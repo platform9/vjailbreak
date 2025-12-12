@@ -8,8 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog/v2"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
+
+// ProgressLogger is an interface for logging clone progress messages.
+// This allows the migrate package to receive progress updates without circular imports.
+type ProgressLogger interface {
+	LogMessage(msg string)
+}
 
 // CloneStatus represents the current state of a clone operation
 type CloneStatus struct {
@@ -27,18 +33,30 @@ type CloneTracker struct {
 	startTime         time.Time
 	pollInterval      time.Duration
 	startupTimeout    time.Duration
+	stallTimeout      time.Duration
 	lastLoggedPercent int
+	lastProgress      float64
+	lastProgressTime  time.Time
+	logger            ProgressLogger
+	diskIndex         int
 }
 
-// NewCloneTracker creates a new clone operation tracker
-func NewCloneTracker(client *Client, task *VmkfstoolsTask) *CloneTracker {
+// NewCloneTracker creates a new clone operation tracker.
+// logger can be nil if no progress events are needed.
+func NewCloneTracker(client *Client, task *VmkfstoolsTask, diskIndex int, logger ProgressLogger) *CloneTracker {
+	now := time.Now()
 	return &CloneTracker{
 		client:            client,
 		task:              task,
-		startTime:         time.Now(),
-		pollInterval:      2 * time.Second,
+		startTime:         now,
+		pollInterval:      10 * time.Second,
 		startupTimeout:    5 * time.Minute,
+		stallTimeout:      5 * time.Minute,
 		lastLoggedPercent: -1,
+		lastProgress:      -1,
+		lastProgressTime:  now,
+		logger:            logger,
+		diskIndex:         diskIndex,
 	}
 }
 
@@ -88,14 +106,40 @@ func (ct *CloneTracker) readLogFile() string {
 }
 
 // parseProgress extracts the highest percentage from log content
+// vmkfstools uses \r (carriage return) to overwrite progress lines in place
 func (ct *CloneTracker) parseProgress(logContent string) float64 {
+	if logContent == "" {
+		return 0
+	}
+
 	var maxPct float64 = 0
-	for _, line := range strings.Split(logContent, "\n") {
+
+	// Replace \r with \n to handle vmkfstools progress output
+	// vmkfstools writes: "Clone: 0% done.\rClone: 1% done.\r..."
+	normalized := strings.ReplaceAll(logContent, "\r", "\n")
+
+	for _, line := range strings.Split(normalized, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
 		var pct float64
-		if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil && pct > maxPct {
-			maxPct = pct
+		// Try with period at end (most common format)
+		if _, err := fmt.Sscanf(line, "Clone: %f%% done.", &pct); err == nil {
+			if pct > maxPct {
+				maxPct = pct
+			}
+			continue
+		}
+		// Try without period
+		if _, err := fmt.Sscanf(line, "Clone: %f%% done", &pct); err == nil {
+			if pct > maxPct {
+				maxPct = pct
+			}
 		}
 	}
+
 	return maxPct
 }
 
@@ -124,30 +168,40 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 		return false
 	}
 
+	// Track progress changes to detect stalled clones
+	now := time.Now()
+	if percentDone > ct.lastProgress {
+		ct.lastProgress = percentDone
+		ct.lastProgressTime = now
+	}
+
 	// Check if process is visible
 	processVisible, _ := ct.client.CheckCloneStatus(ct.task.Pid)
 	if processVisible {
 		return true
 	}
 
-	// Process not visible - check if it's still working based on log
+	// Process not visible - check if clone is stalled
 	elapsed := time.Since(ct.startTime)
+	timeSinceProgress := now.Sub(ct.lastProgressTime)
 
-	// If log shows progress (but not 100%), clone is running even if process not visible
+	// If we have progress but it's stalled (no change for stallTimeout), clone likely failed
+	if percentDone > 0 && percentDone < 100 && timeSinceProgress > ct.stallTimeout {
+		utils.PrintLog(fmt.Sprintf("WARNING: Clone appears stalled: no progress change for %v (stuck at %.0f%%)", timeSinceProgress.Round(time.Second), percentDone))
+		return false
+	}
+
+	// If log shows progress (but not 100%) and not stalled, clone is running even if process not visible
 	if percentDone > 0 {
-		klog.V(2).Infof("Process not visible but log shows %.0f%% progress, treating as running", percentDone)
 		return true
 	}
 
 	// If log is empty and within startup timeout, assume still starting
 	if logContent == "" && elapsed < ct.startupTimeout {
-		klog.V(2).Infof("Process not visible, log empty, but only %v elapsed (timeout: %v), treating as starting",
-			elapsed.Round(time.Second), ct.startupTimeout)
 		return true
 	}
 
 	// Process not visible, no progress, startup timeout exceeded
-	klog.Infof("Clone appears to have ended: process not visible, no progress in log after %v", elapsed.Round(time.Second))
 	return false
 }
 
@@ -155,15 +209,22 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 	currentBucket := (int(percentDone) / 5) * 5
 	if currentBucket > ct.lastLoggedPercent {
-		elapsed := time.Since(ct.startTime).Round(time.Second)
-		klog.Infof("Clone progress: %d%% done [elapsed: %v]", currentBucket, elapsed)
+		msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", ct.diskIndex, currentBucket)
+		utils.PrintLog(msg)
+		if ct.logger != nil {
+			ct.logger.LogMessage(msg)
+		}
 		ct.lastLoggedPercent = currentBucket
 	}
 }
 
 // WaitForCompletion blocks until the clone completes, fails, or context is cancelled
 func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
-	klog.Infof("Starting clone monitor for PID %d", ct.task.Pid)
+	msg := fmt.Sprintf("Starting clone monitor for disk %d (PID %d)", ct.diskIndex, ct.task.Pid)
+	utils.PrintLog(msg)
+	if ct.logger != nil {
+		ct.logger.LogMessage(msg)
+	}
 
 	ticker := time.NewTicker(ct.pollInterval)
 	defer ticker.Stop()
@@ -171,7 +232,7 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			klog.Info("Clone monitoring cancelled")
+			utils.PrintLog("Clone monitoring cancelled")
 			return ctx.Err()
 
 		case <-ticker.C:
@@ -184,7 +245,8 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 				if status.Error != "" {
 					return fmt.Errorf("clone failed: %s", status.Error)
 				}
-				klog.Infof("Clone completed successfully in %v", status.ElapsedTime.Round(time.Second))
+				msg := fmt.Sprintf("Disk %d clone completed successfully in %v", ct.diskIndex, status.ElapsedTime.Round(time.Second))
+				utils.PrintLog(msg)
 				return nil
 			}
 		}
