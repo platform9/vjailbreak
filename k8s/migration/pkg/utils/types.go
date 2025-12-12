@@ -57,6 +57,8 @@ type VMwareClusterInfo struct {
 	Name string
 	// Hosts is a list of ESXi hosts that are part of this cluster
 	Hosts []VMwareHostInfo
+	// Datacenter is the vSphere datacenter this cluster belongs to
+	Datacenter string
 }
 
 // RollingMigartionValidationConfig defines the validation configuration for rolling migration

@@ -62,29 +62,45 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
 
       const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
         const credName = cred.metadata.name
-        const datacenter = cred.spec.datacenter || credName
+        const fixedDatacenter = cred.spec.datacenter
 
         // Use hostName directly from credential spec instead of fetching from secret
         const vcenterName = cred.spec.hostName || credName
 
         const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, credName)
+        
+        const clustersByDC: Record<string, typeof clustersResponse.items> = {}
 
-        const clusters = clustersResponse.items.map((cluster: VMwareCluster) => ({
-          id: `${credName}:${cluster.metadata.name}`,
-          name: cluster.metadata.name,
-          displayName: cluster.spec.name
-        }))
+        clustersResponse.items.forEach((cluster: VMwareCluster) => {
+          const annotations = (cluster.metadata as any).annotations
+          const dcAnnotation = annotations?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
+          if (!clustersByDC[dcAnnotation]) {
+            clustersByDC[dcAnnotation] = []
+          }
+          clustersByDC[dcAnnotation].push(cluster)
+        })
 
-        return {
-          credName,
-          datacenter,
-          vcenterName,
-          clusters
-        }
+        return Object.keys(clustersByDC).map(dcName => {
+           const clusters = clustersByDC[dcName].map((cluster: VMwareCluster) => ({
+            id: `${credName}:${dcName}:${cluster.metadata.name}`,
+            name: cluster.metadata.name,
+            displayName: cluster.spec.name,
+            datacenter: dcName
+          }))
+
+          return {
+            credName,
+            datacenter: dcName,
+            vcenterName,
+            clusters
+          }
+        })
       })
 
-      const newSourceData = await Promise.all(sourceDataPromises)
-      setSourceData(newSourceData.filter((item) => item.clusters.length > 0))
+      const nestedResults = await Promise.all(sourceDataPromises)
+      const newSourceData = nestedResults.flat().filter((item) => item.clusters.length > 0)
+      
+      setSourceData(newSourceData)
     } catch (error) {
       console.error('Failed to fetch VMware cluster data:', error)
       setError('Failed to fetch VMware cluster data')
