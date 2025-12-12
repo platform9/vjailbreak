@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	cindervolumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	cindervolumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
@@ -131,7 +131,7 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 		migobj.logMessage(fmt.Sprintf("Updated disk %s with Cinder volume ID: %s", vmdisk.Name, clonedVolume.OpenstackVol.ID))
 
 		// Attach the Cinder volume to get the device path
-		devicePath, err := migobj.AttachVolume(vminfo.VMDisks[idx])
+		devicePath, err := migobj.AttachVolume(ctx, vminfo.VMDisks[idx])
 		if err != nil {
 			return []storage.Volume{}, errors.Wrapf(err, "failed to attach volume for disk %s", vmdisk.Name)
 		}
@@ -415,7 +415,7 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 
 	// Wait for volume to become available
 	migobj.logMessage(fmt.Sprintf("Waiting for volume %s to become available", managedVolume.ID))
-	if err := migobj.Openstackclients.WaitForVolume(managedVolume.ID); err != nil {
+	if err := migobj.Openstackclients.WaitForVolume(ctx, managedVolume.ID); err != nil {
 		return "", errors.Wrapf(err, "failed to wait for volume %s to become available", managedVolume.ID)
 	}
 
