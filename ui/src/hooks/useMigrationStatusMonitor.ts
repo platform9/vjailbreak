@@ -33,8 +33,13 @@ export const useMigrationStatusMonitor = (migrations: Migration[] = []) => {
         return
       }
 
-      // Skip if phase hasn't changed or already reported
-      if (tracker.previousPhase === currentPhase || tracker.lastReportedPhase === currentPhase) {
+      // Skip if phase hasn't changed
+      if (tracker.previousPhase === currentPhase) {
+        return
+      }
+
+      // Skip if this phase has already been reported (prevents duplicate events)
+      if (tracker.lastReportedPhase === currentPhase) {
         return
       }
 
@@ -117,11 +122,11 @@ export const useMigrationStatusMonitor = (migrations: Migration[] = []) => {
           namespace: migration.metadata?.namespace
         })
 
-        // Mark as reported
+        // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[migrationName].lastReportedPhase = Phase.Succeeded
       }
 
-      // Update previous phase
+      // Update previous phase (only after all event tracking is complete)
       statusTrackerRef.current[migrationName].previousPhase = currentPhase
     })
   }, [migrations, track, reportError, autoCleanup])
