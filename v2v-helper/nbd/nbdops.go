@@ -175,9 +175,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
-		
-		lastLoggedProgress := -1
-		const logInterval = 5
+
 		lastChannelProgress := 0
 
 		for scanner.Scan() {
@@ -188,12 +186,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
 
-			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
-				utils.PrintLog(msg)
-				lastLoggedProgress = progressInt
-			}
-
-			if lastChannelProgress <= progressInt-10 {
+			// Send progress to channel at every 10% - the consumer will log it
+			if progressInt == 0 || progressInt == 100 || (progressInt > lastChannelProgress && progressInt-lastChannelProgress >= 10) {
 				nbdserver.progresschan <- msg
 				lastChannelProgress = progressInt
 			}
