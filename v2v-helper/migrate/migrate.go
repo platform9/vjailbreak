@@ -1008,13 +1008,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	// Simulate conversion steps with log messages
 	for idx, disk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), disk.Name))
-		time.Sleep(1 * time.Second) // Brief pause for visual effect
+		time.Sleep(30 * time.Second) // Brief pause for visual effect
 
 		if idx == 0 {
 			migobj.logMessage(fmt.Sprintf("Detected boot volume: %s", disk.Name))
 			vminfo.VMDisks[idx].Boot = true
 		}
-
 		migobj.logMessage(fmt.Sprintf("Converted disk %s successfully", disk.Name))
 	}
 
@@ -1437,40 +1436,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
-	if err != nil {
-		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
-			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
-			detachErr := migobj.DetachAllVolumes(ctx, vminfo)
-			if detachErr != nil {
-				utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", detachErr))
-			}
-
-			cleanUpErr := migobj.VMops.CleanUpSnapshots(true)
-			if cleanUpErr != nil {
-				utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", cleanUpErr))
-				return errors.Wrap(cleanUpErr, "Failed to cleanup snapshot of source VM")
-			}
-			return errors.Wrap(err, "failed to convert disks")
-		}
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to convert disks")
-	}
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
-		}
-		return errors.Wrap(err, "failed to create target instance")
-	}
-
-	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
-	}
 
 	return nil
 }
