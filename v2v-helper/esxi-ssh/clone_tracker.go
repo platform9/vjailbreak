@@ -210,9 +210,10 @@ func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 	currentBucket := (int(percentDone) / 5) * 5
 	if currentBucket > ct.lastLoggedPercent {
 		msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", ct.diskIndex, currentBucket)
-		utils.PrintLog(msg)
 		if ct.logger != nil {
 			ct.logger.LogMessage(msg)
+		} else {
+			utils.PrintLog(msg)
 		}
 		ct.lastLoggedPercent = currentBucket
 	}
@@ -221,9 +222,10 @@ func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 // WaitForCompletion blocks until the clone completes, fails, or context is cancelled
 func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 	msg := fmt.Sprintf("Starting clone monitor for disk %d (PID %d)", ct.diskIndex, ct.task.Pid)
-	utils.PrintLog(msg)
 	if ct.logger != nil {
 		ct.logger.LogMessage(msg)
+	} else {
+		utils.PrintLog(msg)
 	}
 
 	ticker := time.NewTicker(ct.pollInterval)
