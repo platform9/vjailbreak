@@ -99,7 +99,6 @@ export interface FormValues extends Record<string, unknown> {
   storageMappings?: { source: string; target: string }[]
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
-  vmwareClusterDisplayName?: string
   pcdCluster?: string // PCD cluster ID
   // Optional Params
   dataCopyMethod?: string
@@ -854,7 +853,6 @@ export default function MigrationFormDrawer({
             openstackCredName={params.openstackCreds?.existingCredName}
             openstackCredentials={openstackCredentials}
             vmwareCluster={params.vmwareCluster}
-            vmwareClusterDisplayName={params.vmwareClusterDisplayName}
             useGPU={params.useGPU}
           />
           {vmValidation.hasError && (

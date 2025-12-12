@@ -82,9 +82,10 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
 
         return Object.keys(clustersByDC).map(dcName => {
            const clusters = clustersByDC[dcName].map((cluster: VMwareCluster) => ({
-            id: `${credName}:${cluster.metadata.name}`,
+            id: `${credName}:${dcName}:${cluster.metadata.name}`,
             name: cluster.metadata.name,
-            displayName: cluster.spec.name
+            displayName: cluster.spec.name,
+            datacenter: dcName
           }))
 
           return {
