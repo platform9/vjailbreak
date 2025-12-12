@@ -1008,7 +1008,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	// Simulate conversion steps with log messages
 	for idx, disk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), disk.Name))
-		time.Sleep(30 * time.Second) // Brief pause for visual effect
+		time.Sleep(120 * time.Second) // Brief pause for visual effect
 
 		if idx == 0 {
 			migobj.logMessage(fmt.Sprintf("Detected boot volume: %s", disk.Name))
@@ -1436,6 +1436,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
+
+	// Detach volume from source instance
+	err = migobj.DetachAllVolumes(ctx, vminfo)
+	if err != nil {
+		return errors.Wrap(err, "failed to detach volumes from source instance")
+	}
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
 
