@@ -1430,6 +1430,11 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vcenter settings")
+	}
+
 	if migobj.StorageCopyMethod == "vendor-based" {
 		// Initialize storage provider if using vendor-based migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
@@ -1453,14 +1458,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	} else {
 		// Create and Add Volumes to Host
-		vminfo, err = migobj.CreateVolumes(vminfo)
+		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
 			return errors.Wrap(err, "failed to add volumes to host")
 		}
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
-			migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
+			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
 			return errors.Wrap(err, "CBT Failure")
 		}
 
@@ -1472,16 +1477,12 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Live Replicate Disks
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 		if err != nil {
-			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
 				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
 			return errors.Wrap(err, "failed to live replicate disks")
 		}
-	}
-	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vcenter settings")
 	}
 
 	// Convert the Boot Disk to raw format
@@ -1539,7 +1540,7 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
-	
+
 	// Delete ports if cleanup is enabled
 	if vcenterSettings != nil && vcenterSettings.CleanupPortsAfterMigrationFailure && len(portids) > 0 {
 		migobj.logMessage("Cleanup ports after migration failure is enabled, deleting ports")
@@ -1549,7 +1550,7 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 	} else if vcenterSettings != nil && !vcenterSettings.CleanupPortsAfterMigrationFailure {
 		migobj.logMessage("Cleanup ports after migration failure is disabled, ports will not be deleted")
 	}
-	
+
 	return nil
 }
 
@@ -1558,7 +1559,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 	openstackops := migobj.Openstackclients
 	var deletionErrors []error
 	successCount := 0
-	
+
 	for _, portID := range portids {
 		err := openstackops.DeletePort(ctx, portID)
 		if err != nil {
@@ -1569,7 +1570,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 			successCount++
 		}
 	}
-	
+
 	if len(deletionErrors) > 0 {
 		migobj.logMessage(fmt.Sprintf("Port deletion completed with errors: %d succeeded, %d failed out of %d total", successCount, len(deletionErrors), len(portids)))
 		// Combine all errors into a single error message
@@ -1579,7 +1580,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 		}
 		return errors.New(errMsg)
 	}
-	
+
 	migobj.logMessage(fmt.Sprintf("Successfully deleted all %d ports", successCount))
 	return nil
 }
@@ -1664,7 +1665,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx,network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx, network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

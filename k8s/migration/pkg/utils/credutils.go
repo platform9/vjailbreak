@@ -1909,7 +1909,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	}
 
 	// Get pool backend info
-	poolPages, err := schedulerstats.List(cinderClient, schedulerstats.ListOpts{Detail: true}).AllPages()
+	poolPages, err := schedulerstats.List(cinderClient, schedulerstats.ListOpts{Detail: true}).AllPages(context.Background())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list backend pools")
 	}
