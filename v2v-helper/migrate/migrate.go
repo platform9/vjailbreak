@@ -4,7 +4,6 @@ package migrate
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -30,6 +29,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -1280,12 +1280,15 @@ func (migobj *Migrate) pingVM(ips []string) error {
 }
 
 func (migobj *Migrate) checkHTTPGet(ips []string, port string) error {
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			Proxy:           http.ProxyFromEnvironment,
-		},
-		Timeout: time.Second * 10,
+	var client *http.Client
+	vjbNet := netutils.NewVjbNet()
+	if migobj.Insecure {
+		vjbNet.Insecure = true
+	}
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		client = vjbNet.GetClient()
+	} else {
+		return errors.Errorf("Both HTTP and HTTPS failed ")
 	}
 	for _, ip := range ips {
 		// Try HTTP first
@@ -1497,7 +1500,7 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 		return errors.Wrap(err, fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
 	}
-	
+
 	// Delete ports if cleanup is enabled
 	if vcenterSettings != nil && vcenterSettings.CleanupPortsAfterMigrationFailure && len(portids) > 0 {
 		migobj.logMessage("Cleanup ports after migration failure is enabled, deleting ports")
@@ -1507,7 +1510,7 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 	} else if vcenterSettings != nil && !vcenterSettings.CleanupPortsAfterMigrationFailure {
 		migobj.logMessage("Cleanup ports after migration failure is disabled, ports will not be deleted")
 	}
-	
+
 	return nil
 }
 
@@ -1516,7 +1519,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 	openstackops := migobj.Openstackclients
 	var deletionErrors []error
 	successCount := 0
-	
+
 	for _, portID := range portids {
 		err := openstackops.DeletePort(ctx, portID)
 		if err != nil {
@@ -1527,7 +1530,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 			successCount++
 		}
 	}
-	
+
 	if len(deletionErrors) > 0 {
 		migobj.logMessage(fmt.Sprintf("Port deletion completed with errors: %d succeeded, %d failed out of %d total", successCount, len(deletionErrors), len(portids)))
 		// Combine all errors into a single error message
@@ -1537,7 +1540,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 		}
 		return errors.New(errMsg)
 	}
-	
+
 	migobj.logMessage(fmt.Sprintf("Successfully deleted all %d ports", successCount))
 	return nil
 }
@@ -1622,7 +1625,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx,network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx, network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

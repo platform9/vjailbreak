@@ -466,7 +466,7 @@ func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []st
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
 
-func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context,ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
+func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
 
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
@@ -495,7 +495,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context,ipEntrie
 					if !slices.Contains(fixedIps, ipIdx.IP) {
 						contain_all = false
 					}
-					subnetId, err := osclient.GetSubnet(ctx,network.Subnets, ipIdx.IP)
+					subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipIdx.IP)
 					if err != nil {
 						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx.IP)
 					}
@@ -527,7 +527,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context,ipEntrie
 
 }
 
-func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context,network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
+func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
 
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
@@ -538,7 +538,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context,network *net
 	if len(ipEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
 		for _, ipEntry := range ipEntries {
-			subnetId, err := osclient.GetSubnet(ctx,network.Subnets, ipEntry.IP)
+			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
 			} else {
@@ -553,7 +553,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context,network *net
 		createOpts.FixedIPs = fixedIPs
 	} else if len(ipEntries) == 0 {
 		PrintLog("Empty port on vcentre detected for mac " + mac)
-		subnetID, err := subnets.Get(ctx,osclient.NetworkingClient, network.Subnets[0]).Extract()
+		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
 		if err != nil {
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
@@ -562,9 +562,9 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context,network *net
 	return createOpts, nil
 }
 
-func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context,network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
-	Existingport, err := osclient.CheckIfPortExists(ctx,ipPerMac[mac], mac, network, gatewayIP)
+	Existingport, err := osclient.CheckIfPortExists(ctx, ipPerMac[mac], mac, network, gatewayIP)
 	if err != nil {
 		return nil, err
 	}
@@ -578,28 +578,28 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context,netw
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
-	createOpts, err := osclient.GetCreateOpts(ctx,network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
+	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
 			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		} else {
 			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
-			return osclient.CreatePortWithDHCP(ctx,network, ipPerMac, mac, gatewayIP, createOpts)
+			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
 		}
 	}
-	return osclient.CreatePort(ctx,createOpts)
+	return osclient.createPortLowLevel(ctx, createOpts)
 }
 
-func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context,network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
 
-	dhcpPort, dhcpErr := osclient.CreatePort(ctx,createOpts)
+	dhcpPort, dhcpErr := osclient.createPortLowLevel(ctx, createOpts)
 
 	if dhcpErr != nil {
 		return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 	}
 	ipPerMac[mac] = []vm.IpEntry{}
 	for _, iAddr := range dhcpPort.FixedIPs {
-		dhcpSubnetId, err := osclient.GetSubnet(ctx,network.Subnets, iAddr.IPAddress)
+		dhcpSubnetId, err := osclient.GetSubnet(ctx, network.Subnets, iAddr.IPAddress)
 		if err != nil {
 			return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
 		}
@@ -617,8 +617,27 @@ func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context,network
 	return dhcpPort, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(ctx context.Context,createOpts ports.CreateOpts) (*ports.Port, error) {
-	return ports.Create(ctx,osclient.NetworkingClient, createOpts).Extract()
+func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+	// Convert ip []string to []vm.IpEntry
+	ipEntries := make([]vm.IpEntry, len(ip))
+	for i, ipAddr := range ip {
+		ipEntries[i] = vm.IpEntry{IP: ipAddr}
+	}
+
+	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
+	if err != nil {
+		if !fallbackToDHCP {
+			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
+		}
+		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
+		// Create with DHCP by removing fixed IPs
+		createOpts.FixedIPs = nil
+	}
+	return osclient.createPortLowLevel(ctx, createOpts)
+}
+
+func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
+	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
@@ -635,7 +654,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		return nil, fmt.Errorf("unable to determine boot volume for VM: %s", vminfo.Name)
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating VM %s, authurl %s, tenant %s with flavor %s in availability zone %s", vminfo.Name, osclient.AuthURL, osclient.Tenant, flavor.ID, availabilityZone))
-	
+
 	// Create the server
 	openstacknws := []servers.Network{}
 	for idx := range networkIDs {
@@ -671,7 +690,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		}
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
-	
+
 	// Set up boot block device with BootIndex 0
 	bootBlockDevice := servers.BlockDevice{
 		DeleteOnTermination: false,
@@ -681,7 +700,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		BootIndex:           0,
 	}
 	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
-	
+
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
 	if serverGroupID != "" {

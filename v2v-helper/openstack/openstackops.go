@@ -3,10 +3,8 @@
 package openstack
 
 import (
-	"context"
-	"crypto/tls"
+	context "context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
-	"github.com/gophercloud/gophercloud/v2"
+	gophercloud "github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
@@ -24,6 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
@@ -45,6 +44,7 @@ type OpenstackOperations interface {
 	ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
 	DeletePort(ctx context.Context, portID string) error
 	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
+	CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
 	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
 	GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
@@ -63,20 +63,16 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider client: %s", err)
 	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-	if insecure {
-		tlsConfig.InsecureSkipVerify = true
-	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-		Proxy:           http.ProxyFromEnvironment,
-	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-	}
 
+	vjbNet := netutils.NewVjbNet()
+	if insecure {
+		vjbNet.Insecure = true
+	}
+	err = vjbNet.CreateSecureHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secure HTTP client %v", err)
+	}
+	providerClient.HTTPClient = *vjbNet.GetClient()
 	// Connection Retry Block
 	for i := 0; i < constants.MaxIntervalCount; i++ {
 		err = openstack.Authenticate(ctx, providerClient, opts)
