@@ -1134,7 +1134,13 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string) ([]string, error) {
-	vmnws, err := utils.GetVMwNetworks(ctx, r.Client, vmwcreds, vmwcreds.Spec.DataCenter, vm)
+	// Get datacenter from VM's cluster annotation
+	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get datacenter for VM")
+	}
+	
+	vmnws, err := utils.GetVMwNetworks(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get network")
 	}
@@ -1194,7 +1200,13 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vm string) ([]string, error) {
-	vmds, err := utils.GetVMwDatastore(ctx, r.Client, vmwcreds, vmwcreds.Spec.DataCenter, vm)
+	// Get datacenter from VM's cluster annotation
+	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get datacenter for VM")
+	}
+	
+	vmds, err := utils.GetVMwDatastore(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get datastores")
 	}
