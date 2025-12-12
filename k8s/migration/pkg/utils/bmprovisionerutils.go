@@ -58,7 +58,7 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		return errors.New("no resources available from BM provisioner")
 	}
 
-	hs, err := GetESXiSummary(ctx, scope.Client, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
+	hs, err := GetESXiSummary(ctx, scope.Client, scope.ESXIMigration.Spec.ESXiName, vmwarecreds, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi summary")
 	}

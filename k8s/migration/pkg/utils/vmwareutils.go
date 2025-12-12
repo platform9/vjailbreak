@@ -73,7 +73,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 			}
 			var vmHosts []VMwareHostInfo
 			for _, host := range hosts {
-				hostSummary, err := GetESXiSummary(ctx, scope.Client, host.Name(), scope.VMwareCreds)
+				hostSummary, err := GetESXiSummary(ctx, scope.Client, host.Name(), scope.VMwareCreds, dc.Name())
 				if err != nil {
 					return nil, errors.Wrap(err, "failed to get ESXi summary")
 				}
@@ -405,7 +405,7 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 		// Convert objects to HostInfo
 		for _, host := range hosts {
 			log.Info("Processing Standalone VMware host", "host", host.Name(), "datacenter", dcName)
-			hostSummary, err := GetESXiSummary(ctx, scope.Client, host.Name(), scope.VMwareCreds)
+			hostSummary, err := GetESXiSummary(ctx, scope.Client, host.Name(), scope.VMwareCreds, dcName)
 			if err != nil {
 				return errors.Wrap(err, "failed to get ESXi summary")
 			}
