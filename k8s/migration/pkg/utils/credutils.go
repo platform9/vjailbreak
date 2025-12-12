@@ -687,6 +687,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	
 	// Collect all VMs from all target datacenters 
 	allVMs := make([]*object.VirtualMachine, 0)
+	vmToDatacenter := make(map[string]string)
 	
 	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
@@ -706,6 +707,9 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 		if err != nil {
 			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
 			continue
+		}
+		for _, vm := range vms {
+			vmToDatacenter[vm.Reference().Value] = dcName
 		}
 		allVMs = append(allVMs, vms...)
 	}
@@ -729,7 +733,8 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 					panicMu.Unlock()
 				}
 			}()
-			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
+			vmDatacenter := vmToDatacenter[allVMs[i].Reference().Value]
+			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -1569,7 +1574,7 @@ var rdmSemaphore = &sync.Mutex{}
 // due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
 //
 //nolint:gocyclo
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
@@ -1680,6 +1685,9 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
+	if clusterName == "" {
+		clusterName = fmt.Sprintf("%s-%s", constants.VMwareClusterNameStandAloneESX, vmDatacenter)
+	}
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
 		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return

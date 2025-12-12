@@ -72,11 +72,11 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         const clustersByDC: Record<string, typeof clustersResponse.items> = {}
 
         clustersResponse.items.forEach((cluster: VMwareCluster) => {
-          const dcLabel = cluster.metadata.labels?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
-          if (!clustersByDC[dcLabel]) {
-            clustersByDC[dcLabel] = []
+          const dcAnnotation = (cluster.metadata as any).annotations?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
+          if (!clustersByDC[dcAnnotation]) {
+            clustersByDC[dcAnnotation] = []
           }
-          clustersByDC[dcLabel].push(cluster)
+          clustersByDC[dcAnnotation].push(cluster)
         })
 
         return Object.keys(clustersByDC).map(dcName => {

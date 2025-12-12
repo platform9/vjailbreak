@@ -105,15 +105,21 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 
+	labels := map[string]string{
+		constants.VMwareClusterLabel: clusterk8sName,
+		constants.VMwareCredsLabel:   credName,
+	}
+	annotations := map[string]string{}
+	if datacenter != "" {
+		annotations[constants.VMwareDatacenterLabel] = datacenter
+	}
+
 	vmwareHost := vjailbreakv1alpha1.VMwareHost{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hostk8sName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				constants.VMwareClusterLabel:    clusterk8sName,
-				constants.VMwareCredsLabel:      credName,
-				constants.VMwareDatacenterLabel: datacenter,
-			},
+			Name:        hostk8sName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: vjailbreakv1alpha1.VMwareHostSpec{
 			Name:         host.Name,
@@ -123,9 +129,10 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 	}
 	existingHost := vjailbreakv1alpha1.VMwareHost{}
 	if err := scope.Client.Get(ctx, client.ObjectKey{Name: hostk8sName, Namespace: namespace}, &existingHost); err == nil {
-		if existingHost.Spec.Name != host.Name || existingHost.Spec.HardwareUUID != host.HardwareUUID || existingHost.Spec.ClusterName != clusterName {
+		if existingHost.Spec.Name != host.Name || existingHost.Spec.HardwareUUID != host.HardwareUUID || existingHost.Spec.ClusterName != clusterName || !reflect.DeepEqual(existingHost.Labels, vmwareHost.Labels) || !reflect.DeepEqual(existingHost.Annotations, vmwareHost.Annotations) {
 			existingHost.Spec = vmwareHost.Spec
 			existingHost.Labels = vmwareHost.Labels
+			existingHost.Annotations = vmwareHost.Annotations
 			updateErr := scope.Client.Update(ctx, &existingHost)
 			if updateErr != nil {
 				return "", errors.Wrap(updateErr, "failed to update vmware host")
@@ -155,14 +162,20 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 
+	labels := map[string]string{
+		constants.VMwareCredsLabel: scope.Name(),
+	}
+	annotations := map[string]string{}
+	if cluster.Datacenter != "" {
+		annotations[constants.VMwareDatacenterLabel] = cluster.Datacenter
+	}
+
 	vmwareCluster := vjailbreakv1alpha1.VMwareCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterk8sName,
-			Namespace: scope.Namespace(),
-			Labels: map[string]string{
-				constants.VMwareCredsLabel:      scope.Name(),
-				constants.VMwareDatacenterLabel: cluster.Datacenter,
-			},
+			Name:        clusterk8sName,
+			Namespace:   scope.Namespace(),
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: vjailbreakv1alpha1.VMwareClusterSpec{
 			Name: cluster.Name,
@@ -182,9 +195,10 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 	// Create the cluster
 	existingCluster := vjailbreakv1alpha1.VMwareCluster{}
 	if err := scope.Client.Get(ctx, client.ObjectKey{Name: clusterk8sName, Namespace: scope.Namespace()}, &existingCluster); err == nil {
-		if existingCluster.Spec.Name != cluster.Name || !reflect.DeepEqual(existingCluster.Labels, vmwareCluster.Labels) {
+		if existingCluster.Spec.Name != cluster.Name || !reflect.DeepEqual(existingCluster.Labels, vmwareCluster.Labels) || !reflect.DeepEqual(existingCluster.Annotations, vmwareCluster.Annotations) {
 			existingCluster.Spec = vmwareCluster.Spec
 			existingCluster.Labels = vmwareCluster.Labels
+			existingCluster.Annotations = vmwareCluster.Annotations
 			updateErr := scope.Client.Update(ctx, &existingCluster)
 			if updateErr != nil {
 				return errors.Wrap(updateErr, "failed to update vmware cluster")
