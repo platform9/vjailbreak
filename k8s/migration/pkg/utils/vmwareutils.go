@@ -409,19 +409,6 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
-	// Try to infer a single datacenter for the dummy cluster from existing real clusters.
-	// If all existing clusters share the same non-empty datacenter, use it; otherwise leave empty.
-	var inferredDatacenter string
-	for _, c := range existingClusters {
-		if c.Datacenter == "" {
-			continue
-		}
-		if inferredDatacenter == "" {
-			inferredDatacenter = c.Datacenter
-		} else if inferredDatacenter != c.Datacenter {
-			inferredDatacenter = ""
-			break
-		}
 
 	labels := map[string]string{
 		constants.VMwareCredsLabel: scope.Name(),
