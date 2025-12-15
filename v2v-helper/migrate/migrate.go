@@ -922,10 +922,6 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 
 	if isNetplanSupported(versionID) {
 		utils.PrintLog("Adding wildcard netplan")
-		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
-			return errors.Wrap(err, "failed to add wildcard netplan")
-		}
-		utils.PrintLog("Wildcard netplan added successfully")
 		return nil
 	}
 
