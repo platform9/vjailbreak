@@ -212,11 +212,6 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
-	networkIDs, securityGroups, err := GetCurrentInstanceNetworkInfo()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get network info")
-	}
-
 	// Get the master node's VjailbreakNode to retrieve its OpenStack UUID
 	masterVjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err = k3sclient.Get(ctx, types.NamespacedName{
@@ -227,11 +222,19 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master vjailbreak node")
 	}
 
-	// Get the volume type from the master node
-	volumeType, err := GetVolumeTypeFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
+	networkIDs, securityGroups, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
-		log.Info("Failed to get volume type from master node, using default", "error", err)
-		volumeType = "" // Use empty string to let OpenStack use default volume type
+		return "", errors.Wrap(err, "failed to get network info")
+	}
+
+	// Get the volume type and availability zone from the master node in a single call
+	volumeType, availabilityZone, err := GetVolumeTypeAndAvailabilityZoneFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
+	if err != nil {
+		log.Info("Failed to get volume type and availability zone from master node, using defaults", "error", err)
+		volumeType = ""
+		availabilityZone = ""
+	} else {
+		log.Info("Retrieved volume type and availability zone from master node", "volumeType", volumeType, "availabilityZone", availabilityZone)
 	}
 
 	// Example: specify root disk from image with volume type
@@ -256,14 +259,14 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	serverCreateOpts := servers.CreateOpts{
 		Name:           vjNode.Name,
 		FlavorRef:      vjNode.Spec.OpenstackFlavorID,
-		ImageRef:       imageID,
 		Networks:       networkIDs,
 		SecurityGroups: securityGroups,
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
 			token[:12], constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
 			token)),
-		BlockDevice: []servers.BlockDevice{rootDisk},
+		BlockDevice:      []servers.BlockDevice{rootDisk},
+		AvailabilityZone: availabilityZone,
 	}
 
 	// Create the VM
@@ -515,6 +518,59 @@ func GetVolumeTypeFromVM(ctx context.Context, k3sclient client.Client, uuid stri
 		}
 	}
 	return "", fmt.Errorf("no volume type found for the VM")
+}
+
+// GetAvailabilityZoneFromVM retrieves the availability zone from a virtual machine using its UUID
+func GetAvailabilityZoneFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get OpenStack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+
+	// Return the availability zone
+	return server.AvailabilityZone, nil
+}
+
+// GetVolumeTypeAndAvailabilityZoneFromVM retrieves both volume type and availability zone from a VM in a single call
+func GetVolumeTypeAndAvailabilityZoneFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (volumeType string, availabilityZone string, err error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get OpenStack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get server details")
+	}
+
+	// Get the availability zone from the server
+	availabilityZone = server.AvailabilityZone
+
+	// Get attached volumes on that server
+	attachedVolumes := server.AttachedVolumes
+
+	// Get the root volume's type (typically the first volume or boot volume)
+	for _, attachedVol := range attachedVolumes {
+		// Get volume details
+		volume, err := volumes.Get(ctx, openstackClients.BlockStorageClient, attachedVol.ID).Extract()
+		if err != nil {
+			return "", availabilityZone, errors.Wrap(err, "failed to get volume details")
+		}
+		// Return the volume type if found
+		if volume.VolumeType != "" {
+			volumeType = volume.VolumeType
+			break
+		}
+	}
+
+	return volumeType, availabilityZone, nil
 }
 
 // ListAllFlavors retrieves a list of all available OpenStack flavors
