@@ -217,6 +217,41 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get network info")
 	}
 
+	// Get the master node's VjailbreakNode to retrieve its OpenStack UUID
+	masterVjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	err = k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      constants.VjailbreakMasterNodeName,
+	}, &masterVjNode)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get master vjailbreak node")
+	}
+
+	// Get the volume type from the master node
+	volumeType, err := GetVolumeTypeFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
+	if err != nil {
+		log.Info("Failed to get volume type from master node, using default", "error", err)
+		volumeType = "" // Use empty string to let OpenStack use default volume type
+	}
+
+	// Example: specify root disk from image with volume type
+	rootDisk := servers.BlockDevice{
+		// SourceType: image, since you're booting from an image
+		SourceType: servers.SourceImage,
+		// DestinationType: volume, because you want a Cinder-backed root disk
+		DestinationType: servers.DestinationVolume,
+		// UUID of the image to use
+		UUID: imageID,
+		// BootIndex = 0 indicates this is the root device
+		BootIndex: 0,
+		// Whether to delete the volume when instance is deleted
+		DeleteOnTermination: true,
+		// Size of the root disk in GB
+		VolumeSize: 60, // example size
+		// Extra options (like volume type)
+		VolumeType: volumeType,
+	}
+
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
 		Name:           vjNode.Name,
@@ -228,6 +263,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 			token[:12], constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
 			token)),
+		BlockDevice: []servers.BlockDevice{rootDisk},
 	}
 
 	// Create the VM
@@ -448,6 +484,37 @@ func GetImageIDOfVMBootFromVolume(ctx context.Context, uuid string, k3sclient cl
 		}
 	}
 	return "", fmt.Errorf("no image found for the volume")
+}
+
+// GetVolumeTypeFromVM retrieves the volume type from a virtual machine using its UUID
+func GetVolumeTypeFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get OpenStack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+
+	// Get attached volumes on that server
+	attachedVolumes := server.AttachedVolumes
+
+	// Get the root volume's type (typically the first volume or boot volume)
+	for _, attachedVol := range attachedVolumes {
+		// Get volume details
+		volume, err := volumes.Get(ctx, openstackClients.BlockStorageClient, attachedVol.ID).Extract()
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get volume details")
+		}
+		// Return the volume type if found
+		if volume.VolumeType != "" {
+			return volume.VolumeType, nil
+		}
+	}
+	return "", fmt.Errorf("no volume type found for the VM")
 }
 
 // ListAllFlavors retrieves a list of all available OpenStack flavors
