@@ -176,23 +176,13 @@ list_users() {
 }
 
 run_support_bundle() {
-  # Find the log_collector.sh script
-  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local log_collector="${script_dir}/log_collector.sh"
+  local log_collector="/etc/pf9/log_collector.sh"
 
   if [[ ! -f "$log_collector" ]]; then
-    # Try alternate locations
-    if [[ -f "/usr/local/bin/log_collector.sh" ]]; then
-      log_collector="/usr/local/bin/log_collector.sh"
-    elif [[ -f "/opt/pf9/log_collector.sh" ]]; then
-      log_collector="/opt/pf9/log_collector.sh"
-    else
-      echo "Error: log_collector.sh not found. Please ensure it's installed." >&2
-      return 1
-    fi
+    echo "Error: log_collector.sh not found. Please ensure it's installed." >&2
+    return 1
   fi
 
-  # Execute the log collector with all passed arguments
   bash "$log_collector" "$@"
 }
 

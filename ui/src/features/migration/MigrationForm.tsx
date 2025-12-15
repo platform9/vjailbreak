@@ -8,7 +8,7 @@ import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
 import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/api/migration-plans/model'
 import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import SecurityGroupAndSSHKeyStep from './SecurityGroupAndSSHKeyStep'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -118,7 +118,9 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   securityGroups?: string[]
+  serverGroup?: string
   fallbackToDHCP?: boolean
+  useGPU?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -266,36 +268,77 @@ export default function MigrationFormDrawer({
     fetchCredentials()
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
-  useEffect(() => {
-    const createMigrationTemplate = async () => {
-      let targetPCDClusterName: string | undefined = undefined
-      if (params.pcdCluster) {
-        const selectedPCD = pcdData.find((p) => p.id === params.pcdCluster)
-        targetPCDClusterName = selectedPCD?.name
-      }
+  const targetPCDClusterName = useMemo(() => {
+    if (!params.pcdCluster) return undefined
+    const selectedPCD = pcdData.find((p) => p.id === params.pcdCluster)
+    return selectedPCD?.name
+  }, [params.pcdCluster, pcdData])
 
-      const body = createMigrationTemplateJson({
-        datacenter: params.vmwareCreds?.datacenter,
-        vmwareRef: vmwareCredentials?.metadata.name,
-        openstackRef: openstackCredentials?.metadata.name,
-        targetPCDClusterName: targetPCDClusterName,
-        useFlavorless: params.useFlavorless || false
-      })
-      const response = await postMigrationTemplate(body)
-      setMigrationTemplate(response)
+  useEffect(() => {
+    if (!vmwareCredsValidated || !openstackCredsValidated) return
+
+    const syncMigrationTemplate = async () => {
+      try {
+        // If a template already exists, update it instead of creating a new one
+        if (migrationTemplate?.metadata?.name) {
+          const patchBody = {
+            spec: {
+              source: {
+                datacenter: params.vmwareCreds?.datacenter,
+                vmwareRef: vmwareCredentials?.metadata.name
+              },
+              destination: {
+                openstackRef: openstackCredentials?.metadata.name
+              },
+              ...(targetPCDClusterName && {
+                targetPCDClusterName
+              }),
+              useFlavorless: params.useFlavorless || false,
+              useGPUFlavor: params.useGPU || false
+            }
+          }
+
+          const updated = await patchMigrationTemplate(migrationTemplate.metadata.name, patchBody)
+          setMigrationTemplate(updated)
+          return
+        }
+
+        // Otherwise create a new template once
+        const body = createMigrationTemplateJson({
+          datacenter: params.vmwareCreds?.datacenter,
+          vmwareRef: vmwareCredentials?.metadata.name,
+          openstackRef: openstackCredentials?.metadata.name,
+          targetPCDClusterName,
+          useFlavorless: params.useFlavorless || false,
+          useGPUFlavor: params.useGPU || false
+        })
+        const created = await postMigrationTemplate(body)
+        setMigrationTemplate(created)
+      } catch (err) {
+        console.error('Error syncing migration template', err)
+        getFieldErrorsUpdater('migrationTemplate')(
+          'Error syncing migration template: ' +
+            (axios.isAxiosError(err)
+              ? err?.response?.data?.message
+              : err instanceof Error
+                ? err.message
+                : String(err))
+        )
+      }
     }
 
-    if (!vmwareCredsValidated || !openstackCredsValidated) return
-    createMigrationTemplate()
+    syncMigrationTemplate()
   }, [
     vmwareCredsValidated,
     openstackCredsValidated,
     params.vmwareCreds?.datacenter,
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
-    params.pcdCluster,
+    targetPCDClusterName,
     params.useFlavorless,
-    pcdData
+    params.useGPU,
+    migrationTemplate?.metadata?.name,
+    getFieldErrorsUpdater
   ])
 
   // Keep original fetchMigrationTemplate for fetching OpenStack networks and volume types
@@ -463,6 +506,9 @@ export default function MigrationFormDrawer({
         params.securityGroups.length > 0 && {
           securityGroups: params.securityGroups
         }),
+      ...(params.serverGroup && {
+        serverGroup: params.serverGroup
+      }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
       ...(selectedMigrationOptions.postMigrationScript &&
@@ -643,7 +689,7 @@ export default function MigrationFormDrawer({
       (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
     )
 
-    // Check for powered-ON VMs without OS assignment or with Unknown OS
+    // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
       .concat(
@@ -666,7 +712,9 @@ export default function MigrationFormDrawer({
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
-          `We could not detect the operating system for ${vmsWithoutOSAssigned.length} powered-on VM${vmsWithoutOSAssigned.length === 1 ? '' : 's'}`
+          `We could not detect the operating system for ${vmsWithoutOSAssigned.length} VM${
+            vmsWithoutOSAssigned.length === 1 ? '' : 's'
+          }`
         )
       }
 
@@ -807,6 +855,7 @@ export default function MigrationFormDrawer({
             openstackCredentials={openstackCredentials}
             vmwareCluster={params.vmwareCluster}
             vmwareClusterDisplayName={params.vmwareClusterDisplayName}
+            useGPU={params.useGPU}
           />
           {vmValidation.hasError && (
             <Alert severity="warning" sx={{ mt: 2, ml: 6 }}>
@@ -831,7 +880,7 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors['storageMapping']}
           />
           {/* Step 4 */}
-          <SecurityGroupAndSSHKeyStep
+          <SecurityGroupAndServerGroupStep
             params={params}
             onChange={getParamsUpdater}
             openstackCredentials={openstackCredentials}

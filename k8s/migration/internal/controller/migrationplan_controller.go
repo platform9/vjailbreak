@@ -27,8 +27,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -584,13 +585,32 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
-	migrationplan.Status.MigrationStatus = status
-	migrationplan.Status.MigrationMessage = message
-	err := r.Status().Update(ctx, migrationplan)
-	if err != nil {
-		return errors.Wrap(err, "failed to update migration plan status")
-	}
-	return nil
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get the latest version of the MigrationPlan
+		latest := &vjailbreakv1alpha1.MigrationPlan{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      migrationplan.Name,
+			Namespace: migrationplan.Namespace,
+		}, latest); err != nil {
+			return err
+		}
+
+		// Only update if the status is different to prevent unnecessary updates
+		if latest.Status.MigrationStatus == status && latest.Status.MigrationMessage == message {
+			return nil
+		}
+
+		// Update the status
+		latest.Status.MigrationStatus = status
+		latest.Status.MigrationMessage = message
+
+		// Use Status().Update() for status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // CreateMigration creates a new Migration resource
@@ -631,8 +651,8 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
-				MigrationPlan:           migrationplan.Name,
-				VMName:                  vm,
+				MigrationPlan: migrationplan.Name,
+				VMName:        vm,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
@@ -969,6 +989,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
 				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
 				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"SERVER_GROUP":               migrationplan.Spec.ServerGroup,
 				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
@@ -996,13 +1017,26 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				return nil, errors.Wrap(err, "failed to list all flavors")
 			}
 
+			// UseGPUFlavor is only applicable for PCD credentials
+			useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
+
+			// Get GPU requirements from VM
+			passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
+			vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
+
 			var flavor *flavors.Flavor
-			flavor, err = utils.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, allFlavors)
+			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to get closest flavor")
 			}
 			if flavor == nil {
-				return nil, errors.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
+				gpuInfo := ""
+				if passthroughGPUCount > 0 || vgpuCount > 0 {
+					gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
+				} else {
+					gpuInfo = " without GPU"
+				}
+				return nil, errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
 			}
 			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
 		}
@@ -1226,10 +1260,9 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				migrationplan.Status.MigrationStatus = corev1.PodFailed
-				migrationplan.Status.MigrationMessage = "Flavorless migration failed: " + err.Error()
-				if updateErr := r.Status().Update(ctx, migrationplan); updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
+				// added constant prefix for the filter in reconciler
+				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)); err != nil {
+					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
 				}
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
 			}
@@ -1380,12 +1413,12 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
-                return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
+				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
-            
+
 			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
 			currentMigration.Status.Conditions = cleanedConditions
-            
+
 			return r.Status().Update(ctx, currentMigration)
 		})
 

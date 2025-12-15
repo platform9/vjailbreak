@@ -1,20 +1,22 @@
 module github.com/platform9/vjailbreak/k8s/migration
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+
+replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/gophercloud/gophercloud v1.14.1
+	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
+	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
@@ -86,14 +88,14 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.34.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
@@ -113,3 +115,5 @@ require (
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
 replace github.com/platform9/vjailbreak/pkg/validation => ../../pkg/validation
+
+replace github.com/platform9/vjailbreak/pkg/openstack => ../../pkg/openstack

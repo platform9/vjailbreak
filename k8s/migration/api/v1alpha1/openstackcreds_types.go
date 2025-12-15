@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -60,12 +60,21 @@ type SecurityGroupInfo struct {
 	RequiresIDDisplay bool   `json:"requiresIdDisplay"`
 }
 
+// ServerGroupInfo holds the server group name, ID, and policy information
+type ServerGroupInfo struct {
+	Name     string `json:"name"`
+	ID       string `json:"id"`
+	Policy   string `json:"policy"`  // affinity, anti-affinity, soft-affinity, soft-anti-affinity
+	Members  int    `json:"members,omitempty"`
+}
+
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
 	VolumeTypes    []string            `json:"volumeTypes,omitempty"`
 	VolumeBackends []string            `json:"volumeBackends,omitempty"`
 	Networks       []string            `json:"networks,omitempty"`
 	SecurityGroups []SecurityGroupInfo `json:"securityGroups,omitempty"`
+	ServerGroups   []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
@@ -116,6 +125,25 @@ type OpenstackCredsList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OpenstackCreds `json:"items"`
+}
+
+// DeepCopyInto is a custom deepcopy function to handle the Flavors field
+// which uses an external type that doesn't implement DeepCopyInto
+func (in *OpenstackCredsSpec) DeepCopyInto(out *OpenstackCredsSpec) {
+	*out = *in
+	out.SecretRef = in.SecretRef
+	if in.Flavors != nil {
+		in, out := &in.Flavors, &out.Flavors
+		*out = make([]flavors.Flavor, len(*in))
+		copy(*out, *in)
+	}
+	if in.PCDHostConfig != nil {
+		in, out := &in.PCDHostConfig, &out.PCDHostConfig
+		*out = make([]HostConfig, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 }
 
 func init() {

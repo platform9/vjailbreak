@@ -89,7 +89,7 @@ func main() {
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
 	defer vcclient.VCClient.CloseIdleConnections()
 	// Validate OpenStack connection
-	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
+	openstackclients, err := openstack.NewOpenStackClients(ctx, openstackInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
@@ -141,12 +141,20 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		ServerGroup:            migrationparams.ServerGroup,
 		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 	}
+
+	if migrationobj.ServerGroup != "" {
+		utils.PrintLog(fmt.Sprintf("Server group configured: %s", migrationobj.ServerGroup))
+	} else {
+		utils.PrintLog("No server group configured for this migration")
+	}
+
 	PreMigrationPowerState, err := vmops.GetVmPowerState()
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to get VM power state: %v", err))

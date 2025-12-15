@@ -1,24 +1,27 @@
 module github.com/platform9/vjailbreak/pkg/vpwned
 
-go 1.24.0
+go 1.24.10
+
+replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
 
 require (
 	github.com/bougou/go-ipmi v0.7.6
 	github.com/canonical/gomaasclient v0.12.0
 	github.com/google/go-github/v63 v63.0.0
-	github.com/gophercloud/gophercloud v1.14.1
+	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/juju/errors v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251010063340-57148ad11aff
+	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/mock v0.5.1
-	golang.org/x/mod v0.25.0
+	golang.org/x/mod v0.29.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/grpc v1.72.1
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
@@ -73,6 +76,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
+	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000 // indirect
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
@@ -90,12 +94,12 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
@@ -120,3 +124,5 @@ replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 replace github.com/platform9/vjailbreak/pkg/validation => ../validation
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration
+
+replace github.com/platform9/vjailbreak/pkg/openstack => ../openstack

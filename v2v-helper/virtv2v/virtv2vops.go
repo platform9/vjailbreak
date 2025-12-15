@@ -218,7 +218,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -286,30 +286,18 @@ func GetOsRelease(path string) (string, error) {
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, networkInterfaces []vjailbreakv1alpha1.NIC, gatewayIP map[string]string) error {
+func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
-	type ipEntry struct {
-		ip     string
-		prefix int32
-	}
-	macToIPs := make(map[string][]ipEntry)
+	macToIPs := ipPerMac
 	macToDNS := make(map[string][]string)
 	if len(guestNetworks) > 0 {
 		for _, gn := range guestNetworks {
 			if strings.Contains(gn.IP, ":") { // skip IPv6 here
 				continue
 			}
-			macToIPs[gn.MAC] = append(macToIPs[gn.MAC], ipEntry{ip: gn.IP, prefix: gn.PrefixLength})
 			if len(gn.DNS) > 0 {
 				macToDNS[gn.MAC] = gn.DNS
 			}
-		}
-	} else if len(networkInterfaces) > 0 {
-		for _, ni := range networkInterfaces {
-			if strings.Contains(ni.IPAddress, ":") { // skip IPv6 here
-				continue
-			}
-			macToIPs[ni.MAC] = append(macToIPs[ni.MAC], ipEntry{ip: ni.IPAddress, prefix: 24})
 		}
 	}
 
@@ -334,13 +322,13 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		b.WriteString("      addresses:\n")
 		for _, e := range entries {
 			// default prefix to 24 if zero
-			prefix := e.prefix
+			prefix := e.Prefix
 			if prefix == 0 {
 				prefix = 24
 			}
-			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.ip, prefix))
+			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 		}
-		if gateway, ok := gatewayIP[mac]; ok {
+		if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
 			if !routesAdded {
 				log.Printf("Writing default routes")
 				b.WriteString("      routes:\n")
@@ -363,46 +351,46 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	}
 	netplanYAML := b.String()
 	log.Printf("NETPLAN YAML : %s", netplanYAML)
-	var ans string
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to create netplan file: %s", err)
+		return fmt.Errorf("failed to create netplan file: %w", err)
 	}
 	log.Println("Created local netplan file")
 	log.Println("Uploading netplan file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
 	if useSingleDisk {
-		remove_command := "mv /etc/netplan /etc/netplan-bkp"
-		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		command := "mv /etc/netplan /etc/netplan-bkp"
+		ans, err = RunCommandInGuest(diskPath, command, true)
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		remove_command = "mkdir /etc/netplan"
-		ans, err = RunCommandInGuest(diskPath, remove_command, true)
+		command = "mkdir /etc/netplan"
+		ans, err = RunCommandInGuest(diskPath, command, true)
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		command := `upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml`
+		command = "upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml"
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
-		remove_command := "mv /etc/netplan /etc/netplan-bkp"
-		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		command := "mv"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		remove_command = "mkdir /etc/netplan"
-		ans, err = RunCommandInGuestAllVolumes(disks, remove_command, true)
+		command = "mkdir"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
 		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %v: %s", remove_command, err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
-		command := "upload"
+		command = "upload"
 		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	}
 	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
-		return err
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
 	}
 	return nil
 }

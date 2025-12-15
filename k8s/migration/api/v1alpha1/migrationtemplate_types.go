@@ -52,6 +52,9 @@ type MigrationTemplateSpec struct {
 	// UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
 	// +optional
 	UseFlavorless bool `json:"useFlavorless,omitempty"`
+	// UseGPUFlavor indicates if the migration should filter and use GPU-enabled flavors.
+	// +optional
+	UseGPUFlavor bool `json:"useGPUFlavor,omitempty"`
 }
 
 // +kubebuilder:object:root=true

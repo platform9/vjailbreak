@@ -3,10 +3,8 @@ package utils
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"reflect"
 	"slices"
@@ -14,14 +12,15 @@ import (
 	"sync"
 	"time"
 
-	gophercloud "github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	gophercloud "github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -47,8 +47,9 @@ import (
 )
 
 const (
-	trueString = "true" // Define at package level
-	sdkPath    = "/sdk" // SDK path constant
+	trueString  = "true" // Define at package level
+	falseString = "false"
+	sdkPath     = "/sdk" // SDK path constant
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -155,7 +156,7 @@ func VerifyNetworks(ctx context.Context, k3sclient client.Client, openstackcreds
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
-	allPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
+	allPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to list networks")
 	}
@@ -187,7 +188,7 @@ func VerifyPorts(ctx context.Context, k3sclient client.Client, openstackcreds *v
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
 
-	allPages, err := ports.List(openstackClients.NetworkingClient, nil).AllPages()
+	allPages, err := ports.List(openstackClients.NetworkingClient, nil).AllPages(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to list ports")
 	}
@@ -218,7 +219,7 @@ func VerifyStorage(ctx context.Context, k3sclient client.Client, openstackcreds 
 	if err != nil {
 		return errors.Wrap(err, "failed to get openstack clients")
 	}
-	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
+	allPages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to list volume types")
 	}
@@ -252,7 +253,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	var openstackvoltypes []string
 	var openstacknetworks []string
 
-	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages()
+	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list volume types")
 	}
@@ -266,7 +267,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		openstackvoltypes = append(openstackvoltypes, allvoltypes[i].Name)
 	}
 
-	allNetworkPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages()
+	allNetworkPages, err := networks.List(openstackClients.NetworkingClient, nil).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list networks")
 	}
@@ -275,7 +276,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all networks")
 	}
-	volumeBackendPools, err := getCinderVolumeBackendPools(openstackClients)
+	volumeBackendPools, err := getCinderVolumeBackendPools(ctx, openstackClients)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cinder volume backend pools")
 	}
@@ -294,7 +295,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 
 	listOpts := projects.ListOpts{Name: credsInfo.TenantName}
-	allPages, err := projects.List(identityClient, listOpts).AllPages()
+	allPages, err := projects.List(identityClient, listOpts).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to list projects with name %s", credsInfo.TenantName)
 	}
@@ -310,7 +311,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 
 	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,
-	}).AllPages()
+	}).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list security groups for project")
 	}
@@ -335,11 +336,29 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
+	// Fetch server groups
+	openstackservergroups := make([]vjailbreakv1alpha1.ServerGroupInfo, 0)
+	allServerGroupPages, err := servergroups.List(openstackClients.ComputeClient, servergroups.ListOpts{}).AllPages(ctx)
+	if err == nil {
+		allServerGroups, err := servergroups.ExtractServerGroups(allServerGroupPages)
+		if err == nil {
+			for _, group := range allServerGroups {
+				openstackservergroups = append(openstackservergroups, vjailbreakv1alpha1.ServerGroupInfo{
+					Name:    group.Name,
+					ID:      group.ID,
+					Policy:  strings.Join(group.Policies, ","),
+					Members: len(group.Members),
+				})
+			}
+		}
+	}
+
 	return &vjailbreakv1alpha1.OpenstackInfo{
 		VolumeTypes:    openstackvoltypes,
 		Networks:       openstacknetworks,
 		VolumeBackends: volumeBackendPools,
 		SecurityGroups: openstacksecuritygroups,
+		ServerGroups:   openstackservergroups,
 	}, nil
 }
 
@@ -398,22 +417,20 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create openstack client")
 	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	vjbNet := netutils.NewVjbNet()
 	if openstackCredential.Insecure {
-		tlsConfig.InsecureSkipVerify = true
+		vjbNet.Insecure = true
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-		Proxy:           http.ProxyFromEnvironment,
+	vjbNet.SetTimeout(60 * time.Second)
+
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		providerClient.HTTPClient = *vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-		Timeout:   60 * time.Second,
-	}
+
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
 		Username:         openstackCredential.Username,
@@ -421,7 +438,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
 	}
-	if err := openstack.Authenticate(providerClient, authOpts); err != nil {
+	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
 		switch {
 		case strings.Contains(err.Error(), "401"):
 			return nil, fmt.Errorf("authentication failed: invalid username, password, or project/domain. Please verify your credentials")
@@ -626,8 +643,8 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
-// GetAllVMs gets all the VMs in a datacenter.
-func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
+// GetAndCreateAllVMs gets all the VMs in a datacenter.
+func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
 	vmErrors := []vmError{}
 	errMu := sync.Mutex{}
@@ -690,6 +707,44 @@ func GetAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter st
 		}
 	}
 	return vminfo, rdmDiskMap, nil
+}
+
+// CountGPUs counts the number of GPU devices attached to a VM.
+// It separately counts PCI passthrough GPUs and vGPU devices.
+func CountGPUs(vmProps *mo.VirtualMachine) vjailbreakv1alpha1.GPUInfo {
+	info := vjailbreakv1alpha1.GPUInfo{}
+
+	if vmProps.Config == nil || vmProps.Config.Hardware.Device == nil {
+		return info
+	}
+
+	for _, device := range vmProps.Config.Hardware.Device {
+		if pciDevice, ok := device.(*types.VirtualPCIPassthrough); ok {
+			if pciDevice.Backing != nil {
+				// VirtualPCIPassthroughVmiopBackingInfo indicates vGPU
+				if _, isVGPU := pciDevice.Backing.(*types.VirtualPCIPassthroughVmiopBackingInfo); isVGPU {
+					info.VGPUCount++
+				} else {
+					// Regular PCI passthrough (likely GPU)
+					info.PassthroughCount++
+				}
+			} else {
+				// PCI passthrough without specific backing
+				info.PassthroughCount++
+			}
+		}
+	}
+
+	return info
+}
+
+// DetectGPUUsage checks if the VM has any GPU devices attached.
+// It detects PCI passthrough devices (including GPUs) and vGPU profiles.
+//
+// Deprecated: Use CountGPUs() and GPUInfo.HasGPU() instead.
+func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
+	gpuInfo := CountGPUs(vmProps)
+	return gpuInfo.HasGPU()
 }
 
 // ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
@@ -944,33 +999,6 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
 	}
 	return nil
-}
-
-// GetClosestFlavour gets the closest flavor for the given CPU and memory
-func GetClosestFlavour(cpu, memory int, allFlavors []flavors.Flavor) (*flavors.Flavor, error) {
-	// Check if the flavor slice is empty
-	if len(allFlavors) == 0 {
-		return nil, fmt.Errorf("no flavors available to select from")
-	}
-
-	bestFlavor := new(flavors.Flavor)
-	bestFlavor.VCPUs = constants.MaxVCPUs
-	bestFlavor.RAM = constants.MaxRAM
-
-	// Find the smallest flavor that meets the requirements
-	for _, flavor := range allFlavors {
-		if flavor.VCPUs >= cpu && flavor.RAM >= memory {
-			if flavor.VCPUs < bestFlavor.VCPUs ||
-				(flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
-				bestFlavor = &flavor
-			}
-		}
-	}
-
-	if bestFlavor.VCPUs != constants.MaxVCPUs {
-		return bestFlavor, nil
-	}
-	return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
 }
 
 // CreateOrUpdateLabel creates or updates a label on a VMwareMachine resource
@@ -1439,8 +1467,8 @@ func CreateOrUpdateRDMDisks(ctx context.Context, client client.Client,
 }
 
 // getCinderVolumeBackendPools retrieves the list of Cinder volume backend pools from OpenStack
-func getCinderVolumeBackendPools(openstackClients *OpenStackClients) ([]string, error) {
-	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages()
+func getCinderVolumeBackendPools(ctx context.Context, openstackClients *OpenStackClients) ([]string, error) {
+	allStoragePoolPages, err := schedulerstats.List(openstackClients.BlockStorageClient, nil).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list all storage backend pools")
 	}
@@ -1706,6 +1734,9 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		return
 	}
 
+	// Detect GPU usage and count GPUs
+	gpuInfo := CountGPUs(&vmProps)
+
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
 		Datastores:        datastores,
@@ -1721,6 +1752,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		RDMDisks:          rdmForVM,
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
+		GPU:               gpuInfo,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
@@ -1731,7 +1763,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 // FindHotplugBaseFlavor connects to OpenStack and finds a flavor with 0 vCPUs and 0 RAM
 func FindHotplugBaseFlavor(computeClient *gophercloud.ServiceClient) (*flavors.Flavor, error) {
-	allPages, err := flavors.ListDetail(computeClient, nil).AllPages()
+	allPages, err := flavors.ListDetail(computeClient, nil).AllPages(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %w", err)
 	}

@@ -2,18 +2,17 @@ package openstack
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -58,23 +57,21 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 	}
 
-	// Configure TLS
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	vjbNet := netutils.NewVjbNet()
 	if openstackCredential.Insecure {
-		tlsConfig.InsecureSkipVerify = true
+		vjbNet.Insecure = true
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-		Proxy:           http.ProxyFromEnvironment,
+	vjbNet.SetTimeout(60 * time.Second)
+	if err := vjbNet.CreateSecureHTTPClient(); err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("failed to create secure HTTP client"),
+			Error:   fmt.Errorf("failed to create secure HTTP client %v", err),
+		}
 	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-		Timeout:   60 * time.Second,
-	}
+	providerClient.HTTPClient = *vjbNet.GetClient()
 
 	// Authenticate
 	authOpts := gophercloud.AuthOptions{
@@ -84,7 +81,7 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
 	}
-	if err := openstack.Authenticate(providerClient, authOpts); err != nil {
+	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
 		var message string
 		switch {
 		case strings.Contains(err.Error(), "401"):
@@ -180,7 +177,7 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
@@ -204,7 +201,7 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	if openstackcreds == nil {
 		return nil, fmt.Errorf("openstackcreds cannot be nil")
 	}
-	
+
 	ctx = ensureLogger(ctx)
 
 	log.Printf("Updating Master Node Image ID")
