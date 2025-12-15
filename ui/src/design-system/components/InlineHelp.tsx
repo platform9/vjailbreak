@@ -12,7 +12,7 @@ const getToneColors = (tone: InlineHelpTone, theme: Theme) => {
   switch (tone) {
     case 'positive':
       return {
-        color: theme.palette.success.main,
+        color: theme.palette.common.white,
         backgroundColor: theme.palette.success.light,
         borderColor: theme.palette.success.main
       }
@@ -24,7 +24,7 @@ const getToneColors = (tone: InlineHelpTone, theme: Theme) => {
       }
     case 'warning':
       return {
-        color: theme.palette.warning.main,
+        color: theme.palette.common.white,
         backgroundColor: theme.palette.warning.light,
         borderColor: theme.palette.warning.main
       }

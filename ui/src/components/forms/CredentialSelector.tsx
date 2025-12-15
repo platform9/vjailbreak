@@ -5,11 +5,11 @@ import {
   CircularProgress,
   FormControl,
   FormHelperText,
-  TextField,
-  Typography
+  TextField
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import { useState } from 'react'
+import { FieldLabel } from 'src/design-system'
 
 interface CredentialOption {
   label: string
@@ -57,9 +57,11 @@ export default function CredentialSelector({
 
   return (
     <FormControl fullWidth error={!!error}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Typography variant="body1">{label}</Typography>
-      </Box>
+      {label ? (
+        <Box sx={{ mb: 0.5 }}>
+          <FieldLabel label={label} align="flex-start" />
+        </Box>
+      ) : null}
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Autocomplete
           fullWidth

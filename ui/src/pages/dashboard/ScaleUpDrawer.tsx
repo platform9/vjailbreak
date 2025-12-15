@@ -1,40 +1,32 @@
-import {
-  Box,
-  FormControl,
-  FormLabel,
-  InputLabel,
-  MenuItem,
-  Select,
-  TextField,
-  Typography,
-  IconButton,
-  Tooltip,
-  CircularProgress,
-  InputAdornment
-} from '@mui/material'
-import React, { useState, useCallback, useEffect } from 'react'
-import Step from 'src/components/forms/Step'
+import { Alert, Box, CircularProgress } from '@mui/material'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useForm, SubmitHandler } from 'react-hook-form'
 import {
   DrawerShell,
   DrawerHeader,
-  DrawerBody,
   DrawerFooter,
-  ActionButton
+  ActionButton,
+  Section,
+  SectionHeader,
+  InlineHelp,
+  FormGrid,
+  Row,
+  FieldLabel
 } from 'src/design-system'
+
+// Use the new common form components from @forms
+import DesignSystemForm from 'src/components/forms/rhf/DesignSystemForm'
+import RHFTextField from 'src/components/forms/rhf/RHFTextField'
+import RHFSelect from 'src/components/forms/rhf/RHFSelect'
+import TextField from 'src/components/forms/TextField'
 import OpenstackCredentialsForm from 'src/components/forms/OpenstackCredentialsForm'
-import InfoIcon from '@mui/icons-material/Info'
+
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
-import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { createNodes } from 'src/api/nodes/nodeMappings'
-import { ArrowDropDownIcon } from '@mui/x-date-pickers/icons'
-import { OpenstackFlavor } from 'src/api/openstack-creds/model'
-import SearchIcon from '@mui/icons-material/Search'
+import axios from 'axios'
+import { OpenstackCreds, OpenstackFlavor } from 'src/api/openstack-creds/model'
 import { NodeItem } from 'src/api/nodes/model'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
-import axios from 'axios'
-import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
-
-// Mock data - replace with actual data from API
 
 interface ScaleUpDrawerProps {
   open: boolean
@@ -42,49 +34,39 @@ interface ScaleUpDrawerProps {
   masterNode: NodeItem | null
 }
 
-const StepHeader = ({
-  number,
-  label,
-  tooltip
-}: {
-  number: string
-  label: string
-  tooltip: string
-}) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-    <Step stepNumber={number} label={label} sx={{ mb: 0 }} />
-    <Tooltip title={tooltip} arrow>
-      <IconButton size="small" color="info">
-        <InfoIcon />
-      </IconButton>
-    </Tooltip>
-  </Box>
-)
+interface ScaleUpFormValues {
+  openstackCredential: string
+  flavor: string
+  nodeCount: number
+}
 
 export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDrawerProps) {
+  const form = useForm<ScaleUpFormValues>({
+    defaultValues: {
+      openstackCredential: '',
+      flavor: '',
+      nodeCount: 1
+    }
+  })
+
+  const {
+    watch,
+    setValue,
+    reset,
+    formState: { errors }
+  } = form
+
   const [openstackCredentials, setOpenstackCredentials] = useState<OpenstackCreds | null>(null)
-  const [nodeCount, setNodeCount] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedOpenstackCred, setSelectedOpenstackCred] = useState<string | null>(null)
   const [openstackError, setOpenstackError] = useState<string | null>(null)
 
   const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([])
-  const [selectedFlavor, setSelectedFlavor] = useState('')
   const [loadingFlavors, setLoadingFlavors] = useState(false)
   const [flavorsError, setFlavorsError] = useState<string | null>(null)
-  const [flavorSearchTerm, setFlavorSearchTerm] = useState('')
 
-  // Filter flavors based on search term
-  const filteredFlavors = React.useMemo(() => {
-    return flavors.filter(
-      (flavor) =>
-        flavor.name.toLowerCase().includes(flavorSearchTerm.toLowerCase()) ||
-        `${flavor.vcpus} vCPU`.toLowerCase().includes(flavorSearchTerm.toLowerCase()) ||
-        `${flavor.ram / 1024}GB RAM`.toLowerCase().includes(flavorSearchTerm.toLowerCase()) ||
-        `${flavor.disk}GB disk`.toLowerCase().includes(flavorSearchTerm.toLowerCase())
-    )
-  }, [flavors, flavorSearchTerm])
+  const watchedValues = watch()
+  const selectedOpenstackCred = watchedValues.openstackCredential
 
   // Fetch credentials list
   const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } =
@@ -93,104 +75,127 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
 
-  const clearStates = () => {
+  // Build flavor options
+  const flavorOptions = useMemo(() => {
+    return flavors.map((flavor) => ({
+      label: `${flavor.name} — ${flavor.vcpus} vCPU · ${flavor.ram / 1024}GB RAM · ${flavor.disk}GB disk`,
+      value: flavor.id
+    }))
+  }, [flavors])
+
+  const clearStates = useCallback(() => {
+    reset({
+      openstackCredential: '',
+      flavor: '',
+      nodeCount: 1
+    })
     setOpenstackCredentials(null)
-    setSelectedOpenstackCred(null)
     setOpenstackError(null)
-    setNodeCount(1)
     setError(null)
-    setSelectedFlavor('')
     setFlavors([])
     setLoadingFlavors(false)
     setFlavorsError(null)
-    setFlavorSearchTerm('')
-  }
+  }, [reset])
 
-  // Reset state when drawer closes
   const handleClose = useCallback(() => {
     clearStates()
     onClose()
-  }, [onClose])
+  }, [clearStates, onClose])
 
-  const handleOpenstackCredSelect = async (credId: string | null) => {
-    setSelectedOpenstackCred(credId)
+  const handleOpenstackCredSelect = useCallback(
+    async (credId: string | null) => {
+      setValue('openstackCredential', credId || '')
+      setValue('flavor', '')
 
-    if (credId) {
-      try {
-        const response = await getOpenstackCredentials(credId)
-        setOpenstackCredentials(response)
-      } catch (error) {
-        console.error('Error fetching OpenStack credentials:', error)
-        setOpenstackError(
-          'Error fetching OpenStack credentials: ' +
-            (axios.isAxiosError(error) ? error?.response?.data?.message : error)
-        )
+      if (credId) {
+        try {
+          const response = await getOpenstackCredentials(credId)
+          setOpenstackCredentials(response)
+          setOpenstackError(null)
+        } catch (err) {
+          console.error('Error fetching OpenStack credentials:', err)
+          setOpenstackError(
+            'Error fetching OpenStack credentials: ' +
+              (axios.isAxiosError(err) ? err?.response?.data?.message : String(err))
+          )
+        }
+      } else {
+        setOpenstackCredentials(null)
+        setOpenstackError(null)
       }
-    } else {
-      setOpenstackCredentials(null)
-    }
-  }
+    },
+    [setValue]
+  )
 
   useEffect(() => {
     const fetchFlavours = async () => {
-      if (openstackCredsValidated || openstackCredentials) {
+      if (openstackCredsValidated && openstackCredentials) {
         setLoadingFlavors(true)
+        setFlavorsError(null)
         try {
           const flavours = openstackCredentials?.spec.flavors
-          console.log(flavours)
           setFlavors(flavours || [])
-        } catch (error) {
-          console.error('Failed to fetch flavors:', error)
+        } catch (err) {
+          console.error('Failed to fetch flavors:', err)
           setFlavorsError('Failed to fetch OpenStack flavors')
         } finally {
           setLoadingFlavors(false)
         }
+      } else {
+        setFlavors([])
+        setValue('flavor', '')
       }
     }
     fetchFlavours()
-  }, [openstackCredsValidated, openstackCredentials])
+  }, [openstackCredsValidated, openstackCredentials, setValue])
 
-  const handleSubmit = async () => {
-    if (
-      !masterNode?.spec.openstackImageID ||
-      !selectedFlavor ||
-      !nodeCount ||
-      !openstackCredentials?.metadata?.name
-    ) {
-      setError('Please fill in all required fields')
-      return
-    }
+  const handleSubmit: SubmitHandler<ScaleUpFormValues> = useCallback(
+    async (values) => {
+      const nodeCountNum = Number(values.nodeCount)
+      if (
+        !masterNode?.spec.openstackImageID ||
+        !values.flavor ||
+        !nodeCountNum ||
+        isNaN(nodeCountNum) ||
+        !openstackCredentials?.metadata?.name
+      ) {
+        setError('Please fill in all required fields')
+        return
+      }
 
-    try {
-      setLoading(true)
-      await createNodes({
-        imageId: masterNode.spec.openstackImageID,
-        openstackCreds: {
-          kind: 'openstackcreds' as const,
-          name: openstackCredentials.metadata.name,
-          namespace: 'migration-system'
-        },
-        count: nodeCount,
-        flavorId: selectedFlavor
-      })
+      try {
+        setLoading(true)
+        setError(null)
+        await createNodes({
+          imageId: masterNode.spec.openstackImageID,
+          openstackCreds: {
+            kind: 'openstackcreds' as const,
+            name: openstackCredentials.metadata.name,
+            namespace: 'migration-system'
+          },
+          count: nodeCountNum,
+          flavorId: values.flavor
+        })
 
-      handleClose()
-    } catch (error) {
-      console.error('Error scaling up nodes:', error)
-      setError(error instanceof Error ? error.message : 'Failed to scale up nodes')
-    } finally {
-      setLoading(false)
-    }
-  }
+        handleClose()
+      } catch (err) {
+        console.error('Error scaling up nodes:', err)
+        setError(err instanceof Error ? err.message : 'Failed to scale up nodes')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [masterNode, openstackCredentials, handleClose]
+  )
 
-  const isSubmitDisabled = !masterNode || !selectedFlavor || loading || !openstackCredsValidated
-
-  useKeyboardSubmit({
-    open,
-    isSubmitDisabled,
-    onSubmit: handleSubmit,
-    onClose: handleClose
-  })
+  const isSubmitDisabled =
+    !masterNode ||
+    !watchedValues.flavor ||
+    loading ||
+    !openstackCredsValidated ||
+    !!errors.openstackCredential ||
+    !!errors.flavor ||
+    !!errors.nodeCount
 
   return (
     <DrawerShell
@@ -204,7 +209,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           </ActionButton>
           <ActionButton
             tone="primary"
-            onClick={handleSubmit}
+            type="submit"
+            form="scaleup-form"
             loading={loading}
             disabled={isSubmitDisabled}
             data-testid="scaleup-submit"
@@ -214,166 +220,125 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         </DrawerFooter>
       }
     >
-      <DrawerBody>
-        <Box sx={{ display: 'grid', gap: 4 }} data-testid="scaleup-form">
-          {/* Step 1: OpenStack Credentials */}
-          <div>
-            <StepHeader
-              number="1"
-              label="OpenStack Credentials"
-              tooltip="Select existing OpenStack credentials to authenticate with the OpenStack platform where new nodes will be created."
+      <DesignSystemForm
+        form={form}
+        id="scaleup-form"
+        onSubmit={handleSubmit}
+        keyboardSubmitProps={{
+          open,
+          onClose: handleClose,
+          isSubmitDisabled
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+            pr: 1
+          }}
+          data-testid="scaleup-form"
+        >
+          {/* OpenStack Credentials */}
+          <Section sx={{ mb: 1 }}>
+            <SectionHeader
+              title="OpenStack Credentials"
+              sx={{ mb: 0 }}
+              //subtitle="Choose an existing credential to authenticate and fetch available flavors."
             />
-            <Box sx={{ ml: 6, mt: 2 }}>
-              <FormControl fullWidth error={!!openstackError} required>
-                <OpenstackCredentialsForm
-                  fullWidth={true}
-                  size="small"
-                  credentialsList={openstackCredsList}
-                  loadingCredentials={loadingOpenstackCreds}
-                  error={openstackError || ''}
-                  onCredentialSelect={handleOpenstackCredSelect}
-                  selectedCredential={selectedOpenstackCred}
-                  showCredentialSelector={true}
-                />
-              </FormControl>
-            </Box>
-          </div>
 
-          {/* Step 2: Agent Template */}
-          <div>
-            <StepHeader
-              number="2"
-              label="Agent Template"
-              tooltip="Configure the specification for the new nodes."
+            <OpenstackCredentialsForm
+              fullWidth
+              size="small"
+              credentialsList={openstackCredsList}
+              loadingCredentials={loadingOpenstackCreds}
+              error={openstackError ?? undefined}
+              onCredentialSelect={handleOpenstackCredSelect}
+              selectedCredential={selectedOpenstackCred}
+              showCredentialSelector
             />
-            <Box sx={{ ml: 6, mt: 2, display: 'grid', gap: 3 }}>
-              <FormControl fullWidth>
-                <TextField
-                  label="Master Agent Image"
-                  value={'Image selected from the first vjailbreak node'}
-                  disabled
-                  fullWidth
-                  size="small"
-                />
-              </FormControl>
-              <FormControl fullWidth>
-                <Typography variant="body1" style={{ color: 'red' }}>
-                  ⚠️ Please select a flavor with a disk size greater than 16GB.
-                </Typography>
-              </FormControl>
-              <FormControl error={!!flavorsError} fullWidth>
-                <InputLabel size="small">
-                  {loadingFlavors ? 'Loading Flavors...' : 'Flavor'}
-                </InputLabel>
-                <Select
-                  value={selectedFlavor}
-                  label="Flavor"
-                  onChange={(e) => setSelectedFlavor(e.target.value)}
-                  required
-                  size="small"
-                  disabled={loadingFlavors || !openstackCredsValidated || !openstackCredentials}
-                  IconComponent={
-                    loadingFlavors
-                      ? () => (
-                          <CircularProgress
-                            size={24}
-                            sx={{ marginRight: 2, display: 'flex', alignItems: 'center' }}
-                          />
-                        )
-                      : ArrowDropDownIcon
-                  }
-                  MenuProps={{
-                    PaperProps: {
-                      style: {
-                        maxHeight: 300
-                      }
-                    }
-                  }}
-                >
-                  <Box
-                    sx={{
-                      p: 1,
-                      position: 'sticky',
-                      top: 0,
-                      bgcolor: 'background.paper',
-                      zIndex: 1
-                    }}
-                  >
-                    <TextField
-                      size="small"
-                      placeholder="Search flavors"
-                      fullWidth
-                      value={flavorSearchTerm}
-                      onChange={(e) => {
-                        e.stopPropagation()
-                        setFlavorSearchTerm(e.target.value)
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      autoFocus
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchIcon fontSize="small" />
-                          </InputAdornment>
-                        )
-                      }}
-                    />
-                  </Box>
-                  {flavors.length === 0 ? (
-                    <MenuItem disabled>No flavors available</MenuItem>
-                  ) : filteredFlavors.length === 0 ? (
-                    <MenuItem disabled>No matching flavors found</MenuItem>
-                  ) : (
-                    filteredFlavors.map((flavor) => (
-                      <MenuItem key={flavor.id} value={flavor.id}>
-                        {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-                {flavorsError && (
-                  <FormLabel error sx={{ mt: 1, fontSize: '0.75rem' }}>
-                    {flavorsError}
-                  </FormLabel>
-                )}
-              </FormControl>
-            </Box>
-          </div>
+          </Section>
 
-          {/* Step 3: Node Count */}
-          <div>
-            <StepHeader
-              number="3"
-              label="Agent Count"
-              tooltip="Specify how many new nodes to create based on the above node template."
+          {/* Agent Template */}
+          <Section>
+            <SectionHeader
+              title="Agent Template"
+              subtitle="Select a flavor to define the CPU, memory and disk for new agents."
             />
-            <Box sx={{ ml: 6, mt: 2 }}>
-              <TextField
-                type="number"
+
+            <FormGrid minWidth={360} gap={1.5}>
+              <RHFTextField
+                name="masterAgentImage"
+                label="Master Agent Image"
+                value={
+                  masterNode?.spec.openstackImageID
+                    ? 'Image selected from master node'
+                    : 'No image found on master node'
+                }
+              />
+
+              <RHFSelect
+                name="flavor"
+                label="Flavor"
+                options={flavorOptions}
+                placeholder={loadingFlavors ? 'Loading flavors...' : 'Select a flavor'}
+                disabled={loadingFlavors || !openstackCredsValidated || !openstackCredentials}
+                searchable
+                searchPlaceholder="Search flavors by name, vCPU, RAM or disk"
+                rules={{ required: 'Flavor selection is required' }}
+                helperText={flavorsError ?? undefined}
+                error={!!flavorsError}
+              />
+            </FormGrid>
+
+            <Alert severity="warning" variant="outlined" sx={{ mt: 1.5 }}>
+              Select a flavor with disk &gt; 16GB for production workloads.
+            </Alert>
+
+            {loadingFlavors && (
+              <Row gap={1} alignItems="center">
+                <CircularProgress size={16} />
+                <span>Loading available flavors…</span>
+              </Row>
+            )}
+          </Section>
+
+          {/* Agent Count */}
+          <Section sx={{ mb: 1 }}>
+            <SectionHeader
+              title="Agent Count"
+              subtitle="Specify how many agents to create with the selected template."
+            />
+
+            <FormGrid minWidth={360} gap={2}>
+              <RHFTextField
+                name="nodeCount"
                 label="Number of Agents"
-                value={nodeCount}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value)
-                  if (value >= 1 && value <= 5) {
-                    setNodeCount(value)
+                type="number"
+                rules={{
+                  required: 'Number of agents is required',
+                  validate: (value) => {
+                    const num = Number(value)
+                    if (isNaN(num)) return 'Please enter a valid number'
+                    if (num < 1) return 'Minimum 1 agent required'
+                    if (num > 5) return 'Maximum 5 agents allowed'
+                    return true
                   }
                 }}
                 inputProps={{ min: 1, max: 5 }}
                 fullWidth
-                size="small"
-                helperText="Min: 1, Max: 5 nodes"
+                labelHelperText="Min: 1 · Max: 5"
+                required
               />
-            </Box>
-          </div>
+            </FormGrid>
+          </Section>
 
-          {error && (
-            <Typography color="error" sx={{ ml: 6 }}>
-              {error}
-            </Typography>
-          )}
+          {/* Error Display */}
+          {error && <InlineHelp tone="critical">{error}</InlineHelp>}
         </Box>
-      </DrawerBody>
+      </DesignSystemForm>
     </DrawerShell>
   )
 }
