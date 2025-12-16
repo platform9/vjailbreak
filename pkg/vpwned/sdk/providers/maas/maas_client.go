@@ -207,6 +207,34 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	case *api.IpmiType_Tool:
 		con_interface = ipmi.InterfaceTool
 	}
+
+	// Handle machine in "New" state - needs commissioning first
+	if strings.EqualFold(machine.StatusName, "New") {
+		logrus.Infof("%s Machine %s is in New state, commissioning first", ctx, systemID)
+		
+		// Commission the machine
+		_, err = m.Client.Machine.Commission(systemID, &entity.MachineCommissionParams{})
+		if err != nil {
+			logrus.Errorf("%s Failed to commission machine: %v", ctx, err)
+			return errors.Wrap(err, "failed to commission machine")
+		}
+		
+		// Wait for commissioning to complete (machine becomes "Ready")
+		logrus.Infof("%s Waiting for machine %s to complete commissioning", ctx, systemID)
+		err = m.waitForMachineState(ctx, systemID, "Ready", 10*time.Minute)
+		if err != nil {
+			logrus.Errorf("%s Failed waiting for commissioning: %v", ctx, err)
+			return errors.Wrap(err, "failed waiting for commissioning to complete")
+		}
+		
+		// Refresh machine state after commissioning
+		machine, err = m.Client.Machine.Get(systemID)
+		if err != nil {
+			logrus.Errorf("Failed to get machine after commissioning: %v", err)
+			return errors.Wrap(err, "failed to get machine after commissioning")
+		}
+	}
+
 	if !req.ManualPowerControl {
 		//Set machine to PXE Boot
 		logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
@@ -230,7 +258,35 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed to release machine: %v", ctx, err)
 			return errors.Wrap(err, "failed to release machine")
 		}
+		
+		// Wait for machine to be released (becomes "Ready")
+		logrus.Infof("%s Waiting for machine %s to be released", ctx, systemID)
+		err = m.waitForMachineState(ctx, systemID, "Ready", 5*time.Minute)
+		if err != nil {
+			logrus.Errorf("%s Failed waiting for release: %v", ctx, err)
+			return errors.Wrap(err, "failed waiting for machine to be released")
+		}
 	}
+	
+	// Allocate the machine before deployment
+	logrus.Infof("%s Allocating machine %s", ctx, systemID)
+	_, err = m.Client.Machines.Allocate(&entity.MachineAllocateParams{
+		SystemID: systemID,
+		Comment:  "vJailbreak: Allocating machine for deployment",
+	})
+	if err != nil {
+		logrus.Errorf("%s Failed to allocate machine: %v", ctx, err)
+		return errors.Wrap(err, "failed to allocate machine")
+	}
+	
+	// Wait for allocation to complete
+	logrus.Infof("%s Waiting for machine %s to be allocated", ctx, systemID)
+	err = m.waitForMachineState(ctx, systemID, "Allocated", 1*time.Minute)
+	if err != nil {
+		logrus.Errorf("%s Failed waiting for allocation: %v", ctx, err)
+		return errors.Wrap(err, "failed waiting for machine to be allocated")
+	}
+	
 	if !req.ManualPowerControl {
 		//Call PXE boot again to deploy the machine
 		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
@@ -354,6 +410,47 @@ func (m *MaasClient) GetIPMIClient(ctx context.Context, host, username, password
 // we should try using goipmi to set the bootdev to PXE
 // this would trigger MaaS to boot an ephemeral image on next reboot for this host
 // then we can move to Deploy state for the host.
+// waitForMachineState polls the machine status until it reaches the desired state or times out
+func (m *MaasClient) waitForMachineState(ctx context.Context, systemID string, desiredState string, timeout time.Duration) error {
+	if m.Client == nil {
+		return errors.New("client not initialized")
+	}
+	
+	deadline := time.Now().Add(timeout)
+	pollInterval := 10 * time.Second
+	
+	for time.Now().Before(deadline) {
+		machine, err := m.Client.Machine.Get(systemID)
+		if err != nil {
+			logrus.Errorf("Failed to get machine status: %v", err)
+			return errors.Wrap(err, "failed to get machine status")
+		}
+		
+		logrus.Debugf("Machine %s current state: %s (waiting for %s)", systemID, machine.StatusName, desiredState)
+		
+		if strings.EqualFold(machine.StatusName, desiredState) {
+			logrus.Infof("Machine %s reached desired state: %s", systemID, desiredState)
+			return nil
+		}
+		
+		// Check for failed states
+		if strings.EqualFold(machine.StatusName, "Failed") || 
+		   strings.EqualFold(machine.StatusName, "Failed commissioning") ||
+		   strings.EqualFold(machine.StatusName, "Failed deployment") {
+			return errors.Errorf("machine %s entered failed state: %s - %s", systemID, machine.StatusName, machine.StatusMessage)
+		}
+		
+		select {
+		case <-ctx.Done():
+			return errors.Wrap(ctx.Err(), "context cancelled while waiting for machine state")
+		case <-time.After(pollInterval):
+			// Continue polling
+		}
+	}
+	
+	return errors.Errorf("timeout waiting for machine %s to reach state %s after %v", systemID, desiredState, timeout)
+}
+
 func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, power_cycle bool, ipmi_interface *api.IpmiType) error {
 	if m.Client == nil {
 		return errors.New("client not initialized")
