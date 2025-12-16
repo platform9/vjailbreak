@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
@@ -264,22 +267,42 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		}
 	}
 
-	// Example: specify root disk from image with volume type
+	// Pre-create the volume in Cinder with the specified volume type
+	// This allows us to control the volume type, which is not supported in block_device_mapping_v2
+	log.Info("Pre-creating root volume in Cinder", "volumeType", volumeType, "size", 60)
+	
+	volumeCreateOpts := volumes.CreateOpts{
+		Size:             60,
+		Name:             fmt.Sprintf("%s-root", vjNode.Name),
+		ImageID:          imageID,
+		AvailabilityZone: availabilityZone,
+	}
+	
+	// Only set volume type if it's not empty
+	if volumeType != "" {
+		volumeCreateOpts.VolumeType = volumeType
+	}
+	
+	volume, err := volumes.Create(ctx, openstackClients.BlockStorageClient, volumeCreateOpts, nil).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create root volume in Cinder")
+	}
+	
+	log.Info("Volume created, waiting for it to become available", "volumeID", volume.ID, "volumeType", volume.VolumeType)
+	
+	// Wait for volume to become available
+	err = waitForVolumeAvailable(ctx, openstackClients.BlockStorageClient, volume.ID, log)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to wait for volume to become available")
+	}
+
+	// Boot instance from the pre-created volume
 	rootDisk := servers.BlockDevice{
-		// SourceType: image, since you're booting from an image
-		SourceType: servers.SourceImage,
-		// DestinationType: volume, because you want a Cinder-backed root disk
-		DestinationType: servers.DestinationVolume,
-		// UUID of the image to use
-		UUID: imageID,
-		// BootIndex = 0 indicates this is the root device
-		BootIndex: 0,
-		// Whether to delete the volume when instance is deleted
+		SourceType:          servers.SourceVolume,
+		DestinationType:     servers.DestinationVolume,
+		UUID:                volume.ID,
+		BootIndex:           0,
 		DeleteOnTermination: true,
-		// Size of the root disk in GB
-		VolumeSize: 60, // example size
-		// Extra options (like volume type)
-		VolumeType: volumeType,
 	}
 
 	// Define server creation parameters
@@ -774,6 +797,37 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 		return errors.Wrap(err, "failed to delete node")
 	}
 	return nil
+}
+
+// waitForVolumeAvailable waits for a volume to become available
+func waitForVolumeAvailable(ctx context.Context, client *gophercloud.ServiceClient, volumeID string, log logr.Logger) error {
+	maxRetries := 60 // Wait up to 5 minutes (60 * 5 seconds)
+	for i := 0; i < maxRetries; i++ {
+		volume, err := volumes.Get(ctx, client, volumeID).Extract()
+		if err != nil {
+			return errors.Wrap(err, "failed to get volume status")
+		}
+		
+		log.Info("Checking volume status", "volumeID", volumeID, "status", volume.Status, "attempt", i+1)
+		
+		if volume.Status == "available" {
+			return nil
+		}
+		
+		if volume.Status == "error" {
+			return fmt.Errorf("volume entered error state")
+		}
+		
+		// Wait 5 seconds before checking again
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+			// Continue to next iteration
+		}
+	}
+	
+	return fmt.Errorf("timeout waiting for volume to become available")
 }
 
 // GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
