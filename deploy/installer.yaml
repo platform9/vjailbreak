@@ -3848,11 +3848,12 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+
         volumeMounts:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirstWithHostNet
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}

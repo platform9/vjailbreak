@@ -8,6 +8,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
+	"go.uber.org/zap"
 )
 
 // ParseCredentialsFromEnv creates a Credentials struct from environment variables.
@@ -72,5 +73,10 @@ func CreateFromOpenstackCreds(openstackCreds vjailbreakv1alpha1.OpenStackCredsIn
 // It constructs the Keystone endpoint URL and creates a client with appropriate security settings.
 func CreateFromDuInfo(pcdInfo pcd.Info) Client {
 	keystoneEndpoint := fmt.Sprintf("%s/keystone", pcdInfo.URL)
-	return NewClient(keystoneEndpoint, pcdInfo.Insecure)
+	client, err := NewClient(keystoneEndpoint, pcdInfo.Insecure)
+	if err != nil {
+		zap.L().Error("failed to create keystone client", zap.Error(err))
+		return nil
+	}
+	return client
 }
