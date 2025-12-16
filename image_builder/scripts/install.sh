@@ -73,7 +73,13 @@ sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 passwo
 sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
-cat /etc/pf9/pf9-htpasswd.sh >> /home/ubuntu/.bashrc
+# Install vjbctl as a system-wide command
+cat > /usr/local/bin/vjbctl << 'EOF'
+#!/bin/bash
+source /etc/pf9/pf9-htpasswd.sh
+_pf9_ht_main "$@"
+EOF
+chmod +x /usr/local/bin/vjbctl
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
