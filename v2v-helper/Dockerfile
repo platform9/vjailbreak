@@ -46,7 +46,9 @@ RUN dnf install -y \
     ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
-    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm && \
+    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
+    guestfs-tools \
+    netplan && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
@@ -69,3 +71,4 @@ COPY --from=builder /workspace/manager /home/fedora/manager
 # Copy scripts directory for migration utilities
 COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
 COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
+COPY scripts/network_config_util.sh /home/fedora/network_config_util.sh

@@ -905,7 +905,7 @@ func (migobj *Migrate) configureLinuxNetwork(vminfo vm.VMInfo, bootVolumeIndex i
 	}
 
 	if virtv2v.IsRHELFamily(osRelease) {
-		return migobj.configureRHELNetwork(vminfo, bootVolumeIndex, osRelease)
+		return migobj.configureRHELNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
 	}
 
 	return nil
@@ -926,6 +926,14 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 			return errors.Wrap(err, "failed to add wildcard netplan")
 		}
 		utils.PrintLog("Wildcard netplan added successfully")
+
+		utils.PrintLog("Running network persistence script")
+		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
+		} else {
+			utils.PrintLog("Network persistence script executed successfully")
+		}
+
 		return nil
 	}
 
@@ -965,11 +973,23 @@ func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex i
 }
 
 // configureRHELNetwork handles RHEL-specific network configuration
-func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
+func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
 	versionID := parseVersionID(osRelease)
 	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
 	if err != nil {
 		return fmt.Errorf("failed to parse major version: %v", err)
+	}
+
+	utils.PrintLog("Uploading macToIP map for RHEL persistence")
+	if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+		return errors.Wrap(err, "failed to add macToIP map")
+	}
+
+	utils.PrintLog("Running network persistence script for RHEL")
+	if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
+	} else {
+		utils.PrintLog("Network persistence script executed successfully")
 	}
 
 	if majorVersion < 7 {
