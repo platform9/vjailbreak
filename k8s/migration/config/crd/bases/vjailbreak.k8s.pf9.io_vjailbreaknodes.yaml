@@ -104,6 +104,18 @@ spec:
               openstackImageID:
                 description: OpenstackImageID is the image of the VM
                 type: string
+              openstackSecurityGroups:
+                description: |-
+                  OpenstackSecurityGroups is the list of security groups for the VM
+                  If empty, the security groups will be determined from the master node
+                items:
+                  type: string
+                type: array
+              openstackVolumeType:
+                description: |-
+                  OpenstackVolumeType is the volume type for the root disk of the VM
+                  If empty, the volume type will be determined from the master node
+                type: string
             required:
             - nodeRole
             - openstackCreds
