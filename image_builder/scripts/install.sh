@@ -74,7 +74,7 @@ sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
 # Install vjbctl as a system-wide command
-cat > /usr/local/bin/vjbctl << 'EOF'
+sudo cat > /usr/local/bin/vjbctl << 'EOF'
 #!/bin/bash
 source /etc/pf9/pf9-htpasswd.sh
 _pf9_ht_main "$@"
