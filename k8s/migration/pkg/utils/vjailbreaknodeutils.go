@@ -391,7 +391,7 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
 }
 
 // GetOpenstackVMIP retrieves the IP address of an OpenStack VM
-func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (string, error) {
+func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (string, error) {
 	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
@@ -402,7 +402,7 @@ func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjai
 	}
 
 	// Fetch the VM details
-	server, err := servers.Get(ctx, openstackClients.ComputeClient, vjNode.Status.OpenstackUUID).Extract()
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to get server details")
 	}

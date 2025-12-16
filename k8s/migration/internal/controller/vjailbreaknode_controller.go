@@ -127,7 +127,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	if uuid != "" {
 		if vjNode.Status.OpenstackUUID == "" {
 			// This will error until the the IP is available
-			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode)
+			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
