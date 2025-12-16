@@ -244,12 +244,12 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			return errors.Wrap(err, "failed to set machine to pxe boot")
 		}
 	}
-	//check if machine is already released
+	// Check if machine needs to be released first
 	if strings.EqualFold(machine.StatusName, "Ready") || strings.EqualFold(machine.StatusName, "Releasing") || strings.EqualFold(machine.StatusName, "released") {
 		logrus.Infof("%s Machine %s is already %s", ctx, systemID, machine.StatusName)
-	} else {
-		// Release the machine
-		logrus.Infof("%s Releasing machine %s", ctx, systemID)
+	} else if !strings.EqualFold(machine.StatusName, "Allocated") {
+		// Release the machine (unless it's already Allocated, which is ready for deployment)
+		logrus.Infof("%s Releasing machine %s from state %s", ctx, systemID, machine.StatusName)
 		_, err = m.Client.Machine.Release(systemID, &entity.MachineReleaseParams{
 			Comment: "vJailbreak: Releasing machine for re-deployment",
 			Erase:   eraseDisk,
@@ -266,25 +266,36 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed waiting for release: %v", ctx, err)
 			return errors.Wrap(err, "failed waiting for machine to be released")
 		}
+		
+		// Refresh machine state after release
+		machine, err = m.Client.Machine.Get(systemID)
+		if err != nil {
+			logrus.Errorf("Failed to get machine after release: %v", err)
+			return errors.Wrap(err, "failed to get machine after release")
+		}
 	}
 	
-	// Allocate the machine before deployment
-	logrus.Infof("%s Allocating machine %s", ctx, systemID)
-	_, err = m.Client.Machines.Allocate(&entity.MachineAllocateParams{
-		SystemID: systemID,
-		Comment:  "vJailbreak: Allocating machine for deployment",
-	})
-	if err != nil {
-		logrus.Errorf("%s Failed to allocate machine: %v", ctx, err)
-		return errors.Wrap(err, "failed to allocate machine")
-	}
-	
-	// Wait for allocation to complete
-	logrus.Infof("%s Waiting for machine %s to be allocated", ctx, systemID)
-	err = m.waitForMachineState(ctx, systemID, "Allocated", 1*time.Minute)
-	if err != nil {
-		logrus.Errorf("%s Failed waiting for allocation: %v", ctx, err)
-		return errors.Wrap(err, "failed waiting for machine to be allocated")
+	// Allocate the machine before deployment (only if not already Allocated)
+	if !strings.EqualFold(machine.StatusName, "Allocated") {
+		logrus.Infof("%s Allocating machine %s", ctx, systemID)
+		_, err = m.Client.Machines.Allocate(&entity.MachineAllocateParams{
+			SystemID: systemID,
+			Comment:  "vJailbreak: Allocating machine for deployment",
+		})
+		if err != nil {
+			logrus.Errorf("%s Failed to allocate machine: %v", ctx, err)
+			return errors.Wrap(err, "failed to allocate machine")
+		}
+		
+		// Wait for allocation to complete
+		logrus.Infof("%s Waiting for machine %s to be allocated", ctx, systemID)
+		err = m.waitForMachineState(ctx, systemID, "Allocated", 1*time.Minute)
+		if err != nil {
+			logrus.Errorf("%s Failed waiting for allocation: %v", ctx, err)
+			return errors.Wrap(err, "failed waiting for machine to be allocated")
+		}
+	} else {
+		logrus.Infof("%s Machine %s is already Allocated, skipping allocation step", ctx, systemID)
 	}
 	
 	if !req.ManualPowerControl {
