@@ -974,7 +974,8 @@ var BMProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	VailbreakProxy_ValidateOpenstackIp_FullMethodName = "/api.VailbreakProxy/ValidateOpenstackIp"
+	VailbreakProxy_ValidateOpenstackIp_FullMethodName   = "/api.VailbreakProxy/ValidateOpenstackIp"
+	VailbreakProxy_RevalidateCredentials_FullMethodName = "/api.VailbreakProxy/RevalidateCredentials"
 )
 
 // VailbreakProxyClient is the client API for VailbreakProxy service.
@@ -982,6 +983,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VailbreakProxyClient interface {
 	ValidateOpenstackIp(ctx context.Context, in *ValidateOpenstackIpRequest, opts ...grpc.CallOption) (*ValidateOpenstackIpResponse, error)
+	RevalidateCredentials(ctx context.Context, in *RevalidateCredentialsRequest, opts ...grpc.CallOption) (*RevalidateCredentialsResponse, error)
 }
 
 type vailbreakProxyClient struct {
@@ -1002,11 +1004,22 @@ func (c *vailbreakProxyClient) ValidateOpenstackIp(ctx context.Context, in *Vali
 	return out, nil
 }
 
+func (c *vailbreakProxyClient) RevalidateCredentials(ctx context.Context, in *RevalidateCredentialsRequest, opts ...grpc.CallOption) (*RevalidateCredentialsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevalidateCredentialsResponse)
+	err := c.cc.Invoke(ctx, VailbreakProxy_RevalidateCredentials_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VailbreakProxyServer is the server API for VailbreakProxy service.
 // All implementations must embed UnimplementedVailbreakProxyServer
 // for forward compatibility.
 type VailbreakProxyServer interface {
 	ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error)
+	RevalidateCredentials(context.Context, *RevalidateCredentialsRequest) (*RevalidateCredentialsResponse, error)
 	mustEmbedUnimplementedVailbreakProxyServer()
 }
 
@@ -1019,6 +1032,9 @@ type UnimplementedVailbreakProxyServer struct{}
 
 func (UnimplementedVailbreakProxyServer) ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateOpenstackIp not implemented")
+}
+func (UnimplementedVailbreakProxyServer) RevalidateCredentials(context.Context, *RevalidateCredentialsRequest) (*RevalidateCredentialsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevalidateCredentials not implemented")
 }
 func (UnimplementedVailbreakProxyServer) mustEmbedUnimplementedVailbreakProxyServer() {}
 func (UnimplementedVailbreakProxyServer) testEmbeddedByValue()                        {}
@@ -1059,6 +1075,24 @@ func _VailbreakProxy_ValidateOpenstackIp_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VailbreakProxy_RevalidateCredentials_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevalidateCredentialsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VailbreakProxyServer).RevalidateCredentials(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VailbreakProxy_RevalidateCredentials_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VailbreakProxyServer).RevalidateCredentials(ctx, req.(*RevalidateCredentialsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VailbreakProxy_ServiceDesc is the grpc.ServiceDesc for VailbreakProxy service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1069,6 +1103,10 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateOpenstackIp",
 			Handler:    _VailbreakProxy_ValidateOpenstackIp_Handler,
+		},
+		{
+			MethodName: "RevalidateCredentials",
+			Handler:    _VailbreakProxy_RevalidateCredentials_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
