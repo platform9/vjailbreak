@@ -222,19 +222,46 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master vjailbreak node")
 	}
 
-	networkIDs, securityGroups, err := GetCurrentInstanceNetworkInfo()
+	networkIDs, masterSecurityGroups, err := GetCurrentInstanceNetworkInfo()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get network info")
 	}
 
-	// Get the volume type and availability zone from the master node in a single call
-	volumeType, availabilityZone, err := GetVolumeTypeAndAvailabilityZoneFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
-	if err != nil {
-		log.Info("Failed to get volume type and availability zone from master node, using defaults", "error", err)
-		volumeType = ""
-		availabilityZone = ""
+	// Determine security groups: use spec value if provided, otherwise use master's
+	var securityGroups []string
+	if len(vjNode.Spec.OpenstackSecurityGroups) > 0 {
+		securityGroups = vjNode.Spec.OpenstackSecurityGroups
+		log.Info("Using security groups from spec", "securityGroups", securityGroups)
 	} else {
-		log.Info("Retrieved volume type and availability zone from master node", "volumeType", volumeType, "availabilityZone", availabilityZone)
+		securityGroups = masterSecurityGroups
+		log.Info("Using security groups from master node", "securityGroups", securityGroups)
+	}
+
+	// Determine volume type: use spec value if provided, otherwise get from master node
+	var volumeType string
+	var availabilityZone string
+	
+	if vjNode.Spec.OpenstackVolumeType != "" {
+		// Use the volume type specified in the spec
+		volumeType = vjNode.Spec.OpenstackVolumeType
+		log.Info("Using volume type from spec", "volumeType", volumeType)
+		
+		// Still need to get availability zone from master
+		_, availabilityZone, err = GetVolumeTypeAndAvailabilityZoneFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
+		if err != nil {
+			log.Info("Failed to get availability zone from master node, using default", "error", err)
+			availabilityZone = ""
+		}
+	} else {
+		// Get both volume type and availability zone from the master node
+		volumeType, availabilityZone, err = GetVolumeTypeAndAvailabilityZoneFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
+		if err != nil {
+			log.Info("Failed to get volume type and availability zone from master node, using defaults", "error", err)
+			volumeType = ""
+			availabilityZone = ""
+		} else {
+			log.Info("Retrieved volume type and availability zone from master node", "volumeType", volumeType, "availabilityZone", availabilityZone)
+		}
 	}
 
 	// Example: specify root disk from image with volume type
