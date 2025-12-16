@@ -4,18 +4,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
-import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
-import { MigrationPlan } from 'src/api/migration-plans/model'
-import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
+import { postMigrationPlan } from 'src/features/migration/api/migration-plans/migrationPlans'
+import { MigrationPlan } from 'src/features/migration/api/migration-plans/model'
 import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
   postMigrationTemplate,
   deleteMigrationTemplate
-} from 'src/api/migration-templates/migrationTemplates'
-import { MigrationTemplate, VmData } from 'src/api/migration-templates/model'
+} from 'src/features/migration/api/migration-templates/migrationTemplates'
+import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
@@ -33,8 +31,6 @@ import { VMWARE_MACHINES_BASE_KEY } from 'src/hooks/api/useVMwareMachinesQuery'
 import { useInterval } from 'src/hooks/useInterval'
 import useParams from 'src/hooks/useParams'
 import { isNilOrEmpty } from 'src/utils'
-import Footer from '../../components/forms/Footer'
-import Header from '../../components/forms/Header'
 import MigrationOptions from './MigrationOptionsAlt'
 import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
 import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
@@ -49,6 +45,9 @@ import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
+import { createMigrationPlanJson } from 'src/features/migration/api/migration-plans/helpers'
+import { Footer, Header } from 'src/shared/components'
 
 const stringsCompareFn = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
 

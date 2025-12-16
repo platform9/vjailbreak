@@ -11,12 +11,12 @@ import {
   TextField,
   InputAdornment
 } from '@mui/material'
-import Step from '../../components/forms/Step'
 import vmwareLogo from 'src/assets/vmware.jpeg'
 import { useClusterData } from './useClusterData'
 
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from '@cds/core/icon'
+import { Step } from 'src/shared/components'
 
 ClarityIcons.addIcons(buildingIcon, clusterIcon, searchIcon)
 

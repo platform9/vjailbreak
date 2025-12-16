@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
-import { VmData } from 'src/api/migration-templates/model'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 import { fetchRdmDisksMap, mapToVmDataWithRdm } from 'src/api/rdm-disks/rdmDiskUtils'
 import { VMwareMachine } from 'src/api/vmware-machines/model'
 

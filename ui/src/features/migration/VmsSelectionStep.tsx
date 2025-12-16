@@ -25,20 +25,19 @@ import {
 import {
   DataGrid,
   GridColDef,
-  GridRow,
+  GridToolbarColumnsButton,
   GridRowSelectionModel,
-  GridToolbarColumnsButton
+  GridRow
 } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
-import { VmData } from 'src/api/migration-templates/model'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
-import CustomLoadingOverlay from 'src/components/grid/CustomLoadingOverlay'
-import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
-import Step from '../../components/forms/Step'
+import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
+import { Step } from 'src/shared/components/forms'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import * as React from 'react'
-import { getMigrationPlans } from 'src/api/migration-plans/migrationPlans'
+import { getMigrationPlans } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
 import InfoIcon from '@mui/icons-material/Info'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -50,11 +49,11 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { validateOpenstackIPs } from 'src/api/openstack-creds/openstackCreds'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { RdmDiskConfigurationPanel } from 'src/components/RdmDiskConfigurationPanel'
 import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from 'src/hooks/api/useRdmDisksQuery'
 import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import axios from 'axios'
+import { RdmDiskConfigurationPanel } from './components'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -1512,13 +1511,14 @@ function VmsSelectionStep({
         {/* GPU Warning Message */}
         {(() => {
           const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
-          const hasGPUVMs = selectedVmsData.some((vm) => vm.useGPU)
+          const hasGPUVMs = selectedVmsData.some((vm) => (vm as any).useGPU)
           const hasAssignedFlavors = selectedVmsData.some((vm) => vm.targetFlavorId)
-          
+
           if (hasGPUVMs && !useGPU && !hasAssignedFlavors) {
             return (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                You have selected VMs with GPU enabled. Please assign appropriate flavour or select "Use GPU enabled flavours" checkbox in Migration Options.
+                You have selected VMs with GPU enabled. Please assign appropriate flavour or select
+                "Use GPU enabled flavours" checkbox in Migration Options.
               </Alert>
             )
           }

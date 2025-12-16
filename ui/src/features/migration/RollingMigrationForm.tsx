@@ -26,12 +26,9 @@ import {
   GridToolbarColumnsButton
 } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
-import Footer from '../../components/forms/Footer'
-import Header from '../../components/forms/Header'
-import Step from '../../components/forms/Step'
-import { DrawerContent } from 'src/components/forms/StyledDrawer'
+import { Footer, Header, Step, DrawerContent } from 'src/shared/components/forms'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
-import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
+import { CustomSearchToolbar } from 'src/components/grid'
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVMwareHosts, patchVMwareHost } from 'src/api/vmware-hosts/vmwareHosts'
@@ -41,8 +38,11 @@ import { VMwareMachine } from 'src/api/vmware-machines/model'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { getBMConfigList, getBMConfig } from 'src/api/bmconfig/bmconfig'
 import { BMConfig } from 'src/api/bmconfig/model'
-import MaasConfigDetailsModal from 'src/pages/dashboard/BMConfigDetailsModal'
-import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
+import MaasConfigDetailsModal from './components/MaasConfigDetailsModal'
+import {
+  getOpenstackCredentials,
+  validateOpenstackIPs
+} from 'src/api/openstack-creds/openstackCreds'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import NetworkAndStorageMappingStep, { ResourceMap } from './NetworkAndStorageMappingStep'
 import {
@@ -57,8 +57,8 @@ import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import { postMigrationTemplate } from 'src/api/migration-templates/migrationTemplates'
+import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
+import { postMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from './MigrationOptionsAlt'
 import { CUTOVER_TYPES } from './constants'
@@ -71,7 +71,6 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import { TextField, CircularProgress } from '@mui/material'
-import { validateOpenstackIPs } from 'src/api/openstack-creds/openstackCreds'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -2506,8 +2505,7 @@ export default function RollingMigrationFormDrawer({
           <MaasConfigDetailsModal
             open={maasDetailsModalOpen}
             onClose={handleCloseMaasDetailsModal}
-            configName={maasConfigs[0].metadata.name}
-            namespace={maasConfigs[0].metadata.namespace}
+            config={maasConfigs[0]}
           />
         )}
 

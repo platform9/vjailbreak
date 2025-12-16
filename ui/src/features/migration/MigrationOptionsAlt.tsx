@@ -13,7 +13,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
 import { useCallback, useEffect } from 'react'
-import Step from 'src/components/forms/Step'
+import { Step } from 'src/shared/components/forms'
 import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
 
 // Accordian Imports
@@ -23,7 +23,7 @@ import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
-import IntervalField from 'src/components/forms/IntervalField'
+import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
 // Styles

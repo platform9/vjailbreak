@@ -1,10 +1,12 @@
 import { styled, Typography, Box } from '@mui/material'
 import { useState } from 'react'
-import Step from '../../components/forms/Step'
+import { Step } from 'src/shared/components/forms'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
-import VmwareCredentialsForm from '../../components/forms/VmwareCredentialsForm'
-import OpenstackCredentialsForm from '../../components/forms/OpenstackCredentialsForm'
+import {
+  VmwareCredentialsForm,
+  OpenstackCredentialsForm
+} from 'src/features/credentials/components'
 
 const SourceAndDestinationStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',

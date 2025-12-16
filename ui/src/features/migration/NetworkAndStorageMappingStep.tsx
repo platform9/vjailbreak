@@ -1,7 +1,7 @@
 import { FormControl, FormHelperText, styled, Typography, Box } from '@mui/material'
 import { useEffect, useMemo } from 'react'
-import ResourceMappingTable from 'src/components/forms/ResourceMappingTableNew'
-import Step from '../../components/forms/Step'
+import { ResourceMappingTableNew as ResourceMappingTable } from './components'
+import { Step } from 'src/shared/components/forms'
 // import ResourceMapping from "../../components/forms/ResourceMapping"
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
