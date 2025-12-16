@@ -79,7 +79,7 @@ sudo cat > /usr/local/bin/vjbctl << 'EOF'
 source /etc/pf9/pf9-htpasswd.sh
 _pf9_ht_main "$@"
 EOF
-chmod +x /usr/local/bin/vjbctl
+sudo chmod +x /usr/local/bin/vjbctl
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
