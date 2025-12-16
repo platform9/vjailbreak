@@ -270,7 +270,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
               </FormControl>
               <FormControl fullWidth>
                 <Typography variant="body1" style={{ color: 'red' }}>
-                  ⚠️ Please select a flavor with a disk size greater than 16GB.
+                  ⚠️ Please select a flavor with a disk size of at least 60GB.
                 </Typography>
               </FormControl>
               <FormControl error={!!flavorsError} fullWidth>
@@ -337,11 +337,15 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   ) : filteredFlavors.length === 0 ? (
                     <MenuItem disabled>No matching flavors found</MenuItem>
                   ) : (
-                    filteredFlavors.map((flavor) => (
-                      <MenuItem key={flavor.id} value={flavor.id}>
-                        {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
-                      </MenuItem>
-                    ))
+                    filteredFlavors.map((flavor) => {
+                      const isDisabled = flavor.disk < 60
+                      return (
+                        <MenuItem key={flavor.id} value={flavor.id} disabled={isDisabled}>
+                          {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
+                          {isDisabled && ' - Insufficient disk size'}
+                        </MenuItem>
+                      )
+                    })
                   )}
                 </Select>
                 {flavorsError && (

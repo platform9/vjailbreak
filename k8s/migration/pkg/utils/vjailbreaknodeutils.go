@@ -267,42 +267,38 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		}
 	}
 
-	// Pre-create the volume in Cinder with the specified volume type
-	// This allows us to control the volume type, which is not supported in block_device_mapping_v2
-	log.Info("Pre-creating root volume in Cinder", "volumeType", volumeType, "size", 60)
+	// Get the flavor details to determine disk size
+	flavor, err := flavors.Get(ctx, openstackClients.ComputeClient, vjNode.Spec.OpenstackFlavorID).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get flavor details")
+	}
 	
-	volumeCreateOpts := volumes.CreateOpts{
-		Size:             60,
-		Name:             fmt.Sprintf("%s-root", vjNode.Name),
-		ImageID:          imageID,
-		AvailabilityZone: availabilityZone,
+	// Use flavor disk size, but ensure it's at least 60GB
+	diskSize := flavor.Disk
+	if diskSize < 60 {
+		diskSize = 60
+		log.Info("Flavor disk size is less than 60GB, using minimum of 60GB", "flavorDisk", flavor.Disk, "actualSize", diskSize)
+	}
+	
+	// Set Nova API microversion to support volume_type in block_device_mapping_v2
+	// Volume type in block device mapping requires microversion 2.67+
+	openstackClients.ComputeClient.Microversion = "2.67"
+	
+	log.Info("Creating agent node with volume type", "volumeType", volumeType, "size", diskSize, "flavor", flavor.Name)
+	
+	// Create root disk from image with volume type
+	rootDisk := servers.BlockDevice{
+		SourceType:          servers.SourceImage,
+		DestinationType:     servers.DestinationVolume,
+		UUID:                imageID,
+		BootIndex:           0,
+		DeleteOnTermination: true,
+		VolumeSize:          diskSize,
 	}
 	
 	// Only set volume type if it's not empty
 	if volumeType != "" {
-		volumeCreateOpts.VolumeType = volumeType
-	}
-	
-	volume, err := volumes.Create(ctx, openstackClients.BlockStorageClient, volumeCreateOpts, nil).Extract()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create root volume in Cinder")
-	}
-	
-	log.Info("Volume created, waiting for it to become available", "volumeID", volume.ID, "volumeType", volume.VolumeType)
-	
-	// Wait for volume to become available
-	err = waitForVolumeAvailable(ctx, openstackClients.BlockStorageClient, volume.ID, log)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to wait for volume to become available")
-	}
-
-	// Boot instance from the pre-created volume
-	rootDisk := servers.BlockDevice{
-		SourceType:          servers.SourceVolume,
-		DestinationType:     servers.DestinationVolume,
-		UUID:                volume.ID,
-		BootIndex:           0,
-		DeleteOnTermination: true,
+		rootDisk.VolumeType = volumeType
 	}
 
 	// Define server creation parameters
