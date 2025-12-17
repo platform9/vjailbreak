@@ -70,6 +70,8 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
+                      description: Disk represents a virtual disk attached to the
+                        VM
                       properties:
                         capacityGB:
                           type: integer

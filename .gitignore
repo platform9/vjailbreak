@@ -21,3 +21,4 @@ pkg/vpwned/bin/vpwctl
 proto_dependenciesv2v-helper/Dockerfile.local
 !
 pkg/mod/
+pkg/sumdb/
