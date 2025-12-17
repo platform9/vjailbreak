@@ -774,6 +774,7 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
     env = append(env, fmt.Sprintf("NETWORK_INTERFACES_DIR=%s", filepath.Join(mountPoint, "/etc/network/interfaces")))
     env = append(env, fmt.Sprintf("SYSTEMD_NETWORK_DIR=%s", filepath.Join(mountPoint, "/run/systemd/network")))
     env = append(env, fmt.Sprintf("UDEV_RULES_FILE=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
+	env = append(env, fmt.Sprintf("WILDCARD_NETPLAN=%s", filepath.Join(mountPoint, "/etc/netplan/99-netcfg.yaml")))
     
     env = append(env, fmt.Sprintf("NETPLAN_DIR=%s", mountPoint))
     
