@@ -60,6 +60,10 @@ type AdvancedOptions struct {
 	GranularNetworks []string `json:"granularNetworks,omitempty"`
 	// GranularPorts is a list of ports to be migrated
 	GranularPorts []string `json:"granularPorts,omitempty"`
+	// PeriodicSyncInterval is the interval at which the migration plan should be synced
+	PeriodicSyncInterval string `json:"periodicSyncInterval,omitempty"`
+	// PeriodicSyncEnabled is a boolean to enable periodic sync
+	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine
@@ -78,7 +82,11 @@ type MigrationPlanSpec struct {
 	// VirtualMachines is a list of virtual machines to be migrated
 	VirtualMachines [][]string `json:"virtualMachines"`
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
+	ServerGroup     string     `json:"serverGroup,omitempty"`
 	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
+	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
+	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
