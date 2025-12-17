@@ -253,7 +253,7 @@ export default function MigrationOptionsAlt({
                     <FormControlLabel
                       control={
                         <Checkbox
-                          checked={selectedMigrationOptions.periodicSyncEnabled}
+                          checked={Boolean(selectedMigrationOptions.periodicSyncEnabled)}
                           onChange={(e) => {
                             onChange('periodicSyncInterval')(
                               globalConfigMap?.data.PERIODIC_SYNC_INTERVAL

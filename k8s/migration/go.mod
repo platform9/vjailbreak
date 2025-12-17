@@ -4,12 +4,11 @@ go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
-replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
-
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
 require (
 	github.com/go-logr/logr v1.4.3
+	github.com/gophercloud/gophercloud v1.14.1
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.23.4
@@ -110,6 +109,7 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.5.0 // indirect
+
 )
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
@@ -117,3 +117,5 @@ replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 replace github.com/platform9/vjailbreak/pkg/validation => ../../pkg/validation
 
 replace github.com/platform9/vjailbreak/pkg/openstack => ../../pkg/openstack
+
+replace github.com/platform9/vjailbreak/common/utils => ../../common/utils

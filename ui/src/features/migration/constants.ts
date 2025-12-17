@@ -17,6 +17,11 @@ export const DATA_COPY_OPTIONS = [
   { value: 'hot', label: 'Copy live VMs, then power off' }
 ]
 
+export const STORAGE_COPY_METHOD_OPTIONS = [
+  { value: "normal", label: "Normal Data Copy" },
+  { value: "vendor-based", label: "Storage Vendor Based" },
+]
+
 export const OS_TYPES_OPTIONS = [
   { value: OS_TYPES.AUTO_DETECT, label: 'Auto-detect' },
   { value: OS_TYPES.WINDOWS, label: 'Windows' },

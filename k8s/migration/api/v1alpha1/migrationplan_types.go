@@ -45,6 +45,10 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 	// +kubebuilder:default:=false
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
+	// +kubebuilder:validation:Enum=pure
+	VendorType string `json:"vendorType,omitempty"`
+	// +kubebuilder:validation:Type=string
+	ArrayCredsRef string `json:"arrayCredsRef,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process
@@ -91,6 +95,8 @@ type MigrationPlanSpecPerVM struct {
 	MigrationTemplate string `json:"migrationTemplate"`
 	// MigrationStrategy is the strategy to be used for the migration
 	MigrationStrategy MigrationPlanStrategy `json:"migrationStrategy"`
+	// Retry the migration if it fails
+	Retry bool `json:"retry,omitempty"`
 	// AdvancedOptions is a list of advanced options for the migration
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
@@ -106,6 +112,8 @@ type MigrationPlanStatus struct {
 	MigrationStatus corev1.PodPhase `json:"migrationStatus"`
 	// MigrationMessage is the message associated with the migration
 	MigrationMessage string `json:"migrationMessage"`
+	// Migration RetryCount is the number of times the migration has been retried
+	RetryCount int `json:"retryCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
