@@ -12,6 +12,7 @@ IFQUERY_CMD="${IFQUERY_CMD:-ifquery}"
 SYSTEMD_NETWORK_DIR="${SYSTEMD_NETWORK_DIR:-/run/systemd/network}"
 UDEV_RULES_FILE="${UDEV_RULES_FILE:-/etc/udev/rules.d/70-persistent-net.rules}"
 NETPLAN_DIR="${NETPLAN_DIR:-/}"
+WILDCARD_NETPLAN="/etc/netplan/99-netcfg.yaml"
 
 # Dump debug strings into a new file descriptor and redirect it to stdout.
 exec 3>&1
@@ -397,6 +398,13 @@ udev_from_netplan() {
         fi
     }
 
+    echo "network:\n" >> $WILDCARD_NETPLAN
+	echo "  version: 2\n" >> $WILDCARD_NETPLAN
+	echo "  renderer: networkd\n" >> $WILDCARD_NETPLAN
+	echo "  ethernets:\n" >> $WILDCARD_NETPLAN
+    id=1
+    injected_wildcard=0
+
     # Read the mapping file line by line
     cat "$V2V_MAP_FILE" | while read -r line;
     do
@@ -415,12 +423,22 @@ udev_from_netplan() {
         # If no interface is found, skip this entry
         if [ -z "$interface_name" ]; then
             log "Info: no interface name found to $S_IP."
-            continue
+            echo "    vjb$id:\n" >> $WILDCARD_NETPLAN
+            echo "     match:\n" >> $WILDCARD_NETPLAN
+            echo "       macaddress: $S_HW\n" >> $WILDCARD_NETPLAN
+            echo "     dhcp4: true\n" >> $WILDCARD_NETPLAN
+            id=$((id+1))
+            injected_wildcard=1
         fi
 
         # Create the udev rule based on the extracted MAC address and interface name
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(remove_quotes "$S_HW")\",NAME=\"$(remove_quotes "$interface_name")\""
     done
+
+    if [ "$injected_wildcard" -eq 0]; then
+        rm -f $WILDCARD_NETPLAN;
+    fi
+
 }
 
 # Create udev rules based on the macToIP mapping + output from parse_ifquery_file
