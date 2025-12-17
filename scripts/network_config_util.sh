@@ -397,13 +397,14 @@ udev_from_netplan() {
             echo "$NAME"
         fi
     }
+    TMP_NETPLAN="/tmp/netplan_wildcard.yaml"
 
     {
         echo "network:"
         echo "  version: 2"
         echo "  renderer: networkd"
         echo "  ethernets:"
-    } > "$WILDCARD_NETPLAN"
+    } > "$TMP_NETPLAN"
 
     id=1
     injected_wildcard=0
@@ -432,7 +433,7 @@ udev_from_netplan() {
                 echo "      match:"
                 echo "        macaddress: $S_HW"
                 echo "      dhcp4: true"
-            } >> "$WILDCARD_NETPLAN"
+            } >> "$TMP_NETPLAN"
 
             id=$((id+1))
             injected_wildcard=1
@@ -443,9 +444,11 @@ udev_from_netplan() {
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(remove_quotes "$S_HW")\",NAME=\"$(remove_quotes "$interface_name")\""
     done
 
-    if [ "$injected_wildcard" -eq 0 ]; then
-        rm -f "$WILDCARD_NETPLAN"
+    if [ "$injected_wildcard" -eq 1 ]; then
+        cp "$TMP_NETPLAN" "$WILDCARD_NETPLAN"
     fi
+    
+    rm -f "$TMP_NETPLAN"
 }
 
 # Create udev rules based on the macToIP mapping + output from parse_ifquery_file
