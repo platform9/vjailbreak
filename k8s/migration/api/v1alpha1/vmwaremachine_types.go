@@ -76,11 +76,12 @@ type VMInfo struct {
 	GPU GPUInfo `json:"gpu,omitempty"`
 }
 
+// Disk represents a virtual disk attached to the VM
 type Disk struct {
 	Name        string `json:"name,omitempty"`
 	CapacityGB  int    `json:"capacityGB,omitempty"`
 	Datastore   string `json:"datastore,omitempty"`
-	DatastoreId string `json:"datastoreId,omitempty"`
+	DatastoreID string `json:"datastoreId,omitempty"`
 }
 
 // NIC represents a Virtual ethernet card in the virtual machine.

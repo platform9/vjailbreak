@@ -51,6 +51,9 @@ const (
 	// BMConfigControllerName is the name of the BMConfig controller
 	BMConfigControllerName = "bmconfig-controller"
 
+	// ValidationStatusFailed is the status value for failed credential validation
+	ValidationStatusFailed = "Failed"
+
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 

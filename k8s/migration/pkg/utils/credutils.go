@@ -1676,7 +1676,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 				Name:        disk.DeviceInfo.GetDescription().Label,
 				CapacityGB:  int(disk.CapacityInKB / 1024 / 1024),
 				Datastore:   ds.Name,
-				DatastoreId: dsref.Value,
+				DatastoreID: dsref.Value,
 			}
 
 			disks = append(disks, disk)

@@ -143,7 +143,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
