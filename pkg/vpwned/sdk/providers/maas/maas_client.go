@@ -511,7 +511,7 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 
 	logrus.Debugf("IPMI connection details: host=%s, username=%s, ipmi_interface=%s, boot_type=%s", host, username, ipmi_interface, boot_type)
 
-	config.SetBootDevice(ctx, bootDevice, boot_type, false)
+	err = config.SetBootDevice(ctx, bootDevice, boot_type, false)
 	if err != nil {
 		logrus.Errorf("Failed to set boot device to PXE: %v", err)
 		return errors.Wrap(err, "failed to set boot device to pxe")
