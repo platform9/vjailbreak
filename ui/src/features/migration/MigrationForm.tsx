@@ -8,7 +8,7 @@ import { createMigrationPlanJson } from "src/api/migration-plans/helpers"
 import { postMigrationPlan } from "src/api/migration-plans/migrationPlans"
 import { MigrationPlan } from "src/api/migration-plans/model"
 import { createMigrationTemplateJson } from "src/api/migration-templates/helpers"
-import SecurityGroupAndSSHKeyStep from "./SecurityGroupAndSSHKeyStep"
+import SecurityGroupAndServerGroupStep from "./SecurityGroupAndServerGroup"
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -946,7 +946,7 @@ export default function MigrationFormDrawer({
             storageMappingError={fieldErrors["storageMapping"]}
           />
           {/* Step 4 */}
-          <SecurityGroupAndSSHKeyStep
+          <SecurityGroupAndServerGroupStep
             params={params}
             onChange={getParamsUpdater}
             openstackCredentials={openstackCredentials}
