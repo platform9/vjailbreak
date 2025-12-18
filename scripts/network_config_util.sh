@@ -109,9 +109,24 @@ udev_from_ifcfg() {
 
         # Find the matching network script file
         IFCFG=$(grep -l "IPADDR=.*$S_IP" "$SCRIPTS_DIR"/ifcfg-* 2>/dev/null)
+        IFCFG_ID=1
         if [ -z "$IFCFG" ]; then
             log "Info: no ifcfg config file found for $S_IP in $SCRIPTS_DIR."
-            continue
+            
+            # Create a new ifcfg file with the dhcp option
+            {
+            echo "TYPE=Ethernet"
+            echo "BOOTPROTO=dhcp"
+            echo "NAME=vjb$IFCFG_ID"                
+            echo "DEVICE=vjb$IFCFG_ID"                
+            echo "ONBOOT=yes"
+            echo "HWADDR=$S_HW"
+            echo "PEERDNS=yes"                 
+            echo "PEERROUTES=yes"              
+            echo "DHCP_HOSTNAME=myhost" 
+            } > "$SCRIPTS_DIR/ifcfg-vjb$IFCFG_ID"
+            IFCFG_ID=$((IFCFG_ID+1))
+            
         fi
 
         # Extract device name from ifcfg file
