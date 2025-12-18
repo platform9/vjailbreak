@@ -409,8 +409,7 @@ udev_from_netplan() {
     id=1
     injected_wildcard=0
 
-    # Read the mapping file line by line
-    cat "$V2V_MAP_FILE" | while read -r line;
+    while read -r line;
     do
         # Extract S_HW and S_IP from the current line in the mapping file
         extract_mac_ip "$line"
@@ -442,10 +441,13 @@ udev_from_netplan() {
 
         # Create the udev rule based on the extracted MAC address and interface name
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(remove_quotes "$S_HW")\",NAME=\"$(remove_quotes "$interface_name")\""
-    done
+    done < "$V2V_MAP_FILE"
 
     if [ "$injected_wildcard" -eq 1 ]; then
+        log "Wildcard injection detected ($injected_wildcard)."
         cp "$TMP_NETPLAN" "$WILDCARD_NETPLAN"
+    else
+        log "No wildcard injection needed."
     fi
     
     rm -f "$TMP_NETPLAN"
