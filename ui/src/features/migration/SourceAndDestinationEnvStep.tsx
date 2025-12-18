@@ -1,24 +1,13 @@
-import { styled, Typography, Box } from '@mui/material'
+import { Box } from '@mui/material'
 import { useState } from 'react'
 import { Step } from 'src/shared/components/forms'
+import { Row, SectionHeader } from 'src/components'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import {
   VmwareCredentialsForm,
   OpenstackCredentialsForm
 } from 'src/features/credentials/components'
-
-const SourceAndDestinationStepContainer = styled('div')(({ theme }) => ({
-  display: 'grid',
-  gridGap: theme.spacing(1)
-}))
-
-const SideBySideContainer = styled(Box)(({ theme }) => ({
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: theme.spacing(3),
-  marginLeft: theme.spacing(6)
-}))
 
 interface SourceAndDestinationEnvStepProps {
   onChange: (id: string) => (value: unknown) => void
@@ -83,13 +72,11 @@ export default function SourceAndDestinationEnvStep({
     }
   }
   return (
-    <SourceAndDestinationStepContainer>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <Step stepNumber="1" label="Source and Destination Environments" />
-      <SideBySideContainer>
-        <Box>
-          <Typography variant="body1" sx={{ mb: 1 }}>
-            Source VMware
-          </Typography>
+      <Row gap={3} flexWrap="wrap" sx={{ ml: 6 }}>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          <SectionHeader title="Source VMware" sx={{ mb: 1 }} />
           <VmwareCredentialsForm
             credentialsList={vmwareCredsList}
             loadingCredentials={loadingVmwareCreds}
@@ -101,10 +88,8 @@ export default function SourceAndDestinationEnvStep({
           />
         </Box>
 
-        <Box>
-          <Typography variant="body1" sx={{ mb: 1 }}>
-            Destination Platform
-          </Typography>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          <SectionHeader title="Destination Platform" sx={{ mb: 1 }} />
           <OpenstackCredentialsForm
             credentialsList={openstackCredsList}
             loadingCredentials={loadingOpenstackCreds}
@@ -115,7 +100,7 @@ export default function SourceAndDestinationEnvStep({
             showCredentialNameField={false}
           />
         </Box>
-      </SideBySideContainer>
-    </SourceAndDestinationStepContainer>
+      </Row>
+    </Box>
   )
 }

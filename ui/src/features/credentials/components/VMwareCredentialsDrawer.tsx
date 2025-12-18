@@ -8,7 +8,6 @@ import {
   IconButton,
   InputAdornment,
   Tooltip,
-  Typography,
   CircularProgress
 } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
@@ -17,7 +16,15 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined'
 
 import { useForm } from 'react-hook-form'
 
-import { DrawerShell, DrawerHeader, DrawerFooter, ActionButton, FormGrid } from 'src/components'
+import {
+  DrawerShell,
+  DrawerHeader,
+  DrawerFooter,
+  ActionButton,
+  FormGrid,
+  Section,
+  SectionHeader
+} from 'src/components'
 import { DesignSystemForm, RHFTextField, RHFToggleField } from 'src/shared/components/forms'
 
 import { createVMwareCredsWithSecretFlow, deleteVMwareCredsWithSecretFlow } from 'src/api/helpers'
@@ -284,16 +291,11 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   const isSubmitDisabled = submitting || validatingVmwareCreds || !isValid
 
   const renderBasicsSection = () => (
-    <Box>
-      <Typography variant="overline" color="text.secondary">
-        Credential Basics
-      </Typography>
-      <Typography variant="h6" sx={{ mt: 0.25 }}>
-        Connection Details
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
-        Provide the name and endpoint details for the VMware environment you want to connect.
-      </Typography>
+    <Section>
+      <SectionHeader
+        title="Connection Details"
+        subtitle="Provide the name and endpoint details for the VMware environment you want to connect."
+      />
 
       <FormGrid gap={2} minWidth={300}>
         <RHFTextField
@@ -346,20 +348,15 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           rules={{ required: 'Datacenter name is required' }}
         />
       </FormGrid>
-    </Box>
+    </Section>
   )
 
   const renderAuthSection = () => (
-    <Box>
-      <Typography variant="overline" color="text.secondary">
-        Authentication
-      </Typography>
-      <Typography variant="h6" sx={{ mt: 0.25 }}>
-        User Credentials
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 2 }}>
-        These credentials need permission to manage inventory and read cluster configuration.
-      </Typography>
+    <Section>
+      <SectionHeader
+        title="User Credentials"
+        subtitle="These credentials need permission to manage inventory and read cluster configuration."
+      />
 
       <FormGrid gap={2} minWidth={300}>
         <RHFTextField
@@ -396,21 +393,15 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           }}
         />
       </FormGrid>
-    </Box>
+    </Section>
   )
 
   const renderSecuritySection = () => (
-    <Box>
-      <Typography variant="overline" color="text.secondary">
-        Security
-      </Typography>
-      <Typography variant="h6" sx={{ mt: 0.25 }}>
-        Connection Options
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, mb: 1.5 }}>
-        Prefer TLS-secure connections. Only disable SSL verification if your environment requires
-        it.
-      </Typography>
+    <Section>
+      <SectionHeader
+        title="Connection Options"
+        subtitle="Prefer TLS-secure connections. Only disable SSL verification if your environment requires it."
+      />
 
       <RHFToggleField
         name="insecure"
@@ -425,7 +416,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           host.
         </Alert>
       </Collapse>
-    </Box>
+    </Section>
   )
 
   const renderStatusRow = () => (

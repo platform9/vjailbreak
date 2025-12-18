@@ -17,10 +17,12 @@ type Story = StoryObj<typeof meta>
 // Helper component for visual demonstration
 const DemoBox = ({
   children,
-  color = '#1976d2'
+  color = '#1976d2',
+  sx
 }: {
   children: React.ReactNode
   color?: string
+  sx?: any
 }) => (
   <Box
     sx={{
@@ -29,7 +31,8 @@ const DemoBox = ({
       color: 'white',
       borderRadius: 1,
       minWidth: 100,
-      textAlign: 'center'
+      textAlign: 'center',
+      ...(sx ?? {})
     }}
   >
     {children}

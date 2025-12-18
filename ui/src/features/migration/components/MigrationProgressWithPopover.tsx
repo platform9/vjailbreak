@@ -3,12 +3,12 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepperProps,
   CircularProgress,
   styled,
   Popover,
   Typography,
-  Box
+  Box,
+  StepIconProps
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
@@ -92,7 +92,7 @@ export default function MigrationProgressWithPopover({
   useEffect(() => {
     const updatedSteps = conditions.reduce(
       (acc, currentStep) => {
-        const { type, status } = currentStep as { type: StatusType; status: string }
+        const { type, status } = currentStep as unknown as { type: StatusType; status: string }
 
         acc[type] = {
           ...(currentStep as unknown as StatusStep),
@@ -186,24 +186,21 @@ interface StepperComponentProps {
 
 const StepperComponent = ({ activeStepIndex, activeStep, steps }: StepperComponentProps) => {
   const getStepIcon = useCallback((status: Status) => {
-    let stepIcon: StepperProps['activeStep']
-    switch (status) {
-      case Status.Completed:
-        stepIcon = () => <CheckCircleOutlineIcon style={{ color: 'green' }} />
-        break
-      case Status.Pending:
-        stepIcon = () => <HourglassBottomIcon style={{ color: 'grey' }} />
-        break
-      case Status.InProgress:
-        stepIcon = () => <CircularProgress size={20} sx={{ color: 'green' }} />
-        break
-      case Status.Failed:
-        stepIcon = () => <ErrorOutlineIcon style={{ color: 'red' }} />
-        break
-      default:
-        break
+    const StepIcon = (_props: StepIconProps) => {
+      switch (status) {
+        case Status.Completed:
+          return <CheckCircleOutlineIcon style={{ color: 'green' }} />
+        case Status.Pending:
+          return <HourglassBottomIcon style={{ color: 'grey' }} />
+        case Status.InProgress:
+          return <CircularProgress size={20} sx={{ color: 'green' }} />
+        case Status.Failed:
+          return <ErrorOutlineIcon style={{ color: 'red' }} />
+        default:
+          return null
+      }
     }
-    return stepIcon as unknown as React.ElementType
+    return StepIcon
   }, [])
 
   const lastUpdated = activeStep?.lastTransitionTime

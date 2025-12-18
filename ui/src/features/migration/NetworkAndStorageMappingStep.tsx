@@ -11,7 +11,6 @@ const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
 
 const FieldsContainer = styled('div')(({ theme }) => ({
   display: 'grid',
-  marginLeft: theme.spacing(6),
   gridGap: theme.spacing(2)
 }))
 
@@ -34,6 +33,7 @@ interface NetworkAndStorageMappingStepProps {
   storageMappingError?: string
   stepNumber?: string
   loading?: boolean
+  showHeader?: boolean
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -46,7 +46,8 @@ export default function NetworkAndStorageMappingStep({
   networkMappingError,
   storageMappingError,
   stepNumber = '3',
-  loading = false
+  loading = false,
+  showHeader = true
 }: NetworkAndStorageMappingStepProps) {
   // Filter out any mappings that don't match the available networks/storage
   const filteredNetworkMappings = useMemo(
@@ -102,7 +103,7 @@ export default function NetworkAndStorageMappingStep({
 
   return (
     <VmsSelectionStepContainer>
-      <Step stepNumber={stepNumber} label="Network and Storage Mapping" />
+      {showHeader ? <Step stepNumber={stepNumber} label="Network and Storage Mapping" /> : null}
       <FieldsContainer>
         {loading ? (
           <Typography variant="body2" color="text.secondary">

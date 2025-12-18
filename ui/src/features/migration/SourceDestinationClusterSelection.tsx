@@ -42,8 +42,7 @@ const ClusterSelectionStepContainer = styled('div')(({ theme }) => ({
 const SideBySideContainer = styled(Box)(({ theme }) => ({
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
-  gap: theme.spacing(3),
-  marginLeft: theme.spacing(6)
+  gap: theme.spacing(3)
 }))
 
 interface SourceDestinationClusterSelectionProps {
@@ -53,6 +52,7 @@ interface SourceDestinationClusterSelectionProps {
   pcdCluster?: string
   stepNumber?: string
   stepLabel?: string
+  showHeader?: boolean
   onVmwareClusterChange?: (value: string) => void
   onPcdClusterChange?: (value: string) => void
   loadingVMware?: boolean
@@ -66,6 +66,7 @@ export default function SourceDestinationClusterSelection({
   pcdCluster = '',
   stepNumber = '1',
   stepLabel = 'Source and Destination Clusters',
+  showHeader = true,
   onVmwareClusterChange,
   onPcdClusterChange,
   loadingVMware: externalLoadingVMware,
@@ -162,7 +163,7 @@ export default function SourceDestinationClusterSelection({
 
   return (
     <ClusterSelectionStepContainer>
-      <Step stepNumber={stepNumber} label={stepLabel} />
+      {showHeader ? <Step stepNumber={stepNumber} label={stepLabel} /> : null}
       <SideBySideContainer>
         <Box>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: '500' }}>

@@ -71,10 +71,9 @@ const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   }
 }))
 
-const FieldsContainer = styled('div')(({ theme }) => ({
-  display: 'grid',
-  marginLeft: theme.spacing(6)
-}))
+const FieldsContainer = styled('div')({
+  display: 'grid'
+})
 
 // Style for Clarity icons
 const CdsIconWrapper = styled('div')({
@@ -163,6 +162,7 @@ interface VmsSelectionStepProps {
   vmwareCluster?: string
   vmwareClusterDisplayName?: string
   useGPU?: boolean
+  showHeader?: boolean
 }
 
 function VmsSelectionStep({
@@ -178,7 +178,8 @@ function VmsSelectionStep({
   openstackCredentials,
   vmwareCluster,
   vmwareClusterDisplayName,
-  useGPU = false
+  useGPU = false,
+  showHeader = true
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
@@ -1397,7 +1398,7 @@ function VmsSelectionStep({
 
   return (
     <VmsSelectionStepContainer>
-      <Step stepNumber="2" label="Select Virtual Machines to Migrate" />
+      {showHeader ? <Step stepNumber="2" label="Select Virtual Machines to Migrate" /> : null}
       <FieldsContainer>
         {rdmValidation.hasRdmVMs && (
           <Alert severity="info" sx={{ mb: 2 }}>

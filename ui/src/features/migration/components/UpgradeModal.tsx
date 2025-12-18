@@ -9,7 +9,6 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
@@ -19,6 +18,7 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import { useTheme } from '@mui/material/styles'
 import React from 'react'
+import { ActionButton } from 'src/components'
 import {
   cleanupStepApiCall,
   getAvailableTags,
@@ -311,8 +311,8 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button
+        <DialogActions sx={{ gap: 1, p: 2 }}>
+          <ActionButton
             onClick={() => upgradeMutation.mutate()}
             disabled={
               !selectedVersion ||
@@ -322,12 +322,11 @@ export const UpgradeModal = ({ show, onClose }) => {
               upgradeMutation.isPending ||
               !allChecksPassed
             }
-            variant="contained"
-            color="primary"
+            tone="primary"
             fullWidth
           >
             Upgrade
-          </Button>
+          </ActionButton>
           <Tooltip
             title={
               <Typography sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
@@ -336,26 +335,25 @@ export const UpgradeModal = ({ show, onClose }) => {
             }
             arrow
           >
-            <span>
-              <Button
+            <span style={{ width: '100%' }}>
+              <ActionButton
                 onClick={runStepwiseCleanup}
-                variant="contained"
-                color="primary"
+                tone="primary"
                 fullWidth
                 disabled={upgradeInProgress || cleanUpInProgress}
               >
                 Cleanup
-              </Button>
+              </ActionButton>
             </span>
           </Tooltip>
-          <Button
+          <ActionButton
             onClick={onClose}
-            variant="outlined"
+            tone="secondary"
             fullWidth
             disabled={upgradeInProgress || cleanUpInProgress}
           >
             Cancel
-          </Button>
+          </ActionButton>
         </DialogActions>
       </Dialog>
     </React.Fragment>

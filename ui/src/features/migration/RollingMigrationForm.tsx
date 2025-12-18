@@ -5,7 +5,6 @@ import {
   styled,
   Paper,
   Tooltip,
-  Button,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,6 +16,7 @@ import {
   FormLabel,
   Snackbar
 } from '@mui/material'
+import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
@@ -186,13 +186,13 @@ const CustomToolbarWithActions = (props) => {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {rowSelectionModel && rowSelectionModel.length > 0 && (
           <>
-            <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
+            <ActionButton variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
-            </Button>
+            </ActionButton>
             {hasPoweredOffVMs && (
-              <Button variant="text" color="primary" onClick={onAssignIP} size="small">
+              <ActionButton variant="text" color="primary" onClick={onAssignIP} size="small">
                 Assign IP ({rowSelectionModel.length})
-              </Button>
+              </ActionButton>
             )}
           </>
         )}
@@ -206,16 +206,18 @@ const CustomESXToolbarWithActions = (props) => {
   const { onAssignHostConfig, ...toolbarProps } = props
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-      <Button
-        variant="text"
-        color="primary"
-        onClick={onAssignHostConfig}
-        size="small"
-        sx={{ ml: 1 }}
-      >
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        width: '100%',
+        padding: '4px 8px',
+        gap: 1
+      }}
+    >
+      <ActionButton variant="text" color="primary" onClick={onAssignHostConfig} size="small">
         Assign Host Config
-      </Button>
+      </ActionButton>
       <CustomSearchToolbar {...toolbarProps} />
     </Box>
   )
@@ -2494,10 +2496,10 @@ export default function RollingMigrationFormDrawer({
               </>
             )}
           </DialogContent>
-          <DialogActions>
-            <Button variant="contained" onClick={handleCloseMaasConfig}>
+          <DialogActions sx={{ gap: 1, p: 2 }}>
+            <ActionButton tone="primary" onClick={handleCloseMaasConfig}>
               Close
-            </Button>
+            </ActionButton>
           </DialogActions>
         </MaasConfigDialog>
 
@@ -2546,16 +2548,18 @@ export default function RollingMigrationFormDrawer({
               </Select>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClosePcdHostConfigDialog}>Cancel</Button>
-            <Button
+          <DialogActions sx={{ gap: 1, p: 2 }}>
+            <ActionButton tone="secondary" onClick={handleClosePcdHostConfigDialog}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
               onClick={handleApplyPcdHostConfig}
-              variant="contained"
-              color="primary"
               disabled={!selectedPcdHostConfig || updatingPcdMapping}
+              loading={updatingPcdMapping}
             >
-              {updatingPcdMapping ? 'Applying...' : 'Apply to all hosts'}
-            </Button>
+              Apply to all hosts
+            </ActionButton>
           </DialogActions>
         </Dialog>
 
@@ -2568,9 +2572,9 @@ export default function RollingMigrationFormDrawer({
             <Box sx={{ my: 2 }}>
               {/* Quick Actions */}
               <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
+                <ActionButton size="small" tone="secondary" onClick={handleClearAllIPs}>
                   Clear All
-                </Button>
+                </ActionButton>
               </Box>
 
               {/* IP Editor Fields */}
@@ -2638,16 +2642,18 @@ export default function RollingMigrationFormDrawer({
               </Box>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
-            <Button
+          <DialogActions sx={{ gap: 1, p: 2 }}>
+            <ActionButton tone="secondary" onClick={handleCloseBulkEditDialog}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
               onClick={handleApplyBulkIPs}
-              variant="contained"
-              color="primary"
               disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
+              loading={assigningIPs}
             >
-              {assigningIPs ? 'Applying...' : 'Apply Changes'}
-            </Button>
+              Apply Changes
+            </ActionButton>
           </DialogActions>
         </Dialog>
 
@@ -2691,16 +2697,18 @@ export default function RollingMigrationFormDrawer({
               </Select>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
-            <Button
+          <DialogActions sx={{ gap: 1, p: 2 }}>
+            <ActionButton tone="secondary" onClick={handleCloseFlavorDialog}>
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
               onClick={handleApplyFlavor}
-              variant="contained"
-              color="primary"
               disabled={!selectedFlavor || updating}
+              loading={updating}
             >
-              {updating ? 'Applying...' : 'Apply to selected VMs'}
-            </Button>
+              Apply to selected VMs
+            </ActionButton>
           </DialogActions>
         </Dialog>
 

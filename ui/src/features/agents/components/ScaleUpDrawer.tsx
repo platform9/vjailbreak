@@ -10,11 +10,10 @@ import {
   SectionHeader,
   InlineHelp,
   FormGrid,
-  Row,
-  FieldLabel
+  Row
 } from 'src/components'
 
-import { DesignSystemForm, RHFTextField, RHFSelect, TextField } from 'src/shared/components/forms'
+import { DesignSystemForm, RHFTextField, RHFSelect } from 'src/shared/components/forms'
 import { OpenstackCredentialsForm } from 'src/features/credentials/components'
 
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'

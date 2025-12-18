@@ -3,13 +3,22 @@ import { useForm, FormProvider } from 'react-hook-form'
 import { Box } from '@mui/material'
 import RHFSelect from './RHFSelect'
 
+const baseOptions = [
+  { label: 'Option 1', value: 'option1' },
+  { label: 'Option 2', value: 'option2' },
+  { label: 'Option 3', value: 'option3' }
+]
+
 const meta: Meta<typeof RHFSelect> = {
   title: 'Forms/RHF/RHFSelect',
   component: RHFSelect,
   parameters: {
     layout: 'centered'
   },
-  tags: ['autodocs']
+  tags: ['autodocs'],
+  args: {
+    options: baseOptions
+  }
 }
 
 export default meta
@@ -34,24 +43,20 @@ const FormWrapper = ({
 export const Default: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="option" />
+      <RHFSelect {...args} name="option" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
     label: 'Select an option',
     placeholder: 'Choose an option',
-    options: [
-      { label: 'Option 1', value: 'option1' },
-      { label: 'Option 2', value: 'option2' },
-      { label: 'Option 3', value: 'option3' }
-    ]
+    options: baseOptions
   }
 }
 
 export const WithHelperText: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="country" />
+      <RHFSelect {...args} name="country" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -70,7 +75,7 @@ export const WithHelperText: Story = {
 export const Required: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="requiredOption" />
+      <RHFSelect {...args} name="requiredOption" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -88,7 +93,7 @@ export const Required: Story = {
 export const Disabled: Story = {
   render: (args) => (
     <FormWrapper defaultValues={{ disabled: 'option1' }}>
-      <RHFSelect {...args} name="disabled" />
+      <RHFSelect {...args} name="disabled" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -104,7 +109,7 @@ export const Disabled: Story = {
 export const WithDefaultValue: Story = {
   render: (args) => (
     <FormWrapper defaultValues={{ selected: 'option2' }}>
-      <RHFSelect {...args} name="selected" />
+      <RHFSelect {...args} name="selected" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -120,7 +125,7 @@ export const WithDefaultValue: Story = {
 export const ManyOptions: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="state" />
+      <RHFSelect {...args} name="state" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -140,7 +145,7 @@ export const ManyOptions: Story = {
 export const Searchable: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="searchableOption" />
+      <RHFSelect {...args} name="searchableOption" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -166,7 +171,7 @@ export const Searchable: Story = {
 export const WithValidation: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFSelect {...args} name="validated" />
+      <RHFSelect {...args} name="validated" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {

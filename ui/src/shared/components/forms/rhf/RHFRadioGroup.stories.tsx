@@ -3,13 +3,22 @@ import { useForm, FormProvider } from 'react-hook-form'
 import { Box } from '@mui/material'
 import RHFRadioGroup from './RHFRadioGroup'
 
+const baseOptions = [
+  { label: 'Option 1', value: 'option1' },
+  { label: 'Option 2', value: 'option2' },
+  { label: 'Option 3', value: 'option3' }
+]
+
 const meta: Meta<typeof RHFRadioGroup> = {
   title: 'Forms/RHF/RHFRadioGroup',
   component: RHFRadioGroup,
   parameters: {
     layout: 'centered'
   },
-  tags: ['autodocs']
+  tags: ['autodocs'],
+  args: {
+    options: baseOptions
+  }
 }
 
 export default meta
@@ -34,23 +43,19 @@ const FormWrapper = ({
 export const Default: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFRadioGroup {...args} name="option" />
+      <RHFRadioGroup {...args} name="option" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
     label: 'Select an option',
-    options: [
-      { label: 'Option 1', value: 'option1' },
-      { label: 'Option 2', value: 'option2' },
-      { label: 'Option 3', value: 'option3' }
-    ]
+    options: baseOptions
   }
 }
 
 export const WithHelperText: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFRadioGroup {...args} name="theme" />
+      <RHFRadioGroup {...args} name="theme" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -67,7 +72,7 @@ export const WithHelperText: Story = {
 export const RowLayout: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFRadioGroup {...args} name="priority" />
+      <RHFRadioGroup {...args} name="priority" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -84,7 +89,7 @@ export const RowLayout: Story = {
 export const Required: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFRadioGroup {...args} name="requiredOption" />
+      <RHFRadioGroup {...args} name="requiredOption" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -100,7 +105,7 @@ export const Required: Story = {
 export const Disabled: Story = {
   render: (args) => (
     <FormWrapper defaultValues={{ disabled: 'option1' }}>
-      <RHFRadioGroup {...args} name="disabled" />
+      <RHFRadioGroup {...args} name="disabled" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -116,7 +121,7 @@ export const Disabled: Story = {
 export const WithDefaultValue: Story = {
   render: (args) => (
     <FormWrapper defaultValues={{ selected: 'option2' }}>
-      <RHFRadioGroup {...args} name="selected" />
+      <RHFRadioGroup {...args} name="selected" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
@@ -132,7 +137,7 @@ export const WithDefaultValue: Story = {
 export const ManyOptions: Story = {
   render: (args) => (
     <FormWrapper>
-      <RHFRadioGroup {...args} name="country" />
+      <RHFRadioGroup {...args} name="country" options={args.options ?? baseOptions} />
     </FormWrapper>
   ),
   args: {
