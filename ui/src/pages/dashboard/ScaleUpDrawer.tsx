@@ -268,11 +268,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   size="small"
                 />
               </FormControl>
-              <FormControl fullWidth>
-                <Typography variant="body1" style={{ color: 'red' }}>
-                  ⚠️ Please select a flavor with a disk size of at least 60GB.
-                </Typography>
-              </FormControl>
               <FormControl error={!!flavorsError} fullWidth>
                 <InputLabel size="small">
                   {loadingFlavors ? 'Loading Flavors...' : 'Flavor'}
