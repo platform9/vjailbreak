@@ -305,7 +305,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		Networks:       networkIDs,
 		SecurityGroups: securityGroups,
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
-			token[:12], constants.ENVFileLocation,
+			"password", constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
 			token)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
