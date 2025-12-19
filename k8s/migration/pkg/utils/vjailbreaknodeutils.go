@@ -641,7 +641,7 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 		}
 
 		// Fetch flavor-specific extra_specs from OpenStack/PCD to retain GPU traits/aliases
-		extraSpecs, extraErr := flavors.ListExtraSpecs(openstackClients.ComputeClient, flavorList[i].ID).Extract()
+		extraSpecs, extraErr := flavors.ListExtraSpecs(ctx, openstackClients.ComputeClient, flavorList[i].ID).Extract()
 		if extraErr != nil {
 			return nil, errors.Wrapf(extraErr, "failed to list extra specs for flavor %q", flavorList[i].Name)
 		}
