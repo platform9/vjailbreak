@@ -193,32 +193,33 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		logrus.Errorf("Failed to get machine: %v", err)
 		return errors.Wrap(err, "failed to get machine")
 	}
-	con_interface := ipmi.InterfaceLanplus
-	if req.IpmiInterface == nil {
-		req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
-	}
-	switch req.IpmiInterface.IpmiInterface.(type) {
-	case *api.IpmiType_Lan:
-		con_interface = ipmi.InterfaceLan
-	case *api.IpmiType_Lanplus:
-		con_interface = ipmi.InterfaceLanplus
-	case *api.IpmiType_OpenIpmi:
-		con_interface = ipmi.InterfaceOpen
-	case *api.IpmiType_Tool:
-		con_interface = ipmi.InterfaceTool
-	}
+	//TODO(Omkar): check back this again
+	// con_interface := ipmi.InterfaceLanplus
+	// if req.IpmiInterface == nil {
+	// 	req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+	// }
+	// switch req.IpmiInterface.IpmiInterface.(type) {
+	// case *api.IpmiType_Lan:
+	// 	con_interface = ipmi.InterfaceLan
+	// case *api.IpmiType_Lanplus:
+	// 	con_interface = ipmi.InterfaceLanplus
+	// case *api.IpmiType_OpenIpmi:
+	// 	con_interface = ipmi.InterfaceOpen
+	// case *api.IpmiType_Tool:
+	// 	con_interface = ipmi.InterfaceTool
+	// }
 
 	// Handle machine in "New" state - needs commissioning first
 	if strings.EqualFold(machine.StatusName, "New") {
 		logrus.Infof("%s Machine %s is in New state, commissioning first", ctx, systemID)
-		
+
 		// Commission the machine
 		_, err = m.Client.Machine.Commission(systemID, &entity.MachineCommissionParams{})
 		if err != nil {
 			logrus.Errorf("%s Failed to commission machine: %v", ctx, err)
 			return errors.Wrap(err, "failed to commission machine")
 		}
-		
+
 		// Wait for commissioning to complete (machine becomes "Ready")
 		logrus.Infof("%s Waiting for machine %s to complete commissioning", ctx, systemID)
 		err = m.waitForMachineState(ctx, systemID, "Ready", 10*time.Minute)
@@ -226,7 +227,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed waiting for commissioning: %v", ctx, err)
 			return errors.Wrap(err, "failed waiting for commissioning to complete")
 		}
-		
+
 		// Refresh machine state after commissioning
 		machine, err = m.Client.Machine.Get(systemID)
 		if err != nil {
@@ -235,15 +236,16 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		}
 	}
 
-	if !req.ManualPowerControl {
-		//Set machine to PXE Boot
-		logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
-		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
-		if err != nil {
-			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-			return errors.Wrap(err, "failed to set machine to pxe boot")
-		}
-	}
+	//TODO(Omkar): check back this again
+	// if !req.ManualPowerControl {
+	// 	//Set machine to PXE Boot
+	// 	logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
+	// 	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+	// 	if err != nil {
+	// 		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+	// 		return errors.Wrap(err, "failed to set machine to pxe boot")
+	// 	}
+	// }
 	// Check if machine needs to be released first
 	if strings.EqualFold(machine.StatusName, "Ready") || strings.EqualFold(machine.StatusName, "Releasing") || strings.EqualFold(machine.StatusName, "released") {
 		logrus.Infof("%s Machine %s is already %s", ctx, systemID, machine.StatusName)
@@ -258,7 +260,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed to release machine: %v", ctx, err)
 			return errors.Wrap(err, "failed to release machine")
 		}
-		
+
 		// Wait for machine to be released (becomes "Ready")
 		logrus.Infof("%s Waiting for machine %s to be released", ctx, systemID)
 		err = m.waitForMachineState(ctx, systemID, "Ready", 5*time.Minute)
@@ -266,7 +268,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed waiting for release: %v", ctx, err)
 			return errors.Wrap(err, "failed waiting for machine to be released")
 		}
-		
+
 		// Refresh machine state after release
 		machine, err = m.Client.Machine.Get(systemID)
 		if err != nil {
@@ -274,7 +276,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			return errors.Wrap(err, "failed to get machine after release")
 		}
 	}
-	
+
 	// Allocate the machine before deployment (only if not already Allocated)
 	if !strings.EqualFold(machine.StatusName, "Allocated") {
 		logrus.Infof("%s Allocating machine %s", ctx, systemID)
@@ -286,7 +288,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 			logrus.Errorf("%s Failed to allocate machine: %v", ctx, err)
 			return errors.Wrap(err, "failed to allocate machine")
 		}
-		
+
 		// Wait for allocation to complete
 		logrus.Infof("%s Waiting for machine %s to be allocated", ctx, systemID)
 		err = m.waitForMachineState(ctx, systemID, "Allocated", 1*time.Minute)
@@ -297,15 +299,15 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	} else {
 		logrus.Infof("%s Machine %s is already Allocated, skipping allocation step", ctx, systemID)
 	}
-	
-	if !req.ManualPowerControl {
-		//Call PXE boot again to deploy the machine
-		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
-		if err != nil {
-			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-			return errors.Wrap(err, "failed to set machine to pxe boot")
-		}
-	}
+
+	// if !req.ManualPowerControl {
+	// 	//Call PXE boot again to deploy the machine
+	// 	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+	// 	if err != nil {
+	// 		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+	// 		return errors.Wrap(err, "failed to set machine to pxe boot")
+	// 	}
+	// }
 	// Deploy the machine again
 	logrus.Infof("%s Deploying machine %s", ctx, systemID)
 	_, err = m.Client.Machine.Deploy(systemID, &entity.MachineDeployParams{
@@ -426,31 +428,31 @@ func (m *MaasClient) waitForMachineState(ctx context.Context, systemID string, d
 	if m.Client == nil {
 		return errors.New("client not initialized")
 	}
-	
+
 	deadline := time.Now().Add(timeout)
 	pollInterval := 10 * time.Second
-	
+
 	for time.Now().Before(deadline) {
 		machine, err := m.Client.Machine.Get(systemID)
 		if err != nil {
 			logrus.Errorf("Failed to get machine status: %v", err)
 			return errors.Wrap(err, "failed to get machine status")
 		}
-		
+
 		logrus.Debugf("Machine %s current state: %s (waiting for %s)", systemID, machine.StatusName, desiredState)
-		
+
 		if strings.EqualFold(machine.StatusName, desiredState) {
 			logrus.Infof("Machine %s reached desired state: %s", systemID, desiredState)
 			return nil
 		}
-		
+
 		// Check for failed states
-		if strings.EqualFold(machine.StatusName, "Failed") || 
-		   strings.EqualFold(machine.StatusName, "Failed commissioning") ||
-		   strings.EqualFold(machine.StatusName, "Failed deployment") {
+		if strings.EqualFold(machine.StatusName, "Failed") ||
+			strings.EqualFold(machine.StatusName, "Failed commissioning") ||
+			strings.EqualFold(machine.StatusName, "Failed deployment") {
 			return errors.Errorf("machine %s entered failed state: %s - %s", systemID, machine.StatusName, machine.StatusMessage)
 		}
-		
+
 		select {
 		case <-ctx.Done():
 			return errors.Wrap(ctx.Err(), "context cancelled while waiting for machine state")
@@ -458,7 +460,7 @@ func (m *MaasClient) waitForMachineState(ctx context.Context, systemID string, d
 			// Continue polling
 		}
 	}
-	
+
 	return errors.Errorf("timeout waiting for machine %s to reach state %s after %v", systemID, desiredState, timeout)
 }
 
@@ -529,20 +531,20 @@ func (m *MaasClient) SetMachine2PXEBoot(ctx context.Context, systemID string, po
 	if power_cycle && powerState.PowerIsOn {
 		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerDown)
 		if err != nil {
-			logrus.Errorf("Failed to power cycle machine: %v", err)
-			return errors.Wrap(err, "failed to power cycle machine")
+			logrus.Errorf("Failed to power down machine %s: %v, current power state: %v", systemID, err, powerState)
+			return errors.Wrapf(err, "failed to power down machine %s", systemID)
 		}
 
 		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
 		if err != nil {
-			logrus.Errorf("Failed to power cycle machine: %v", err)
-			return errors.Wrap(err, "failed to power cycle machine")
+			logrus.Errorf("Failed to power up machine %s after power down: %v, current power state: %v", systemID, err, powerState)
+			return errors.Wrapf(err, "failed to power up machine %s after power down", systemID)
 		}
 	} else if !powerState.PowerIsOn {
 		_, err = config.ChassisControl(ctx, ipmi.ChassisControlPowerUp)
 		if err != nil {
-			logrus.Errorf("Failed to power up machine: %v", err)
-			return errors.Wrap(err, "failed to power up machine")
+			logrus.Errorf("Failed to power up machine %s: %v, current power state: %v", systemID, err, powerState)
+			return errors.Wrapf(err, "failed to power up machine %s", systemID)
 		}
 	}
 	logrus.Infof("Successfully set machine %s to PXE boot", systemID)
