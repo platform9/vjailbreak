@@ -120,7 +120,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	VolumeAvailableWaitRetryLimit = 15
 
 	// DefaultMigrationMethod is the default migration method
-	DefaultMigrationMethod = "hot"
+	DefaultMigrationMethod = "cold"
 
 	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
 	VCenterScanConcurrencyLimit = 100
