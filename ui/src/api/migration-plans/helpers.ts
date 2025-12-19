@@ -5,7 +5,7 @@ export const createMigrationPlanJson = (params) => {
     name,
     migrationTemplateName,
     retry = false,
-    type = 'hot',
+    type = 'cold',
     dataCopyStart,
     vmCutoverStart,
     vmCutoverEnd,
