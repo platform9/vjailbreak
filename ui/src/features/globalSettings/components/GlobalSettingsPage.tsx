@@ -167,7 +167,7 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
   },
   advanced: {
     label: 'Advanced',
-    helper: 'Tune integration defaults and automation flags for OpenStack and VMware flows.',
+    helper: 'Tune integration defaults and automation flags for PCD and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
   }
 }
@@ -232,7 +232,7 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Number of login retries before the workflow surfaces an authentication error.',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 'Maximum number of vCenter VMs to scan concurrently.',
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES:
-    'Time before failed OpenStack credentials are re-queued for another attempt.',
+    'Time before failed PCD credentials are re-queued for another attempt.',
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 'Time before VMware credential rotations are retried.',
   DEFAULT_MIGRATION_METHOD:
     'Default method for VM migration (placeholder for future releases, not currently used).',
@@ -874,7 +874,7 @@ export default function GlobalSettingsPage() {
         <TabPanel current={activeTab} value="advanced">
           <SettingsGrid>
             <NumberField
-              label="OpenStack Creds Requeue After (minutes)"
+              label="PCD Creds Requeue After (minutes)"
               name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
               value={form.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
               onChange={onNumber}

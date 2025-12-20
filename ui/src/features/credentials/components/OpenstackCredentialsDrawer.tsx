@@ -307,7 +307,7 @@ export default function OpenstackCredentialsDrawer({
             action: 'openstack-validation-status-polling'
           }
         })
-        setError('Error validating OpenStack credentials')
+        setError('Error validating PCD credentials')
         setValidatingOpenstackCreds(false)
         setSubmitting(false)
       }
@@ -320,7 +320,7 @@ export default function OpenstackCredentialsDrawer({
     <DrawerShell
       open={open}
       onClose={closeDrawer}
-      header={<DrawerHeader title="Add OpenStack Credentials" onClose={closeDrawer} />}
+      header={<DrawerHeader title="Add PCD Credentials" onClose={closeDrawer} />}
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={closeDrawer} data-testid="openstack-cred-cancel">
@@ -351,15 +351,15 @@ export default function OpenstackCredentialsDrawer({
       >
         <Section>
           <SectionHeader
-            title="OpenStack credential details"
-            subtitle="Give your credential a clear name and upload the RC file from your OpenStack environment."
+            title="PCD Credential Details"
+            subtitle="Give your credential a clear name and upload the RC file from your PCD environment."
           />
 
           <FormGrid minWidth={360} gap={2}>
             <RHFTextField
               name="credentialName"
-              label="OpenStack credential name"
-              placeholder="e.g. prod-openstack"
+              label="PCD Credential Name"
+              placeholder="e.g. prod-pcd"
               rules={{
                 required: 'Credential name is required',
                 validate: (value: string) =>
@@ -404,7 +404,7 @@ export default function OpenstackCredentialsDrawer({
               <InlineHelp tone="warning">
                 <Row gap={1}>
                   <CircularProgress size={16} />
-                  <span>Validating OpenStack credentials…</span>
+                  <span>Validating PCD credentials…</span>
                 </Row>
               </InlineHelp>
             )}
@@ -413,7 +413,7 @@ export default function OpenstackCredentialsDrawer({
               <InlineHelp tone="positive">
                 <Row gap={1}>
                   <CheckIcon color="success" fontSize="small" />
-                  <span>OpenStack credentials created and validated.</span>
+                  <span>PCD credentials created and validated.</span>
                 </Row>
               </InlineHelp>
             )}

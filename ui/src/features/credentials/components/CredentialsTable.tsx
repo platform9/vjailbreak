@@ -64,7 +64,7 @@ const getColumns = (
     flex: 1,
     renderCell: (params) => (
       <Chip
-        label={params.value}
+        label={params.value === 'OpenStack' ? 'PCD' : params.value}
         color={params.value === 'VMware' ? 'primary' : 'secondary'}
         variant="outlined"
         size="small"
@@ -184,7 +184,7 @@ const CustomToolbar = ({
           onClick={onAddOpenstackCredential}
           sx={{ height: 40 }}
         >
-          Add OpenStack Credentials
+          Add PCD Credentials
         </Button>
         {numSelected > 0 && (
           <Button

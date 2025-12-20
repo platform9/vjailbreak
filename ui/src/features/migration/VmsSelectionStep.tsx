@@ -565,7 +565,7 @@ function VmsSelectionStep({
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <div style={{ fontWeight: 500 }}>Flavor</div>
-          <Tooltip title="Target OpenStack flavor to be assigned to this VM after migration.">
+          <Tooltip title="Target PCD flavor to be assigned to this VM after migration.">
             <InfoIcon fontSize="small" sx={{ color: 'info.info', opacity: 0.7, cursor: 'help' }} />
           </Tooltip>
         </Box>
@@ -1036,7 +1036,7 @@ function VmsSelectionStep({
               typeof responseData === 'string' ? responseData : responseData?.message
             const validationErrorMessage =
               apiMessage ||
-              'OpenStack IP validation service is unavailable (500). Please verify credentials or try again later.'
+              'PCD IP validation service is unavailable (500). Please verify credentials or try again later.'
 
             markBulkValidationFailure(validationErrorMessage)
             showToast(validationErrorMessage, 'error')
@@ -1550,7 +1550,7 @@ function VmsSelectionStep({
                 <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="body1">Auto Assign</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Let OpenStack automatically assign the most suitable flavor
+                    Let PCD automatically assign the most suitable flavor
                   </Typography>
                 </Box>
               </MenuItem>

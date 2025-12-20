@@ -2518,7 +2518,7 @@ export default function RollingMigrationFormDrawer({
           fullWidth
           maxWidth="sm"
         >
-          <DialogTitle>Assign Host Config to All ESXi Hosts</DialogTitle>
+          <DialogTitle>Assign Host Config To All ESXi Hosts</DialogTitle>
           <DialogContent>
             <Box sx={{ my: 2 }}>
               <Typography variant="body2" gutterBottom>
@@ -2558,7 +2558,7 @@ export default function RollingMigrationFormDrawer({
               disabled={!selectedPcdHostConfig || updatingPcdMapping}
               loading={updatingPcdMapping}
             >
-              Apply to all hosts
+              Apply To All Hosts
             </ActionButton>
           </DialogActions>
         </Dialog>

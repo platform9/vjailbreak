@@ -103,11 +103,11 @@ export default function NetworkAndStorageMappingStep({
 
   return (
     <VmsSelectionStepContainer>
-      {showHeader ? <Step stepNumber={stepNumber} label="Network and Storage Mapping" /> : null}
+      {showHeader ? <Step stepNumber={stepNumber} label="Network And Storage Mapping" /> : null}
       <FieldsContainer>
         {loading ? (
           <Typography variant="body2" color="text.secondary">
-            Loading OpenStack networks and storage options...
+            Loading PCD networks and storage options...
           </Typography>
         ) : (
           <>
@@ -139,7 +139,7 @@ export default function NetworkAndStorageMappingStep({
                 sourceItems={vmwareNetworks}
                 targetItems={openstackNetworks}
                 sourceLabel="VMware Network"
-                targetLabel="OpenStack Network"
+                targetLabel="PCD Network"
                 values={params.networkMappings || []}
                 onChange={(value) => onChange('networkMappings')(value)}
                 oneToManyMapping
@@ -168,13 +168,13 @@ export default function NetworkAndStorageMappingStep({
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Select source and target storage to automatically create mappings. All storage
-                devices must be mapped to proceed.
+                devices must be mapped in order to proceed.
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmWareStorage}
                 targetItems={openstackStorage}
                 sourceLabel="VMware Datastore"
-                targetLabel="OpenStack VolumeType"
+                targetLabel="PCD Volume Type"
                 values={params.storageMappings || []}
                 onChange={(value) => onChange('storageMappings')(value)}
                 oneToManyMapping

@@ -73,8 +73,8 @@ export default function Onboarding() {
         </CircularLogoContainer>
         <Typography variant="h2">vJailbreak</Typography>
         <Typography variant="body1">
-          Ready to migrate from VMware to OpenStack? <br />
-          Click below to start moving your VMware workloads to OpenStack with ease.
+          Ready to migrate from VMware to PCD? <br />
+          Click below to start moving your VMware workloads to PCD with ease.
         </Typography>
         <Button variant="contained" size="large" onClick={() => setOpenMigrationForm(true)}>
           Start Migration

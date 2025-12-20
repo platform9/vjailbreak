@@ -260,7 +260,7 @@ export default function MigrationFormDrawer({
       } catch (error) {
         console.error('Error fetching existing OpenStack credentials:', error)
         getFieldErrorsUpdater('openstackCreds')(
-          'Error fetching OpenStack credentials: ' +
+          'Error fetching PCD credentials: ' +
             (axios.isAxiosError(error) ? error?.response?.data?.message : error)
         )
       }
@@ -890,7 +890,7 @@ export default function MigrationFormDrawer({
     () => [
       {
         id: 'source-destination',
-        title: '1. Source and destination',
+        title: '1. Source And Destination',
         description: 'Pick clusters and credentials',
         status: isStep1Complete ? 'complete' : 'attention'
       },
@@ -902,25 +902,25 @@ export default function MigrationFormDrawer({
       },
       {
         id: 'map-resources',
-        title: '3. Map networks and storage',
-        description: 'Map VMware networks/datastores to OpenStack',
+        title: '3. Map Networks And Storage',
+        description: 'Map VMware networks/datastores to PCD',
         status: isStep3Complete ? 'complete' : 'attention'
       },
       {
         id: 'security',
-        title: '4. Security and placement',
+        title: '4. Security And Placement',
         description: 'Security groups and server group',
         status: 'optional'
       },
       {
         id: 'options',
-        title: '5. Migration options',
+        title: '5. Migration Options',
         description: 'Scheduling and advanced behavior',
         status: 'optional'
       },
       {
         id: 'review',
-        title: '6. Review and confirm',
+        title: '6. Review And Confirm',
         description: 'Confirm selections before starting',
         status: reviewConfirmed ? 'complete' : 'optional'
       }
@@ -1002,7 +1002,7 @@ export default function MigrationFormDrawer({
       }}
       header={
         <DrawerHeader
-          title="Create migration"
+          title="Create Migration"
           subtitle="Configure source/destination, select VMs, and map resources before starting"
           icon={<MigrationIcon />}
           onClose={handleClose}
@@ -1019,7 +1019,7 @@ export default function MigrationFormDrawer({
             disabled={submitDisabled}
             loading={submitting}
           >
-            Start migration
+            Start Migration
           </ActionButton>
         </DrawerFooter>
       }
@@ -1063,7 +1063,7 @@ export default function MigrationFormDrawer({
           {/* Step 1 */}
           <Box ref={section1Ref}>
             <SurfaceCard
-              title="1. Source and destination"
+              title="1. Source And Destination"
               subtitle="Choose where you migrate from and where you migrate to"
             >
               <SourceDestinationClusterSelection
@@ -1110,8 +1110,8 @@ export default function MigrationFormDrawer({
           {/* Step 3 */}
           <Box ref={section3Ref}>
             <SurfaceCard
-              title="3. Map networks and storage"
-              subtitle="Ensure all VMware networks and datastores have OpenStack targets"
+              title="3. Map Networks And Storage"
+              subtitle="Ensure all VMware networks and datastores have PCD targets"
             >
               <NetworkAndStorageMappingStep
                 vmwareNetworks={availableVmwareNetworks}
@@ -1146,7 +1146,7 @@ export default function MigrationFormDrawer({
           {/* Step 5 */}
           <Box ref={section5Ref}>
             <SurfaceCard
-              title="5. Migration options"
+              title="5. Migration Options"
               subtitle="Optional scheduling, cutover behavior, and advanced settings"
             >
               <MigrationOptions
@@ -1165,7 +1165,7 @@ export default function MigrationFormDrawer({
 
           <Box ref={reviewRef}>
             <SurfaceCard
-              title="6. Review and confirm"
+              title="6. Review And Confirm"
               subtitle="Verify your selections before starting the migration"
             >
               <Box sx={{ display: 'grid', gap: 1.5 }}>

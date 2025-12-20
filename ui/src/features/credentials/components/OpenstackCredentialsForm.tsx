@@ -61,13 +61,13 @@ export default function OpenstackCredentialsForm({
       {showCredentialSelector && (
         <FormControl fullWidth error={!!error}>
           <CredentialSelector
-            placeholder="Select OpenStack credentials"
+            placeholder="Select PCD Credentials"
             options={credentialOptions}
             value={selectedCredential}
             onChange={onCredentialSelect || (() => {})}
             loading={loadingCredentials}
             size={size}
-            emptyMessage="No OpenStack credentials found. Please use the credential drawer to create new ones."
+            emptyMessage="No PCD credentials found. Please use the credential drawer to create new ones."
             showAddNewButton={false}
           />
           {error && (

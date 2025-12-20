@@ -1,25 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import React from 'react'
 import {
   Box,
   TextField,
-  Button,
   Typography,
-  Grid,
   styled,
-  Paper,
   Select,
   MenuItem,
   FormControl,
+  FormHelperText,
   SelectChangeEvent,
-  Switch,
   CircularProgress,
   Snackbar,
   Alert,
-  Tooltip,
   useTheme
 } from '@mui/material'
-import InfoIcon from '@mui/icons-material/Info'
 import CodeMirror from '@uiw/react-codemirror'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { yaml } from '@codemirror/lang-yaml'
@@ -43,35 +38,85 @@ import {
   BLACK
 } from 'src/theme/colors'
 
-const StyledPaper = styled(Paper)({
-  width: '100%',
-  padding: '24px',
-  boxSizing: 'border-box'
+import {
+  ActionButton,
+  FieldLabel,
+  Row,
+  Section,
+  SectionHeader,
+  SurfaceCard,
+  ToggleField
+} from 'src/components'
+
+const LoadingRow = styled(Row)(({ theme }) => ({
+  paddingTop: theme.spacing(2),
+  paddingBottom: theme.spacing(2)
+}))
+
+const FormRoot = styled('form')(({ theme }) => ({
+  display: 'grid',
+  gap: theme.spacing(2)
+}))
+
+const ConnectionGrid = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gap: theme.spacing(2),
+  alignItems: 'start',
+  gridTemplateColumns: '1fr',
+  [theme.breakpoints.up('md')]: {
+    gridTemplateColumns: 'repeat(3, 1fr)'
+  }
+}))
+
+const FieldBlock = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gap: theme.spacing(0.75),
+  alignContent: 'start'
+}))
+
+const FieldLabelSlot = styled(Box)({
+  minHeight: 0
 })
 
-const Footer = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: theme.spacing(2),
-  marginTop: theme.spacing(4),
-  paddingTop: theme.spacing(2),
-  borderTop: `1px solid ${theme.palette.divider}`
+const ToggleRow = styled(Box)(({ theme }) => ({
+  marginTop: theme.spacing(1)
 }))
 
-const Section = styled(Box)(({ theme }) => ({
-  marginBottom: theme.spacing(4)
-}))
+const CloudInitField = styled(FormControl)({
+  width: '100%'
+})
 
-const FormField = styled(Box)(({ theme }) => ({
-  marginBottom: theme.spacing(2)
-}))
-
-const CodeMirrorContainer = styled(Box)(({ theme }) => ({
-  border: `1px solid ${theme.palette.grey[300]}`,
+const CodeMirrorContainer = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'hasError'
+})<{ hasError?: boolean }>(({ theme, hasError }) => ({
+  border: `1px solid ${hasError ? theme.palette.error.main : theme.palette.divider}`,
   borderRadius: theme.shape.borderRadius,
-  overflow: 'hidden',
-  marginBottom: theme.spacing(2)
+  overflow: 'auto',
+  backgroundColor: theme.palette.background.paper
 }))
+
+function validateCloudInit(cloudInit: string): string | null {
+  const trimmed = cloudInit.trim()
+
+  if (!trimmed) {
+    return 'Cloud-init user-data is required.'
+  }
+
+  if (cloudInit.includes('\t')) {
+    return 'Cloud-init YAML contains tab characters. YAML requires spaces for indentation.'
+  }
+
+  const firstNonEmptyLine = cloudInit
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+
+  if (firstNonEmptyLine !== '#cloud-config') {
+    return 'Cloud-init must start with #cloud-config as the first non-empty line.'
+  }
+
+  return null
+}
 
 export default function MaasConfigForm() {
   const { reportError } = useErrorHandler({ component: 'BMConfigForm' })
@@ -111,6 +156,8 @@ runcmd:
     severity: 'info' as 'error' | 'info' | 'success' | 'warning'
   })
   const [urlError, setUrlError] = useState('')
+
+  const cloudInitError = useMemo(() => validateCloudInit(formData.cloudInit), [formData.cloudInit])
 
   const maasUrlRegex = /^https?:\/\/.+\/MAAS\/?$/
 
@@ -290,6 +337,15 @@ runcmd:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (cloudInitError) {
+      setNotification({
+        open: true,
+        message: cloudInitError,
+        severity: 'error'
+      })
+      return
+    }
+
     if (urlError) {
       setNotification({
         open: true,
@@ -380,175 +436,179 @@ runcmd:
   }
 
   return (
-    <StyledPaper elevation={0}>
+    <SurfaceCard
+      title="Bare metal config"
+      subtitle="Configure MAAS connection, boot source selection, and cloud-init user-data."
+      footer={
+        <Row justifyContent="flex-end" gap={2}>
+          <ActionButton tone="secondary" onClick={handleCancel}>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            type="submit"
+            form="bm-config-form"
+            loading={submitting}
+            disabled={submitting || !formData.os || !!urlError || !!cloudInitError}
+          >
+            Save
+          </ActionButton>
+        </Row>
+      }
+    >
       {initialLoading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" height="400px">
-          <CircularProgress />
-          <Typography variant="body1" sx={{ ml: 2 }}>
+        <LoadingRow gap={2} alignItems="center">
+          <CircularProgress size={20} />
+          <Typography variant="body2" color="text.secondary">
             Loading existing configuration...
           </Typography>
-        </Box>
+        </LoadingRow>
       ) : (
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid' }}>
-          <Section sx={{ mb: 2 }}>
-            <Grid container columnSpacing={4} rowSpacing={2}>
-              <Grid item xs={12} md={6}>
-                <FormField>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Bare Metal Provider URL
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    name="maasUrl"
-                    value={formData.maasUrl}
-                    onChange={handleChange}
-                    size="small"
-                    variant="outlined"
-                    placeholder="http://10.9.4.234:5240/MAAS"
-                    error={!!urlError}
-                    helperText={urlError}
+        <FormRoot id="bm-config-form" onSubmit={handleSubmit}>
+          <Section>
+            {/* <SectionHeader
+              title="Connection"
+              subtitle="MAAS endpoint and credentials used to fetch boot sources."
+            /> */}
+
+            <ConnectionGrid>
+              <FieldBlock>
+                <FieldLabelSlot>
+                  <FieldLabel
+                    label="Bare Metal Provider URL"
+                    required
+                    // helperText="Format: http(s)://hostname/MAAS"
                   />
-                </FormField>
-              </Grid>
-              <Grid item xs={12} md={2}>
-                <FormField>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Insecure
-                  </Typography>
-                  <Switch
-                    name="insecure"
-                    checked={formData.insecure}
-                    onChange={handleSwitchChange}
-                    color="primary"
+                </FieldLabelSlot>
+                <TextField
+                  fullWidth
+                  name="maasUrl"
+                  value={formData.maasUrl}
+                  onChange={handleChange}
+                  size="small"
+                  variant="outlined"
+                  placeholder="http://10.9.4.234:5240/MAAS"
+                  error={!!urlError}
+                  helperText={urlError}
+                />
+              </FieldBlock>
+
+              <FieldBlock>
+                <FieldLabelSlot>
+                  <FieldLabel
+                    label="API Key"
+                    tooltip="The API key for your MAAS account. You can generate this from the MAAS UI under 'API Keys'."
+                    required
+                    helperText=" "
                   />
-                </FormField>
-              </Grid>
-              <Grid item md={4} />
-              <Grid item xs={12} md={6}>
-                <FormField>
-                  <Typography
-                    variant="subtitle2"
-                    gutterBottom
-                    sx={{ display: 'flex', alignItems: 'center' }}
-                  >
-                    API Key
-                    <Tooltip
-                      title="The API key for your MAAS account. You can generate this from the MAAS UI under 'API Keys'."
-                      arrow
+                </FieldLabelSlot>
+                <TextField
+                  fullWidth
+                  name="apiKey"
+                  value={formData.apiKey}
+                  onChange={handleChange}
+                  size="small"
+                  variant="outlined"
+                  type="password"
+                />
+              </FieldBlock>
+
+              <FieldBlock>
+                <FieldLabelSlot>
+                  <FieldLabel
+                    label="OS"
+                    tooltip="Ubuntu Jammy is only supported for now."
+                    required
+                    helperText=" "
+                  />
+                </FieldLabelSlot>
+
+                {loading ? (
+                  <Row gap={1} alignItems="center">
+                    <CircularProgress size={16} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading OS options...
+                    </Typography>
+                  </Row>
+                ) : (
+                  <FormControl fullWidth size="small">
+                    <Select
+                      name="os"
+                      value={formData.os}
+                      onChange={handleSelectChange}
+                      displayEmpty
+                      disabled={bootSources?.length === 0}
                     >
-                      <InfoIcon fontSize="small" sx={{ ml: 1, opacity: 0.7 }} />
-                    </Tooltip>
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    name="apiKey"
-                    value={formData.apiKey}
-                    onChange={handleChange}
-                    size="small"
-                    variant="outlined"
-                    type="password"
-                  />
-                </FormField>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <FormField>
-                  <Typography
-                    variant="subtitle2"
-                    gutterBottom
-                    sx={{ display: 'flex', alignItems: 'center' }}
-                  >
-                    OS
-                    <Tooltip title="Ubuntu Jammy is only supported for now." arrow>
-                      <InfoIcon fontSize="small" sx={{ ml: 1, opacity: 0.7 }} />
-                    </Tooltip>
-                  </Typography>
-                  {loading ? (
-                    <Box display="flex" alignItems="center">
-                      <CircularProgress size={20} sx={{ mr: 1 }} />
-                      <Typography variant="body2" color="text.secondary">
-                        Loading OS options...
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <FormControl fullWidth size="small">
-                      <Select
-                        name="os"
-                        value={formData.os}
-                        onChange={handleSelectChange}
-                        displayEmpty
-                        disabled={bootSources?.length === 0}
-                      >
-                        <MenuItem value="" disabled>
-                          Select an OS
+                      <MenuItem value="" disabled>
+                        Select an OS
+                      </MenuItem>
+                      {bootSources?.map((source) => (
+                        <MenuItem
+                          key={`${source.OS} (${source.Release})`}
+                          value={source.Release}
+                          disabled={!(source.OS === 'ubuntu' && source.Release === 'jammy')}
+                        >
+                          {`${source.OS} (${source.Release})`}
                         </MenuItem>
-                        {bootSources?.map((source) => (
-                          <MenuItem
-                            key={`${source.OS} (${source.Release})`}
-                            value={source.Release}
-                            disabled={!(source.OS === 'ubuntu' && source.Release === 'jammy')}
-                          >
-                            {`${source.OS} (${source.Release})`}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  )}
-                </FormField>
-              </Grid>
-            </Grid>
-          </Section>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+              </FieldBlock>
+            </ConnectionGrid>
 
-          <Section sx={{ mb: 2 }}>
-            <Box
-              sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}
-            >
-              <Typography variant="subtitle2">Cloud-init (YAML):</Typography>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleResetCloudInit}
-                startIcon={<RefreshIcon fontSize="small" />}
-              >
-                Reset to Default
-              </Button>
-            </Box>
-            <CodeMirrorContainer>
-              <CodeMirror
-                value={formData.cloudInit}
-                height="300px"
-                extensions={extensions}
-                theme={isDarkMode ? 'dark' : 'light'}
-                onChange={(value) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    cloudInit: value
-                  }))
-                }}
-                basicSetup={{
-                  lineNumbers: true,
-                  highlightActiveLine: true,
-                  highlightSelectionMatches: true,
-                  syntaxHighlighting: true
-                }}
+            <ToggleRow>
+              <ToggleField
+                name="insecure"
+                checked={formData.insecure}
+                onChange={handleSwitchChange}
+                label="Insecure"
+                tooltip="Disable TLS certificate verification. Use only in trusted networks or lab environments."
+                description="Skip SSL verification when connecting to MAAS."
               />
-            </CodeMirrorContainer>
+            </ToggleRow>
           </Section>
 
-          <Footer>
-            <Button variant="outlined" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              type="submit"
-              color="primary"
-              disabled={submitting || !formData.os || !!urlError}
-              startIcon={submitting ? <CircularProgress size={20} color="inherit" /> : null}
-            >
-              {submitting ? 'Saving...' : 'Save'}
-            </Button>
-          </Footer>
-        </Box>
+          <Section>
+            <SectionHeader
+              title="Cloud-init"
+              subtitle="User-data YAML applied when machines boot."
+              actions={
+                <ActionButton
+                  tone="secondary"
+                  onClick={handleResetCloudInit}
+                  startIcon={<RefreshIcon fontSize="small" />}
+                >
+                  Reset to Default
+                </ActionButton>
+              }
+            />
+
+            <CloudInitField error={!!cloudInitError}>
+              <CodeMirrorContainer hasError={!!cloudInitError}>
+                <CodeMirror
+                  value={formData.cloudInit}
+                  height="300px"
+                  extensions={extensions}
+                  theme={isDarkMode ? 'dark' : 'light'}
+                  onChange={(value) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      cloudInit: value
+                    }))
+                  }}
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLine: true,
+                    highlightSelectionMatches: true,
+                    syntaxHighlighting: true
+                  }}
+                />
+              </CodeMirrorContainer>
+              {cloudInitError ? <FormHelperText>{cloudInitError}</FormHelperText> : null}
+            </CloudInitField>
+          </Section>
+        </FormRoot>
       )}
 
       <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification}>
@@ -560,6 +620,6 @@ runcmd:
           {notification.message}
         </Alert>
       </Snackbar>
-    </StyledPaper>
+    </SurfaceCard>
   )
 }

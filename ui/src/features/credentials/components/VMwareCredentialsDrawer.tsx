@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Collapse,
-  Divider,
   FormLabel,
   IconButton,
   InputAdornment,
@@ -466,14 +465,18 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         data-testid="vmware-cred-form"
         id={formId}
       >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 2.5 }}>
-          {renderBasicsSection()}
-
-          <Divider />
-
-          {renderAuthSection()}
-
-          <Divider />
+        <Box sx={{ display: 'grid', gap: 2, py: 1.5 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+              gap: 3,
+              alignItems: 'start'
+            }}
+          >
+            {renderBasicsSection()}
+            {renderAuthSection()}
+          </Box>
 
           {renderSecuritySection()}
 

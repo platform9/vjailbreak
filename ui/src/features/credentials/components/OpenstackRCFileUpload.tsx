@@ -126,10 +126,10 @@ const OpenstackRCFileUploader = forwardRef<
       <FormControl error={!!(error || openstackCredsError)} fullWidth>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <FieldLabel
-            label="OpenStack RC file"
+            label="PCD RC File"
             required
             align="flex-start"
-            helperText="Upload the RC file exported from your OpenStack environment."
+            helperText="Upload the RC file exported from your PCD environment."
           />
           <Box
             sx={{
@@ -151,7 +151,7 @@ const OpenstackRCFileUploader = forwardRef<
               component="label"
               size={size === 'small' ? 'small' : 'medium'}
             >
-              Choose file
+              Choose File
               <input type="file" hidden onChange={handleFileChange} key={fileInputKey} />
             </ActionButton>
           </Box>

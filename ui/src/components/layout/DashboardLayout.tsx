@@ -23,7 +23,7 @@ const StyledPaper = styled(Paper)({
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
-  overflow: 'hidden',
+  overflow: 'auto',
   minHeight: 0,
   '& .MuiDataGrid-root': {
     flex: 1,

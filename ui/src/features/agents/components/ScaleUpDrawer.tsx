@@ -108,7 +108,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         } catch (err) {
           console.error('Error fetching OpenStack credentials:', err)
           setOpenstackError(
-            'Error fetching OpenStack credentials: ' +
+            'Error fetching PCD credentials: ' +
               (axios.isAxiosError(err) ? err?.response?.data?.message : String(err))
           )
         }
@@ -130,7 +130,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           setFlavors(flavours || [])
         } catch (err) {
           console.error('Failed to fetch flavors:', err)
-          setFlavorsError('Failed to fetch OpenStack flavors')
+          setFlavorsError('Failed to fetch PCD flavors')
         } finally {
           setLoadingFlavors(false)
         }
@@ -223,19 +223,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           isSubmitDisabled
         }}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            maxHeight: 'calc(100vh - 200px)',
-            overflowY: 'auto',
-            pr: 1
-          }}
-          data-testid="scaleup-form"
-        >
+        <Box sx={{ display: 'grid', gap: 2, py: 1.5 }} data-testid="scaleup-form">
           <Section sx={{ mb: 1 }}>
-            <SectionHeader title="OpenStack Credentials" sx={{ mb: 0 }} />
+            <SectionHeader title="PCD Credentials" sx={{ mb: 0 }} />
 
             <OpenstackCredentialsForm
               fullWidth

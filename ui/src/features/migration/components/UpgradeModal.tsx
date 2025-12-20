@@ -49,7 +49,7 @@ export const UpgradeModal = ({ show, onClose }) => {
     'Delete RollingMigrationPlans',
     'Scale down Agents',
     'Delete VMware credentials',
-    'Delete OpenStack credentials',
+    'Delete PCD credentials',
     'Delete Custom Resources'
   ]
   const [stepStates, setStepStates] = useState(
@@ -159,7 +159,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
         { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
         { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
-        { label: 'OpenStack credentials deleted', value: checkResults.openstackCredsDeleted },
+        { label: 'PCD credentials deleted', value: checkResults.openstackCredsDeleted },
         { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
         { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources }
       ]
