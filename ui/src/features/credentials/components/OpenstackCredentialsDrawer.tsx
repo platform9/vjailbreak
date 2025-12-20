@@ -11,7 +11,8 @@ import {
   SectionHeader,
   InlineHelp,
   Row,
-  FormGrid
+  FormGrid,
+  SurfaceCard
 } from 'src/components'
 import {
   createOpenstackCredsWithSecretFlow,
@@ -81,6 +82,24 @@ export default function OpenstackCredentialsDrawer({
 
   const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery()
 
+  const resetDrawerState = useCallback(() => {
+    reset({
+      credentialName: '',
+      rcFile: undefined,
+      isPcd: false,
+      insecure: false
+    })
+    setRcFileValues(null)
+    setCreatedCredentialName(null)
+    setCreatedCredentialIsPcd(false)
+    setValidatingOpenstackCreds(false)
+    setOpenstackCredsValidated(null)
+    setError(null)
+    setSubmitting(false)
+
+    onClose()
+  }, [onClose, reset])
+
   const closeDrawer = useCallback(() => {
     if (createdCredentialName) {
       try {
@@ -99,22 +118,8 @@ export default function OpenstackCredentialsDrawer({
       }
     }
 
-    reset({
-      credentialName: '',
-      rcFile: undefined,
-      isPcd: false,
-      insecure: false
-    })
-    setRcFileValues(null)
-    setCreatedCredentialName(null)
-    setCreatedCredentialIsPcd(false)
-    setValidatingOpenstackCreds(false)
-    setOpenstackCredsValidated(null)
-    setError(null)
-    setSubmitting(false)
-
-    onClose()
-  }, [createdCredentialName, onClose, reset])
+    resetDrawerState()
+  }, [createdCredentialName, resetDrawerState])
 
   const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null)
 
@@ -237,7 +242,7 @@ export default function OpenstackCredentialsDrawer({
 
       setTimeout(() => {
         refetchOpenstackCreds()
-        onClose()
+        resetDrawerState()
       }, 1500)
     } else if (status === 'Failed') {
       setOpenstackCredsValidated(false)
@@ -320,7 +325,13 @@ export default function OpenstackCredentialsDrawer({
     <DrawerShell
       open={open}
       onClose={closeDrawer}
-      header={<DrawerHeader title="Add PCD Credentials" onClose={closeDrawer} />}
+      header={
+        <DrawerHeader
+          title="Add PCD Credentials"
+          subtitle="Upload an RC file and validate access to your PCD environment"
+          onClose={closeDrawer}
+        />
+      }
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={closeDrawer} data-testid="openstack-cred-cancel">
@@ -349,78 +360,80 @@ export default function OpenstackCredentialsDrawer({
           isSubmitDisabled
         }}
       >
-        <Section>
-          <SectionHeader
-            title="PCD Credential Details"
-            subtitle="Give your credential a clear name and upload the RC file from your PCD environment."
-          />
-
-          <FormGrid minWidth={360} gap={2}>
-            <RHFTextField
-              name="credentialName"
-              label="PCD Credential Name"
-              placeholder="e.g. prod-pcd"
-              rules={{
-                required: 'Credential name is required',
-                validate: (value: string) =>
-                  isValidName(value) ||
-                  'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
-              }}
-              fullWidth
-              required
+        <SurfaceCard>
+          <Section>
+            <SectionHeader
+              title="PCD Credential Details"
+              subtitle="Give your credential a clear name and upload the RC file from your PCD environment."
             />
-          </FormGrid>
 
-          <Box mt={2}>
-            <RHFOpenstackRCFileField
-              name="rcFile"
-              onParsed={handleRCFileParsed}
-              onError={(errorMsg) => setError(errorMsg)}
-              externalError={error || undefined}
-              size="small"
-              required
-            />
-          </Box>
+            <FormGrid minWidth={360} gap={2}>
+              <RHFTextField
+                name="credentialName"
+                label="PCD Credential Name"
+                placeholder="e.g. prod-pcd"
+                rules={{
+                  required: 'Credential name is required',
+                  validate: (value: string) =>
+                    isValidName(value) ||
+                    'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
+                }}
+                fullWidth
+                required
+              />
+            </FormGrid>
 
-          <Row gap={3} mt={3} flexWrap="wrap">
-            <Box sx={{ flex: 1, minWidth: 260 }}>
-              <RHFToggleField
-                name="isPcd"
-                label="Is PCD credential"
-                description="Mark this if the credential is for a Platform9 Cloud Deployment (PCD)."
+            <Box mt={2}>
+              <RHFOpenstackRCFileField
+                name="rcFile"
+                onParsed={handleRCFileParsed}
+                onError={(errorMsg) => setError(errorMsg)}
+                externalError={error || undefined}
+                size="small"
+                required
               />
             </Box>
-            <Box sx={{ flex: 1, minWidth: 260 }}>
-              <RHFToggleField
-                name="insecure"
-                label="Allow insecure TLS (skip SSL verification)"
-                description="Use only for testing or environments with self-signed certificates."
-              />
+
+            <Row gap={3} mt={3} flexWrap="wrap">
+              <Box sx={{ flex: 1, minWidth: 260 }}>
+                <RHFToggleField
+                  name="isPcd"
+                  label="Is PCD credential"
+                  description="Mark this if the credential is for a Platform9 Cloud Deployment (PCD)."
+                />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 260 }}>
+                <RHFToggleField
+                  name="insecure"
+                  label="Allow insecure TLS (skip SSL verification)"
+                  description="Use only for testing or environments with self-signed certificates."
+                />
+              </Box>
+            </Row>
+
+            <Box mt={3} display="flex" flexDirection="column" gap={2}>
+              {validatingOpenstackCreds && (
+                <InlineHelp tone="warning">
+                  <Row gap={1}>
+                    <CircularProgress size={16} />
+                    <span>Validating PCD credentials…</span>
+                  </Row>
+                </InlineHelp>
+              )}
+
+              {openstackCredsValidated === true && credentialName && (
+                <InlineHelp tone="positive">
+                  <Row gap={1}>
+                    <CheckIcon color="success" fontSize="small" />
+                    <span>PCD credentials created and validated.</span>
+                  </Row>
+                </InlineHelp>
+              )}
+
+              {error && <InlineHelp tone="critical">{error}</InlineHelp>}
             </Box>
-          </Row>
-
-          <Box mt={3} display="flex" flexDirection="column" gap={2}>
-            {validatingOpenstackCreds && (
-              <InlineHelp tone="warning">
-                <Row gap={1}>
-                  <CircularProgress size={16} />
-                  <span>Validating PCD credentials…</span>
-                </Row>
-              </InlineHelp>
-            )}
-
-            {openstackCredsValidated === true && credentialName && (
-              <InlineHelp tone="positive">
-                <Row gap={1}>
-                  <CheckIcon color="success" fontSize="small" />
-                  <span>PCD credentials created and validated.</span>
-                </Row>
-              </InlineHelp>
-            )}
-
-            {error && <InlineHelp tone="critical">{error}</InlineHelp>}
-          </Box>
-        </Section>
+          </Section>
+        </SurfaceCard>
       </DesignSystemForm>
     </DrawerShell>
   )

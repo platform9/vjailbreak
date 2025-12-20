@@ -1,4 +1,4 @@
-import { Alert, Box, CircularProgress } from '@mui/material'
+import { Box, CircularProgress } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -6,11 +6,10 @@ import {
   DrawerHeader,
   DrawerFooter,
   ActionButton,
-  Section,
-  SectionHeader,
   InlineHelp,
   FormGrid,
-  Row
+  Row,
+  SurfaceCard
 } from 'src/components'
 
 import { DesignSystemForm, RHFTextField, RHFSelect } from 'src/shared/components/forms'
@@ -22,6 +21,8 @@ import axios from 'axios'
 import { OpenstackCreds, OpenstackFlavor } from 'src/api/openstack-creds/model'
 import { NodeItem } from 'src/api/nodes/model'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { useAmplitude } from 'src/hooks/useAmplitude'
 
 interface ScaleUpDrawerProps {
   open: boolean
@@ -32,14 +33,19 @@ interface ScaleUpDrawerProps {
 interface ScaleUpFormValues {
   openstackCredential: string
   flavor: string
+  securityGroup: string
   nodeCount: number
 }
 
 export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDrawerProps) {
+  const { reportError } = useErrorHandler({ component: 'ScaleUpDrawer' })
+  const { track } = useAmplitude({ component: 'ScaleUpDrawer' })
+
   const form = useForm<ScaleUpFormValues>({
     defaultValues: {
       openstackCredential: '',
       flavor: '',
+      securityGroup: '',
       nodeCount: 1
     }
   })
@@ -55,6 +61,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openstackError, setOpenstackError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const [flavors, setFlavors] = useState<Array<OpenstackFlavor>>([])
   const [loadingFlavors, setLoadingFlavors] = useState(false)
@@ -76,15 +83,25 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     }))
   }, [flavors])
 
+  const securityGroupOptions = useMemo(() => {
+    const groups = openstackCredentials?.status?.openstack?.securityGroups || []
+    return groups.map((group) => ({
+      label: group.requiresIdDisplay ? `${group.name} (${group.id})` : group.name,
+      value: group.id
+    }))
+  }, [openstackCredentials])
+
   const clearStates = useCallback(() => {
     reset({
       openstackCredential: '',
       flavor: '',
+      securityGroup: '',
       nodeCount: 1
     })
     setOpenstackCredentials(null)
     setOpenstackError(null)
     setError(null)
+    setSuccess(false)
     setFlavors([])
     setLoadingFlavors(false)
     setFlavorsError(null)
@@ -99,6 +116,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     async (credId: string | null) => {
       setValue('openstackCredential', credId || '')
       setValue('flavor', '')
+      setValue('securityGroup', '')
 
       if (credId) {
         try {
@@ -107,6 +125,13 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           setOpenstackError(null)
         } catch (err) {
           console.error('Error fetching OpenStack credentials:', err)
+          reportError(err as Error, {
+            context: 'scaleup-fetch-openstack-credential',
+            metadata: {
+              credentialName: credId,
+              action: 'get-openstack-credential'
+            }
+          })
           setOpenstackError(
             'Error fetching PCD credentials: ' +
               (axios.isAxiosError(err) ? err?.response?.data?.message : String(err))
@@ -117,7 +142,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setOpenstackError(null)
       }
     },
-    [setValue]
+    [reportError, setValue]
   )
 
   useEffect(() => {
@@ -159,6 +184,14 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       try {
         setLoading(true)
         setError(null)
+
+        track('Agents Scale Up', {
+          stage: 'start',
+          nodeCount: nodeCountNum,
+          flavorId: values.flavor,
+          credentialName: openstackCredentials?.metadata?.name
+        })
+
         await createNodes({
           imageId: masterNode.spec.openstackImageID,
           openstackCreds: {
@@ -170,31 +203,68 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           flavorId: values.flavor
         })
 
-        handleClose()
+        track('Agents Scale Up', {
+          stage: 'success',
+          nodeCount: nodeCountNum,
+          flavorId: values.flavor,
+          credentialName: openstackCredentials?.metadata?.name
+        })
+
+        setSuccess(true)
+        setTimeout(() => {
+          handleClose()
+        }, 1500)
       } catch (err) {
         console.error('Error scaling up nodes:', err)
+
+        track('Agents Scale Up', {
+          stage: 'failure',
+          nodeCount: nodeCountNum,
+          flavorId: values.flavor,
+          credentialName: openstackCredentials?.metadata?.name,
+          errorMessage: err instanceof Error ? err.message : String(err)
+        })
+
+        reportError(err as Error, {
+          context: 'scaleup-create-nodes',
+          metadata: {
+            nodeCount: nodeCountNum,
+            flavorId: values.flavor,
+            credentialName: openstackCredentials?.metadata?.name,
+            action: 'create-nodes'
+          }
+        })
+
         setError(err instanceof Error ? err.message : 'Failed to scale up nodes')
       } finally {
         setLoading(false)
       }
     },
-    [masterNode, openstackCredentials, handleClose]
+    [handleClose, masterNode, openstackCredentials, reportError, track]
   )
 
   const isSubmitDisabled =
     !masterNode ||
     !watchedValues.flavor ||
+    !watchedValues.securityGroup ||
     loading ||
     !openstackCredsValidated ||
     !!errors.openstackCredential ||
     !!errors.flavor ||
+    !!errors.securityGroup ||
     !!errors.nodeCount
 
   return (
     <DrawerShell
       open={open}
       onClose={handleClose}
-      header={<DrawerHeader title="Scale Up Agents" onClose={handleClose} />}
+      header={
+        <DrawerHeader
+          title="Scale Up Agents"
+          subtitle="Create additional worker agents using a PCD credential and flavor"
+          onClose={handleClose}
+        />
+      }
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={handleClose} data-testid="scaleup-cancel">
@@ -223,10 +293,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           isSubmitDisabled
         }}
       >
-        <Box sx={{ display: 'grid', gap: 2, py: 1.5 }} data-testid="scaleup-form">
-          <Section sx={{ mb: 1 }}>
-            <SectionHeader title="PCD Credentials" sx={{ mb: 0 }} />
-
+        <Box sx={{ display: 'grid', gap: 2 }} data-testid="scaleup-form">
+          <SurfaceCard
+            title="1. PCD Credentials"
+            subtitle="Select an existing PCD credential. The credential must be validated."
+          >
             <OpenstackCredentialsForm
               fullWidth
               size="small"
@@ -237,15 +308,13 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
               selectedCredential={selectedOpenstackCred}
               showCredentialSelector
             />
-          </Section>
+          </SurfaceCard>
 
-          <Section>
-            <SectionHeader
-              title="Agent Template"
-              subtitle="Select a flavor to define the CPU, memory and disk for new agents."
-            />
-
-            <FormGrid minWidth={360} gap={1.5}>
+          <SurfaceCard
+            title="2. Agent Template"
+            subtitle="Choose the flavor and security group for newly created agents."
+          >
+            <FormGrid minWidth={260} gap={2}>
               <RHFTextField
                 name="masterAgentImage"
                 label="Master Agent Image"
@@ -268,27 +337,46 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 helperText={flavorsError ?? undefined}
                 error={!!flavorsError}
               />
+
+              <RHFSelect
+                name="securityGroup"
+                label="Security Group"
+                options={securityGroupOptions}
+                placeholder={
+                  !openstackCredsValidated
+                    ? 'Select a validated credential first'
+                    : securityGroupOptions.length === 0
+                      ? 'No security groups available'
+                      : 'Select a security group'
+                }
+                disabled={!openstackCredsValidated || securityGroupOptions.length === 0}
+                searchable
+                searchPlaceholder="Search security groups"
+                rules={{ required: 'Security group is required' }}
+              />
             </FormGrid>
 
-            <Alert severity="warning" variant="outlined" sx={{ mt: 1.5 }}>
-              Select a flavor with disk &gt; 16GB for production workloads.
-            </Alert>
+            <Box sx={{ display: 'grid', gap: 1.5 }}>
+              <InlineHelp tone="warning">
+                Select a flavor with disk &gt; 16GB for production workloads.
+              </InlineHelp>
 
-            {loadingFlavors && (
-              <Row gap={1} alignItems="center">
-                <CircularProgress size={16} />
-                <span>Loading available flavors…</span>
-              </Row>
-            )}
-          </Section>
+              {loadingFlavors && (
+                <InlineHelp tone="warning">
+                  <Row gap={1}>
+                    <CircularProgress size={16} />
+                    <span>Loading available flavors…</span>
+                  </Row>
+                </InlineHelp>
+              )}
+            </Box>
+          </SurfaceCard>
 
-          <Section sx={{ mb: 1 }}>
-            <SectionHeader
-              title="Agent Count"
-              subtitle="Specify how many agents to create with the selected template."
-            />
-
-            <FormGrid minWidth={360} gap={2}>
+          <SurfaceCard
+            title="3. Agent Count & Review"
+            subtitle="Set the number of agents to create and review your selections before scaling up."
+          >
+            <FormGrid minWidth={260} gap={2}>
               <RHFTextField
                 name="nodeCount"
                 label="Number of Agents"
@@ -309,9 +397,22 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 required
               />
             </FormGrid>
-          </Section>
 
-          {error && <InlineHelp tone="critical">{error}</InlineHelp>}
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              {loading && (
+                <InlineHelp tone="warning">
+                  <Row gap={1}>
+                    <CircularProgress size={16} />
+                    <span>Scaling up agents…</span>
+                  </Row>
+                </InlineHelp>
+              )}
+
+              {success && <InlineHelp tone="positive">Agents successfully created.</InlineHelp>}
+
+              {error && <InlineHelp tone="critical">{error}</InlineHelp>}
+            </Box>
+          </SurfaceCard>
         </Box>
       </DesignSystemForm>
     </DrawerShell>

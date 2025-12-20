@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Collapse,
-  FormLabel,
   IconButton,
   InputAdornment,
   Tooltip,
@@ -21,8 +20,11 @@ import {
   DrawerFooter,
   ActionButton,
   FormGrid,
+  InlineHelp,
+  Row,
   Section,
-  SectionHeader
+  SectionHeader,
+  SurfaceCard
 } from 'src/components'
 import { DesignSystemForm, RHFTextField, RHFToggleField } from 'src/shared/components/forms'
 
@@ -106,13 +108,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     e.preventDefault()
   }, [])
 
-  const closeDrawer = useCallback(() => {
-    if (createdCredentialName) {
-      deleteVMwareCredsWithSecretFlow(createdCredentialName).catch((err) => {
-        console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
-      })
-    }
-
+  const resetDrawerState = useCallback(() => {
     reset(defaultValues)
     setCreatedCredentialName(null)
     setValidatingVmwareCreds(false)
@@ -122,7 +118,17 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     setShowPassword(false)
 
     onClose()
-  }, [createdCredentialName, onClose, reset])
+  }, [onClose, reset])
+
+  const closeDrawer = useCallback(() => {
+    if (createdCredentialName) {
+      deleteVMwareCredsWithSecretFlow(createdCredentialName).catch((err) => {
+        console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
+      })
+    }
+
+    resetDrawerState()
+  }, [createdCredentialName, resetDrawerState])
 
   useEffect(() => {
     setVmwareCredsValidated(null)
@@ -150,7 +156,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
         setTimeout(() => {
           refetchVmwareCreds()
-          onClose()
+          resetDrawerState()
         }, 1500)
       } else if (status === 'Failed') {
         setVmwareCredsValidated(false)
@@ -192,7 +198,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
       setSubmitting(false)
     },
-    [createdCredentialName, onClose, refetchVmwareCreds, reportError, track]
+    [createdCredentialName, refetchVmwareCreds, reportError, resetDrawerState, track]
   )
 
   useInterval(
@@ -419,19 +425,26 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   const renderStatusRow = () => (
-    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+    <Box display="flex" flexDirection="column" gap={2}>
       {validatingVmwareCreds && (
-        <>
-          <CircularProgress size={24} />
-          <FormLabel>Validating VMware credentials...</FormLabel>
-        </>
+        <InlineHelp tone="warning">
+          <Row gap={1}>
+            <CircularProgress size={16} />
+            <span>Validating VMware credentials…</span>
+          </Row>
+        </InlineHelp>
       )}
+
       {vmwareCredsValidated === true && credentialNameValue && (
-        <>
-          <CheckIcon color="success" fontSize="small" />
-          <FormLabel>VMware credentials created</FormLabel>
-        </>
+        <InlineHelp tone="positive">
+          <Row gap={1}>
+            <CheckIcon color="success" fontSize="small" />
+            <span>VMware credentials created and validated.</span>
+          </Row>
+        </InlineHelp>
       )}
+
+      {formError && <InlineHelp tone="critical">{formError}</InlineHelp>}
     </Box>
   )
 
@@ -439,7 +452,13 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     <DrawerShell
       open={open}
       onClose={closeDrawer}
-      header={<DrawerHeader title="Add VMware Credentials" onClose={closeDrawer} />}
+      header={
+        <DrawerHeader
+          title="Add VMware Credentials"
+          subtitle="Provide vCenter connection details and validate access"
+          onClose={closeDrawer}
+        />
+      }
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={closeDrawer} data-testid="vmware-cred-cancel">
@@ -465,29 +484,25 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         data-testid="vmware-cred-form"
         id={formId}
       >
-        <Box sx={{ display: 'grid', gap: 2, py: 1.5 }}>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-              gap: 3,
-              alignItems: 'start'
-            }}
-          >
-            {renderBasicsSection()}
-            {renderAuthSection()}
+        <SurfaceCard>
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+                alignItems: 'start'
+              }}
+            >
+              {renderBasicsSection()}
+              {renderAuthSection()}
+            </Box>
+
+            {renderSecuritySection()}
+
+            {renderStatusRow()}
           </Box>
-
-          {renderSecuritySection()}
-
-          {renderStatusRow()}
-
-          {formError && (
-            <Alert severity="error" variant="outlined">
-              {formError}
-            </Alert>
-          )}
-        </Box>
+        </SurfaceCard>
       </DesignSystemForm>
     </DrawerShell>
   )
