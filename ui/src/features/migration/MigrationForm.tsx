@@ -1,14 +1,4 @@
-import {
-  Box,
-  Alert,
-  Checkbox,
-  Divider,
-  FormControlLabel,
-  Typography,
-  Select,
-  MenuItem,
-  useMediaQuery
-} from '@mui/material'
+import { Box, Alert, Divider, Typography, Select, MenuItem, useMediaQuery } from '@mui/material'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
@@ -834,8 +824,6 @@ export default function MigrationFormDrawer({
   const reviewRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
-  const [reviewConfirmed, setReviewConfirmed] = useState(false)
-
   const isStep1Complete = Boolean(
     params.vmwareCluster &&
       params.pcdCluster &&
@@ -920,12 +908,12 @@ export default function MigrationFormDrawer({
       },
       {
         id: 'review',
-        title: '6. Review And Confirm',
+        title: '6. Preview',
         description: 'Confirm selections before starting',
-        status: reviewConfirmed ? 'complete' : 'optional'
+        status: 'optional'
       }
     ],
-    [isStep1Complete, isStep2Complete, isStep3Complete, reviewConfirmed, reviewedAndReady]
+    [isStep1Complete, isStep2Complete, isStep3Complete, reviewedAndReady]
   )
 
   const scrollToSection = useCallback((id: string) => {
@@ -1002,7 +990,7 @@ export default function MigrationFormDrawer({
       }}
       header={
         <DrawerHeader
-          title="Create Migration"
+          title="Start Migration"
           subtitle="Configure source/destination, select VMs, and map resources before starting"
           icon={<MigrationIcon />}
           onClose={handleClose}
@@ -1044,7 +1032,7 @@ export default function MigrationFormDrawer({
 
         <Box sx={{ display: 'grid', gap: 3 }}>
           {isSmallNav ? (
-            <SurfaceCard title="Sections" subtitle="Jump to any section">
+            <SurfaceCard title="Steps" subtitle="Jump to any section">
               <Select
                 size="small"
                 value={activeSectionId}
@@ -1165,7 +1153,7 @@ export default function MigrationFormDrawer({
 
           <Box ref={reviewRef}>
             <SurfaceCard
-              title="6. Review And Confirm"
+              title="6. Preview"
               subtitle="Verify your selections before starting the migration"
             >
               <Box sx={{ display: 'grid', gap: 1.5 }}>
@@ -1224,22 +1212,6 @@ export default function MigrationFormDrawer({
                     </Typography>
                   </Box>
                 </Box>
-
-                {!reviewedAndReady ? (
-                  <Alert severity="warning">
-                    Complete Steps 1–3 before confirming and starting the migration.
-                  </Alert>
-                ) : null}
-
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={reviewConfirmed}
-                      onChange={(e) => setReviewConfirmed(e.target.checked)}
-                    />
-                  }
-                  label="I have reviewed the configuration and want to start this migration."
-                />
               </Box>
             </SurfaceCard>
           </Box>

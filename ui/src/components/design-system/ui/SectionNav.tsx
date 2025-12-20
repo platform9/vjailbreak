@@ -1,6 +1,7 @@
-import { Box, Chip, List, ListItemButton, ListItemText, Typography } from '@mui/material'
+import { Box, List, ListItemButton, ListItemText, Typography } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import { ReactNode } from 'react'
 
@@ -22,40 +23,16 @@ export interface SectionNavProps {
   'data-testid'?: string
 }
 
-const statusChip = (status: SectionNavStatus | undefined) => {
+const statusIcon = (status: SectionNavStatus | undefined) => {
   switch (status) {
     case 'complete':
-      return (
-        <Chip
-          size="small"
-          icon={<CheckCircleOutlineIcon />}
-          label="Done"
-          color="success"
-          variant="outlined"
-        />
-      )
+      return <CheckCircleOutlineIcon fontSize="small" color="success" />
     case 'attention':
-      return (
-        <Chip
-          size="small"
-          icon={<ErrorOutlineIcon />}
-          label="Fix"
-          color="error"
-          variant="outlined"
-        />
-      )
+      return <ErrorOutlineIcon fontSize="small" color="error" />
     case 'optional':
-      return <Chip size="small" label="Optional" color="default" variant="outlined" />
+      return <InfoOutlinedIcon fontSize="small" color="action" />
     default:
-      return (
-        <Chip
-          size="small"
-          icon={<RadioButtonUncheckedIcon />}
-          label="To do"
-          color="default"
-          variant="outlined"
-        />
-      )
+      return <RadioButtonUncheckedIcon fontSize="small" color="action" />
   }
 }
 
@@ -87,7 +64,9 @@ export default function SectionNav({
           borderBottom: (theme) => `1px solid ${theme.palette.divider}`
         }}
       >
-        <Typography variant="subtitle2">Sections</Typography>
+        <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+          Steps
+        </Typography>
         {!dense ? (
           <Typography variant="caption" color="text.secondary">
             Jump to any section
@@ -103,7 +82,7 @@ export default function SectionNav({
               selected={selected}
               onClick={() => onSelect(item.id)}
               sx={{
-                alignItems: 'flex-start',
+                alignItems: 'center',
                 gap: 1.5,
                 py: dense ? 0.75 : 1.25,
                 px: dense ? 1.5 : 2,
@@ -112,35 +91,15 @@ export default function SectionNav({
                 }
               }}
             >
-              <Box sx={{ pt: dense ? 0.1 : 0.25 }}>
-                {item.status ? (
-                  <Chip
-                    size="small"
-                    label={
-                      item.status === 'complete'
-                        ? 'Done'
-                        : item.status === 'attention'
-                          ? 'Fix'
-                          : item.status === 'optional'
-                            ? 'Opt'
-                            : 'To do'
-                    }
-                    color={
-                      item.status === 'complete'
-                        ? 'success'
-                        : item.status === 'attention'
-                          ? 'error'
-                          : 'default'
-                    }
-                    variant="outlined"
-                    sx={{
-                      height: dense ? 20 : 24,
-                      '& .MuiChip-label': { px: dense ? 0.75 : 1 }
-                    }}
-                  />
-                ) : (
-                  statusChip(item.status)
-                )}
+              <Box
+                sx={{
+                  width: 20,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {statusIcon(item.status)}
               </Box>
               <ListItemText
                 primary={
