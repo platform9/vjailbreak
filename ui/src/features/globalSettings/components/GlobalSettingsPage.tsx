@@ -7,24 +7,23 @@ import {
   FormControl,
   FormHelperText,
   MenuItem,
-  Paper,
   Select,
   SelectChangeEvent,
   Snackbar,
-  Switch,
   Tab,
   Tabs,
   TextField,
-  Tooltip,
   Typography,
   styled,
   useTheme
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import FieldLabel from 'src/components/design-system/ui/FieldLabel'
+import FormGrid from 'src/components/design-system/ui/FormGrid'
+import ToggleField from 'src/components/design-system/ui/ToggleField'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
@@ -32,7 +31,7 @@ import {
   VERSION_NAMESPACE
 } from 'src/api/settings/settings'
 
-const StyledPaper = styled(Paper)(({ theme }) => ({
+const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
   height: 'calc(100vh - 96px)',
   padding: theme.spacing(4),
@@ -49,42 +48,6 @@ const Footer = styled(Box)(({ theme }) => ({
   paddingTop: theme.spacing(2),
   borderTop: `1px solid ${theme.palette.divider}`
 }))
-
-const SettingsGrid = styled(Box)(({ theme }) => ({
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-  gap: theme.spacing(2)
-}))
-
-const FieldLabel = ({ label, tooltip }: { label: string; tooltip?: string }) => (
-  <Box display="flex" alignItems="center" gap={0.75}>
-    <Typography variant="body2" fontWeight={500} color="text.primary">
-      {label}
-    </Typography>
-    {tooltip ? (
-      <Tooltip
-        placement="top"
-        arrow
-        componentsProps={{
-          tooltip: {
-            sx: {
-              fontSize: '12px',
-              lineHeight: 1.5,
-              letterSpacing: 0
-            }
-          }
-        }}
-        title={
-          <Typography variant="caption" sx={{ fontSize: '12px', lineHeight: 1, letterSpacing: 0 }}>
-            {tooltip}
-          </Typography>
-        }
-      >
-        <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'pointer' }} />
-      </Tooltip>
-    ) : null}
-  </Box>
-)
 
 type SettingsForm = {
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: number
@@ -437,6 +400,7 @@ type TextFieldProps = {
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   tooltip?: string
+  required?: boolean
 }
 
 const CustomTextField = ({
@@ -446,10 +410,11 @@ const CustomTextField = ({
   helper,
   error,
   onChange,
-  tooltip
+  tooltip,
+  required
 }: TextFieldProps) => (
   <Box display="flex" flexDirection="column" gap={0.5}>
-    <FieldLabel label={label} tooltip={tooltip} />
+    <FieldLabel label={label} tooltip={tooltip} required={required} />
     <TextField
       fullWidth
       size="small"
@@ -493,36 +458,6 @@ const IntervalField = ({
       helperText={error || helper || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
     />
   </Box>
-)
-
-type ToggleFieldProps = {
-  label: string
-  name: keyof SettingsForm
-  checked: boolean
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  tooltip?: string
-  description?: string
-}
-
-const ToggleField = ({
-  label,
-  name,
-  checked,
-  onChange,
-  tooltip,
-  description
-}: ToggleFieldProps) => (
-  <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-    <Box display="flex" alignItems="center" justifyContent="space-between">
-      <FieldLabel label={label} tooltip={tooltip} />
-      <Switch name={String(name)} checked={checked} onChange={onChange} />
-    </Box>
-    {description ? (
-      <Typography variant="caption" color="text.secondary">
-        {description}
-      </Typography>
-    ) : null}
-  </Paper>
 )
 
 export default function GlobalSettingsPage() {
@@ -733,7 +668,7 @@ export default function GlobalSettingsPage() {
 
   if (loading) {
     return (
-      <StyledPaper elevation={0}>
+      <StyledPaper>
         <Box display="flex" justifyContent="center" alignItems="center" height="400px">
           <CircularProgress />
           <Typography variant="body1" sx={{ ml: 2 }}>
@@ -745,7 +680,7 @@ export default function GlobalSettingsPage() {
   }
 
   return (
-    <StyledPaper elevation={0}>
+    <StyledPaper>
       <Box
         component="form"
         onSubmit={onSave}
@@ -783,7 +718,7 @@ export default function GlobalSettingsPage() {
         </Typography>
 
         <TabPanel current={activeTab} value="general">
-          <SettingsGrid>
+          <FormGrid minWidth={320} gap={2}>
             <CustomTextField
               label="Deployment Name"
               name="DEPLOYMENT_NAME"
@@ -791,6 +726,7 @@ export default function GlobalSettingsPage() {
               onChange={onText}
               error={errors.DEPLOYMENT_NAME}
               tooltip={FIELD_TOOLTIPS.DEPLOYMENT_NAME}
+              required
             />
 
             <NumberField
@@ -810,11 +746,11 @@ export default function GlobalSettingsPage() {
               error={errors.PERIODIC_SYNC_INTERVAL}
               tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL}
             />
-          </SettingsGrid>
+          </FormGrid>
         </TabPanel>
 
         <TabPanel current={activeTab} value="retry">
-          <SettingsGrid>
+          <FormGrid minWidth={320} gap={2}>
             <NumberField
               label="VM Active Wait Interval (seconds)"
               name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
@@ -868,11 +804,11 @@ export default function GlobalSettingsPage() {
               error={numberError('VCENTER_SCAN_CONCURRENCY_LIMIT')}
               tooltip={FIELD_TOOLTIPS.VCENTER_SCAN_CONCURRENCY_LIMIT}
             />
-          </SettingsGrid>
+          </FormGrid>
         </TabPanel>
 
         <TabPanel current={activeTab} value="advanced">
-          <SettingsGrid>
+          <FormGrid minWidth={320} gap={2}>
             <NumberField
               label="PCD Creds Requeue After (minutes)"
               name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
@@ -913,30 +849,24 @@ export default function GlobalSettingsPage() {
                 <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
               )}
             </FormControl>
-          </SettingsGrid>
+          </FormGrid>
 
           <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
             Automation Flags
           </Typography>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fit, minmax(260px, 1fr))' },
-              gap: 2
-            }}
-          >
+          <FormGrid minWidth={260} gap={2}>
             {TOGGLE_FIELDS.map(({ key, label, description }) => (
               <ToggleField
                 key={key}
                 label={label}
-                name={key}
+                name={String(key)}
                 checked={form[key] as boolean}
                 onChange={onBool}
                 tooltip={FIELD_TOOLTIPS[key]}
                 description={description}
               />
             ))}
-          </Box>
+          </FormGrid>
         </TabPanel>
 
         <Box sx={{ flexGrow: 1 }} />
