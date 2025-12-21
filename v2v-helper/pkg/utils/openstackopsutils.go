@@ -27,7 +27,6 @@ import (
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumeactions"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
@@ -190,10 +189,10 @@ func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID str
 }
 
 func (osclient *OpenStackClients) unreserveVolume(ctx context.Context, volumeID string) error {
-	resetOpts := volumeactions.ResetStateOpts{
+	resetOpts := volumes.ResetStateOpts{
 		State: "available",
 	}
-	if err := volumeactions.ResetState(ctx, osclient.BlockStorageClient, volumeID, resetOpts).ExtractErr(); err != nil {
+	if err := volumes.ResetState(ctx, osclient.BlockStorageClient, volumeID, resetOpts).ExtractErr(); err != nil {
 		return fmt.Errorf("failed to reset volume state to available: %s", err)
 	}
 	return nil
