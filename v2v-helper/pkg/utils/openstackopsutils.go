@@ -27,6 +27,7 @@ import (
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumeactions"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
@@ -166,8 +167,34 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting volume with ID %s, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
 	err := volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete volume: %s", err)
+	if err == nil {
+		return nil
+	}
+
+	// If the volume is stuck in reserved state, try unreserving and retry delete once.
+	if strings.Contains(err.Error(), "status 'reserved'") || strings.Contains(err.Error(), "in status \"reserved\"") {
+		PrintLog(fmt.Sprintf("OPENSTACK API: Volume %s is reserved, attempting to unreserve before delete", volumeID))
+		if unreserveErr := osclient.unreserveVolume(ctx, volumeID); unreserveErr != nil {
+			return fmt.Errorf("failed to delete volume (reserved) and failed to unreserve: %s; unreserve error: %s", err, unreserveErr)
+		}
+		if waitErr := osclient.WaitForVolume(ctx, volumeID); waitErr != nil {
+			return fmt.Errorf("failed to delete volume (reserved) and failed to wait after unreserve: %s; wait error: %s", err, waitErr)
+		}
+		if retryErr := volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr(); retryErr != nil {
+			return fmt.Errorf("failed to delete volume after unreserve: %s; original error: %s", retryErr, err)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("failed to delete volume: %s", err)
+}
+
+func (osclient *OpenStackClients) unreserveVolume(ctx context.Context, volumeID string) error {
+	resetOpts := volumeactions.ResetStateOpts{
+		State: "available",
+	}
+	if err := volumeactions.ResetState(ctx, osclient.BlockStorageClient, volumeID, resetOpts).ExtractErr(); err != nil {
+		return fmt.Errorf("failed to reset volume state to available: %s", err)
 	}
 	return nil
 }
@@ -881,4 +908,22 @@ func (osclient *OpenStackClients) GetServerGroups(ctx context.Context, projectNa
 	}
 
 	return result, nil
+}
+
+func (osclient *OpenStackClients) GetVM(ctx context.Context, vmID string) (*servers.Server, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Getting VM with ID %s, authurl %s, tenant %s", vmID, osclient.AuthURL, osclient.Tenant))
+	server, err := servers.Get(ctx, osclient.ComputeClient, vmID).Extract()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM: %s", err)
+	}
+	return server, nil
+}
+
+func (osclient *OpenStackClients) DeleteVM(ctx context.Context, vmID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting VM with ID %s, authurl %s, tenant %s", vmID, osclient.AuthURL, osclient.Tenant))
+	err := servers.Delete(ctx, osclient.ComputeClient, vmID).ExtractErr()
+	if err != nil {
+		return fmt.Errorf("failed to delete VM: %s", err)
+	}
+	return nil
 }
