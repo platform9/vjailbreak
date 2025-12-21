@@ -110,10 +110,10 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 
 	// Defer setting phase to Error if returning with error
 	defer func() {
-		if r := recover(); r != nil {
+		if recovered := recover(); recovered != nil {
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
 			_ = r.Client.Status().Update(ctx, vjNode) // Ignore error in defer
-			panic(r)
+			panic(recovered)
 		}
 	}()
 
