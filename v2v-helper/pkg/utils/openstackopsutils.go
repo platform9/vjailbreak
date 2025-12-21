@@ -189,11 +189,11 @@ func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID str
 }
 
 func (osclient *OpenStackClients) unreserveVolume(ctx context.Context, volumeID string) error {
-	resetOpts := volumes.ResetStateOpts{
-		State: "available",
+	resetOpts := volumes.ResetStatusOpts{
+		Status: "available",
 	}
-	if err := volumes.ResetState(ctx, osclient.BlockStorageClient, volumeID, resetOpts).ExtractErr(); err != nil {
-		return fmt.Errorf("failed to reset volume state to available: %s", err)
+	if err := volumes.ResetStatus(ctx, osclient.BlockStorageClient, volumeID, resetOpts).ExtractErr(); err != nil {
+		return fmt.Errorf("failed to reset volume status to available: %s", err)
 	}
 	return nil
 }
