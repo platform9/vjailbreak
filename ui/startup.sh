@@ -4,5 +4,5 @@
 VITE_API_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) envsubst < /usr/share/nginx/html/index.html > /usr/share/nginx/html/index.html.temp
 mv -f /usr/share/nginx/html/index.html.temp /usr/share/nginx/html/index.html
 
-# Start Nginx
-nginx -g 'daemon off;'
+# Start OpenResty
+/usr/local/openresty/bin/openresty -g 'daemon off;'

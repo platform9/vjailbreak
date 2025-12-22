@@ -109,6 +109,20 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, errors.Wrap(err, "failed to validate MigrationPlan")
 	}
 
+	// Set default migration type if not provided
+	if migrationplan.Spec.MigrationStrategy.Type == "" {
+		vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to get vjailbreak settings")
+			return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+		}
+		migrationplan.Spec.MigrationStrategy.Type = vjailbreakSettings.DefaultMigrationMethod
+		// Update the spec
+		if err := r.Update(ctx, migrationplan); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan with default type")
+		}
+	}
+
 	migrationPlanScope, err := scope.NewMigrationPlanScope(scope.MigrationPlanScopeParams{
 		Logger:        r.ctxlog,
 		Client:        r.Client,
