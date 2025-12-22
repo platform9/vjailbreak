@@ -439,9 +439,10 @@ runcmd:
     <SurfaceCard
       title="Bare metal config"
       subtitle="Configure MAAS connection, boot source selection, and cloud-init user-data."
+      data-testid="bm-config-card"
       footer={
         <Row justifyContent="flex-end" gap={2}>
-          <ActionButton tone="secondary" onClick={handleCancel}>
+          <ActionButton tone="secondary" onClick={handleCancel} data-testid="bm-config-cancel">
             Cancel
           </ActionButton>
           <ActionButton
@@ -450,6 +451,7 @@ runcmd:
             form="bm-config-form"
             loading={submitting}
             disabled={submitting || !formData.os || !!urlError || !!cloudInitError}
+            data-testid="bm-config-save"
           >
             Save
           </ActionButton>
@@ -464,7 +466,7 @@ runcmd:
           </Typography>
         </LoadingRow>
       ) : (
-        <FormRoot id="bm-config-form" onSubmit={handleSubmit}>
+        <FormRoot id="bm-config-form" onSubmit={handleSubmit} data-testid="bm-config-form">
           <Section>
             {/* <SectionHeader
               title="Connection"
@@ -490,6 +492,7 @@ runcmd:
                   placeholder="http://10.9.4.234:5240/MAAS"
                   error={!!urlError}
                   helperText={urlError}
+                  data-testid="bm-config-maas-url"
                 />
               </FieldBlock>
 
@@ -510,6 +513,7 @@ runcmd:
                   size="small"
                   variant="outlined"
                   type="password"
+                  data-testid="bm-config-api-key"
                 />
               </FieldBlock>
 
@@ -538,6 +542,7 @@ runcmd:
                       onChange={handleSelectChange}
                       displayEmpty
                       disabled={bootSources?.length === 0}
+                      data-testid="bm-config-os-select"
                     >
                       <MenuItem value="" disabled>
                         Select an OS
@@ -565,6 +570,7 @@ runcmd:
                 label="Insecure"
                 tooltip="Disable TLS certificate verification. Use only in trusted networks or lab environments."
                 description="Skip SSL verification when connecting to MAAS."
+                data-testid="bm-config-insecure-toggle"
               />
             </ToggleRow>
           </Section>
@@ -578,6 +584,7 @@ runcmd:
                   tone="secondary"
                   onClick={handleResetCloudInit}
                   startIcon={<RefreshIcon fontSize="small" />}
+                  data-testid="bm-config-cloudinit-reset"
                 >
                   Reset to Default
                 </ActionButton>
@@ -585,7 +592,10 @@ runcmd:
             />
 
             <CloudInitField error={!!cloudInitError}>
-              <CodeMirrorContainer hasError={!!cloudInitError}>
+              <CodeMirrorContainer
+                hasError={!!cloudInitError}
+                data-testid="bm-config-cloudinit-editor"
+              >
                 <CodeMirror
                   value={formData.cloudInit}
                   height="300px"

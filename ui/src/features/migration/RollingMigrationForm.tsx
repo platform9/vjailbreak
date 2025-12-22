@@ -2284,6 +2284,7 @@ export default function RollingMigrationFormDrawer({
         }}
       />
       <DrawerShell
+        data-testid="rolling-migration-form-drawer"
         open={open}
         onClose={handleClose}
         width={drawerWidth}
@@ -2293,6 +2294,7 @@ export default function RollingMigrationFormDrawer({
         }}
         header={
           <DrawerHeader
+            data-testid="rolling-migration-form-header"
             title="Start Cluster Conversion"
             subtitle="Select source/destination, configure hosts and VMs, map resources, and start"
             icon={<ClusterIcon />}
@@ -2300,8 +2302,12 @@ export default function RollingMigrationFormDrawer({
           />
         }
         footer={
-          <DrawerFooter>
-            <ActionButton tone="secondary" onClick={handleClose}>
+          <DrawerFooter data-testid="rolling-migration-form-footer">
+            <ActionButton
+              tone="secondary"
+              onClick={handleClose}
+              data-testid="rolling-migration-form-cancel"
+            >
               Cancel
             </ActionButton>
             <ActionButton
@@ -2309,6 +2315,7 @@ export default function RollingMigrationFormDrawer({
               onClick={handleSubmit}
               disabled={isSubmitDisabled}
               loading={submitting}
+              data-testid="rolling-migration-form-submit"
             >
               Start Conversion
             </ActionButton>
@@ -2317,6 +2324,7 @@ export default function RollingMigrationFormDrawer({
       >
         <Box
           ref={contentRootRef}
+          data-testid="rolling-migration-form-content"
           sx={{
             display: 'grid',
             gridTemplateColumns: isSmallNav ? '1fr' : '260px 1fr',
@@ -2325,6 +2333,7 @@ export default function RollingMigrationFormDrawer({
         >
           {!isSmallNav ? (
             <SectionNav
+              data-testid="rolling-migration-form-section-nav"
               items={sectionNavItems}
               activeId={activeSectionId}
               onSelect={scrollToSection}
@@ -2335,12 +2344,17 @@ export default function RollingMigrationFormDrawer({
 
           <Box sx={{ display: 'grid', gap: 3 }}>
             {isSmallNav ? (
-              <SurfaceCard title="Steps" subtitle="Jump to any section">
+              <SurfaceCard
+                title="Steps"
+                subtitle="Jump to any section"
+                data-testid="rolling-migration-form-steps-card"
+              >
                 <Select
                   size="small"
                   value={activeSectionId}
                   onChange={(e) => scrollToSection(e.target.value as string)}
                   fullWidth
+                  data-testid="rolling-migration-form-steps-select"
                 >
                   {sectionNavItems.map((item) => (
                     <MenuItem key={item.id} value={item.id}>
@@ -2351,10 +2365,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             ) : null}
 
-            <Box ref={section1Ref}>
+            <Box ref={section1Ref} data-testid="rolling-migration-form-step-source-destination">
               <SurfaceCard
                 title="1. Source And Destination"
                 subtitle="Choose where you convert from and where you convert to"
+                data-testid="rolling-migration-form-step1-card"
               >
                 <SourceDestinationClusterSelection
                   onChange={() => () => {}}
@@ -2370,10 +2385,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section2Ref}>
+            <Box ref={section2Ref} data-testid="rolling-migration-form-step-baremetal">
               <SurfaceCard
                 title="2. Bare Metal Config"
                 subtitle="Verify the selected configuration"
+                data-testid="rolling-migration-form-step2-card"
               >
                 {loadingMaasConfig ? (
                   <Typography variant="body2">Loading Bare Metal Config...</Typography>
@@ -2383,6 +2399,7 @@ export default function RollingMigrationFormDrawer({
                   <Typography
                     variant="subtitle2"
                     component="a"
+                    data-testid="rolling-migration-form-baremetal-view-details"
                     sx={{
                       color: 'primary.main',
                       textDecoration: 'underline',
@@ -2397,10 +2414,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section3Ref}>
+            <Box ref={section3Ref} data-testid="rolling-migration-form-step-hosts">
               <SurfaceCard
                 title="3. ESXi Hosts"
                 subtitle="Assign PCD host configurations to all ESXi hosts"
+                data-testid="rolling-migration-form-step3-card"
               >
                 <Box
                   sx={{
@@ -2423,7 +2441,10 @@ export default function RollingMigrationFormDrawer({
                     </Typography>
                   )}
                 </Box>
-                <Paper sx={{ width: '100%', height: 389 }}>
+                <Paper
+                  sx={{ width: '100%', height: 389 }}
+                  data-testid="rolling-migration-form-hosts-grid"
+                >
                   <DataGrid
                     rows={orderedESXHosts}
                     columns={esxColumns}
@@ -2456,10 +2477,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section4Ref}>
+            <Box ref={section4Ref} data-testid="rolling-migration-form-step-vms">
               <SurfaceCard
                 title="4. Select VMs"
                 subtitle="Choose the virtual machines to convert and assign required fields"
+                data-testid="rolling-migration-form-step4-card"
               >
                 <Typography
                   variant="caption"
@@ -2469,7 +2491,10 @@ export default function RollingMigrationFormDrawer({
                   💡 Tip: Powered-off VMs require IP Address and OS assignment for proper migration
                   configuration
                 </Typography>
-                <Paper sx={{ width: '100%', height: 389 }}>
+                <Paper
+                  sx={{ width: '100%', height: 389 }}
+                  data-testid="rolling-migration-form-vms-grid"
+                >
                   <DataGrid
                     rows={vmsWithAssignments}
                     columns={vmColumns}
@@ -2545,10 +2570,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section5Ref}>
+            <Box ref={section5Ref} data-testid="rolling-migration-form-step-map-resources">
               <SurfaceCard
                 title="5. Map Networks And Storage"
                 subtitle="Ensure VMware networks/datastores have PCD targets"
+                data-testid="rolling-migration-form-step5-card"
               >
                 {sourceCluster && destinationPCD ? (
                   <NetworkAndStorageMappingStep
@@ -2574,10 +2600,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section6Ref}>
+            <Box ref={section6Ref} data-testid="rolling-migration-form-step-options">
               <SurfaceCard
                 title="6. Migration Options"
                 subtitle="Optional scheduling, cutover behavior, and advanced settings"
+                data-testid="rolling-migration-form-step6-card"
               >
                 <MigrationOptions
                   stepNumber="6"
@@ -2592,10 +2619,11 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section7Ref}>
+            <Box ref={section7Ref} data-testid="rolling-migration-form-step-preview">
               <SurfaceCard
                 title="7. Preview"
                 subtitle="Verify your selections before starting the conversion"
+                data-testid="rolling-migration-form-step7-card"
               >
                 <Box sx={{ display: 'grid', gap: 1.5 }}>
                   <Typography variant="subtitle2">Summary</Typography>
@@ -2654,6 +2682,7 @@ export default function RollingMigrationFormDrawer({
         open={maasConfigDialogOpen}
         onClose={handleCloseMaasConfig}
         aria-labelledby="baremetal-config-dialog-title"
+        data-testid="rolling-migration-form-baremetal-dialog"
       >
         <DialogTitle id="baremetal-config-dialog-title">
           <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>
@@ -2768,7 +2797,11 @@ export default function RollingMigrationFormDrawer({
           )}
         </DialogContent>
         <DialogActions sx={{ gap: 1, p: 2 }}>
-          <ActionButton tone="primary" onClick={handleCloseMaasConfig}>
+          <ActionButton
+            tone="primary"
+            onClick={handleCloseMaasConfig}
+            data-testid="rolling-migration-form-baremetal-dialog-close"
+          >
             Close
           </ActionButton>
         </DialogActions>
@@ -2788,6 +2821,7 @@ export default function RollingMigrationFormDrawer({
         onClose={handleClosePcdHostConfigDialog}
         fullWidth
         maxWidth="sm"
+        data-testid="rolling-migration-form-host-config-dialog"
       >
         <DialogTitle>Assign Host Config To All ESXi Hosts</DialogTitle>
         <DialogContent>
@@ -2802,6 +2836,7 @@ export default function RollingMigrationFormDrawer({
               size="small"
               sx={{ mt: 1 }}
               displayEmpty
+              data-testid="rolling-migration-form-host-config-select"
             >
               <MenuItem value="">
                 <em>Select a host configuration</em>
@@ -2820,7 +2855,11 @@ export default function RollingMigrationFormDrawer({
           </Box>
         </DialogContent>
         <DialogActions sx={{ gap: 1, p: 2 }}>
-          <ActionButton tone="secondary" onClick={handleClosePcdHostConfigDialog}>
+          <ActionButton
+            tone="secondary"
+            onClick={handleClosePcdHostConfigDialog}
+            data-testid="rolling-migration-form-host-config-cancel"
+          >
             Cancel
           </ActionButton>
           <ActionButton
@@ -2828,6 +2867,7 @@ export default function RollingMigrationFormDrawer({
             onClick={handleApplyPcdHostConfig}
             disabled={!selectedPcdHostConfig || updatingPcdMapping}
             loading={updatingPcdMapping}
+            data-testid="rolling-migration-form-host-config-apply"
           >
             Apply To All Hosts
           </ActionButton>
@@ -2843,7 +2883,12 @@ export default function RollingMigrationFormDrawer({
           <Box sx={{ my: 2 }}>
             {/* Quick Actions */}
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-              <ActionButton size="small" tone="secondary" onClick={handleClearAllIPs}>
+              <ActionButton
+                size="small"
+                tone="secondary"
+                onClick={handleClearAllIPs}
+                data-testid="rolling-migration-form-bulk-ip-clear"
+              >
                 Clear All
               </ActionButton>
             </Box>
@@ -2912,7 +2957,11 @@ export default function RollingMigrationFormDrawer({
           </Box>
         </DialogContent>
         <DialogActions sx={{ gap: 1, p: 2 }}>
-          <ActionButton tone="secondary" onClick={handleCloseBulkEditDialog}>
+          <ActionButton
+            tone="secondary"
+            onClick={handleCloseBulkEditDialog}
+            data-testid="rolling-migration-form-bulk-ip-cancel"
+          >
             Cancel
           </ActionButton>
           <ActionButton
@@ -2920,6 +2969,7 @@ export default function RollingMigrationFormDrawer({
             onClick={handleApplyBulkIPs}
             disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
             loading={assigningIPs}
+            data-testid="rolling-migration-form-bulk-ip-apply"
           >
             Apply Changes
           </ActionButton>

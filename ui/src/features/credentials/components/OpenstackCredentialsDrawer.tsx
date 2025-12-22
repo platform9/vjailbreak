@@ -1,4 +1,4 @@
-import { Box, CircularProgress } from '@mui/material'
+import { Box } from '@mui/material'
 import axios from 'axios'
 import { useState, useCallback } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
@@ -9,7 +9,7 @@ import {
   ActionButton,
   Section,
   SectionHeader,
-  InlineHelp,
+  OperationStatus,
   Row,
   FormGrid,
   SurfaceCard
@@ -411,27 +411,18 @@ export default function OpenstackCredentialsDrawer({
               </Box>
             </Row>
 
-            <Box mt={3} display="flex" flexDirection="column" gap={2}>
-              {validatingOpenstackCreds && (
-                <InlineHelp tone="warning">
-                  <Row gap={1}>
-                    <CircularProgress size={16} />
-                    <span>Validating PCD credentials…</span>
-                  </Row>
-                </InlineHelp>
-              )}
-
-              {openstackCredsValidated === true && credentialName && (
-                <InlineHelp tone="positive">
-                  <Row gap={1}>
-                    <CheckIcon color="success" fontSize="small" />
-                    <span>PCD credentials created and validated.</span>
-                  </Row>
-                </InlineHelp>
-              )}
-
-              {error && <InlineHelp tone="critical">{error}</InlineHelp>}
-            </Box>
+            <OperationStatus
+              mt={3}
+              display="flex"
+              flexDirection="column"
+              gap={2}
+              loading={validatingOpenstackCreds}
+              loadingMessage="Validating PCD credentials…"
+              success={openstackCredsValidated === true && Boolean(credentialName)}
+              successMessage="PCD credentials created and validated."
+              successIcon={<CheckIcon color="success" fontSize="small" />}
+              error={error}
+            />
           </Section>
         </SurfaceCard>
       </DesignSystemForm>

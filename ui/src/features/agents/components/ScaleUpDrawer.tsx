@@ -1,4 +1,4 @@
-import { Box, CircularProgress } from '@mui/material'
+import { Box } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -7,8 +7,8 @@ import {
   DrawerFooter,
   ActionButton,
   InlineHelp,
+  OperationStatus,
   FormGrid,
-  Row,
   SurfaceCard
 } from 'src/components'
 
@@ -361,14 +361,10 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 Select a flavor with disk &gt; 16GB for production workloads.
               </InlineHelp>
 
-              {loadingFlavors && (
-                <InlineHelp tone="warning">
-                  <Row gap={1}>
-                    <CircularProgress size={16} />
-                    <span>Loading available flavors…</span>
-                  </Row>
-                </InlineHelp>
-              )}
+              <OperationStatus
+                loading={loadingFlavors}
+                loadingMessage="Loading available flavors…"
+              />
             </Box>
           </SurfaceCard>
 
@@ -398,20 +394,14 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
               />
             </FormGrid>
 
-            <Box sx={{ display: 'grid', gap: 2 }}>
-              {loading && (
-                <InlineHelp tone="warning">
-                  <Row gap={1}>
-                    <CircularProgress size={16} />
-                    <span>Scaling up agents…</span>
-                  </Row>
-                </InlineHelp>
-              )}
-
-              {success && <InlineHelp tone="positive">Agents successfully created.</InlineHelp>}
-
-              {error && <InlineHelp tone="critical">{error}</InlineHelp>}
-            </Box>
+            <OperationStatus
+              sx={{ display: 'grid', gap: 2 }}
+              loading={loading}
+              loadingMessage="Scaling up agents…"
+              success={success}
+              successMessage="Agents successfully created."
+              error={error}
+            />
           </SurfaceCard>
         </Box>
       </DesignSystemForm>

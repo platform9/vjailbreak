@@ -36,5 +36,8 @@ export type { InlineHelpProps, InlineHelpTone } from './InlineHelp'
 export { default as Row } from './Row'
 export type { RowProps } from './Row'
 
+export { default as OperationStatus } from './OperationStatus'
+export type { OperationStatusProps, OperationStatusLayout } from './OperationStatus'
+
 export { default as SectionNav } from './SectionNav'
 export type { SectionNavProps, SectionNavItem, SectionNavStatus } from './SectionNav'

@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Collapse,
-  IconButton,
-  InputAdornment,
-  Tooltip,
-  CircularProgress
-} from '@mui/material'
+import { Alert, Box, Collapse, IconButton, InputAdornment, Tooltip } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 import CheckIcon from '@mui/icons-material/Check'
 import InfoOutlined from '@mui/icons-material/InfoOutlined'
@@ -20,8 +12,7 @@ import {
   DrawerFooter,
   ActionButton,
   FormGrid,
-  InlineHelp,
-  Row,
+  OperationStatus,
   Section,
   SectionHeader,
   SurfaceCard
@@ -425,27 +416,17 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   const renderStatusRow = () => (
-    <Box display="flex" flexDirection="column" gap={2}>
-      {validatingVmwareCreds && (
-        <InlineHelp tone="warning">
-          <Row gap={1}>
-            <CircularProgress size={16} />
-            <span>Validating VMware credentials…</span>
-          </Row>
-        </InlineHelp>
-      )}
-
-      {vmwareCredsValidated === true && credentialNameValue && (
-        <InlineHelp tone="positive">
-          <Row gap={1}>
-            <CheckIcon color="success" fontSize="small" />
-            <span>VMware credentials created and validated.</span>
-          </Row>
-        </InlineHelp>
-      )}
-
-      {formError && <InlineHelp tone="critical">{formError}</InlineHelp>}
-    </Box>
+    <OperationStatus
+      display="flex"
+      flexDirection="column"
+      gap={2}
+      loading={validatingVmwareCreds}
+      loadingMessage="Validating VMware credentials…"
+      success={vmwareCredsValidated === true && Boolean(credentialNameValue)}
+      successMessage="VMware credentials created and validated."
+      successIcon={<CheckIcon color="success" fontSize="small" />}
+      error={formError}
+    />
   )
 
   return (

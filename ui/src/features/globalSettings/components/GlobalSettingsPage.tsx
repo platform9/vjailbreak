@@ -388,6 +388,7 @@ const NumberField = ({
       onChange={onChange}
       error={!!error}
       helperText={error || helper}
+      data-testid={`global-settings-field-${String(name)}`}
     />
   </Box>
 )
@@ -423,6 +424,7 @@ const CustomTextField = ({
       onChange={onChange}
       error={!!error}
       helperText={error || helper}
+      data-testid={`global-settings-field-${String(name)}`}
     />
   </Box>
 )
@@ -456,6 +458,7 @@ const IntervalField = ({
       onChange={onChange}
       error={!!error}
       helperText={error || helper || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
+      data-testid={`global-settings-field-${String(name)}`}
     />
   </Box>
 )
@@ -684,6 +687,7 @@ export default function GlobalSettingsPage() {
       <Box
         component="form"
         onSubmit={onSave}
+        data-testid="global-settings-form"
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -695,12 +699,14 @@ export default function GlobalSettingsPage() {
           onChange={handleTabChange}
           variant="scrollable"
           allowScrollButtonsMobile
+          data-testid="global-settings-tabs"
           sx={{ borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
         >
           {TAB_ORDER.map((tab) => (
             <Tab
               key={tab}
               value={tab}
+              data-testid={`global-settings-tab-${tab}`}
               label={
                 <TabLabel
                   label={TAB_META[tab].label}
@@ -841,6 +847,7 @@ export default function GlobalSettingsPage() {
                 name="DEFAULT_MIGRATION_METHOD"
                 value={form.DEFAULT_MIGRATION_METHOD}
                 onChange={onSelect}
+                data-testid="global-settings-field-DEFAULT_MIGRATION_METHOD"
               >
                 <MenuItem value="hot">hot</MenuItem>
                 <MenuItem value="cold">cold</MenuItem>
@@ -864,6 +871,7 @@ export default function GlobalSettingsPage() {
                 onChange={onBool}
                 tooltip={FIELD_TOOLTIPS[key]}
                 description={description}
+                data-testid={`global-settings-toggle-${String(key)}`}
               />
             ))}
           </FormGrid>
@@ -877,10 +885,11 @@ export default function GlobalSettingsPage() {
             color="inherit"
             onClick={onResetDefaults}
             startIcon={<RefreshIcon />}
+            data-testid="global-settings-reset-defaults"
           >
             Reset to Defaults
           </Button>
-          <Button variant="outlined" onClick={onCancel}>
+          <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
             Cancel
           </Button>
           <Button
@@ -889,6 +898,7 @@ export default function GlobalSettingsPage() {
             color="primary"
             disabled={saving}
             startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
+            data-testid="global-settings-save"
           >
             {saving ? 'Saving...' : 'Save'}
           </Button>

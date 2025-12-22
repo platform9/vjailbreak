@@ -981,6 +981,7 @@ export default function MigrationFormDrawer({
 
   return (
     <DrawerShell
+      data-testid="migration-form-drawer"
       open={open}
       onClose={handleClose}
       width={drawerWidth}
@@ -990,6 +991,7 @@ export default function MigrationFormDrawer({
       }}
       header={
         <DrawerHeader
+          data-testid="migration-form-header"
           title="Start Migration"
           subtitle="Configure source/destination, select VMs, and map resources before starting"
           icon={<MigrationIcon />}
@@ -997,8 +999,8 @@ export default function MigrationFormDrawer({
         />
       }
       footer={
-        <DrawerFooter>
-          <ActionButton tone="secondary" onClick={handleClose}>
+        <DrawerFooter data-testid="migration-form-footer">
+          <ActionButton tone="secondary" onClick={handleClose} data-testid="migration-form-cancel">
             Cancel
           </ActionButton>
           <ActionButton
@@ -1006,6 +1008,7 @@ export default function MigrationFormDrawer({
             onClick={handleSubmit}
             disabled={submitDisabled}
             loading={submitting}
+            data-testid="migration-form-submit"
           >
             Start Migration
           </ActionButton>
@@ -1014,6 +1017,7 @@ export default function MigrationFormDrawer({
     >
       <Box
         ref={contentRootRef}
+        data-testid="migration-form-content"
         sx={{
           display: 'grid',
           gridTemplateColumns: isSmallNav ? '1fr' : '260px 1fr',
@@ -1022,6 +1026,7 @@ export default function MigrationFormDrawer({
       >
         {!isSmallNav ? (
           <SectionNav
+            data-testid="migration-form-section-nav"
             items={sectionNavItems}
             activeId={activeSectionId}
             onSelect={scrollToSection}
@@ -1032,12 +1037,17 @@ export default function MigrationFormDrawer({
 
         <Box sx={{ display: 'grid', gap: 3 }}>
           {isSmallNav ? (
-            <SurfaceCard title="Steps" subtitle="Jump to any section">
+            <SurfaceCard
+              title="Steps"
+              subtitle="Jump to any section"
+              data-testid="migration-form-steps-card"
+            >
               <Select
                 size="small"
                 value={activeSectionId}
                 onChange={(e) => scrollToSection(e.target.value as string)}
                 fullWidth
+                data-testid="migration-form-steps-select"
               >
                 {sectionNavItems.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
@@ -1049,10 +1059,11 @@ export default function MigrationFormDrawer({
           ) : null}
 
           {/* Step 1 */}
-          <Box ref={section1Ref}>
+          <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
             <SurfaceCard
               title="1. Source And Destination"
               subtitle="Choose where you migrate from and where you migrate to"
+              data-testid="migration-form-step1-card"
             >
               <SourceDestinationClusterSelection
                 onChange={getParamsUpdater}
@@ -1065,10 +1076,11 @@ export default function MigrationFormDrawer({
           </Box>
 
           {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
-          <Box ref={section2Ref}>
+          <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
             <SurfaceCard
               title="2. Select VMs"
               subtitle="Pick the virtual machines you want to migrate"
+              data-testid="migration-form-step2-card"
             >
               <VmsSelectionStep
                 onChange={getParamsUpdater}
@@ -1096,10 +1108,11 @@ export default function MigrationFormDrawer({
           </Box>
 
           {/* Step 3 */}
-          <Box ref={section3Ref}>
+          <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
             <SurfaceCard
               title="3. Map Networks And Storage"
               subtitle="Ensure all VMware networks and datastores have PCD targets"
+              data-testid="migration-form-step3-card"
             >
               <NetworkAndStorageMappingStep
                 vmwareNetworks={availableVmwareNetworks}
@@ -1116,10 +1129,11 @@ export default function MigrationFormDrawer({
           </Box>
 
           {/* Step 4 */}
-          <Box ref={section4Ref}>
+          <Box ref={section4Ref} data-testid="migration-form-step-security">
             <SurfaceCard
               title="4. Security groups and server group"
               subtitle="Optional placement and security settings"
+              data-testid="migration-form-step4-card"
             >
               <SecurityGroupAndServerGroupStep
                 params={params}
@@ -1132,10 +1146,11 @@ export default function MigrationFormDrawer({
           </Box>
 
           {/* Step 5 */}
-          <Box ref={section5Ref}>
+          <Box ref={section5Ref} data-testid="migration-form-step-options">
             <SurfaceCard
               title="5. Migration Options"
               subtitle="Optional scheduling, cutover behavior, and advanced settings"
+              data-testid="migration-form-step5-card"
             >
               <MigrationOptions
                 params={params}
@@ -1151,10 +1166,11 @@ export default function MigrationFormDrawer({
             </SurfaceCard>
           </Box>
 
-          <Box ref={reviewRef}>
+          <Box ref={reviewRef} data-testid="migration-form-step-review">
             <SurfaceCard
               title="6. Preview"
               subtitle="Verify your selections before starting the migration"
+              data-testid="migration-form-step6-card"
             >
               <Box sx={{ display: 'grid', gap: 1.5 }}>
                 <Typography variant="subtitle2">Summary</Typography>
