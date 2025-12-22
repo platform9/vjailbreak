@@ -74,7 +74,7 @@ sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
 # Install vjbctl as a system-wide command in /usr/local/bin so it's available to all users (including root)
-cat > /usr/local/bin/vjbctl << 'EOF'
+sudo tee /usr/local/bin/vjbctl > /dev/null << 'EOF'
 #!/bin/bash
 # Source the main script to load all functions (user management, support-bundle, etc.)
 source /etc/pf9/pf9-htpasswd.sh
