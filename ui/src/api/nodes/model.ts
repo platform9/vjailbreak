@@ -34,6 +34,8 @@ export interface Spec {
   nodeRole: string
   openstackCreds: OpenstackCredsRef
   openstackFlavorID: string
+  openstackVolumeType?: string
+  openstackSecurityGroups?: string[]
 }
 
 export interface Status {

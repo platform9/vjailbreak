@@ -40,6 +40,16 @@ type VjailbreakNodeSpec struct {
 
 	// OpenstackImageID is the image of the VM
 	OpenstackImageID string `json:"openstackImageID"`
+
+	// OpenstackVolumeType is the volume type for the root disk of the VM
+	// If empty, the volume type will be determined from the master node
+	// +optional
+	OpenstackVolumeType string `json:"openstackVolumeType,omitempty"`
+
+	// OpenstackSecurityGroups is the list of security groups for the VM
+	// If empty, the security groups will be determined from the master node
+	// +optional
+	OpenstackSecurityGroups []string `json:"openstackSecurityGroups,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode including

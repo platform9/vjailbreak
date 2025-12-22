@@ -10,7 +10,9 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
-  InputAdornment
+  InputAdornment,
+  Checkbox,
+  ListItemText
 } from '@mui/material'
 import React, { useState, useCallback, useEffect } from 'react'
 import Step from 'src/components/forms/Step'
@@ -71,6 +73,13 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const [flavorsError, setFlavorsError] = useState<string | null>(null)
   const [flavorSearchTerm, setFlavorSearchTerm] = useState('')
 
+  const [volumeTypes, setVolumeTypes] = useState<Array<string>>([])
+  const [selectedVolumeType, setSelectedVolumeType] = useState('')
+
+  const [securityGroups, setSecurityGroups] = useState<Array<{ name: string; id: string }>>([])
+  const [selectedSecurityGroups, setSelectedSecurityGroups] = useState<string[]>([])
+  const [useMasterSecurityGroups, setUseMasterSecurityGroups] = useState(true)
+
   // Filter flavors based on search term
   const filteredFlavors = React.useMemo(() => {
     return flavors.filter(
@@ -100,6 +109,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     setLoadingFlavors(false)
     setFlavorsError(null)
     setFlavorSearchTerm('')
+    setVolumeTypes([])
+    setSelectedVolumeType('')
+    setSecurityGroups([])
+    setSelectedSecurityGroups([])
+    setUseMasterSecurityGroups(true)
   }
 
   // Reset state when drawer closes
@@ -146,6 +160,27 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     fetchFlavours()
   }, [openstackCredsValidated, openstackCredentials])
 
+  useEffect(() => {
+    if (openstackCredsValidated && openstackCredentials) {
+      const types = openstackCredentials?.status?.openstack?.volumeTypes || []
+      setVolumeTypes(types)
+      // Set default to use master's volume type
+      setSelectedVolumeType('USE_MASTER')
+
+      const sgs = openstackCredentials?.status?.openstack?.securityGroups || []
+      setSecurityGroups(sgs)
+      // Default to using master's security groups
+      setUseMasterSecurityGroups(true)
+      setSelectedSecurityGroups([])
+    } else {
+      setVolumeTypes([])
+      setSelectedVolumeType('')
+      setSecurityGroups([])
+      setSelectedSecurityGroups([])
+      setUseMasterSecurityGroups(true)
+    }
+  }, [openstackCredsValidated, openstackCredentials])
+
   const handleSubmit = async () => {
     if (
       !masterNode?.spec.openstackImageID ||
@@ -167,7 +202,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           namespace: 'migration-system'
         },
         count: nodeCount,
-        flavorId: selectedFlavor
+        flavorId: selectedFlavor,
+        volumeType: selectedVolumeType === 'USE_MASTER' ? undefined : selectedVolumeType,
+        securityGroups: useMasterSecurityGroups ? undefined : selectedSecurityGroups
       })
 
       handleClose()
@@ -230,11 +267,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   fullWidth
                   size="small"
                 />
-              </FormControl>
-              <FormControl fullWidth>
-                <Typography variant="body1" style={{ color: 'red' }}>
-                  ⚠️ Please select a flavor with a disk size greater than 16GB.
-                </Typography>
               </FormControl>
               <FormControl error={!!flavorsError} fullWidth>
                 <InputLabel size="small">
@@ -300,11 +332,15 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   ) : filteredFlavors.length === 0 ? (
                     <MenuItem disabled>No matching flavors found</MenuItem>
                   ) : (
-                    filteredFlavors.map((flavor) => (
-                      <MenuItem key={flavor.id} value={flavor.id}>
-                        {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
-                      </MenuItem>
-                    ))
+                    filteredFlavors.map((flavor) => {
+                      const isDisabled = flavor.disk < 60
+                      return (
+                        <MenuItem key={flavor.id} value={flavor.id} disabled={isDisabled}>
+                          {`${flavor.name} (${flavor.vcpus} vCPU, ${flavor.ram / 1024}GB RAM, ${flavor.disk}GB disk)`}
+                          {isDisabled && ' - Insufficient disk size'}
+                        </MenuItem>
+                      )
+                    })
                   )}
                 </Select>
                 {flavorsError && (
@@ -312,6 +348,64 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     {flavorsError}
                   </FormLabel>
                 )}
+              </FormControl>
+              <FormControl fullWidth>
+                <InputLabel size="small">Volume Type</InputLabel>
+                <Select
+                  value={selectedVolumeType}
+                  label="Volume Type"
+                  onChange={(e) => setSelectedVolumeType(e.target.value)}
+                  size="small"
+                  disabled={!openstackCredsValidated || !openstackCredentials}
+                >
+                  <MenuItem value="USE_MASTER">
+                    Use volume type of primary VJB instance
+                  </MenuItem>
+                  {volumeTypes.map((volumeType) => (
+                    <MenuItem key={volumeType} value={volumeType}>
+                      {volumeType}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth>
+                <InputLabel size="small">Security Groups</InputLabel>
+                <Select
+                  multiple
+                  value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
+                  label="Security Groups"
+                  onChange={(e) => {
+                    const value = e.target.value as string[]
+                    if (value.includes('USE_MASTER')) {
+                      setUseMasterSecurityGroups(true)
+                      setSelectedSecurityGroups([])
+                    } else {
+                      setUseMasterSecurityGroups(false)
+                      setSelectedSecurityGroups(value)
+                    }
+                  }}
+                  size="small"
+                  disabled={!openstackCredsValidated || !openstackCredentials}
+                  renderValue={(selected) => {
+                    if (useMasterSecurityGroups) {
+                      return 'Use security groups of primary VJB instance'
+                    }
+                    return (selected as string[])
+                      .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
+                      .join(', ')
+                  }}
+                >
+                  <MenuItem value="USE_MASTER">
+                    <Checkbox checked={useMasterSecurityGroups} />
+                    <ListItemText primary="Use security groups of primary VJB instance" />
+                  </MenuItem>
+                  {securityGroups.map((sg) => (
+                    <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
+                      <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
+                      <ListItemText primary={sg.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
               </FormControl>
             </Box>
           </div>

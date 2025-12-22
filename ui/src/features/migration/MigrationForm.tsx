@@ -477,10 +477,7 @@ export default function MigrationFormDrawer({
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
-      type:
-        selectedMigrationOptions.dataCopyMethod && params.dataCopyMethod
-          ? params.dataCopyMethod
-          : 'cold',
+      type: params.dataCopyMethod,
       ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
