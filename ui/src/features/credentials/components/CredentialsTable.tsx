@@ -1,4 +1,4 @@
-import { DataGrid, GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
+import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip, Chip, CircularProgress } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -6,6 +6,7 @@ import AddIcon from '@mui/icons-material/Add'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import SyncIcon from '@mui/icons-material/Sync'
 import { CustomSearchToolbar } from 'src/components/grid'
+import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
@@ -470,7 +471,7 @@ export default function CredentialsTable() {
 
   return (
     <div style={{ height: 'calc(100vh - 180px)', width: '100%', overflow: 'hidden' }}>
-      <DataGrid
+      <CommonDataGrid
         rows={allCredentials}
         columns={tableColumns}
         disableRowSelectionOnClick
@@ -500,12 +501,12 @@ export default function CredentialsTable() {
           )
         }}
         pageSizeOptions={[10, 25, 50, 100]}
+        loading={isLoading}
+        emptyMessage="No credentials available"
         sx={{
           '& .MuiDataGrid-main': {
             overflow: 'auto'
           },
-          border: 1,
-          borderColor: 'divider',
           '& .MuiDataGrid-cell:focus': {
             outline: 'none'
           }

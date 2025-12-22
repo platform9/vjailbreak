@@ -1,10 +1,11 @@
-import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbarContainer } from '@mui/x-data-grid'
+import { GridColDef, GridRowSelectionModel, GridToolbarContainer } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { useState, useMemo } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
+import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { LogsDrawer } from '.'
 import { Condition, Migration, Phase } from '../api/migrations'
@@ -429,7 +430,7 @@ export default function MigrationsTable({
 
   return (
     <>
-      <DataGrid
+      <CommonDataGrid
         rows={migrationsWithActions}
         columns={
           onDeleteSelected === undefined && onDeleteMigration === undefined
@@ -444,6 +445,7 @@ export default function MigrationsTable({
         }}
         pageSizeOptions={[25, 50, 100]}
         localeText={{ noRowsLabel: 'No Migrations Available' }}
+        emptyMessage="No migrations available"
         getRowId={(row) => row.metadata?.name}
         checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
         onRowSelectionModelChange={handleSelectionChange}

@@ -10,7 +10,7 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material'
-import { DataGrid, GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
+import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -25,6 +25,7 @@ import { ConfirmationDialog } from 'src/components/dialogs'
 import { deleteRollingMigrationPlan } from 'src/api/rolling-migration-plans/rollingMigrationPlans'
 import { useQueryClient } from '@tanstack/react-query'
 import { ROLLING_MIGRATION_PLANS_QUERY_KEY } from 'src/hooks/api/useRollingMigrationPlansQuery'
+import { CommonDataGrid } from 'src/components/grid'
 
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from '@cds/core/icon'
@@ -273,7 +274,7 @@ function ClusterDetailsDrawer({
               title=""
             />
             <Box sx={{ height: 300, width: '100%' }}>
-              <DataGrid
+              <CommonDataGrid
                 rows={esxHosts}
                 columns={esxColumns}
                 disableRowSelectionOnClick
@@ -281,11 +282,7 @@ function ClusterDetailsDrawer({
                   pagination: { paginationModel: { pageSize: 10 } }
                 }}
                 pageSizeOptions={[10, 25, 50]}
-                sx={{
-                  '& .MuiDataGrid-columnHeaders': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                  }
-                }}
+                emptyMessage="No ESX migrations available"
               />
             </Box>
           </Box>
@@ -654,7 +651,7 @@ export default function RollingMigrationsTable({
 
   return (
     <Box sx={{ width: '100%', height: '100%' }}>
-      <DataGrid
+      <CommonDataGrid
         rows={rollingMigrationPlans}
         columns={clusterColumns}
         getRowId={(row: RollingMigrationPlan) => row.metadata?.name || ''}
@@ -666,6 +663,7 @@ export default function RollingMigrationsTable({
         }}
         pageSizeOptions={[5, 10, 25]}
         localeText={{ noRowsLabel: 'No Migrations Available' }}
+        emptyMessage="No cluster conversions available"
         slots={{
           toolbar: () => (
             <CustomToolbar
