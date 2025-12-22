@@ -544,7 +544,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	}
 	if datacenter != "" {
 		finder := find.NewFinder(c, false)
-		_, err = finder.Datacenter(context.Background(), datacenter)
+		_, err = finder.Datacenter(ctx, datacenter)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find datacenter: %w", err)
 		}

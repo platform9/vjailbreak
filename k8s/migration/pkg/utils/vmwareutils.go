@@ -289,7 +289,10 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 
 	for _, dc := range targetDatacenters {
 		dcName := dc.Name()
-		hosts := standAloneHosts[dcName]
+		hosts, ok := standAloneHosts[dcName]
+		if !ok {
+			hosts = []*object.HostSystem{}
+		}
 		vmHosts := make([]VMwareHostInfo, 0, len(hosts))
 		for _, host := range hosts {
 			vmHosts = append(vmHosts, VMwareHostInfo{
