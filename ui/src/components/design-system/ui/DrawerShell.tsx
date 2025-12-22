@@ -1,12 +1,14 @@
 import { Box, Drawer, DrawerProps, IconButton, Typography } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { ReactNode } from 'react'
+import { ReactNode, useRef, useState } from 'react'
+import ConfirmationDialog from 'src/components/dialogs/ConfirmationDialog'
 
 export interface DrawerShellProps extends DrawerProps {
   width?: number | string
   header?: ReactNode
   footer?: ReactNode
   'data-testid'?: string
+  requireCloseConfirmation?: boolean
 }
 
 export default function DrawerShell({
@@ -16,31 +18,71 @@ export default function DrawerShell({
   children,
   PaperProps,
   'data-testid': dataTestId = 'drawer-shell',
+  requireCloseConfirmation = true,
   ...props
 }: DrawerShellProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const pendingCloseRef = useRef<{ event: unknown; reason: unknown } | null>(null)
+
+  const handleCloseConfirmed = async () => {
+    const pending = pendingCloseRef.current
+    pendingCloseRef.current = null
+    setConfirmOpen(false)
+    props.onClose?.(pending?.event as never, pending?.reason as never)
+  }
+
+  const handleCloseConfirmationDismiss = () => {
+    pendingCloseRef.current = null
+    setConfirmOpen(false)
+  }
+
+  const handleDrawerClose: DrawerProps['onClose'] = (event, reason) => {
+    if (requireCloseConfirmation && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+      pendingCloseRef.current = { event, reason }
+      setConfirmOpen(true)
+      return
+    }
+
+    props.onClose?.(event, reason)
+  }
+
   return (
-    <Drawer
-      anchor="right"
-      {...props}
-      PaperProps={{
-        sx: {
-          display: 'grid',
-          gridTemplateRows:
-            `${header ? 'max-content' : ''} 1fr ${footer ? 'max-content' : ''}`.trim(),
-          width,
-          maxWidth: '95vw',
-          borderLeft: (theme) => `1px solid ${theme.palette.divider}`,
-          backgroundColor: (theme) => theme.palette.background.paper,
-          ...(PaperProps?.sx ?? {})
-        },
-        ...PaperProps
-      }}
-      data-testid={dataTestId}
-    >
-      {header}
-      <DrawerBody>{children}</DrawerBody>
-      {footer}
-    </Drawer>
+    <>
+      <Drawer
+        anchor="right"
+        {...props}
+        onClose={handleDrawerClose}
+        PaperProps={{
+          sx: {
+            display: 'grid',
+            gridTemplateRows:
+              `${header ? 'max-content' : ''} 1fr ${footer ? 'max-content' : ''}`.trim(),
+            width,
+            maxWidth: '95vw',
+            borderLeft: (theme) => `1px solid ${theme.palette.divider}`,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            ...(PaperProps?.sx ?? {})
+          },
+          ...PaperProps
+        }}
+        data-testid={dataTestId}
+      >
+        {header}
+        <DrawerBody>{children}</DrawerBody>
+        {footer}
+      </Drawer>
+
+      <ConfirmationDialog
+        open={confirmOpen}
+        onClose={handleCloseConfirmationDismiss}
+        title="Close drawer?"
+        message="Are you sure you want to close this drawer?"
+        actionLabel="Close"
+        actionColor="warning"
+        actionVariant="outlined"
+        onConfirm={handleCloseConfirmed}
+      />
+    </>
   )
 }
 
