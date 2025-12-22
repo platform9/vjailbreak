@@ -66,12 +66,12 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
     boxShadow: theme.palette.mode === 'dark' ? 'none' : theme.shadows[1],
 
     '& .MuiDataGrid-columnHeaders': {
-      backgroundColor: alpha(
-        theme.palette.primary.main,
-        theme.palette.mode === 'dark' ? 0.12 : 0.06
-      ),
       borderBottom: `1px solid ${theme.palette.divider}`
     },
+    '& .MuiDataGrid-columnHeaders, & .MuiDataGrid-columnHeadersInner, & .MuiDataGrid-container--top [role="row"], & .MuiDataGrid-columnHeader':
+      {
+        backgroundColor: `${theme.palette.background.paper} !important`
+      },
     '& .MuiDataGrid-columnHeaderTitle': {
       fontWeight: 600,
       fontSize: '0.8125rem'

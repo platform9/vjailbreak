@@ -10,21 +10,24 @@ const DashboardContainer = styled('div')({
   overflow: 'hidden'
 })
 
-const ContentContainer = styled('div')({
+const ContentContainer = styled('div')(({ theme }) => ({
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
-  padding: '16px',
+  padding: theme.spacing(2),
+  backgroundColor: theme.palette.background.default,
   overflow: 'hidden',
   minHeight: 0
-})
+}))
 
-const StyledPaper = styled(Paper)({
+const StyledPaper = styled(Paper)(({ theme }) => ({
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
   overflow: 'auto',
   minHeight: 0,
+  border: `1px solid ${theme.palette.divider}`,
+  borderRadius: theme.spacing(1.25),
   '& .MuiDataGrid-root': {
     flex: 1,
     border: 'none',
@@ -36,7 +39,7 @@ const StyledPaper = styled(Paper)({
   '& .MuiDataGrid-virtualScroller': {
     overflow: 'auto !important'
   }
-})
+}))
 
 export default function DashboardLayout() {
   const location = useLocation()

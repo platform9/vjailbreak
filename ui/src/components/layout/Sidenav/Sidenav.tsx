@@ -31,28 +31,6 @@ import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
 
-const ToggleButtonCollapsed = styled(IconButton)(({ theme }) => ({
-  position: 'fixed',
-  top: '50%',
-  left: 'calc(72px - 12px)',
-  transform: 'translateY(-50%)',
-  backgroundColor: theme.palette.background.paper,
-  border: `1px solid ${theme.palette.divider}`,
-  borderRadius: '50%',
-  width: 32,
-  height: 32,
-  zIndex: theme.zIndex.drawer + 1,
-  boxShadow: theme.shadows[2],
-  transition: theme.transitions.create(['left', 'box-shadow'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen
-  }),
-  '&:hover': {
-    backgroundColor: theme.palette.action.hover,
-    boxShadow: theme.shadows[4]
-  }
-}))
-
 const StyledDrawer = styled(Drawer, {
   shouldForwardProp: (prop) => prop !== 'collapsed'
 })<{ collapsed: boolean }>(({ theme, collapsed }) => ({
@@ -66,11 +44,9 @@ const StyledDrawer = styled(Drawer, {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.enteringScreen
     }),
-    overflow: 'hidden',
-    overflowX: 'hidden',
-    overflowY: 'hidden',
+    overflow: 'visible',
     borderRight: `1px solid ${theme.palette.divider}`,
-    backgroundColor: theme.palette.background.default,
+    backgroundColor: theme.palette.background.paper,
     '&::-webkit-scrollbar': {
       display: 'none'
     },
@@ -83,11 +59,12 @@ const DrawerHeader = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: theme.spacing(2, 2),
+  padding: theme.spacing(1.5, 2),
   ...theme.mixins.toolbar,
-  minHeight: '80px !important',
+  minHeight: '64px !important',
   borderBottom: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
-  marginBottom: theme.spacing(1)
+  marginBottom: theme.spacing(1),
+  position: 'relative'
 }))
 
 const BrandContainer = styled(Box, {
@@ -195,12 +172,15 @@ const StyledListItemButton = styled(ListItemButton, {
   position: 'relative',
   overflow: 'hidden',
   cursor: 'pointer',
-  transition: theme.transitions.create(['background-color', 'transform'], {
+  transition: theme.transitions.create(['background-color', 'box-shadow'], {
     duration: theme.transitions.duration.shorter
   }),
   ...(active && {
     backgroundColor: alpha(theme.palette.primary.main, 0.08),
     color: theme.palette.primary.main,
+    '& .MuiTypography-root': {
+      fontWeight: 600
+    },
     '&::before': {
       content: '""',
       position: 'absolute',
@@ -215,8 +195,10 @@ const StyledListItemButton = styled(ListItemButton, {
     }
   }),
   '&:hover': {
-    backgroundColor: alpha(theme.palette.primary.main, 0.04),
-    transform: 'translateX(2px)'
+    backgroundColor: alpha(theme.palette.primary.main, 0.05)
+  },
+  '&.Mui-focusVisible': {
+    boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.25)}`
   }
 }))
 
@@ -234,25 +216,36 @@ const NavigationBadge = styled(Chip)(({ theme }) => ({
   marginLeft: theme.spacing(1)
 }))
 
-const ToggleButton = styled(IconButton)(({ theme }) => ({
-  position: 'fixed',
-  top: '50%',
-  left: 'calc(280px - 12px)',
-  transform: 'translateY(-50%)',
-  backgroundColor: theme.palette.background.paper,
-  border: `1px solid ${theme.palette.divider}`,
-  borderRadius: '50%',
+const CornerToggleButton = styled(IconButton)(({ theme }) => ({
+  position: 'absolute',
+  right: -18,
+  bottom: -18,
   width: 32,
   height: 32,
-  zIndex: theme.zIndex.drawer + 1,
-  boxShadow: theme.shadows[2],
-  transition: theme.transitions.create(['left', 'box-shadow'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen
-  }),
+  borderRadius: '50%',
+  backgroundColor: theme.palette.background.paper,
+  border: `1px solid ${theme.palette.divider}`,
+  color: theme.palette.text.secondary,
+  boxShadow: theme.shadows[1],
+  transition: theme.transitions.create(
+    ['background-color', 'border-color', 'box-shadow', 'color'],
+    {
+      duration: theme.transitions.duration.shorter
+    }
+  ),
   '&:hover': {
-    backgroundColor: theme.palette.action.hover,
-    boxShadow: theme.shadows[4]
+    backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.18 : 0.12),
+    borderColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.55 : 0.4),
+    color: theme.palette.primary.main,
+    boxShadow: theme.shadows[3]
+  },
+  '&:active': {
+    backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.24 : 0.16),
+    borderColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.65 : 0.5),
+    boxShadow: theme.shadows[2]
+  },
+  '&.Mui-focusVisible': {
+    boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.25)}`
   }
 }))
 
@@ -432,12 +425,23 @@ export default function Sidenav({
         <BrandContainer collapsed={isCollapsed}>
           <Platform9Logo collapsed={isCollapsed} />
         </BrandContainer>
+        <Tooltip
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          placement="right"
+          arrow
+        >
+          <CornerToggleButton onClick={handleToggleCollapse} aria-label="toggle sidebar">
+            {isCollapsed ? <ChevronRight fontSize="small" /> : <ChevronLeft fontSize="small" />}
+          </CornerToggleButton>
+        </Tooltip>
       </DrawerHeader>
 
       <List
         sx={{
           pt: 1,
-          overflow: 'hidden',
+          flex: 1,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           '&::-webkit-scrollbar': {
             display: 'none'
           },
@@ -460,7 +464,8 @@ export default function Sidenav({
           ))}
       </List>
 
-      <Box sx={{ mt: 'auto', mb: 1.5, px: 2, position: 'relative' }}>
+      <Box sx={{ mt: 'auto', px: 2, pb: 1.5, pt: 1.5, position: 'relative' }}>
+        <Divider sx={{ mb: 1.5, opacity: 0.6 }} />
         <VersionDisplay collapsed={isCollapsed} />
         {versionInfo?.upgradeAvailable &&
           versionInfo?.upgradeVersion &&
@@ -524,20 +529,8 @@ export default function Sidenav({
   )
 
   return (
-    <Box sx={{ position: 'relative' }}>
-      <StyledDrawer variant="permanent" collapsed={isCollapsed}>
-        {drawerContent}
-      </StyledDrawer>
-
-      {isCollapsed ? (
-        <ToggleButtonCollapsed onClick={handleToggleCollapse}>
-          <ChevronRight fontSize="small" />
-        </ToggleButtonCollapsed>
-      ) : (
-        <ToggleButton onClick={handleToggleCollapse}>
-          <ChevronLeft fontSize="small" />
-        </ToggleButton>
-      )}
-    </Box>
+    <StyledDrawer variant="permanent" collapsed={isCollapsed}>
+      {drawerContent}
+    </StyledDrawer>
   )
 }
