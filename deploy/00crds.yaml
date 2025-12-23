@@ -83,6 +83,11 @@ spec:
                     description: CinderBackendPool is the pool name within the backend
                       (optional)
                     type: string
+                  cinderHost:
+                    description: |-
+                      CinderHost is the full Cinder host string for manage API
+                      Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+                    type: string
                   volumeType:
                     description: VolumeType is the Cinder volume type associated with
                       this mapping
@@ -743,6 +748,21 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
+                type: object
+              assignedIPsPerVM:
+                additionalProperties:
+                  type: string
+                description: |-
+                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -754,11 +774,6 @@ spec:
                   migration
                 properties:
                   adminInitiatedCutOver:
-                    default: false
-                    type: boolean
-                  arrayCredsRef:
-                    type: string
-                  arrayOffload:
                     default: false
                     type: boolean
                   dataCopyStart:
@@ -777,10 +792,6 @@ spec:
                     enum:
                     - hot
                     - cold
-                    type: string
-                  vendorType:
-                    enum:
-                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -808,13 +819,12 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               securityGroups:
                 items:
                   type: string
                 type: array
+              serverGroup:
+                type: string
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -840,10 +850,6 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
-              retryCount:
-                description: Migration RetryCount is the number of times the migration
-                  has been retried
-                type: integer
             required:
             - migrationMessage
             - migrationStatus
@@ -910,10 +916,11 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
-              arrayOffload:
-                description: ArrayOffload specifies whether to use array offload for
-                  data copy
-                type: boolean
+              assignedIP:
+                description: |-
+                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
+                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
+                type: string
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -927,9 +934,6 @@ spec:
                 type: string
               podRef:
                 description: PodRef is the name of the pod
-                type: string
-              vendorType:
-                description: VendorType specifies the vendor type of the storage system
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
@@ -1432,6 +1436,25 @@ spec:
                       - requiresIdDisplay
                       type: object
                     type: array
+                  serverGroups:
+                    items:
+                      description: ServerGroupInfo holds the server group name, ID,
+                        and policy information
+                      properties:
+                        id:
+                          type: string
+                        members:
+                          type: integer
+                        name:
+                          type: string
+                        policy:
+                          type: string
+                      required:
+                      - id
+                      - name
+                      - policy
+                      type: object
+                    type: array
                   volumeBackends:
                     items:
                       type: string
@@ -1862,6 +1885,14 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
@@ -1968,11 +1999,6 @@ spec:
                   adminInitiatedCutOver:
                     default: false
                     type: boolean
-                  arrayCredsRef:
-                    type: string
-                  arrayOffload:
-                    default: false
-                    type: boolean
                   dataCopyStart:
                     format: date-time
                     type: string
@@ -1989,10 +2015,6 @@ spec:
                     enum:
                     - hot
                     - cold
-                    type: string
-                  vendorType:
-                    enum:
-                    - pure
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -2020,9 +2042,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -2991,6 +3010,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - get
@@ -3012,14 +3040,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - pods/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:

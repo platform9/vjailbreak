@@ -51,9 +51,6 @@ const (
 	// BMConfigControllerName is the name of the BMConfig controller
 	BMConfigControllerName = "bmconfig-controller"
 
-	// ValidationStatusFailed is the status value for failed credential validation
-	ValidationStatusFailed = "Failed"
-
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
@@ -122,6 +119,18 @@ const (
 
 	// ArrayCredsFinalizer is the finalizer for storage array credentials
 	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ArrayCreds phases
+	ArrayCredsPhaseDiscovered = "Discovered"
+	ArrayCredsPhaseConfigured = "Configured"
+	ArrayCredsPhaseValidated  = "Validated"
+	ArrayCredsPhaseFailed     = "Failed"
+
+	// ArrayCreds validation statuses
+	ArrayCredsStatusPending             = "Pending"
+	ArrayCredsStatusSucceeded           = "Succeeded"
+	ArrayCredsStatusFailed              = "Failed"
+	ArrayCredsStatusAwaitingCredentials = "AwaitingCredentials"
 
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
@@ -216,9 +225,6 @@ const (
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
-	// CleanupPortsAfterMigrationFailure is the default value for cleanup ports after migration failure
-	CleanupPortsAfterMigrationFailure = false
-
 	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
 	PopulateVMwareMachineFlavors = true
 
@@ -265,9 +271,6 @@ runcmd:
 	// MigrationConditionTypeValidated represents the condition type for validated phase
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
-
-	// MigrationConditionTypeMigrated represents the condition type for successful completion
-	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{

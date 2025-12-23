@@ -2,12 +2,15 @@ module github.com/platform9/vjailbreak/v2v-helper
 
 go 1.24.3
 
+toolchain go1.24.10
+
 require (
 	github.com/golang/mock v1.6.0
 	github.com/gophercloud/gophercloud v1.14.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250904115639-c2134e9ef3b9
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251010063340-57148ad11aff
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0
@@ -16,12 +19,14 @@ require (
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.1
+	k8s.io/klog/v2 v2.130.1
 	libguestfs.org/libnbd v1.20.0
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/devans10/pugo/flasharray v0.0.0-20241116160615-6bb8c469c9a0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
@@ -53,7 +58,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250610211856-8b98d1ed966a // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
@@ -63,3 +67,5 @@ require (
 )
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../k8s/migration
+
+replace github.com/platform9/vjailbreak/pkg/vpwned => ../pkg/vpwned

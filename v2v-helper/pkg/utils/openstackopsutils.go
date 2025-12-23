@@ -19,24 +19,26 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	gophercloud "github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/bootfromvolume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/schedulerhints"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 )
 
 type OpenStackClients struct {
@@ -57,7 +59,6 @@ var (
 )
 
 func GetCurrentInstanceUUID() (string, error) {
-
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
@@ -113,7 +114,7 @@ func GetCurrentInstanceUUID() (string, error) {
 }
 
 // create a new volume
-func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
+func (osclient *OpenStackClients) CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
 	blockStorageClient := osclient.BlockStorageClient
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating volume with name %s with size %d, for OS type %s, UEFI %v, volume type %s, authurl %s, tenant %s", name, size, ostype, uefi, volumetype, osclient.AuthURL, osclient.Tenant))
@@ -126,36 +127,36 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 	// Add 1GB to the size to account for the extra space
 	opts.Size += 1
 
-	volume, err := volumes.Create(ctx, blockStorageClient, opts, nil).Extract()
+	volume, err := volumes.Create(blockStorageClient, opts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create volume: %s", err)
 	}
 
-	err = osclient.WaitForVolume(ctx, volume.ID)
+	err = osclient.WaitForVolume(volume.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for volume: %s", err)
 	}
-	volume, err = volumes.Get(ctx, osclient.BlockStorageClient, volume.ID).Extract()
+	volume, err = volumes.Get(osclient.BlockStorageClient, volume.ID).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get volume: %s", err)
 	}
 	PrintLog(fmt.Sprintf("Volume created successfully. current status %s", volume.Status))
 
 	if uefi {
-		err = osclient.SetVolumeUEFI(ctx, volume)
+		err = osclient.SetVolumeUEFI(volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume uefi: %s", err)
 		}
 	}
 
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
-		err = osclient.SetVolumeImageMetadata(ctx, volume, setRDMLabel)
+		err = osclient.SetVolumeImageMetadata(volume, setRDMLabel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
 		}
 	}
 
-	err = osclient.EnableQGA(ctx, volume)
+	err = osclient.EnableQGA(volume)
 	if err != nil {
 		return nil, err
 	}
@@ -163,24 +164,24 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 	return volume, nil
 }
 
-func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID string) error {
+func (osclient *OpenStackClients) DeleteVolume(volumeID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting volume with ID %s, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
-	err := volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
+	err := volumes.Delete(osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
 	if err != nil {
 		return fmt.Errorf("failed to delete volume: %s", err)
 	}
 	return nil
 }
 
-func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID string) error {
+func (osclient *OpenStackClients) WaitForVolume(volumeID string) error {
 	// Get vjailbreak settings
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), osclient.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume %s to become available, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
 	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
-		volume, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
+		volume, err := volumes.Get(osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
 			return fmt.Errorf("failed to get volume: %s", err)
 		}
@@ -193,7 +194,7 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 		}
 
 		// Check if the volume is available from nova side as well
-		server, err := servers.Get(ctx, osclient.ComputeClient, instanceID).Extract()
+		server, err := servers.Get(osclient.ComputeClient, instanceID).Extract()
 		if err != nil {
 			return fmt.Errorf("failed to get server: %s", err)
 		}
@@ -217,19 +218,19 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 	return fmt.Errorf("volume did not become available within %d seconds", vjailbreakSettings.VolumeAvailableWaitRetryLimit*vjailbreakSettings.VolumeAvailableWaitIntervalSeconds)
 }
 
-func (osclient *OpenStackClients) AttachVolumeToVM(ctx context.Context, volumeID string) error {
+func (osclient *OpenStackClients) AttachVolumeToVM(volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Attaching volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
 
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(context.Background(), osclient.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
-		_, err = volumeattach.Create(ctx, osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
+		_, err = volumeattach.Create(osclient.ComputeClient, instanceID, volumeattach.CreateOpts{
 			VolumeID:            volumeID,
 			DeleteOnTermination: false,
 		}).Extract()
@@ -244,7 +245,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(ctx context.Context, volumeID
 	}
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume attachment for volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
-	err = osclient.WaitForVolumeAttachment(ctx, volumeID)
+	err = osclient.WaitForVolumeAttachment(volumeID)
 	if err != nil {
 		return fmt.Errorf("failed to wait for volume attachment: %s", err)
 	}
@@ -272,7 +273,7 @@ func (osclient *OpenStackClients) FindDevice(volumeID string) (string, error) {
 	return "", nil
 }
 
-func (osclient *OpenStackClients) WaitForVolumeAttachment(ctx context.Context, volumeID string) error {
+func (osclient *OpenStackClients) WaitForVolumeAttachment(volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
@@ -288,7 +289,7 @@ func (osclient *OpenStackClients) WaitForVolumeAttachment(ctx context.Context, v
 	return fmt.Errorf("volume attachment not found within %d seconds", constants.MaxIntervalCount*5)
 }
 
-func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volumeID string) error {
+func (osclient *OpenStackClients) DetachVolumeFromVM(volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
@@ -296,7 +297,7 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volume
 	PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
 
 	for i := 0; i < constants.MaxIntervalCount; i++ {
-		err = volumeattach.Delete(ctx, osclient.ComputeClient, instanceID, volumeID).ExtractErr()
+		err = volumeattach.Delete(osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
 			break
 		}
@@ -309,38 +310,38 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volume
 	return nil
 }
 
-func (osclient *OpenStackClients) EnableQGA(ctx context.Context, volume *volumes.Volume) error {
+func (osclient *OpenStackClients) EnableQGA(volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Enabling QGA for volume %s, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
-	options := volumes.ImageMetadataOpts{
+	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_qemu_guest_agent": "yes",
 			"hw_video_model":      "virtio",
 			"hw_pointer_model":    "usbtablet",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
 	}
 	return nil
 }
 
-func (osclient *OpenStackClients) SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
+func (osclient *OpenStackClients) SetVolumeUEFI(volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Setting UEFI for volume %s, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
-	options := volumes.ImageMetadataOpts{
+	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_firmware_type": "uefi",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return fmt.Errorf("failed to set volume image metadata hw_firmware_type to uefi: %s", err)
 	}
 	return nil
 }
 
-func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error {
-	options := volumes.ImageMetadataOpts{
+func (osclient *OpenStackClients) SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error {
+	options := volumeactions.ImageMetadataOpts{
 		Metadata: map[string]string{
 			"hw_disk_bus": "virtio",
 			"os_type":     "windows",
@@ -349,28 +350,28 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	if setRDMLabel {
 		options.Metadata["hw_scsi_model"] = "virtio-scsi"
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetImageMetadata(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return fmt.Errorf("failed to set volume image metadata for windows: %s", err)
 	}
 	return nil
 }
 
-func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
+func (osclient *OpenStackClients) SetVolumeBootable(volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Setting volume %s as bootable, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
-	options := volumes.BootableOpts{
+	options := volumeactions.BootableOpts{
 		Bootable: true,
 	}
-	err := volumes.SetBootable(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	err := volumeactions.SetBootable(osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 	if err != nil {
 		return fmt.Errorf("failed to set volume as bootable: %s", err)
 	}
 	return nil
 }
 
-func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
+func (osclient *OpenStackClients) GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Getting closest flavor for %d vCPUs and %d MB RAM, authurl %s, tenant %s", cpu, memory, osclient.AuthURL, osclient.Tenant))
-	allPages, err := flavors.ListDetail(osclient.ComputeClient, nil).AllPages(ctx)
+	allPages, err := flavors.ListDetail(osclient.ComputeClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list flavors: %s", err)
 	}
@@ -382,32 +383,41 @@ func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int
 
 	PrintLog(fmt.Sprintf("Current requirements: %d CPUs and %d MB of RAM", cpu, memory))
 
-	// Use the shared flavor selection logic (without GPU filtering for v2v-helper fallback)
-	// Note: v2v-helper doesn't track GPU counts, so we pass 0 for both
-	bestFlavor, err := openstackpkg.GetClosestFlavour(int(cpu), int(memory), 0, 0, allFlavors, false)
-	if err != nil {
-		PrintLog("No suitable flavor found without GPU.")
-		return nil, errors.Wrap(err, "failed to get closest flavor")
+	bestFlavor := new(flavors.Flavor)
+	bestFlavor.VCPUs = constants.MaxCPU
+	bestFlavor.RAM = constants.MaxRAM
+	// Find the smallest flavor that meets the requirements
+	for _, flavor := range allFlavors {
+		if flavor.VCPUs >= int(cpu) && flavor.RAM >= int(memory) {
+			if flavor.VCPUs < bestFlavor.VCPUs || (flavor.VCPUs == bestFlavor.VCPUs && flavor.RAM < bestFlavor.RAM) {
+				bestFlavor = &flavor
+			}
+		}
 	}
 
-	PrintLog(fmt.Sprintf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
-		bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk))
+	if bestFlavor.VCPUs != constants.MaxCPU {
+		PrintLog(fmt.Sprintf("The best flavor is:\nName: %s, ID: %s, RAM: %dMB, VCPUs: %d, Disk: %dGB\n",
+			bestFlavor.Name, bestFlavor.ID, bestFlavor.RAM, bestFlavor.VCPUs, bestFlavor.Disk))
+	} else {
+		PrintLog("No suitable flavor found.")
+		return nil, fmt.Errorf("no suitable flavor found for %d vCPUs and %d MB RAM", cpu, memory)
+	}
 
 	return bestFlavor, nil
 }
 
-func (osclient *OpenStackClients) GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error) {
+func (osclient *OpenStackClients) GetFlavor(flavorId string) (*flavors.Flavor, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Getting flavor %s, authurl %s, tenant %s", flavorId, osclient.AuthURL, osclient.Tenant))
-	flavor, err := flavors.Get(ctx, osclient.ComputeClient, flavorId).Extract()
+	flavor, err := flavors.Get(osclient.ComputeClient, flavorId).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor: %s", err)
 	}
 	return flavor, nil
 }
 
-func (osclient *OpenStackClients) GetNetwork(ctx context.Context, networkname string) (*networks.Network, error) {
+func (osclient *OpenStackClients) GetNetwork(networkname string) (*networks.Network, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching network %s, authurl %s, tenant %s", networkname, osclient.AuthURL, osclient.Tenant))
-	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages(ctx)
+	allPages, err := networks.List(osclient.NetworkingClient, nil).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list networks: %s", err)
 	}
@@ -425,32 +435,22 @@ func (osclient *OpenStackClients) GetNetwork(ctx context.Context, networkname st
 	return nil, fmt.Errorf("network not found")
 }
 
-func (osclient *OpenStackClients) GetPort(ctx context.Context, portID string) (*ports.Port, error) {
+func (osclient *OpenStackClients) GetPort(portID string) (*ports.Port, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
-	port, err := ports.Get(ctx, osclient.NetworkingClient, portID).Extract()
+	port, err := ports.Get(osclient.NetworkingClient, portID).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get port: %s", err)
 	}
 	return port, nil
 }
 
-func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string) error {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
-	err := ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete port %s: %s", portID, err)
-	}
-	PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
-	return nil
-}
-
-func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []string, ip string) (*subnets.Subnet, error) {
+func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*subnets.Subnet, error) {
 	parsedIp := net.ParseIP(ip)
 	if parsedIp == nil {
 		return nil, fmt.Errorf("invalid IP address: %s", ip)
 	}
 	for _, subnet := range subnetList {
-		sn, err := subnets.Get(ctx, osclient.NetworkingClient, subnet).Extract()
+		sn, err := subnets.Get(osclient.NetworkingClient, subnet).Extract()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
@@ -465,13 +465,12 @@ func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []st
 	}
 	return nil, fmt.Errorf("IP %s is not in any of the subnets %v", ip, subnetList)
 }
-
-func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
-
+func (osclient *OpenStackClients) CreatePort(network *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
+PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ip))
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
-	}).AllPages(ctx)
+	}).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list networks: %s", err)
 	}
@@ -480,6 +479,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 	if err != nil {
 		return nil, err
 	}
+
 	for _, port := range portList {
 		if port.MACAddress == mac {
 			if port.DeviceID != "" {
@@ -491,18 +491,18 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 					fixedIps = append(fixedIps, fixedIp.IPAddress)
 				}
 				contain_all := true
-				for _, ipIdx := range ipEntries {
-					if !slices.Contains(fixedIps, ipIdx.IP) {
+				for _, ipIdx := range ip {
+					if !slices.Contains(fixedIps, ipIdx) {
 						contain_all = false
 					}
-					subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipIdx.IP)
+					subnetId, err := osclient.GetSubnet(network.Subnets, ipIdx)
 					if err != nil {
-						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx.IP)
+						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx)
 					}
 					gatewayIP[mac] = subnetId.GatewayIP
 				}
 				if !contain_all {
-					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ipEntries)
+					return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IPs %v, while IPs %v were requested", mac, fixedIps, ip)
 				}
 				// Check if port is already active - cannot reuse active ports
 				if port.Status == "ACTIVE" {
@@ -510,7 +510,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 				}
 				PrintLog(fmt.Sprintf("Port with MAC address %s already exists and is available, ID: %s", mac, port.ID))
 				return &port, nil
-			} else if len(port.FixedIPs) == 0 && len(ipEntries) == 0 {
+			} else if len(port.FixedIPs) == 0 && len(ip) == 0 {
 				// Check if port is already active - cannot reuse active ports
 				if port.Status == "ACTIVE" {
 					return nil, errors.New("port is already active, VM might already been migrated or this IP is used by another VM")
@@ -518,16 +518,17 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 				PrintLog(fmt.Sprintf("Port with MAC address %s already exists, ID: %s", mac, port.ID))
 				return &port, nil
 			} else {
-				return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %v was requested", mac, port.FixedIPs, ipEntries)
+				return nil, fmt.Errorf("port conflict: a port with MAC %s already exists but has IP %s, while IP %s was requested", mac, port.FixedIPs, ip)
 			}
 		}
 	}
 
-	return nil, nil
+	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %s", mac, ip))
 
-}
-
-func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
+	// Check if subnet is valid to avoid panic.
+	if len(network.Subnets) == 0 {
+		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
+	}
 
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
@@ -535,112 +536,54 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
 	}
-	if len(ipEntries) > 0 {
+	if len(ip) > 0 {
 		fixedIPs := make([]ports.IP, 0)
-		for _, ipEntry := range ipEntries {
-			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
-			if err != nil {
-				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
-			} else {
-				gatewayIP[mac] = subnetId.GatewayIP
-				PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipEntry.IP, subnetId.ID))
-				fixedIPs = append(fixedIPs, ports.IP{
-					SubnetID:  subnetId.ID,
-					IPAddress: ipEntry.IP,
-				})
+		for _, ipPerMac := range ip {
+			subnetId, err := osclient.GetSubnet(network.Subnets, ipPerMac)
+			if err != nil && !fallbackToDHCP {
+				return nil, fmt.Errorf("subnet not found for IP %s", ipPerMac)
 			}
+			gatewayIP[mac] = subnetId.GatewayIP
+			PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipPerMac, subnetId.ID))
+			fixedIPs = append(fixedIPs, ports.IP{
+				SubnetID:  subnetId.ID,
+				IPAddress: ipPerMac,
+			})
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if len(ipEntries) == 0 {
+	} else if len(ip) == 0 && !fallbackToDHCP {
 		PrintLog("Empty port on vcentre detected for mac " + mac)
-		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
-		if err != nil {
-			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
-		}
-		gatewayIP[mac] = subnetID.GatewayIP
 	}
-	return createOpts, nil
-}
 
-func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
-	Existingport, err := osclient.CheckIfPortExists(ctx, ipPerMac[mac], mac, network, gatewayIP)
+	port, err := ports.Create(osclient.NetworkingClient, createOpts).Extract()
 	if err != nil {
-		return nil, err
-	}
-	if Existingport != nil {
-		return Existingport, nil
-	}
-	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
-
-	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
-		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
-	}
-
-	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
-	if err != nil {
+		// If static IP assignment fails, check the fallback flag
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
-		} else {
-			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
-			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
+			// If fallback is disabled, return the error immediately
+			return nil, errors.Wrapf(err, "failed to create port with static IP %s, and fallback to DHCP is disabled", ip)
 		}
-	}
-	return osclient.createPortLowLevel(ctx, createOpts)
-}
+		// If fallback is enabled, proceed with the DHCP attempt
+		PrintLog(fmt.Sprintf("Could Not Use IP: %s, using DHCP to create Port", ip))
+		dhcpPort, dhcpErr := ports.Create(osclient.NetworkingClient, ports.CreateOpts{
+			Name:           "port-" + vmname,
+			NetworkID:      network.ID,
+			MACAddress:     mac,
+			SecurityGroups: &securityGroups,
+		}).Extract()
 
-func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
-
-	dhcpPort, dhcpErr := osclient.createPortLowLevel(ctx, createOpts)
-
-	if dhcpErr != nil {
-		return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
-	}
-	ipPerMac[mac] = []vm.IpEntry{}
-	for _, iAddr := range dhcpPort.FixedIPs {
-		dhcpSubnetId, err := osclient.GetSubnet(ctx, network.Subnets, iAddr.IPAddress)
-		if err != nil {
-			return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
+		if dhcpErr != nil {
+			return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
 		}
-		ipPerMac[mac] = append(ipPerMac[mac], vm.IpEntry{
-			IP:     iAddr.IPAddress,
-			Prefix: 0,
-		})
-		gatewayIP[mac] = dhcpSubnetId.GatewayIP
+
+		PrintLog(fmt.Sprintf("Port created with DHCP instead of static IP %s. Port ID: %s", ip, dhcpPort.ID))
+		return dhcpPort, nil
 	}
-	logMsg := "Port created with DHCP instead of static IP"
-	if len(ipPerMac[mac]) > 0 {
-		logMsg = fmt.Sprintf("Port created with DHCP instead of static IP %v", ipPerMac[mac][0])
-	}
-	PrintLog(fmt.Sprintf("%s. Port ID: %s", logMsg, dhcpPort.ID))
-	return dhcpPort, nil
+
+	PrintLog(fmt.Sprintf("Port created with ID: %s", port.ID))
+	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error) {
-	// Convert ip []string to []vm.IpEntry
-	ipEntries := make([]vm.IpEntry, len(ip))
-	for i, ipAddr := range ip {
-		ipEntries[i] = vm.IpEntry{IP: ipAddr}
-	}
-
-	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
-	if err != nil {
-		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
-		}
-		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
-		// Create with DHCP by removing fixed IPs
-		createOpts.FixedIPs = nil
-	}
-	return osclient.createPortLowLevel(ctx, createOpts)
-}
-
-func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
-	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
-}
-
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -654,7 +597,12 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		return nil, fmt.Errorf("unable to determine boot volume for VM: %s", vminfo.Name)
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating VM %s, authurl %s, tenant %s with flavor %s in availability zone %s", vminfo.Name, osclient.AuthURL, osclient.Tenant, flavor.ID, availabilityZone))
-
+	blockDevice := bootfromvolume.BlockDevice{
+		DeleteOnTermination: false,
+		DestinationType:     bootfromvolume.DestinationVolume,
+		SourceType:          bootfromvolume.SourceVolume,
+		UUID:                uuid,
+	}
 	// Create the server
 	openstacknws := []servers.Network{}
 	for idx := range networkIDs {
@@ -668,6 +616,14 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		FlavorRef:      flavor.ID,
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
+	}
+
+	schedulerHints := schedulerhints.SchedulerHints{}
+	if serverGroupID != "" {
+		schedulerHints.Group = serverGroupID
+		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
+	} else {
+		PrintLog(fmt.Sprintf("No server group specified for VM %s - using default scheduling", vminfo.Name))
 	}
 
 	if useFlavorless {
@@ -691,74 +647,62 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	// Set up boot block device with BootIndex 0
-	bootBlockDevice := servers.BlockDevice{
-		DeleteOnTermination: false,
-		DestinationType:     servers.DestinationVolume,
-		SourceType:          servers.SourceVolume,
-		UUID:                uuid,
-		BootIndex:           0,
-	}
-	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
-
-	// Prepare scheduler hints for server group if specified
-	var schedulerHints servers.SchedulerHintOptsBuilder
-	if serverGroupID != "" {
-		schedulerHints = servers.SchedulerHintOpts{
-			Group: serverGroupID,
-		}
-		PrintLog(fmt.Sprintf("Applying server group ID %s to VM %s via scheduler hints", serverGroupID, vminfo.Name))
-	} else {
-		PrintLog(fmt.Sprintf("No server group specified for VM %s - using default scheduling", vminfo.Name))
+	createOpts := bootfromvolume.CreateOptsExt{
+		CreateOptsBuilder: schedulerhints.CreateOptsExt{
+			CreateOptsBuilder: serverCreateOpts,
+			SchedulerHints:    schedulerHints,
+		},
+		BlockDevice: []bootfromvolume.BlockDevice{blockDevice},
 	}
 
 	for _, disk := range vminfo.RDMDisks {
 		// Set the Nova API version to 2.6
 		osclient.ComputeClient.Microversion = "2.60"
-		blockDevice := servers.BlockDevice{
+		blockDevice := bootfromvolume.BlockDevice{
 			DeleteOnTermination: false,
-			DestinationType:     servers.DestinationVolume,
-			SourceType:          servers.SourceVolume,
+			DestinationType:     bootfromvolume.DestinationVolume,
+			SourceType:          bootfromvolume.SourceVolume,
 			UUID:                disk.Status.CinderVolumeID,
 			DeviceType:          "lun",
 			DiskBus:             "scsi",
 			BootIndex:           -1,
 		}
-		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, blockDevice)
+		createOpts.BlockDevice = append(createOpts.BlockDevice, blockDevice)
+	}
+
+	// Wait for RDM disks to become available before creating VM
+	for _, disk := range vminfo.RDMDisks {
+		if disk.Status.CinderVolumeID == "" {
+			return nil, fmt.Errorf("RDM disk %s has empty CinderVolumeID", disk.Name)
+		}
+		err := osclient.WaitForVolume(disk.Status.CinderVolumeID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to wait for RDM volume %s to become available: %s", disk.Name, err)
+		}
 	}
 
 	// Wait for disks to become available
 	for _, disk := range vminfo.VMDisks {
-		err := osclient.WaitForVolume(ctx, disk.OpenstackVol.ID)
+		err := osclient.WaitForVolume(disk.OpenstackVol.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to wait for volume to become available: %s", err)
 		}
 	}
 
-	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+	server, err := servers.Create(osclient.ComputeClient, createOpts).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}
 
-	// Wait for server to become active
-	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
-		result, err := servers.Get(ctx, osclient.ComputeClient, server.ID).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get server status: %s", err)
-		}
-		if result.Status == "ACTIVE" {
-			break
-		}
-		if result.Status == "ERROR" {
-			return nil, fmt.Errorf("server %s went into ERROR state", server.ID)
-		}
-		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
+	err = servers.WaitForStatus(osclient.ComputeClient, server.ID, "ACTIVE", vjailbreakSettings.VMActiveWaitRetryLimit*vjailbreakSettings.VMActiveWaitIntervalSeconds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for server to become active: %s", err)
 	}
 
 	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
 	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
-		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
+		_, err := volumeattach.Create(osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
 		}).Extract()
@@ -769,8 +713,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	return server, nil
 }
 
-func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID string) (bool, error) {
-	result, err := servers.Get(ctx, osclient.ComputeClient, vmID).Extract()
+func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
+	result, err := servers.Get(osclient.ComputeClient, vmID).Extract()
 	if err != nil {
 		return false, fmt.Errorf("failed to get server: %s", err)
 	}
@@ -780,7 +724,7 @@ func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID st
 	return true, nil
 }
 
-func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error) {
+func (osclient *OpenStackClients) GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error) {
 	if len(groupNames) == 0 {
 		return nil, nil
 	}
@@ -789,20 +733,20 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, group
 		return nil, fmt.Errorf("projectName is required for security group lookup")
 	}
 
-	//check if string is UUID
+	// check if string is UUID
 	isUUID := func(s string) bool {
 		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 		return re.MatchString(s)
 	}
 
-	//build a map name -> ID
+	// build a map name -> ID
 	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create identity client: %w", err)
 	}
 
 	listOpts := projects.ListOpts{Name: projectName}
-	allPages, err := projects.List(identityClient, listOpts).AllPages(ctx)
+	allPages, err := projects.List(identityClient, listOpts).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
 	}
@@ -817,7 +761,7 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, group
 
 	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
 		TenantID: projectID,
-	}).AllPages(ctx)
+	}).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list security groups: %w", err)
 	}
@@ -848,10 +792,70 @@ func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, group
 	return groupIDs, nil
 }
 
-func (osclient *OpenStackClients) GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
+// ManageExistingVolume manages an existing volume on the storage backend into Cinder
+// Uses the manageable_volumes endpoint which is the standard Cinder manage API
+func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s", name, host, volumeType))
+
+	// Build the manage request payload
+	// This matches the format used by the tested RDM disk controller
+	volumePayload := map[string]interface{}{
+		"volume": map[string]interface{}{
+			"host":        host,
+			"ref":         ref,
+			"name":        name,
+			"volume_type": volumeType,
+			"description": "Volume managed by vjailbreak VAAI copy",
+			"bootable":    false,
+		},
+	}
+
+	PrintLog(fmt.Sprintf("OPENSTACK API: Manage volume payload: %+v", volumePayload))
+
+	var result map[string]interface{}
+	response, err := osclient.BlockStorageClient.Post(
+		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
+		volumePayload,
+		&result,
+		&gophercloud.RequestOpts{
+			OkCodes:     []int{202}, // Accepted
+			MoreHeaders: map[string]string{"OpenStack-API-Version": "volume 3.8"},
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to manage existing volume: %w", err)
+	}
+
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+
+	// Extract volume from response
+	volumeMap, ok := result["volume"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to extract volume from response: %+v", result)
+	}
+
+	// Marshal and unmarshal to convert to volumes.Volume struct
+	volumeJSON, err := json.Marshal(volumeMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal volume map: %w", err)
+	}
+
+	var volume volumes.Volume
+	if err := json.Unmarshal(volumeJSON, &volume); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal volume: %w", err)
+	}
+
+	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
+
+	return &volume, nil
+}
+func (osclient *OpenStackClients) GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching server groups for project %s", projectName))
 
-	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages(ctx)
+	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list server groups: %w", err)
 	}

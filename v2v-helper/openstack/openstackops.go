@@ -3,8 +3,9 @@
 package openstack
 
 import (
-	context "context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -14,46 +15,44 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
-	gophercloud "github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
-	netutils "github.com/platform9/vjailbreak/common/utils"
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
 
 type OpenstackOperations interface {
-	CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error)
-	WaitForVolume(ctx context.Context, volumeID string) error
-	AttachVolumeToVM(ctx context.Context, volumeID string) error
-	WaitForVolumeAttachment(ctx context.Context, volumeID string) error
-	DetachVolumeFromVM(ctx context.Context, volumeID string) error
-	SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error
-	EnableQGA(ctx context.Context, volume *volumes.Volume) error
-	SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error
-	SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error
-	GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error)
-	GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error)
-	GetNetwork(ctx context.Context, networkname string) (*networks.Network, error)
-	GetPort(ctx context.Context, portID string) (*ports.Port, error)
-	ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
-	DeletePort(ctx context.Context, portID string) error
-	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
-	CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
-	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
-	GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
-	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
-	DeleteVolume(ctx context.Context, volumeID string) error
+	CreateVolume(name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error)
+	WaitForVolume(volumeID string) error
+	AttachVolumeToVM(volumeID string) error
+	WaitForVolumeAttachment(volumeID string) error
+	DetachVolumeFromVM(volumeID string) error
+	SetVolumeUEFI(volume *volumes.Volume) error
+	EnableQGA(volume *volumes.Volume) error
+	SetVolumeImageMetadata(volume *volumes.Volume, setRDMLabel bool) error
+	SetVolumeBootable(volume *volumes.Volume) error
+	GetClosestFlavour(cpu int32, memory int32) (*flavors.Flavor, error)
+	GetFlavor(flavorId string) (*flavors.Flavor, error)
+	GetNetwork(networkname string) (*networks.Network, error)
+	GetPort(portID string) (*ports.Port, error)
+	GetSubnet(network []string, ip string) (*subnets.Subnet, error)
+	CreatePort(networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
+	CreateVM(flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+	GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
+	GetSecurityGroupIDs(groupNames []string, projectName string) ([]string, error)
+	DeleteVolume(volumeID string) error
 	FindDevice(volumeID string) (string, error)
-	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	WaitUntilVMActive(vmID string) (bool, error)
+	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 }
 
-func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {
+func validateOpenStack(insecure bool) (*utils.OpenStackClients, error) {
 	opts, err := openstack.AuthOptionsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
@@ -63,19 +62,23 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider client: %s", err)
 	}
-
-	vjbNet := netutils.NewVjbNet()
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 	if insecure {
-		vjbNet.Insecure = true
+		tlsConfig.InsecureSkipVerify = true
 	}
-	err = vjbNet.CreateSecureHTTPClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create secure HTTP client %v", err)
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+		Proxy:           http.ProxyFromEnvironment,
 	}
-	providerClient.HTTPClient = *vjbNet.GetClient()
+	providerClient.HTTPClient = http.Client{
+		Transport: transport,
+	}
+
 	// Connection Retry Block
 	for i := 0; i < constants.MaxIntervalCount; i++ {
-		err = openstack.Authenticate(ctx, providerClient, opts)
+		err = openstack.Authenticate(providerClient, opts)
 		if err == nil {
 			break
 		}
@@ -114,8 +117,8 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	}, nil
 }
 
-func NewOpenStackClients(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {
-	ostackclients, err := validateOpenStack(ctx, insecure)
+func NewOpenStackClients(insecure bool) (*utils.OpenStackClients, error) {
+	ostackclients, err := validateOpenStack(insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
 	}

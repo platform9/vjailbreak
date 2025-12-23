@@ -135,6 +135,32 @@ export default function NetworkAndStorageMappingStep({
     }
   }, [storageCopyMethod, vmWareStorage, validatedArrayCreds, onChange])
 
+  // Auto-map datastores to ArrayCreds when vendor-based is selected
+  useEffect(() => {
+    if (storageCopyMethod === 'vendor-based' && vmWareStorage.length > 0 && validatedArrayCreds.length > 0) {
+      const autoMappings: ResourceMap[] = []
+      
+      vmWareStorage.forEach(datastore => {
+        // Find ArrayCreds that has this datastore in its dataStore array
+        const matchingArrayCreds = validatedArrayCreds.find(ac => 
+          ac.status?.dataStore?.some(ds => ds.name === datastore)
+        )
+        
+        if (matchingArrayCreds) {
+          autoMappings.push({
+            source: datastore,
+            target: matchingArrayCreds.metadata.name
+          })
+        }
+      })
+      
+      // Only update if mappings changed
+      if (autoMappings.length > 0 && JSON.stringify(autoMappings) !== JSON.stringify(params.arrayCredsMappings)) {
+        onChange("arrayCredsMappings")(autoMappings)
+      }
+    }
+  }, [storageCopyMethod, vmWareStorage, validatedArrayCreds, onChange])
+
   const unmappedStorage = useMemo(
     () => {
       if (storageCopyMethod === 'vendor-based') {
