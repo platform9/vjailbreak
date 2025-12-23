@@ -874,14 +874,14 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 
 		if majorVersion >= 7 {
-			firstbootscriptname := "rhel_enable_dhcp"
-			firstbootscript := constants.RhelFirstBootScript
-			firstbootscripts = append(firstbootscripts, firstbootscriptname)
+			// firstbootscriptname := "rhel_enable_dhcp"
+			// firstbootscript := constants.RhelFirstBootScript
+			// firstbootscripts = append(firstbootscripts, firstbootscriptname)
 
-			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
-				return errors.Wrap(err, "failed to add first boot script")
-			}
-			utils.PrintLog("First boot script added successfully")
+			// if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
+			// return errors.Wrap(err, "failed to add first boot script")
+			// }
+			// utils.PrintLog("First boot script added successfully")
 		}
 	}
 
