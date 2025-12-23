@@ -112,7 +112,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-			_ = r.Client.Status().Update(ctx, vjNode) // Ignore error in defer
+			r.safeUpdateStatus(ctx, vjNode, log)
 			panic(recovered)
 		}
 	}()
@@ -121,7 +121,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-			_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
 		log.Info("Skipping master node, updating flavor", "name", vjNode.Name)
@@ -133,7 +133,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
 	if err != nil {
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-		_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
 	}
 
@@ -143,7 +143,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
 				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-				_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+				r.safeUpdateStatus(ctx, vjNode, log)
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
 
@@ -154,7 +154,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			err = r.Client.Status().Update(ctx, vjNode)
 			if err != nil {
 				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-				_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+				r.safeUpdateStatus(ctx, vjNode, log)
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
 		}
@@ -165,7 +165,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-			_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
 		}
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
@@ -179,7 +179,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		err = r.Client.Status().Update(ctx, vjNode)
 		if err != nil {
 			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-			_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
 
@@ -190,7 +190,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vmid, err := utils.CreateOpenstackVMForWorkerNode(ctx, r.Client, scope)
 	if err != nil {
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-		_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
@@ -202,7 +202,7 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	err = r.Client.Status().Update(ctx, vjNode)
 	if err != nil {
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-		_ = r.Client.Status().Update(ctx, vjNode) // Ignore error
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
@@ -289,4 +289,11 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 
 	// Always requeue after one minute
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+}
+
+// safeUpdateStatus updates the status and logs any errors without returning them
+func (r *VjailbreakNodeReconciler) safeUpdateStatus(ctx context.Context, vjNode *vjailbreakv1alpha1.VjailbreakNode, log logr.Logger) {
+	if err := r.Client.Status().Update(ctx, vjNode); err != nil {
+		log.Error(err, "failed to update vjailbreak node status", "name", vjNode.Name)
+	}
 }
