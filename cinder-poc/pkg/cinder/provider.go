@@ -426,9 +426,16 @@ func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string
 		return naa
 	}
 
+	// Check for wwn field (Pure Storage uses this)
+	if wwn, ok := data["wwn"].(string); ok {
+		naa := fmt.Sprintf("naa.%s", strings.ToLower(wwn))
+		klog.Infof("Extracted NAA from wwn: %s", naa)
+		return naa
+	}
+
 	// Check for target_wwn (for FC)
 	if wwn, ok := data["target_wwn"].(string); ok {
-		naa := fmt.Sprintf("naa.%s", wwn)
+		naa := fmt.Sprintf("naa.%s", strings.ToLower(wwn))
 		klog.Infof("Extracted NAA from target_wwn: %s", naa)
 		return naa
 	}
