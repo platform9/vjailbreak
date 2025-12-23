@@ -25,12 +25,14 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
   VERSION_NAMESPACE
 } from 'src/api/settings/settings'
+import VDDKUpload from 'src/components/VDDKUpload'
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -133,7 +135,7 @@ const DEFAULTS: SettingsForm = {
 }
 
 type FormUpdater = (prev: SettingsForm) => SettingsForm
-type TabKey = 'general' | 'retry' | 'advanced'
+type TabKey = 'general' | 'retry' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -154,10 +156,11 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
     'AUTO_FSTAB_UPDATE'
-  ]
+  ],
+  vddk: []
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced', 'vddk']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -175,6 +178,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     label: 'Advanced',
     helper: 'Tune integration defaults and automation flags for OpenStack and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
+  },
+  vddk: {
+    label: 'VDDK Upload',
+    helper: 'Upload VDDK tar files to be extracted to /home/ubuntu on the server.',
+    icon: <CloudUploadIcon fontSize="small" />
   }
 }
 
@@ -954,6 +962,10 @@ export default function GlobalSettingsPage() {
               />
             ))}
           </Box>
+        </TabPanel>
+
+        <TabPanel current={activeTab} value="vddk">
+          <VDDKUpload />
         </TabPanel>
 
         <Box sx={{ flexGrow: 1 }} />
