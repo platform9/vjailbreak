@@ -54,29 +54,41 @@ export const useVMwareMachinesQuery = ({
       let filteredItems: VMwareMachine[] = vmResponse.items
 
       if (clusterName && datacenterName) {
-        
         const isNoCluster = clusterName.startsWith('no-cluster-')
-        
         if (isNoCluster) {
           const datacenterClusterNames = new Set<string>()
-          
-          clustersResponse.items.forEach(cluster => {
+
+          clustersResponse.items.forEach((cluster) => {
             const annotations = (cluster.metadata as any)?.annotations || {}
             const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
             if (clusterDC === datacenterName) {
               datacenterClusterNames.add(cluster.metadata.name)
             }
           })
-          
+
           filteredItems = vmResponse.items.filter((vm) => {
-            const vmClusterLabel = vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] || ''
+            const vmClusterLabel =
+              vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] || ''
             return datacenterClusterNames.has(vmClusterLabel)
           })
         } else {
-          filteredItems = vmResponse.items.filter((vm) => {
-            const vmClusterLabel = vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster']
-            return vmClusterLabel === clusterName
+          const selectedClusterResource = clustersResponse.items.find((cluster) => {
+            const annotations = (cluster.metadata as any)?.annotations || {}
+            const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
+
+            return cluster.spec.name === clusterName && clusterDC === datacenterName
           })
+
+          const expectedClusterLabel = selectedClusterResource?.metadata.name
+
+          if (expectedClusterLabel) {
+            filteredItems = vmResponse.items.filter((vm) => {
+              const vmClusterLabel = vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster']
+              return vmClusterLabel === expectedClusterLabel
+            })
+          } else {
+            filteredItems = []
+          }
         }
       }
 
