@@ -188,7 +188,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	// Check if the datacenter exists (only if datacenter is provided)
 	if datacenter != "" {
 		finder := find.NewFinder(c, false)
-		_, err = finder.Datacenter(context.Background(), datacenter)
+		_, err = finder.Datacenter(ctx, datacenter)
 		if err != nil {
 			return ValidationResult{
 				Valid:   false,
