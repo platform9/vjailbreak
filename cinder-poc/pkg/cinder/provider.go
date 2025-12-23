@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -263,6 +264,7 @@ func (c *CinderStorageProvider) MapVolumeToGroup(ctx context.Context, initiatorG
 	}
 	vol := vols[0]
 
+	var connectionInfo map[string]interface{}
 	for _, iqn := range iqns {
 		connector := map[string]interface{}{
 			"initiator": iqn,
@@ -270,14 +272,21 @@ func (c *CinderStorageProvider) MapVolumeToGroup(ctx context.Context, initiatorG
 			"platform":  "VMware_ESXi",
 			"os_type":   "vmware",
 		}
-		if _, err := c.initializeConnection(vol.ID, connector); err != nil {
+		resp, err := c.initializeConnection(vol.ID, connector)
+		if err != nil {
 			return storage.Volume{}, fmt.Errorf("initialize connection failed for %s: %w", iqn, err)
+		}
+		// Store the first connection info response to extract NAA
+		if connectionInfo == nil {
+			connectionInfo = resp
+			klog.Infof("Connection info response: %+v", resp)
 		}
 		klog.Infof("Initialized connection for volume %s to iqn %s", vol.Name, iqn)
 	}
 	// update returned volume info
-	targetVolume.NAA = c.getVolumeNAA(&vol)
+	targetVolume.NAA = c.extractNAAFromConnectionInfo(connectionInfo)
 	targetVolume.ID = vol.ID
+	klog.Infof("Extracted NAA: %s for volume %s", targetVolume.NAA, vol.Name)
 	return targetVolume, nil
 }
 
@@ -381,6 +390,53 @@ func (c *CinderStorageProvider) getVolumeNAA(vol *volumes.Volume) string {
 	return ""
 }
 
+// extractNAAFromConnectionInfo extracts the NAA identifier from Cinder's initialize_connection response
+func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string]interface{}) string {
+	if connInfo == nil {
+		return ""
+	}
+
+	// The response structure is: { "connection_info": { "data": { ... } } }
+	connectionInfo, ok := connInfo["connection_info"].(map[string]interface{})
+	if !ok {
+		klog.Warningf("No connection_info in response")
+		return ""
+	}
+
+	data, ok := connectionInfo["data"].(map[string]interface{})
+	if !ok {
+		klog.Warningf("No data in connection_info")
+		return ""
+	}
+
+	// For Pure Storage, NAA is typically in device_path or target_wwn or explicitly as "naa"
+	// Example: device_path = "/dev/disk/by-id/scsi-3naa.624a937011f9af6d5a344f0500016e27"
+	if devicePath, ok := data["device_path"].(string); ok {
+		// Extract NAA from device path
+		if idx := strings.Index(devicePath, "naa."); idx != -1 {
+			naa := devicePath[idx:]
+			klog.Infof("Extracted NAA from device_path: %s", naa)
+			return naa
+		}
+	}
+
+	// Check for explicit "naa" field
+	if naa, ok := data["naa"].(string); ok {
+		klog.Infof("Found explicit NAA field: %s", naa)
+		return naa
+	}
+
+	// Check for target_wwn (for FC)
+	if wwn, ok := data["target_wwn"].(string); ok {
+		naa := fmt.Sprintf("naa.%s", wwn)
+		klog.Infof("Extracted NAA from target_wwn: %s", naa)
+		return naa
+	}
+
+	klog.Warningf("Could not extract NAA from connection info: %+v", data)
+	return ""
+}
+
 func (c *CinderStorageProvider) getVolumeSerial(vol *volumes.Volume) string {
 	return vol.ID
 }
@@ -392,11 +448,35 @@ func (c *CinderStorageProvider) initializeConnection(volumeID string, connector 
 			"connector": connector,
 		},
 	}
+	klog.Infof("Calling initialize_connection for volume %s with connector: %+v", volumeID, connector)
 	var resp map[string]interface{}
-	_, err := c.client.Post(url, req, &resp, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	httpResp, err := c.client.Post(url, req, &resp, &gophercloud.RequestOpts{
+		OkCodes: []int{200},
+	})
 	if err != nil {
-		return nil, err
+		klog.Errorf("initialize_connection failed: %v", err)
+		klog.Errorf("Error type: %T", err)
+		if httpResp != nil {
+			klog.Errorf("HTTP Status: %d", httpResp.StatusCode)
+		}
+		// Try to parse error details from gophercloud error
+		switch e := err.(type) {
+		case gophercloud.ErrUnexpectedResponseCode:
+			klog.Errorf("ErrUnexpectedResponseCode - Expected: %v, Actual: %d, Body: %s",
+				e.Expected, e.Actual, string(e.Body))
+		case *gophercloud.ErrUnexpectedResponseCode:
+			klog.Errorf("*ErrUnexpectedResponseCode - Expected: %v, Actual: %d, Body: %s",
+				e.Expected, e.Actual, string(e.Body))
+		case gophercloud.ErrDefault500:
+			klog.Errorf("ErrDefault500 - Body: %s", string(e.Body))
+		case *gophercloud.ErrDefault500:
+			klog.Errorf("*ErrDefault500 - Body: %s", string(e.Body))
+		default:
+			klog.Errorf("Unknown error type, full error: %+v", err)
+		}
+		return nil, fmt.Errorf("%v", err)
 	}
+	klog.Infof("initialize_connection response: %+v", resp)
 	// response has key "connection_info" or "initialize_connection"
 	// return raw response for caller to parse
 	return resp, nil
