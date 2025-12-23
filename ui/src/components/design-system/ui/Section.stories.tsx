@@ -5,7 +5,7 @@ import SectionHeader from './SectionHeader'
 import FieldLabel from './FieldLabel'
 
 const meta: Meta<typeof Section> = {
-  title: 'Design System/Section',
+  title: 'Components/Design System/Section',
   component: Section,
   parameters: {
     layout: 'centered'

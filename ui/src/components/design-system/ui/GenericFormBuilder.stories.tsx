@@ -3,7 +3,7 @@ import { fn } from '@storybook/test'
 import GenericFormBuilder from './GenericFormBuilder'
 
 const meta: Meta<typeof GenericFormBuilder> = {
-  title: 'Design System/GenericFormBuilder',
+  title: 'Components/Design System/GenericFormBuilder',
   component: GenericFormBuilder,
   parameters: {
     layout: 'padded'

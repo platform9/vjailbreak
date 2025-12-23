@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import SectionHeader from './SectionHeader'
 
 const meta: Meta<typeof SectionHeader> = {
-  title: 'Design System/SectionHeader',
+  title: 'Components/Design System/SectionHeader',
   component: SectionHeader,
   parameters: {
     layout: 'centered'

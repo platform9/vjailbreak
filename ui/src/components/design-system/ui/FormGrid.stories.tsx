@@ -4,7 +4,7 @@ import FieldLabel from './FieldLabel'
 import FormGrid from './FormGrid'
 
 const meta: Meta<typeof FormGrid> = {
-  title: 'Design System/FormGrid',
+  title: 'Components/Design System/FormGrid',
   component: FormGrid,
   args: {
     minWidth: 320,

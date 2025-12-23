@@ -3,7 +3,7 @@ import { Stack } from '@mui/material'
 import ActionButton from './ActionButton'
 
 const meta: Meta<typeof ActionButton> = {
-  title: 'Design System/ActionButton',
+  title: 'Components/Design System/ActionButton',
   component: ActionButton,
   args: {
     children: 'Primary CTA'

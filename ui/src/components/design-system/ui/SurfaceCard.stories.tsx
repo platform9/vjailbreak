@@ -4,7 +4,7 @@ import SurfaceCard from './SurfaceCard'
 import ActionButton from './ActionButton'
 
 const meta: Meta<typeof SurfaceCard> = {
-  title: 'Design System/SurfaceCard',
+  title: 'Components/Design System/SurfaceCard',
   component: SurfaceCard,
   args: {
     title: 'Cluster Overview',

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import FieldLabel from './FieldLabel'
 
 const meta: Meta<typeof FieldLabel> = {
-  title: 'Design System/FieldLabel',
+  title: 'Components/Design System/FieldLabel',
   component: FieldLabel,
   args: {
     label: 'Cluster Name',

@@ -3,7 +3,7 @@ import { Box, Button } from '@mui/material'
 import Row from './Row'
 
 const meta: Meta<typeof Row> = {
-  title: 'Design System/Row',
+  title: 'Components/Design System/Row',
   component: Row,
   parameters: {
     layout: 'centered'

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import ToggleField from './ToggleField'
 
 const meta: Meta<typeof ToggleField> = {
-  title: 'Design System/ToggleField',
+  title: 'Components/Design System/ToggleField',
   component: ToggleField,
   args: {
     label: 'Enable data copy throttling',

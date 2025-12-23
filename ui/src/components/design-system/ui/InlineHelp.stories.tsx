@@ -3,7 +3,7 @@ import { Stack } from '@mui/material'
 import InlineHelp from './InlineHelp'
 
 const meta: Meta<typeof InlineHelp> = {
-  title: 'Design System/InlineHelp',
+  title: 'Components/Design System/InlineHelp',
   component: InlineHelp,
   parameters: {
     layout: 'centered'

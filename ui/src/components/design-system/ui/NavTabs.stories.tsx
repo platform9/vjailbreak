@@ -4,7 +4,7 @@ import { Box } from '@mui/material'
 import { NavTabs, NavTab } from './NavTabs'
 
 const meta: Meta<typeof NavTabs> = {
-  title: 'Design System/NavTabs',
+  title: 'Components/Design System/NavTabs',
   component: NavTabs,
   args: {
     value: 0

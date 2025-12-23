@@ -5,7 +5,7 @@ import DrawerShell, { DrawerHeader, DrawerBody, DrawerFooter } from './DrawerShe
 import ActionButton from './ActionButton'
 
 const meta: Meta<typeof DrawerShell> = {
-  title: 'Design System/DrawerShell',
+  title: 'Components/Design System/DrawerShell',
   component: DrawerShell,
   parameters: {
     layout: 'fullscreen'
