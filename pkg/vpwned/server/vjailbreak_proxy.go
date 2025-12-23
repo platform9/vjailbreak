@@ -1,8 +1,14 @@
 package server
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -495,4 +501,225 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		logrus.WithFields(logrus.Fields{"func": fn, "kind": kind, "name": name, "namespace": namespace}).Error("Unknown credentials kind")
 		return nil, fmt.Errorf("unknown credentials kind: %s", kind)
 	}
+}
+
+func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer) error {
+	const fn = "UploadVDDK"
+	logrus.WithField("func", fn).Info("Starting VDDK upload via gRPC stream")
+
+	var uploadID string
+	var filename string
+	var totalBytesReceived int64
+	var tempFilePath string
+	var tempFile *os.File
+
+	extractDir := "/home/ubuntu"
+	tempDir := "/tmp/vddk-uploads"
+
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to create temp directory")
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Error("Error receiving stream")
+			if tempFile != nil {
+				tempFile.Close()
+				os.Remove(tempFilePath)
+			}
+			return fmt.Errorf("failed to receive stream: %w", err)
+		}
+
+		if uploadID == "" {
+			uploadID = req.UploadId
+			if uploadID == "" {
+				uploadID = fmt.Sprintf("vddk_%d", time.Now().UnixNano())
+			}
+			filename = req.Filename
+			tempFilePath = filepath.Join(tempDir, filename)
+
+			logrus.WithFields(logrus.Fields{
+				"func":      fn,
+				"upload_id": uploadID,
+				"filename":  filename,
+			}).Info("Initializing VDDK upload")
+
+			tempFile, err = os.Create(tempFilePath)
+			if err != nil {
+				logrus.WithField("func", fn).WithError(err).Error("Failed to create temp file")
+				return fmt.Errorf("failed to create temp file: %w", err)
+			}
+			defer tempFile.Close()
+		}
+
+		chunk := req.FileChunk
+		if len(chunk) > 0 {
+			n, err := tempFile.Write(chunk)
+			if err != nil {
+				logrus.WithField("func", fn).WithError(err).Error("Failed to write chunk")
+				os.Remove(tempFilePath)
+				return fmt.Errorf("failed to write chunk: %w", err)
+			}
+			totalBytesReceived += int64(n)
+
+			logrus.WithFields(logrus.Fields{
+				"func":          fn,
+				"upload_id":     uploadID,
+				"chunk_index":   req.ChunkIndex,
+				"bytes_written": n,
+				"total_bytes":   totalBytesReceived,
+			}).Debug("Chunk written")
+		}
+	}
+
+	if tempFile != nil {
+		if err := tempFile.Sync(); err != nil {
+			logrus.WithField("func", fn).WithError(err).Error("Failed to sync file")
+			os.Remove(tempFilePath)
+			return fmt.Errorf("failed to sync file: %w", err)
+		}
+		tempFile.Close()
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":        fn,
+		"upload_id":   uploadID,
+		"file_path":   tempFilePath,
+		"total_bytes": totalBytesReceived,
+	}).Info("VDDK tar file uploaded, starting extraction")
+
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to create extraction directory")
+		return fmt.Errorf("failed to create extraction directory: %w", err)
+	}
+
+	if err := extractTarFile(tempFilePath, extractDir); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to extract tar file")
+		return fmt.Errorf("failed to extract tar file: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":        fn,
+		"upload_id":   uploadID,
+		"extract_dir": extractDir,
+	}).Info("VDDK tar file extracted successfully")
+
+	response := &api.UploadVDDKResponse{
+		UploadId:           uploadID,
+		Status:             "success",
+		Message:            "File uploaded and extracted successfully",
+		ExtractDir:         extractDir,
+		BytesReceived:      totalBytesReceived,
+		ProgressPercentage: 100.0,
+	}
+
+	if err := stream.SendAndClose(response); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to send response")
+		return fmt.Errorf("failed to send response: %w", err)
+	}
+
+	return nil
+}
+
+func extractTarFile(tarPath, destDir string) error {
+	const fn = "extractTarFile"
+	logrus.WithFields(logrus.Fields{
+		"func":     fn,
+		"tar_path": tarPath,
+		"dest_dir": destDir,
+	}).Info("Starting tar extraction")
+
+	tarFile, err := os.Open(tarPath)
+	if err != nil {
+		return fmt.Errorf("failed to open tar file: %w", err)
+	}
+	defer tarFile.Close()
+
+	var tarReader *tar.Reader
+
+	if strings.HasSuffix(tarPath, ".tar.gz") || strings.HasSuffix(tarPath, ".tgz") {
+		gzReader, err := gzip.NewReader(tarFile)
+		if err != nil {
+			return fmt.Errorf("failed to create gzip reader: %w", err)
+		}
+		defer gzReader.Close()
+		tarReader = tar.NewReader(gzReader)
+	} else if strings.HasSuffix(tarPath, ".tar") {
+		tarReader = tar.NewReader(tarFile)
+	} else {
+		cmd := exec.Command("tar", "-xzf", tarPath, "-C", destDir)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("tar command failed: %w, output: %s", err, string(output))
+		}
+		logrus.WithField("func", fn).Info("Extracted using tar command")
+		return nil
+	}
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read tar header: %w", err)
+		}
+
+		target := filepath.Join(destDir, header.Name)
+
+		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid file path in tar: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", target, err)
+			}
+			logrus.WithFields(logrus.Fields{"func": fn, "dir": target}).Debug("Created directory")
+
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for %s: %w", target, err)
+			}
+
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("failed to create file %s: %w", target, err)
+			}
+
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				outFile.Close()
+				return fmt.Errorf("failed to write file %s: %w", target, err)
+			}
+			outFile.Close()
+			logrus.WithFields(logrus.Fields{"func": fn, "file": target}).Debug("Extracted file")
+
+		case tar.TypeSymlink:
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return fmt.Errorf("failed to create symlink %s: %w", target, err)
+			}
+			logrus.WithFields(logrus.Fields{"func": fn, "symlink": target}).Debug("Created symlink")
+
+		default:
+			logrus.WithFields(logrus.Fields{
+				"func":     fn,
+				"name":     header.Name,
+				"typeflag": header.Typeflag,
+			}).Warn("Unsupported tar entry type, skipping")
+		}
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":     fn,
+		"tar_path": tarPath,
+		"dest_dir": destDir,
+	}).Info("Tar extraction completed successfully")
+
+	return nil
 }

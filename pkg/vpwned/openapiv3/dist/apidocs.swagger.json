@@ -866,6 +866,39 @@
         ]
       }
     },
+    "/vpw/v1/upload_vddk": {
+      "post": {
+        "operationId": "VailbreakProxy_UploadVDDK",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUploadVDDKResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": " (streaming inputs)",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUploadVDDKRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/validate_openstack_ip": {
       "post": {
         "operationId": "VailbreakProxy_ValidateOpenstackIp",
@@ -1582,6 +1615,54 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "apiUploadVDDKRequest": {
+      "type": "object",
+      "properties": {
+        "fileChunk": {
+          "type": "string",
+          "format": "byte"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "chunkIndex": {
+          "type": "string",
+          "format": "int64"
+        },
+        "totalChunks": {
+          "type": "string",
+          "format": "int64"
+        },
+        "uploadId": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUploadVDDKResponse": {
+      "type": "object",
+      "properties": {
+        "uploadId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "extractDir": {
+          "type": "string"
+        },
+        "bytesReceived": {
+          "type": "string",
+          "format": "int64"
+        },
+        "progressPercentage": {
+          "type": "number",
+          "format": "float"
         }
       }
     },

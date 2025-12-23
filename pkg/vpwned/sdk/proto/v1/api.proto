@@ -514,6 +514,23 @@ message RevalidateCredentialsResponse {
   string message = 1;
 }
 
+message UploadVDDKRequest {
+  bytes file_chunk = 1;
+  string filename = 2;
+  int64 chunk_index = 3;
+  int64 total_chunks = 4;
+  string upload_id = 5;
+}
+
+message UploadVDDKResponse {
+  string upload_id = 1;
+  string status = 2;
+  string message = 3;
+  string extract_dir = 4;
+  int64 bytes_received = 5;
+  float progress_percentage = 6;
+}
+
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
@@ -525,6 +542,13 @@ service VailbreakProxy {
     rpc RevalidateCredentials(RevalidateCredentialsRequest) returns (RevalidateCredentialsResponse) {
       option (google.api.http) = {
         post: "/vpw/v1/revalidate_credentials"
+        body: "*"
+      };
+    }
+
+    rpc UploadVDDK(stream UploadVDDKRequest) returns (UploadVDDKResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/upload_vddk"
         body: "*"
       };
     }
