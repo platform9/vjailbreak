@@ -523,7 +523,6 @@ runcmd:
                   <FieldLabel
                     label="OS"
                     tooltip="Ubuntu Jammy is only supported for now."
-                    required
                     helperText=" "
                   />
                 </FieldLabelSlot>
