@@ -96,11 +96,11 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 		return "", errors.Wrap(err, "failed to convert host name to k8s name")
 	}
 
-	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterName, credName)
-	// If it's a dummy cluster for a specific DC, we generate the correct k8s name for reference
-	if clusterName == constants.VMwareClusterNameStandAloneESX && datacenter != "" {
-		clusterk8sName, err = GetK8sCompatibleVMWareObjectName(fmt.Sprintf("%s-%s", clusterName, datacenter), credName)
+	clusterK8sID := clusterName
+	if datacenter != "" {
+		clusterK8sID = fmt.Sprintf("%s-%s", clusterName, datacenter)
 	}
+	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, credName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -153,7 +153,7 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 	log := scope.Logger
 
 	clusterK8sID := cluster.Name
-	if cluster.Name == constants.VMwareClusterNameStandAloneESX && cluster.Datacenter != "" {
+	if cluster.Datacenter != "" {
 		clusterK8sID = fmt.Sprintf("%s-%s", cluster.Name, cluster.Datacenter)
 	}
 
