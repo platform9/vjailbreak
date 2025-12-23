@@ -320,8 +320,8 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	clusterNames := make(map[string]bool)
 	for _, cluster := range clusters {
 		clusterK8sID := cluster.Name
-		if cluster.Name == constants.VMwareClusterNameStandAloneESX && cluster.Datacenter != "" {
-			clusterK8sID = fmt.Sprintf("%s-%s", cluster.Name, cluster.Datacenter)
+		if cluster.Datacenter != "" {
+		    clusterK8sID = fmt.Sprintf("%s-%s", cluster.Name, cluster.Datacenter)
 		}
 		cname, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
 		if err != nil {
