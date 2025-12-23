@@ -75,8 +75,10 @@ export const useVMwareMachinesQuery = ({
           const selectedClusterResource = clustersResponse.items.find((cluster) => {
             const annotations = (cluster.metadata as any)?.annotations || {}
             const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
+            const matchesDisplayName = cluster.spec.name === clusterName && clusterDC === datacenterName
+            const matchesK8sName = cluster.metadata.name === clusterName && clusterDC === datacenterName
 
-            return cluster.spec.name === clusterName && clusterDC === datacenterName
+            return matchesDisplayName || matchesK8sName
           })
 
           const expectedClusterLabel = selectedClusterResource?.metadata.name
