@@ -73,7 +73,16 @@ sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 passwo
 sudo chmod 644 /etc/htpasswd
 sudo chown root:root /etc/htpasswd
 
-cat /etc/pf9/pf9-htpasswd.sh >> /home/ubuntu/.bashrc
+# Install vjbctl as a system-wide command in /usr/local/bin so it's available to all users (including root)
+sudo tee /usr/local/bin/vjbctl > /dev/null << 'EOF'
+#!/bin/bash
+# Source the main script to load all functions (user management, support-bundle, etc.)
+source /etc/pf9/pf9-htpasswd.sh
+# Call the main entry point function, passing all command-line arguments
+# "$@" expands to all arguments passed to this script (e.g., "user create admin" becomes three separate args)
+_pf9_ht_main "$@"
+EOF
+sudo chmod +x /usr/local/bin/vjbctl
 
 # Function to wait for K3s to be ready
 wait_for_k3s() {
