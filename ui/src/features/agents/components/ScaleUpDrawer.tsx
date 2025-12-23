@@ -357,7 +357,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             </FormGrid>
 
             <Box sx={{ display: 'grid', gap: 1.5 }}>
-              <InlineHelp tone="warning">
+              <InlineHelp tone="warning" icon="warning" variant="outline">
                 Select a flavor with disk &gt; 16GB for production workloads.
               </InlineHelp>
 

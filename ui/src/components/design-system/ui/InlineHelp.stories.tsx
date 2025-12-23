@@ -52,6 +52,38 @@ export const AllTones: Story = {
   )
 }
 
+export const Variants: Story = {
+  render: () => (
+    <Stack spacing={2} sx={{ width: 400 }}>
+      <InlineHelp tone="default" variant="contained">
+        Contained (default)
+      </InlineHelp>
+      <InlineHelp tone="default" variant="outline">
+        Outline
+      </InlineHelp>
+    </Stack>
+  )
+}
+
+export const Icons: Story = {
+  render: () => (
+    <Stack spacing={2} sx={{ width: 400 }}>
+      <InlineHelp tone="default" icon="auto">
+        Auto icon (defaults to info)
+      </InlineHelp>
+      <InlineHelp tone="positive" icon="auto">
+        Auto icon with positive tone
+      </InlineHelp>
+      <InlineHelp tone="warning" icon="warning">
+        Explicit warning icon
+      </InlineHelp>
+      <InlineHelp tone="critical" icon="danger">
+        Explicit danger icon
+      </InlineHelp>
+    </Stack>
+  )
+}
+
 export const LongContent: Story = {
   args: {
     tone: 'default',

@@ -1,46 +1,92 @@
 import { Box, Typography, BoxProps, Theme } from '@mui/material'
-import { forwardRef } from 'react'
+import {
+  CheckCircleOutline,
+  ErrorOutline,
+  InfoOutlined,
+  WarningAmberOutlined
+} from '@mui/icons-material'
+import { forwardRef, type ReactElement } from 'react'
 
 export type InlineHelpTone = 'default' | 'positive' | 'critical' | 'warning'
+
+export type InlineHelpVariant = 'contained' | 'outline'
+
+export type InlineHelpIcon = 'none' | 'auto' | 'info' | 'success' | 'warning' | 'danger'
 
 export interface InlineHelpProps extends BoxProps {
   children: React.ReactNode
   tone?: InlineHelpTone
+
+  variant?: InlineHelpVariant
+  icon?: InlineHelpIcon | ReactElement
 }
 
-const getToneColors = (tone: InlineHelpTone, theme: Theme) => {
+const getToneStyles = (tone: InlineHelpTone, variant: InlineHelpVariant, theme: Theme) => {
   switch (tone) {
     case 'positive':
       return {
-        color: theme.palette.common.white,
-        backgroundColor: theme.palette.success.light,
+        color: variant === 'outline' ? theme.palette.success.main : theme.palette.common.white,
+        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.success.light,
         borderColor: theme.palette.success.main
       }
     case 'critical':
       return {
         color: theme.palette.error.main,
-        backgroundColor: theme.palette.error.light,
+        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.error.light,
         borderColor: theme.palette.error.main
       }
     case 'warning':
       return {
-        color: theme.palette.common.white,
-        backgroundColor: theme.palette.warning.light,
+        color: variant === 'outline' ? theme.palette.warning.main : theme.palette.common.white,
+        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.warning.light,
         borderColor: theme.palette.warning.main
       }
     default:
       return {
         color: theme.palette.text.secondary,
-        backgroundColor: theme.palette.grey[100],
+        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.grey[100],
         borderColor: theme.palette.grey[300]
       }
   }
 }
 
+const getAutoIcon = (tone: InlineHelpTone) => {
+  switch (tone) {
+    case 'positive':
+      return 'success'
+    case 'critical':
+      return 'danger'
+    case 'warning':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
+const getIconNode = (icon: InlineHelpIcon, tone: InlineHelpTone) => {
+  const resolved = icon === 'auto' ? getAutoIcon(tone) : icon
+
+  switch (resolved) {
+    case 'success':
+      return <CheckCircleOutline fontSize="inherit" />
+    case 'warning':
+      return <WarningAmberOutlined fontSize="inherit" />
+    case 'danger':
+      return <ErrorOutline fontSize="inherit" />
+    case 'info':
+      return <InfoOutlined fontSize="inherit" />
+    case 'none':
+    default:
+      return null
+  }
+}
+
 const InlineHelp = forwardRef<HTMLDivElement, InlineHelpProps>(function InlineHelp(
-  { children, tone = 'default', ...rest },
+  { children, tone = 'default', variant = 'contained', icon = 'none', ...rest },
   ref
 ) {
+  const iconNode = typeof icon === 'string' ? getIconNode(icon, tone) : icon
+
   return (
     <Box
       ref={ref}
@@ -49,11 +95,23 @@ const InlineHelp = forwardRef<HTMLDivElement, InlineHelpProps>(function InlineHe
         borderRadius: 1,
         border: 1,
         fontSize: '0.875rem',
-        ...getToneColors(tone, theme)
+        ...getToneStyles(tone, variant, theme),
+        ...(iconNode
+          ? {
+              display: 'flex',
+              gap: 1,
+              alignItems: 'center'
+            }
+          : null)
       })}
       {...rest}
     >
-      <Typography variant="body2">{children}</Typography>
+      {iconNode ? (
+        <Box sx={{ fontSize: 18, lineHeight: 1, flexShrink: 0, display: 'flex' }}>{iconNode}</Box>
+      ) : null}
+      <Typography variant="body2" component="div">
+        {children}
+      </Typography>
     </Box>
   )
 })

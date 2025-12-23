@@ -440,6 +440,7 @@ runcmd:
       title="Bare metal config"
       subtitle="Configure MAAS connection, boot source selection, and cloud-init user-data."
       data-testid="bm-config-card"
+      sx={{ borderRadius: 'none' }}
       footer={
         <Row justifyContent="flex-end" gap={2}>
           <ActionButton tone="secondary" onClick={handleCancel} data-testid="bm-config-cancel">

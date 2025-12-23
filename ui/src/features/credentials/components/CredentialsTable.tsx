@@ -470,7 +470,7 @@ export default function CredentialsTable() {
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 180px)', width: '100%', overflow: 'hidden' }}>
+    <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
       <CommonDataGrid
         rows={allCredentials}
         columns={tableColumns}

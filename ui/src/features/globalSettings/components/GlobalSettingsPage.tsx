@@ -33,7 +33,8 @@ import {
 
 const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
-  height: 'calc(100vh - 96px)',
+  height: '100%',
+  minHeight: 0,
   padding: theme.spacing(4),
   boxSizing: 'border-box',
   display: 'flex',
@@ -691,7 +692,8 @@ export default function GlobalSettingsPage() {
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 'calc(96vh - 92px)'
+          flex: 1,
+          minHeight: 0
         }}
       >
         <Tabs
