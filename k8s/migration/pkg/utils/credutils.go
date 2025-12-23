@@ -921,10 +921,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
-	clusterK8sID := vminfo.ClusterName
-	if datacenter != "" {
-		clusterK8sID = fmt.Sprintf("%s-%s", vminfo.ClusterName, datacenter)
-	}
+	clusterK8sID := GetClusterK8sID(vminfo.ClusterName, datacenter)
 	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
@@ -1695,7 +1692,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
 	if clusterName == "" {
-		clusterName = fmt.Sprintf("%s-%s", constants.VMwareClusterNameStandAloneESX, vmDatacenter)
+		clusterName = GetClusterK8sID(clusterName, vmDatacenter)
 	}
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
 		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())

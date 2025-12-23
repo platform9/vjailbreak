@@ -20,6 +20,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// GetClusterK8sID returns a unified identifier for a cluster
+func GetClusterK8sID(clusterName, datacenter string) string {
+	baseName := clusterName
+	if baseName == "" {
+		baseName = constants.VMwareClusterNameStandAloneESX
+	}
+
+	if datacenter != "" {
+		return fmt.Sprintf("%s-%s", baseName, datacenter)
+	}
+
+	return baseName
+}
+
 // GetVMwareClustersAndHosts retrieves a list of all available VMware clusters and their hosts
 func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScope) ([]VMwareClusterInfo, error) {
 	// Pre-allocate clusters slice with initial capacity
@@ -152,10 +166,7 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, cluster VMwareClusterInfo) error {
 	log := scope.Logger
 
-	clusterK8sID := cluster.Name
-	if cluster.Datacenter != "" {
-		clusterK8sID = fmt.Sprintf("%s-%s", cluster.Name, cluster.Datacenter)
-	}
+	clusterK8sID := GetClusterK8sID(cluster.Name, cluster.Datacenter)
 
 	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
 	if err != nil {
@@ -319,10 +330,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	// Create a map of valid cluster names for O(1) lookups
 	clusterNames := make(map[string]bool)
 	for _, cluster := range clusters {
-		clusterK8sID := cluster.Name
-		if cluster.Datacenter != "" {
-		    clusterK8sID = fmt.Sprintf("%s-%s", cluster.Name, cluster.Datacenter)
-		}
+		clusterK8sID := GetClusterK8sID(cluster.Name, cluster.Datacenter)
 		cname, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
 		if err != nil {
 			return errors.Wrap(err, "failed to convert cluster name to k8s name")

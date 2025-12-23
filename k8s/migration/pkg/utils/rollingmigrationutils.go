@@ -828,7 +828,19 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("BMConfig is not valid")
 	}
 
-	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName)
+	vmwareCreds, err = GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials")
+	}
+
+	vmwareCredsInfo, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, vmwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials from secret")
+	}
+
+	clusterK8sID := GetClusterK8sID(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCredsInfo.Datacenter)
+
+	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to filter vmware hosts for cluster")
 	}
