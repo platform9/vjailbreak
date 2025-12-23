@@ -47,60 +47,67 @@ export default function VDDKUpload() {
     setUploadResult(null)
 
     try {
-      const reader = new FileReader()
+      const CHUNK_SIZE = 1024 * 1024 // 1MB chunks
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+      const uploadId = `ui_upload_${Date.now()}`
       
-      reader.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percentComplete = (e.loaded / e.total) * 50
-          setProgress(percentComplete)
-        }
-      }
+      let uploadedBytes = 0
 
-      reader.onload = async () => {
-        try {
-          const base64 = (reader.result as string).split(',')[1]
-          
-          setProgress(50)
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const chunk = file.slice(start, end)
 
-          const response = await axios.post<UploadResponse>(
-            '/dev-api/sdk/vpw/v1/upload_vddk',
-            {
-              upload_id: `ui_upload_${Date.now()}`,
-              filename: file.name,
-              file_chunk: base64,
-              chunk_index: 0,
-              total_chunks: 1
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              onUploadProgress: (progressEvent) => {
-                if (progressEvent.total) {
-                  const percentComplete = 50 + (progressEvent.loaded / progressEvent.total) * 50
-                  setProgress(percentComplete)
+        const reader = new FileReader()
+        
+        await new Promise<void>((resolve, reject) => {
+          reader.onload = async () => {
+            try {
+              const base64 = (reader.result as string).split(',')[1]
+              
+              const response = await axios.post<UploadResponse>(
+                '/dev-api/sdk/vpw/v1/upload_vddk',
+                {
+                  upload_id: uploadId,
+                  filename: file.name,
+                  file_chunk: base64,
+                  chunk_index: chunkIndex,
+                  total_chunks: totalChunks
+                },
+                {
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
                 }
+              )
+
+              uploadedBytes += chunk.size
+              const percentComplete = (uploadedBytes / file.size) * 100
+              setProgress(percentComplete)
+
+              // If this is the last chunk, save the result
+              if (chunkIndex === totalChunks - 1) {
+                setUploadResult(response.data)
               }
+
+              resolve()
+            } catch (err: any) {
+              reject(err)
             }
-          )
+          }
 
-          setProgress(100)
-          setUploadResult(response.data)
-        } catch (err: any) {
-          setError(err.response?.data?.message || err.message || 'Upload failed')
-        } finally {
-          setUploading(false)
-        }
+          reader.onerror = () => {
+            reject(new Error('Failed to read chunk'))
+          }
+
+          reader.readAsDataURL(chunk)
+        })
       }
 
-      reader.onerror = () => {
-        setError('Failed to read file')
-        setUploading(false)
-      }
-
-      reader.readAsDataURL(file)
+      setProgress(100)
     } catch (err: any) {
-      setError(err.message || 'Upload failed')
+      setError(err.response?.data?.message || err.message || 'Upload failed')
+    } finally {
       setUploading(false)
     }
   }

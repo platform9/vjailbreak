@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -33,9 +34,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
+type uploadState struct {
+	filename           string
+	tempFilePath       string
+	tempFile           *os.File
+	totalBytesReceived int64
+	totalChunks        int64
+	receivedChunks     map[int64]bool
+	mu                 sync.Mutex
+}
+
 type vjailbreakProxy struct {
 	api.UnimplementedVailbreakProxyServer
-	K8sClient client.Client
+	K8sClient      client.Client
+	uploadStates   map[string]*uploadState
+	uploadStatesMu sync.RWMutex
 }
 
 type OpenstackCredsinfo struct {
@@ -507,12 +520,6 @@ func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer)
 	const fn = "UploadVDDK"
 	logrus.WithField("func", fn).Info("Starting VDDK upload via gRPC stream")
 
-	var uploadID string
-	var filename string
-	var totalBytesReceived int64
-	var tempFilePath string
-	var tempFile *os.File
-
 	extractDir := "/home/ubuntu"
 	tempDir := "/tmp/vddk-uploads"
 
@@ -521,6 +528,10 @@ func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer)
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
+	var uploadID string
+	var state *uploadState
+	var isComplete bool
+
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
@@ -528,69 +539,119 @@ func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer)
 		}
 		if err != nil {
 			logrus.WithField("func", fn).WithError(err).Error("Error receiving stream")
-			if tempFile != nil {
-				tempFile.Close()
-				os.Remove(tempFilePath)
+			if state != nil && state.tempFile != nil {
+				state.tempFile.Close()
+				os.Remove(state.tempFilePath)
 			}
 			return fmt.Errorf("failed to receive stream: %w", err)
 		}
 
+		uploadID = req.UploadId
 		if uploadID == "" {
-			uploadID = req.UploadId
-			if uploadID == "" {
-				uploadID = fmt.Sprintf("vddk_%d", time.Now().UnixNano())
-			}
-			filename = req.Filename
-			tempFilePath = filepath.Join(tempDir, filename)
+			uploadID = fmt.Sprintf("vddk_%d", time.Now().UnixNano())
+		}
 
-			logrus.WithFields(logrus.Fields{
-				"func":      fn,
-				"upload_id": uploadID,
-				"filename":  filename,
-			}).Info("Initializing VDDK upload")
-
-			tempFile, err = os.Create(tempFilePath)
+		p.uploadStatesMu.Lock()
+		if p.uploadStates == nil {
+			p.uploadStates = make(map[string]*uploadState)
+		}
+		state = p.uploadStates[uploadID]
+		if state == nil {
+			tempFilePath := filepath.Join(tempDir, req.Filename)
+			tempFile, err := os.Create(tempFilePath)
 			if err != nil {
+				p.uploadStatesMu.Unlock()
 				logrus.WithField("func", fn).WithError(err).Error("Failed to create temp file")
 				return fmt.Errorf("failed to create temp file: %w", err)
 			}
-			defer tempFile.Close()
-		}
 
+			state = &uploadState{
+				filename:       req.Filename,
+				tempFilePath:   tempFilePath,
+				tempFile:       tempFile,
+				totalChunks:    req.TotalChunks,
+				receivedChunks: make(map[int64]bool),
+			}
+			p.uploadStates[uploadID] = state
+
+			logrus.WithFields(logrus.Fields{
+				"func":         fn,
+				"upload_id":    uploadID,
+				"filename":     req.Filename,
+				"total_chunks": req.TotalChunks,
+			}).Info("Initializing VDDK upload")
+		}
+		p.uploadStatesMu.Unlock()
+
+		state.mu.Lock()
 		chunk := req.FileChunk
 		if len(chunk) > 0 {
-			n, err := tempFile.Write(chunk)
+			n, err := state.tempFile.Write(chunk)
 			if err != nil {
+				state.mu.Unlock()
 				logrus.WithField("func", fn).WithError(err).Error("Failed to write chunk")
-				os.Remove(tempFilePath)
+				state.tempFile.Close()
+				os.Remove(state.tempFilePath)
 				return fmt.Errorf("failed to write chunk: %w", err)
 			}
-			totalBytesReceived += int64(n)
+			state.totalBytesReceived += int64(n)
+			state.receivedChunks[req.ChunkIndex] = true
 
 			logrus.WithFields(logrus.Fields{
 				"func":          fn,
 				"upload_id":     uploadID,
 				"chunk_index":   req.ChunkIndex,
 				"bytes_written": n,
-				"total_bytes":   totalBytesReceived,
+				"total_bytes":   state.totalBytesReceived,
+				"chunks_recv":   len(state.receivedChunks),
+				"total_chunks":  state.totalChunks,
 			}).Debug("Chunk written")
+
+			if int64(len(state.receivedChunks)) >= state.totalChunks {
+				isComplete = true
+			}
 		}
+		state.mu.Unlock()
 	}
 
-	if tempFile != nil {
-		if err := tempFile.Sync(); err != nil {
+	if state == nil {
+		return fmt.Errorf("no upload state found")
+	}
+
+	if state.tempFile != nil {
+		if err := state.tempFile.Sync(); err != nil {
 			logrus.WithField("func", fn).WithError(err).Error("Failed to sync file")
-			os.Remove(tempFilePath)
+			state.tempFile.Close()
+			os.Remove(state.tempFilePath)
 			return fmt.Errorf("failed to sync file: %w", err)
 		}
-		tempFile.Close()
+		state.tempFile.Close()
 	}
+
+	if !isComplete {
+		response := &api.UploadVDDKResponse{
+			UploadId:           uploadID,
+			Status:             "in_progress",
+			Message:            fmt.Sprintf("Received %d/%d chunks", len(state.receivedChunks), state.totalChunks),
+			BytesReceived:      state.totalBytesReceived,
+			ProgressPercentage: float32(len(state.receivedChunks)) / float32(state.totalChunks) * 100,
+		}
+		if err := stream.SendAndClose(response); err != nil {
+			logrus.WithField("func", fn).WithError(err).Error("Failed to send in-progress response")
+			return fmt.Errorf("failed to send response: %w", err)
+		}
+		return nil
+	}
+
+	p.uploadStatesMu.Lock()
+	delete(p.uploadStates, uploadID)
+	p.uploadStatesMu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
 		"func":        fn,
 		"upload_id":   uploadID,
-		"file_path":   tempFilePath,
-		"total_bytes": totalBytesReceived,
+		"file_path":   state.tempFilePath,
+		"total_bytes": state.totalBytesReceived,
 	}).Info("VDDK tar file uploaded, starting extraction")
 
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
@@ -598,7 +659,7 @@ func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer)
 		return fmt.Errorf("failed to create extraction directory: %w", err)
 	}
 
-	if err := extractTarFile(tempFilePath, extractDir); err != nil {
+	if err := extractTarFile(state.tempFilePath, extractDir); err != nil {
 		logrus.WithField("func", fn).WithError(err).Error("Failed to extract tar file")
 		return fmt.Errorf("failed to extract tar file: %w", err)
 	}
@@ -614,7 +675,7 @@ func (p *vjailbreakProxy) UploadVDDK(stream api.VailbreakProxy_UploadVDDKServer)
 		Status:             "success",
 		Message:            "File uploaded and extracted successfully",
 		ExtractDir:         extractDir,
-		BytesReceived:      totalBytesReceived,
+		BytesReceived:      state.totalBytesReceived,
 		ProgressPercentage: 100.0,
 	}
 
