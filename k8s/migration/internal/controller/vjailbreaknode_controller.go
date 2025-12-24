@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
@@ -108,9 +109,20 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	vjNode := scope.VjailbreakNode
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
+	// Defer setting phase to Error if returning with error
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+			r.safeUpdateStatus(ctx, vjNode, log)
+			panic(recovered)
+		}
+	}()
+
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
 		log.Info("Skipping master node, updating flavor", "name", vjNode.Name)
@@ -121,6 +133,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
 	if err != nil {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
 	}
 
@@ -129,6 +143,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			// This will error until the the IP is available
 			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
+				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+				r.safeUpdateStatus(ctx, vjNode, log)
 				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
 
@@ -138,6 +154,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			// Update the VjailbreakNode status
 			err = r.Client.Status().Update(ctx, vjNode)
 			if err != nil {
+				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+				r.safeUpdateStatus(ctx, vjNode, log)
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
 		}
@@ -147,6 +165,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 				log.Info("Node not found, waiting for node to be created", "name", vjNode.Name)
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
 		}
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
@@ -159,6 +179,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		// Update the VjailbreakNode status
 		err = r.Client.Status().Update(ctx, vjNode)
 		if err != nil {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+			r.safeUpdateStatus(ctx, vjNode, log)
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
 
@@ -168,6 +190,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	// Create Openstack VM for worker node
 	vmid, err := utils.CreateOpenstackVMForWorkerNode(ctx, r.Client, scope)
 	if err != nil {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
@@ -178,6 +202,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	// Update the VjailbreakNode status
 	err = r.Client.Status().Update(ctx, vjNode)
 	if err != nil {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		r.safeUpdateStatus(ctx, vjNode, log)
 		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
@@ -194,6 +220,13 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	log.Info("Reconciling VjailbreakNode Delete")
 
 	if scope.VjailbreakNode.Spec.NodeRole == constants.NodeRoleMaster {
+		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
+		return ctrl.Result{}, nil
+	}
+
+	// If the node is in Error state, skip VM deletion to allow safe cleanup
+	if scope.VjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseError {
+		log.Info("Node is in Error state, skipping VM deletion for safe cleanup", "name", scope.VjailbreakNode.Name)
 		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
 		return ctrl.Result{}, nil
 	}
@@ -257,4 +290,11 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 
 	// Always requeue after one minute
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+}
+
+// safeUpdateStatus updates the status and logs any errors without returning them
+func (r *VjailbreakNodeReconciler) safeUpdateStatus(ctx context.Context, vjNode *vjailbreakv1alpha1.VjailbreakNode, log logr.Logger) {
+	if err := r.Client.Status().Update(ctx, vjNode); err != nil {
+		log.Error(err, "failed to update vjailbreak node status", "name", vjNode.Name)
+	}
 }

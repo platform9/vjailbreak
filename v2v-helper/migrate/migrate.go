@@ -69,6 +69,7 @@ type Migrate struct {
 	TenantName              string
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
+	TargetVMID              string
 }
 
 type MigrationTimes struct {
@@ -1159,6 +1160,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
+	migobj.TargetVMID = newVM.ID
 
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
@@ -1487,6 +1489,16 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
+	// Delete ERROR VM if exists
+	if migobj.TargetVMID != "" {
+		vm, err := migobj.Openstackclients.GetVM(ctx, migobj.TargetVMID)
+		if err == nil && vm.Status == "ERROR" {
+			migobj.logMessage("Deleting ERROR target VM")
+			if delErr := migobj.Openstackclients.DeleteVM(ctx, migobj.TargetVMID); delErr != nil {
+				utils.PrintLog(fmt.Sprintf("Failed to delete ERROR VM: %s", delErr))
+			}
+		}
+	}
 	err := migobj.DetachAllVolumes(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))
