@@ -867,22 +867,6 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if versionID == "" {
 			return errors.Errorf("failed to get version ID")
 		}
-
-		majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
-		if err != nil {
-			return fmt.Errorf("failed to parse major version: %v", err)
-		}
-
-		if majorVersion >= 7 {
-			// firstbootscriptname := "rhel_enable_dhcp"
-			// firstbootscript := constants.RhelFirstBootScript
-			// firstbootscripts = append(firstbootscripts, firstbootscriptname)
-
-			// if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
-			// return errors.Wrap(err, "failed to add first boot script")
-			// }
-			// utils.PrintLog("First boot script added successfully")
-		}
 	}
 
 	// Run virt-v2v conversion
