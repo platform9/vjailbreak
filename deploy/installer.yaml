@@ -2246,8 +2246,6 @@ spec:
               vcenterHost:
                 description: VcenterHost is the vCenter host
                 type: string
-            required:
-            - datacenter
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
