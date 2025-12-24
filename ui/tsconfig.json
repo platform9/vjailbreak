@@ -2,18 +2,12 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
     "baseUrl": ".",
     "noImplicitAny": false,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -30,18 +24,9 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "paths": {
-      "app-config": [
-        "config.js"
-      ],
-      "src/*": [
-        "src/*"
-      ]
-    },
+      "app-config": ["config.js"],
+      "src/*": ["src/*"]
+    }
   },
-  "include": [
-    "src",
-    "vite-env.d.ts",
-    "config.example.ts",
-    "config.ts"
-  ]
+  "include": ["src", ".storybook", "vite-env.d.ts", "config.example.ts", "config.ts"]
 }

@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import { ThemeProvider } from './theme/ThemeContext.tsx'
-import { AnalyticsProvider } from './components/AnalyticsProvider.tsx'
+import { AnalyticsProvider } from './components/providers'
 
 const queryClient = new QueryClient()
 

@@ -5,7 +5,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
 import { useCallback, useEffect } from 'react'
-import Step from 'src/components/forms/Step'
+import { Step } from 'src/shared/components/forms'
 import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
 
 // Accordian Imports
@@ -16,9 +16,7 @@ import AccordionSummary from '@mui/material/AccordionSummary'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
 
 // Styles
-const FieldsContainer = styled('div')(({ theme }) => ({
-  marginLeft: theme.spacing(4)
-}))
+const FieldsContainer = styled('div')({})
 
 const Fields = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -44,6 +42,7 @@ interface MigrationOptionsPropsInterface {
   ) => (value: unknown) => void
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
+  showHeader?: boolean
 }
 
 // TODO - Commented out the non-required field from the options for now
@@ -60,7 +59,8 @@ export default function MigrationOptions({
   selectedMigrationOptions,
   updateSelectedMigrationOptions,
   errors,
-  getErrorsUpdater
+  getErrorsUpdater,
+  showHeader = true
 }: MigrationOptionsPropsInterface) {
   // Iniitialize fields
   useEffect(() => {
@@ -101,7 +101,9 @@ export default function MigrationOptions({
           aria-controls="panel2-content"
           id="panel2-header"
         >
-          <Step stepNumber="4" label="Migration Options (Optional)" sx={{ mb: '0' }} />
+          {showHeader ? (
+            <Step stepNumber="4" label="Migration Options (Optional)" sx={{ mb: '0' }} />
+          ) : null}
         </AccordionSummary>
         <AccordionDetails>
           <FieldsContainer>
