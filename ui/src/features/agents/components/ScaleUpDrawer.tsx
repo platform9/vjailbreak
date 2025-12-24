@@ -1,4 +1,12 @@
-import { Box } from '@mui/material'
+import {
+  Box,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Checkbox,
+  ListItemText
+} from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -6,7 +14,6 @@ import {
   DrawerHeader,
   DrawerFooter,
   ActionButton,
-  InlineHelp,
   OperationStatus,
   FormGrid,
   SurfaceCard
@@ -33,7 +40,6 @@ interface ScaleUpDrawerProps {
 interface ScaleUpFormValues {
   openstackCredential: string
   flavor: string
-  securityGroup: string
   nodeCount: number
 }
 
@@ -45,7 +51,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     defaultValues: {
       openstackCredential: '',
       flavor: '',
-      securityGroup: '',
       nodeCount: 1
     }
   })
@@ -76,26 +81,30 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
 
+  const [volumeTypes, setVolumeTypes] = useState<Array<string>>([])
+  const [selectedVolumeType, setSelectedVolumeType] = useState('')
+
+  const [securityGroups, setSecurityGroups] = useState<Array<{ name: string; id: string }>>([])
+  const [selectedSecurityGroups, setSelectedSecurityGroups] = useState<string[]>([])
+  const [useMasterSecurityGroups, setUseMasterSecurityGroups] = useState(true)
+
   const flavorOptions = useMemo(() => {
-    return flavors.map((flavor) => ({
-      label: `${flavor.name} — ${flavor.vcpus} vCPU · ${flavor.ram / 1024}GB RAM · ${flavor.disk}GB disk`,
-      value: flavor.id
-    }))
+    return flavors
+      .filter((flavor) => flavor.disk >= 60)
+      .map((flavor) => ({
+        label: `${flavor.name} — ${flavor.vcpus} vCPU · ${flavor.ram / 1024}GB RAM · ${flavor.disk}GB disk`,
+        value: flavor.id
+      }))
   }, [flavors])
 
-  const securityGroupOptions = useMemo(() => {
-    const groups = openstackCredentials?.status?.openstack?.securityGroups || []
-    return groups.map((group) => ({
-      label: group.requiresIdDisplay ? `${group.name} (${group.id})` : group.name,
-      value: group.id
-    }))
-  }, [openstackCredentials])
+  const flavorById = useMemo(() => {
+    return new Map(flavors.map((flavor) => [flavor.id, flavor]))
+  }, [flavors])
 
   const clearStates = useCallback(() => {
     reset({
       openstackCredential: '',
       flavor: '',
-      securityGroup: '',
       nodeCount: 1
     })
     setOpenstackCredentials(null)
@@ -105,6 +114,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     setFlavors([])
     setLoadingFlavors(false)
     setFlavorsError(null)
+    setVolumeTypes([])
+    setSelectedVolumeType('')
+    setSecurityGroups([])
+    setSelectedSecurityGroups([])
+    setUseMasterSecurityGroups(true)
   }, [reset])
 
   const handleClose = useCallback(() => {
@@ -116,7 +130,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     async (credId: string | null) => {
       setValue('openstackCredential', credId || '')
       setValue('flavor', '')
-      setValue('securityGroup', '')
+      setSelectedVolumeType('')
+      setUseMasterSecurityGroups(true)
+      setSelectedSecurityGroups([])
 
       if (credId) {
         try {
@@ -167,6 +183,27 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     fetchFlavours()
   }, [openstackCredsValidated, openstackCredentials, setValue])
 
+  useEffect(() => {
+    if (openstackCredsValidated && openstackCredentials) {
+      const types = openstackCredentials?.status?.openstack?.volumeTypes || []
+      setVolumeTypes(types)
+      // Set default to use master's volume type
+      setSelectedVolumeType('USE_MASTER')
+
+      const sgs = openstackCredentials?.status?.openstack?.securityGroups || []
+      setSecurityGroups(sgs)
+      // Default to using master's security groups
+      setUseMasterSecurityGroups(true)
+      setSelectedSecurityGroups([])
+    } else {
+      setVolumeTypes([])
+      setSelectedVolumeType('')
+      setSecurityGroups([])
+      setSelectedSecurityGroups([])
+      setUseMasterSecurityGroups(true)
+    }
+  }, [openstackCredsValidated, openstackCredentials])
+
   const handleSubmit: SubmitHandler<ScaleUpFormValues> = useCallback(
     async (values) => {
       const nodeCountNum = Number(values.nodeCount)
@@ -178,6 +215,12 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         !openstackCredentials?.metadata?.name
       ) {
         setError('Please fill in all required fields')
+        return
+      }
+
+      const selectedFlavor = flavorById.get(values.flavor)
+      if (selectedFlavor && selectedFlavor.disk < 60) {
+        setError('Selected flavor has insufficient disk size')
         return
       }
 
@@ -200,7 +243,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             namespace: 'migration-system'
           },
           count: nodeCountNum,
-          flavorId: values.flavor
+          flavorId: values.flavor,
+          volumeType: selectedVolumeType === 'USE_MASTER' ? undefined : selectedVolumeType,
+          securityGroups: useMasterSecurityGroups ? undefined : selectedSecurityGroups
         })
 
         track('Agents Scale Up', {
@@ -240,18 +285,26 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setLoading(false)
       }
     },
-    [handleClose, masterNode, openstackCredentials, reportError, track]
+    [
+      flavorById,
+      handleClose,
+      masterNode,
+      openstackCredentials,
+      reportError,
+      track,
+      selectedSecurityGroups,
+      selectedVolumeType,
+      useMasterSecurityGroups
+    ]
   )
 
   const isSubmitDisabled =
     !masterNode ||
     !watchedValues.flavor ||
-    !watchedValues.securityGroup ||
     loading ||
     !openstackCredsValidated ||
     !!errors.openstackCredential ||
     !!errors.flavor ||
-    !!errors.securityGroup ||
     !!errors.nodeCount
 
   return (
@@ -333,33 +386,91 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 disabled={loadingFlavors || !openstackCredsValidated || !openstackCredentials}
                 searchable
                 searchPlaceholder="Search flavors by name, vCPU, RAM or disk"
-                rules={{ required: 'Flavor selection is required' }}
+                rules={{
+                  required: 'Flavor selection is required',
+                  validate: (value) => {
+                    const f = flavorById.get(String(value))
+                    if (f && f.disk < 60) return 'Selected flavor has insufficient disk size'
+                    return true
+                  }
+                }}
                 helperText={flavorsError ?? undefined}
                 error={!!flavorsError}
               />
+            </FormGrid>
 
-              <RHFSelect
-                name="securityGroup"
-                label="Security Group"
-                options={securityGroupOptions}
-                placeholder={
-                  !openstackCredsValidated
-                    ? 'Select a validated credential first'
-                    : securityGroupOptions.length === 0
-                      ? 'No security groups available'
-                      : 'Select a security group'
+            <FormGrid minWidth={260} gap={2}>
+              <FormControl
+                fullWidth
+                size="small"
+                disabled={!openstackCredsValidated || !openstackCredentials}
+              >
+                <InputLabel size="small">Volume Type</InputLabel>
+                <Select
+                  value={selectedVolumeType}
+                  label="Volume Type"
+                  onChange={(e) => setSelectedVolumeType(e.target.value)}
+                  size="small"
+                >
+                  <MenuItem value="USE_MASTER">Use volume type of primary VJB instance</MenuItem>
+                  {volumeTypes.map((volumeType) => (
+                    <MenuItem key={volumeType} value={volumeType}>
+                      {volumeType}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl
+                fullWidth
+                size="small"
+                disabled={
+                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
                 }
-                disabled={!openstackCredsValidated || securityGroupOptions.length === 0}
-                searchable
-                searchPlaceholder="Search security groups"
-                rules={{ required: 'Security group is required' }}
-              />
+              >
+                <InputLabel size="small">Security Groups</InputLabel>
+                <Select
+                  multiple
+                  value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
+                  label="Security Groups"
+                  onChange={(e) => {
+                    const value = e.target.value as string[]
+                    if (value.includes('USE_MASTER')) {
+                      setUseMasterSecurityGroups(true)
+                      setSelectedSecurityGroups([])
+                    } else {
+                      setUseMasterSecurityGroups(false)
+                      setSelectedSecurityGroups(value)
+                    }
+                  }}
+                  size="small"
+                  renderValue={(selected) => {
+                    if (useMasterSecurityGroups) {
+                      return 'Use security groups of primary VJB instance'
+                    }
+                    return (selected as string[])
+                      .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
+                      .join(', ')
+                  }}
+                >
+                  <MenuItem value="USE_MASTER">
+                    <Checkbox checked={useMasterSecurityGroups} />
+                    <ListItemText primary="Use security groups of primary VJB instance" />
+                  </MenuItem>
+                  {securityGroups.map((sg) => (
+                    <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
+                      <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
+                      <ListItemText primary={sg.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </FormGrid>
 
             <Box sx={{ display: 'grid', gap: 1.5 }}>
-              <InlineHelp tone="warning" icon="warning" variant="outline">
+              {/* <InlineHelp tone="warning" icon="warning" variant="outline">
                 Select a flavor with disk &gt; 16GB for production workloads.
-              </InlineHelp>
+              </InlineHelp> */}
 
               <OperationStatus
                 loading={loadingFlavors}

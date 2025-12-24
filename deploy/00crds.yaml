@@ -2033,6 +2033,18 @@ spec:
               openstackImageID:
                 description: OpenstackImageID is the image of the VM
                 type: string
+              openstackSecurityGroups:
+                description: |-
+                  OpenstackSecurityGroups is the list of security groups for the VM
+                  If empty, the security groups will be determined from the master node
+                items:
+                  type: string
+                type: array
+              openstackVolumeType:
+                description: |-
+                  OpenstackVolumeType is the volume type for the root disk of the VM
+                  If empty, the volume type will be determined from the master node
+                type: string
             required:
             - nodeRole
             - openstackCreds
@@ -2396,6 +2408,19 @@ spec:
                   esxiName:
                     description: ESXiName is the name of the ESXi host
                     type: string
+                  gpu:
+                    description: GPU contains information about GPU devices attached
+                      to the VM
+                    properties:
+                      passthroughCount:
+                        description: PassthroughCount is the number of PCI passthrough
+                          GPU devices
+                        type: integer
+                      vgpuCount:
+                        description: VGPUCount is the number of vGPU (shared GPU)
+                          devices
+                        type: integer
+                    type: object
                   guestNetworks:
                     description: GuestNetworks is the list of network interfaces for
                       the virtual machine as reported by the guest
@@ -2461,10 +2486,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  useGPU:
-                    description: UseGPU is a flag to indicate if the virtual machine
-                      uses GPU
-                    type: boolean
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
