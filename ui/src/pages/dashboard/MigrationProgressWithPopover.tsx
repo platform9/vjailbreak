@@ -129,7 +129,7 @@ export default function MigrationProgressWithPopover({
       ].includes(phase as Phase)
     ) {
       return <CircularProgress size={20} style={{ marginRight: 3 }} />
-    } else if (phase === Phase.Failed) {
+    } else if (phase === Phase.Failed || phase === Phase.ValidationFailed) {
       return <ErrorOutlineIcon style={{ color: 'red' }} />
     } else {
       return <HourglassBottomIcon style={{ color: 'grey' }} />

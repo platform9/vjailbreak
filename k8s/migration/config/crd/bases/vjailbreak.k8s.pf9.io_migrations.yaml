@@ -142,6 +142,7 @@ spec:
                 enum:
                 - Pending
                 - Validating
+                - ValidationFailed
                 - AwaitingDataCopyStart
                 - CopyingBlocks
                 - CopyingChangedBlocks
