@@ -75,9 +75,9 @@ export default function DrawerShell({
       <ConfirmationDialog
         open={confirmOpen}
         onClose={handleCloseConfirmationDismiss}
-        title="Close drawer?"
-        message="Are you sure you want to close this drawer?"
-        actionLabel="Close"
+        title="Discard Changes?"
+        message="Are you sure you want to leave? Any unsaved changes will be lost."
+        actionLabel="Leave"
         actionColor="warning"
         actionVariant="outlined"
         onConfirm={handleCloseConfirmed}
