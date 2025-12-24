@@ -3,6 +3,7 @@ import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
 import { VmData } from 'src/features/migration/api/migration-templates/model'
 import { fetchRdmDisksMap, mapToVmDataWithRdm } from 'src/api/rdm-disks/rdmDiskUtils'
 import { VMwareMachine } from 'src/api/vmware-machines/model'
+import { getVMwareClusters } from 'src/api/vmware-clusters/vmwareClusters'
 
 export const VMWARE_MACHINES_BASE_KEY = 'vmwaremachines'
 
@@ -13,7 +14,7 @@ interface UseVMwareMachinesQueryProps {
   sessionId?: string
   vmwareCredName?: string
   clusterName?: string
-  vmwareClusterDisplayName?: string
+  datacenterName?: string
 }
 
 export const useVMwareMachinesQuery = ({
@@ -23,7 +24,7 @@ export const useVMwareMachinesQuery = ({
   sessionId = 'default',
   vmwareCredName,
   clusterName,
-  vmwareClusterDisplayName
+  datacenterName
 }: UseVMwareMachinesQueryProps = {}) => {
   const areCredsValidated = vmwareCredsValidated && openstackCredsValidated
   const queryEnabled = enabled && areCredsValidated
@@ -34,7 +35,8 @@ export const useVMwareMachinesQuery = ({
     vmwareCredsValidated,
     openstackCredsValidated,
     vmwareCredName,
-    clusterName
+    clusterName,
+    datacenterName
   ]
 
   return useQuery({
@@ -43,17 +45,53 @@ export const useVMwareMachinesQuery = ({
       if (!areCredsValidated) {
         return []
       }
-      const [vmResponse, rdmDisksMap] = await Promise.all([
+      const [vmResponse, rdmDisksMap, clustersResponse] = await Promise.all([
         getVMwareMachines(undefined, vmwareCredName),
-        fetchRdmDisksMap()
+        fetchRdmDisksMap(),
+        getVMwareClusters(undefined, vmwareCredName)
       ])
 
       let filteredItems: VMwareMachine[] = vmResponse.items
 
-      if (vmwareClusterDisplayName && vmwareClusterDisplayName !== 'NO CLUSTER') {
-        filteredItems = vmResponse.items.filter(
-          (vm) => vm.spec.vms.clusterName === vmwareClusterDisplayName
-        )
+      if (clusterName && datacenterName) {
+        const isNoCluster = clusterName.startsWith('no-cluster-')
+        if (isNoCluster) {
+          const datacenterClusterNames = new Set<string>()
+
+          clustersResponse.items.forEach((cluster) => {
+            const annotations = (cluster.metadata as any)?.annotations || {}
+            const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
+            if (clusterDC === datacenterName) {
+              datacenterClusterNames.add(cluster.metadata.name)
+            }
+          })
+
+          filteredItems = vmResponse.items.filter((vm) => {
+            const vmClusterLabel =
+              vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] || ''
+            return datacenterClusterNames.has(vmClusterLabel)
+          })
+        } else {
+          const selectedClusterResource = clustersResponse.items.find((cluster) => {
+            const annotations = (cluster.metadata as any)?.annotations || {}
+            const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
+            const matchesDisplayName = cluster.spec.name === clusterName && clusterDC === datacenterName
+            const matchesK8sName = cluster.metadata.name === clusterName && clusterDC === datacenterName
+
+            return matchesDisplayName || matchesK8sName
+          })
+
+          const expectedClusterLabel = selectedClusterResource?.metadata.name
+
+          if (expectedClusterLabel) {
+            filteredItems = vmResponse.items.filter((vm) => {
+              const vmClusterLabel = vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster']
+              return vmClusterLabel === expectedClusterLabel
+            })
+          } else {
+            filteredItems = []
+          }
+        }
       }
 
       // Use RDM-aware mapping function

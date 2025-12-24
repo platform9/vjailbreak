@@ -116,14 +116,8 @@ export default function SourceDestinationClusterSelection({
       onChange('vmwareCreds')({
         existingCredName: credName
       })
-
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const cluster = sourceItem?.clusters.find((c) => c.id === value)
-
-      onChange('vmwareClusterDisplayName')(cluster?.displayName || '')
     } else {
       onChange('vmwareCreds')({})
-      onChange('vmwareClusterDisplayName')('')
     }
   }
 
@@ -187,12 +181,20 @@ export default function SourceDestinationClusterSelection({
                 const parts = selected.split(':')
                 const credName = parts[0]
 
-                const sourceItem = sourceData.find((item) => item.credName === credName)
-                const vcenterName = sourceItem?.vcenterName || credName
+                const sourceItem = sourceData.find(
+                  (item) => item.credName === credName && item.clusters.some((c) => c.id === selected)
+                )
                 const cluster = sourceItem?.clusters.find((c) => c.id === selected)
-                return `${vcenterName} - ${sourceItem?.datacenter || ''} - ${
-                  cluster?.displayName || ''
-                }`
+                const vcenterName = sourceItem?.vcenterName || credName
+                const datacenterDisplay = sourceItem?.datacenter || ''
+
+                return datacenterDisplay && datacenterDisplay !== 'All Datacenters'
+                  ? `${vcenterName} - ${datacenterDisplay} - ${
+                      cluster?.displayName || cluster?.name || 'Unknown Cluster'
+                    }`
+                  : `${vcenterName} - ${
+                      cluster?.displayName || cluster?.name || 'Unknown Cluster'
+                    }`
               }}
               endAdornment={
                 loadingVMware ? (

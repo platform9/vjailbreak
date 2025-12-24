@@ -94,7 +94,6 @@ export interface FormValues extends Record<string, unknown> {
   storageMappings?: { source: string; target: string }[]
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
-  vmwareClusterDisplayName?: string
   pcdCluster?: string // PCD cluster ID
   // Optional Params
   dataCopyMethod?: string
@@ -279,7 +278,9 @@ export default function MigrationFormDrawer({
           const patchBody = {
             spec: {
               source: {
-                datacenter: params.vmwareCreds?.datacenter,
+                ...(params.vmwareCreds?.datacenter && {
+                  datacenter: params.vmwareCreds.datacenter
+                }),
                 vmwareRef: vmwareCredentials?.metadata.name
               },
               destination: {
@@ -300,7 +301,7 @@ export default function MigrationFormDrawer({
 
         // Otherwise create a new template once
         const body = createMigrationTemplateJson({
-          datacenter: params.vmwareCreds?.datacenter,
+          ...(params.vmwareCreds?.datacenter && { datacenter: params.vmwareCreds.datacenter }),
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,
@@ -1091,7 +1092,6 @@ export default function MigrationFormDrawer({
                 openstackCredName={params.openstackCreds?.existingCredName}
                 openstackCredentials={openstackCredentials}
                 vmwareCluster={params.vmwareCluster}
-                vmwareClusterDisplayName={params.vmwareClusterDisplayName}
                 useGPU={params.useGPU}
                 showHeader={false}
               />
@@ -1178,9 +1178,7 @@ export default function MigrationFormDrawer({
                     <Typography variant="body2" color="text.secondary">
                       Source
                     </Typography>
-                    <Typography variant="body2">
-                      {params.vmwareClusterDisplayName || params.vmwareCluster || '—'}
-                    </Typography>
+                    <Typography variant="body2">{params.vmwareCluster || '—'}</Typography>
                   </Box>
 
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>

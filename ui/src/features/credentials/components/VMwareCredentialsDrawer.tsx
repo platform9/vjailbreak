@@ -237,7 +237,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
         const response = await createVMwareCredsWithSecretFlow(vals.credentialName, {
           VCENTER_HOST: vals.vcenterHost,
-          VCENTER_DATACENTER: vals.datacenter,
+          VCENTER_DATACENTER: vals.datacenter || '',
           VCENTER_USERNAME: vals.username,
           VCENTER_PASSWORD: vals.password,
           ...(vals.insecure && { VCENTER_INSECURE: true })
@@ -338,10 +338,8 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           name="datacenter"
           label="Datacenter name"
           placeholder="Primary-DC"
-          required
           fullWidth
           size="small"
-          rules={{ required: 'Datacenter name is required' }}
         />
       </FormGrid>
     </Section>

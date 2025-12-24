@@ -160,7 +160,6 @@ interface VmsSelectionStepProps {
   openstackCredName?: string
   openstackCredentials?: OpenstackCreds
   vmwareCluster?: string
-  vmwareClusterDisplayName?: string
   useGPU?: boolean
   showHeader?: boolean
 }
@@ -177,7 +176,6 @@ function VmsSelectionStep({
   openstackCredName,
   openstackCredentials,
   vmwareCluster,
-  vmwareClusterDisplayName,
   useGPU = false,
   showHeader = true
 }: VmsSelectionStepProps) {
@@ -321,6 +319,13 @@ function VmsSelectionStep({
     const parts = vmwareCluster.split(':')
     // The value is "credName:datacenter:clusterName"
     return parts.length === 3 ? parts[2] : undefined
+  }, [vmwareCluster])
+
+  const datacenterName = React.useMemo(() => {
+    if (!vmwareCluster) return undefined
+    const parts = vmwareCluster.split(':')
+    // Extract datacenter from cluster ID
+    return parts.length === 3 ? parts[1] : undefined
   }, [vmwareCluster])
 
   // Define columns inside component to access state and functions
@@ -626,7 +631,7 @@ function VmsSelectionStep({
     sessionId,
     vmwareCredName,
     clusterName,
-    vmwareClusterDisplayName
+    datacenterName
   })
 
   useEffect(() => {
@@ -1853,7 +1858,6 @@ const arePropsEqual = (
   if (prevProps.openstackCredName !== nextProps.openstackCredName) return false
   if (prevProps.openstackCredentials !== nextProps.openstackCredentials) return false
   if (prevProps.vmwareCluster !== nextProps.vmwareCluster) return false
-  if (prevProps.vmwareClusterDisplayName !== nextProps.vmwareClusterDisplayName) return false
 
   return true
 }
