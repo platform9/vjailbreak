@@ -143,7 +143,7 @@ const typography = {
     fontStyle: 'normal',
     lineHeight: '1.75',
     letterSpacing: '0.02857em',
-    textTransform: 'uppercase' as const
+    textTransform: 'none' as const
   },
   // Overline typography variant
   overline: {
