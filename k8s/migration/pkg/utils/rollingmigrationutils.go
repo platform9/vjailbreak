@@ -815,11 +815,6 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("failed to get rolling migration plan validation config")
 	}
 
-	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
-	if err != nil {
-		return false, "", errors.Wrap(err, "failed to get vmware credentials")
-	}
-
 	// TODO(vpwned): validate vmwarecreds have enough permissions
 
 	// TODO(vpwned): validate there is enough space on underlying storage array
@@ -828,7 +823,7 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("BMConfig is not valid")
 	}
 
-	vmwareCreds, err = GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to get vmware credentials")
 	}
