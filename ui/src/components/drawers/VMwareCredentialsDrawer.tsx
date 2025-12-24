@@ -234,7 +234,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     if (
       !formValues.credentialName ||
       !formValues.vcenterHost ||
-      !formValues.datacenter ||
       !formValues.username ||
       !formValues.password
     ) {
@@ -256,7 +255,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     try {
       const credentialData = {
         VCENTER_HOST: formValues.vcenterHost,
-        VCENTER_DATACENTER: formValues.datacenter,
+        VCENTER_DATACENTER: formValues.datacenter || '',
         VCENTER_USERNAME: formValues.username,
         VCENTER_PASSWORD: formValues.password,
         ...(formValues.insecure && { VCENTER_INSECURE: true })
@@ -314,7 +313,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       validatingVmwareCreds ||
       !isValidCredentialName ||
       !formValues.vcenterHost ||
-      !formValues.datacenter ||
       !formValues.username ||
       !formValues.password,
     onSubmit: handleSubmit,
@@ -370,13 +368,13 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
             <TextField
               id="datacenter"
-              label="Datacenter Name"
+              label="Datacenter Name (Optional)"
               variant="outlined"
               value={formValues.datacenter}
               onChange={handleFormChange('datacenter')}
-              required
               fullWidth
               size="small"
+              placeholder="Leave empty to scan all datacenters"
               sx={{ mb: 2 }}
             />
 
@@ -466,7 +464,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           validatingVmwareCreds ||
           !isValidCredentialName ||
           !formValues.vcenterHost?.trim() ||
-          !formValues.datacenter?.trim() ||
           !formValues.username?.trim() ||
           !formValues.password?.trim()
         }
