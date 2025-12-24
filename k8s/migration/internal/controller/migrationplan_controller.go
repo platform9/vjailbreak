@@ -461,7 +461,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// Validate VM OS types before proceeding with migration
-	validVMs, skippedVMs, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
 
 	allVMNames := []string{}
 	for _, group := range migrationplan.Spec.VirtualMachines {
