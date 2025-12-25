@@ -554,9 +554,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			}
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
-		result, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
-		if err != nil || result.RequeueAfter > 0 {
-			return result, err
+		err = r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
@@ -583,7 +583,7 @@ func (r *MigrationPlanReconciler) checkAndHandlePausedPlan(ctx context.Context, 
 }
 
 // processMigrationPhases processes migration phases for triggered migrations
-func (r *MigrationPlanReconciler) processMigrationPhases(ctx context.Context, scope *scope.MigrationPlanScope, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobjs *vjailbreakv1alpha1.MigrationList, parallelvms []string) (ctrl.Result, error) {
+func (r *MigrationPlanReconciler) processMigrationPhases(ctx context.Context, scope *scope.MigrationPlanScope, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobjs *vjailbreakv1alpha1.MigrationList, parallelvms []string) error {
 	for i := 0; i < len(migrationobjs.Items); i++ {
 		switch migrationobjs.Items[i].Status.Phase {
 		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
@@ -591,22 +591,22 @@ func (r *MigrationPlanReconciler) processMigrationPhases(ctx context.Context, sc
 			err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
 				fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
 			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
+				return errors.Wrap(err, "failed to update migration plan status")
 			}
-			return ctrl.Result{}, nil
+			return nil
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 			err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
 			if err != nil {
 				r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-				return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
+				return errors.Wrap(err, "failed to reconcile post migration")
 			}
 			continue
 		default:
 			r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
-			return ctrl.Result{}, nil
+			return nil
 		}
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // handleRDMDiskMigrationError handles errors that occur during RDM disk migration
