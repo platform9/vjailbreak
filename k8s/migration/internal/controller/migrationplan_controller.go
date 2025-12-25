@@ -519,6 +519,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			r.ctxlog.Error(err, "Failed to mark VM migration ValidationFailed", "vm", vmName)
 		}
 	}
+}
 
 	if validationErr != nil {
     	if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
