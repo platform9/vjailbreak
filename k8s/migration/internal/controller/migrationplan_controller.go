@@ -501,7 +501,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	if validationErr != nil {
-    	r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr))
+    	if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
+        	r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
+    	}
     	return ctrl.Result{}, validationErr
 	}
 
@@ -538,13 +540,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return r.handleRDMDiskMigrationError(ctx, migrationplan, err)
 	}
 
-	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
-		migrationplan.Status.MigrationStatus = "Paused"
-		migrationplan.Status.MigrationMessage = "Migration plan is paused"
-		if err := r.Update(ctx, migrationplan); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-		}
-		return ctrl.Result{}, nil
+	if paused, err := r.checkAndHandlePausedPlan(ctx, migrationplan); paused {
+		return ctrl.Result{}, err
 	}
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
@@ -557,27 +554,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			}
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
-		for i := 0; i < len(migrationobjs.Items); i++ {
-			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-				}
-				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
-				if err != nil {
-					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
-				}
-				continue
-			default:
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
-				return ctrl.Result{}, nil
-			}
+		result, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
+		if err != nil || result.RequeueAfter > 0 {
+			return result, err
 		}
 	}
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
@@ -587,6 +566,46 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
 	}
 
+	return ctrl.Result{}, nil
+}
+
+// checkAndHandlePausedPlan checks if migration plan is paused and handles it
+func (r *MigrationPlanReconciler) checkAndHandlePausedPlan(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (bool, error) {
+	if !utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
+		return false, nil
+	}
+	migrationplan.Status.MigrationStatus = "Paused"
+	migrationplan.Status.MigrationMessage = "Migration plan is paused"
+	if err := r.Update(ctx, migrationplan); err != nil {
+		return true, errors.Wrap(err, "failed to update migration plan status")
+	}
+	return true, nil
+}
+
+// processMigrationPhases processes migration phases for triggered migrations
+func (r *MigrationPlanReconciler) processMigrationPhases(ctx context.Context, scope *scope.MigrationPlanScope, migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobjs *vjailbreakv1alpha1.MigrationList, parallelvms []string) (ctrl.Result, error) {
+	for i := 0; i < len(migrationobjs.Items); i++ {
+		switch migrationobjs.Items[i].Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed:
+			r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
+			err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
+				fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
+			}
+			return ctrl.Result{}, nil
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
+			if err != nil {
+				r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
+				return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
+			}
+			continue
+		default:
+			r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
+			return ctrl.Result{}, nil
+		}
+	}
 	return ctrl.Result{}, nil
 }
 
