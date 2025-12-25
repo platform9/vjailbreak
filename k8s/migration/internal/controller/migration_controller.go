@@ -130,6 +130,12 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	ctxlog.Info("Reconciling Migration object")
 
+	// Skip pod reconciliation for ValidationFailed migrations
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+		ctxlog.Info("Migration is in ValidationFailed phase, skipping pod reconciliation", "migration", migration.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
 	if err != nil {
@@ -286,7 +292,8 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
-		vjailbreakv1alpha1.VMMigrationPhasePending}
+		vjailbreakv1alpha1.VMMigrationPhasePending,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
 
 loop:
 	for i := range events.Items {

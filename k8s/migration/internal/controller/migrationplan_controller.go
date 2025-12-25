@@ -482,20 +482,35 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
     }
 
     if validationErr != nil {
-        migrationObj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+        // Use retry to handle resourceVersion conflicts gracefully
+        err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+            // Re-fetch the migration object to get the latest version
+            migration := &vjailbreakv1alpha1.Migration{}
+            if err := r.Get(ctx, types.NamespacedName{
+                Name:      migrationObj.Name,
+                Namespace: migrationObj.Namespace,
+            }, migration); err != nil {
+                return err
+            }
+
+            // Update the status with ValidationFailed
+            migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+            
+            validationCondition := corev1.PodCondition{
+                Type:               "Validated",
+                Status:             corev1.ConditionFalse,
+                Reason:             "PlanValidationFailed",
+                Message:            validationErr.Error(),
+                LastTransitionTime: metav1.Now(),
+            }
+            
+            migration.Status.Conditions = append(migration.Status.Conditions, validationCondition)
+            
+            return r.Status().Update(ctx, migration)
+        })
         
-        validationCondition := corev1.PodCondition{
-            Type:               "Validated",
-            Status:             corev1.ConditionFalse,
-            Reason:             "PlanValidationFailed",
-            Message:            validationErr.Error(),
-            LastTransitionTime: metav1.Now(),
-        }
-        
-        migrationObj.Status.Conditions = append(migrationObj.Status.Conditions, validationCondition)
-        
-        if err := r.Status().Update(ctx, migrationObj); err != nil {
-            r.ctxlog.Error(err, "Failed to update migration status to ValidationFailed", "vm", vmName)
+        if err != nil {
+            r.ctxlog.Error(err, "Failed to update migration status to ValidationFailed after retries", "vm", vmName)
         }
     }
 	}
