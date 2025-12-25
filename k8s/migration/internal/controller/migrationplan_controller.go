@@ -410,7 +410,8 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 	return vmMachine, nil
 }
 
-//nolint:gocyclo // ReconcileMigrationPlanJob reconciles jobs created by the migration plan
+// ReconcileMigrationPlanJob reconciles jobs created by the migration plan
+//nolint:gocyclo
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
