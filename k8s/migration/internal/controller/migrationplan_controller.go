@@ -481,38 +481,43 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
         continue
     }
 
-    if validationErr != nil {
-        // Use retry to handle resourceVersion conflicts gracefully
-        err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-            // Re-fetch the migration object to get the latest version
-            migration := &vjailbreakv1alpha1.Migration{}
-            if err := r.Get(ctx, types.NamespacedName{
-                Name:      migrationObj.Name,
-                Namespace: migrationObj.Namespace,
-            }, migration); err != nil {
-                return err
-            }
+	// If this VM is NOT in validVMs, mark its Migration as ValidationFailed
+	isValid := false
+	for _, validVM := range validVMs {
+		if validVM.Spec.VMInfo.Name == vmName {
+			isValid = true
+			break
+		}
+	}
 
-            // Update the status with ValidationFailed
-            migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-            
-            validationCondition := corev1.PodCondition{
-                Type:               "Validated",
-                Status:             corev1.ConditionFalse,
-                Reason:             "PlanValidationFailed",
-                Message:            validationErr.Error(),
-                LastTransitionTime: metav1.Now(),
-            }
-            
-            migration.Status.Conditions = append(migration.Status.Conditions, validationCondition)
-            
-            return r.Status().Update(ctx, migration)
-        })
-        
-        if err != nil {
-            r.ctxlog.Error(err, "Failed to update migration status to ValidationFailed after retries", "vm", vmName)
-        }
-    }
+	if !isValid {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			migration := &vjailbreakv1alpha1.Migration{}
+			if err := r.Get(ctx, types.NamespacedName{
+				Name:      migrationObj.Name,
+				Namespace: migrationObj.Namespace,
+			}, migration); err != nil {
+				return err
+			}
+
+			migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+			migration.Status.Conditions = append(
+				migration.Status.Conditions,
+				corev1.PodCondition{
+					Type:               "Validated",
+					Status:             corev1.ConditionFalse,
+					Reason:             "VMValidationFailed",
+					Message:            "VM failed migration plan validation",
+					LastTransitionTime: metav1.Now(),
+				},
+			)
+
+			return r.Status().Update(ctx, migration)
+		})
+
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to mark VM migration ValidationFailed", "vm", vmName)
+		}
 	}
 
 	if validationErr != nil {

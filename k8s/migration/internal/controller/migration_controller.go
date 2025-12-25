@@ -87,6 +87,14 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+		ctxlog.Info(
+			"Migration is ValidationFailed; skipping reconciliation and requeue",
+			"migration", migration.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
 	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
@@ -129,12 +137,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	ctxlog.Info("Reconciling Migration object")
-
-	// Skip pod reconciliation for ValidationFailed migrations
-	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
-		ctxlog.Info("Migration is in ValidationFailed phase, skipping pod reconciliation", "migration", migration.Name)
-		return ctrl.Result{}, nil
-	}
 
 	// Get the pod phase
 	pod, err := r.GetPod(ctx, migrationScope)
