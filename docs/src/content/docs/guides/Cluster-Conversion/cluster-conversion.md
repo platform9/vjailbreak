@@ -19,8 +19,8 @@ Before starting the RollingConversion process, ensure the following checks are c
 3. Ensure Ubuntu MAAS setup is available and configured
 * Only Ubuntu 22.04 is currently supported for PCD hosts within the Private Cloud Director (PCD).
 * Ensure that the appropriate PXE image is configured based on requirements; a standard Ubuntu 22 image is recommended.
-* It is presumed that the ESX hosts are pre-configured as “Machines” in the “Allocated or Deployed” state within MAAS.
-* Verify the accuracy of the IPMI configuration for all the MAAS machines.
+* It is presumed that the ESX hosts are pre-configured as "Machines" in the "Allocated or Deployed" state within MAAS.
+* **IMPORTANT**: All ESXi hosts added to MAAS must have IPMI details configured. vJailbreak uses IPMI to control the power state and boot order of the ESXi hosts during the conversion process. Verify the accuracy of the IPMI configuration for all the MAAS machines before starting the rolling conversion.
 4. Backup current configurations and data related to vCenter.
 5. Ensure vMotion configured correctly on vCenter
 * I.e, If an ESX is put in maintenance mode, VMs should be able to move off that ESX
