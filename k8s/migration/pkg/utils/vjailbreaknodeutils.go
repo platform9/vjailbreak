@@ -240,12 +240,12 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	// Determine volume type: use spec value if provided, otherwise get from master node
 	var volumeType string
 	var availabilityZone string
-	
+
 	if vjNode.Spec.OpenstackVolumeType != "" {
 		// Use the volume type specified in the spec
 		volumeType = vjNode.Spec.OpenstackVolumeType
 		log.Info("Using volume type from spec", "volumeType", volumeType)
-		
+
 		// Still need to get availability zone from master
 		_, availabilityZone, err = GetVolumeTypeAndAvailabilityZoneFromVM(ctx, k3sclient, masterVjNode.Status.OpenstackUUID, creds)
 		if err != nil {
@@ -269,20 +269,20 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get flavor details")
 	}
-	
+
 	// Use flavor disk size, but ensure it's at least 60GB
 	diskSize := flavor.Disk
 	if diskSize < 60 {
 		diskSize = 60
 		log.Info("Flavor disk size is less than 60GB, using minimum of 60GB", "flavorDisk", flavor.Disk, "actualSize", diskSize)
 	}
-	
+
 	// Set Nova API microversion to support volume_type in block_device_mapping_v2
 	// Volume type in block device mapping requires microversion 2.67+
 	openstackClients.ComputeClient.Microversion = "2.67"
-	
+
 	log.Info("Creating agent node with volume type", "volumeType", volumeType, "size", diskSize, "flavor", flavor.Name)
-	
+
 	// Create root disk from image with volume type
 	rootDisk := servers.BlockDevice{
 		SourceType:          servers.SourceImage,
@@ -292,7 +292,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		DeleteOnTermination: true,
 		VolumeSize:          diskSize,
 	}
-	
+
 	// Only set volume type if it's not empty
 	if volumeType != "" {
 		rootDisk.VolumeType = volumeType
