@@ -465,6 +465,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	// Validate VM OS types before proceeding with migration
 	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	if validationErr != nil {
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
+			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
+		}
+		return ctrl.Result{}, validationErr
+	}
 
 	allVMNames := []string{}
 	for _, group := range migrationplan.Spec.VirtualMachines {
@@ -534,13 +540,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				r.ctxlog.Error(err, "Failed to update migration status", "vm", vmName)
 			}
 		}
-	}
-
-	if validationErr != nil {
-		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
-			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
-		}
-		return ctrl.Result{}, validationErr
 	}
 
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
