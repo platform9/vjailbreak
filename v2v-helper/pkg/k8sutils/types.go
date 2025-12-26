@@ -19,4 +19,5 @@ type VjailbreakSettings struct {
 	PeriodicSyncMaxRetries              uint64
 	PeriodicSyncRetryCap                string
 	AutoFstabUpdate                     bool
+	AutoPXEBootOnConversion             bool
 }
