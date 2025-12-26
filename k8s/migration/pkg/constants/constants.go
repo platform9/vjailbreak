@@ -129,6 +129,9 @@ const (
 	// VjailbreakNodePhaseNodeReady is the phase for node ready
 	VjailbreakNodePhaseNodeReady = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
 
+	// VjailbreakNodePhaseError is the phase for node in error state
+	VjailbreakNodePhaseError = vjailbreakv1alpha1.VjailbreakNodePhase("Error")
+
 	// NamespaceMigrationSystem is the namespace for migration system
 	NamespaceMigrationSystem = "migration-system"
 

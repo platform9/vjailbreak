@@ -117,11 +117,22 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
+	// Skip reconciliation if node is in error state - wait for manual intervention or deletion
+	if vjNode.Status.Phase == constants.VjailbreakNodePhaseError {
+		log.Info("Node is in error state, skipping reconciliation. Delete the node to clean up.", "name", vjNode.Name)
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
 
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
+		log.Error(err, "Failed to get OpenStack VM by name, setting node to error state")
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
+			log.Error(updateErr, "Failed to update node status to error")
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, errors.Wrap(err, "failed to get openstack vm by name")
 	}
 
 	if uuid != "" {
@@ -129,7 +140,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			// This will error until the the IP is available
 			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
+				log.Error(err, "Failed to get VM IP, will retry")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
 			}
 
 			vjNode.Status.OpenstackUUID = uuid
@@ -168,7 +180,12 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	// Create Openstack VM for worker node
 	vmid, err := utils.CreateOpenstackVMForWorkerNode(ctx, r.Client, scope)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to create openstack vm for worker node")
+		log.Error(err, "Failed to create OpenStack VM for worker node, setting node to error state")
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
+			log.Error(updateErr, "Failed to update node status to error")
+		}
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
 	vjNode.Status.OpenstackUUID = uuid
@@ -202,30 +219,42 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	// Update the VjailbreakNode status
 	err := r.Client.Status().Update(ctx, scope.VjailbreakNode)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
+		log.Error(err, "Failed to update node status to deleting, continuing with deletion")
 	}
 
+	// Try to get the VM UUID - use stored UUID if lookup fails
 	uuid, err := utils.GetOpenstackVMByName(ctx, scope.VjailbreakNode.Name, r.Client, scope.VjailbreakNode)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to get openstack vm by name")
+		log.Info("Failed to lookup VM by name, using stored UUID if available", "error", err)
+		uuid = scope.VjailbreakNode.Status.OpenstackUUID
 	}
 
-	if uuid == "" {
-		log.Info("node already deleted", "name", scope.VjailbreakNode.Name)
-		controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
-		return ctrl.Result{}, nil
+	// If we have a UUID (either from lookup or stored), try to delete the VM
+	if uuid != "" {
+		err = utils.DeleteOpenstackVM(ctx, uuid, r.Client, scope.VjailbreakNode)
+		if err != nil {
+			log.Error(err, "Failed to delete OpenStack VM, continuing with cleanup", "uuid", uuid)
+			// Don't return error - continue with cleanup even if VM deletion fails
+		} else {
+			log.Info("Successfully deleted OpenStack VM", "uuid", uuid)
+		}
+	} else {
+		log.Info("No VM UUID found, VM may have been manually deleted or never created")
 	}
 
-	err = utils.DeleteOpenstackVM(ctx, scope.VjailbreakNode.Status.OpenstackUUID, r.Client, scope.VjailbreakNode)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete openstack vm")
-	}
-
+	// Try to delete the Kubernetes node
 	err = utils.DeleteNodeByName(ctx, r.Client, scope.VjailbreakNode.Name)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete node by name")
+		log.Error(err, "Failed to delete Kubernetes node, continuing with finalizer removal", "nodeName", scope.VjailbreakNode.Name)
+		// Don't return error - allow finalizer removal even if K8s node deletion fails
+	} else if err == nil {
+		log.Info("Successfully deleted Kubernetes node", "nodeName", scope.VjailbreakNode.Name)
 	}
+
+	// Always remove finalizer to allow the resource to be deleted
+	// This ensures nodes in error states can be cleaned up
 	controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
+	log.Info("Finalizer removed, VjailbreakNode will be deleted", "name", scope.VjailbreakNode.Name)
 	return ctrl.Result{}, nil
 }
 
