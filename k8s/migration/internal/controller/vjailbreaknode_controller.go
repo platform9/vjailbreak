@@ -80,10 +80,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Quick path for just updating ActiveMigrations if node is ready
 	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
-		result, err := r.updateActiveMigrations(ctx, vjailbreakNodeScope)
-		if err != nil {
-			return result, errors.Wrap(err, "failed to update active migrations")
-		}
+		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
 	}
 
 	// Handle deleted VjailbreakNode
@@ -123,8 +120,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
-	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
-
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
 	if err != nil {
 		log.Error(err, "Failed to get OpenStack VM by name, setting node to error state")
@@ -136,37 +131,64 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	if uuid != "" {
-		if vjNode.Status.OpenstackUUID == "" {
-			// This will error until the the IP is available
-			vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
-			if err != nil {
-				log.Error(err, "Failed to get VM IP, will retry")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
+		// VM exists, check if we need to update UUID and/or IP
+		if vjNode.Status.OpenstackUUID == "" || vjNode.Status.VMIP == "" {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+			
+			// Get VM IP if not already set
+			if vjNode.Status.VMIP == "" {
+				vmip, err = utils.GetOpenstackVMIP(ctx, r.Client, vjNode, uuid)
+				if err != nil {
+					log.Error(err, "Failed to get VM IP, will retry")
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to get vm ip from openstack uuid")
+				}
+				vjNode.Status.VMIP = vmip
 			}
-
-			vjNode.Status.OpenstackUUID = uuid
-			vjNode.Status.VMIP = vmip
+			
+			// Set UUID if not already set
+			if vjNode.Status.OpenstackUUID == "" {
+				vjNode.Status.OpenstackUUID = uuid
+			}
 
 			// Update the VjailbreakNode status
 			err = r.Client.Status().Update(ctx, vjNode)
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 			}
+			// If we just set the IP, requeue quickly to check K8s node status
+			if vjNode.Status.VMIP != "" {
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
 		}
+		// VM and UUID already set, check Kubernetes node status
 		node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Info("Node not found, waiting for node to be created", "name", vjNode.Name)
+				// Keep phase as VMCreated while waiting for K8s node
+				if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
+					vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+					if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
+						log.Error(updateErr, "Failed to update node status")
+					}
+				}
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 			return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
 		}
-		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+		// Check if node is ready
+		nodeReady := false
 		for _, condition := range node.Status.Conditions {
-			if condition.Type == "Ready" {
-				vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+			if condition.Type == "Ready" && condition.Status == corev1.ConditionTrue {
+				nodeReady = true
 				break
 			}
+		}
+		// Update phase based on node readiness
+		if nodeReady {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+		} else if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
+			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 		}
 		// Update the VjailbreakNode status
 		err = r.Client.Status().Update(ctx, vjNode)
@@ -174,7 +196,19 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
 		}
 
-		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		// Requeue based on node readiness
+		if nodeReady {
+			// Node is ready - no need to reconcile until something changes
+			return ctrl.Result{}, nil
+		}
+		// Node not ready yet - check again soon
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// VM doesn't exist yet, create it
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+	if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
+		log.Error(updateErr, "Failed to update node status to CreatingVM")
 	}
 
 	// Create Openstack VM for worker node
@@ -188,9 +222,9 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{RequeueAfter: 2 * time.Minute}, errors.Wrap(err, "failed to create openstack vm for worker node")
 	}
 
-	vjNode.Status.OpenstackUUID = uuid
+	vjNode.Status.OpenstackUUID = vmid
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-	vjNode.Status.VMIP = vmip
+	// Note: VMIP will be populated on next reconciliation when we can query it from OpenStack
 
 	// Update the VjailbreakNode status
 	err = r.Client.Status().Update(ctx, vjNode)
@@ -199,7 +233,8 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	}
 
 	log.Info("Successfully created openstack vm for worker node", "vmid", vmid)
-	return ctrl.Result{}, nil
+	// Requeue to fetch the VM IP (give VM time to get IP assigned)
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 // reconcileDelete handles deleted VjailbreakNode
@@ -284,6 +319,9 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 		return ctrl.Result{}, errors.Wrap(err, "failed to patch vjailbreak node status")
 	}
 
-	// Always requeue after one minute
-	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	// Only requeue if there are active migrations - otherwise wait for changes
+	if len(activeMigrations) > 0 {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	return ctrl.Result{}, nil
 }
