@@ -34,29 +34,13 @@ The script is deployed through the migration form interface:
 The script executes **automatically after the migration completes and VM boots for the first time in PCD/OpenStack.**
 
 
-The firstboot Script feature uses [Guestfs](https://libguestfs.org/) (libguestfs) which is a set of tools for accessing and modifying virtual machine disk images. During migration, guestfs runs as part of [virt-v2v in-place](https://libguestfs.org/virt-v2v-in-place.1.html) conversion process which runs inside the v2v-helper pod.
+The firstboot script feature uses [virt-v2v](https://libguestfs.org/virt-v2v.1.html) to inject the script, which internally uses [Guestfs](https://libguestfs.org/) libraries. During the migration, the process runs inside the **v2v-helper pod**.
 
 ### Order of Execution
 
-#### 1. User Submits the Post-Migration Script
 - User provides a post-migration script via the migration form
 - Script is added in the **Post-Migration Script** field
-
-#### 2. Controller Creates ConfigMap
-- The migration controller intercepts the script content
-- Creates a Kubernetes **ConfigMap** with the script data with the name as `firstboot-config-<vmwaremachine-resource-name>`
-- ConfigMap details:
-  - **Key**: `user_firstboot.sh`
-  - **Value**: User-provided script content
-
-#### 3. ConfigMap Mounted to v2v-helper Pod
-- The ConfigMap is mounted as a volume in the **v2v-helper pod**
-- Mount path allows virt-v2v to access the script
-
-#### 4. Guestfs Access and Execution
-- "virt-v2v" reads the script from the mounted ConfigMap
-- Script content is retrieved from the `user_firstboot.sh` key
-- Guestfs adds the scripts by applying changes to the VM disk image
+- Virt-v2v injects the scripts by applying changes to the VM disk image
 - When VM boots for the first time in PCD/OpenStack, the script executes automatically
 
 
