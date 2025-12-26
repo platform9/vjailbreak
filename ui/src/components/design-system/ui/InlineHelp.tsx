@@ -23,24 +23,39 @@ export interface InlineHelpProps extends BoxProps {
 
 const getToneStyles = (tone: InlineHelpTone, variant: InlineHelpVariant, theme: Theme) => {
   switch (tone) {
-    case 'positive':
+    case 'positive': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.success.light
       return {
-        color: variant === 'outline' ? theme.palette.success.main : theme.palette.common.white,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.success.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.success.main
+            : theme.palette.getContrastText(theme.palette.success.light),
+        backgroundColor,
         borderColor: theme.palette.success.main
       }
-    case 'critical':
+    }
+    case 'critical': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.error.light
       return {
-        color: theme.palette.error.main,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.error.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.error.main
+            : theme.palette.getContrastText(theme.palette.error.light),
+        backgroundColor,
         borderColor: theme.palette.error.main
       }
-    case 'warning':
+    }
+    case 'warning': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.warning.light
       return {
-        color: variant === 'outline' ? theme.palette.warning.main : theme.palette.common.white,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.warning.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.warning.main
+            : theme.palette.getContrastText(theme.palette.warning.light),
+        backgroundColor,
         borderColor: theme.palette.warning.main
       }
+    }
     default:
       return {
         color: theme.palette.text.secondary,
@@ -82,7 +97,7 @@ const getIconNode = (icon: InlineHelpIcon, tone: InlineHelpTone) => {
 }
 
 const InlineHelp = forwardRef<HTMLDivElement, InlineHelpProps>(function InlineHelp(
-  { children, tone = 'default', variant = 'contained', icon = 'none', ...rest },
+  { children, tone = 'default', variant = 'outline', icon = 'none', ...rest },
   ref
 ) {
   const iconNode = typeof icon === 'string' ? getIconNode(icon, tone) : icon

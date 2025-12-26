@@ -57,7 +57,7 @@ export default function OpenstackCredentialsDrawer({
     defaultValues: {
       credentialName: '',
       rcFile: undefined,
-      isPcd: false,
+      isPcd: true,
       insecure: false
     }
   })
@@ -65,13 +65,14 @@ export default function OpenstackCredentialsDrawer({
   const {
     watch,
     setValue,
+    setError: setFormError,
     reset,
     formState: { errors }
   } = form
 
   const [validatingOpenstackCreds, setValidatingOpenstackCreds] = useState(false)
   const [openstackCredsValidated, setOpenstackCredsValidated] = useState<boolean | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
   const [createdCredentialIsPcd, setCreatedCredentialIsPcd] = useState(false)
@@ -94,7 +95,7 @@ export default function OpenstackCredentialsDrawer({
     setCreatedCredentialIsPcd(false)
     setValidatingOpenstackCreds(false)
     setOpenstackCredsValidated(null)
-    setError(null)
+    setOperationError(null)
     setSubmitting(false)
 
     onClose()
@@ -127,7 +128,7 @@ export default function OpenstackCredentialsDrawer({
     (values: Record<string, string>) => {
       setRcFileValues(values)
       setOpenstackCredsValidated(null)
-      setError(null)
+      setOperationError(null)
 
       if (values.OS_INSECURE !== undefined) {
         const val = values.OS_INSECURE.toString().toLowerCase().trim()
@@ -154,13 +155,16 @@ export default function OpenstackCredentialsDrawer({
   const handleSubmit: SubmitHandler<OpenstackCredentialsFormValues> = useCallback(
     async (values) => {
       if (!rcFileValues) {
-        setError('Please provide a credential name and upload an RC file')
+        setFormError('rcFile', {
+          type: 'manual',
+          message: 'OpenStack RC file is required'
+        })
         return
       }
 
       setSubmitting(true)
       setValidatingOpenstackCreds(true)
-      setError(null)
+      setOperationError(null)
 
       try {
         const projectName = rcFileValues.OS_PROJECT_NAME || rcFileValues.OS_TENANT_NAME
@@ -212,11 +216,11 @@ export default function OpenstackCredentialsDrawer({
         setValidatingOpenstackCreds(false)
 
         const errorMessage = getApiErrorMessage(error)
-        setError(errorMessage)
+        setOperationError(errorMessage)
         setSubmitting(false)
       }
     },
-    [rcFileValues, reportError, track]
+    [rcFileValues, reportError, setFormError, track]
   )
 
   const isSubmitDisabled =
@@ -247,7 +251,7 @@ export default function OpenstackCredentialsDrawer({
     } else if (status === 'Failed') {
       setOpenstackCredsValidated(false)
       setValidatingOpenstackCreds(false)
-      setError(message || 'Validation failed')
+      setOperationError(message || 'Validation failed')
 
       track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
         credentialType: 'openstack',
@@ -312,7 +316,7 @@ export default function OpenstackCredentialsDrawer({
             action: 'openstack-validation-status-polling'
           }
         })
-        setError('Error validating PCD credentials')
+        setOperationError('Error validating PCD credentials')
         setValidatingOpenstackCreds(false)
         setSubmitting(false)
       }
@@ -383,18 +387,14 @@ export default function OpenstackCredentialsDrawer({
               />
             </FormGrid>
 
-            <Box mt={2}>
-              <RHFOpenstackRCFileField
-                name="rcFile"
-                onParsed={handleRCFileParsed}
-                onError={(errorMsg) => setError(errorMsg)}
-                externalError={error || undefined}
-                size="small"
-                required
-              />
-            </Box>
+            <RHFOpenstackRCFileField
+              name="rcFile"
+              onParsed={handleRCFileParsed}
+              size="small"
+              required
+            />
 
-            <Row gap={3} mt={3} flexWrap="wrap">
+            <Row gap={3} flexWrap="wrap">
               <Box sx={{ flex: 1, minWidth: 260 }}>
                 <RHFToggleField
                   name="isPcd"
@@ -421,7 +421,7 @@ export default function OpenstackCredentialsDrawer({
               success={openstackCredsValidated === true && Boolean(credentialName)}
               successMessage="PCD credentials created and validated."
               successIcon={<CheckIcon color="success" fontSize="small" />}
-              error={error}
+              error={operationError}
             />
           </Section>
         </SurfaceCard>
