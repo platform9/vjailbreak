@@ -494,8 +494,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	if !isValid {
 		migration := &vjailbreakv1alpha1.Migration{}
-		if err := wait.PollImmediate(200*time.Millisecond, 5*time.Second, func() (bool, error) {
-			err := r.Get(ctx, types.NamespacedName{
+		if err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 5*time.Second, true, func(pctx context.Context) (bool, error) {
+			err := r.Get(pctx, types.NamespacedName{
 				Name:      migrationObj.Name,
 				Namespace: migrationObj.Namespace,
 			}, migration)
