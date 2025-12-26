@@ -16,6 +16,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,11 +29,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
 
 // CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
@@ -305,7 +304,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		Networks:       networkIDs,
 		SecurityGroups: securityGroups,
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
-			"password", constants.ENVFileLocation,
+			constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
 			token)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
