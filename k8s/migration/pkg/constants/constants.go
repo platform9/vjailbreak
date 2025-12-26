@@ -233,13 +233,16 @@ const (
 	// ConfigMap settings keys
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionDefault = false
+	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
 	K3sCloudInitScript = `#cloud-config
-password: %s
-chpasswd: { expire: False }
 write_files:
 - path: %s
   content: |
