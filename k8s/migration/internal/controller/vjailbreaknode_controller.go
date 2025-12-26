@@ -20,8 +20,6 @@ import (
 	"context"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -99,7 +97,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.VjailbreakNodeScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("Reconciling VjailbreakNode")
-	var node *corev1.Node
 
 	vjNode := scope.VjailbreakNode
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
@@ -132,99 +129,24 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	if uuid != "" {
 		// VM exists, check if we need to update UUID and/or IP
 		if vjNode.Status.OpenstackUUID == "" || vjNode.Status.VMIP == "" {
-			// Get VM status and IP from OpenStack
-			vmStatus, vmIP, err := utils.GetOpenstackVMStatus(ctx, r.Client, vjNode, uuid)
+			ipSet, err := utils.ReconcileVMStatusAndIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
-				log.Error(err, "Failed to get VM status from OpenStack, setting node to error state")
-				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-				if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
-					log.Error(updateErr, "Failed to update node status to error")
-				}
-				return ctrl.Result{RequeueAfter: 5 * time.Minute}, errors.Wrap(err, "failed to get vm status from openstack")
+				log.Error(err, "Failed to reconcile VM status and IP")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 			}
-
-			// Check VM status in OpenStack
-			log.Info("VM status in OpenStack", "status", vmStatus, "ip", vmIP)
-			
-			// Handle different VM states
-			switch vmStatus {
-			case "ERROR":
-				log.Error(nil, "VM is in ERROR state in OpenStack, setting node to error state")
-				vjNode.Status.Phase = constants.VjailbreakNodePhaseError
-				if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
-					log.Error(updateErr, "Failed to update node status to error")
-				}
-				return ctrl.Result{RequeueAfter: 5 * time.Minute}, errors.New("VM is in ERROR state in OpenStack")
-			case "ACTIVE":
-				// VM is active, proceed with IP assignment
-				vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-				if vmIP == "" {
-					log.Info("VM is ACTIVE but IP not yet available, will retry")
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-				vjNode.Status.VMIP = vmIP
-			default:
-				// VM is still building or in another transitional state
-				log.Info("VM is not yet ACTIVE, keeping CreatingVM phase", "status", vmStatus)
-				vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
-				if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
-					log.Error(updateErr, "Failed to update node status")
-				}
+			if !ipSet {
+				// IP not yet available or VM still building, retry
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
-			
-			// Set UUID if not already set
-			if vjNode.Status.OpenstackUUID == "" {
-				vjNode.Status.OpenstackUUID = uuid
-			}
-
-			// Update the VjailbreakNode status
-			err = r.Client.Status().Update(ctx, vjNode)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
-			}
-			// If we just set the IP, requeue quickly to check K8s node status
-			if vjNode.Status.VMIP != "" {
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-			}
+			// IP was set, requeue quickly to check K8s node status
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		// VM and UUID already set, check Kubernetes node status
-		node, err = utils.GetNodeByName(ctx, r.Client, vjNode.Name)
+		nodeReady, err := utils.ReconcileK8sNodeStatus(ctx, r.Client, vjNode)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Info("Node not found, waiting for node to be created", "name", vjNode.Name)
-				// Keep phase as VMCreated while waiting for K8s node
-				if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
-					vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-					if updateErr := r.Client.Status().Update(ctx, vjNode); updateErr != nil {
-						log.Error(updateErr, "Failed to update node status")
-					}
-				}
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-			}
-			return ctrl.Result{}, errors.Wrap(err, "failed to get node by name")
+			log.Error(err, "Failed to reconcile K8s node status")
+			return ctrl.Result{}, err
 		}
-		// Check if node is ready
-		nodeReady := false
-		for _, condition := range node.Status.Conditions {
-			if condition.Type == "Ready" && condition.Status == corev1.ConditionTrue {
-				nodeReady = true
-				break
-			}
-		}
-		// Update phase based on node readiness
-		if nodeReady {
-			vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
-		} else if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
-			vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-		}
-		// Update the VjailbreakNode status
-		err = r.Client.Status().Update(ctx, vjNode)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update vjailbreak node status")
-		}
-
-		// Requeue based on node readiness
 		if nodeReady {
 			// Node is ready - no need to reconcile until something changes
 			return ctrl.Result{}, nil

@@ -87,6 +87,9 @@ const (
 	// PauseMigrationLabel is the label for pausing rolling migration plan
 	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
+	// PauseMigrationValue is the value for pausing migration
+	PauseMigrationValue = "true"
+
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
 

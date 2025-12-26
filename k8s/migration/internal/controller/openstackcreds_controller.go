@@ -352,7 +352,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 		
 		// Mark sync as in progress
 		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = "true"
-		if err := r.Client.Update(ctx, scope.OpenstackCreds); err != nil {
+		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
 			return nil
 		}
@@ -368,7 +368,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 			
 			// Get the latest version of the resource to update annotations
 			latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
-			if getErr := r.Client.Get(syncCtx, client.ObjectKey{
+			if getErr := r.Get(syncCtx, client.ObjectKey{
 				Name:      scope.OpenstackCreds.Name,
 				Namespace: scope.OpenstackCreds.Namespace,
 			}, latestCreds); getErr != nil {
@@ -391,7 +391,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 				delete(latestCreds.Annotations, "pcd-sync-last-error")
 			}
 			
-			if updateErr := r.Client.Update(syncCtx, latestCreds); updateErr != nil {
+			if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
 				ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
 			}
 		}()
