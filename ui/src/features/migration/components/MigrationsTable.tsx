@@ -34,7 +34,8 @@ const PHASE_STEPS = {
   [Phase.AwaitingCutOverStartTime]: 7,
   [Phase.AwaitingAdminCutOver]: 8,
   [Phase.Succeeded]: 9,
-  [Phase.Failed]: 9
+  [Phase.Failed]: 10,
+  [Phase.ValidationFailed]: 11
 }
 
 const IN_PROGRESS_PHASES = [
@@ -62,7 +63,7 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
 
   const message = latestCondition?.message || phase
 
-  if (phase === Phase.Failed || phase === Phase.Succeeded) {
+  if (phase === Phase.Failed || phase === Phase.ValidationFailed || phase === Phase.Succeeded) {
     return `${phase} - ${message}`
   }
 

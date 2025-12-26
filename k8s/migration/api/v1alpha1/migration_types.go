@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -38,6 +38,8 @@ const (
 	VMMigrationPhasePending VMMigrationPhase = "Pending"
 	// VMMigrationPhaseValidating indicates the migration prerequisites are being validated
 	VMMigrationPhaseValidating VMMigrationPhase = "Validating"
+	// VMMigrationPhaseValidationFailed indicates the migration prerequisites validation failed
+	VMMigrationPhaseValidationFailed VMMigrationPhase = "ValidationFailed"
 	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
 	// VMMigrationPhaseCopying indicates initial block copying is in progress

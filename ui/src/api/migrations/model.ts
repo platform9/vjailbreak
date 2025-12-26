@@ -116,6 +116,7 @@ export enum Type {
 export enum Phase {
   Pending = 'Pending',
   Validating = 'Validating',
+  ValidationFailed = 'ValidationFailed',
   AwaitingDataCopyStart = 'AwaitingDataCopyStart',
   CopyingBlocks = 'CopyingBlocks',
   CopyingChangedBlocks = 'CopyingChangedBlocks',
