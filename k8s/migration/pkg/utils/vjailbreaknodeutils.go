@@ -470,6 +470,53 @@ func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjai
 	return "", errors.New("failed to get vm ip")
 }
 
+// GetOpenstackVMStatus retrieves the status and IP of an OpenStack VM
+// Returns: status (string), ip (string), error
+func GetOpenstackVMStatus(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (string, string, error) {
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get openstack creds")
+	}
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", "", errors.Wrap(err, "Failed to get server details")
+	}
+
+	// Get VM status
+	vmStatus := server.Status
+
+	// Extract IP addresses
+	var vmIP string
+	for _, addresses := range server.Addresses {
+		addrs, ok := addresses.([]any)
+		if !ok {
+			continue
+		}
+		for _, addr := range addrs {
+			ipInfo, ok := addr.(map[string]any)
+			if !ok {
+				continue
+			}
+			addrStr, ok := ipInfo["addr"].(string)
+			if ok && addrStr != "" {
+				vmIP = addrStr
+				break
+			}
+		}
+		if vmIP != "" {
+			break
+		}
+	}
+
+	return vmStatus, vmIP, nil
+}
+
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
 func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)

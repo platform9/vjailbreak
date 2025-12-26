@@ -54,13 +54,14 @@ const columns: GridColDef[] = [
     flex: 1,
     renderCell: (params) => {
       const isError = params.value === 'Error'
+      const isDeleting = params.value === 'Deleting'
       return (
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 1,
-            color: isError ? 'error.main' : 'text.primary'
+            color: isError ? 'error.main' : isDeleting ? 'warning.main' : 'text.primary'
           }}
         >
           {isError && <WarningIcon fontSize="small" />}
@@ -131,12 +132,14 @@ const columns: GridColDef[] = [
     sortable: false,
     renderCell: (params) => {
       const isErrorState = params.row.phase === 'Error'
+      const isDeleting = params.row.phase === 'Deleting'
       const hasMigrations = params.row.activeMigrations.length > 0
       const isMaster = params.row.role === 'master'
-      const isDisabled = isMaster || (hasMigrations && !isErrorState)
+      const isDisabled = isMaster || isDeleting || (hasMigrations && !isErrorState)
       
       const getTooltip = () => {
         if (isMaster) return 'Master node cannot be scaled down'
+        if (isDeleting) return 'Node is being deleted'
         if (isErrorState) return 'Force delete node in error state'
         if (hasMigrations) return 'Node has active migrations'
         return 'Scale down node'
@@ -349,6 +352,9 @@ export default function NodesTable() {
 
   const isRowSelectable = (params: GridRowParams) => {
     const isErrorState = params.row.phase === 'Error'
+    const isDeleting = params.row.phase === 'Deleting'
+    // Don't allow selection of nodes being deleted
+    if (isDeleting) return false
     return params.row.role === 'worker' && (params.row.activeMigrations.length === 0 || isErrorState)
   }
 
