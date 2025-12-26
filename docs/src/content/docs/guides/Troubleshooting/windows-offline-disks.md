@@ -89,18 +89,19 @@ Check File Explorer - your drives (E:, F:, G:, etc.) should now be visible.
 ## Automated Solution
 
 vJailbreak provides automated scripts to detect and fix this issue during first boot after migration.
-This should be passed as a firstboot script on the migration form.
 
 ### Available Scripts
 
-Two PowerShell scripts are available in the `scripts/firstboot/windows/` directory:
+Two BAT scripts are available in the `scripts/firstboot/windows/` directory. These scripts generate PowerShell scripts that run on first boot:
 
-1. **`check-disks.ps1`** - Diagnostic script that only checks disk status
-2. **`disk-online-fix.bat`** - Automated fix script that brings offline disks online
+1. **`check-disks.bat`** - Generates a diagnostic PowerShell script that only checks disk status
+2. **`disk-online-fix.bat`** - Generates an automated fix PowerShell script that brings offline disks online
+
+**Usage**: Copy the contents of either BAT file and paste it into the **Post Migration Script** field in the migration form. The script will execute automatically on first boot after migration.
 
 ### Script 1: Check Disks (Diagnostic Only)
 
-The `check-disks.ps1` script performs a read-only analysis:
+The `check-disks.bat` script generates `check-disks.ps1` which performs a read-only analysis:
 
 - Scans all physical disks
 - Reports operational status (Online/Offline)
@@ -112,12 +113,13 @@ The `check-disks.ps1` script performs a read-only analysis:
 
 ### Script 2: Disk Online Fix (Automated Repair)
 
-The `disk-online-fix.bat` script automatically fixes offline disk issues:
+The `disk-online-fix.bat` script generates and executes `check-disks-fix.ps1` which automatically fixes offline disk issues:
 
-- Generates and executes `check-disks-fix.ps1`
 - Performs all diagnostic checks from Script 1
 - **Automatically brings ALL offline disks online**
 - Logs all actions to `C:\DiskStatus_Report.txt`
+
+**Note**: The generated PowerShell script (`check-disks-fix.ps1`) is a separate file from the diagnostic-only `check-disks.ps1`. It includes all diagnostic functionality plus automated repair capabilities.
 
 
 ## ⚠️ Important Warnings
@@ -142,7 +144,7 @@ The automated fix script uses a **blanket approach** to bring ALL offline disks 
 
 ### Recommendations
 
-- Review the diagnostic output from `check-disks.ps1` before running the automated fix
+- Review the diagnostic output from `check-disks.bat` before running the automated fix
 - Document which disks should be online in your source environment
 - Test the migration process with a non-critical VM first
 - Review the log file at `C:\DiskStatus_Report.txt` after running the fix script
@@ -153,6 +155,6 @@ The automated fix script uses a **blanket approach** to bring ALL offline disks 
 To prevent this issue in future migrations, you can:
 
 1. **Pre-configure SAN Policy**: Before migration, set the SAN policy on the source VM to `OnlineAll`
-2. **Post-migration Automation**: Include the `disk-online-fix.bat` script in your firstboot automation sequence
+2. **Post-migration Automation**: Copy the contents of `disk-online-fix.bat` into the Post Migration Script field in the migration form
 3. **Document Disk States**: Maintain documentation of which disks should be online/offline for each VM
 
