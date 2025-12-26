@@ -45,7 +45,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -500,50 +499,37 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 			// If VM is not valid, mark its Migration as ValidationFailed
 			if !isValid {
-				migration := &vjailbreakv1alpha1.Migration{}
-				pollErr := wait.PollUntilContextTimeout(
-					ctx,
-					200*time.Millisecond,
-					5*time.Second,
-					true,
-					func(pctx context.Context) (bool, error) {
-						getErr := r.Get(pctx, types.NamespacedName{
-							Name:      migrationObj.Name,
-							Namespace: migrationObj.Namespace,
-						}, migration)
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latestMigration := &vjailbreakv1alpha1.Migration{}
+					if getErr := r.Get(ctx, types.NamespacedName{
+						Name:      migrationObj.Name,
+						Namespace: migrationObj.Namespace,
+					}, latestMigration); getErr != nil {
+						return getErr
+					}
 
-						if apierrors.IsNotFound(getErr) {
-							return false, nil
-						}
-						return getErr == nil, getErr
-					},
-				)
+					latestMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+					latestMigration.Status.Conditions = append(
+						latestMigration.Status.Conditions,
+						corev1.PodCondition{
+							Type:               "Validated",
+							Status:             corev1.ConditionFalse,
+							Reason:             "VMValidationFailed",
+							Message:            "VM failed migration plan validation",
+							LastTransitionTime: metav1.Now(),
+						},
+					)
+					return r.Status().Update(ctx, latestMigration)
+				})
 
-				if pollErr != nil {
-					r.ctxlog.Error(pollErr, "Migration object never appeared", "vm", vmName)
-					continue
-				}
-
-				migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-				migration.Status.Conditions = append(
-					migration.Status.Conditions,
-					corev1.PodCondition{
-						Type:               "Validated",
-						Status:             corev1.ConditionFalse,
-						Reason:             "VMValidationFailed",
-						Message:            "VM failed migration plan validation",
-						LastTransitionTime: metav1.Now(),
-					},
-				)
-
-				if err := r.Status().Update(ctx, migration); err != nil {
-					r.ctxlog.Error(err, "Failed to update migration status", "vm", vmName)
+				if err != nil {
+					r.ctxlog.Error(err, "Failed to update migration status after retries", "vm", vmName)
 				}
 			}
 		}
 
 		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
-			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
+			r.ctxlog.Error(err, "Failed to update migration plan status")
 		}
 		return ctrl.Result{}, validationErr
 	}
