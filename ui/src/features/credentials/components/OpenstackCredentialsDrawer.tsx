@@ -399,7 +399,7 @@ export default function OpenstackCredentialsDrawer({
                 <RHFToggleField
                   name="isPcd"
                   label="Is PCD credential"
-                  description="Mark this if the credential is for a Platform9 Cloud Deployment (PCD)."
+                  description="Mark this if the credential is for a Private Cloud Director (PCD)."
                 />
               </Box>
               <Box sx={{ flex: 1, minWidth: 260 }}>

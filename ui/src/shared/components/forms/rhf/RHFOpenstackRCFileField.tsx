@@ -125,7 +125,6 @@ export default function RHFOpenstackRCFileField({
                 <input
                   type="file"
                   hidden
-                  accept=".rc,.txt"
                   onChange={(e) => {
                     const selectedFile = e.target.files?.[0]
                     if (selectedFile) {
