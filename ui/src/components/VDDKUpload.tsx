@@ -47,7 +47,7 @@ export default function VDDKUpload() {
     setUploadResult(null)
 
     try {
-      const CHUNK_SIZE = 1024 * 1024 // 1MB chunks
+      const CHUNK_SIZE = 256 * 1024 // 256KB chunks (to avoid 413 after base64 encoding)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
       const uploadId = `ui_upload_${Date.now()}`
       
