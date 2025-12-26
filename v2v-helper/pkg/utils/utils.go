@@ -172,3 +172,10 @@ func DoRetryWithExponentialBackoff(ctx context.Context, task func() error, maxRe
 	}
 	return err
 }
+func GetNetworkPersistance(ctx context.Context, client client.Client) bool {
+	migrationParams, err := GetMigrationParams(ctx, client)
+	if err != nil {
+		return false
+	}
+	return migrationParams.NetworkPersistance
+}
