@@ -473,6 +473,26 @@ export default function MigrationOptionsAlt({
             </OptionLeft>
             <Box />
           </OptionRow>
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Persist source network interfaces"
+                control={
+                  <Checkbox
+                    checked={params?.networkPersistence || false}
+                    onChange={(e) => {
+                      onChange('networkPersistence')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Retain the source VM's network interface names
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
         </SectionBlock>
 
         {isPCD ? (

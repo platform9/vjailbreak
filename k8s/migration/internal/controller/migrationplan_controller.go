@@ -29,12 +29,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -1013,6 +1013,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 				"PERIODIC_SYNC_ENABLED":      strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
+				"NETWORK_PERSISTENCE":        strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
