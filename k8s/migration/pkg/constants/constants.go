@@ -243,7 +243,6 @@ const (
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
 	K3sCloudInitScript = `#cloud-config
-password: %s
 chpasswd: { expire: False }
 write_files:
 - path: %s
