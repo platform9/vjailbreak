@@ -849,7 +849,7 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 // performDiskConversion runs virt-v2v conversion on the boot disk
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
 
-	persisNetwork := utils.GetNetworkPersistance(ctx)
+	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 
 	if !migobj.Convert {
 		return nil
@@ -905,7 +905,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 
 // configureLinuxNetwork handles network configuration for Linux systems
 func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
-	persisNetwork := utils.GetNetworkPersistance(ctx)
+	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	if persisNetwork {
 		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
 			return errors.Wrap(err, "failed to inject mac to ips")
