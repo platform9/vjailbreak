@@ -87,6 +87,21 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Handle deletion reconciliation first, even for ValidationFailed migrations.
+	if !migration.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
 	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
 		ctxlog.Info(
 			"Migration is ValidationFailed; skipping reconciliation and requeue",
@@ -111,21 +126,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			reterr = err
 		}
 	}()
-
-	// Handle deletion reconciliation
-	if !migration.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
-			if err := r.reconcileDelete(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
 
 	// Adding finalizer if it doesn't exist
 	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {

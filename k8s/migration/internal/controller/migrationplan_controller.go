@@ -52,6 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
