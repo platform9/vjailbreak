@@ -46,7 +46,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       openstackCredential: '',
       flavor: '',
       nodeCount: 1,
-      masterAgentImage: 'No image found on master node'
+      masterAgentImage: masterNode?.spec.openstackImageID || 'No image found on master node'
     }
   })
 
@@ -105,7 +105,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       openstackCredential: '',
       flavor: '',
       nodeCount: 1,
-      masterAgentImage: ''
+      masterAgentImage: masterNode?.spec.openstackImageID || 'No image found on master node'
     })
     setOpenstackCredentials(null)
     setOpenstackError(null)
@@ -432,51 +432,42 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <FieldLabel label="Security Groups" align="flex-start" />
-                  <FormControl
-                    variant="outlined"
+
+                  <Select
+                    multiple
+                    value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
+                    label=""
+                    onChange={(e) => {
+                      const value = e.target.value as string[]
+                      if (value.includes('USE_MASTER')) {
+                        setUseMasterSecurityGroups(true)
+                        setSelectedSecurityGroups([])
+                      } else {
+                        setUseMasterSecurityGroups(false)
+                        setSelectedSecurityGroups(value)
+                      }
+                    }}
                     size="small"
-                    disabled={
-                      !openstackCredsValidated ||
-                      !openstackCredentials ||
-                      securityGroups.length === 0
-                    }
+                    renderValue={(selected) => {
+                      if (useMasterSecurityGroups) {
+                        return 'Use security groups of primary VJB instance'
+                      }
+                      return (selected as string[])
+                        .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
+                        .join(', ')
+                    }}
                   >
-                    <Select
-                      multiple
-                      value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
-                      label=""
-                      onChange={(e) => {
-                        const value = e.target.value as string[]
-                        if (value.includes('USE_MASTER')) {
-                          setUseMasterSecurityGroups(true)
-                          setSelectedSecurityGroups([])
-                        } else {
-                          setUseMasterSecurityGroups(false)
-                          setSelectedSecurityGroups(value)
-                        }
-                      }}
-                      size="small"
-                      renderValue={(selected) => {
-                        if (useMasterSecurityGroups) {
-                          return 'Use security groups of primary VJB instance'
-                        }
-                        return (selected as string[])
-                          .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
-                          .join(', ')
-                      }}
-                    >
-                      <MenuItem value="USE_MASTER">
-                        <Checkbox checked={useMasterSecurityGroups} />
-                        <ListItemText primary="Use security groups of primary VJB instance" />
+                    <MenuItem value="USE_MASTER">
+                      <Checkbox checked={useMasterSecurityGroups} />
+                      <ListItemText primary="Use security groups of primary VJB instance" />
+                    </MenuItem>
+                    {securityGroups.map((sg) => (
+                      <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
+                        <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
+                        <ListItemText primary={sg.name} />
                       </MenuItem>
-                      {securityGroups.map((sg) => (
-                        <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
-                          <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
-                          <ListItemText primary={sg.name} />
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                    ))}
+                  </Select>
                 </Box>
               </FormControl>
             </FormGrid>
