@@ -178,9 +178,14 @@ interface NodeSelector {
   id: string
   name: string
   status: string
+  phase: string
   ipAddress: string
   role: string
   activeMigrations: string[]
+  creationTimestamp?: Date
+  metadata?: {
+    name: string
+  }
 }
 
 const NodesToolbar = ({
@@ -272,7 +277,10 @@ export default function NodesTable() {
       ipAddress: node.status?.vmIP || '-',
       role: node.spec.nodeRole,
       creationTimestamp: node.metadata.creationTimestamp,
-      activeMigrations: node.status?.activeMigrations || []
+      activeMigrations: node.status?.activeMigrations || [],
+      metadata: {
+        name: node.metadata.name
+      }
     })) || []
 
   const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
