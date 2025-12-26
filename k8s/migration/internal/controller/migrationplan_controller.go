@@ -29,12 +29,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -45,6 +45,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -52,7 +53,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -467,75 +467,79 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	allVMNames := []string{}
 	for _, group := range migrationplan.Spec.VirtualMachines {
-    	allVMNames = append(allVMNames, group...)
+		allVMNames = append(allVMNames, group...)
 	}
 
 	for _, vmName := range allVMNames {
-    vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
-    if err != nil {
-        r.ctxlog.Error(err, "Failed to get vmMachine for pre-creation", "vm", vmName)
-        continue 
-    }
-
-    migrationObj, err := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
-    if err != nil {
-        r.ctxlog.Error(err, "Failed to create migration object", "vm", vmName)
-        continue
-    }
-
-	// If this VM is NOT in validVMs, mark its Migration as ValidationFailed
-	isValid := false
-	for _, validVM := range validVMs {
-		if validVM.Spec.VMInfo.Name == vmName {
-			isValid = true
-			break
-		}
-	}
-
-	if !isValid {
-		migration := &vjailbreakv1alpha1.Migration{}
-		if err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 5*time.Second, true, func(pctx context.Context) (bool, error) {
-			err := r.Get(pctx, types.NamespacedName{
-				Name:      migrationObj.Name,
-				Namespace: migrationObj.Namespace,
-			}, migration)
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-			return err == nil, err
-		}); err != nil {
-			r.ctxlog.Error(err, "Migration object never appeared", "vm", vmName)
+		vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to get vmMachine for pre-creation", "vm", vmName)
 			continue
 		}
 
-		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-		migration.Status.Conditions = append(
-			migration.Status.Conditions,
-			corev1.PodCondition{
-				Type:               "Validated",
-				Status:             corev1.ConditionFalse,
-				Reason:             "VMValidationFailed",
-				Message:            "VM failed migration plan validation",
-				LastTransitionTime: metav1.Now(),
-			},
-		)
-
-		if err := r.Status().Update(ctx, migration); err != nil {
-			r.ctxlog.Error(err, "Failed to update migration status", "vm", vmName)
+		migrationObj, err := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to create migration object", "vm", vmName)
+			continue
 		}
 
+		// If this VM is NOT in validVMs, mark its Migration as ValidationFailed
+		isValid := false
+		for _, validVM := range validVMs {
+			if validVM.Spec.VMInfo.Name == vmName {
+				isValid = true
+				break
+			}
+		}
 
-		if err != nil {
-			r.ctxlog.Error(err, "Failed to mark VM migration ValidationFailed", "vm", vmName)
+		if !isValid {
+			migration := &vjailbreakv1alpha1.Migration{}
+			pollErr := wait.PollUntilContextTimeout(
+				ctx,
+				200*time.Millisecond,
+				5*time.Second,
+				true,
+				func(pctx context.Context) (bool, error) {
+					getErr := r.Get(pctx, types.NamespacedName{
+						Name:      migrationObj.Name,
+						Namespace: migrationObj.Namespace,
+					}, migration)
+
+					if apierrors.IsNotFound(getErr) {
+						return false, nil
+					}
+					return getErr == nil, getErr
+				},
+			)
+
+			if pollErr != nil {
+				r.ctxlog.Error(pollErr, "Migration object never appeared", "vm", vmName)
+				continue
+			}
+
+			migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+			migration.Status.Conditions = append(
+				migration.Status.Conditions,
+				corev1.PodCondition{
+					Type:               "Validated",
+					Status:             corev1.ConditionFalse,
+					Reason:             "VMValidationFailed",
+					Message:            "VM failed migration plan validation",
+					LastTransitionTime: metav1.Now(),
+				},
+			)
+
+			if err := r.Status().Update(ctx, migration); err != nil {
+				r.ctxlog.Error(err, "Failed to update migration status", "vm", vmName)
+			}
 		}
 	}
-}
 
 	if validationErr != nil {
-    	if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
-        	r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
-    	}
-    	return ctrl.Result{}, validationErr
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
+			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
+		}
+		return ctrl.Result{}, validationErr
 	}
 
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
