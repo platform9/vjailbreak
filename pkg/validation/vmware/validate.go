@@ -185,14 +185,16 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 		}
 	}
 
-	// Check if the datacenter exists
-	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), datacenter)
-	if err != nil {
-		return ValidationResult{
-			Valid:   false,
-			Message: fmt.Sprintf("Failed to find datacenter: %s", err.Error()),
-			Error:   err,
+	// Check if the datacenter exists (only if datacenter is provided)
+	if datacenter != "" {
+		finder := find.NewFinder(c, false)
+		_, err = finder.Datacenter(ctx, datacenter)
+		if err != nil {
+			return ValidationResult{
+				Valid:   false,
+				Message: fmt.Sprintf("Failed to find datacenter: %s", err.Error()),
+				Error:   err,
+			}
 		}
 	}
 

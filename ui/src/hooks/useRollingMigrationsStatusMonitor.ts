@@ -35,8 +35,13 @@ export const useRollingMigrationsStatusMonitor = (
         return
       }
 
-      // Skip if phase hasn't changed or already reported
-      if (tracker.previousPhase === currentPhase || tracker.lastReportedPhase === currentPhase) {
+      // Skip if phase hasn't changed
+      if (tracker.previousPhase === currentPhase) {
+        return
+      }
+
+      // Skip if this phase has already been reported (prevents duplicate events)
+      if (tracker.lastReportedPhase === currentPhase) {
         return
       }
 
@@ -99,7 +104,7 @@ export const useRollingMigrationsStatusMonitor = (
           rollingMigrationPlan
         })
 
-        // Mark as reported
+        // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[planName].lastReportedPhase = currentPhase
       }
 
@@ -119,11 +124,11 @@ export const useRollingMigrationsStatusMonitor = (
           migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
         })
 
-        // Mark as reported
+        // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[planName].lastReportedPhase = currentPhase
       }
 
-      // Update previous phase
+      // Update previous phase (only after all event tracking is complete)
       if (statusTrackerRef.current[planName]) {
         statusTrackerRef.current[planName].previousPhase = currentPhase
       }

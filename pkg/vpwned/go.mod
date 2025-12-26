@@ -2,15 +2,18 @@ module github.com/platform9/vjailbreak/pkg/vpwned
 
 go 1.24.10
 
+replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
+
 require (
 	github.com/bougou/go-ipmi v0.7.6
 	github.com/canonical/gomaasclient v0.12.0
 	github.com/google/go-github/v63 v63.0.0
-	github.com/gophercloud/gophercloud v1.14.1
+	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/juju/errors v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
+	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
@@ -18,7 +21,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/mock v0.5.1
-	golang.org/x/mod v0.25.0
+	golang.org/x/mod v0.29.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/grpc v1.72.1
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
@@ -53,7 +56,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gophercloud/gophercloud/v2 v2.9.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -92,12 +94,12 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect

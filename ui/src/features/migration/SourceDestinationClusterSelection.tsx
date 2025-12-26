@@ -11,12 +11,12 @@ import {
   TextField,
   InputAdornment
 } from '@mui/material'
-import Step from '../../components/forms/Step'
 import vmwareLogo from 'src/assets/vmware.jpeg'
 import { useClusterData } from './useClusterData'
 
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from '@cds/core/icon'
+import { Step } from 'src/shared/components'
 
 ClarityIcons.addIcons(buildingIcon, clusterIcon, searchIcon)
 
@@ -42,8 +42,7 @@ const ClusterSelectionStepContainer = styled('div')(({ theme }) => ({
 const SideBySideContainer = styled(Box)(({ theme }) => ({
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
-  gap: theme.spacing(3),
-  marginLeft: theme.spacing(6)
+  gap: theme.spacing(3)
 }))
 
 interface SourceDestinationClusterSelectionProps {
@@ -53,6 +52,7 @@ interface SourceDestinationClusterSelectionProps {
   pcdCluster?: string
   stepNumber?: string
   stepLabel?: string
+  showHeader?: boolean
   onVmwareClusterChange?: (value: string) => void
   onPcdClusterChange?: (value: string) => void
   loadingVMware?: boolean
@@ -66,6 +66,7 @@ export default function SourceDestinationClusterSelection({
   pcdCluster = '',
   stepNumber = '1',
   stepLabel = 'Source and Destination Clusters',
+  showHeader = true,
   onVmwareClusterChange,
   onPcdClusterChange,
   loadingVMware: externalLoadingVMware,
@@ -115,14 +116,8 @@ export default function SourceDestinationClusterSelection({
       onChange('vmwareCreds')({
         existingCredName: credName
       })
-
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const cluster = sourceItem?.clusters.find((c) => c.id === value)
-
-      onChange('vmwareClusterDisplayName')(cluster?.displayName || '')
     } else {
       onChange('vmwareCreds')({})
-      onChange('vmwareClusterDisplayName')('')
     }
   }
 
@@ -162,7 +157,7 @@ export default function SourceDestinationClusterSelection({
 
   return (
     <ClusterSelectionStepContainer>
-      <Step stepNumber={stepNumber} label={stepLabel} />
+      {showHeader ? <Step stepNumber={stepNumber} label={stepLabel} /> : null}
       <SideBySideContainer>
         <Box>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: '500' }}>
@@ -186,12 +181,20 @@ export default function SourceDestinationClusterSelection({
                 const parts = selected.split(':')
                 const credName = parts[0]
 
-                const sourceItem = sourceData.find((item) => item.credName === credName)
-                const vcenterName = sourceItem?.vcenterName || credName
+                const sourceItem = sourceData.find(
+                  (item) => item.credName === credName && item.clusters.some((c) => c.id === selected)
+                )
                 const cluster = sourceItem?.clusters.find((c) => c.id === selected)
-                return `${vcenterName} - ${sourceItem?.datacenter || ''} - ${
-                  cluster?.displayName || ''
-                }`
+                const vcenterName = sourceItem?.vcenterName || credName
+                const datacenterDisplay = sourceItem?.datacenter || ''
+
+                return datacenterDisplay && datacenterDisplay !== 'All Datacenters'
+                  ? `${vcenterName} - ${datacenterDisplay} - ${
+                      cluster?.displayName || cluster?.name || 'Unknown Cluster'
+                    }`
+                  : `${vcenterName} - ${
+                      cluster?.displayName || cluster?.name || 'Unknown Cluster'
+                    }`
               }}
               endAdornment={
                 loadingVMware ? (

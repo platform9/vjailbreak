@@ -70,12 +70,16 @@ const createNodeSpec = (params: {
   imageId: string
   openstackCreds: OpenstackCredsRef
   flavorId: string
+  volumeType?: string
+  securityGroups?: string[]
   role?: string
 }): Spec => ({
   openstackImageID: params.imageId,
   nodeRole: params.role || 'worker',
   openstackCreds: params.openstackCreds,
-  openstackFlavorID: params.flavorId
+  openstackFlavorID: params.flavorId,
+  ...(params.volumeType && { openstackVolumeType: params.volumeType }),
+  ...(params.securityGroups && params.securityGroups.length > 0 && { openstackSecurityGroups: params.securityGroups })
 })
 
 const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6)
@@ -107,6 +111,8 @@ export const createNodes = async (params: {
   imageId: string
   openstackCreds: OpenstackCredsRef
   flavorId: string
+  volumeType?: string
+  securityGroups?: string[]
   count: number
   namespace?: string
 }) => {
@@ -121,7 +127,9 @@ export const createNodes = async (params: {
       const spec = createNodeSpec({
         imageId: params.imageId,
         openstackCreds: params.openstackCreds,
-        flavorId: params.flavorId
+        flavorId: params.flavorId,
+        volumeType: params.volumeType,
+        securityGroups: params.securityGroups
       })
       const node = createNodeObject({ spec, namespace })
 

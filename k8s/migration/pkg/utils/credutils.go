@@ -3,10 +3,8 @@ package utils
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"reflect"
 	"slices"
@@ -32,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -98,9 +97,6 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	}
 	if password == "" {
 		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
-	}
-	if datacenter == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
@@ -418,22 +414,20 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create openstack client")
 	}
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
+	vjbNet := netutils.NewVjbNet()
 	if openstackCredential.Insecure {
-		tlsConfig.InsecureSkipVerify = true
+		vjbNet.Insecure = true
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-		Proxy:           http.ProxyFromEnvironment,
+	vjbNet.SetTimeout(60 * time.Second)
+
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		providerClient.HTTPClient = *vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
-	providerClient.HTTPClient = http.Client{
-		Transport: transport,
-		Timeout:   60 * time.Second,
-	}
+
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
 		Username:         openstackCredential.Username,
@@ -548,11 +542,12 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	if lastErr != nil {
 		return nil, fmt.Errorf("failed to login to vCenter after %d attempts: %w", maxRetries, lastErr)
 	}
-	// Check if the datacenter exists
-	finder := find.NewFinder(c, false)
-	_, err = finder.Datacenter(context.Background(), datacenter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datacenter: %w", err)
+	if datacenter != "" {
+		finder := find.NewFinder(c, false)
+		_, err = finder.Datacenter(ctx, datacenter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find datacenter: %w", err)
+		}
 	}
 	// All validations passed - cache the fully validated client
 	vmwareClientMap.Store(mapKey, c)
@@ -662,22 +657,64 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	}
 	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
 
-	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
+	// Determine which datacenters to scan
+	targetDatacenters := []string{}
+	if datacenter != "" {
+		targetDatacenters = append(targetDatacenters, datacenter)
+	} else {
+		// If no datacenter specified, we need to fetch all datacenters from vCenter
+		c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to validate vmware creds: %w", err)
+		}
+		finder := find.NewFinder(c, false)
+		dcs, err := finder.DatacenterList(ctx, "*")
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to list datacenters: %w", err)
+		}
+		for _, dc := range dcs {
+			targetDatacenters = append(targetDatacenters, dc.Name())
+		}
+		log.Info("No datacenter specified, scanning all found datacenters", "count", len(targetDatacenters), "datacenters", targetDatacenters)
 	}
-
-	vms, err := finder.VirtualMachineList(ctx, "*")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get vms: %w", err)
-	}
-	// Pre-allocate vminfo slice with capacity of vms to avoid append allocations
-	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(vms))
 
 	// Create a semaphore to limit concurrent goroutines
 	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
-	for i := range vms {
+	
+	// Collect all VMs from all target datacenters 
+	allVMs := make([]*object.VirtualMachine, 0)
+	vmToDatacenter := make(map[string]string)
+	
+	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get client: %w", err)
+	}
+
+	for _, dcName := range targetDatacenters {
+		finder := find.NewFinder(c, false)
+		dc, err := finder.Datacenter(ctx, dcName)
+		if err != nil {
+			log.Error(err, "failed to find datacenter, skipping", "datacenter", dcName)
+			continue
+		}
+		finder.SetDatacenter(dc)
+		
+		vms, err := finder.VirtualMachineList(ctx, "*")
+		if err != nil {
+			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
+			continue
+		}
+		for _, vm := range vms {
+			vmToDatacenter[vm.Reference().Value] = dcName
+		}
+		allVMs = append(allVMs, vms...)
+	}
+
+	// Pre-allocate vminfo slice
+	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(allVMs))
+
+	for i := range allVMs {
 		// Acquire semaphore (blocks if 100 goroutines are already running)
 		semaphore <- struct{}{}
 		wg.Add(1)
@@ -693,7 +730,8 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 					panicMu.Unlock()
 				}
 			}()
-			processSingleVM(ctx, scope, vms[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap)
+			vmDatacenter := vmToDatacenter[allVMs[i].Reference().Value]
+			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -874,7 +912,7 @@ func AppendUnique(slice []string, values ...string) []string {
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
 	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
@@ -883,7 +921,8 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
-	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ClusterName, vmwcreds.Name)
+	clusterK8sID := GetClusterK8sID(vminfo.ClusterName, datacenter)
+	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -921,6 +960,9 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 					constants.VMwareCredsLabel:   vmwcreds.Name,
 					constants.ESXiNameLabel:      esxiK8sName,
 					constants.VMwareClusterLabel: clusterK8sName,
+				},
+				Annotations: map[string]string{
+					constants.VMwareDatacenterLabel: datacenter,
 				},
 			},
 			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
@@ -971,6 +1013,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 			}
 			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
 			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
+
+			if vmwvm.Annotations == nil {
+				vmwvm.Annotations = make(map[string]string)
+			}
+			vmwvm.Annotations[constants.VMwareDatacenterLabel] = datacenter
 
 			if vmwvm.Spec.VMInfo.OSFamily == "" {
 				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
@@ -1512,11 +1559,14 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 		}()
 	}
 	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, datacenter)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find datacenter: %w", err)
+
+	if datacenter != "" {
+		dc, err := finder.Datacenter(ctx, datacenter)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to find datacenter: %w", err)
+		}
+		finder.SetDatacenter(dc)
 	}
-	finder.SetDatacenter(dc)
 	return c, finder, nil
 }
 
@@ -1530,7 +1580,7 @@ var rdmSemaphore = &sync.Mutex{}
 // due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
 //
 //nolint:gocyclo
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
@@ -1641,6 +1691,9 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	clusterName = getClusterNameFromHost(ctx, c, host)
+	if clusterName == "" {
+		clusterName = GetClusterK8sID(clusterName, vmDatacenter)
+	}
 	if len(rdmForVM) >= 1 && len(disks) == 0 {
 		log.Info("Skipping VM: VM has RDM disks but no regular bootable disks found, migration not supported", "VM NAME", vm.Name())
 		return
@@ -1758,7 +1811,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		GPU:               gpuInfo,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
-	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM)
+	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM, vmDatacenter)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
 	}
