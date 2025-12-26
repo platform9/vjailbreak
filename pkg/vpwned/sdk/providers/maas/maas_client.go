@@ -193,21 +193,21 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		logrus.Errorf("Failed to get machine: %v", err)
 		return errors.Wrap(err, "failed to get machine")
 	}
-	//TODO(Omkar): check back this again
-	// con_interface := ipmi.InterfaceLanplus
-	// if req.IpmiInterface == nil {
-	// 	req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
-	// }
-	// switch req.IpmiInterface.IpmiInterface.(type) {
-	// case *api.IpmiType_Lan:
-	// 	con_interface = ipmi.InterfaceLan
-	// case *api.IpmiType_Lanplus:
-	// 	con_interface = ipmi.InterfaceLanplus
-	// case *api.IpmiType_OpenIpmi:
-	// 	con_interface = ipmi.InterfaceOpen
-	// case *api.IpmiType_Tool:
-	// 	con_interface = ipmi.InterfaceTool
-	// }
+
+	con_interface := ipmi.InterfaceLanplus
+	if req.IpmiInterface == nil || req.IpmiInterface.IpmiInterface == nil {
+		req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+	}
+	switch req.IpmiInterface.IpmiInterface.(type) {
+	case *api.IpmiType_Lan:
+		con_interface = ipmi.InterfaceLan
+	case *api.IpmiType_Lanplus:
+		con_interface = ipmi.InterfaceLanplus
+	case *api.IpmiType_OpenIpmi:
+		con_interface = ipmi.InterfaceOpen
+	case *api.IpmiType_Tool:
+		con_interface = ipmi.InterfaceTool
+	}
 
 	// Handle machine in "New" state - needs commissioning first
 	if strings.EqualFold(machine.StatusName, "New") {
@@ -236,16 +236,15 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		}
 	}
 
-	//TODO(Omkar): check back this again
-	// if !req.ManualPowerControl {
-	// 	//Set machine to PXE Boot
-	// 	logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
-	// 	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
-	// 	if err != nil {
-	// 		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-	// 		return errors.Wrap(err, "failed to set machine to pxe boot")
-	// 	}
-	// }
+	if !req.ManualPowerControl {
+		//Set machine to PXE Boot
+		logrus.Infof("Setting %s to PXE boot over %s", machine.Hostname, con_interface)
+		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+		if err != nil {
+			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+			return errors.Wrap(err, "failed to set machine to pxe boot")
+		}
+	}
 	// Check if machine needs to be released first
 	if strings.EqualFold(machine.StatusName, "Ready") || strings.EqualFold(machine.StatusName, "Releasing") || strings.EqualFold(machine.StatusName, "released") {
 		logrus.Infof("%s Machine %s is already %s", ctx, systemID, machine.StatusName)
@@ -300,14 +299,14 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		logrus.Infof("%s Machine %s is already Allocated, skipping allocation step", ctx, systemID)
 	}
 
-	// if !req.ManualPowerControl {
-	// 	//Call PXE boot again to deploy the machine
-	// 	err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
-	// 	if err != nil {
-	// 		logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
-	// 		return errors.Wrap(err, "failed to set machine to pxe boot")
-	// 	}
-	// }
+	if !req.ManualPowerControl {
+		//Call PXE boot again to deploy the machine
+		err = m.SetMachine2PXEBoot(ctx, systemID, req.PowerCycle, req.IpmiInterface)
+		if err != nil {
+			logrus.Errorf("%s Failed to set machine to PXE boot: %v", ctx, err)
+			return errors.Wrap(err, "failed to set machine to pxe boot")
+		}
+	}
 	// Deploy the machine again
 	logrus.Infof("%s Deploying machine %s", ctx, systemID)
 	_, err = m.Client.Machine.Deploy(systemID, &entity.MachineDeployParams{

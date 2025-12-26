@@ -161,4 +161,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
 	AutoFstabUpdateKey = "AUTO_FSTAB_UPDATE"
+
+	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionDefault = false
+	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
 )
