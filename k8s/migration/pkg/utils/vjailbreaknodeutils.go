@@ -470,6 +470,53 @@ func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjai
 	return "", errors.New("failed to get vm ip")
 }
 
+// GetOpenstackVMStatus retrieves the status and IP of an OpenStack VM
+// Returns: status (string), ip (string), error
+func GetOpenstackVMStatus(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (string, string, error) {
+	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get openstack creds")
+	}
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, creds)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", "", errors.Wrap(err, "Failed to get server details")
+	}
+
+	// Get VM status
+	vmStatus := server.Status
+
+	// Extract IP addresses
+	var vmIP string
+	for _, addresses := range server.Addresses {
+		addrs, ok := addresses.([]any)
+		if !ok {
+			continue
+		}
+		for _, addr := range addrs {
+			ipInfo, ok := addr.(map[string]any)
+			if !ok {
+				continue
+			}
+			addrStr, ok := ipInfo["addr"].(string)
+			if ok && addrStr != "" {
+				vmIP = addrStr
+				break
+			}
+		}
+		if vmIP != "" {
+			break
+		}
+	}
+
+	return vmStatus, vmIP, nil
+}
+
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
 func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
@@ -820,4 +867,102 @@ func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string,
 		return nil, errors.Wrap(err, "failed to get vm migration")
 	}
 	return migration, nil
+}
+
+// ReconcileVMStatusAndIP handles VM status checking and IP population for a VjailbreakNode
+func ReconcileVMStatusAndIP(ctx context.Context, k8sClient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (bool, error) {
+	// Get VM status and IP from OpenStack
+	vmStatus, vmIP, err := GetOpenstackVMStatus(ctx, k8sClient, vjNode, uuid)
+	if err != nil {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		if updateErr := k8sClient.Status().Update(ctx, vjNode); updateErr != nil {
+			return false, errors.Wrap(updateErr, "failed to update node status to error")
+		}
+		return false, errors.Wrap(err, "failed to get vm status from openstack")
+	}
+
+	// Handle different VM states
+	switch vmStatus {
+	case "ERROR":
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
+		if updateErr := k8sClient.Status().Update(ctx, vjNode); updateErr != nil {
+			return false, errors.Wrap(updateErr, "failed to update node status to error")
+		}
+		return false, errors.New("VM is in ERROR state in OpenStack")
+	case "ACTIVE":
+		// VM is active, proceed with IP assignment
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+		if vmIP == "" {
+			// IP not yet available, caller should retry
+			return false, nil
+		}
+		vjNode.Status.VMIP = vmIP
+	default:
+		// VM is still building or in another transitional state
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
+		if updateErr := k8sClient.Status().Update(ctx, vjNode); updateErr != nil {
+			return false, errors.Wrap(updateErr, "failed to update node status")
+		}
+		return false, nil
+	}
+
+	// Set UUID if not already set
+	if vjNode.Status.OpenstackUUID == "" {
+		vjNode.Status.OpenstackUUID = uuid
+	}
+
+	// Update the VjailbreakNode status
+	err = k8sClient.Status().Update(ctx, vjNode)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to update vjailbreak node status")
+	}
+
+	// Return true if IP was set
+	return vjNode.Status.VMIP != "", nil
+}
+
+// ReconcileK8sNodeStatus checks Kubernetes node status and updates VjailbreakNode phase accordingly
+func ReconcileK8sNodeStatus(ctx context.Context, k8sClient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (bool, error) {
+	node, err := GetNodeByName(ctx, k8sClient, vjNode.Name)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Keep phase as VMCreated while waiting for K8s node
+			if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
+				vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+				if updateErr := k8sClient.Status().Update(ctx, vjNode); updateErr != nil {
+					return false, errors.Wrap(updateErr, "failed to update node status")
+				}
+			}
+			return false, nil
+		}
+		return false, errors.Wrap(err, "failed to get node by name")
+	}
+
+	// Check if node is ready
+	nodeReady := IsNodeReady(node)
+
+	// Update phase based on node readiness
+	if nodeReady {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+	} else if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
+	}
+
+	// Update the VjailbreakNode status
+	err = k8sClient.Status().Update(ctx, vjNode)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to update vjailbreak node status")
+	}
+
+	return nodeReady, nil
+}
+
+// IsNodeReady checks if a Kubernetes node is in Ready state
+func IsNodeReady(node *corev1.Node) bool {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == "Ready" && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
