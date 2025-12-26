@@ -322,6 +322,7 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	}
 	return nil
 }
+
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
