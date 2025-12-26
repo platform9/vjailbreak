@@ -195,8 +195,10 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	}
 
 	con_interface := ipmi.InterfaceLanplus
-	if req.IpmiInterface == nil || req.IpmiInterface.IpmiInterface == nil {
+	if req.IpmiInterface == nil {
 		req.IpmiInterface = &api.IpmiType{IpmiInterface: &api.IpmiType_Lanplus{}}
+	} else if req.IpmiInterface.IpmiInterface == nil {
+		req.IpmiInterface.IpmiInterface = &api.IpmiType_Lanplus{}
 	}
 	switch req.IpmiInterface.IpmiInterface.(type) {
 	case *api.IpmiType_Lan:
