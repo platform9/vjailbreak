@@ -848,6 +848,9 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
+
+	persisNetwork := utils.GetNetworkPersistance(ctx)
+
 	if !migobj.Convert {
 		return nil
 	}
@@ -867,6 +870,24 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if versionID == "" {
 			return errors.Errorf("failed to get version ID")
 		}
+		if !persisNetwork {
+
+			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse major version: %v", err)
+			}
+
+			if majorVersion >= 7 {
+				firstbootscriptname := "rhel_enable_dhcp"
+				firstbootscript := constants.RhelFirstBootScript
+				firstbootscripts = append(firstbootscripts, firstbootscriptname)
+
+				if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
+					return errors.Wrap(err, "failed to add first boot script")
+				}
+				utils.PrintLog("First boot script added successfully")
+			}
+		}
 	}
 
 	// Run virt-v2v conversion
@@ -883,13 +904,28 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 }
 
 // configureLinuxNetwork handles network configuration for Linux systems
-func (migobj *Migrate) configureLinuxNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
-	if strings.Contains(osRelease, "ubuntu") {
-		return migobj.configureUbuntuNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
-	}
+func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+	persisNetwork := utils.GetNetworkPersistance(ctx)
+	if persisNetwork {
+		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+			return errors.Wrap(err, "failed to inject mac to ips")
+		}
+		utils.PrintLog("Mac to ips injection completed successfully")
 
-	if virtv2v.IsRHELFamily(osRelease) {
-		return migobj.configureRHELNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
+		utils.PrintLog("Running network persistence script")
+		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
+		} else {
+			utils.PrintLog("Network persistence script executed successfully")
+		}
+	} else {
+		if strings.Contains(osRelease, "ubuntu") {
+			return migobj.configureUbuntuNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
+		}
+
+		if virtv2v.IsRHELFamily(osRelease) {
+			return migobj.configureRHELNetwork(vminfo, bootVolumeIndex, osRelease)
+		}
 	}
 
 	return nil
@@ -910,14 +946,6 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 			return errors.Wrap(err, "failed to add wildcard netplan")
 		}
 		utils.PrintLog("Wildcard netplan added successfully")
-
-		utils.PrintLog("Running network persistence script")
-		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
-		} else {
-			utils.PrintLog("Network persistence script executed successfully")
-		}
-
 		return nil
 	}
 
@@ -957,23 +985,11 @@ func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex i
 }
 
 // configureRHELNetwork handles RHEL-specific network configuration
-func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	versionID := parseVersionID(osRelease)
 	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
 	if err != nil {
 		return fmt.Errorf("failed to parse major version: %v", err)
-	}
-
-	utils.PrintLog("Uploading macToIP map for RHEL persistence")
-	if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
-		return errors.Wrap(err, "failed to add macToIP map")
-	}
-
-	utils.PrintLog("Running network persistence script for RHEL")
-	if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
-		utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
-	} else {
-		utils.PrintLog("Network persistence script executed successfully")
 	}
 
 	if majorVersion < 7 {
@@ -1052,7 +1068,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	// Step 9: Configure network for Linux systems
 	if osType == constants.OSFamilyLinux {
-		if err := migobj.configureLinuxNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
+		if err := migobj.configureLinuxNetwork(ctx, vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
 			return err
 		}
 	}

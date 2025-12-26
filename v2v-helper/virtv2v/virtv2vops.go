@@ -286,7 +286,42 @@ func GetOsRelease(path string) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
+func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+	// Add wildcard to netplan
+	macToIPs := ipPerMac
+	macToIPsFile := "/home/fedora/macToIP"
+	f, err := os.Create(macToIPsFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for mac, ips := range macToIPs {
+		if len(ips) > 0 {
+			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, ips[0].IP)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
+	// Construct YAML
+	log.Println("Created macToIP file with entries")
+	// Upload it to the disk
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
+	if useSingleDisk {
+		command := "upload /home/fedora/macToIP /etc/macToIP"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
+	}
+	if err != nil {
+		log.Printf("failed to upload macToIP file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload macToIP file: %w: %s", err, strings.TrimSpace(ans))
+	}
+	return nil
+}
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
@@ -716,76 +751,76 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
 func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
-    // Skip this entirely for Windows as it doesn't use these udev rules/bash scripts
-    if strings.ToLower(ostype) == constants.OSFamilyWindows {
-        log.Println("Skipping offline network persistence for Windows guest")
-        return nil
-    }
+	// Skip this entirely for Windows as it doesn't use these udev rules/bash scripts
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
+		log.Println("Skipping offline network persistence for Windows guest")
+		return nil
+	}
 
-    // Create a temporary directory in the Pod to serve as the mount point
-    mountPoint, err := os.MkdirTemp("", "v2v-mount-*")
-    if err != nil {
-        return fmt.Errorf("failed to create temp mount dir: %w", err)
-    }
-    defer os.RemoveAll(mountPoint)
+	// Create a temporary directory in the Pod to serve as the mount point
+	mountPoint, err := os.MkdirTemp("", "v2v-mount-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp mount dir: %w", err)
+	}
+	defer os.RemoveAll(mountPoint)
 
-    // Construct the guestmount command
-    args := []string{"-i", "--rw"}
-    
-    if useSingleDisk {
-        args = append(args, "-a", diskPath)
-    } else {
-        for _, disk := range disks {
-            args = append(args, "-a", disk.Path)
-        }
-    }
-    args = append(args, mountPoint)
+	// Construct the guestmount command
+	args := []string{"-i", "--rw"}
 
-    log.Printf("Mounting disk to %s using guestmount...", mountPoint)
-    mountCmd := exec.Command("guestmount", args...)
-    if out, err := mountCmd.CombinedOutput(); err != nil {
-        return fmt.Errorf("guestmount failed: %v, output: %s", err, string(out))
-    }
+	if useSingleDisk {
+		args = append(args, "-a", diskPath)
+	} else {
+		for _, disk := range disks {
+			args = append(args, "-a", disk.Path)
+		}
+	}
+	args = append(args, mountPoint)
 
-    // Unmount even if the script execution fails
-    defer func() {
-        log.Println("Unmounting disk...")
-        unmountCmd := exec.Command("guestunmount", mountPoint)
-        if out, err := unmountCmd.CombinedOutput(); err != nil {
-            log.Printf("Failed to unmount %s: %v, output: %s", mountPoint, err, string(out))
-        }
-    }()
+	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
+	mountCmd := exec.Command("guestmount", args...)
+	if out, err := mountCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("guestmount failed: %v, output: %s", err, string(out))
+	}
 
-    scriptPath := "/home/fedora/network_config_util.sh"
-    if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-        return fmt.Errorf("script not found at %s", scriptPath)
-    }
+	// Unmount even if the script execution fails
+	defer func() {
+		log.Println("Unmounting disk...")
+		unmountCmd := exec.Command("guestunmount", mountPoint)
+		if out, err := unmountCmd.CombinedOutput(); err != nil {
+			log.Printf("Failed to unmount %s: %v, output: %s", mountPoint, err, string(out))
+		}
+	}()
 
-    runCmd := exec.Command("bash", scriptPath)
-    
-    // Configure environment variables to point the script to the Mount Point
-    env := os.Environ()
-    env = append(env, fmt.Sprintf("V2V_MAP_FILE=%s", filepath.Join(mountPoint, "/etc/macToIP")))
-    env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR=%s", filepath.Join(mountPoint, "/etc/sysconfig/network-scripts")))
-    env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR_SUSE=%s", filepath.Join(mountPoint, "/etc/sysconfig/network")))
-    env = append(env, fmt.Sprintf("NETWORK_CONNECTIONS_DIR=%s", filepath.Join(mountPoint, "/etc/NetworkManager/system-connections")))
-    env = append(env, fmt.Sprintf("NM_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/NetworkManager")))
-    env = append(env, fmt.Sprintf("DHCLIENT_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/dhclient")))
-    env = append(env, fmt.Sprintf("NETWORK_INTERFACES_DIR=%s", filepath.Join(mountPoint, "/etc/network/interfaces")))
-    env = append(env, fmt.Sprintf("SYSTEMD_NETWORK_DIR=%s", filepath.Join(mountPoint, "/run/systemd/network")))
-    env = append(env, fmt.Sprintf("UDEV_RULES_FILE=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
+	scriptPath := "/home/fedora/network_config_util.sh"
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("script not found at %s", scriptPath)
+	}
+
+	runCmd := exec.Command("bash", scriptPath)
+
+	// Configure environment variables to point the script to the Mount Point
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("V2V_MAP_FILE=%s", filepath.Join(mountPoint, "/etc/macToIP")))
+	env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR=%s", filepath.Join(mountPoint, "/etc/sysconfig/network-scripts")))
+	env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR_SUSE=%s", filepath.Join(mountPoint, "/etc/sysconfig/network")))
+	env = append(env, fmt.Sprintf("NETWORK_CONNECTIONS_DIR=%s", filepath.Join(mountPoint, "/etc/NetworkManager/system-connections")))
+	env = append(env, fmt.Sprintf("NM_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/NetworkManager")))
+	env = append(env, fmt.Sprintf("DHCLIENT_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/dhclient")))
+	env = append(env, fmt.Sprintf("NETWORK_INTERFACES_DIR=%s", filepath.Join(mountPoint, "/etc/network/interfaces")))
+	env = append(env, fmt.Sprintf("SYSTEMD_NETWORK_DIR=%s", filepath.Join(mountPoint, "/run/systemd/network")))
+	env = append(env, fmt.Sprintf("UDEV_RULES_FILE=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
 	env = append(env, fmt.Sprintf("WILDCARD_NETPLAN=%s", filepath.Join(mountPoint, "/etc/netplan/99-netcfg.yaml")))
-    
-    env = append(env, fmt.Sprintf("NETPLAN_DIR=%s", mountPoint))
-    
-    runCmd.Env = env
 
-    log.Println("Executing network persistence script")
-    output, err := runCmd.CombinedOutput()
-    if err != nil {
-        return fmt.Errorf("network persistence script failed: %w, output: %s", err, string(output))
-    }
-    log.Printf("Network persistence script output: %s", string(output))
+	env = append(env, fmt.Sprintf("NETPLAN_DIR=%s", mountPoint))
 
-    return nil
+	runCmd.Env = env
+
+	log.Println("Executing network persistence script")
+	output, err := runCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("network persistence script failed: %w, output: %s", err, string(output))
+	}
+	log.Printf("Network persistence script output: %s", string(output))
+
+	return nil
 }

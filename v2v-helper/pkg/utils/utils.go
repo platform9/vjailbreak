@@ -172,3 +172,7 @@ func DoRetryWithExponentialBackoff(ctx context.Context, task func() error, maxRe
 	}
 	return err
 }
+
+func GetNetworkPersistance(ctx context.Context) bool {
+	return false
+}
