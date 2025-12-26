@@ -317,7 +317,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "Failed to create server")
 	}
 
-	log.Info("Server created.", "ID", server.ID)
+	log.Info("Server created", "ID", server.ID)
 	return server.ID, nil
 }
 
