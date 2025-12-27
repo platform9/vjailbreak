@@ -177,5 +177,6 @@ func GetNetworkPersistance(ctx context.Context, client client.Client) bool {
 	if err != nil {
 		return false
 	}
+	PrintLog(fmt.Sprintf("Network persistence value from ConfigMap: %t", migrationParams.NetworkPersistance))
 	return migrationParams.NetworkPersistance
 }
