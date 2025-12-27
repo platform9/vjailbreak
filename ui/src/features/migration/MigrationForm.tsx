@@ -115,6 +115,7 @@ export interface FormValues extends Record<string, unknown> {
   serverGroup?: string
   fallbackToDHCP?: boolean
   useGPU?: boolean
+  networkPersistence?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -508,6 +509,9 @@ export default function MigrationFormDrawer({
         params.postMigrationScript && {
           postMigrationScript: params.postMigrationScript
         }),
+      ...(typeof params.networkPersistence === 'boolean' && {
+        networkPersistence: params.networkPersistence
+      }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled
     }

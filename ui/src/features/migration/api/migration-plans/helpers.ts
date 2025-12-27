@@ -19,7 +19,8 @@ export const createMigrationPlanJson = (params) => {
     postMigrationScript,
     periodicSyncInterval,
     periodicSyncEnabled,
-    assignedIPsPerVM
+    assignedIPsPerVM,
+    networkPersistence
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -43,6 +44,9 @@ export const createMigrationPlanJson = (params) => {
   }
   if (typeof periodicSyncEnabled === 'boolean') {
     advancedOptions.periodicSyncEnabled = periodicSyncEnabled
+  }
+  if (typeof networkPersistence === 'boolean') {
+    advancedOptions.networkPersistence = networkPersistence
   }
   if (Object.keys(advancedOptions).length > 0) {
     spec.advancedOptions = advancedOptions
