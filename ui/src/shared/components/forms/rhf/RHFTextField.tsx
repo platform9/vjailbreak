@@ -12,6 +12,7 @@ export type RHFTextFieldProps = TextFieldProps & {
   rules?: ControllerRules
   labelHelperText?: FieldLabelProps['helperText']
   labelProps?: FieldLabelCustomProps
+  disabled?: boolean
 }
 
 export default function RHFTextField({
@@ -22,6 +23,7 @@ export default function RHFTextField({
   label,
   labelHelperText,
   labelProps,
+  disabled = false,
   ...rest
 }: RHFTextFieldProps) {
   const { control } = useFormContext()
@@ -49,6 +51,7 @@ export default function RHFTextField({
             value={field.value ?? ''}
             error={fieldState.invalid || errorProp}
             helperText={fieldState.error?.message ?? helperText}
+            disabled={disabled}
           />
         </Box>
       )}

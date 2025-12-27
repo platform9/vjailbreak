@@ -1,12 +1,4 @@
-import {
-  Box,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Checkbox,
-  ListItemText
-} from '@mui/material'
+import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -16,7 +8,8 @@ import {
   ActionButton,
   OperationStatus,
   FormGrid,
-  SurfaceCard
+  SurfaceCard,
+  FieldLabel
 } from 'src/components'
 
 import { DesignSystemForm, RHFTextField, RHFSelect } from 'src/shared/components/forms'
@@ -41,6 +34,7 @@ interface ScaleUpFormValues {
   openstackCredential: string
   flavor: string
   nodeCount: number
+  masterAgentImage?: string
 }
 
 export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDrawerProps) {
@@ -51,7 +45,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     defaultValues: {
       openstackCredential: '',
       flavor: '',
-      nodeCount: 1
+      nodeCount: 1,
+      masterAgentImage: masterNode?.spec.openstackImageID || 'No image found on master node'
     }
   })
 
@@ -101,11 +96,16 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     return new Map(flavors.map((flavor) => [flavor.id, flavor]))
   }, [flavors])
 
+  useEffect(() => {
+    setValue('masterAgentImage', masterNode?.spec.openstackImageID)
+  }, [masterNode, setValue])
+
   const clearStates = useCallback(() => {
     reset({
       openstackCredential: '',
       flavor: '',
-      nodeCount: 1
+      nodeCount: 1,
+      masterAgentImage: masterNode?.spec.openstackImageID || 'No image found on master node'
     })
     setOpenstackCredentials(null)
     setOpenstackError(null)
@@ -368,15 +368,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             subtitle="Choose the flavor and security group for newly created agents."
           >
             <FormGrid minWidth={260} gap={2}>
-              <RHFTextField
-                name="masterAgentImage"
-                label="Master Agent Image"
-                value={
-                  masterNode?.spec.openstackImageID
-                    ? 'Image selected from master node'
-                    : 'No image found on master node'
-                }
-              />
+              <RHFTextField name="masterAgentImage" label="Master Agent Image" disabled={true} />
 
               <RHFSelect
                 name="flavor"
@@ -405,20 +397,30 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 size="small"
                 disabled={!openstackCredsValidated || !openstackCredentials}
               >
-                <InputLabel size="small">Volume Type</InputLabel>
-                <Select
-                  value={selectedVolumeType}
-                  label="Volume Type"
-                  onChange={(e) => setSelectedVolumeType(e.target.value)}
-                  size="small"
-                >
-                  <MenuItem value="USE_MASTER">Use volume type of primary VJB instance</MenuItem>
-                  {volumeTypes.map((volumeType) => (
-                    <MenuItem key={volumeType} value={volumeType}>
-                      {volumeType}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <FieldLabel label="Volume Type" align="flex-start" />
+                  <FormControl
+                    variant="outlined"
+                    size="small"
+                    disabled={!openstackCredsValidated || !openstackCredentials}
+                  >
+                    <Select
+                      value={selectedVolumeType}
+                      label=""
+                      onChange={(e) => setSelectedVolumeType(e.target.value)}
+                      size="small"
+                    >
+                      <MenuItem value="USE_MASTER">
+                        Use volume type of primary VJB instance
+                      </MenuItem>
+                      {volumeTypes.map((volumeType) => (
+                        <MenuItem key={volumeType} value={volumeType}>
+                          {volumeType}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
               </FormControl>
 
               <FormControl
@@ -428,42 +430,45 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
                 }
               >
-                <InputLabel size="small">Security Groups</InputLabel>
-                <Select
-                  multiple
-                  value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
-                  label="Security Groups"
-                  onChange={(e) => {
-                    const value = e.target.value as string[]
-                    if (value.includes('USE_MASTER')) {
-                      setUseMasterSecurityGroups(true)
-                      setSelectedSecurityGroups([])
-                    } else {
-                      setUseMasterSecurityGroups(false)
-                      setSelectedSecurityGroups(value)
-                    }
-                  }}
-                  size="small"
-                  renderValue={(selected) => {
-                    if (useMasterSecurityGroups) {
-                      return 'Use security groups of primary VJB instance'
-                    }
-                    return (selected as string[])
-                      .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
-                      .join(', ')
-                  }}
-                >
-                  <MenuItem value="USE_MASTER">
-                    <Checkbox checked={useMasterSecurityGroups} />
-                    <ListItemText primary="Use security groups of primary VJB instance" />
-                  </MenuItem>
-                  {securityGroups.map((sg) => (
-                    <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
-                      <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
-                      <ListItemText primary={sg.name} />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <FieldLabel label="Security Groups" align="flex-start" />
+
+                  <Select
+                    multiple
+                    value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
+                    label=""
+                    onChange={(e) => {
+                      const value = e.target.value as string[]
+                      if (value.includes('USE_MASTER')) {
+                        setUseMasterSecurityGroups(true)
+                        setSelectedSecurityGroups([])
+                      } else {
+                        setUseMasterSecurityGroups(false)
+                        setSelectedSecurityGroups(value)
+                      }
+                    }}
+                    size="small"
+                    renderValue={(selected) => {
+                      if (useMasterSecurityGroups) {
+                        return 'Use security groups of primary VJB instance'
+                      }
+                      return (selected as string[])
+                        .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
+                        .join(', ')
+                    }}
+                  >
+                    <MenuItem value="USE_MASTER">
+                      <Checkbox checked={useMasterSecurityGroups} />
+                      <ListItemText primary="Use security groups of primary VJB instance" />
                     </MenuItem>
-                  ))}
-                </Select>
+                    {securityGroups.map((sg) => (
+                      <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
+                        <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
+                        <ListItemText primary={sg.name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Box>
               </FormControl>
             </FormGrid>
 

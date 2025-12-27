@@ -305,7 +305,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
             required: 'Credential name is required',
             validate: (value: string) =>
               isValidName(value) ||
-              'Credential name must start with a letter/number and use only letters, numbers, or hyphens.'
+              'Credential name must start with a lowercase letter/number and use only lowercase letters, numbers, or hyphens.'
           }}
         />
 
