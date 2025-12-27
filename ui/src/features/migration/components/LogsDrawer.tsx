@@ -208,6 +208,7 @@ export default function LogsDrawer({
     <DrawerShell
       open={open}
       onClose={handleClose}
+      requireCloseConfirmation={false}
       header={
         <DrawerHeader
           title={headerTitle}

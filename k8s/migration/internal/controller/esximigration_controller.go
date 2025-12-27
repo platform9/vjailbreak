@@ -274,7 +274,7 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	}
 	if vmwareHost.Spec.HostConfigID == "" {
 		log.Info("Host config ID is empty, pausing ESXi migration. please assign host config to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = "true"
+		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = constants.PauseMigrationValue
 		err = r.Update(ctx, scope.RollingMigrationPlan)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")
