@@ -482,10 +482,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 			migrationObj, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
 			if createErr != nil {
+				r.ctxlog.Error(createErr, "Failed to create migration object during validation failure documentation", "vm", vmName)
 				continue
 			}
 
-			_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latestMigration := &vjailbreakv1alpha1.Migration{}
 				if getErr := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latestMigration); getErr != nil {
 					return getErr
@@ -499,7 +500,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 					LastTransitionTime: metav1.Now(),
 				})
 				return r.Status().Update(ctx, latestMigration)
-			})
+			}); retryErr != nil {
+				r.ctxlog.Error(retryErr, "Failed to update migration status after retries", "vm", vmName)
+			}
 		}
 
 		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
@@ -511,9 +514,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	for _, vmName := range allVMNames {
 		vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
 		if err != nil {
+			r.ctxlog.Error(err, "Failed to get vmMachine for migration creation", "vm", vmName)
 			continue
 		}
-		_, _ = r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
+		if _, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine); createErr != nil {
+			r.ctxlog.Error(createErr, "Failed to create migration object", "vm", vmName)
+		}
 	}
 
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
