@@ -42,6 +42,7 @@ type MigrationParams struct {
 	FallbackToDHCP          bool
 	PeriodicSyncInterval    string
 	PeriodicSyncEnabled     bool
+	NetworkPersistance      bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -85,5 +86,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		FallbackToDHCP:          string(configMap.Data["FALLBACK_TO_DHCP"]) == constants.TrueString,
 		PeriodicSyncInterval:    string(configMap.Data["PERIODIC_SYNC_INTERVAL"]),
 		PeriodicSyncEnabled:     string(configMap.Data["PERIODIC_SYNC_ENABLED"]) == constants.TrueString,
+		NetworkPersistance:      string(configMap.Data["NETWORK_PERSISTENCE"]) == constants.TrueString,
 	}, nil
 }

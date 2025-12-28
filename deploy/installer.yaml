@@ -459,6 +459,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  networkPersistence:
+                    description: NetworkPersistence instructs the migration helper
+                      to persist the source networking configuration
+                    type: boolean
                   periodicSyncEnabled:
                     description: PeriodicSyncEnabled is a boolean to enable periodic
                       sync
@@ -1597,6 +1601,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  networkPersistence:
+                    description: NetworkPersistence instructs the migration helper
+                      to persist the source networking configuration
+                    type: boolean
                   periodicSyncEnabled:
                     description: PeriodicSyncEnabled is a boolean to enable periodic
                       sync
