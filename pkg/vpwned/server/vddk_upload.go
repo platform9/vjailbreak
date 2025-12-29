@@ -105,8 +105,9 @@ func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
 		"dest_path":     destPath,
 	}).Info("Successfully saved VDDK file")
 
-	// Extract the tar file
-	extractDir := filepath.Join(vddkUploadDir, "vddk_extracted")
+	// Extract the tar file directly to vddkUploadDir
+	// The tar file contains vmware-vix-disklib-distrib/ as the top-level directory
+	extractDir := vddkUploadDir
 	logrus.WithFields(logrus.Fields{
 		"func":        fn,
 		"extract_dir": extractDir,
@@ -211,6 +212,41 @@ func extractTarFile(srcPath, destDir string) error {
 				logrus.WithField("func", fn).Warnf("Failed to set permissions for %s: %v", target, err)
 			}
 			logrus.WithField("func", fn).Debugf("Extracted file: %s", target)
+
+		case tar.TypeSymlink:
+			// Create parent directory if it doesn't exist
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for symlink %s: %w", target, err)
+			}
+
+			// Remove existing file/symlink if it exists
+			os.Remove(target)
+
+			// Create the symlink
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				logrus.WithField("func", fn).Warnf("Failed to create symlink %s -> %s: %v", target, header.Linkname, err)
+			} else {
+				logrus.WithField("func", fn).Debugf("Created symlink: %s -> %s", target, header.Linkname)
+			}
+
+		case tar.TypeLink:
+			// Create parent directory if it doesn't exist
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for hard link %s: %w", target, err)
+			}
+
+			// Construct the link target path
+			linkTarget := filepath.Join(destDir, header.Linkname)
+
+			// Remove existing file/link if it exists
+			os.Remove(target)
+
+			// Create the hard link
+			if err := os.Link(linkTarget, target); err != nil {
+				logrus.WithField("func", fn).Warnf("Failed to create hard link %s -> %s: %v", target, linkTarget, err)
+			} else {
+				logrus.WithField("func", fn).Debugf("Created hard link: %s -> %s", target, linkTarget)
+			}
 
 		default:
 			logrus.WithField("func", fn).Warnf("Unsupported file type %v for %s", header.Typeflag, header.Name)
