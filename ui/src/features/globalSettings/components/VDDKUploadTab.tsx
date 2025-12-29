@@ -144,7 +144,7 @@ export default function VDDKUploadTab() {
         setUploadMessage('Network error occurred during upload.')
       })
 
-      xhr.open('POST', '/vpw/v1/vddk/upload')
+      xhr.open('POST', '/dev-api/sdk/vpw/v1/vddk/upload')
       xhr.send(formData)
     } catch (error) {
       setUploadStatus('error')
