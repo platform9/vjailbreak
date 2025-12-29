@@ -1,4 +1,4 @@
-import { get, post, put } from '../axios'
+import { get, put } from '../axios'
 import { VjailbreakSettings } from './model'
 
 export const VERSION_CONFIG_MAP_NAME = 'vjailbreak-settings'
@@ -35,21 +35,4 @@ export const updateSettingsConfigMap = async (
     config: { mock: false }
   })
   return response
-}
-
-export interface InjectEnvVariablesRequest {
-  http_proxy?: string
-  https_proxy?: string
-  no_proxy?: string
-}
-
-export interface InjectEnvVariablesResponse {
-  message: string
-}
-
-export const injectEnvVariables = (data: InjectEnvVariablesRequest) => {
-  return post<InjectEnvVariablesResponse>({
-    endpoint: '/dev-api/sdk/vpw/v1/inject_env_variables',
-    data
-  })
 }

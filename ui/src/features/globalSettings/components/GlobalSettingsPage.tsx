@@ -29,9 +29,9 @@ import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
-  VERSION_NAMESPACE,
-  injectEnvVariables
+  VERSION_NAMESPACE
 } from 'src/api/settings/settings'
+import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 
 const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -70,10 +70,12 @@ type SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
-  PROXY: string
+  // Proxy-related fields are UI-only and handled via injectEnvVariables
   PROXY_ENABLED: boolean
-  PROXY_HOST: string
-  PROXY_PORT: string
+  PROXY_HTTP_HOST: string
+  PROXY_HTTP_PORT: string
+  PROXY_HTTPS_HOST: string
+  PROXY_HTTPS_PORT: string
   NO_PROXY: string
 }
 
@@ -95,10 +97,11 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
-  PROXY: '',
   PROXY_ENABLED: false,
-  PROXY_HOST: '',
-  PROXY_PORT: '',
+  PROXY_HTTP_HOST: '',
+  PROXY_HTTP_PORT: '',
+  PROXY_HTTPS_HOST: '',
+  PROXY_HTTPS_PORT: '',
   NO_PROXY: 'localhost,127.0.0.1'
 }
 
@@ -115,7 +118,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VCENTER_LOGIN_RETRY_LIMIT',
     'VCENTER_SCAN_CONCURRENCY_LIMIT'
   ],
-  network: ['PROXY'],
+  network: [],
   advanced: [
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
@@ -226,11 +229,13 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
-  PROXY:
-    'Proxy URL derived from the host and port. Used for outbound HTTP/HTTPS traffic (leave disabled to skip proxy).',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
-  PROXY_HOST: 'Hostname or IP of the proxy server (e.g. proxy.example.com).',
-  PROXY_PORT: 'TCP port of the proxy server (e.g. 3128).',
+  PROXY_HTTP_HOST:
+    'Hostname or IP of the HTTP proxy server (e.g. proxy.example.com). Do not include http://.',
+  PROXY_HTTP_PORT: 'TCP port of the HTTP proxy server (e.g. 3128).',
+  PROXY_HTTPS_HOST:
+    'Hostname or IP of the HTTPS proxy server (e.g. proxy.example.com). Do not include https://.',
+  PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
     'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
 }
@@ -301,12 +306,7 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
   VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
   AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
-  DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
-  PROXY: f.PROXY,
-  PROXY_ENABLED: String(f.PROXY_ENABLED),
-  PROXY_HOST: f.PROXY_HOST,
-  PROXY_PORT: f.PROXY_PORT,
-  NO_PROXY: f.NO_PROXY
+  DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
 })
 
 const fromConfigMapData = (data: Record<string, string> | undefined): SettingsForm => ({
@@ -365,11 +365,12 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
   VALIDATE_RDM_OWNER_VMS: parseBool(data?.VALIDATE_RDM_OWNER_VMS, DEFAULTS.VALIDATE_RDM_OWNER_VMS),
   AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, DEFAULTS.AUTO_FSTAB_UPDATE),
   DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME,
-  PROXY: parseString(data?.PROXY, DEFAULTS.PROXY),
-  PROXY_ENABLED: parseBool(data?.PROXY_ENABLED, DEFAULTS.PROXY_ENABLED),
-  PROXY_HOST: parseString(data?.PROXY_HOST, DEFAULTS.PROXY_HOST),
-  PROXY_PORT: parseString(data?.PROXY_PORT, DEFAULTS.PROXY_PORT),
-  NO_PROXY: parseString(data?.NO_PROXY, DEFAULTS.NO_PROXY)
+  PROXY_ENABLED: DEFAULTS.PROXY_ENABLED,
+  PROXY_HTTP_HOST: DEFAULTS.PROXY_HTTP_HOST,
+  PROXY_HTTP_PORT: DEFAULTS.PROXY_HTTP_PORT,
+  PROXY_HTTPS_HOST: DEFAULTS.PROXY_HTTPS_HOST,
+  PROXY_HTTPS_PORT: DEFAULTS.PROXY_HTTPS_PORT,
+  NO_PROXY: DEFAULTS.NO_PROXY
 })
 
 const parseInterval = (val: string): string | undefined => {
@@ -587,29 +588,54 @@ export default function GlobalSettingsPage() {
     }
 
     const proxyEnabled = state.PROXY_ENABLED
-    const proxyHost = (state.PROXY_HOST ?? '').trim()
-    const proxyPort = (state.PROXY_PORT ?? '').trim()
+    const httpHost = (state.PROXY_HTTP_HOST ?? '').trim()
+    const httpPort = (state.PROXY_HTTP_PORT ?? '').trim()
+    const httpsHost = (state.PROXY_HTTPS_HOST ?? '').trim()
+    const httpsPort = (state.PROXY_HTTPS_PORT ?? '').trim()
 
     if (proxyEnabled) {
-      if (!proxyHost) {
-        e.PROXY_HOST = 'Proxy server is required when proxy is enabled.'
-      }
-      if (!proxyPort) {
-        e.PROXY_PORT = 'Proxy port is required when proxy is enabled.'
-      } else {
-        const portNum = Number(proxyPort)
-        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-          e.PROXY_PORT = 'Enter a valid TCP port between 1 and 65535.'
+      const validateHostPort = (
+        hostKey: keyof SettingsForm,
+        portKey: keyof SettingsForm,
+        hostVal: string,
+        portVal: string,
+        scheme: 'http' | 'https'
+      ) => {
+        if (!hostVal && !portVal) {
+          return
+        }
+
+        if (!hostVal) {
+          e[String(hostKey)] =
+            `${scheme.toUpperCase()} proxy server is required when proxy is enabled.`
+        } else if (/^https?:\/\//i.test(hostVal)) {
+          e[String(hostKey)] =
+            scheme === 'http'
+              ? 'Enter only the hostname or IP for HTTP proxy (without http://).'
+              : 'Enter only the hostname or IP for HTTPS proxy (without https://).'
+        }
+
+        if (!portVal) {
+          e[String(portKey)] =
+            `${scheme.toUpperCase()} proxy port is required when proxy is enabled.`
+        } else {
+          const portNum = Number(portVal)
+          if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+            e[String(portKey)] = 'Enter a valid TCP port between 1 and 65535.'
+          }
+        }
+
+        if (!e[String(hostKey)] && !e[String(portKey)]) {
+          const proxyUrl = `${scheme}://${hostVal}:${portVal}`
+          const proxyError = validateProxyUrl(proxyUrl)
+          if (proxyError) {
+            e[String(hostKey)] = proxyError
+          }
         }
       }
 
-      if (!e.PROXY_HOST && !e.PROXY_PORT) {
-        const proxyUrl = `http://${proxyHost}:${proxyPort}`
-        const proxyError = validateProxyUrl(proxyUrl)
-        if (proxyError) {
-          e.PROXY = proxyError
-        }
-      }
+      validateHostPort('PROXY_HTTP_HOST', 'PROXY_HTTP_PORT', httpHost, httpPort, 'http')
+      validateHostPort('PROXY_HTTPS_HOST', 'PROXY_HTTPS_PORT', httpsHost, httpsPort, 'https')
     }
 
     return e
@@ -644,10 +670,73 @@ export default function GlobalSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true)
     try {
-      const cm = await getSettingsConfigMap()
-      const next = fromConfigMapData(cm?.data as any)
-      updateForm(next ?? DEFAULTS)
-      setInitial(next ?? DEFAULTS)
+      const [settingsCm, pf9Env] = await Promise.all([
+        getSettingsConfigMap(),
+        getPf9EnvConfig().catch((err) => {
+          console.error('Failed to fetch pf9-env config:', err)
+          return undefined
+        })
+      ])
+
+      const base = fromConfigMapData(settingsCm?.data as any)
+
+      let httpHost = ''
+      let httpPort = ''
+      let httpsHost = ''
+      let httpsPort = ''
+      let noProxy = base.NO_PROXY
+      let proxyEnabled = base.PROXY_ENABLED
+
+      const data = pf9Env?.data || {}
+
+      const parseProxy = (value?: string) => {
+        if (!value) return { host: '', port: '' }
+        try {
+          const url = new URL(value)
+          return {
+            host: url.hostname,
+            port: url.port || ''
+          }
+        } catch {
+          return { host: '', port: '' }
+        }
+      }
+
+      const httpProxy = data.http_proxy
+      const httpsProxy = data.https_proxy
+
+      if (httpProxy) {
+        const parsed = parseProxy(httpProxy)
+        httpHost = parsed.host
+        httpPort = parsed.port
+      }
+
+      if (httpsProxy) {
+        const parsed = parseProxy(httpsProxy)
+        httpsHost = parsed.host
+        httpsPort = parsed.port
+      }
+
+      if (httpProxy || httpsProxy) {
+        proxyEnabled = true
+      }
+
+      if (data.no_proxy) {
+        noProxy = data.no_proxy
+      }
+
+      const merged: SettingsForm = {
+        ...base,
+        PROXY_ENABLED: proxyEnabled,
+        PROXY_HTTP_HOST: httpHost,
+        PROXY_HTTP_PORT: httpPort,
+        PROXY_HTTPS_HOST: httpsHost,
+        PROXY_HTTPS_PORT: httpsPort,
+        NO_PROXY: noProxy
+      }
+
+      updateForm(merged)
+      setInitial(merged)
     } finally {
       setLoading(false)
     }
@@ -724,13 +813,14 @@ export default function GlobalSettingsPage() {
       }
       setSaving(true)
       try {
-        const proxyHost = (form.PROXY_HOST ?? '').trim()
-        const proxyPort = (form.PROXY_PORT ?? '').trim()
+        const httpHost = (form.PROXY_HTTP_HOST ?? '').trim()
+        const httpPort = (form.PROXY_HTTP_PORT ?? '').trim()
+        const httpsHost = (form.PROXY_HTTPS_HOST ?? '').trim()
+        const httpsPort = (form.PROXY_HTTPS_PORT ?? '').trim()
         const proxyEnabled = form.PROXY_ENABLED
 
         const nextForm: SettingsForm = {
-          ...form,
-          PROXY: proxyEnabled && proxyHost && proxyPort ? `http://${proxyHost}:${proxyPort}` : ''
+          ...form
         }
 
         await updateSettingsConfigMap({
@@ -744,9 +834,13 @@ export default function GlobalSettingsPage() {
 
         try {
           const envPayload = {
-            http_proxy: nextForm.PROXY || undefined,
-            https_proxy: nextForm.PROXY || undefined,
-            no_proxy: (nextForm.NO_PROXY ?? '').trim() || undefined
+            http_proxy:
+              proxyEnabled && httpHost && httpPort ? `http://${httpHost}:${httpPort}` : undefined,
+            https_proxy:
+              proxyEnabled && httpsHost && httpsPort
+                ? `https://${httpsHost}:${httpsPort}`
+                : undefined,
+            no_proxy: (form.NO_PROXY ?? '').trim() || undefined
           }
 
           // If no env values are provided (proxy disabled and no no_proxy), skip API call
@@ -884,29 +978,55 @@ export default function GlobalSettingsPage() {
               data-testid="global-settings-toggle-PROXY_ENABLED"
             />
           </FormGrid>
-          <FormGrid minWidth={320} gap={2}>
-            {form.PROXY_ENABLED && (
-              <>
-                <CustomTextField
-                  label="Proxy Server"
-                  name="PROXY_HOST"
-                  value={form.PROXY_HOST}
-                  onChange={onText}
-                  error={errors.PROXY_HOST}
-                  tooltip={FIELD_TOOLTIPS.PROXY_HOST}
-                  required
-                />
+          {form.PROXY_ENABLED && (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <FormGrid minWidth={320} gap={2}>
+                  <CustomTextField
+                    label="HTTP Proxy Server"
+                    name="PROXY_HTTP_HOST"
+                    value={form.PROXY_HTTP_HOST}
+                    onChange={onText}
+                    error={errors.PROXY_HTTP_HOST}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_HOST}
+                    required
+                  />
 
-                <CustomTextField
-                  label="Proxy Port"
-                  name="PROXY_PORT"
-                  value={form.PROXY_PORT}
-                  onChange={onText}
-                  error={errors.PROXY_PORT}
-                  tooltip={FIELD_TOOLTIPS.PROXY_PORT}
-                  required
-                />
+                  <CustomTextField
+                    label="HTTP Proxy Port"
+                    name="PROXY_HTTP_PORT"
+                    value={form.PROXY_HTTP_PORT}
+                    onChange={onText}
+                    error={errors.PROXY_HTTP_PORT}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_PORT}
+                    required
+                  />
+                </FormGrid>
+              </Box>
 
+              <Box sx={{ mb: 2 }}>
+                <FormGrid minWidth={320} gap={2}>
+                  <CustomTextField
+                    label="HTTPS Proxy Server"
+                    name="PROXY_HTTPS_HOST"
+                    value={form.PROXY_HTTPS_HOST}
+                    onChange={onText}
+                    error={errors.PROXY_HTTPS_HOST}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_HOST}
+                  />
+
+                  <CustomTextField
+                    label="HTTPS Proxy Port"
+                    name="PROXY_HTTPS_PORT"
+                    value={form.PROXY_HTTPS_PORT}
+                    onChange={onText}
+                    error={errors.PROXY_HTTPS_PORT}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_PORT}
+                  />
+                </FormGrid>
+              </Box>
+
+              <FormGrid minWidth={320} gap={2}>
                 <CustomTextField
                   label="No Proxy Hosts"
                   name="NO_PROXY"
@@ -915,9 +1035,9 @@ export default function GlobalSettingsPage() {
                   error={errors.NO_PROXY}
                   tooltip={FIELD_TOOLTIPS.NO_PROXY}
                 />
-              </>
-            )}
-          </FormGrid>
+              </FormGrid>
+            </>
+          )}
         </TabPanel>
 
         <TabPanel current={activeTab} value="retry">
