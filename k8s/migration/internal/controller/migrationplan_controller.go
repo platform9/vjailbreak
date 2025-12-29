@@ -517,8 +517,39 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			r.ctxlog.Error(err, "Failed to get vmMachine for migration creation", "vm", vmName)
 			continue
 		}
-		if _, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine); createErr != nil {
+
+		migrationObj, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
+		if createErr != nil {
 			r.ctxlog.Error(createErr, "Failed to create migration object", "vm", vmName)
+			continue
+		}
+
+		isValid := false
+		for _, v := range validVMs {
+			if v.Spec.VMInfo.Name == vmName {
+				isValid = true
+				break
+			}
+		}
+
+		if !isValid {
+			if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latestMigration := &vjailbreakv1alpha1.Migration{}
+				if getErr := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latestMigration); getErr != nil {
+					return getErr
+				}
+				latestMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+				latestMigration.Status.Conditions = append(latestMigration.Status.Conditions, corev1.PodCondition{
+					Type:               "Validated",
+					Status:             corev1.ConditionFalse,
+					Reason:             "VMValidationFailed",
+					Message:            "VM failed migration plan validation (unsupported OS)",
+					LastTransitionTime: metav1.Now(),
+				})
+				return r.Status().Update(ctx, latestMigration)
+			}); retryErr != nil {
+				r.ctxlog.Error(retryErr, "Failed to mark skipped VM as ValidationFailed", "vm", vmName)
+			}
 		}
 	}
 
