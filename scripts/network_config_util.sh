@@ -13,6 +13,7 @@ SYSTEMD_NETWORK_DIR="${SYSTEMD_NETWORK_DIR:-/run/systemd/network}"
 UDEV_RULES_FILE="${UDEV_RULES_FILE:-/etc/udev/rules.d/70-persistent-net.rules}"
 NETPLAN_DIR="${NETPLAN_DIR:-/}"
 WILDCARD_NETPLAN="${WILDCARD_NETPLAN:-/etc/netplan/99-netcfg.yaml}"
+IS_NETPLAN="${IS_NETPLAN:-true}"
 
 # Dump debug strings into a new file descriptor and redirect it to stdout.
 exec 3>&1
@@ -362,6 +363,10 @@ udev_from_dhclient_lease() {
 
 # Create udev rules based on the macToIP mapping + output from parse_netplan_file
 udev_from_netplan() {
+    if [ "$IS_NETPLAN" = "false" ]; then
+        log "Info: netplan is not enabled."
+        return 1
+    fi
     # Check if netplan command exist
     if ! ${IN_TESTING:-false} && ! command -v netplan >/dev/null 2>&1; then
         log "Warning: netplan is not installed."
