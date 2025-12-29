@@ -658,7 +658,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}
 	logrus.WithField("func", fn).Info("Successfully restarted deployment")
 
-	successMsg := fmt.Sprintf("Successfully injected environment variables and restarted %s deployment. The new environment variables will be reflected in the next migration.", deploymentName)
+	successMsg := fmt.Sprintf("Successfully injected environment variables and restarted %s deployment", deploymentName)
 	logrus.WithField("func", fn).Info(successMsg)
 
 	return &api.InjectEnvVariablesResponse{
