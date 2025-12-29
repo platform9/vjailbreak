@@ -21,6 +21,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
@@ -28,7 +29,8 @@ import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
-  VERSION_NAMESPACE
+  VERSION_NAMESPACE,
+  injectEnvVariables
 } from 'src/api/settings/settings'
 
 const StyledPaper = styled(Box)(({ theme }) => ({
@@ -68,6 +70,11 @@ type SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
+  PROXY: string
+  PROXY_ENABLED: boolean
+  PROXY_HOST: string
+  PROXY_PORT: string
+  NO_PROXY: string
 }
 
 const DEFAULTS: SettingsForm = {
@@ -87,11 +94,16 @@ const DEFAULTS: SettingsForm = {
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
-  DEPLOYMENT_NAME: 'vJailbreak'
+  DEPLOYMENT_NAME: 'vJailbreak',
+  PROXY: '',
+  PROXY_ENABLED: false,
+  PROXY_HOST: '',
+  PROXY_PORT: '',
+  NO_PROXY: 'localhost,127.0.0.1'
 }
 
 type FormUpdater = (prev: SettingsForm) => SettingsForm
-type TabKey = 'general' | 'retry' | 'advanced'
+type TabKey = 'general' | 'retry' | 'network' | 'advanced'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -103,6 +115,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VCENTER_LOGIN_RETRY_LIMIT',
     'VCENTER_SCAN_CONCURRENCY_LIMIT'
   ],
+  network: ['PROXY'],
   advanced: [
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
@@ -115,7 +128,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   ]
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -128,6 +141,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     helper:
       'Control wait intervals, retry tolerances, and concurrency to balance speed vs. safety.',
     icon: <HistoryToggleOffOutlinedIcon fontSize="small" />
+  },
+  network: {
+    label: 'Network',
+    helper: 'Configure proxy used by the migration system components.',
+    icon: <LanOutlinedIcon fontSize="small" />
   },
   advanced: {
     label: 'Advanced',
@@ -207,7 +225,14 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   POPULATE_VMWARE_MACHINE_FLAVORS:
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
-  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.'
+  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
+  PROXY:
+    'Proxy URL derived from the host and port. Used for outbound HTTP/HTTPS traffic (leave disabled to skip proxy).',
+  PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
+  PROXY_HOST: 'Hostname or IP of the proxy server (e.g. proxy.example.com).',
+  PROXY_PORT: 'TCP port of the proxy server (e.g. 3128).',
+  NO_PROXY:
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
 }
 
 type ToggleKey = Extract<
@@ -256,6 +281,9 @@ const parseNum = (v: unknown, fallback: number) => {
   return Number.isFinite(n) ? n : fallback
 }
 
+const parseString = (v: unknown, fallback: string) =>
+  typeof v === 'string' ? v : typeof v === 'number' ? String(v) : fallback
+
 const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: String(f.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD),
   PERIODIC_SYNC_INTERVAL: f.PERIODIC_SYNC_INTERVAL,
@@ -273,7 +301,12 @@ const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
   VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
   AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
-  DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
+  DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
+  PROXY: f.PROXY,
+  PROXY_ENABLED: String(f.PROXY_ENABLED),
+  PROXY_HOST: f.PROXY_HOST,
+  PROXY_PORT: f.PROXY_PORT,
+  NO_PROXY: f.NO_PROXY
 })
 
 const fromConfigMapData = (data: Record<string, string> | undefined): SettingsForm => ({
@@ -331,7 +364,12 @@ const fromConfigMapData = (data: Record<string, string> | undefined): SettingsFo
   ),
   VALIDATE_RDM_OWNER_VMS: parseBool(data?.VALIDATE_RDM_OWNER_VMS, DEFAULTS.VALIDATE_RDM_OWNER_VMS),
   AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, DEFAULTS.AUTO_FSTAB_UPDATE),
-  DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME
+  DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME,
+  PROXY: parseString(data?.PROXY, DEFAULTS.PROXY),
+  PROXY_ENABLED: parseBool(data?.PROXY_ENABLED, DEFAULTS.PROXY_ENABLED),
+  PROXY_HOST: parseString(data?.PROXY_HOST, DEFAULTS.PROXY_HOST),
+  PROXY_PORT: parseString(data?.PROXY_PORT, DEFAULTS.PROXY_PORT),
+  NO_PROXY: parseString(data?.NO_PROXY, DEFAULTS.NO_PROXY)
 })
 
 const parseInterval = (val: string): string | undefined => {
@@ -355,6 +393,20 @@ const parseInterval = (val: string): string | undefined => {
     return 'Interval must be at least 5 minutes'
   }
 
+  return undefined
+}
+
+const validateProxyUrl = (val: string): string | undefined => {
+  const trimmed = (val ?? '').trim()
+  if (!trimmed) return undefined
+  try {
+    const u = new URL(trimmed)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return 'Proxy must start with http:// or https://'
+    }
+  } catch {
+    return 'Enter a valid URL (e.g. http://proxy.local:3128)'
+  }
   return undefined
 }
 
@@ -534,6 +586,32 @@ export default function GlobalSettingsPage() {
       e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
     }
 
+    const proxyEnabled = state.PROXY_ENABLED
+    const proxyHost = (state.PROXY_HOST ?? '').trim()
+    const proxyPort = (state.PROXY_PORT ?? '').trim()
+
+    if (proxyEnabled) {
+      if (!proxyHost) {
+        e.PROXY_HOST = 'Proxy server is required when proxy is enabled.'
+      }
+      if (!proxyPort) {
+        e.PROXY_PORT = 'Proxy port is required when proxy is enabled.'
+      } else {
+        const portNum = Number(proxyPort)
+        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+          e.PROXY_PORT = 'Enter a valid TCP port between 1 and 65535.'
+        }
+      }
+
+      if (!e.PROXY_HOST && !e.PROXY_PORT) {
+        const proxyUrl = `http://${proxyHost}:${proxyPort}`
+        const proxyError = validateProxyUrl(proxyUrl)
+        if (proxyError) {
+          e.PROXY = proxyError
+        }
+      }
+    }
+
     return e
   }, [])
 
@@ -646,16 +724,53 @@ export default function GlobalSettingsPage() {
       }
       setSaving(true)
       try {
+        const proxyHost = (form.PROXY_HOST ?? '').trim()
+        const proxyPort = (form.PROXY_PORT ?? '').trim()
+        const proxyEnabled = form.PROXY_ENABLED
+
+        const nextForm: SettingsForm = {
+          ...form,
+          PROXY: proxyEnabled && proxyHost && proxyPort ? `http://${proxyHost}:${proxyPort}` : ''
+        }
+
         await updateSettingsConfigMap({
           apiVersion: 'v1',
           kind: 'ConfigMap',
           metadata: { name: VERSION_CONFIG_MAP_NAME, namespace: VERSION_NAMESPACE },
-          data: toConfigMapData(form)
+          data: toConfigMapData(nextForm)
         } as any)
-        setInitial(form)
-        show('Global Settings saved successfully.', 'success')
+
+        let envInjectionFailed = false
+
+        try {
+          const envPayload = {
+            http_proxy: nextForm.PROXY || undefined,
+            https_proxy: nextForm.PROXY || undefined,
+            no_proxy: (nextForm.NO_PROXY ?? '').trim() || undefined
+          }
+
+          // If no env values are provided (proxy disabled and no no_proxy), skip API call
+          if (envPayload.http_proxy || envPayload.https_proxy || envPayload.no_proxy) {
+            await injectEnvVariables(envPayload)
+          }
+        } catch (envErr) {
+          envInjectionFailed = true
+          console.error('Failed to inject proxy env variables:', envErr)
+        }
+
+        setInitial(nextForm)
+
+        if (envInjectionFailed) {
+          show(
+            'Settings saved, but applying proxy environment variables failed. Please verify connectivity and try again.',
+            'warning'
+          )
+        } else {
+          show('Global Settings saved successfully.', 'success')
+        }
       } catch (err) {
-        show('Failed to save Global Settings.', 'error')
+        console.error('Failed to save Global Settings ConfigMap:', err)
+        show('Failed to save Global Settings. No changes were applied.', 'error')
       } finally {
         setSaving(false)
       }
@@ -754,6 +869,54 @@ export default function GlobalSettingsPage() {
               error={errors.PERIODIC_SYNC_INTERVAL}
               tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL}
             />
+          </FormGrid>
+        </TabPanel>
+
+        <TabPanel current={activeTab} value="network">
+          <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
+            <ToggleField
+              label="Use Proxy"
+              name="PROXY_ENABLED"
+              checked={form.PROXY_ENABLED}
+              onChange={onBool}
+              tooltip={FIELD_TOOLTIPS.PROXY_ENABLED}
+              description="Route outbound HTTP/HTTPS traffic via the configured proxy."
+              data-testid="global-settings-toggle-PROXY_ENABLED"
+            />
+          </FormGrid>
+          <FormGrid minWidth={320} gap={2}>
+            {form.PROXY_ENABLED && (
+              <>
+                <CustomTextField
+                  label="Proxy Server"
+                  name="PROXY_HOST"
+                  value={form.PROXY_HOST}
+                  onChange={onText}
+                  error={errors.PROXY_HOST}
+                  tooltip={FIELD_TOOLTIPS.PROXY_HOST}
+                  required
+                />
+
+                <CustomTextField
+                  label="Proxy Port"
+                  name="PROXY_PORT"
+                  value={form.PROXY_PORT}
+                  onChange={onText}
+                  error={errors.PROXY_PORT}
+                  tooltip={FIELD_TOOLTIPS.PROXY_PORT}
+                  required
+                />
+
+                <CustomTextField
+                  label="No Proxy Hosts"
+                  name="NO_PROXY"
+                  value={form.NO_PROXY}
+                  onChange={onText}
+                  error={errors.NO_PROXY}
+                  tooltip={FIELD_TOOLTIPS.NO_PROXY}
+                />
+              </>
+            )}
           </FormGrid>
         </TabPanel>
 
