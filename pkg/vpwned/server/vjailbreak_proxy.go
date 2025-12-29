@@ -558,8 +558,13 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, existingCM)
 
 	if err == nil {
-		logrus.WithField("func", fn).Info("ConfigMap exists, updating it")
-		existingCM.Data = envData
+		logrus.WithField("func", fn).Info("ConfigMap exists, appending new environment variables")
+		if existingCM.Data == nil {
+			existingCM.Data = make(map[string]string)
+		}
+		for key, value := range envData {
+			existingCM.Data[key] = value
+		}
 		if err := k8sClient.Update(ctx, existingCM); err != nil {
 			logrus.WithFields(logrus.Fields{"func": fn, "configmap": configMapName}).WithError(err).Error("Failed to update existing ConfigMap")
 			return &api.InjectEnvVariablesResponse{
@@ -567,7 +572,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 				Message: fmt.Sprintf("Failed to update existing ConfigMap: %v", err),
 			}, err
 		}
-		logrus.WithFields(logrus.Fields{"func": fn, "env_count": len(envData)}).Info("Successfully updated existing ConfigMap")
+		logrus.WithFields(logrus.Fields{"func": fn, "total_env_count": len(existingCM.Data)}).Info("Successfully updated existing ConfigMap")
 	} else {
 		logrus.WithField("func", fn).Info("ConfigMap does not exist, creating new one")
 		newCM := &corev1.ConfigMap{
@@ -587,7 +592,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		logrus.WithFields(logrus.Fields{"func": fn, "env_count": len(envData)}).Info("Successfully created new ConfigMap")
 	}
 
-	logrus.WithField("func", fn).Info("Step 3: Restarting controller deployment - scaling down to 0")
+	logrus.WithField("func", fn).Info("Step 3: Triggering rollout restart of controller deployment")
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deployment := &appsv1.Deployment{}
 		if getErr := k8sClient.Get(ctx, k8stypes.NamespacedName{
@@ -596,69 +601,45 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		}, deployment); getErr != nil {
 			return getErr
 		}
-		deployment.Spec.Replicas = &[]int32{0}[0]
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
 		return k8sClient.Update(ctx, deployment)
 	}); err != nil {
-		logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).WithError(err).Error("Failed to scale down deployment")
+		logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).WithError(err).Error("Failed to trigger rollout restart of controller")
 		return &api.InjectEnvVariablesResponse{
 			Success: false,
-			Message: fmt.Sprintf("Failed to scale down deployment: %v", err),
+			Message: fmt.Sprintf("Failed to trigger rollout restart of controller: %v", err),
 		}, err
 	}
+	logrus.WithField("func", fn).Info("Successfully triggered rollout restart of controller deployment")
 
-	logrus.WithField("func", fn).Info("Waiting for deployment to scale down")
-	timeout := 2 * time.Minute
-	interval := 5 * time.Second
-	scaledDown := false
-	for start := time.Now(); time.Since(start) < timeout; {
-		deployment := &appsv1.Deployment{}
-		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
-			Name:      deploymentName,
-			Namespace: deploymentNs,
-		}, deployment); err != nil {
-			logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).WithError(err).Error("Failed to get deployment status")
-			return &api.InjectEnvVariablesResponse{
-				Success: false,
-				Message: fmt.Sprintf("Failed to get deployment status: %v", err),
-			}, err
-		}
-		if deployment.Status.Replicas == 0 {
-			logrus.WithField("func", fn).Info("Deployment successfully scaled down")
-			scaledDown = true
-			break
-		}
-		time.Sleep(interval)
-	}
-
-	if !scaledDown {
-		logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).Error("Deployment did not scale down within timeout")
-		return &api.InjectEnvVariablesResponse{
-			Success: false,
-			Message: fmt.Sprintf("Deployment %s did not scale down within timeout", deploymentName),
-		}, fmt.Errorf("deployment %s not scaled down within timeout", deploymentName)
-	}
-
-	logrus.WithField("func", fn).Info("Scaling deployment back up to 1")
+	logrus.WithField("func", fn).Info("Step 4: Triggering rollout restart of vpwned-sdk deployment")
+	vpwnedDeploymentName := "migration-vpwned-sdk"
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deployment := &appsv1.Deployment{}
 		if getErr := k8sClient.Get(ctx, k8stypes.NamespacedName{
-			Name:      deploymentName,
+			Name:      vpwnedDeploymentName,
 			Namespace: deploymentNs,
 		}, deployment); getErr != nil {
 			return getErr
 		}
-		deployment.Spec.Replicas = &[]int32{1}[0]
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
 		return k8sClient.Update(ctx, deployment)
 	}); err != nil {
-		logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).WithError(err).Error("Failed to scale up deployment")
+		logrus.WithFields(logrus.Fields{"func": fn, "deployment": vpwnedDeploymentName}).WithError(err).Error("Failed to trigger rollout restart of vpwned-sdk")
 		return &api.InjectEnvVariablesResponse{
 			Success: false,
-			Message: fmt.Sprintf("Failed to scale up deployment: %v", err),
+			Message: fmt.Sprintf("Failed to trigger rollout restart of vpwned-sdk: %v", err),
 		}, err
 	}
-	logrus.WithField("func", fn).Info("Successfully restarted deployment")
+	logrus.WithField("func", fn).Info("Successfully triggered rollout restart of vpwned-sdk deployment")
 
-	successMsg := fmt.Sprintf("Successfully injected environment variables and restarted %s deployment", deploymentName)
+	successMsg := fmt.Sprintf("Successfully injected environment variables and restarted %s and %s deployments", deploymentName, vpwnedDeploymentName)
 	logrus.WithField("func", fn).Info(successMsg)
 
 	return &api.InjectEnvVariablesResponse{
