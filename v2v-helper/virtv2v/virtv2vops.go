@@ -823,7 +823,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
-func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
+func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, isNetplan bool) error {
 	// Skip this entirely for Windows as it doesn't use these udev rules/bash scripts
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		log.Println("Skipping offline network persistence for Windows guest")
@@ -883,9 +883,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	env = append(env, fmt.Sprintf("SYSTEMD_NETWORK_DIR=%s", filepath.Join(mountPoint, "/run/systemd/network")))
 	env = append(env, fmt.Sprintf("UDEV_RULES_FILE=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
 	env = append(env, fmt.Sprintf("WILDCARD_NETPLAN=%s", filepath.Join(mountPoint, "/etc/netplan/99-netcfg.yaml")))
-
 	env = append(env, fmt.Sprintf("NETPLAN_DIR=%s", mountPoint))
-
+	env = append(env, fmt.Sprintf("IS_NETPLAN=%t", isNetplan))
 	runCmd.Env = env
 
 	log.Println("Executing network persistence script")
