@@ -110,7 +110,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/dist/"))
 
 	// Register VDDK upload handler first with specific path
-	mux.HandleFunc("/dev-api/sdk/vpw/v1/vddk/upload", HandleVDDKUpload)
+	mux.HandleFunc("/vpw/v1/vddk/upload", HandleVDDKUpload)
 
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
@@ -136,9 +136,9 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	}
 
 	// Wrap gatewayMuxer to handle all other routes
-	mux.HandleFunc("/dev-api/sdk/vpw/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
 		// Skip VDDK upload endpoint - it's already registered
-		if r.URL.Path == "/dev-api/sdk/vpw/v1/vddk/upload" {
+		if r.URL.Path == "/vpw/v1/vddk/upload" {
 			// This shouldn't be reached due to more specific pattern, but just in case
 			HandleVDDKUpload(w, r)
 			return
