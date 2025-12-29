@@ -231,10 +231,10 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
   PROXY_HTTP_HOST:
-    'Hostname or IP of the HTTP proxy server (e.g. proxy.example.com). Do not include http://.',
+    'FQDN or IP of the HTTP proxy server (e.g. proxy.example.com). Do not include http://.',
   PROXY_HTTP_PORT: 'TCP port of the HTTP proxy server (e.g. 3128).',
   PROXY_HTTPS_HOST:
-    'Hostname or IP of the HTTPS proxy server (e.g. proxy.example.com). Do not include https://.',
+    'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). Do not include https://.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
     'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
@@ -593,6 +593,13 @@ export default function GlobalSettingsPage() {
     const httpsHost = (state.PROXY_HTTPS_HOST ?? '').trim()
     const httpsPort = (state.PROXY_HTTPS_PORT ?? '').trim()
 
+    const fqdnRegex =
+      /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))+$/
+    const ipv4Regex =
+      /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+
+    const isValidHost = (value: string) => fqdnRegex.test(value) || ipv4Regex.test(value)
+
     if (proxyEnabled) {
       const validateHostPort = (
         hostKey: keyof SettingsForm,
@@ -611,8 +618,10 @@ export default function GlobalSettingsPage() {
         } else if (/^https?:\/\//i.test(hostVal)) {
           e[String(hostKey)] =
             scheme === 'http'
-              ? 'Enter only the hostname or IP for HTTP proxy (without http://).'
-              : 'Enter only the hostname or IP for HTTPS proxy (without https://).'
+              ? 'Enter only the FQDN or IPv4 address for HTTP proxy (without http://).'
+              : 'Enter only the FQDN or IPv4 address for HTTPS proxy (without https://).'
+        } else if (!isValidHost(hostVal)) {
+          e[String(hostKey)] = 'Enter a valid FQDN (with at least one dot) or IPv4 address.'
         }
 
         if (!portVal) {
@@ -833,20 +842,26 @@ export default function GlobalSettingsPage() {
         let envInjectionFailed = false
 
         try {
+          const normalizeNoProxy = (value: string) =>
+            value
+              .split(',')
+              .map((entry) => entry.trim())
+              .filter((entry) => entry.length > 0)
+              .join(',')
+
+          const rawNoProxy = (form.NO_PROXY ?? '').trim()
+          const normalizedNoProxy = rawNoProxy ? normalizeNoProxy(rawNoProxy) : ''
+
           const envPayload = {
             http_proxy:
-              proxyEnabled && httpHost && httpPort ? `http://${httpHost}:${httpPort}` : undefined,
+              proxyEnabled && httpHost && httpPort ? `http://${httpHost}:${httpPort}` : '',
             https_proxy:
-              proxyEnabled && httpsHost && httpsPort
-                ? `https://${httpsHost}:${httpsPort}`
-                : undefined,
-            no_proxy: (form.NO_PROXY ?? '').trim() || undefined
+              proxyEnabled && httpsHost && httpsPort ? `https://${httpsHost}:${httpsPort}` : '',
+            no_proxy: normalizedNoProxy
           }
 
-          // If no env values are provided (proxy disabled and no no_proxy), skip API call
-          if (envPayload.http_proxy || envPayload.https_proxy || envPayload.no_proxy) {
-            await injectEnvVariables(envPayload)
-          }
+          // Always call env injection so disabling proxy clears existing values
+          await injectEnvVariables(envPayload)
         } catch (envErr) {
           envInjectionFailed = true
           console.error('Failed to inject proxy env variables:', envErr)
