@@ -130,6 +130,41 @@ func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(response))
 }
 
+// isPathWithinRoot checks if a path (after resolving symlinks) is within the root directory
+func isPathWithinRoot(root, path string) (bool, error) {
+	// Clean and make paths absolute
+	cleanRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return false, fmt.Errorf("failed to get absolute path for root: %w", err)
+	}
+
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return false, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Try to resolve symlinks if the path exists
+	// If it doesn't exist yet, that's okay - we'll check the cleaned path
+	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+	if err != nil {
+		// Path doesn't exist yet or can't be resolved - use the cleaned path
+		resolvedPath = cleanPath
+	}
+
+	// Get relative path from root to the resolved path
+	relPath, err := filepath.Rel(cleanRoot, resolvedPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	// Check if the relative path tries to escape (starts with ..)
+	if strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) || relPath == ".." {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // extractTarFile extracts a tar or tar.gz file to the specified destination
 func extractTarFile(srcPath, destDir string) error {
 	const fn = "extractTarFile"
@@ -178,9 +213,13 @@ func extractTarFile(srcPath, destDir string) error {
 		// Construct the full path
 		target := filepath.Join(destDir, header.Name)
 
-		// Ensure the path is within destDir (security check)
-		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path in tar: %s", header.Name)
+		// Ensure the path is within destDir (security check with symlink resolution)
+		withinRoot, err := isPathWithinRoot(destDir, target)
+		if err != nil {
+			return fmt.Errorf("failed to validate path %s: %w", header.Name, err)
+		}
+		if !withinRoot {
+			return fmt.Errorf("illegal file path in tar (path traversal attempt): %s", header.Name)
 		}
 
 		switch header.Typeflag {
@@ -214,6 +253,26 @@ func extractTarFile(srcPath, destDir string) error {
 			logrus.WithField("func", fn).Debugf("Extracted file: %s", target)
 
 		case tar.TypeSymlink:
+			// Validate symlink target to prevent path traversal
+			// Reject absolute symlink targets
+			if filepath.IsAbs(header.Linkname) {
+				logrus.WithField("func", fn).Warnf("Skipping symlink with absolute target: %s -> %s", header.Name, header.Linkname)
+				break
+			}
+
+			// For relative symlinks, resolve where they would point to
+			// The symlink target is relative to the directory containing the symlink
+			symlinkTargetPath := filepath.Join(filepath.Dir(target), header.Linkname)
+			withinRoot, err := isPathWithinRoot(destDir, symlinkTargetPath)
+			if err != nil {
+				logrus.WithField("func", fn).Warnf("Failed to validate symlink target %s -> %s: %v", header.Name, header.Linkname, err)
+				break
+			}
+			if !withinRoot {
+				logrus.WithField("func", fn).Warnf("Skipping symlink pointing outside extraction root: %s -> %s", header.Name, header.Linkname)
+				break
+			}
+
 			// Create parent directory if it doesn't exist
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory for symlink %s: %w", target, err)
@@ -230,13 +289,24 @@ func extractTarFile(srcPath, destDir string) error {
 			}
 
 		case tar.TypeLink:
+			// Construct the link target path
+			linkTarget := filepath.Join(destDir, header.Linkname)
+
+			// Validate hard link target to prevent path traversal
+			withinRoot, err := isPathWithinRoot(destDir, linkTarget)
+			if err != nil {
+				logrus.WithField("func", fn).Warnf("Failed to validate hard link target %s -> %s: %v", header.Name, header.Linkname, err)
+				break
+			}
+			if !withinRoot {
+				logrus.WithField("func", fn).Warnf("Skipping hard link pointing outside extraction root: %s -> %s", header.Name, header.Linkname)
+				break
+			}
+
 			// Create parent directory if it doesn't exist
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory for hard link %s: %w", target, err)
 			}
-
-			// Construct the link target path
-			linkTarget := filepath.Join(destDir, header.Linkname)
 
 			// Remove existing file/link if it exists
 			os.Remove(target)
