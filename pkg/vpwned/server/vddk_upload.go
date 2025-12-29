@@ -56,9 +56,19 @@ func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
 		"size":     handler.Size,
 	}).Info("Received VDDK file")
 
-	if filepath.Ext(handler.Filename) != ".tar" && filepath.Ext(handler.Filename) != ".gz" {
+	// Validate file type - accept .tar, .tar.gz, and .tgz files
+	filename := strings.ToLower(handler.Filename)
+	validExtensions := []string{".tar", ".tar.gz", ".tgz"}
+	isValid := false
+	for _, ext := range validExtensions {
+		if strings.HasSuffix(filename, ext) {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
 		logrus.WithField("func", fn).Errorf("Invalid file type: %s", handler.Filename)
-		http.Error(w, "Invalid file type. Only .tar or .tar.gz files are allowed", http.StatusBadRequest)
+		http.Error(w, "Invalid file type. Only .tar, .tar.gz, or .tgz files are allowed", http.StatusBadRequest)
 		return
 	}
 

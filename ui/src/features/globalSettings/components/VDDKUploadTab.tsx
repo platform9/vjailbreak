@@ -196,7 +196,7 @@ export default function VDDKUploadTab() {
         <HiddenInput
           id="vddk-file-input"
           type="file"
-          accept=".tar,.tar.gz,.tgz"
+          accept=".tar,.tgz,application/x-tar,application/gzip,application/x-gzip,application/x-compressed-tar"
           onChange={handleFileInputChange}
         />
 
