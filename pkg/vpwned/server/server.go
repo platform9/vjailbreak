@@ -108,6 +108,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	//TODO: Move this path to a direct path in the /tmp or a path in the container
 	// or take it via config or env variable
 	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/dist/"))
+	mux.HandleFunc("/vpw/v1/vddk/upload", HandleVDDKUpload)
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{

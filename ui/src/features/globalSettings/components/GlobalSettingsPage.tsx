@@ -21,9 +21,11 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
+import VDDKUploadTab from './VDDKUploadTab'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
@@ -91,7 +93,7 @@ const DEFAULTS: SettingsForm = {
 }
 
 type FormUpdater = (prev: SettingsForm) => SettingsForm
-type TabKey = 'general' | 'retry' | 'advanced'
+type TabKey = 'general' | 'retry' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -112,10 +114,11 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
     'AUTO_FSTAB_UPDATE'
-  ]
+  ],
+  vddk: []
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced', 'vddk']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -133,6 +136,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     label: 'Advanced',
     helper: 'Tune integration defaults and automation flags for PCD and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
+  },
+  vddk: {
+    label: 'VDDK Upload',
+    helper: 'Upload and manage VDDK (Virtual Disk Development Kit) files for VMware integration.',
+    icon: <CloudUploadIcon fontSize="small" />
   }
 }
 
@@ -879,32 +887,38 @@ export default function GlobalSettingsPage() {
           </FormGrid>
         </TabPanel>
 
+        <TabPanel current={activeTab} value="vddk">
+          <VDDKUploadTab />
+        </TabPanel>
+
         <Box sx={{ flexGrow: 1 }} />
 
-        <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
-          <Button
-            variant="outlined"
-            color="inherit"
-            onClick={onResetDefaults}
-            startIcon={<RefreshIcon />}
-            data-testid="global-settings-reset-defaults"
-          >
-            Reset to Defaults
-          </Button>
-          <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            type="submit"
-            color="primary"
-            disabled={saving}
-            startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
-            data-testid="global-settings-save"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </Footer>
+        {activeTab !== 'vddk' && (
+          <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={onResetDefaults}
+              startIcon={<RefreshIcon />}
+              data-testid="global-settings-reset-defaults"
+            >
+              Reset to Defaults
+            </Button>
+            <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              type="submit"
+              color="primary"
+              disabled={saving}
+              startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
+              data-testid="global-settings-save"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </Footer>
+        )}
       </Box>
 
       <Snackbar
