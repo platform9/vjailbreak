@@ -45,6 +45,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -517,7 +518,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 
 		if !isValid {
-			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation (unsupported OS)")
+			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
 		}
 	}
 
@@ -1784,23 +1785,50 @@ func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm str
 	return datacenter, nil
 }
 
-// markMigrationValidationFailed updates a Migration status to ValidationFailed with retry logic
+// markMigrationValidationFailed updates a Migration status to ValidationFailed
 func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, vmName string, message string) {
-	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latestMigration := &vjailbreakv1alpha1.Migration{}
-		if getErr := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latestMigration); getErr != nil {
-			return getErr
+	migration := &vjailbreakv1alpha1.Migration{}
+	pollErr := wait.PollUntilContextTimeout(
+		ctx,
+		200*time.Millisecond,
+		5*time.Second,
+		true,
+		func(pctx context.Context) (bool, error) {
+			getErr := r.Get(pctx, types.NamespacedName{
+				Name:      migrationObj.Name,
+				Namespace: migrationObj.Namespace,
+			}, migration)
+
+			if apierrors.IsNotFound(getErr) {
+				return false, nil
+			}
+			return getErr == nil, getErr
+		},
+	)
+
+	if pollErr != nil {
+		r.ctxlog.Error(pollErr, "Migration object never appeared in API server, cannot mark as failed", "vm", vmName)
+		return
+	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &vjailbreakv1alpha1.Migration{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latest); err != nil {
+			return err
 		}
-		latestMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-		latestMigration.Status.Conditions = append(latestMigration.Status.Conditions, corev1.PodCondition{
+
+		latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+		latest.Status.Conditions = append(latest.Status.Conditions, corev1.PodCondition{
 			Type:               "Validated",
 			Status:             corev1.ConditionFalse,
 			Reason:             "VMValidationFailed",
 			Message:            message,
 			LastTransitionTime: metav1.Now(),
 		})
-		return r.Status().Update(ctx, latestMigration)
-	}); retryErr != nil {
+		return r.Status().Update(ctx, latest)
+	})
+
+	if retryErr != nil {
 		r.ctxlog.Error(retryErr, "Failed to mark VM as ValidationFailed after retries", "vm", vmName)
 	}
 }
