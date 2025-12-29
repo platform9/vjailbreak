@@ -312,6 +312,38 @@
         ]
       }
     },
+    "/vpw/v1/inject_env_variables": {
+      "post": {
+        "operationId": "VailbreakProxy_InjectEnvVariables",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiInjectEnvVariablesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiInjectEnvVariablesRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/list_boot_source": {
       "get": {
         "operationId": "BMProvider_ListBootSource",
@@ -1134,6 +1166,31 @@
       "properties": {
         "vm": {
           "$ref": "#/definitions/apiVMInfo"
+        }
+      }
+    },
+    "apiInjectEnvVariablesRequest": {
+      "type": "object",
+      "properties": {
+        "httpProxy": {
+          "type": "string"
+        },
+        "httpsProxy": {
+          "type": "string"
+        },
+        "noProxy": {
+          "type": "string"
+        }
+      }
+    },
+    "apiInjectEnvVariablesResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
         }
       }
     },

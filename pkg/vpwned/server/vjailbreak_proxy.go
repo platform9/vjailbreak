@@ -16,12 +16,15 @@ import (
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/validation/vmware"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlLog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -495,4 +498,152 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		logrus.WithFields(logrus.Fields{"func": fn, "kind": kind, "name": name, "namespace": namespace}).Error("Unknown credentials kind")
 		return nil, fmt.Errorf("unknown credentials kind: %s", kind)
 	}
+}
+
+func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.InjectEnvVariablesRequest) (*api.InjectEnvVariablesResponse, error) {
+	const fn = "InjectEnvVariables"
+	logrus.WithFields(logrus.Fields{
+		"func":        fn,
+		"http_proxy":  in.GetHttpProxy(),
+		"https_proxy": in.GetHttpsProxy(),
+		"no_proxy":    in.GetNoProxy(),
+	}).Info("Starting InjectEnvVariables request")
+	defer logrus.WithField("func", fn).Info("Completed InjectEnvVariables request")
+
+	const (
+		configMapName      = "pf9-env"
+		configMapNamespace = "migration-system"
+		deploymentName     = "migration-controller-manager"
+		deploymentNs       = "migration-system"
+	)
+
+	httpProxy := in.GetHttpProxy()
+	httpsProxy := in.GetHttpsProxy()
+	noProxy := in.GetNoProxy()
+
+	if httpProxy == "" && httpsProxy == "" && noProxy == "" {
+		logrus.WithField("func", fn).Error("All environment variables are empty")
+		return &api.InjectEnvVariablesResponse{
+			Success: false,
+			Message: "At least one environment variable must be provided",
+		}, nil
+	}
+
+	k8sClient, err := CreateInClusterClient()
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to create in-cluster k8s client")
+		return &api.InjectEnvVariablesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to create Kubernetes client: %v", err),
+		}, err
+	}
+
+	logrus.WithField("func", fn).Info("Step 1: Preparing environment variables data")
+	envData := make(map[string]string)
+	if httpProxy != "" {
+		envData["http_proxy"] = httpProxy
+	}
+	if httpsProxy != "" {
+		envData["https_proxy"] = httpsProxy
+	}
+	if noProxy != "" {
+		envData["no_proxy"] = noProxy
+	}
+
+	logrus.WithField("func", fn).Info("Step 2: Updating or creating ConfigMap")
+	existingCM := &corev1.ConfigMap{}
+	err = k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      configMapName,
+		Namespace: configMapNamespace,
+	}, existingCM)
+
+	if err == nil {
+		logrus.WithField("func", fn).Info("ConfigMap exists, appending new environment variables")
+		if existingCM.Data == nil {
+			existingCM.Data = make(map[string]string)
+		}
+		for key, value := range envData {
+			existingCM.Data[key] = value
+		}
+		if err := k8sClient.Update(ctx, existingCM); err != nil {
+			logrus.WithFields(logrus.Fields{"func": fn, "configmap": configMapName}).WithError(err).Error("Failed to update existing ConfigMap")
+			return &api.InjectEnvVariablesResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to update existing ConfigMap: %v", err),
+			}, err
+		}
+		logrus.WithFields(logrus.Fields{"func": fn, "total_env_count": len(existingCM.Data)}).Info("Successfully updated existing ConfigMap")
+	} else {
+		logrus.WithField("func", fn).Info("ConfigMap does not exist, creating new one")
+		newCM := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: configMapNamespace,
+			},
+			Data: envData,
+		}
+		if err := k8sClient.Create(ctx, newCM); err != nil {
+			logrus.WithFields(logrus.Fields{"func": fn, "configmap": configMapName}).WithError(err).Error("Failed to create new ConfigMap")
+			return &api.InjectEnvVariablesResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to create new ConfigMap: %v", err),
+			}, err
+		}
+		logrus.WithFields(logrus.Fields{"func": fn, "env_count": len(envData)}).Info("Successfully created new ConfigMap")
+	}
+
+	logrus.WithField("func", fn).Info("Step 3: Triggering rollout restart of controller deployment")
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deployment := &appsv1.Deployment{}
+		if getErr := k8sClient.Get(ctx, k8stypes.NamespacedName{
+			Name:      deploymentName,
+			Namespace: deploymentNs,
+		}, deployment); getErr != nil {
+			return getErr
+		}
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		return k8sClient.Update(ctx, deployment)
+	}); err != nil {
+		logrus.WithFields(logrus.Fields{"func": fn, "deployment": deploymentName}).WithError(err).Error("Failed to trigger rollout restart of controller")
+		return &api.InjectEnvVariablesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to trigger rollout restart of controller: %v", err),
+		}, err
+	}
+	logrus.WithField("func", fn).Info("Successfully triggered rollout restart of controller deployment")
+
+	logrus.WithField("func", fn).Info("Step 4: Triggering rollout restart of vpwned-sdk deployment")
+	vpwnedDeploymentName := "migration-vpwned-sdk"
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deployment := &appsv1.Deployment{}
+		if getErr := k8sClient.Get(ctx, k8stypes.NamespacedName{
+			Name:      vpwnedDeploymentName,
+			Namespace: deploymentNs,
+		}, deployment); getErr != nil {
+			return getErr
+		}
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		return k8sClient.Update(ctx, deployment)
+	}); err != nil {
+		logrus.WithFields(logrus.Fields{"func": fn, "deployment": vpwnedDeploymentName}).WithError(err).Error("Failed to trigger rollout restart of vpwned-sdk")
+		return &api.InjectEnvVariablesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to trigger rollout restart of vpwned-sdk: %v", err),
+		}, err
+	}
+	logrus.WithField("func", fn).Info("Successfully triggered rollout restart of vpwned-sdk deployment")
+
+	successMsg := fmt.Sprintf("Successfully injected environment variables and restarted %s and %s deployments", deploymentName, vpwnedDeploymentName)
+	logrus.WithField("func", fn).Info(successMsg)
+
+	return &api.InjectEnvVariablesResponse{
+		Success: true,
+		Message: successMsg,
+	}, nil
 }
