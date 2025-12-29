@@ -153,8 +153,9 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	}
 	logrus.Info("starting http server.....")
 	httpServer = &http.Server{
-		Addr:    apiHost + ":" + apiPort,
-		Handler: mux,
+		Addr:           apiHost + ":" + apiPort,
+		Handler:        mux,
+		MaxHeaderBytes: 1 << 20, // 1 MB for headers
 	}
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		logrus.Error("cannot start http server", err)
