@@ -18,20 +18,24 @@ export type SettingsForm = {
   DEPLOYMENT_NAME: string
   // Proxy-related fields are UI-only and handled via injectEnvVariables
   PROXY_ENABLED: boolean
+  PROXY_HTTP_SCHEME: 'http' | 'https'
   PROXY_HTTP_HOST: string
   PROXY_HTTP_PORT: string
+  PROXY_HTTPS_SCHEME: 'http' | 'https'
   PROXY_HTTPS_HOST: string
   PROXY_HTTPS_PORT: string
   NO_PROXY: string
 }
 
-type ProxyParts = { host: string; port: string }
+type ProxyParts = { scheme: 'http' | 'https'; host: string; port: string }
 
 type ProxyFormState = Pick<
   SettingsForm,
   | 'PROXY_ENABLED'
+  | 'PROXY_HTTP_SCHEME'
   | 'PROXY_HTTP_HOST'
   | 'PROXY_HTTP_PORT'
+  | 'PROXY_HTTPS_SCHEME'
   | 'PROXY_HTTPS_HOST'
   | 'PROXY_HTTPS_PORT'
   | 'NO_PROXY'
@@ -85,16 +89,18 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
   }
 
   const parseProxyParts = (value?: string): ProxyParts => {
-    if (!value) return { host: '', port: '' }
+    if (!value) return { scheme: 'http', host: '', port: '' }
     try {
       const url = new URL(value)
-      const protocol = url.protocol === 'https:' ? '443' : '80'
+      const scheme = url.protocol === 'https:' ? 'https' : 'http'
+      const defaultPort = scheme === 'https' ? '443' : '80'
       return {
+        scheme,
         host: url.hostname,
-        port: url.port || protocol
+        port: url.port || defaultPort
       }
     } catch {
-      return { host: '', port: '' }
+      return { scheme: 'http', host: '', port: '' }
     }
   }
 
@@ -113,8 +119,10 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
 
     return {
       PROXY_ENABLED: proxyEnabled,
+      PROXY_HTTP_SCHEME: httpParts.scheme,
       PROXY_HTTP_HOST: httpParts.host,
       PROXY_HTTP_PORT: httpParts.port,
+      PROXY_HTTPS_SCHEME: httpsParts.scheme,
       PROXY_HTTPS_HOST: httpsParts.host,
       PROXY_HTTPS_PORT: httpsParts.port,
       NO_PROXY: noProxy
@@ -134,16 +142,19 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
       .join(',')
 
   const buildEnvPayload = (form: SettingsForm) => {
+    const httpScheme = form.PROXY_HTTP_SCHEME ?? 'http'
     const httpHost = (form.PROXY_HTTP_HOST ?? '').trim()
     const httpPort = (form.PROXY_HTTP_PORT ?? '').trim()
+    const httpsScheme = form.PROXY_HTTPS_SCHEME ?? 'http'
     const httpsHost = (form.PROXY_HTTPS_HOST ?? '').trim()
     const httpsPort = (form.PROXY_HTTPS_PORT ?? '').trim()
     const proxyEnabled = form.PROXY_ENABLED
 
     return {
-      http_proxy: proxyEnabled && httpHost && httpPort ? `http://${httpHost}:${httpPort}` : '',
+      http_proxy:
+        proxyEnabled && httpHost && httpPort ? `${httpScheme}://${httpHost}:${httpPort}` : '',
       https_proxy:
-        proxyEnabled && httpsHost && httpsPort ? `https://${httpsHost}:${httpsPort}` : '',
+        proxyEnabled && httpsHost && httpsPort ? `${httpsScheme}://${httpsHost}:${httpsPort}` : '',
       no_proxy: normalizeNoProxy((form.NO_PROXY ?? '').trim())
     }
   }
@@ -234,8 +245,10 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     DEPLOYMENT_NAME:
       typeof data?.DEPLOYMENT_NAME === 'string' ? data.DEPLOYMENT_NAME : defaults.DEPLOYMENT_NAME,
     PROXY_ENABLED: defaults.PROXY_ENABLED,
+    PROXY_HTTP_SCHEME: defaults.PROXY_HTTP_SCHEME,
     PROXY_HTTP_HOST: defaults.PROXY_HTTP_HOST,
     PROXY_HTTP_PORT: defaults.PROXY_HTTP_PORT,
+    PROXY_HTTPS_SCHEME: defaults.PROXY_HTTPS_SCHEME,
     PROXY_HTTPS_HOST: defaults.PROXY_HTTPS_HOST,
     PROXY_HTTPS_PORT: defaults.PROXY_HTTPS_PORT,
     NO_PROXY: defaults.NO_PROXY

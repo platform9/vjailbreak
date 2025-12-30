@@ -1,4 +1,5 @@
 import React, { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormProvider, useForm } from 'react-hook-form'
 import {
   Alert,
   Box,
@@ -12,7 +13,6 @@ import {
   Snackbar,
   Tab,
   Tabs,
-  TextField,
   Typography,
   styled,
   useTheme
@@ -26,8 +26,8 @@ import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
-import { IntervalField as SharedIntervalField } from 'src/shared/components/forms'
-import { getGlobalSettingsHelpers } from 'src/features/globalSettings/helpers'
+import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
+import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
@@ -55,33 +55,6 @@ const Footer = styled(Box)(({ theme }) => ({
   borderTop: `1px solid ${theme.palette.divider}`
 }))
 
-type SettingsForm = {
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: number
-  PERIODIC_SYNC_INTERVAL: string
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: number
-  VM_ACTIVE_WAIT_RETRY_LIMIT: number
-  DEFAULT_MIGRATION_METHOD: 'hot' | 'cold'
-  VCENTER_SCAN_CONCURRENCY_LIMIT: number
-  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: boolean
-  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: boolean
-  POPULATE_VMWARE_MACHINE_FLAVORS: boolean
-  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: number
-  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: number
-  VCENTER_LOGIN_RETRY_LIMIT: number
-  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: number
-  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: number
-  VALIDATE_RDM_OWNER_VMS: boolean
-  AUTO_FSTAB_UPDATE: boolean
-  DEPLOYMENT_NAME: string
-  // Proxy-related fields are UI-only and handled via injectEnvVariables
-  PROXY_ENABLED: boolean
-  PROXY_HTTP_HOST: string
-  PROXY_HTTP_PORT: string
-  PROXY_HTTPS_HOST: string
-  PROXY_HTTPS_PORT: string
-  NO_PROXY: string
-}
-
 const DEFAULTS: SettingsForm = {
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 20,
   PERIODIC_SYNC_INTERVAL: '1h',
@@ -101,16 +74,16 @@ const DEFAULTS: SettingsForm = {
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
   PROXY_ENABLED: false,
+  PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
   PROXY_HTTP_PORT: '',
+  PROXY_HTTPS_SCHEME: 'http',
   PROXY_HTTPS_HOST: '',
   PROXY_HTTPS_PORT: '',
   NO_PROXY: 'localhost,127.0.0.1'
 }
 
 const helpers = getGlobalSettingsHelpers(DEFAULTS)
-
-type FormUpdater = (prev: SettingsForm) => SettingsForm
 type TabKey = 'general' | 'retry' | 'network' | 'advanced'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
@@ -125,8 +98,10 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   ],
   network: [
     'PROXY_ENABLED',
+    'PROXY_HTTP_SCHEME',
     'PROXY_HTTP_HOST',
     'PROXY_HTTP_PORT',
+    'PROXY_HTTPS_SCHEME',
     'PROXY_HTTPS_HOST',
     'PROXY_HTTPS_PORT',
     'NO_PROXY'
@@ -242,11 +217,15 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
+  PROXY_HTTP_SCHEME:
+    "Protocol to use when constructing the HTTP proxy URL (default: 'http'). Many proxies expect http://.",
   PROXY_HTTP_HOST:
-    'FQDN or IP of the HTTP proxy server (e.g. proxy.example.com). Do not include http://.',
+    'FQDN or IP of the HTTP proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTP_PORT: 'TCP port of the HTTP proxy server (e.g. 3128).',
+  PROXY_HTTPS_SCHEME:
+    "Protocol to use when constructing the HTTPS proxy URL (default: 'http'). Some environments set https_proxy using http://.",
   PROXY_HTTPS_HOST:
-    'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). Do not include https://.',
+    'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
     'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
@@ -311,29 +290,17 @@ const EMPTY_ERRORS: FieldErrorMap = {}
 const { parseInterval, validateProxyUrl, deriveProxyState, applyProxyState } = helpers
 const { toConfigMapData, fromConfigMapData, buildEnvPayload } = helpers
 
-type NumberFieldProps = {
-  label: string
-  name: keyof SettingsForm
-  value: number
-  helper?: string
-  min?: number
-  error?: string
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  tooltip?: string
-}
-
 type UseGlobalSettingsControllerReturn = {
   form: SettingsForm
   errors: FieldErrorMap
+  rhfForm: ReturnType<typeof useForm<SettingsForm>>
   loading: boolean
   saving: boolean
   activeTab: TabKey
   notification: NotificationState
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onNumber: (e: React.ChangeEvent<HTMLInputElement>) => void
   onBool: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSelect: (e: SelectChangeEvent<string>) => void
-  numberError: (key: keyof SettingsForm) => string | undefined
   tabHasError: (tab: TabKey) => boolean
   handleTabChange: (_: SyntheticEvent, value: string | number) => void
   onResetDefaults: () => void
@@ -343,13 +310,19 @@ type UseGlobalSettingsControllerReturn = {
 }
 
 const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
-  const [form, setForm] = useState<SettingsForm>(DEFAULTS)
   const [initial, setInitial] = useState<SettingsForm>(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<FieldErrorMap>(EMPTY_ERRORS)
   const [activeTab, setActiveTab] = useState<TabKey>('general')
   const [notification, setNotification] = useState<NotificationState>(DEFAULT_NOTIFICATION)
+
+  const rhfForm = useForm<SettingsForm>({
+    defaultValues: DEFAULTS,
+    mode: 'onChange'
+  })
+
+  const form = rhfForm.watch() as SettingsForm
 
   const buildErrors = useCallback((state: SettingsForm): FieldErrorMap => {
     const e: FieldErrorMap = {}
@@ -413,19 +386,84 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     }
 
     const proxyEnabled = state.PROXY_ENABLED
+    const httpScheme = state.PROXY_HTTP_SCHEME
     const httpHost = (state.PROXY_HTTP_HOST ?? '').trim()
     const httpPort = (state.PROXY_HTTP_PORT ?? '').trim()
+    const httpsScheme = state.PROXY_HTTPS_SCHEME
     const httpsHost = (state.PROXY_HTTPS_HOST ?? '').trim()
     const httpsPort = (state.PROXY_HTTPS_PORT ?? '').trim()
+    const noProxyRaw = state.NO_PROXY ?? ''
 
     const fqdnRegex =
       /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))+$/
     const ipv4Regex =
       /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
 
+    const isValidNoProxyEntry = (value: string) => {
+      if (!value) return false
+      if (/^https?:\/\//i.test(value)) return false
+
+      if (ipv4Regex.test(value)) return true
+
+      const cidrMatch = value.match(/^(.+)\/(\d{1,2})$/)
+      if (cidrMatch) {
+        const ip = cidrMatch[1]
+        const mask = Number(cidrMatch[2])
+        if (ipv4Regex.test(ip) && Number.isInteger(mask) && mask >= 0 && mask <= 32) {
+          return true
+        }
+      }
+
+      if (value === 'localhost') return true
+
+      const hostname = value.replace(/^\*\./, '').replace(/^\./, '')
+      if (!hostname) return false
+
+      // Reject ambiguous numeric-only tokens like "11".
+      // (If user wants an IP, they should provide full IPv4 or IPv4 CIDR.)
+      if (/^\d+$/.test(hostname)) return false
+
+      // permissive hostname / domain check (supports internal hostnames and FQDNs)
+      if (!/^[a-zA-Z0-9-\.]+$/.test(hostname)) return false
+      if (hostname.startsWith('-') || hostname.endsWith('-')) return false
+      if (hostname.includes('..')) return false
+
+      return hostname.split('.').every((part) => {
+        if (!part) return false
+        if (part.length > 63) return false
+        if (!/^[a-zA-Z0-9-]+$/.test(part)) return false
+        if (part.startsWith('-') || part.endsWith('-')) return false
+        return true
+      })
+    }
+
     const isValidHost = (value: string) => fqdnRegex.test(value) || ipv4Regex.test(value)
 
+    const noProxy = noProxyRaw.trim()
+    if (noProxy) {
+      const entries = noProxy.split(',').map((entry) => entry.trim())
+      const hasEmpty = entries.some((entry) => entry.length === 0)
+
+      if (hasEmpty) {
+        e.NO_PROXY =
+          'Remove empty entries. Use a comma-separated list (e.g. localhost,127.0.0.1,.example.com,10.0.0.0/8).'
+      } else {
+        const invalid = entries.find((entry) => !isValidNoProxyEntry(entry))
+        if (invalid) {
+          e.NO_PROXY = `Invalid no_proxy entry: "${invalid}". Use hosts/domains/IPs or IPv4 CIDRs (no http:// or https://).`
+        }
+      }
+    }
+
     if (proxyEnabled) {
+      if (httpScheme !== 'http' && httpScheme !== 'https') {
+        e.PROXY_HTTP_SCHEME = "Must be 'http' or 'https'."
+      }
+
+      if (httpsScheme !== 'http' && httpsScheme !== 'https') {
+        e.PROXY_HTTPS_SCHEME = "Must be 'http' or 'https'."
+      }
+
       const validateHostPort = (
         hostKey: keyof SettingsForm,
         portKey: keyof SettingsForm,
@@ -442,9 +480,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
             `${scheme.toUpperCase()} proxy server is required when proxy is enabled.`
         } else if (/^https?:\/\//i.test(hostVal)) {
           e[String(hostKey)] =
-            scheme === 'http'
-              ? 'Enter only the FQDN or IPv4 address for HTTP proxy (without http://).'
-              : 'Enter only the FQDN or IPv4 address for HTTPS proxy (without https://).'
+            'Enter only the FQDN or IPv4 address (or paste the full URL and it will auto-fill).'
         } else if (!isValidHost(hostVal)) {
           e[String(hostKey)] = 'Enter a valid FQDN (with at least one dot) or IPv4 address.'
         }
@@ -468,8 +504,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         }
       }
 
-      validateHostPort('PROXY_HTTP_HOST', 'PROXY_HTTP_PORT', httpHost, httpPort, 'http')
-      validateHostPort('PROXY_HTTPS_HOST', 'PROXY_HTTPS_PORT', httpsHost, httpsPort, 'https')
+      validateHostPort('PROXY_HTTP_HOST', 'PROXY_HTTP_PORT', httpHost, httpPort, httpScheme)
+      validateHostPort('PROXY_HTTPS_HOST', 'PROXY_HTTPS_PORT', httpsHost, httpsPort, httpsScheme)
     }
 
     return e
@@ -484,16 +520,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     [buildErrors]
   )
 
-  const updateForm = useCallback(
-    (updater: SettingsForm | FormUpdater) => {
-      setForm((prev) => {
-        const next = typeof updater === 'function' ? (updater as FormUpdater)(prev) : updater
-        setErrors(buildErrors(next))
-        return next
-      })
-    },
-    [buildErrors]
-  )
+  useEffect(() => {
+    const subscription = rhfForm.watch((value) => {
+      setErrors(buildErrors(value as SettingsForm))
+    })
+
+    return () => subscription.unsubscribe()
+  }, [buildErrors, rhfForm])
 
   const fetchSettings = useCallback(async () => {
     setLoading(true)
@@ -512,7 +545,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       const proxyState = deriveProxyState(base, pf9Env?.data)
       const merged = applyProxyState(base, proxyState)
 
-      setForm(merged)
+      rhfForm.reset(merged)
       setInitial(merged)
       setErrors(buildErrors(merged))
     } catch (err) {
@@ -520,7 +553,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     } finally {
       setLoading(false)
     }
-  }, [buildErrors])
+  }, [buildErrors, rhfForm])
 
   useEffect(() => {
     fetchSettings()
@@ -541,43 +574,34 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   const onText = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const { name, value } = e.target
-      updateForm((prev) => ({ ...prev, [name]: value }))
+      rhfForm.setValue(name as keyof SettingsForm, value as any, { shouldValidate: true })
     },
-    [updateForm]
-  )
-
-  const onNumber = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target
-      const n = value === '' ? ('' as unknown as number) : Number(value)
-      updateForm((prev) => ({ ...prev, [name]: n }))
-    },
-    [updateForm]
+    [rhfForm]
   )
 
   const onBool = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const { name, checked } = e.target
-      updateForm((prev) => ({ ...prev, [name]: checked }))
+      rhfForm.setValue(name as keyof SettingsForm, checked as any, { shouldValidate: true })
     },
-    [updateForm]
+    [rhfForm]
   )
 
   const onSelect = useCallback(
     (e: SelectChangeEvent<string>) => {
       const { name, value } = e.target
-      updateForm((prev) => ({ ...prev, [name]: value as 'hot' | 'cold' }))
+      rhfForm.setValue(name as keyof SettingsForm, value as any, { shouldValidate: true })
     },
-    [updateForm]
+    [rhfForm]
   )
 
   const onResetDefaults = useCallback(() => {
-    updateForm({ ...DEFAULTS })
-  }, [updateForm])
+    rhfForm.reset({ ...DEFAULTS })
+  }, [rhfForm])
 
   const onCancel = useCallback(() => {
-    updateForm({ ...initial })
-  }, [initial, updateForm])
+    rhfForm.reset({ ...initial })
+  }, [initial, rhfForm])
 
   const onSave = useCallback(
     async (e: React.FormEvent) => {
@@ -589,8 +613,10 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
 
       const proxyChanged =
         form.PROXY_ENABLED !== initial.PROXY_ENABLED ||
+        form.PROXY_HTTP_SCHEME !== initial.PROXY_HTTP_SCHEME ||
         form.PROXY_HTTP_HOST !== initial.PROXY_HTTP_HOST ||
         form.PROXY_HTTP_PORT !== initial.PROXY_HTTP_PORT ||
+        form.PROXY_HTTPS_SCHEME !== initial.PROXY_HTTPS_SCHEME ||
         form.PROXY_HTTPS_HOST !== initial.PROXY_HTTPS_HOST ||
         form.PROXY_HTTPS_PORT !== initial.PROXY_HTTPS_PORT ||
         form.NO_PROXY !== initial.NO_PROXY
@@ -625,7 +651,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           }
         }
 
-        setForm(nextState)
+        rhfForm.reset(nextState)
         setInitial(nextState)
         setErrors(buildErrors(nextState))
 
@@ -644,10 +670,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         setSaving(false)
       }
     },
-    [form, initial, validateForm, show, buildErrors]
+    [form, initial, validateForm, show, buildErrors, rhfForm]
   )
-
-  const numberError = useCallback((key: keyof SettingsForm) => errors[String(key)], [errors])
 
   const tabErrorFlags = useMemo(
     () =>
@@ -670,15 +694,14 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   return {
     form,
     errors,
+    rhfForm,
     loading,
     saving,
     activeTab,
     notification,
     onText,
-    onNumber,
     onBool,
     onSelect,
-    numberError,
     tabHasError,
     handleTabChange,
     onResetDefaults,
@@ -688,81 +711,19 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   }
 }
 
-const NumberField = ({
-  label,
-  name,
-  value,
-  helper,
-  error,
-  onChange,
-  tooltip
-}: NumberFieldProps) => (
-  <Box display="flex" flexDirection="column" gap={0.5}>
-    <FieldLabel label={label} tooltip={tooltip} />
-    <TextField
-      fullWidth
-      size="small"
-      type="number"
-      name={String(name)}
-      value={Number.isFinite(value) ? value : ''}
-      onChange={onChange}
-      error={!!error}
-      helperText={error || helper}
-      data-testid={`global-settings-field-${String(name)}`}
-    />
-  </Box>
-)
-
-type TextFieldProps = {
-  label: string
-  name: keyof SettingsForm
-  value: string
-  helper?: string
-  error?: string
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  tooltip?: string
-  required?: boolean
-}
-
-const CustomTextField = ({
-  label,
-  name,
-  value,
-  helper,
-  error,
-  onChange,
-  tooltip,
-  required
-}: TextFieldProps) => (
-  <Box display="flex" flexDirection="column" gap={0.5}>
-    <FieldLabel label={label} tooltip={tooltip} required={required} />
-    <TextField
-      fullWidth
-      size="small"
-      name={String(name)}
-      value={value}
-      onChange={onChange}
-      error={!!error}
-      helperText={error || helper}
-      data-testid={`global-settings-field-${String(name)}`}
-    />
-  </Box>
-)
-
 export default function GlobalSettingsPage() {
   const theme = useTheme()
   const {
     form,
     errors,
+    rhfForm,
     loading,
     saving,
     activeTab,
     notification,
     onText,
-    onNumber,
     onBool,
     onSelect,
-    numberError,
     tabHasError,
     handleTabChange,
     onResetDefaults,
@@ -779,317 +740,412 @@ export default function GlobalSettingsPage() {
   if (loading) {
     return (
       <StyledPaper>
-        <Box display="flex" justifyContent="center" alignItems="center" height="400px">
-          <CircularProgress />
-          <Typography variant="body1" sx={{ ml: 2 }}>
-            Loading Global Settings...
-          </Typography>
-        </Box>
+        <FormProvider {...rhfForm}>
+          <Box display="flex" justifyContent="center" alignItems="center" height="400px">
+            <CircularProgress />
+            <Typography variant="body1" sx={{ ml: 2 }}>
+              Loading Global Settings...
+            </Typography>
+          </Box>
+        </FormProvider>
       </StyledPaper>
     )
   }
 
   return (
     <StyledPaper>
-      <Box
-        component="form"
-        onSubmit={onSave}
-        data-testid="global-settings-form"
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0
-        }}
-      >
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          allowScrollButtonsMobile
-          data-testid="global-settings-tabs"
-          sx={{ borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
+      <FormProvider {...rhfForm}>
+        <Box
+          component="form"
+          onSubmit={onSave}
+          data-testid="global-settings-form"
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0
+          }}
         >
-          {TAB_ORDER.map((tab) => (
-            <Tab
-              key={tab}
-              value={tab}
-              data-testid={`global-settings-tab-${tab}`}
-              label={
-                <TabLabel
-                  label={TAB_META[tab].label}
-                  showError={tabHasError(tab)}
-                  icon={TAB_META[tab].icon}
-                />
-              }
-              {...tabProps(tab)}
-            />
-          ))}
-        </Tabs>
-
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {TAB_META[activeTab].helper}
-        </Typography>
-
-        <TabPanel activeTab={activeTab} value="general">
-          <FormGrid minWidth={320} gap={2}>
-            <CustomTextField
-              label="Deployment Name"
-              name="DEPLOYMENT_NAME"
-              value={form.DEPLOYMENT_NAME}
-              onChange={onText}
-              error={errors.DEPLOYMENT_NAME}
-              tooltip={FIELD_TOOLTIPS.DEPLOYMENT_NAME}
-              required
-            />
-
-            <NumberField
-              label="Changed Blocks Copy Iteration Threshold"
-              name="CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"
-              value={form.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
-              onChange={onNumber}
-              error={numberError('CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD')}
-              tooltip={FIELD_TOOLTIPS.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
-            />
-
-            <Box display="flex" flexDirection="column" gap={0.5}>
-              <FieldLabel label="Periodic Sync" tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL} />
-              <SharedIntervalField
-                label=""
-                name="PERIODIC_SYNC_INTERVAL"
-                value={form.PERIODIC_SYNC_INTERVAL}
-                onChange={onText}
-                error={errors.PERIODIC_SYNC_INTERVAL}
-              />
-            </Box>
-          </FormGrid>
-        </TabPanel>
-
-        <TabPanel activeTab={activeTab} value="network">
-          <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
-            <ToggleField
-              label="Use Proxy"
-              name="PROXY_ENABLED"
-              checked={form.PROXY_ENABLED}
-              onChange={onBool}
-              tooltip={FIELD_TOOLTIPS.PROXY_ENABLED}
-              description="Route outbound HTTP/HTTPS traffic via the configured proxy."
-              data-testid="global-settings-toggle-PROXY_ENABLED"
-            />
-          </FormGrid>
-          {form.PROXY_ENABLED && (
-            <>
-              <Box sx={{ mb: 2 }}>
-                <FormGrid minWidth={320} gap={2}>
-                  <CustomTextField
-                    label="HTTP Proxy Server"
-                    name="PROXY_HTTP_HOST"
-                    value={form.PROXY_HTTP_HOST}
-                    onChange={onText}
-                    error={errors.PROXY_HTTP_HOST}
-                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_HOST}
-                    required
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="scrollable"
+            allowScrollButtonsMobile
+            data-testid="global-settings-tabs"
+            sx={{ borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
+          >
+            {TAB_ORDER.map((tab) => (
+              <Tab
+                key={tab}
+                value={tab}
+                data-testid={`global-settings-tab-${tab}`}
+                label={
+                  <TabLabel
+                    label={TAB_META[tab].label}
+                    showError={tabHasError(tab)}
+                    icon={TAB_META[tab].icon}
                   />
-
-                  <CustomTextField
-                    label="HTTP Proxy Port"
-                    name="PROXY_HTTP_PORT"
-                    value={form.PROXY_HTTP_PORT}
-                    onChange={onText}
-                    error={errors.PROXY_HTTP_PORT}
-                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_PORT}
-                    required
-                  />
-                </FormGrid>
-              </Box>
-
-              <Box sx={{ mb: 2 }}>
-                <FormGrid minWidth={320} gap={2}>
-                  <CustomTextField
-                    label="HTTPS Proxy Server"
-                    name="PROXY_HTTPS_HOST"
-                    value={form.PROXY_HTTPS_HOST}
-                    onChange={onText}
-                    error={errors.PROXY_HTTPS_HOST}
-                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_HOST}
-                    required
-                  />
-
-                  <CustomTextField
-                    label="HTTPS Proxy Port"
-                    name="PROXY_HTTPS_PORT"
-                    value={form.PROXY_HTTPS_PORT}
-                    onChange={onText}
-                    error={errors.PROXY_HTTPS_PORT}
-                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_PORT}
-                    required
-                  />
-                </FormGrid>
-              </Box>
-
-              <FormGrid minWidth={320} gap={2}>
-                <CustomTextField
-                  label="No Proxy Hosts"
-                  name="NO_PROXY"
-                  value={form.NO_PROXY}
-                  onChange={onText}
-                  error={errors.NO_PROXY}
-                  tooltip={FIELD_TOOLTIPS.NO_PROXY}
-                />
-              </FormGrid>
-            </>
-          )}
-        </TabPanel>
-
-        <TabPanel activeTab={activeTab} value="retry">
-          <FormGrid minWidth={320} gap={2}>
-            <NumberField
-              label="VM Active Wait Interval (seconds)"
-              name="VM_ACTIVE_WAIT_INTERVAL_SECONDS"
-              value={form.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
-              onChange={onNumber}
-              error={numberError('VM_ACTIVE_WAIT_INTERVAL_SECONDS')}
-              tooltip={FIELD_TOOLTIPS.VM_ACTIVE_WAIT_INTERVAL_SECONDS}
-            />
-
-            <NumberField
-              label="VM Active Retry Limit"
-              name="VM_ACTIVE_WAIT_RETRY_LIMIT"
-              value={form.VM_ACTIVE_WAIT_RETRY_LIMIT}
-              onChange={onNumber}
-              error={numberError('VM_ACTIVE_WAIT_RETRY_LIMIT')}
-              tooltip={FIELD_TOOLTIPS.VM_ACTIVE_WAIT_RETRY_LIMIT}
-            />
-
-            <NumberField
-              label="Volume Wait Interval (seconds)"
-              name="VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"
-              value={form.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
-              onChange={onNumber}
-              error={numberError('VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS')}
-              tooltip={FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS}
-            />
-
-            <NumberField
-              label="Volume Retry Limit"
-              name="VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"
-              value={form.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
-              onChange={onNumber}
-              error={numberError('VOLUME_AVAILABLE_WAIT_RETRY_LIMIT')}
-              tooltip={FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT}
-            />
-
-            <NumberField
-              label="vCenter Login Retry Limit"
-              name="VCENTER_LOGIN_RETRY_LIMIT"
-              value={form.VCENTER_LOGIN_RETRY_LIMIT}
-              onChange={onNumber}
-              error={numberError('VCENTER_LOGIN_RETRY_LIMIT')}
-              tooltip={FIELD_TOOLTIPS.VCENTER_LOGIN_RETRY_LIMIT}
-            />
-
-            <NumberField
-              label="vCenter Concurrency Limit"
-              name="VCENTER_SCAN_CONCURRENCY_LIMIT"
-              value={form.VCENTER_SCAN_CONCURRENCY_LIMIT}
-              onChange={onNumber}
-              error={numberError('VCENTER_SCAN_CONCURRENCY_LIMIT')}
-              tooltip={FIELD_TOOLTIPS.VCENTER_SCAN_CONCURRENCY_LIMIT}
-            />
-          </FormGrid>
-        </TabPanel>
-
-        <TabPanel activeTab={activeTab} value="advanced">
-          <FormGrid minWidth={320} gap={2}>
-            <NumberField
-              label="PCD Creds Requeue After (minutes)"
-              name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
-              value={form.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
-              onChange={onNumber}
-              error={numberError('OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES')}
-              tooltip={FIELD_TOOLTIPS.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
-            />
-
-            <NumberField
-              label="VMware Creds Requeue After (minutes)"
-              name="VMWARE_CREDS_REQUEUE_AFTER_MINUTES"
-              value={form.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
-              onChange={onNumber}
-              error={numberError('VMWARE_CREDS_REQUEUE_AFTER_MINUTES')}
-              tooltip={FIELD_TOOLTIPS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
-            />
-
-            <FormControl
-              fullWidth
-              size="small"
-              error={!!errors.DEFAULT_MIGRATION_METHOD}
-              sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
-            >
-              <FieldLabel
-                label="Default Migration Method"
-                tooltip={FIELD_TOOLTIPS.DEFAULT_MIGRATION_METHOD}
-              />
-              <Select
-                name="DEFAULT_MIGRATION_METHOD"
-                value={form.DEFAULT_MIGRATION_METHOD}
-                onChange={onSelect}
-                data-testid="global-settings-field-DEFAULT_MIGRATION_METHOD"
-              >
-                <MenuItem value="hot">hot</MenuItem>
-                <MenuItem value="cold">cold</MenuItem>
-              </Select>
-              {errors.DEFAULT_MIGRATION_METHOD && (
-                <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
-              )}
-            </FormControl>
-          </FormGrid>
-
-          <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
-            Automation Flags
-          </Typography>
-          <FormGrid minWidth={260} gap={2}>
-            {TOGGLE_FIELDS.map(({ key, label, description }) => (
-              <ToggleField
-                key={key}
-                label={label}
-                name={String(key)}
-                checked={form[key] as boolean}
-                onChange={onBool}
-                tooltip={FIELD_TOOLTIPS[key]}
-                description={description}
-                data-testid={`global-settings-toggle-${String(key)}`}
+                }
+                {...tabProps(tab)}
               />
             ))}
-          </FormGrid>
-        </TabPanel>
+          </Tabs>
 
-        <Box sx={{ flexGrow: 1 }} />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {TAB_META[activeTab].helper}
+          </Typography>
 
-        <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
-          <Button
-            variant="outlined"
-            color="inherit"
-            onClick={onResetDefaults}
-            startIcon={<RefreshIcon />}
-            data-testid="global-settings-reset-defaults"
-          >
-            Reset to Defaults
-          </Button>
-          <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            type="submit"
-            color="primary"
-            disabled={saving}
-            startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
-            data-testid="global-settings-save"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </Footer>
-      </Box>
+          <TabPanel activeTab={activeTab} value="general">
+            <FormGrid minWidth={320} gap={2}>
+              <RHFTextField
+                name="DEPLOYMENT_NAME"
+                label="Deployment Name"
+                required
+                labelProps={{ tooltip: FIELD_TOOLTIPS.DEPLOYMENT_NAME }}
+                error={Boolean(errors.DEPLOYMENT_NAME)}
+                helperText={errors.DEPLOYMENT_NAME}
+              />
+
+              <RHFTextField
+                name="CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"
+                label="Changed Blocks Copy Iteration Threshold"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD }}
+                error={Boolean(errors.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD)}
+                helperText={errors.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
+
+              <Box display="flex" flexDirection="column" gap={0.5}>
+                <FieldLabel label="Periodic Sync" tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL} />
+                <SharedIntervalField
+                  label=""
+                  name="PERIODIC_SYNC_INTERVAL"
+                  value={form.PERIODIC_SYNC_INTERVAL}
+                  onChange={onText}
+                  error={errors.PERIODIC_SYNC_INTERVAL}
+                />
+              </Box>
+            </FormGrid>
+          </TabPanel>
+
+          <TabPanel activeTab={activeTab} value="network">
+            <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
+              <ToggleField
+                label="Use Proxy"
+                name="PROXY_ENABLED"
+                checked={form.PROXY_ENABLED}
+                onChange={onBool}
+                tooltip={FIELD_TOOLTIPS.PROXY_ENABLED}
+                description="Route outbound HTTP/HTTPS traffic via the configured proxy."
+                data-testid="global-settings-toggle-PROXY_ENABLED"
+              />
+            </FormGrid>
+            {form.PROXY_ENABLED && (
+              <>
+                <Box sx={{ mb: 2 }}>
+                  <FormGrid minWidth={320} gap={2}>
+                    <FormControl
+                      fullWidth
+                      size="small"
+                      error={Boolean(errors.PROXY_HTTP_SCHEME)}
+                      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                    >
+                      <FieldLabel
+                        label="HTTP Proxy Protocol"
+                        tooltip={FIELD_TOOLTIPS.PROXY_HTTP_SCHEME}
+                      />
+                      <Select
+                        name="PROXY_HTTP_SCHEME"
+                        value={form.PROXY_HTTP_SCHEME}
+                        onChange={onSelect}
+                        data-testid="global-settings-select-PROXY_HTTP_SCHEME"
+                      >
+                        <MenuItem value="http">http</MenuItem>
+                        {/* <MenuItem value="https">https</MenuItem> */}
+                      </Select>
+                      {errors.PROXY_HTTP_SCHEME ? (
+                        <FormHelperText>{errors.PROXY_HTTP_SCHEME}</FormHelperText>
+                      ) : null}
+                    </FormControl>
+
+                    <RHFTextField
+                      name="PROXY_HTTP_HOST"
+                      label="HTTP Proxy Server"
+                      required
+                      labelProps={{ tooltip: FIELD_TOOLTIPS.PROXY_HTTP_HOST }}
+                      error={Boolean(errors.PROXY_HTTP_HOST)}
+                      helperText={errors.PROXY_HTTP_HOST}
+                      onValueChange={(value) => {
+                        if (!/^https?:\/\//i.test(value)) return
+                        try {
+                          const url = new URL(value)
+                          const scheme = url.protocol === 'https:' ? 'https' : 'http'
+                          rhfForm.setValue('PROXY_HTTP_SCHEME', scheme, { shouldValidate: true })
+                          rhfForm.setValue('PROXY_HTTP_HOST', url.hostname, {
+                            shouldValidate: true
+                          })
+                          if (url.port) {
+                            rhfForm.setValue('PROXY_HTTP_PORT', url.port, { shouldValidate: true })
+                          }
+                        } catch {
+                          // ignore - validation will surface errors
+                        }
+                      }}
+                    />
+
+                    <RHFTextField
+                      name="PROXY_HTTP_PORT"
+                      label="HTTP Proxy Port"
+                      required
+                      labelProps={{ tooltip: FIELD_TOOLTIPS.PROXY_HTTP_PORT }}
+                      error={Boolean(errors.PROXY_HTTP_PORT)}
+                      helperText={errors.PROXY_HTTP_PORT}
+                    />
+                  </FormGrid>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <FormGrid minWidth={320} gap={2}>
+                    <FormControl
+                      fullWidth
+                      size="small"
+                      error={Boolean(errors.PROXY_HTTPS_SCHEME)}
+                      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                    >
+                      <FieldLabel
+                        label="HTTPS Proxy Protocol"
+                        tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_SCHEME}
+                      />
+                      <Select
+                        name="PROXY_HTTPS_SCHEME"
+                        value={form.PROXY_HTTPS_SCHEME}
+                        onChange={onSelect}
+                        data-testid="global-settings-select-PROXY_HTTPS_SCHEME"
+                      >
+                        <MenuItem value="http">http</MenuItem>
+                        <MenuItem value="https">https</MenuItem>
+                      </Select>
+                      {errors.PROXY_HTTPS_SCHEME ? (
+                        <FormHelperText>{errors.PROXY_HTTPS_SCHEME}</FormHelperText>
+                      ) : null}
+                    </FormControl>
+
+                    <RHFTextField
+                      name="PROXY_HTTPS_HOST"
+                      label="HTTPS Proxy Server"
+                      required
+                      labelProps={{ tooltip: FIELD_TOOLTIPS.PROXY_HTTPS_HOST }}
+                      error={Boolean(errors.PROXY_HTTPS_HOST)}
+                      helperText={errors.PROXY_HTTPS_HOST}
+                      onValueChange={(value) => {
+                        if (!/^https?:\/\//i.test(value)) return
+                        try {
+                          const url = new URL(value)
+                          const scheme = url.protocol === 'https:' ? 'https' : 'http'
+                          rhfForm.setValue('PROXY_HTTPS_SCHEME', scheme, { shouldValidate: true })
+                          rhfForm.setValue('PROXY_HTTPS_HOST', url.hostname, {
+                            shouldValidate: true
+                          })
+                          if (url.port) {
+                            rhfForm.setValue('PROXY_HTTPS_PORT', url.port, { shouldValidate: true })
+                          }
+                        } catch {
+                          // ignore - validation will surface errors
+                        }
+                      }}
+                    />
+
+                    <RHFTextField
+                      name="PROXY_HTTPS_PORT"
+                      label="HTTPS Proxy Port"
+                      required
+                      labelProps={{ tooltip: FIELD_TOOLTIPS.PROXY_HTTPS_PORT }}
+                      error={Boolean(errors.PROXY_HTTPS_PORT)}
+                      helperText={errors.PROXY_HTTPS_PORT}
+                    />
+                  </FormGrid>
+                </Box>
+
+                <FormGrid minWidth={320} gap={2}>
+                  <RHFTextField
+                    name="NO_PROXY"
+                    label="No Proxy Hosts"
+                    labelProps={{ tooltip: FIELD_TOOLTIPS.NO_PROXY }}
+                    error={Boolean(errors.NO_PROXY)}
+                    helperText={errors.NO_PROXY}
+                  />
+                </FormGrid>
+              </>
+            )}
+          </TabPanel>
+
+          <TabPanel activeTab={activeTab} value="retry">
+            <FormGrid minWidth={320} gap={2}>
+              {(
+                [
+                  {
+                    name: 'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
+                    label: 'VM Active Wait Interval (seconds)',
+                    tooltip: FIELD_TOOLTIPS.VM_ACTIVE_WAIT_INTERVAL_SECONDS
+                  },
+                  {
+                    name: 'VM_ACTIVE_WAIT_RETRY_LIMIT',
+                    label: 'VM Active Retry Limit',
+                    tooltip: FIELD_TOOLTIPS.VM_ACTIVE_WAIT_RETRY_LIMIT
+                  },
+                  {
+                    name: 'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
+                    label: 'Volume Wait Interval (seconds)',
+                    tooltip: FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS
+                  },
+                  {
+                    name: 'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
+                    label: 'Volume Retry Limit',
+                    tooltip: FIELD_TOOLTIPS.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT
+                  },
+                  {
+                    name: 'VCENTER_LOGIN_RETRY_LIMIT',
+                    label: 'vCenter Login Retry Limit',
+                    tooltip: FIELD_TOOLTIPS.VCENTER_LOGIN_RETRY_LIMIT
+                  },
+                  {
+                    name: 'VCENTER_SCAN_CONCURRENCY_LIMIT',
+                    label: 'vCenter Concurrency Limit',
+                    tooltip: FIELD_TOOLTIPS.VCENTER_SCAN_CONCURRENCY_LIMIT
+                  }
+                ] as const
+              ).map((item) => (
+                <RHFTextField
+                  key={item.name}
+                  name={item.name}
+                  label={item.label}
+                  type="number"
+                  labelProps={{ tooltip: item.tooltip }}
+                  error={Boolean(errors[item.name])}
+                  helperText={errors[item.name]}
+                  onValueChange={(value) => {
+                    rhfForm.setValue(item.name, value === '' ? ('' as any) : Number(value), {
+                      shouldValidate: true
+                    })
+                  }}
+                />
+              ))}
+            </FormGrid>
+          </TabPanel>
+
+          <TabPanel activeTab={activeTab} value="advanced">
+            <FormGrid minWidth={320} gap={2}>
+              <RHFTextField
+                name="OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"
+                label="PCD Creds Requeue After (minutes)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES }}
+                error={Boolean(errors.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES)}
+                helperText={errors.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
+
+              <RHFTextField
+                name="VMWARE_CREDS_REQUEUE_AFTER_MINUTES"
+                label="VMware Creds Requeue After (minutes)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES }}
+                error={Boolean(errors.VMWARE_CREDS_REQUEUE_AFTER_MINUTES)}
+                helperText={errors.VMWARE_CREDS_REQUEUE_AFTER_MINUTES}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
+
+              <FormControl
+                fullWidth
+                size="small"
+                error={!!errors.DEFAULT_MIGRATION_METHOD}
+                sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+              >
+                <FieldLabel
+                  label="Default Migration Method"
+                  tooltip={FIELD_TOOLTIPS.DEFAULT_MIGRATION_METHOD}
+                />
+                <Select
+                  name="DEFAULT_MIGRATION_METHOD"
+                  value={form.DEFAULT_MIGRATION_METHOD}
+                  onChange={onSelect}
+                  data-testid="global-settings-field-DEFAULT_MIGRATION_METHOD"
+                >
+                  <MenuItem value="hot">hot</MenuItem>
+                  <MenuItem value="cold">cold</MenuItem>
+                </Select>
+                {errors.DEFAULT_MIGRATION_METHOD && (
+                  <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
+                )}
+              </FormControl>
+            </FormGrid>
+
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              Automation Flags
+            </Typography>
+            <FormGrid minWidth={260} gap={2}>
+              {TOGGLE_FIELDS.map(({ key, label, description }) => (
+                <ToggleField
+                  key={key}
+                  label={label}
+                  name={String(key)}
+                  checked={form[key] as boolean}
+                  onChange={onBool}
+                  tooltip={FIELD_TOOLTIPS[key]}
+                  description={description}
+                  data-testid={`global-settings-toggle-${String(key)}`}
+                />
+              ))}
+            </FormGrid>
+          </TabPanel>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={onResetDefaults}
+              startIcon={<RefreshIcon />}
+              data-testid="global-settings-reset-defaults"
+            >
+              Reset to Defaults
+            </Button>
+            <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              type="submit"
+              color="primary"
+              disabled={saving}
+              startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
+              data-testid="global-settings-save"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </Footer>
+        </Box>
+      </FormProvider>
 
       <Snackbar
         open={notification.open}
