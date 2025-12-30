@@ -123,7 +123,14 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VCENTER_LOGIN_RETRY_LIMIT',
     'VCENTER_SCAN_CONCURRENCY_LIMIT'
   ],
-  network: [],
+  network: [
+    'PROXY_ENABLED',
+    'PROXY_HTTP_HOST',
+    'PROXY_HTTP_PORT',
+    'PROXY_HTTPS_HOST',
+    'PROXY_HTTPS_PORT',
+    'NO_PROXY'
+  ],
   advanced: [
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
@@ -579,6 +586,15 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         show('Please fix the validation errors.', 'error')
         return
       }
+
+      const proxyChanged =
+        form.PROXY_ENABLED !== initial.PROXY_ENABLED ||
+        form.PROXY_HTTP_HOST !== initial.PROXY_HTTP_HOST ||
+        form.PROXY_HTTP_PORT !== initial.PROXY_HTTP_PORT ||
+        form.PROXY_HTTPS_HOST !== initial.PROXY_HTTPS_HOST ||
+        form.PROXY_HTTPS_PORT !== initial.PROXY_HTTPS_PORT ||
+        form.NO_PROXY !== initial.NO_PROXY
+
       setSaving(true)
       try {
         await updateSettingsConfigMap({
@@ -597,8 +613,21 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           console.error('Failed to inject proxy env variables:', envErr)
         }
 
-        setInitial(form)
-        setErrors(buildErrors(form))
+        let nextState = form
+
+        if (proxyChanged) {
+          try {
+            const pf9Env = await getPf9EnvConfig()
+            const proxyState = deriveProxyState(form, pf9Env?.data)
+            nextState = applyProxyState(form, proxyState)
+          } catch (refetchErr) {
+            console.error('Failed to refetch pf9-env config after save:', refetchErr)
+          }
+        }
+
+        setForm(nextState)
+        setInitial(nextState)
+        setErrors(buildErrors(nextState))
 
         if (envInjectionFailed) {
           show(
@@ -615,7 +644,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         setSaving(false)
       }
     },
-    [form, validateForm, show, buildErrors]
+    [form, initial, validateForm, show, buildErrors]
   )
 
   const numberError = useCallback((key: keyof SettingsForm) => errors[String(key)], [errors])
