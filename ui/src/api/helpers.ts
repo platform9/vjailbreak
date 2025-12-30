@@ -22,6 +22,7 @@ import { AMPLITUDE_EVENTS, EventProperties } from 'src/types/amplitude'
 import { enrichEventProperties, getTrackingBehavior } from 'src/config/amplitude'
 import { trackEvent } from 'src/services/amplitudeService'
 import axios from './axios'
+import { get } from './axios'
 
 export interface TrackingContext {
   component?: string
@@ -196,6 +197,42 @@ export const revalidateCredentials = (data: RevalidateCredentialsRequest) => {
   return axios.post<RevalidateCredentialsResponse>({
     endpoint: '/dev-api/sdk/vpw/v1/revalidate_credentials',
     data
+  })
+}
+
+export interface InjectEnvVariablesRequest {
+  http_proxy?: string
+  https_proxy?: string
+  no_proxy?: string
+}
+
+export interface InjectEnvVariablesResponse {
+  message: string
+}
+
+export const injectEnvVariables = (data: InjectEnvVariablesRequest) => {
+  return axios.post<InjectEnvVariablesResponse>({
+    endpoint: '/dev-api/sdk/vpw/v1/inject_env_variables',
+    data
+  })
+}
+
+export interface Pf9EnvConfigMap {
+  apiVersion: string
+  kind: string
+  metadata: {
+    name: string
+    namespace: string
+    [key: string]: any
+  }
+  data?: Record<string, string>
+}
+
+export const getPf9EnvConfig = async (): Promise<Pf9EnvConfigMap> => {
+  const endpoint = '/api/v1/namespaces/migration-system/configmaps/pf9-env'
+  return get<Pf9EnvConfigMap>({
+    endpoint,
+    config: { mock: false }
   })
 }
 

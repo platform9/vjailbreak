@@ -1,4 +1,4 @@
-import React, { SyntheticEvent, useCallback, useEffect, useState } from 'react'
+import React, { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Box,
@@ -17,19 +17,24 @@ import {
   styled,
   useTheme
 } from '@mui/material'
+import type { SnackbarCloseReason } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
+import { IntervalField as SharedIntervalField } from 'src/shared/components/forms'
+import { getGlobalSettingsHelpers } from 'src/features/globalSettings/helpers'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
   VERSION_NAMESPACE
 } from 'src/api/settings/settings'
+import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 
 const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -68,6 +73,13 @@ type SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
+  // Proxy-related fields are UI-only and handled via injectEnvVariables
+  PROXY_ENABLED: boolean
+  PROXY_HTTP_HOST: string
+  PROXY_HTTP_PORT: string
+  PROXY_HTTPS_HOST: string
+  PROXY_HTTPS_PORT: string
+  NO_PROXY: string
 }
 
 const DEFAULTS: SettingsForm = {
@@ -87,11 +99,19 @@ const DEFAULTS: SettingsForm = {
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
-  DEPLOYMENT_NAME: 'vJailbreak'
+  DEPLOYMENT_NAME: 'vJailbreak',
+  PROXY_ENABLED: false,
+  PROXY_HTTP_HOST: '',
+  PROXY_HTTP_PORT: '',
+  PROXY_HTTPS_HOST: '',
+  PROXY_HTTPS_PORT: '',
+  NO_PROXY: 'localhost,127.0.0.1'
 }
 
+const helpers = getGlobalSettingsHelpers(DEFAULTS)
+
 type FormUpdater = (prev: SettingsForm) => SettingsForm
-type TabKey = 'general' | 'retry' | 'advanced'
+type TabKey = 'general' | 'retry' | 'network' | 'advanced'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -102,6 +122,14 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
     'VCENTER_LOGIN_RETRY_LIMIT',
     'VCENTER_SCAN_CONCURRENCY_LIMIT'
+  ],
+  network: [
+    'PROXY_ENABLED',
+    'PROXY_HTTP_HOST',
+    'PROXY_HTTP_PORT',
+    'PROXY_HTTPS_HOST',
+    'PROXY_HTTPS_PORT',
+    'NO_PROXY'
   ],
   advanced: [
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
@@ -115,7 +143,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   ]
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'advanced']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -128,6 +156,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     helper:
       'Control wait intervals, retry tolerances, and concurrency to balance speed vs. safety.',
     icon: <HistoryToggleOffOutlinedIcon fontSize="small" />
+  },
+  network: {
+    label: 'Network',
+    helper: 'Configure proxy used by the migration system components.',
+    icon: <LanOutlinedIcon fontSize="small" />
   },
   advanced: {
     label: 'Advanced',
@@ -163,14 +196,14 @@ const TabLabel = ({
 
 const TabPanel = ({
   children,
-  current,
+  activeTab,
   value
 }: {
   children: React.ReactNode
-  current: TabKey
+  activeTab: TabKey
   value: TabKey
 }) => {
-  if (current !== value) return null
+  if (activeTab !== value) return null
   return (
     <Box
       role="tabpanel"
@@ -207,7 +240,16 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   POPULATE_VMWARE_MACHINE_FLAVORS:
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
-  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.'
+  AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
+  PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
+  PROXY_HTTP_HOST:
+    'FQDN or IP of the HTTP proxy server (e.g. proxy.example.com). Do not include http://.',
+  PROXY_HTTP_PORT: 'TCP port of the HTTP proxy server (e.g. 3128).',
+  PROXY_HTTPS_HOST:
+    'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). Do not include https://.',
+  PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
+  NO_PROXY:
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
 }
 
 type ToggleKey = Extract<
@@ -248,115 +290,26 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
   }
 ]
 
-const parseBool = (v: unknown, fallback: boolean) =>
-  typeof v === 'string' ? v.toLowerCase() === 'true' : typeof v === 'boolean' ? v : fallback
+type NotificationSeverity = 'error' | 'info' | 'success' | 'warning'
 
-const parseNum = (v: unknown, fallback: number) => {
-  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN
-  return Number.isFinite(n) ? n : fallback
+type NotificationState = {
+  open: boolean
+  message: string
+  severity: NotificationSeverity
 }
 
-const toConfigMapData = (f: SettingsForm): Record<string, string> => ({
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: String(f.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD),
-  PERIODIC_SYNC_INTERVAL: f.PERIODIC_SYNC_INTERVAL,
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: String(f.VM_ACTIVE_WAIT_INTERVAL_SECONDS),
-  VM_ACTIVE_WAIT_RETRY_LIMIT: String(f.VM_ACTIVE_WAIT_RETRY_LIMIT),
-  DEFAULT_MIGRATION_METHOD: f.DEFAULT_MIGRATION_METHOD,
-  VCENTER_SCAN_CONCURRENCY_LIMIT: String(f.VCENTER_SCAN_CONCURRENCY_LIMIT),
-  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: String(f.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE),
-  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: String(f.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE),
-  POPULATE_VMWARE_MACHINE_FLAVORS: String(f.POPULATE_VMWARE_MACHINE_FLAVORS),
-  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: String(f.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS),
-  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: String(f.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT),
-  VCENTER_LOGIN_RETRY_LIMIT: String(f.VCENTER_LOGIN_RETRY_LIMIT),
-  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: String(f.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES),
-  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
-  VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
-  AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
-  DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
-})
+type FieldErrorMap = Record<string, string>
 
-const fromConfigMapData = (data: Record<string, string> | undefined): SettingsForm => ({
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: parseNum(
-    data?.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD,
-    DEFAULTS.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD
-  ),
-  PERIODIC_SYNC_INTERVAL: data?.PERIODIC_SYNC_INTERVAL ?? DEFAULTS.PERIODIC_SYNC_INTERVAL,
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: parseNum(
-    data?.VM_ACTIVE_WAIT_INTERVAL_SECONDS,
-    DEFAULTS.VM_ACTIVE_WAIT_INTERVAL_SECONDS
-  ),
-  VM_ACTIVE_WAIT_RETRY_LIMIT: parseNum(
-    data?.VM_ACTIVE_WAIT_RETRY_LIMIT,
-    DEFAULTS.VM_ACTIVE_WAIT_RETRY_LIMIT
-  ),
-  DEFAULT_MIGRATION_METHOD: (data?.DEFAULT_MIGRATION_METHOD === 'cold' ? 'cold' : 'hot') as
-    | 'hot'
-    | 'cold',
-  VCENTER_SCAN_CONCURRENCY_LIMIT: parseNum(
-    data?.VCENTER_SCAN_CONCURRENCY_LIMIT,
-    DEFAULTS.VCENTER_SCAN_CONCURRENCY_LIMIT
-  ),
-  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: parseBool(
-    data?.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE,
-    DEFAULTS.CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE
-  ),
-  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: parseBool(
-    data?.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE,
-    DEFAULTS.CLEANUP_PORTS_AFTER_MIGRATION_FAILURE
-  ),
-  POPULATE_VMWARE_MACHINE_FLAVORS: parseBool(
-    data?.POPULATE_VMWARE_MACHINE_FLAVORS,
-    DEFAULTS.POPULATE_VMWARE_MACHINE_FLAVORS
-  ),
-  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: parseNum(
-    data?.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS,
-    DEFAULTS.VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS
-  ),
-  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: parseNum(
-    data?.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT,
-    DEFAULTS.VOLUME_AVAILABLE_WAIT_RETRY_LIMIT
-  ),
-  VCENTER_LOGIN_RETRY_LIMIT: parseNum(
-    data?.VCENTER_LOGIN_RETRY_LIMIT,
-    DEFAULTS.VCENTER_LOGIN_RETRY_LIMIT
-  ),
-  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: parseNum(
-    data?.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES,
-    DEFAULTS.OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES
-  ),
-  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: parseNum(
-    data?.VMWARE_CREDS_REQUEUE_AFTER_MINUTES,
-    DEFAULTS.VMWARE_CREDS_REQUEUE_AFTER_MINUTES
-  ),
-  VALIDATE_RDM_OWNER_VMS: parseBool(data?.VALIDATE_RDM_OWNER_VMS, DEFAULTS.VALIDATE_RDM_OWNER_VMS),
-  AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, DEFAULTS.AUTO_FSTAB_UPDATE),
-  DEPLOYMENT_NAME: data?.DEPLOYMENT_NAME ?? DEFAULTS.DEPLOYMENT_NAME
-})
-
-const parseInterval = (val: string): string | undefined => {
-  const trimmedVal = val?.trim()
-  if (!trimmedVal) return 'Periodic Sync is required'
-
-  const regex = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/
-  const match = trimmedVal.match(regex)
-
-  if (!match || match[0] === '') {
-    return 'Use duration format like 5m, 1h30m, 5m30s (units: h,m,s).'
-  }
-
-  const hours = match[1] ? Number(match[1]) : 0
-  const minutes = match[2] ? Number(match[2]) : 0
-  const seconds = match[3] ? Number(match[3]) : 0
-
-  const totalMinutes = hours * 60 + minutes + seconds / 60
-
-  if (isNaN(totalMinutes) || totalMinutes < 5) {
-    return 'Interval must be at least 5 minutes'
-  }
-
-  return undefined
+const DEFAULT_NOTIFICATION: NotificationState = {
+  open: false,
+  message: '',
+  severity: 'info'
 }
+
+const EMPTY_ERRORS: FieldErrorMap = {}
+
+const { parseInterval, validateProxyUrl, deriveProxyState, applyProxyState } = helpers
+const { toConfigMapData, fromConfigMapData, buildEnvPayload } = helpers
 
 type NumberFieldProps = {
   label: string
@@ -367,6 +320,372 @@ type NumberFieldProps = {
   error?: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   tooltip?: string
+}
+
+type UseGlobalSettingsControllerReturn = {
+  form: SettingsForm
+  errors: FieldErrorMap
+  loading: boolean
+  saving: boolean
+  activeTab: TabKey
+  notification: NotificationState
+  onText: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onNumber: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onBool: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onSelect: (e: SelectChangeEvent<string>) => void
+  numberError: (key: keyof SettingsForm) => string | undefined
+  tabHasError: (tab: TabKey) => boolean
+  handleTabChange: (_: SyntheticEvent, value: string | number) => void
+  onResetDefaults: () => void
+  onCancel: () => void
+  onSave: (e: React.FormEvent) => Promise<void>
+  handleNotificationClose: (_: SyntheticEvent | Event, reason?: SnackbarCloseReason) => void
+}
+
+const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
+  const [form, setForm] = useState<SettingsForm>(DEFAULTS)
+  const [initial, setInitial] = useState<SettingsForm>(DEFAULTS)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<FieldErrorMap>(EMPTY_ERRORS)
+  const [activeTab, setActiveTab] = useState<TabKey>('general')
+  const [notification, setNotification] = useState<NotificationState>(DEFAULT_NOTIFICATION)
+
+  const buildErrors = useCallback((state: SettingsForm): FieldErrorMap => {
+    const e: FieldErrorMap = {}
+
+    const cb = state.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD
+    if (!Number.isInteger(cb) || cb < 1 || cb > 20) {
+      e.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD = 'Enter an integer between 1 and 20 (inclusive).'
+    }
+
+    const intervalStr = (state.PERIODIC_SYNC_INTERVAL ?? '').trim()
+    const intervalError = parseInterval(intervalStr)
+    if (intervalError) {
+      e.PERIODIC_SYNC_INTERVAL = intervalError
+    }
+
+    if (state.DEFAULT_MIGRATION_METHOD !== 'hot' && state.DEFAULT_MIGRATION_METHOD !== 'cold') {
+      e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'."
+    }
+
+    const requiredAtLeastOne: Array<keyof SettingsForm> = [
+      'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
+      'VM_ACTIVE_WAIT_RETRY_LIMIT',
+      'VCENTER_SCAN_CONCURRENCY_LIMIT',
+      'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
+      'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
+      'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
+      'VMWARE_CREDS_REQUEUE_AFTER_MINUTES'
+    ]
+
+    requiredAtLeastOne.forEach((k) => {
+      const v = state[k] as unknown as number
+      if (!Number.isFinite(v) || !Number.isInteger(v) || v < 1) {
+        e[String(k)] = 'Enter an integer >= 1.'
+      }
+    })
+
+    const loginRetry = state.VCENTER_LOGIN_RETRY_LIMIT
+    if (!Number.isFinite(loginRetry) || !Number.isInteger(loginRetry) || loginRetry < 0) {
+      e.VCENTER_LOGIN_RETRY_LIMIT = 'Enter an integer >= 0.'
+    }
+
+    const bools: Array<keyof SettingsForm> = [
+      'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
+      'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
+      'POPULATE_VMWARE_MACHINE_FLAVORS',
+      'VALIDATE_RDM_OWNER_VMS',
+      'AUTO_FSTAB_UPDATE'
+    ]
+    bools.forEach((k) => {
+      const val = state[k]
+      if (typeof val !== 'boolean') {
+        e[String(k)] = 'Must be boolean: true or false.'
+      }
+    })
+
+    const dn = (state.DEPLOYMENT_NAME ?? '').trim()
+    if (!dn) {
+      e.DEPLOYMENT_NAME = 'Required.'
+    } else if (dn.length > 63) {
+      e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
+    }
+
+    const proxyEnabled = state.PROXY_ENABLED
+    const httpHost = (state.PROXY_HTTP_HOST ?? '').trim()
+    const httpPort = (state.PROXY_HTTP_PORT ?? '').trim()
+    const httpsHost = (state.PROXY_HTTPS_HOST ?? '').trim()
+    const httpsPort = (state.PROXY_HTTPS_PORT ?? '').trim()
+
+    const fqdnRegex =
+      /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))+$/
+    const ipv4Regex =
+      /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+
+    const isValidHost = (value: string) => fqdnRegex.test(value) || ipv4Regex.test(value)
+
+    if (proxyEnabled) {
+      const validateHostPort = (
+        hostKey: keyof SettingsForm,
+        portKey: keyof SettingsForm,
+        hostVal: string,
+        portVal: string,
+        scheme: 'http' | 'https'
+      ) => {
+        if (!hostVal && !portVal) {
+          return
+        }
+
+        if (!hostVal) {
+          e[String(hostKey)] =
+            `${scheme.toUpperCase()} proxy server is required when proxy is enabled.`
+        } else if (/^https?:\/\//i.test(hostVal)) {
+          e[String(hostKey)] =
+            scheme === 'http'
+              ? 'Enter only the FQDN or IPv4 address for HTTP proxy (without http://).'
+              : 'Enter only the FQDN or IPv4 address for HTTPS proxy (without https://).'
+        } else if (!isValidHost(hostVal)) {
+          e[String(hostKey)] = 'Enter a valid FQDN (with at least one dot) or IPv4 address.'
+        }
+
+        if (!portVal) {
+          e[String(portKey)] =
+            `${scheme.toUpperCase()} proxy port is required when proxy is enabled.`
+        } else {
+          const portNum = Number(portVal)
+          if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+            e[String(portKey)] = 'Enter a valid TCP port between 1 and 65535.'
+          }
+        }
+
+        if (!e[String(hostKey)] && !e[String(portKey)]) {
+          const proxyUrl = `${scheme}://${hostVal}:${portVal}`
+          const proxyError = validateProxyUrl(proxyUrl)
+          if (proxyError) {
+            e[String(hostKey)] = proxyError
+          }
+        }
+      }
+
+      validateHostPort('PROXY_HTTP_HOST', 'PROXY_HTTP_PORT', httpHost, httpPort, 'http')
+      validateHostPort('PROXY_HTTPS_HOST', 'PROXY_HTTPS_PORT', httpsHost, httpsPort, 'https')
+    }
+
+    return e
+  }, [])
+
+  const validateForm = useCallback(
+    (state: SettingsForm) => {
+      const nextErrors = buildErrors(state)
+      setErrors(nextErrors)
+      return Object.keys(nextErrors).length === 0
+    },
+    [buildErrors]
+  )
+
+  const updateForm = useCallback(
+    (updater: SettingsForm | FormUpdater) => {
+      setForm((prev) => {
+        const next = typeof updater === 'function' ? (updater as FormUpdater)(prev) : updater
+        setErrors(buildErrors(next))
+        return next
+      })
+    },
+    [buildErrors]
+  )
+
+  const fetchSettings = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [settingsCm, pf9Env] = await Promise.all([
+        getSettingsConfigMap(),
+        getPf9EnvConfig().catch((err) => {
+          console.error('Failed to fetch pf9-env config:', err)
+          return undefined
+        })
+      ])
+
+      const base = fromConfigMapData(
+        settingsCm?.data as Record<string, string | number | undefined> | undefined
+      )
+      const proxyState = deriveProxyState(base, pf9Env?.data)
+      const merged = applyProxyState(base, proxyState)
+
+      setForm(merged)
+      setInitial(merged)
+      setErrors(buildErrors(merged))
+    } catch (err) {
+      console.error('Failed to load Global Settings:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [buildErrors])
+
+  useEffect(() => {
+    fetchSettings()
+  }, [fetchSettings])
+
+  const show = useCallback((message: string, severity: NotificationSeverity = 'info') => {
+    setNotification({ open: true, message, severity })
+  }, [])
+
+  const handleNotificationClose = useCallback(
+    (_: SyntheticEvent | Event, reason?: SnackbarCloseReason) => {
+      if (reason === 'clickaway') return
+      setNotification((prev) => ({ ...prev, open: false }))
+    },
+    []
+  )
+
+  const onText = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, value } = e.target
+      updateForm((prev) => ({ ...prev, [name]: value }))
+    },
+    [updateForm]
+  )
+
+  const onNumber = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, value } = e.target
+      const n = value === '' ? ('' as unknown as number) : Number(value)
+      updateForm((prev) => ({ ...prev, [name]: n }))
+    },
+    [updateForm]
+  )
+
+  const onBool = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { name, checked } = e.target
+      updateForm((prev) => ({ ...prev, [name]: checked }))
+    },
+    [updateForm]
+  )
+
+  const onSelect = useCallback(
+    (e: SelectChangeEvent<string>) => {
+      const { name, value } = e.target
+      updateForm((prev) => ({ ...prev, [name]: value as 'hot' | 'cold' }))
+    },
+    [updateForm]
+  )
+
+  const onResetDefaults = useCallback(() => {
+    updateForm({ ...DEFAULTS })
+  }, [updateForm])
+
+  const onCancel = useCallback(() => {
+    updateForm({ ...initial })
+  }, [initial, updateForm])
+
+  const onSave = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!validateForm(form)) {
+        show('Please fix the validation errors.', 'error')
+        return
+      }
+
+      const proxyChanged =
+        form.PROXY_ENABLED !== initial.PROXY_ENABLED ||
+        form.PROXY_HTTP_HOST !== initial.PROXY_HTTP_HOST ||
+        form.PROXY_HTTP_PORT !== initial.PROXY_HTTP_PORT ||
+        form.PROXY_HTTPS_HOST !== initial.PROXY_HTTPS_HOST ||
+        form.PROXY_HTTPS_PORT !== initial.PROXY_HTTPS_PORT ||
+        form.NO_PROXY !== initial.NO_PROXY
+
+      setSaving(true)
+      try {
+        await updateSettingsConfigMap({
+          apiVersion: 'v1',
+          kind: 'ConfigMap',
+          metadata: { name: VERSION_CONFIG_MAP_NAME, namespace: VERSION_NAMESPACE },
+          data: toConfigMapData(form)
+        } as any)
+
+        let envInjectionFailed = false
+
+        try {
+          await injectEnvVariables(buildEnvPayload(form))
+        } catch (envErr) {
+          envInjectionFailed = true
+          console.error('Failed to inject proxy env variables:', envErr)
+        }
+
+        let nextState = form
+
+        if (proxyChanged) {
+          try {
+            const pf9Env = await getPf9EnvConfig()
+            const proxyState = deriveProxyState(form, pf9Env?.data)
+            nextState = applyProxyState(form, proxyState)
+          } catch (refetchErr) {
+            console.error('Failed to refetch pf9-env config after save:', refetchErr)
+          }
+        }
+
+        setForm(nextState)
+        setInitial(nextState)
+        setErrors(buildErrors(nextState))
+
+        if (envInjectionFailed) {
+          show(
+            'Settings saved, but applying proxy environment variables failed. Please verify connectivity and try again.',
+            'warning'
+          )
+        } else {
+          show('Global Settings saved successfully.', 'success')
+        }
+      } catch (err) {
+        console.error('Failed to save Global Settings ConfigMap:', err)
+        show('Failed to save Global Settings. No changes were applied.', 'error')
+      } finally {
+        setSaving(false)
+      }
+    },
+    [form, initial, validateForm, show, buildErrors]
+  )
+
+  const numberError = useCallback((key: keyof SettingsForm) => errors[String(key)], [errors])
+
+  const tabErrorFlags = useMemo(
+    () =>
+      TAB_ORDER.reduce<Record<TabKey, boolean>>(
+        (acc, tab) => {
+          acc[tab] = TAB_FIELD_KEYS[tab].some((key) => Boolean(errors[String(key)]))
+          return acc
+        },
+        {} as Record<TabKey, boolean>
+      ),
+    [errors]
+  )
+
+  const tabHasError = useCallback((tab: TabKey) => tabErrorFlags[tab], [tabErrorFlags])
+
+  const handleTabChange = useCallback((_: SyntheticEvent, value: string | number) => {
+    setActiveTab(value as TabKey)
+  }, [])
+
+  return {
+    form,
+    errors,
+    loading,
+    saving,
+    activeTab,
+    notification,
+    onText,
+    onNumber,
+    onBool,
+    onSelect,
+    numberError,
+    tabHasError,
+    handleTabChange,
+    onResetDefaults,
+    onCancel,
+    onSave,
+    handleNotificationClose
+  }
 }
 
 const NumberField = ({
@@ -430,245 +749,32 @@ const CustomTextField = ({
   </Box>
 )
 
-type IntervalFieldProps = {
-  label: string
-  name: keyof SettingsForm
-  value: string
-  helper?: string
-  error?: string
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  tooltip?: string
-}
-
-const IntervalField = ({
-  label,
-  name,
-  value,
-  helper,
-  error,
-  onChange,
-  tooltip
-}: IntervalFieldProps) => (
-  <Box display="flex" flexDirection="column" gap={0.5}>
-    <FieldLabel label={label} tooltip={tooltip} />
-    <TextField
-      fullWidth
-      size="small"
-      name={String(name)}
-      value={value}
-      onChange={onChange}
-      error={!!error}
-      helperText={error || helper || 'e.g. 5m, 1h30m, 5m30s (units: h,m,s)'}
-      data-testid={`global-settings-field-${String(name)}`}
-    />
-  </Box>
-)
-
 export default function GlobalSettingsPage() {
   const theme = useTheme()
-  const [form, setForm] = useState<SettingsForm>(DEFAULTS)
-  const [initial, setInitial] = useState<SettingsForm>(DEFAULTS)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [activeTab, setActiveTab] = useState<TabKey>('general')
-
-  const buildErrors = useCallback((state: SettingsForm) => {
-    const e: Record<string, string> = {}
-
-    const cb = state.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD
-    if (!Number.isInteger(cb) || cb < 1 || cb > 20) {
-      e.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD = 'Enter an integer between 1 and 20 (inclusive).'
-    }
-
-    const intervalStr = (state.PERIODIC_SYNC_INTERVAL ?? '').trim()
-    const intervalError = parseInterval(intervalStr)
-    if (intervalError) {
-      e.PERIODIC_SYNC_INTERVAL = intervalError
-    }
-
-    if (state.DEFAULT_MIGRATION_METHOD !== 'hot' && state.DEFAULT_MIGRATION_METHOD !== 'cold') {
-      e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'."
-    }
-
-    const requiredAtLeastOne: Array<keyof SettingsForm> = [
-      'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
-      'VM_ACTIVE_WAIT_RETRY_LIMIT',
-      'VCENTER_SCAN_CONCURRENCY_LIMIT',
-      'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
-      'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
-      'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
-      'VMWARE_CREDS_REQUEUE_AFTER_MINUTES'
-    ]
-
-    requiredAtLeastOne.forEach((k) => {
-      const v = state[k] as unknown as number
-      if (!Number.isFinite(v) || !Number.isInteger(v) || v < 1) {
-        e[String(k)] = 'Enter an integer >= 1.'
-      }
-    })
-
-    const loginRetry = state.VCENTER_LOGIN_RETRY_LIMIT
-    if (!Number.isFinite(loginRetry) || !Number.isInteger(loginRetry) || loginRetry < 0) {
-      e.VCENTER_LOGIN_RETRY_LIMIT = 'Enter an integer >= 0.'
-    }
-
-    const bools: Array<keyof SettingsForm> = [
-      'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
-      'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
-      'POPULATE_VMWARE_MACHINE_FLAVORS',
-      'VALIDATE_RDM_OWNER_VMS',
-      'AUTO_FSTAB_UPDATE'
-    ]
-    bools.forEach((k) => {
-      const val = state[k]
-      if (typeof val !== 'boolean') {
-        e[String(k)] = 'Must be boolean: true or false.'
-      }
-    })
-
-    const dn = (state.DEPLOYMENT_NAME ?? '').trim()
-    if (!dn) {
-      e.DEPLOYMENT_NAME = 'Required.'
-    } else if (dn.length > 63) {
-      e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
-    }
-
-    return e
-  }, [])
-
-  const validateForm = useCallback(
-    (state: SettingsForm) => {
-      const nextErrors = buildErrors(state)
-      setErrors(nextErrors)
-      return Object.keys(nextErrors).length === 0
-    },
-    [buildErrors]
-  )
-
-  const updateForm = useCallback(
-    (updater: SettingsForm | FormUpdater) => {
-      setForm((prev) => {
-        const next = typeof updater === 'function' ? (updater as FormUpdater)(prev) : updater
-        setErrors(buildErrors(next))
-        return next
-      })
-    },
-    [buildErrors]
-  )
-
-  const [notification, setNotification] = useState<{
-    open: boolean
-    message: string
-    severity: 'error' | 'info' | 'success' | 'warning'
-  }>({ open: false, message: '', severity: 'info' })
-
-  const fetchSettings = async () => {
-    setLoading(true)
-    try {
-      const cm = await getSettingsConfigMap()
-      const next = fromConfigMapData(cm?.data as any)
-      updateForm(next ?? DEFAULTS)
-      setInitial(next ?? DEFAULTS)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchSettings()
-  }, [])
-
-  const show = useCallback(
-    (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') =>
-      setNotification({ open: true, message, severity }),
-    []
-  )
+  const {
+    form,
+    errors,
+    loading,
+    saving,
+    activeTab,
+    notification,
+    onText,
+    onNumber,
+    onBool,
+    onSelect,
+    numberError,
+    tabHasError,
+    handleTabChange,
+    onResetDefaults,
+    onCancel,
+    onSave,
+    handleNotificationClose
+  } = useGlobalSettingsController()
 
   const tabProps = (value: TabKey) => ({
     id: `settings-tab-${value}`,
     'aria-controls': `settings-tabpanel-${value}`
   })
-
-  const handleTabChange = useCallback((_: SyntheticEvent, value: string | number) => {
-    setActiveTab(value as TabKey)
-  }, [])
-
-  const onText = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target
-      updateForm((prev) => ({ ...prev, [name]: value }))
-    },
-    [updateForm]
-  )
-
-  const onNumber = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target
-      const n = value === '' ? ('' as unknown as number) : Number(value)
-      updateForm((prev) => ({ ...prev, [name]: n }))
-    },
-    [updateForm]
-  )
-
-  const onBool = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, checked } = e.target
-      updateForm((prev) => ({ ...prev, [name]: checked }))
-    },
-    [updateForm]
-  )
-
-  const onSelect = useCallback(
-    (e: SelectChangeEvent<string>) => {
-      const { name, value } = e.target
-      updateForm((prev) => ({ ...prev, [name]: value as 'hot' | 'cold' }))
-    },
-    [updateForm]
-  )
-
-  const onResetDefaults = useCallback(() => {
-    updateForm(DEFAULTS)
-    setErrors({})
-  }, [updateForm])
-
-  const onCancel = useCallback(() => {
-    updateForm(initial)
-    setErrors({})
-  }, [initial, updateForm])
-
-  const onSave = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!validateForm(form)) {
-        show('Please fix the validation errors.', 'error')
-        return
-      }
-      setSaving(true)
-      try {
-        await updateSettingsConfigMap({
-          apiVersion: 'v1',
-          kind: 'ConfigMap',
-          metadata: { name: VERSION_CONFIG_MAP_NAME, namespace: VERSION_NAMESPACE },
-          data: toConfigMapData(form)
-        } as any)
-        setInitial(form)
-        show('Global Settings saved successfully.', 'success')
-      } catch (err) {
-        show('Failed to save Global Settings.', 'error')
-      } finally {
-        setSaving(false)
-      }
-    },
-    [form, validateForm, show]
-  )
-
-  const numberError = useCallback((key: keyof SettingsForm) => errors[String(key)], [errors])
-
-  const tabHasError = useCallback(
-    (tab: TabKey) => TAB_FIELD_KEYS[tab].some((key) => Boolean(errors[String(key)])),
-    [errors]
-  )
 
   if (loading) {
     return (
@@ -725,7 +831,7 @@ export default function GlobalSettingsPage() {
           {TAB_META[activeTab].helper}
         </Typography>
 
-        <TabPanel current={activeTab} value="general">
+        <TabPanel activeTab={activeTab} value="general">
           <FormGrid minWidth={320} gap={2}>
             <CustomTextField
               label="Deployment Name"
@@ -746,18 +852,96 @@ export default function GlobalSettingsPage() {
               tooltip={FIELD_TOOLTIPS.CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD}
             />
 
-            <IntervalField
-              label="Periodic Sync"
-              name="PERIODIC_SYNC_INTERVAL"
-              value={form.PERIODIC_SYNC_INTERVAL}
-              onChange={onText}
-              error={errors.PERIODIC_SYNC_INTERVAL}
-              tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL}
-            />
+            <Box display="flex" flexDirection="column" gap={0.5}>
+              <FieldLabel label="Periodic Sync" tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_INTERVAL} />
+              <SharedIntervalField
+                label=""
+                name="PERIODIC_SYNC_INTERVAL"
+                value={form.PERIODIC_SYNC_INTERVAL}
+                onChange={onText}
+                error={errors.PERIODIC_SYNC_INTERVAL}
+              />
+            </Box>
           </FormGrid>
         </TabPanel>
 
-        <TabPanel current={activeTab} value="retry">
+        <TabPanel activeTab={activeTab} value="network">
+          <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
+            <ToggleField
+              label="Use Proxy"
+              name="PROXY_ENABLED"
+              checked={form.PROXY_ENABLED}
+              onChange={onBool}
+              tooltip={FIELD_TOOLTIPS.PROXY_ENABLED}
+              description="Route outbound HTTP/HTTPS traffic via the configured proxy."
+              data-testid="global-settings-toggle-PROXY_ENABLED"
+            />
+          </FormGrid>
+          {form.PROXY_ENABLED && (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <FormGrid minWidth={320} gap={2}>
+                  <CustomTextField
+                    label="HTTP Proxy Server"
+                    name="PROXY_HTTP_HOST"
+                    value={form.PROXY_HTTP_HOST}
+                    onChange={onText}
+                    error={errors.PROXY_HTTP_HOST}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_HOST}
+                    required
+                  />
+
+                  <CustomTextField
+                    label="HTTP Proxy Port"
+                    name="PROXY_HTTP_PORT"
+                    value={form.PROXY_HTTP_PORT}
+                    onChange={onText}
+                    error={errors.PROXY_HTTP_PORT}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTP_PORT}
+                    required
+                  />
+                </FormGrid>
+              </Box>
+
+              <Box sx={{ mb: 2 }}>
+                <FormGrid minWidth={320} gap={2}>
+                  <CustomTextField
+                    label="HTTPS Proxy Server"
+                    name="PROXY_HTTPS_HOST"
+                    value={form.PROXY_HTTPS_HOST}
+                    onChange={onText}
+                    error={errors.PROXY_HTTPS_HOST}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_HOST}
+                    required
+                  />
+
+                  <CustomTextField
+                    label="HTTPS Proxy Port"
+                    name="PROXY_HTTPS_PORT"
+                    value={form.PROXY_HTTPS_PORT}
+                    onChange={onText}
+                    error={errors.PROXY_HTTPS_PORT}
+                    tooltip={FIELD_TOOLTIPS.PROXY_HTTPS_PORT}
+                    required
+                  />
+                </FormGrid>
+              </Box>
+
+              <FormGrid minWidth={320} gap={2}>
+                <CustomTextField
+                  label="No Proxy Hosts"
+                  name="NO_PROXY"
+                  value={form.NO_PROXY}
+                  onChange={onText}
+                  error={errors.NO_PROXY}
+                  tooltip={FIELD_TOOLTIPS.NO_PROXY}
+                />
+              </FormGrid>
+            </>
+          )}
+        </TabPanel>
+
+        <TabPanel activeTab={activeTab} value="retry">
           <FormGrid minWidth={320} gap={2}>
             <NumberField
               label="VM Active Wait Interval (seconds)"
@@ -815,7 +999,7 @@ export default function GlobalSettingsPage() {
           </FormGrid>
         </TabPanel>
 
-        <TabPanel current={activeTab} value="advanced">
+        <TabPanel activeTab={activeTab} value="advanced">
           <FormGrid minWidth={320} gap={2}>
             <NumberField
               label="PCD Creds Requeue After (minutes)"
@@ -910,7 +1094,7 @@ export default function GlobalSettingsPage() {
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
+        onClose={handleNotificationClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         sx={{
           top: { xs: 80, sm: 90 },
@@ -918,7 +1102,7 @@ export default function GlobalSettingsPage() {
         }}
       >
         <Alert
-          onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
+          onClose={handleNotificationClose}
           severity={notification.severity}
           variant="filled"
           sx={{
