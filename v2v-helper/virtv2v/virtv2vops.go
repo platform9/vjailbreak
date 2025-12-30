@@ -864,7 +864,7 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 		}
 	}()
 
-	scriptPath := "/home/fedora/network_config_util.sh"
+	scriptPath := "/home/fedora/generate_udev_mapping.sh"
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("script not found at %s", scriptPath)
 	}
