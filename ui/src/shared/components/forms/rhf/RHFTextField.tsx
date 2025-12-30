@@ -13,6 +13,10 @@ export type RHFTextFieldProps = TextFieldProps & {
   labelHelperText?: FieldLabelProps['helperText']
   labelProps?: FieldLabelCustomProps
   disabled?: boolean
+  onValueChange?: (
+    value: string,
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => void
 }
 
 export default function RHFTextField({
@@ -23,6 +27,7 @@ export default function RHFTextField({
   label,
   labelHelperText,
   labelProps,
+  onValueChange,
   disabled = false,
   ...rest
 }: RHFTextFieldProps) {
@@ -49,6 +54,10 @@ export default function RHFTextField({
             {...field}
             label={undefined}
             value={field.value ?? ''}
+            onChange={(event) => {
+              field.onChange(event)
+              onValueChange?.(event.target.value, event)
+            }}
             error={fieldState.invalid || errorProp}
             helperText={fieldState.error?.message ?? helperText}
             disabled={disabled}
