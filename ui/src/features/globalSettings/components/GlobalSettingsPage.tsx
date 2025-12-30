@@ -419,10 +419,6 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       const hostname = value.replace(/^\*\./, '').replace(/^\./, '')
       if (!hostname) return false
 
-      // Reject ambiguous numeric-only tokens like "11".
-      // (If user wants an IP, they should provide full IPv4 or IPv4 CIDR.)
-      if (/^\d+$/.test(hostname)) return false
-
       // permissive hostname / domain check (supports internal hostnames and FQDNs)
       if (!/^[a-zA-Z0-9-\.]+$/.test(hostname)) return false
       if (hostname.startsWith('-') || hostname.endsWith('-')) return false
