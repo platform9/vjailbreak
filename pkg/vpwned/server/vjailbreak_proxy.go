@@ -620,7 +620,8 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		if in.GetHttpProxy() == "" && in.GetHttpsProxy() == "" {
 			delete(existingCM.Data, "no_proxy")
 			logrus.WithField("func", fn).Info("Deleting no_proxy from ConfigMap (both proxies are empty)")
-		} else if in.GetNoProxy() == "" {
+		} else if in.GetNoProxy() == "" && noProxy == "" {
+			// Only delete no_proxy if it's still empty after auto-append logic
 			delete(existingCM.Data, "no_proxy")
 			logrus.WithField("func", fn).Info("Deleting no_proxy from ConfigMap")
 		}
