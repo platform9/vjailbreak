@@ -43,6 +43,8 @@ type MigrationPlanStrategy struct {
 	HealthCheckPort string `json:"healthCheckPort,omitempty"`
 	// +kubebuilder:default:=false
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
+	// +kubebuilder:default:=false
+	ArrayOffload bool `json:"arrayOffload,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process
