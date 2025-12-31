@@ -529,6 +529,45 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		}, nil
 	}
 
+	// If at least one of http_proxy or https_proxy is present, ensure .svc,.cluster.local,localhost,127.0.0.1,169.254.169.254 is in no_proxy
+	if (httpProxy != "" || httpsProxy != "") {
+		requiredNoProxyValues := []string{".svc", ".cluster.local", "localhost", "127.0.0.1", "169.254.169.254"}
+		noProxyList := []string{}
+		
+		if noProxy != "" {
+			noProxyList = strings.Split(noProxy, ",")
+			// Trim spaces from each entry
+			for i := range noProxyList {
+				noProxyList[i] = strings.TrimSpace(noProxyList[i])
+			}
+		}
+		
+		// Check and add missing values
+		for _, required := range requiredNoProxyValues {
+			found := false
+			for _, existing := range noProxyList {
+				if existing == required {
+					found = true
+					break
+				}
+			}
+			if !found {
+				noProxyList = append(noProxyList, required)
+				logrus.WithFields(logrus.Fields{
+					"func":  fn,
+					"value": required,
+				}).Info("Auto-appending value to no_proxy")
+			}
+		}
+		
+		// Reconstruct no_proxy
+		noProxy = strings.Join(noProxyList, ",")
+		logrus.WithFields(logrus.Fields{
+			"func":     fn,
+			"no_proxy": noProxy,
+		}).Info("Updated no_proxy value")
+	}
+
 	k8sClient, err := CreateInClusterClient()
 	if err != nil {
 		logrus.WithField("func", fn).WithError(err).Error("Failed to create in-cluster k8s client")
