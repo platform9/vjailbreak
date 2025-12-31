@@ -597,13 +597,34 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, existingCM)
 
 	if err == nil {
-		logrus.WithField("func", fn).Info("ConfigMap exists, appending new environment variables")
+		logrus.WithField("func", fn).Info("ConfigMap exists, updating environment variables")
 		if existingCM.Data == nil {
 			existingCM.Data = make(map[string]string)
 		}
+		
+		// Update or add non-empty values
 		for key, value := range envData {
 			existingCM.Data[key] = value
 		}
+		
+		// Delete keys when empty values are sent
+		if in.GetHttpProxy() == "" {
+			delete(existingCM.Data, "http_proxy")
+			logrus.WithField("func", fn).Info("Deleting http_proxy from ConfigMap")
+		}
+		if in.GetHttpsProxy() == "" {
+			delete(existingCM.Data, "https_proxy")
+			logrus.WithField("func", fn).Info("Deleting https_proxy from ConfigMap")
+		}
+		// If both http_proxy and https_proxy are empty, also delete no_proxy
+		if in.GetHttpProxy() == "" && in.GetHttpsProxy() == "" {
+			delete(existingCM.Data, "no_proxy")
+			logrus.WithField("func", fn).Info("Deleting no_proxy from ConfigMap (both proxies are empty)")
+		} else if in.GetNoProxy() == "" {
+			delete(existingCM.Data, "no_proxy")
+			logrus.WithField("func", fn).Info("Deleting no_proxy from ConfigMap")
+		}
+		
 		if err := k8sClient.Update(ctx, existingCM); err != nil {
 			logrus.WithFields(logrus.Fields{"func": fn, "configmap": configMapName}).WithError(err).Error("Failed to update existing ConfigMap")
 			return &api.InjectEnvVariablesResponse{
