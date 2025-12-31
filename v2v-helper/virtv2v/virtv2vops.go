@@ -364,11 +364,13 @@ func GetInterfaceNamesFromDisk(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 		lines := strings.Split(content, "\n")
 		
 		// Method 1: Direct HWADDR in the file
+		// Note: content is lowercase because RunCommandInGuest uses strings.ToLower()
 		log.Printf("[GetInterfaceNamesFromDisk] Trying Method 1: Looking for HWADDR in %s", file)
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "HWADDR=") {
-				mac := strings.TrimPrefix(line, "HWADDR=")
+			// Case-insensitive match since content is lowercased
+			if strings.HasPrefix(line, "hwaddr=") {
+				mac := strings.TrimPrefix(line, "hwaddr=")
 				mac = strings.Trim(mac, "\"'")
 				foundMac = strings.ToLower(strings.TrimSpace(mac))
 				if foundMac != "" {
@@ -383,12 +385,14 @@ func GetInterfaceNamesFromDisk(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 		
 		// Method 2: Match by IP address (works for static IPs)
 		// Since same MAC gets same IP, we can use ipPerMac to find the MAC
+		// Note: content is lowercase because RunCommandInGuest uses strings.ToLower()
 		if foundMac == "" {
 			log.Printf("[GetInterfaceNamesFromDisk] Trying Method 2: Looking for IPADDR in %s", file)
 			for _, line := range lines {
 				line = strings.TrimSpace(line)
-				if strings.HasPrefix(line, "IPADDR=") {
-					ip := strings.TrimPrefix(line, "IPADDR=")
+				// Case-insensitive match since content is lowercased
+				if strings.HasPrefix(line, "ipaddr=") {
+					ip := strings.TrimPrefix(line, "ipaddr=")
 					ip = strings.Trim(ip, "\"'")
 					ip = strings.TrimSpace(ip)
 					log.Printf("[GetInterfaceNamesFromDisk] Found IPADDR=%s in %s", ip, file)
@@ -563,6 +567,7 @@ func AddHWADDRToStaticInterfaces(disks []vm.VMDisk, useSingleDisk bool, diskPath
 		}
 		
 		// Check if it has static IP and no HWADDR
+		// Note: content is lowercase because RunCommandInGuest uses strings.ToLower()
 		hasHWADDR := false
 		hasIPADDR := false
 		var staticIP string
@@ -570,14 +575,16 @@ func AddHWADDRToStaticInterfaces(disks []vm.VMDisk, useSingleDisk bool, diskPath
 		lines := strings.Split(content, "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "HWADDR=") {
+			// Case-insensitive match since content is lowercased
+			if strings.HasPrefix(line, "hwaddr=") {
 				hasHWADDR = true
 			}
-			if strings.HasPrefix(line, "IPADDR=") {
+			if strings.HasPrefix(line, "ipaddr=") {
 				hasIPADDR = true
-				ip := strings.TrimPrefix(line, "IPADDR=")
+				ip := strings.TrimPrefix(line, "ipaddr=")
 				staticIP = strings.Trim(ip, "\"'")
 				staticIP = strings.TrimSpace(staticIP)
+				log.Printf("[AddHWADDRToStaticInterfaces] Found static IP %s in %s", staticIP, file)
 			}
 		}
 		
@@ -668,6 +675,7 @@ func AddMACToNMKeyfiles(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		}
 		
 		// Check if it has static IP and no MAC
+		// Note: content is lowercase because RunCommandInGuest uses strings.ToLower()
 		hasMac := false
 		hasStaticIP := false
 		var staticIP string
@@ -677,19 +685,19 @@ func AddMACToNMKeyfiles(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			
-			// Track sections
+			// Track sections (case-insensitive)
 			if strings.HasPrefix(line, "[ethernet]") {
 				inEthernetSection = true
 			} else if strings.HasPrefix(line, "[") {
 				inEthernetSection = false
 			}
 			
-			// Check for existing MAC
+			// Check for existing MAC (case-insensitive)
 			if inEthernetSection && strings.HasPrefix(line, "mac-address=") {
 				hasMac = true
 			}
 			
-			// Get static IP
+			// Get static IP (case-insensitive)
 			if strings.HasPrefix(line, "address1=") {
 				hasStaticIP = true
 				addr := strings.TrimPrefix(line, "address1=")
@@ -698,6 +706,7 @@ func AddMACToNMKeyfiles(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 					ipParts := strings.Split(parts[0], "/")
 					if len(ipParts) > 0 {
 						staticIP = strings.TrimSpace(ipParts[0])
+						log.Printf("[AddMACToNMKeyfiles] Found static IP %s in %s", staticIP, file)
 					}
 				}
 			}
