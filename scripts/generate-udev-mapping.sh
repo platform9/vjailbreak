@@ -43,14 +43,20 @@ clean_string_input() {
     echo "$1" | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-# Parses the mapping line to isolate MAC and IP components
+# Parses the mapping line to isolate MAC, IP, and device name components
+# Format: MAC:ip:IP or MAC:ip:IP:dev:DEVICE
 parse_address_pair() {
     FOUND_MAC=""
     FOUND_IP=""
+    FOUND_DEV=""
     # Regex pattern to identify valid MAC:ip:IPv4 format
     if echo "$1" | grep -qE '^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$'; then
         FOUND_MAC=$(echo "$1" | sed -nE 's/^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:.*$/\1/p')
         FOUND_IP=$(echo "$1" | sed -nE 's/^.*:ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$/\1/p')
+        # Extract device name if present
+        if echo "$1" | grep -q ':dev:'; then
+            FOUND_DEV=$(echo "$1" | sed -nE 's/^.*:dev:([^:]+).*$/\1/p')
+        fi
     fi
 }
 
@@ -92,6 +98,10 @@ process_ifcfg_infrastructure() {
         return 0
     fi
 
+    # Track which MACs we've created rules for
+    declare -A processed_macs
+    local VJB_INDEX=1
+
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
@@ -100,40 +110,103 @@ process_ifcfg_infrastructure() {
             continue
         fi
 
-        # Locate script matching the IP
-        local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null)
-        local VJB_INDEX=1
-        
-        if [[ -z "$CFG_FILE" ]]; then
-            display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
-            
-            # Create a virtual bridge/dhcp interface if none exists
-            {
-                echo "TYPE=Ethernet"
-                echo "BOOTPROTO=dhcp"
-                echo "NAME=vjb$VJB_INDEX"                
-                echo "DEVICE=vjb$VJB_INDEX"                
-                echo "ONBOOT=yes"
-                echo "HWADDR=$FOUND_MAC"
-                echo "PEERDNS=yes"                 
-                echo "PEERROUTES=yes"              
-                echo "DHCP_HOSTNAME=myhost" 
-            } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
-            VJB_INDEX=$((VJB_INDEX+1))
-        fi
-
-        local IF_NAME=$(resolve_device_via_ifcfg "$CFG_FILE" "$FOUND_MAC")
-        if [[ -z "$IF_NAME" ]]; then
-            # Suse fallback: parse name from the file string itself
-            IF_NAME=$(basename "$CFG_FILE" | sed 's/^ifcfg-//')
-        fi
-
-        if [[ -z "$IF_NAME" || "$IF_NAME" == "lo" ]]; then
-            display_msg "Notice: Could not determine valid interface for $CFG_FILE"
+        # Skip if already processed
+        if [[ -n "${processed_macs[$FOUND_MAC]}" ]]; then
             continue
         fi
 
+        # Determine the device name to use
+        local IF_NAME=""
+
+        # Method 1: If macToIP has device name, use it directly
+        if [[ -n "$FOUND_DEV" ]]; then
+            IF_NAME="$FOUND_DEV"
+            display_msg "Using device name from macToIP: $FOUND_MAC -> $IF_NAME"
+        else
+            # Method 2: Try to find ifcfg file by IP address (for static IPs)
+            local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null | head -1)
+            if [[ -n "$CFG_FILE" ]]; then
+                IF_NAME=$(resolve_device_via_ifcfg "$CFG_FILE" "$FOUND_MAC")
+                if [[ -z "$IF_NAME" ]]; then
+                    IF_NAME=$(basename "$CFG_FILE" | sed 's/^ifcfg-//')
+                fi
+                display_msg "Found device from ifcfg file (static IP): $FOUND_MAC -> $IF_NAME"
+            else
+                # Method 3: For DHCP interfaces or interfaces without static IP
+                # Try to find by checking HWADDR in ifcfg files
+                for IFCFG_FILE in "$TARGET_DIR"/ifcfg-*; do
+                    [[ -f "$IFCFG_FILE" ]] || continue
+                    
+                    # Skip loopback
+                    if [[ "$(basename "$IFCFG_FILE")" == "ifcfg-lo" ]]; then
+                        continue
+                    fi
+                    
+                    # Check if this file has HWADDR matching our MAC
+                    if grep -qi "^HWADDR=.*$FOUND_MAC" "$IFCFG_FILE" 2>/dev/null; then
+                        IF_NAME=$(basename "$IFCFG_FILE" | sed 's/^ifcfg-//')
+                        display_msg "Found device from ifcfg file (HWADDR match): $FOUND_MAC -> $IF_NAME (IP: $FOUND_IP)"
+                        break
+                    fi
+                done
+                
+                # Method 4: If still not found, try DHCP interfaces in order (best effort)
+                if [[ -z "$IF_NAME" ]]; then
+                    for IFCFG_FILE in "$TARGET_DIR"/ifcfg-*; do
+                        [[ -f "$IFCFG_FILE" ]] || continue
+                        
+                        if [[ "$(basename "$IFCFG_FILE")" == "ifcfg-lo" ]]; then
+                            continue
+                        fi
+                        
+                        # Check if this is a DHCP interface without HWADDR
+                        if grep -q "^BOOTPROTO=dhcp" "$IFCFG_FILE" 2>/dev/null && \
+                           ! grep -q "^HWADDR=" "$IFCFG_FILE" 2>/dev/null; then
+                            local POTENTIAL_DEVICE=$(basename "$IFCFG_FILE" | sed 's/^ifcfg-//')
+                            
+                            # Check if not already used
+                            local DEVICE_USED=0
+                            for used_mac in "${!processed_macs[@]}"; do
+                                if [[ "${processed_macs[$used_mac]}" == "$POTENTIAL_DEVICE" ]]; then
+                                    DEVICE_USED=1
+                                    break
+                                fi
+                            done
+                            
+                            if [[ $DEVICE_USED -eq 0 ]]; then
+                                IF_NAME="$POTENTIAL_DEVICE"
+                                display_msg "Found device from ifcfg file (DHCP fallback): $FOUND_MAC -> $IF_NAME (IP: $FOUND_IP)"
+                                break
+                            fi
+                        fi
+                    done
+                fi
+            fi
+        fi
+
+        # If still no device name, create a new vjb interface
+        if [[ -z "$IF_NAME" || "$IF_NAME" == "lo" ]]; then
+            IF_NAME="vjb$VJB_INDEX"
+            display_msg "Creating new vjb interface: $FOUND_MAC -> $IF_NAME"
+            
+            # Create ifcfg file
+            {
+                echo "TYPE=Ethernet"
+                echo "BOOTPROTO=dhcp"
+                echo "NAME=$IF_NAME"
+                echo "DEVICE=$IF_NAME"
+                echo "ONBOOT=yes"
+                echo "HWADDR=$FOUND_MAC"
+                echo "PEERDNS=yes"
+                echo "PEERROUTES=yes"
+                echo "DHCP_HOSTNAME=myhost"
+            } > "$TARGET_DIR/ifcfg-$IF_NAME"
+            VJB_INDEX=$((VJB_INDEX+1))
+        fi
+
+        # Create udev rule
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
+        processed_macs["$FOUND_MAC"]="$IF_NAME"
     done
 }
 

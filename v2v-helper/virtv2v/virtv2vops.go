@@ -286,6 +286,478 @@ func GetOsRelease(path string) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
+
+// GetInterfaceNamesFromDisk reads the source VM's disk and extracts interface names from ifcfg files
+// Matches by IP address since the same MAC will have the same IP on the migrated VM
+func GetInterfaceNamesFromDisk(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ipPerMac map[string][]vm.IpEntry) (map[string]string, error) {
+	macToInterface := make(map[string]string)
+	
+	// Build a reverse map: IP -> MAC for quick lookup
+	ipToMac := make(map[string]string)
+	for mac, ips := range ipPerMac {
+		if len(ips) > 0 {
+			ipToMac[ips[0].IP] = strings.ToLower(mac)
+		}
+	}
+	
+	// Determine which directory to use (RHEL vs SUSE)
+	var scriptsDir string
+	var lsOut string
+	var err error
+	
+	// Try RHEL path first
+	if useSingleDisk {
+		lsOut, err = RunCommandInGuest(diskPath, "ls /etc/sysconfig/network-scripts", false)
+	} else {
+		lsOut, err = RunCommandInGuestAllVolumes(disks, "ls", false, "/etc/sysconfig/network-scripts")
+	}
+	
+	if err != nil {
+		// Try SUSE path
+		if useSingleDisk {
+			lsOut, err = RunCommandInGuest(diskPath, "ls /etc/sysconfig/network", false)
+		} else {
+			lsOut, err = RunCommandInGuestAllVolumes(disks, "ls", false, "/etc/sysconfig/network")
+		}
+		if err != nil {
+			log.Printf("Warning: Could not list network config directory: %v", err)
+			return macToInterface, nil
+		}
+		scriptsDir = "/etc/sysconfig/network"
+	} else {
+		scriptsDir = "/etc/sysconfig/network-scripts"
+	}
+	
+	files := strings.Split(strings.TrimSpace(lsOut), "\n")
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		// Only process ifcfg-* files, skip ifcfg-lo
+		if !strings.HasPrefix(file, "ifcfg-") || file == "ifcfg-lo" {
+			continue
+		}
+		
+		// Extract interface name from filename (e.g., ifcfg-ens35 -> ens35)
+		interfaceName := strings.TrimPrefix(file, "ifcfg-")
+		
+		// Read the file content
+		var content string
+		filePath := fmt.Sprintf("%s/%s", scriptsDir, file)
+		if useSingleDisk {
+			content, err = RunCommandInGuest(diskPath, fmt.Sprintf("cat %s", filePath), false)
+		} else {
+			content, err = RunCommandInGuestAllVolumes(disks, "cat", false, filePath)
+		}
+		if err != nil {
+			log.Printf("Warning: Could not read %s: %v", file, err)
+			continue
+		}
+		
+		// Try to find MAC address for this interface
+		var foundMac string
+		lines := strings.Split(content, "\n")
+		
+		// Method 1: Direct HWADDR in the file
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "HWADDR=") {
+				mac := strings.TrimPrefix(line, "HWADDR=")
+				mac = strings.Trim(mac, "\"'")
+				foundMac = strings.ToLower(strings.TrimSpace(mac))
+				if foundMac != "" {
+					log.Printf("Found interface mapping from HWADDR: %s -> %s", foundMac, interfaceName)
+					break
+				}
+			}
+		}
+		
+		// Method 2: Match by IP address (works for static IPs)
+		// Since same MAC gets same IP, we can use ipPerMac to find the MAC
+		if foundMac == "" {
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "IPADDR=") {
+					ip := strings.TrimPrefix(line, "IPADDR=")
+					ip = strings.Trim(ip, "\"'")
+					ip = strings.TrimSpace(ip)
+					if ip != "" {
+						if mac, found := ipToMac[ip]; found {
+							foundMac = mac
+							log.Printf("Found interface mapping from IPADDR: %s (IP: %s) -> %s", foundMac, ip, interfaceName)
+							break
+						}
+					}
+				}
+			}
+		}
+		
+		// Store the mapping if we found a MAC
+		if foundMac != "" {
+			macToInterface[foundMac] = interfaceName
+		} else {
+			log.Printf("Info: Could not find MAC for interface %s (likely DHCP without HWADDR)", interfaceName)
+		}
+	}
+	
+	return macToInterface, nil
+}
+
+// GetInterfaceNamesFromNMKeyfiles reads NetworkManager keyfile configs (.nmconnection)
+// Used for RHEL 9, CentOS Stream 9, Rocky 9, etc. where ifcfg files are deprecated
+func GetInterfaceNamesFromNMKeyfiles(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ipPerMac map[string][]vm.IpEntry) (map[string]string, error) {
+	macToInterface := make(map[string]string)
+	
+	// Build a reverse map: IP -> MAC for quick lookup
+	ipToMac := make(map[string]string)
+	for mac, ips := range ipPerMac {
+		if len(ips) > 0 {
+			ipToMac[ips[0].IP] = strings.ToLower(mac)
+		}
+	}
+	
+	// List .nmconnection files
+	var lsOut string
+	var err error
+	if useSingleDisk {
+		lsOut, err = RunCommandInGuest(diskPath, "ls /etc/NetworkManager/system-connections", false)
+	} else {
+		lsOut, err = RunCommandInGuestAllVolumes(disks, "ls", false, "/etc/NetworkManager/system-connections")
+	}
+	if err != nil {
+		log.Printf("Info: NetworkManager keyfiles directory not found (not RHEL 9): %v", err)
+		return macToInterface, nil // Not an error, just not present
+	}
+	
+	files := strings.Split(strings.TrimSpace(lsOut), "\n")
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if !strings.HasSuffix(file, ".nmconnection") {
+			continue
+		}
+		
+		// Read file content
+		var content string
+		filePath := fmt.Sprintf("/etc/NetworkManager/system-connections/%s", file)
+		if useSingleDisk {
+			content, err = RunCommandInGuest(diskPath, fmt.Sprintf("cat %s", filePath), false)
+		} else {
+			content, err = RunCommandInGuestAllVolumes(disks, "cat", false, filePath)
+		}
+		if err != nil {
+			log.Printf("Warning: Could not read %s: %v", file, err)
+			continue
+		}
+		
+		// Parse INI-style format
+		var interfaceName string
+		var ipAddress string
+		var hasMac bool
+		
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			
+			// Get interface name
+			if strings.HasPrefix(line, "interface-name=") {
+				interfaceName = strings.TrimPrefix(line, "interface-name=")
+			}
+			
+			// Check if MAC already exists
+			if strings.HasPrefix(line, "mac-address=") {
+				hasMac = true
+			}
+			
+			// Get IP address (format: address1=10.9.7.182/24,10.9.7.1)
+			if strings.HasPrefix(line, "address1=") {
+				addr := strings.TrimPrefix(line, "address1=")
+				// Split by comma (gateway part), take first part
+				parts := strings.Split(addr, ",")
+				if len(parts) > 0 {
+					// Split by / (CIDR), take IP
+					ipParts := strings.Split(parts[0], "/")
+					if len(ipParts) > 0 {
+						ipAddress = strings.TrimSpace(ipParts[0])
+					}
+				}
+			}
+		}
+		
+		// Match IP to MAC
+		if interfaceName != "" && ipAddress != "" {
+			if mac, found := ipToMac[ipAddress]; found {
+				macToInterface[mac] = interfaceName
+				if hasMac {
+					log.Printf("Found interface mapping from keyfile (has MAC): %s -> %s (IP: %s)", mac, interfaceName, ipAddress)
+				} else {
+					log.Printf("Found interface mapping from keyfile (no MAC): %s -> %s (IP: %s)", mac, interfaceName, ipAddress)
+				}
+			}
+		} else if interfaceName != "" {
+			log.Printf("Info: Keyfile %s has interface %s but no static IP", file, interfaceName)
+		}
+	}
+	
+	return macToInterface, nil
+}
+
+// AddHWADDRToStaticInterfaces adds HWADDR to static IP ifcfg files
+// This allows NetworkManager to match configs by MAC even if interface names change
+func AddHWADDRToStaticInterfaces(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ipPerMac map[string][]vm.IpEntry) error {
+	// Build IP -> MAC map
+	ipToMac := make(map[string]string)
+	for mac, ips := range ipPerMac {
+		if len(ips) > 0 {
+			ipToMac[ips[0].IP] = mac
+		}
+	}
+	
+	// List all ifcfg files
+	var lsOut string
+	var err error
+	if useSingleDisk {
+		lsOut, err = RunCommandInGuest(diskPath, "ls /etc/sysconfig/network-scripts", false)
+	} else {
+		lsOut, err = RunCommandInGuestAllVolumes(disks, "ls", false, "/etc/sysconfig/network-scripts")
+	}
+	if err != nil {
+		log.Printf("Warning: Could not list network-scripts directory: %v", err)
+		return nil
+	}
+	
+	files := strings.Split(strings.TrimSpace(lsOut), "\n")
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if !strings.HasPrefix(file, "ifcfg-") || file == "ifcfg-lo" {
+			continue
+		}
+		
+		// Read the file
+		var content string
+		filePath := fmt.Sprintf("/etc/sysconfig/network-scripts/%s", file)
+		if useSingleDisk {
+			content, err = RunCommandInGuest(diskPath, fmt.Sprintf("cat %s", filePath), false)
+		} else {
+			content, err = RunCommandInGuestAllVolumes(disks, "cat", false, filePath)
+		}
+		if err != nil {
+			continue
+		}
+		
+		// Check if it has static IP and no HWADDR
+		hasHWADDR := false
+		hasIPADDR := false
+		var staticIP string
+		
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "HWADDR=") {
+				hasHWADDR = true
+			}
+			if strings.HasPrefix(line, "IPADDR=") {
+				hasIPADDR = true
+				ip := strings.TrimPrefix(line, "IPADDR=")
+				staticIP = strings.Trim(ip, "\"'")
+				staticIP = strings.TrimSpace(staticIP)
+			}
+		}
+		
+		// Only add HWADDR to static IP interfaces that don't have it
+		if hasIPADDR && !hasHWADDR && staticIP != "" {
+			if mac, found := ipToMac[staticIP]; found {
+				// Add HWADDR to the file
+				newContent := content
+				if !strings.HasSuffix(newContent, "\n") {
+					newContent += "\n"
+				}
+				newContent += fmt.Sprintf("HWADDR=%s\n", mac)
+				
+				// Write to temp file
+				tempFile := fmt.Sprintf("/home/fedora/%s", file)
+				f, err := os.Create(tempFile)
+				if err != nil {
+					log.Printf("Warning: Could not create temp file for %s: %v", file, err)
+					continue
+				}
+				if _, err := f.WriteString(newContent); err != nil {
+					f.Close()
+					log.Printf("Warning: Could not write temp file for %s: %v", file, err)
+					continue
+				}
+				f.Close()
+				
+				// Upload back to the disk
+				var ans string
+				if useSingleDisk {
+					ans, err = RunCommandInGuest(diskPath, fmt.Sprintf("upload %s %s", tempFile, filePath), true)
+				} else {
+					ans, err = RunCommandInGuestAllVolumes(disks, "upload", true, tempFile, filePath)
+				}
+				if err != nil {
+					log.Printf("Warning: Could not upload %s: %v: %s", file, err, strings.TrimSpace(ans))
+				} else {
+					log.Printf("Added HWADDR=%s to %s", mac, file)
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// AddMACToNMKeyfiles adds MAC addresses to NetworkManager keyfile configs
+// This allows NetworkManager to match configs by MAC even if interface names change (RHEL 9+)
+func AddMACToNMKeyfiles(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ipPerMac map[string][]vm.IpEntry) error {
+	// Build IP -> MAC map
+	ipToMac := make(map[string]string)
+	for mac, ips := range ipPerMac {
+		if len(ips) > 0 {
+			ipToMac[ips[0].IP] = mac
+		}
+	}
+	
+	// List .nmconnection files
+	var lsOut string
+	var err error
+	if useSingleDisk {
+		lsOut, err = RunCommandInGuest(diskPath, "ls /etc/NetworkManager/system-connections", false)
+	} else {
+		lsOut, err = RunCommandInGuestAllVolumes(disks, "ls", false, "/etc/NetworkManager/system-connections")
+	}
+	if err != nil {
+		log.Printf("Info: NetworkManager keyfiles directory not found (not RHEL 9): %v", err)
+		return nil // Not an error
+	}
+	
+	files := strings.Split(strings.TrimSpace(lsOut), "\n")
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if !strings.HasSuffix(file, ".nmconnection") {
+			continue
+		}
+		
+		// Read the file
+		var content string
+		filePath := fmt.Sprintf("/etc/NetworkManager/system-connections/%s", file)
+		if useSingleDisk {
+			content, err = RunCommandInGuest(diskPath, fmt.Sprintf("cat %s", filePath), false)
+		} else {
+			content, err = RunCommandInGuestAllVolumes(disks, "cat", false, filePath)
+		}
+		if err != nil {
+			continue
+		}
+		
+		// Check if it has static IP and no MAC
+		hasMac := false
+		hasStaticIP := false
+		var staticIP string
+		var inEthernetSection bool
+		
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			
+			// Track sections
+			if strings.HasPrefix(line, "[ethernet]") {
+				inEthernetSection = true
+			} else if strings.HasPrefix(line, "[") {
+				inEthernetSection = false
+			}
+			
+			// Check for existing MAC
+			if inEthernetSection && strings.HasPrefix(line, "mac-address=") {
+				hasMac = true
+			}
+			
+			// Get static IP
+			if strings.HasPrefix(line, "address1=") {
+				hasStaticIP = true
+				addr := strings.TrimPrefix(line, "address1=")
+				parts := strings.Split(addr, ",")
+				if len(parts) > 0 {
+					ipParts := strings.Split(parts[0], "/")
+					if len(ipParts) > 0 {
+						staticIP = strings.TrimSpace(ipParts[0])
+					}
+				}
+			}
+		}
+		
+		// Only add MAC to static IP connections that don't have it
+		if hasStaticIP && !hasMac && staticIP != "" {
+			if mac, found := ipToMac[staticIP]; found {
+				// Add MAC to the [ethernet] section
+				newContent := ""
+				inEthernetSection = false
+				macAdded := false
+				
+				for _, line := range lines {
+					newContent += line + "\n"
+					
+					// Track when we enter [ethernet] section
+					if strings.TrimSpace(line) == "[ethernet]" {
+						inEthernetSection = true
+					} else if strings.HasPrefix(strings.TrimSpace(line), "[") && strings.TrimSpace(line) != "[ethernet]" {
+						// Entering a different section
+						if inEthernetSection && !macAdded {
+							// We're leaving ethernet section without adding MAC, add it now
+							newContent = strings.TrimSuffix(newContent, line+"\n")
+							newContent += fmt.Sprintf("mac-address=%s\n", mac)
+							newContent += line + "\n"
+							macAdded = true
+						}
+						inEthernetSection = false
+					}
+					
+					// If we're in ethernet section and haven't added MAC yet, add after first line
+					if inEthernetSection && !macAdded && strings.TrimSpace(line) == "[ethernet]" {
+						newContent += fmt.Sprintf("mac-address=%s\n", mac)
+						macAdded = true
+					}
+				}
+				
+				// If [ethernet] section doesn't exist, create it
+				if !macAdded {
+					newContent += "\n[ethernet]\n"
+					newContent += fmt.Sprintf("mac-address=%s\n", mac)
+					macAdded = true
+				}
+				
+				if macAdded {
+					// Write to temp file
+					tempFile := fmt.Sprintf("/home/fedora/%s", file)
+					f, err := os.Create(tempFile)
+					if err != nil {
+						log.Printf("Warning: Could not create temp file for %s: %v", file, err)
+						continue
+					}
+					if _, err := f.WriteString(newContent); err != nil {
+						f.Close()
+						log.Printf("Warning: Could not write temp file for %s: %v", file, err)
+						continue
+					}
+					f.Close()
+					
+					// Upload back to the disk
+					var ans string
+					if useSingleDisk {
+						ans, err = RunCommandInGuest(diskPath, fmt.Sprintf("upload %s %s", tempFile, filePath), true)
+					} else {
+						ans, err = RunCommandInGuestAllVolumes(disks, "upload", true, tempFile, filePath)
+					}
+					if err != nil {
+						log.Printf("Warning: Could not upload %s: %v: %s", file, err, strings.TrimSpace(ans))
+					} else {
+						log.Printf("Added mac-address=%s to %s", mac, file)
+					}
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
 func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
@@ -295,11 +767,53 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 		return err
 	}
 	defer f.Close()
+	
+	// Add HWADDR to static IP ifcfg files (RHEL 7/8) to prevent network breaking if interface names change
+	if err := AddHWADDRToStaticInterfaces(disks, useSingleDisk, diskPath, ipPerMac); err != nil {
+		log.Printf("Warning: Could not add HWADDR to ifcfg files: %v", err)
+	}
+	
+	// Add MAC to NetworkManager keyfiles (RHEL 9+) to prevent network breaking if interface names change
+	if err := AddMACToNMKeyfiles(disks, useSingleDisk, diskPath, ipPerMac); err != nil {
+		log.Printf("Warning: Could not add MAC to keyfiles: %v", err)
+	}
+	
+	// Get interface names from ifcfg files (RHEL 7/8)
+	macToDevice, err := GetInterfaceNamesFromDisk(disks, useSingleDisk, diskPath, ipPerMac)
+	if err != nil {
+		log.Printf("Warning: Could not get interface names from disk: %v", err)
+		macToDevice = make(map[string]string)
+	}
+	
+	// Also get interface names from NetworkManager keyfiles (RHEL 9+) and merge
+	nmMacToDevice, err := GetInterfaceNamesFromNMKeyfiles(disks, useSingleDisk, diskPath, ipPerMac)
+	if err != nil {
+		log.Printf("Warning: Could not get interface names from keyfiles: %v", err)
+	} else {
+		// Merge keyfile results into macToDevice (keyfiles take precedence if both exist)
+		for mac, dev := range nmMacToDevice {
+			if _, exists := macToDevice[mac]; !exists {
+				macToDevice[mac] = dev
+				log.Printf("Added interface from keyfile: %s -> %s", mac, dev)
+			} else {
+				log.Printf("Interface %s already mapped from ifcfg, skipping keyfile entry", mac)
+			}
+		}
+	}
+	
+	// Write macToIP file with device names if available
 	for mac, ips := range macToIPs {
 		if len(ips) > 0 {
-			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, ips[0].IP)
-			if err != nil {
-				return err
+			// Include device name if available
+			deviceName := macToDevice[strings.ToLower(mac)]
+			var writeErr error
+			if deviceName != "" {
+				_, writeErr = fmt.Fprintf(f, "%s:ip:%s:dev:%s\n", mac, ips[0].IP, deviceName)
+			} else {
+				_, writeErr = fmt.Fprintf(f, "%s:ip:%s\n", mac, ips[0].IP)
+			}
+			if writeErr != nil {
+				return writeErr
 			}
 		}
 	}
