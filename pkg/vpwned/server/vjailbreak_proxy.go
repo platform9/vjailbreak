@@ -529,9 +529,9 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		}, nil
 	}
 
-	// If at least one of http_proxy or https_proxy is present, ensure .svc,.cluster.local,localhost,127.0.0.1,169.254.169.254 is in no_proxy
+	// If at least one of http_proxy or https_proxy is present, ensure .svc,.cluster.local,localhost,127.0.0.1,169.254.169.254,10.43.0.0/16 is in no_proxy
 	if (httpProxy != "" || httpsProxy != "") {
-		requiredNoProxyValues := []string{".svc", ".cluster.local", "localhost", "127.0.0.1", "169.254.169.254"}
+		requiredNoProxyValues := []string{".svc", ".cluster.local", "localhost", "127.0.0.1", "169.254.169.254", "10.43.0.0/16"}
 		noProxyList := []string{}
 		
 		if noProxy != "" {
