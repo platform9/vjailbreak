@@ -25,6 +25,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
+import InlineHelp from 'src/components/design-system/ui/InlineHelp'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
 import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
@@ -298,6 +299,7 @@ type UseGlobalSettingsControllerReturn = {
   saving: boolean
   activeTab: TabKey
   notification: NotificationState
+  proxyUpdateSuccess: boolean
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
   onBool: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSelect: (e: SelectChangeEvent<string>) => void
@@ -316,6 +318,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   const [errors, setErrors] = useState<FieldErrorMap>(EMPTY_ERRORS)
   const [activeTab, setActiveTab] = useState<TabKey>('general')
   const [notification, setNotification] = useState<NotificationState>(DEFAULT_NOTIFICATION)
+  const [proxyUpdateSuccess, setProxyUpdateSuccess] = useState(false)
 
   const rhfForm = useForm<SettingsForm>({
     defaultValues: DEFAULTS,
@@ -579,6 +582,10 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const { name, checked } = e.target
       rhfForm.setValue(name as keyof SettingsForm, checked as any, { shouldValidate: true })
+
+      if (name === 'PROXY_ENABLED' && !checked) {
+        setProxyUpdateSuccess(false)
+      }
     },
     [rhfForm]
   )
@@ -602,6 +609,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   const onSave = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
+
+      setProxyUpdateSuccess(false)
       if (!validateForm(form)) {
         show('Please fix the validation errors.', 'error')
         return
@@ -657,6 +666,9 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
             'warning'
           )
         } else {
+          if (proxyChanged) {
+            setProxyUpdateSuccess(true)
+          }
           show('Global Settings saved successfully.', 'success')
         }
       } catch (err) {
@@ -695,6 +707,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     saving,
     activeTab,
     notification,
+    proxyUpdateSuccess,
     onText,
     onBool,
     onSelect,
@@ -717,6 +730,7 @@ export default function GlobalSettingsPage() {
     saving,
     activeTab,
     notification,
+    proxyUpdateSuccess,
     onText,
     onBool,
     onSelect,
@@ -727,6 +741,20 @@ export default function GlobalSettingsPage() {
     onSave,
     handleNotificationClose
   } = useGlobalSettingsController()
+
+  const [proxyHelpDismissed, setProxyHelpDismissed] = useState(false)
+
+  useEffect(() => {
+    if (!form.PROXY_ENABLED) {
+      setProxyHelpDismissed(false)
+    }
+  }, [form.PROXY_ENABLED])
+
+  useEffect(() => {
+    if (proxyUpdateSuccess) {
+      setProxyHelpDismissed(false)
+    }
+  }, [proxyUpdateSuccess])
 
   const tabProps = (value: TabKey) => ({
     id: `settings-tab-${value}`,
@@ -832,6 +860,16 @@ export default function GlobalSettingsPage() {
           </TabPanel>
 
           <TabPanel activeTab={activeTab} value="network">
+            {proxyUpdateSuccess && !proxyHelpDismissed ? (
+              <InlineHelp
+                tone="warning"
+                icon="warning"
+                onClose={() => setProxyHelpDismissed(true)}
+                sx={{ mb: 2 }}
+              >
+                Proxy changes may take up to 2 minutes to take effect across the system.
+              </InlineHelp>
+            ) : null}
             <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
               <ToggleField
                 label="Use Proxy"
