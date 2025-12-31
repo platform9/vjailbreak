@@ -71,4 +71,4 @@ COPY --from=builder /workspace/manager /home/fedora/manager
 # Copy scripts directory for migration utilities
 COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
 COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
-COPY scripts/generate_udev_mapping.sh /home/fedora/generate_udev_mapping.sh
+COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
