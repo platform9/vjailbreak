@@ -97,6 +97,7 @@ udev_from_ifcfg() {
     fi
 
     # Read the mapping file line by line
+    IFCFG_ID=1
     cat "$V2V_MAP_FILE" | while read -r line;
     do
         # Extract S_HW and S_IP
@@ -110,7 +111,6 @@ udev_from_ifcfg() {
 
         # Find the matching network script file
         IFCFG=$(grep -l "IPADDR=.*$S_IP" "$SCRIPTS_DIR"/ifcfg-* 2>/dev/null)
-        IFCFG_ID=1
         if [ -z "$IFCFG" ]; then
             log "Info: no ifcfg config file found for $S_IP in $SCRIPTS_DIR."
             
