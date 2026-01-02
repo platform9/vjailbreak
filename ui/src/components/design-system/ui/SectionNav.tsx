@@ -1,8 +1,6 @@
-import { Box, List, ListItemButton, ListItemText, Typography } from '@mui/material'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
+import { Box, List, ListItemButton, Tooltip, Typography } from '@mui/material'
+import CheckIcon from '@mui/icons-material/Check'
+import { alpha, type Theme } from '@mui/material/styles'
 import { ReactNode } from 'react'
 
 export type SectionNavStatus = 'complete' | 'attention' | 'incomplete' | 'optional'
@@ -23,16 +21,56 @@ export interface SectionNavProps {
   'data-testid'?: string
 }
 
-const statusIcon = (status: SectionNavStatus | undefined) => {
+type Status = SectionNavStatus | undefined
+
+const getSelectedAccent = (theme: Theme, status: Status) => {
   switch (status) {
     case 'complete':
-      return <CheckCircleOutlineIcon fontSize="small" color="success" />
+      return theme.palette.success.main
     case 'attention':
-      return <ErrorOutlineIcon fontSize="small" color="error" />
+      return theme.palette.error.main
     case 'optional':
-      return <InfoOutlinedIcon fontSize="small" color="action" />
+      return theme.palette.info.main
     default:
-      return <RadioButtonUncheckedIcon fontSize="small" color="action" />
+      return theme.palette.primary.main
+  }
+}
+
+const getStatusChipSx = (status: Status) => {
+  switch (status) {
+    case 'complete':
+      return {
+        borderColor: (theme: Theme) => theme.palette.success.main,
+        backgroundColor: (theme: Theme) => theme.palette.success.light,
+        color: (theme: Theme) => theme.palette.success.contrastText
+      }
+    case 'attention':
+      return {
+        borderColor: (theme: Theme) => theme.palette.error.main,
+        backgroundColor: (theme: Theme) => theme.palette.error.light,
+        color: (theme: Theme) => theme.palette.error.contrastText
+      }
+    case 'optional':
+      return {
+        borderColor: (theme: Theme) => theme.palette.info.main,
+        backgroundColor: (theme: Theme) => theme.palette.info.light,
+        color: (theme: Theme) => theme.palette.info.contrastText
+      }
+    default:
+      return {
+        borderColor: (theme: Theme) => theme.palette.divider,
+        backgroundColor: (theme: Theme) => theme.palette.action.hover,
+        color: (theme: Theme) => theme.palette.text.primary
+      }
+  }
+}
+
+const getSelectedChipSx = (theme: Theme, status: Status) => {
+  const c = getSelectedAccent(theme, status)
+  return {
+    transform: 'scale(1.07)',
+    borderColor: c,
+    boxShadow: `0 0 0 3px ${alpha(c, 0.22)}, 0 8px 18px ${alpha(theme.palette.common.black, 0.18)}`
   }
 }
 
@@ -44,6 +82,15 @@ export default function SectionNav({
   showDescriptions = true,
   'data-testid': dataTestId = 'section-nav'
 }: SectionNavProps) {
+  const width = dense ? 56 : 68
+  const listPaddingY = dense ? 0.5 : 1
+  const headerPaddingY = dense ? 0.75 : 1
+  const buttonPaddingY = dense ? 0.75 : 1
+  const chipSize = dense ? 30 : 34
+  const iconSize = dense ? 16 : 18
+  const connectorHeight = dense ? 14 : 18
+  const connectorMarginY = dense ? 0.25 : 0.5
+
   return (
     <Box
       data-testid={dataTestId}
@@ -51,74 +98,120 @@ export default function SectionNav({
         position: 'sticky',
         top: 0,
         alignSelf: 'start',
-        border: (theme) => `1px solid ${theme.palette.divider}`,
-        borderRadius: (theme) => theme.shape.borderRadius * 2,
-        backgroundColor: (theme) => theme.palette.background.paper,
-        overflow: 'hidden'
+        width
       }}
     >
       <Box
         sx={{
-          px: dense ? 1.5 : 2,
-          py: dense ? 1 : 1.5,
-          borderBottom: (theme) => `1px solid ${theme.palette.divider}`
+          display: 'flex',
+          justifyContent: 'center',
+          py: headerPaddingY
         }}
       >
-        <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'text.secondary',
+            lineHeight: 1
+          }}
+        >
           Steps
         </Typography>
-        {!dense ? (
-          <Typography variant="caption" color="text.secondary">
-            Jump to any section
-          </Typography>
-        ) : null}
       </Box>
-      <List dense disablePadding>
-        {items.map((item) => {
+      <List dense disablePadding sx={{ py: listPaddingY }}>
+        {items.map((item, index) => {
           const selected = item.id === activeId
+          const stepNumber = index + 1
+          const isLast = index === items.length - 1
+
+          const tooltipTitle = (
+            <Box sx={{ py: 0.25 }}>
+              <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+                {item.title}
+              </Typography>
+              {showDescriptions && item.description ? (
+                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                  {item.description}
+                </Typography>
+              ) : null}
+            </Box>
+          )
+
           return (
-            <ListItemButton
+            <Box
               key={item.id}
-              selected={selected}
-              onClick={() => onSelect(item.id)}
               sx={{
-                alignItems: 'center',
-                gap: 1.5,
-                py: dense ? 0.75 : 1.25,
-                px: dense ? 1.5 : 2,
-                '&.Mui-selected': {
-                  backgroundColor: (theme) => theme.palette.action.selected
-                }
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
               }}
             >
-              <Box
-                sx={{
-                  width: 20,
-                  display: 'grid',
-                  placeItems: 'center',
-                  flexShrink: 0
-                }}
-              >
-                {statusIcon(item.status)}
-              </Box>
-              <ListItemText
-                primary={
-                  <Typography
-                    variant={dense ? 'caption' : 'body2'}
-                    sx={{ fontWeight: selected ? 600 : 500 }}
+              <Tooltip title={tooltipTitle} placement="right" arrow>
+                <ListItemButton
+                  selected={selected}
+                  onClick={() => onSelect(item.id)}
+                  aria-label={`Step ${stepNumber}`}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    py: buttonPaddingY,
+                    px: 0,
+                    height: dense ? 30 : 34,
+                    borderRadius: 2,
+                    '&.Mui-selected': {
+                      backgroundColor: (theme) => theme.palette.action.selected
+                    },
+                    '&:hover': {
+                      backgroundColor: (theme) => theme.palette.action.hover
+                    }
+                  }}
+                >
+                  <Box
+                    sx={(theme) => ({
+                      width: chipSize,
+                      height: chipSize,
+                      borderRadius: 999,
+                      border: '2px solid',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontVariantNumeric: 'tabular-nums',
+                      transition: 'transform 140ms ease, box-shadow 140ms ease, filter 140ms ease',
+                      ...getStatusChipSx(item.status),
+                      ...(selected ? getSelectedChipSx(theme, item.status) : {}),
+                      '&:hover': {
+                        filter: 'brightness(0.98)'
+                      }
+                    })}
                   >
-                    {item.title}
-                  </Typography>
-                }
-                secondary={
-                  showDescriptions && item.description ? (
-                    <Typography variant="caption" color="text.secondary">
-                      {item.description}
-                    </Typography>
-                  ) : null
-                }
-              />
-            </ListItemButton>
+                    {item.status === 'complete' ? (
+                      <CheckIcon sx={{ fontSize: iconSize }} />
+                    ) : (
+                      <Typography
+                        variant={dense ? 'caption' : 'body2'}
+                        sx={{ fontWeight: 700, lineHeight: 1 }}
+                      >
+                        {stepNumber}
+                      </Typography>
+                    )}
+                  </Box>
+                </ListItemButton>
+              </Tooltip>
+              {!isLast ? (
+                <Box
+                  aria-hidden
+                  sx={{
+                    width: 2,
+                    height: connectorHeight,
+                    borderRadius: 999,
+                    backgroundColor: (theme) => theme.palette.divider,
+                    my: connectorMarginY
+                  }}
+                />
+              ) : null}
+            </Box>
           )
         })}
       </List>
