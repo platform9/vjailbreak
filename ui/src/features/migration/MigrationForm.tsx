@@ -935,45 +935,65 @@ export default function MigrationFormDrawer({
   }, [])
 
   useEffect(() => {
-    const root = contentRootRef.current?.parentElement ?? undefined
-    const nodes = [
-      section1Ref.current,
-      section2Ref.current,
-      section3Ref.current,
-      section4Ref.current,
-      section5Ref.current,
-      reviewRef.current
-    ].filter(Boolean) as HTMLDivElement[]
+    if (!open) return
 
-    if (!root || nodes.length === 0) return
+    let cancelled = false
+    let observer: IntersectionObserver | undefined
+    let rafId: number | undefined
 
-    const idByNode = new Map<Element, string>([
-      [section1Ref.current as HTMLDivElement, 'source-destination'],
-      [section2Ref.current as HTMLDivElement, 'select-vms'],
-      [section3Ref.current as HTMLDivElement, 'map-resources'],
-      [section4Ref.current as HTMLDivElement, 'security'],
-      [section5Ref.current as HTMLDivElement, 'options'],
-      [reviewRef.current as HTMLDivElement, 'review']
-    ])
+    const init = () => {
+      if (cancelled) return
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
+      const root = contentRootRef.current?.parentElement ?? undefined
+      const nodes = [
+        section1Ref.current,
+        section2Ref.current,
+        section3Ref.current,
+        section4Ref.current,
+        section5Ref.current,
+        reviewRef.current
+      ].filter(Boolean) as HTMLDivElement[]
 
-        if (!visible) return
-        const id = idByNode.get(visible.target)
-        if (id) setActiveSectionId(id)
-      },
-      {
-        root,
-        threshold: [0.2, 0.35, 0.5, 0.65]
+      if (!root || nodes.length === 0) {
+        rafId = requestAnimationFrame(init)
+        return
       }
-    )
 
-    nodes.forEach((n) => observer.observe(n))
-    return () => observer.disconnect()
+      const idByNode = new Map<Element, string>([
+        [section1Ref.current as HTMLDivElement, 'source-destination'],
+        [section2Ref.current as HTMLDivElement, 'select-vms'],
+        [section3Ref.current as HTMLDivElement, 'map-resources'],
+        [section4Ref.current as HTMLDivElement, 'security'],
+        [section5Ref.current as HTMLDivElement, 'options'],
+        [reviewRef.current as HTMLDivElement, 'review']
+      ])
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting)
+            .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
+
+          if (!visible) return
+          const id = idByNode.get(visible.target)
+          if (id) setActiveSectionId(id)
+        },
+        {
+          root,
+          threshold: [0.2, 0.35, 0.5, 0.65]
+        }
+      )
+
+      nodes.forEach((n) => observer?.observe(n))
+    }
+
+    rafId = requestAnimationFrame(init)
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+      observer?.disconnect()
+    }
   }, [open])
 
   const submitDisabled = disableSubmit || submitting
@@ -1022,7 +1042,7 @@ export default function MigrationFormDrawer({
         data-testid="migration-form-content"
         sx={{
           display: 'grid',
-          gridTemplateColumns: isSmallNav ? '1fr' : '260px 1fr',
+          gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
           gap: 3
         }}
       >
