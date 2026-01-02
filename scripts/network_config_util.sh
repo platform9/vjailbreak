@@ -79,20 +79,7 @@ get_device_from_ifcfg() {
     # Return an empty string if no valid device is found
     echo ""
 }
-# Function to add line if missing
-add_if_missing() {
-    SYSCTL_FILE="/etc/sysctl.conf"
-    local key="$1"
-    local value="$2"
-    if ! grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$SYSCTL_FILE" 2>/dev/null; then
-        echo "$key = $value" >> "$SYSCTL_FILE"
-        echo "Added $key = $value to $SYSCTL_FILE"
-    else
-        # Update existing line
-        sed -i "s/^[[:space:]]*${key}[[:space:]]*=.*$/${key} = ${value}/" "$SYSCTL_FILE"
-        echo "Updated $key = $value in $SYSCTL_FILE"
-    fi
-}
+
 # Create udev rules based on the macToip mapping + ifcfg network scripts
 # Supports both RHEL (/etc/sysconfig/network-scripts/) and SUSE (/etc/sysconfig/network/)
 # Automatically detects which path exists and uses it (RHEL path takes precedence)
@@ -159,10 +146,6 @@ udev_from_ifcfg() {
 
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(remove_quotes "$S_HW")\",NAME=\"$(remove_quotes "$DEVICE")\""
     done
-
-
-    add_if_missing "net.ipv4.conf.all.rp_filter" "2"
-    add_if_missing "net.ipv4.conf.default.rp_filter" "2"
 }
 
 # Create udev rules based on the macToip mapping + network manager connections
