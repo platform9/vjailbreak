@@ -60,7 +60,7 @@ import { useTheme } from '@mui/material/styles'
 
 const stringsCompareFn = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
 
-const drawerWidth = 1200
+const drawerWidth = 1400
 
 export interface FormValues extends Record<string, unknown> {
   vmwareCreds?: {
@@ -880,37 +880,37 @@ export default function MigrationFormDrawer({
     () => [
       {
         id: 'source-destination',
-        title: '1. Source And Destination',
+        title: 'Source And Destination',
         description: 'Pick clusters and credentials',
         status: isStep1Complete ? 'complete' : 'attention'
       },
       {
         id: 'select-vms',
-        title: '2. Select VMs',
+        title: 'Select VMs',
         description: 'Choose VMs and assign required fields',
         status: isStep2Complete ? 'complete' : 'attention'
       },
       {
         id: 'map-resources',
-        title: '3. Map Networks And Storage',
+        title: 'Map Networks And Storage',
         description: 'Map VMware networks/datastores to PCD',
         status: isStep3Complete ? 'complete' : 'attention'
       },
       {
         id: 'security',
-        title: '4. Security And Placement',
+        title: 'Security And Placement',
         description: 'Security groups and server group',
         status: 'optional'
       },
       {
         id: 'options',
-        title: '5. Migration Options',
+        title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
         status: 'optional'
       },
       {
         id: 'review',
-        title: '6. Preview',
+        title: 'Preview',
         description: 'Confirm selections before starting',
         status: 'optional'
       }
@@ -1083,7 +1083,8 @@ export default function MigrationFormDrawer({
           {/* Step 1 */}
           <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
             <SurfaceCard
-              title="1. Source And Destination"
+              variant="section"
+              title="Source And Destination"
               subtitle="Choose where you migrate from and where you migrate to"
               data-testid="migration-form-step1-card"
             >
@@ -1097,10 +1098,13 @@ export default function MigrationFormDrawer({
             </SurfaceCard>
           </Box>
 
+          <Divider />
+
           {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
           <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
             <SurfaceCard
-              title="2. Select VMs"
+              variant="section"
+              title="Select VMs"
               subtitle="Pick the virtual machines you want to migrate"
               data-testid="migration-form-step2-card"
             >
@@ -1127,11 +1131,13 @@ export default function MigrationFormDrawer({
               )}
             </SurfaceCard>
           </Box>
+          <Divider />
 
           {/* Step 3 */}
           <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
             <SurfaceCard
-              title="3. Map Networks And Storage"
+              variant="section"
+              title="Map Networks And Storage"
               subtitle="Ensure all VMware networks and datastores have PCD targets"
               data-testid="migration-form-step3-card"
             >
@@ -1148,11 +1154,13 @@ export default function MigrationFormDrawer({
               />
             </SurfaceCard>
           </Box>
+          <Divider />
 
           {/* Step 4 */}
           <Box ref={section4Ref} data-testid="migration-form-step-security">
             <SurfaceCard
-              title="4. Security groups and server group"
+              variant="section"
+              title="Security groups and server group"
               subtitle="Optional placement and security settings"
               data-testid="migration-form-step4-card"
             >
@@ -1165,11 +1173,13 @@ export default function MigrationFormDrawer({
               />
             </SurfaceCard>
           </Box>
+          <Divider />
 
           {/* Step 5 */}
           <Box ref={section5Ref} data-testid="migration-form-step-options">
             <SurfaceCard
-              title="5. Migration Options"
+              variant="section"
+              title="Migration Options"
               subtitle="Optional scheduling, cutover behavior, and advanced settings"
               data-testid="migration-form-step5-card"
             >
@@ -1187,9 +1197,12 @@ export default function MigrationFormDrawer({
             </SurfaceCard>
           </Box>
 
+          <Divider />
+
           <Box ref={reviewRef} data-testid="migration-form-step-review">
             <SurfaceCard
-              title="6. Preview"
+              variant="section"
+              title="Preview"
               subtitle="Verify your selections before starting the migration"
               data-testid="migration-form-step6-card"
             >

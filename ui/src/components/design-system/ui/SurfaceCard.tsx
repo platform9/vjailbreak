@@ -1,7 +1,8 @@
 import { Box, Divider, Paper, PaperProps, Typography } from '@mui/material'
 import { ReactNode } from 'react'
 
-export interface SurfaceCardProps extends Omit<PaperProps, 'title'> {
+export interface SurfaceCardProps extends Omit<PaperProps, 'title' | 'variant'> {
+  variant?: 'card' | 'section'
   title?: ReactNode
   subtitle?: ReactNode
   actions?: ReactNode
@@ -10,6 +11,7 @@ export interface SurfaceCardProps extends Omit<PaperProps, 'title'> {
 }
 
 export default function SurfaceCard({
+  variant = 'section',
   title,
   subtitle,
   actions,
@@ -20,19 +22,24 @@ export default function SurfaceCard({
   ...paperProps
 }: SurfaceCardProps) {
   const hasHeader = !!(title || subtitle || actions)
+  const isSection = variant === 'section'
 
   return (
     <Paper
       elevation={0}
       {...paperProps}
       sx={{
-        border: (theme) => `1px solid ${theme.palette.divider}`,
-        borderRadius: (theme) => theme.shape.borderRadius * 2,
+        border: (theme) => (isSection ? 'none' : `1px solid ${theme.palette.divider}`),
+        // boxShadow: (theme) => (isSection ? theme.shadows[6] : theme.shadows[3]),
+        // borderBottom: (theme) =>
+        //   isSection ? `1px solid ${theme.palette.primary.main}` : undefined,
         backgroundColor: (theme) => theme.palette.background.paper,
         display: 'flex',
         flexDirection: 'column',
-        gap: 2,
-        p: 3,
+        gap: isSection ? 1.5 : 2,
+        p: isSection ? 2 : 3,
+        //  paddingBottom: isSection ? 4 : 3,
+        borderRadius: 0,
         ...sx
       }}
       data-testid={dataTestId}
@@ -41,7 +48,7 @@ export default function SurfaceCard({
         <Box data-testid={`${dataTestId}-header`} sx={{ display: 'flex', alignItems: 'center' }}>
           <Box sx={{ flex: 1 }}>
             {title ? (
-              <Typography variant="h6" component="h2">
+              <Typography variant={isSection ? 'subtitle1' : 'h6'} component="h2">
                 {title}
               </Typography>
             ) : null}
@@ -55,12 +62,12 @@ export default function SurfaceCard({
         </Box>
       ) : null}
 
-      {hasHeader && children ? <Divider /> : null}
+      {hasHeader && children && !isSection ? <Divider /> : null}
 
       {children ? (
         <Box
           data-testid={`${dataTestId}-body`}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: isSection ? 1.5 : 2 }}
         >
           {children}
         </Box>
