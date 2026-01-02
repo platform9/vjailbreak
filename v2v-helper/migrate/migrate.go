@@ -1648,10 +1648,6 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					}
 				}
 			}
-			persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
-			if persisNetwork {
-				securityGroupIDs = []string{}
-			}
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
 			port, err := openstackops.ValidateAndCreatePort(ctx, network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
