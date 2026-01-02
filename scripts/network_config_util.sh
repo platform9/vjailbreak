@@ -81,6 +81,7 @@ get_device_from_ifcfg() {
 }
 # Function to add line if missing
 add_if_missing() {
+    SYSCTL_FILE="/etc/sysctl.conf"
     local key="$1"
     local value="$2"
     if ! grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$SYSCTL_FILE" 2>/dev/null; then
@@ -158,8 +159,6 @@ udev_from_ifcfg() {
 
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(remove_quotes "$S_HW")\",NAME=\"$(remove_quotes "$DEVICE")\""
     done
-    SYSCTL_FILE="/etc/sysctl.conf"
-
 
 
     add_if_missing "net.ipv4.conf.all.rp_filter" "2"
