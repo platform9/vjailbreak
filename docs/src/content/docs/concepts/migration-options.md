@@ -49,9 +49,7 @@ To enable this behavior, check **Persist source network interfaces** under **Mig
 :::caution
 **Important: Routing Considerations**
 
-When migrating VMs with multiple interfaces on the same subnet using a mix of static and DHCP configurations, you may encounter asymmetric routing.
-
-Because the destination platform may initialize interfaces in a different order, the default route might be assigned to an unexpected interface. This results in traffic arriving on one port but attempting to exit through another, which often causes connectivity loss.
+If a VM has multiple interfaces on the same subnet and uses a mix of static and DHCP configurations, the destination platform may select the default route based on whichever interface comes up first. This can lead to asymmetric routing (requests arriving on one interface while replies go out through another), which may cause partial connectivity.
 
 **Recommendation:**
 - If your VM uses multiple interfaces on a single subnet, ensure all interfaces are configured as **Static** before enabling this feature.
