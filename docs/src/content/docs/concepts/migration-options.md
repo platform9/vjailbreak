@@ -52,8 +52,7 @@ To enable this behavior, check **Persist source network interfaces** under **Mig
 If a VM has multiple interfaces on the same subnet and uses a mix of static and DHCP configurations, the destination platform may select the default route based on whichever interface comes up first. This can lead to asymmetric routing (requests arriving on one interface while replies go out through another), which may cause partial connectivity.
 
 **Recommendation:**
-- If your VM uses multiple interfaces on a single subnet, ensure all interfaces are configured as **Static** before enabling this feature.
-- If you rely on mixed **DHCP/Static** configurations on the same subnet, keep this option disabled until a future update addresses automatic route prioritization.
+- To avoid asymmetric routing, ensure each interface is on a unique subnet or consolidate multiple IPs onto a single port, as multiple interfaces on the same subnet will cause connectivity issues.
 :::
 
 :::note
