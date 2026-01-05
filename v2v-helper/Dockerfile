@@ -48,8 +48,7 @@ RUN dnf install -y \
     ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
     ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
     guestfs-tools \
-    netplan \
-    ifupdown && \
+    netplan &&\
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
