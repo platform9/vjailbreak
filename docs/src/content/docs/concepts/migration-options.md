@@ -37,3 +37,42 @@ An optional parameter. Renames the source VM in VMware to have a specific suffix
 ### Move to folder
 An optional parameter. Moves the source VM in VMware to a specific folder, good option to group migrated VMs and keep it out of the hands of the user.
 
+## Network persistence
+
+### Persist source network interfaces
+When enabled, vJailbreak preserves the source VM's network interface names on the destination VM (for example, `eth0` or `ens3`). This prevents breaking guest configurations—such as firewall rules or legacy scripts—that depend on specific interface names.
+
+For statically configured interfaces, vJailbreak also preserves routes defined in configuration files, ensuring the guest retains its original network behavior after migration.
+
+To enable this behavior, check **Persist source network interfaces** under **Migration Options** in the migration form.
+
+:::caution
+**Important: Routing Considerations**
+
+When migrating VMs with multiple interfaces on the same subnet using a mix of static and DHCP configurations, you may encounter asymmetric routing.
+
+Because the destination platform may initialize interfaces in a different order, the default route might be assigned to an unexpected interface. This results in traffic arriving on one port but attempting to exit through another, which often causes connectivity loss.
+
+**Recommendation:**
+- If your VM uses multiple interfaces on a single subnet, ensure all interfaces are configured as **Static** before enabling this feature.
+- If you rely on mixed **DHCP/Static** configurations on the same subnet, keep this option disabled until a future update addresses automatic route prioritization.
+:::
+
+:::note
+For DHCP-enabled ports, connectivity and DHCP functionality are preserved, but the interface name may be renamed if this feature is not selected.
+:::
+
+:::note
+For cross-network migration, network persistence is currently not supported and will be blocked.
+:::
+
+#### Supported operating systems
+
+| Operating system | Supported |
+| --- | --- |
+| Red Hat Enterprise Linux (all versions) | Yes |
+| Rocky Linux (all versions) | Yes |
+| CentOS Linux (all versions) | Yes |
+| Ubuntu 17 and later | Yes |
+| Ubuntu less than 17 | No |
+| Windows | No |
