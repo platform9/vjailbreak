@@ -92,6 +92,7 @@ process_ifcfg_infrastructure() {
         return 0
     fi
 
+    local VJB_INDEX=1
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
@@ -102,7 +103,6 @@ process_ifcfg_infrastructure() {
 
         # Locate script matching the IP
         local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null)
-        local VJB_INDEX=1
         
         if [[ -z "$CFG_FILE" ]]; then
             display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
