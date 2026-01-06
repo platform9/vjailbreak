@@ -49,7 +49,7 @@ To enable this behavior, check **Persist source network interfaces** under **Mig
 :::caution
 **Important: Routing Considerations**
 
-If a VM has multiple interfaces on the same subnet and uses a mix of static and DHCP configurations, the destination platform may select the default route based on whichever interface comes up first. This can lead to asymmetric routing (requests arriving on one interface while replies go out through another), which may cause partial connectivity.
+If a VM has multiple interfaces on the same subnet and has asymmetric routing table, the destination openstack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing is having port-security enabled.
 
 **Recommendation:**
 - To avoid asymmetric routing, ensure each interface is on a unique subnet or consolidate multiple IPs onto a single port, as multiple interfaces on the same subnet will cause connectivity issues.
