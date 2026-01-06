@@ -415,11 +415,6 @@ func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string
 		// Extract NAA from device path
 		if idx := strings.Index(devicePath, "naa."); idx != -1 {
 			naa := devicePath[idx:]
-			// Pure Storage may return "naa.36..." but ESXi expects "naa.6..."
-			// Strip the "3" after "naa." prefix if present
-			if strings.HasPrefix(naa, "naa.36") {
-				naa = "naa." + naa[5:] // Keep "naa." + rest without "3"
-			}
 			klog.Infof("Extracted NAA from device_path: %s", naa)
 			return naa
 		}
@@ -427,26 +422,13 @@ func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string
 
 	// Check for explicit "naa" field
 	if naa, ok := data["naa"].(string); ok {
-		// Normalize: strip "naa." if present, handle "36" prefix, then re-add "naa."
-		naa = strings.TrimPrefix(naa, "naa.")
-		if strings.HasPrefix(naa, "36") {
-			naa = naa[1:] // Strip leading "3"
-		}
-		naa = "naa." + naa
 		klog.Infof("Found explicit NAA field: %s", naa)
 		return naa
 	}
 
 	// Check for wwn field (Pure Storage uses this)
 	if wwn, ok := data["wwn"].(string); ok {
-		wwn = strings.ToLower(wwn)
-		// Pure Storage returns wwn with "36" prefix (e.g., "3624a937..."),
-		// but ESXi expects "6" prefix (e.g., "624a937...").
-		// Strip the leading "3" if present for ESXi compatibility.
-		if strings.HasPrefix(wwn, "36") {
-			wwn = wwn[1:] // Remove the leading "3"
-		}
-		naa := fmt.Sprintf("naa.%s", wwn)
+		naa := fmt.Sprintf("naa.%s", strings.ToLower(wwn))
 		klog.Infof("Extracted NAA from wwn: %s", naa)
 		return naa
 	}
