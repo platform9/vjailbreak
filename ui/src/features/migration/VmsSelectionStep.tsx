@@ -1432,7 +1432,8 @@ function VmsSelectionStep({
                   columnVisibilityModel: {
                     vmState: false, // Hide the vmState column that we use only for sorting
                     rdmDisks: false, // Hide the RDM disks column by default
-                    networks: false // Hide the networks column by default
+                    networks: false, // Hide the networks column by default
+                    esxHost: false // Hide the esxHost column by default
                   }
                 }
               }}

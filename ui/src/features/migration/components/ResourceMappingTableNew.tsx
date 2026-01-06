@@ -1,16 +1,10 @@
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
-import {
-  FormControl,
-  FormHelperText,
-  InputLabel,
-  MenuItem,
-  Select,
-  Typography,
-  TextField,
-  InputAdornment,
-  Box
-} from '@mui/material'
+import { FormHelperText, Typography } from '@mui/material'
 import { useCallback, useMemo, useState, useEffect } from 'react'
+
+import { useFormContext, useWatch } from 'react-hook-form'
+
+import { RHFSelect } from 'src/shared/components/forms'
 
 import DeleteIcon from '@mui/icons-material/Delete'
 import {
@@ -39,6 +33,7 @@ interface ResourceMappingProps {
   onChange: (mappings: ResourceMap[]) => void
   error?: string
   oneToManyMapping?: boolean
+  fieldPrefix?: string
 }
 
 export default function ResourceMappingTable({
@@ -50,13 +45,15 @@ export default function ResourceMappingTable({
   values = [],
   onChange,
   error,
-  oneToManyMapping = false
+  oneToManyMapping = false,
+  fieldPrefix = 'resourceMapping'
 }: ResourceMappingProps) {
-  const [selectedSourceItem, setSelectedSourceItem] = useState('')
-  const [selectedTargetItem, setSelectedTargetItem] = useState('')
   const [showEmptyRow, setShowEmptyRow] = useState(true)
-  const [sourceSearch, setSourceSearch] = useState('')
-  const [targetSearch, setTargetSearch] = useState('')
+
+  const { setValue } = useFormContext()
+
+  const selectedSourceItem = useWatch({ name: `${fieldPrefix}.source` }) as string | undefined
+  const selectedTargetItem = useWatch({ name: `${fieldPrefix}.target` }) as string | undefined
 
   // Automatically add mapping when both source and target are selected
   useEffect(() => {
@@ -70,13 +67,13 @@ export default function ResourceMappingTable({
       ]
 
       onChange(updatedMappings)
-      setSelectedSourceItem('')
-      setSelectedTargetItem('')
+      setValue(`${fieldPrefix}.source`, '')
+      setValue(`${fieldPrefix}.target`, '')
 
       // Ensure an empty row is shown after adding a mapping
       setShowEmptyRow(true)
     }
-  }, [selectedSourceItem, selectedTargetItem, values, onChange])
+  }, [fieldPrefix, onChange, selectedSourceItem, selectedTargetItem, setValue, values])
 
   // Add empty row function - only used for the "+" button now
   const handleAddEmptyRow = useCallback(() => {
@@ -107,18 +104,15 @@ export default function ResourceMappingTable({
     return targetItems.filter((item) => !values.some((mapping) => mapping.target === item))
   }, [oneToManyMapping, targetItems, values])
 
-  // Filtered by search terms (case-insensitive)
-  const filteredSourceItems = useMemo(() => {
-    const term = sourceSearch.trim().toLowerCase()
-    if (!term) return availableSourceItems
-    return availableSourceItems.filter((i) => i.toLowerCase().includes(term))
-  }, [availableSourceItems, sourceSearch])
+  const sourceOptions = useMemo(
+    () => availableSourceItems.map((item) => ({ label: item, value: item })),
+    [availableSourceItems]
+  )
 
-  const filteredTargetItems = useMemo(() => {
-    const term = targetSearch.trim().toLowerCase()
-    if (!term) return availableTargetItems
-    return availableTargetItems.filter((i) => i.toLowerCase().includes(term))
-  }, [availableTargetItems, targetSearch])
+  const targetOptions = useMemo(
+    () => availableTargetItems.map((item) => ({ label: item, value: item })),
+    [availableTargetItems]
+  )
 
   // Hide empty row only when there are no available items to map
   useEffect(() => {
@@ -174,120 +168,24 @@ export default function ResourceMappingTable({
             {showEmptyRow && (
               <TableRow sx={{ height: '60px' }}>
                 <TableCell width={550}>
-                  <FormControl fullWidth size="small" disabled={availableSourceItems.length === 0}>
-                    <InputLabel id="source-item-label">{sourceLabel}</InputLabel>
-                    <Select
-                      labelId="source-item-label"
-                      value={selectedSourceItem}
-                      onChange={(e) => setSelectedSourceItem(e.target.value)}
-                      label={sourceLabel}
-                      fullWidth
-                      MenuProps={{
-                        PaperProps: {
-                          style: { maxHeight: 300 }
-                        }
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          p: 1,
-                          position: 'sticky',
-                          top: 0,
-                          bgcolor: 'background.paper',
-                          zIndex: 1
-                        }}
-                      >
-                        <TextField
-                          size="small"
-                          placeholder={`Search ${sourceLabel.toLowerCase()}`}
-                          fullWidth
-                          value={sourceSearch}
-                          onChange={(e) => {
-                            e.stopPropagation()
-                            setSourceSearch(e.target.value)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                          InputProps={{
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                {/* use a simple magnifier character to avoid extra icon deps */}
-                                <span role="img" aria-label="search">
-                                  🔎
-                                </span>
-                              </InputAdornment>
-                            )
-                          }}
-                        />
-                      </Box>
-                      {filteredSourceItems.length === 0 ? (
-                        <MenuItem disabled>No matching items</MenuItem>
-                      ) : (
-                        filteredSourceItems.map((item) => (
-                          <MenuItem key={item} value={item}>
-                            {item}
-                          </MenuItem>
-                        ))
-                      )}
-                    </Select>
-                  </FormControl>
+                  <RHFSelect
+                    name={`${fieldPrefix}.source`}
+                    options={sourceOptions}
+                    placeholder={`Select ${sourceLabel}`}
+                    searchable
+                    searchPlaceholder={`Search ${sourceLabel.toLowerCase()}...`}
+                    disabled={availableSourceItems.length === 0}
+                  />
                 </TableCell>
                 <TableCell width={550}>
-                  <FormControl fullWidth size="small" disabled={availableTargetItems.length === 0}>
-                    <InputLabel id="target-item-label">{targetLabel}</InputLabel>
-                    <Select
-                      labelId="target-item-label"
-                      value={selectedTargetItem}
-                      onChange={(e) => setSelectedTargetItem(e.target.value)}
-                      label={targetLabel}
-                      MenuProps={{
-                        PaperProps: {
-                          style: { maxHeight: 300 }
-                        }
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          p: 1,
-                          position: 'sticky',
-                          top: 0,
-                          bgcolor: 'background.paper',
-                          zIndex: 1
-                        }}
-                      >
-                        <TextField
-                          size="small"
-                          placeholder={`Search ${targetLabel.toLowerCase()}`}
-                          fullWidth
-                          value={targetSearch}
-                          onChange={(e) => {
-                            e.stopPropagation()
-                            setTargetSearch(e.target.value)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                          InputProps={{
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <span role="img" aria-label="search">
-                                  🔎
-                                </span>
-                              </InputAdornment>
-                            )
-                          }}
-                        />
-                      </Box>
-                      {filteredTargetItems.length === 0 ? (
-                        <MenuItem disabled>No matching items</MenuItem>
-                      ) : (
-                        filteredTargetItems.map((item) => (
-                          <MenuItem key={item} value={item}>
-                            {item}
-                          </MenuItem>
-                        ))
-                      )}
-                    </Select>
-                  </FormControl>
+                  <RHFSelect
+                    name={`${fieldPrefix}.target`}
+                    options={targetOptions}
+                    placeholder={`Select ${targetLabel}`}
+                    searchable
+                    searchPlaceholder={`Search ${targetLabel.toLowerCase()}...`}
+                    disabled={availableTargetItems.length === 0}
+                  />
                 </TableCell>
                 <TableCell align="right">
                   {/* The plus button is now hidden since mappings are automatically added */}
