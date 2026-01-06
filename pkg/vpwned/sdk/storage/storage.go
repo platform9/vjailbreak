@@ -81,6 +81,11 @@ type StorageAccessInfo struct {
 	Password            string
 	SkipSSLVerification bool
 	VendorType          string
+	// Cinder-specific fields
+	TenantName string // OpenStack project/tenant name
+	DomainName string // OpenStack domain name
+	Region     string // OpenStack region
+	Insecure   bool   // Skip TLS verification (alias for SkipSSLVerification)
 }
 
 // ArrayInfo holds basic storage array information
