@@ -482,7 +482,7 @@ process_ifquery_infrastructure() {
         fi
         
         if [[ -z "$FOUND_IP" ]]; then
-            echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "vjb$ID_INDEX\")\""
+            echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "vjb$ID_INDEX")\""
             {
             echo ""
             echo "auto vjb$ID_INDEX"
@@ -490,7 +490,7 @@ process_ifquery_infrastructure() {
             echo "iface vjb$ID_INDEX inet manual"
             echo ""
             } >> "$DEBIAN_IF_DIR"
-            ID_INDEX=$((ID_INDEX+1))
+            ID_INDEX=$((ID_INDEX + 1))
             continue
         fi
 
