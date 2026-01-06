@@ -34,6 +34,7 @@ interface ResourceMappingProps {
   error?: string
   oneToManyMapping?: boolean
   fieldPrefix?: string
+  required?: boolean
 }
 
 export default function ResourceMappingTable({
@@ -46,7 +47,8 @@ export default function ResourceMappingTable({
   onChange,
   error,
   oneToManyMapping = false,
-  fieldPrefix = 'resourceMapping'
+  fieldPrefix = 'resourceMapping',
+  required = false
 }: ResourceMappingProps) {
   const [showEmptyRow, setShowEmptyRow] = useState(true)
 
@@ -158,8 +160,8 @@ export default function ResourceMappingTable({
         <Table size="small" aria-label="resource-mapping">
           <TableHead>
             <TableRow sx={{ height: '50px' }}>
-              <TableCell>{sourceLabel}</TableCell>
-              <TableCell>{targetLabel}</TableCell>
+              <TableCell>{`${sourceLabel}${required ? ' *' : ''}`}</TableCell>
+              <TableCell>{`${targetLabel}${required ? ' *' : ''}`}</TableCell>
               <TableCell align="right">Action</TableCell>
             </TableRow>
           </TableHead>

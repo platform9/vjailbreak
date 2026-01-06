@@ -68,6 +68,11 @@ const drawerWidth = 1400
 type MigrationDrawerRHFValues = {
   securityGroups: string[]
   serverGroup: string
+  dataCopyStartTime: string
+  cutoverStartTime: string
+  cutoverEndTime: string
+  postMigrationActionSuffix: string
+  postMigrationActionFolderName: string
 }
 
 const stringArrayEqual = (a: string[] | undefined, b: string[] | undefined) => {
@@ -216,24 +221,142 @@ export default function MigrationFormDrawer({
   const form = useForm<MigrationDrawerRHFValues, any, MigrationDrawerRHFValues>({
     defaultValues: {
       securityGroups: params.securityGroups ?? [],
-      serverGroup: params.serverGroup ?? ''
+      serverGroup: params.serverGroup ?? '',
+      dataCopyStartTime: params.dataCopyStartTime ?? '',
+      cutoverStartTime: params.cutoverStartTime ?? '',
+      cutoverEndTime: params.cutoverEndTime ?? '',
+      postMigrationActionSuffix: params.postMigrationAction?.suffix ?? '',
+      postMigrationActionFolderName: params.postMigrationAction?.folderName ?? ''
     }
   })
 
   const rhfSecurityGroups = useWatch({ control: form.control, name: 'securityGroups' })
   const rhfServerGroup = useWatch({ control: form.control, name: 'serverGroup' })
+  const rhfDataCopyStartTime = useWatch({ control: form.control, name: 'dataCopyStartTime' })
+  const rhfCutoverStartTime = useWatch({ control: form.control, name: 'cutoverStartTime' })
+  const rhfCutoverEndTime = useWatch({ control: form.control, name: 'cutoverEndTime' })
+  const rhfPostMigrationActionSuffix = useWatch({
+    control: form.control,
+    name: 'postMigrationActionSuffix'
+  })
+  const rhfPostMigrationActionFolderName = useWatch({
+    control: form.control,
+    name: 'postMigrationActionFolderName'
+  })
 
   useEffect(() => {
     const nextSecurityGroups = params.securityGroups ?? []
     const nextServerGroup = params.serverGroup ?? ''
 
-    if (!stringArrayEqual(rhfSecurityGroups ?? [], nextSecurityGroups)) {
+    const nextDataCopyStartTime = params.dataCopyStartTime ?? ''
+    const nextCutoverStartTime = params.cutoverStartTime ?? ''
+    const nextCutoverEndTime = params.cutoverEndTime ?? ''
+    const nextPostMigrationActionSuffix = params.postMigrationAction?.suffix ?? ''
+    const nextPostMigrationActionFolderName = params.postMigrationAction?.folderName ?? ''
+
+    const currentSecurityGroups = form.getValues('securityGroups') ?? []
+    const currentServerGroup = form.getValues('serverGroup') ?? ''
+    const currentDataCopyStartTime = form.getValues('dataCopyStartTime') ?? ''
+    const currentCutoverStartTime = form.getValues('cutoverStartTime') ?? ''
+    const currentCutoverEndTime = form.getValues('cutoverEndTime') ?? ''
+    const currentPostMigrationActionSuffix = form.getValues('postMigrationActionSuffix') ?? ''
+    const currentPostMigrationActionFolderName =
+      form.getValues('postMigrationActionFolderName') ?? ''
+
+    if (!stringArrayEqual(currentSecurityGroups, nextSecurityGroups)) {
       form.setValue('securityGroups', nextSecurityGroups)
     }
-    if ((rhfServerGroup ?? '') !== nextServerGroup) {
+    if (currentServerGroup !== nextServerGroup) {
       form.setValue('serverGroup', nextServerGroup)
     }
-  }, [form, params.securityGroups, params.serverGroup, rhfSecurityGroups, rhfServerGroup])
+
+    if (currentDataCopyStartTime !== nextDataCopyStartTime) {
+      form.setValue('dataCopyStartTime', nextDataCopyStartTime)
+    }
+    if (currentCutoverStartTime !== nextCutoverStartTime) {
+      form.setValue('cutoverStartTime', nextCutoverStartTime)
+    }
+    if (currentCutoverEndTime !== nextCutoverEndTime) {
+      form.setValue('cutoverEndTime', nextCutoverEndTime)
+    }
+    if (currentPostMigrationActionSuffix !== nextPostMigrationActionSuffix) {
+      form.setValue('postMigrationActionSuffix', nextPostMigrationActionSuffix)
+    }
+    if (currentPostMigrationActionFolderName !== nextPostMigrationActionFolderName) {
+      form.setValue('postMigrationActionFolderName', nextPostMigrationActionFolderName)
+    }
+  }, [
+    form,
+    params.securityGroups,
+    params.serverGroup,
+    params.dataCopyStartTime,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    params.postMigrationAction
+  ])
+
+  useEffect(() => {
+    const nextDataCopyStartTime = (rhfDataCopyStartTime ?? '') as string
+    if ((params.dataCopyStartTime ?? '') !== nextDataCopyStartTime) {
+      getParamsUpdater('dataCopyStartTime')(nextDataCopyStartTime)
+    }
+  }, [getParamsUpdater, params.dataCopyStartTime, rhfDataCopyStartTime])
+
+  useEffect(() => {
+    const nextCutoverStartTime = (rhfCutoverStartTime ?? '') as string
+    if ((params.cutoverStartTime ?? '') !== nextCutoverStartTime) {
+      getParamsUpdater('cutoverStartTime')(nextCutoverStartTime)
+    }
+  }, [getParamsUpdater, params.cutoverStartTime, rhfCutoverStartTime])
+
+  useEffect(() => {
+    const nextCutoverEndTime = (rhfCutoverEndTime ?? '') as string
+    if ((params.cutoverEndTime ?? '') !== nextCutoverEndTime) {
+      getParamsUpdater('cutoverEndTime')(nextCutoverEndTime)
+    }
+  }, [getParamsUpdater, params.cutoverEndTime, rhfCutoverEndTime])
+
+  useEffect(() => {
+    const nextSuffix = String(rhfPostMigrationActionSuffix ?? '')
+    const normalized = nextSuffix.trim() ? nextSuffix.trim() : ''
+    const current = params.postMigrationAction?.suffix ?? ''
+
+    const renameEnabled = !!selectedMigrationOptions.postMigrationAction?.renameVm
+    if (!renameEnabled) return
+
+    if (current !== normalized) {
+      getParamsUpdater('postMigrationAction')({
+        ...params.postMigrationAction,
+        suffix: normalized ? normalized : undefined
+      })
+    }
+  }, [
+    getParamsUpdater,
+    params.postMigrationAction,
+    rhfPostMigrationActionSuffix,
+    selectedMigrationOptions.postMigrationAction?.renameVm
+  ])
+
+  useEffect(() => {
+    const nextFolderName = String(rhfPostMigrationActionFolderName ?? '')
+    const normalized = nextFolderName.trim() ? nextFolderName.trim() : ''
+    const current = params.postMigrationAction?.folderName ?? ''
+
+    const moveToFolderEnabled = !!selectedMigrationOptions.postMigrationAction?.moveToFolder
+    if (!moveToFolderEnabled) return
+
+    if (current !== normalized) {
+      getParamsUpdater('postMigrationAction')({
+        ...params.postMigrationAction,
+        folderName: normalized ? normalized : undefined
+      })
+    }
+  }, [
+    getParamsUpdater,
+    params.postMigrationAction,
+    rhfPostMigrationActionFolderName,
+    selectedMigrationOptions.postMigrationAction?.moveToFolder
+  ])
 
   useEffect(() => {
     const next = (rhfSecurityGroups ?? []) as string[]
