@@ -60,7 +60,8 @@ export const useVMwareMachinesQuery = ({
 
           clustersResponse.items.forEach((cluster) => {
             const annotations = (cluster.metadata as any)?.annotations || {}
-            const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
+            const clusterDC =
+              annotations['vjailbreak.k8s.pf9.io/datacenter'] || datacenterName || ''
             if (clusterDC === datacenterName) {
               datacenterClusterNames.add(cluster.metadata.name)
             }
@@ -75,8 +76,9 @@ export const useVMwareMachinesQuery = ({
           const selectedClusterResource = clustersResponse.items.find((cluster) => {
             const annotations = (cluster.metadata as any)?.annotations || {}
             const clusterDC = annotations['vjailbreak.k8s.pf9.io/datacenter'] || ''
-            const matchesDisplayName = cluster.spec.name === clusterName && clusterDC === datacenterName
-            const matchesK8sName = cluster.metadata.name === clusterName && clusterDC === datacenterName
+            const dcMatches = !clusterDC || clusterDC === datacenterName
+            const matchesDisplayName = cluster.spec.name === clusterName && dcMatches
+            const matchesK8sName = cluster.metadata.name === clusterName && dcMatches
 
             return matchesDisplayName || matchesK8sName
           })
@@ -89,7 +91,7 @@ export const useVMwareMachinesQuery = ({
               return vmClusterLabel === expectedClusterLabel
             })
           } else {
-            filteredItems = []
+            filteredItems = vmResponse.items
           }
         }
       }

@@ -143,6 +143,7 @@ export default function NetworkAndStorageMappingStep({
                 values={params.networkMappings || []}
                 onChange={(value) => onChange('networkMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="networkMapping"
               />
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
@@ -178,6 +179,7 @@ export default function NetworkAndStorageMappingStep({
                 values={params.storageMappings || []}
                 onChange={(value) => onChange('storageMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="storageMapping"
               />
               {storageMappingError && <FormHelperText error>{storageMappingError}</FormHelperText>}
             </FormControl>
