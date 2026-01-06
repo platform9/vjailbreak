@@ -71,8 +71,26 @@ spec:
               migrationPlan:
                 description: MigrationPlan is the name of the migration plan
                 type: string
+              migrationType:
+                description: |-
+                  MigrationType indicates whether this is a hot (live) or cold migration
+                  This is set at migration creation time from the MigrationPlan strategy
+                enum:
+                - hot
+                - cold
+                type: string
               podRef:
                 description: PodRef is the name of the pod
+                type: string
+              region:
+                description: |-
+                  Region is the OpenStack region name where the VM is being migrated
+                  This is set at migration creation time from the OpenStack credentials
+                type: string
+              tenant:
+                description: |-
+                  Tenant is the OpenStack tenant/project name where the VM is being migrated
+                  This is set at migration creation time from the OpenStack credentials
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
@@ -137,6 +155,11 @@ spec:
                   - type
                   type: object
                 type: array
+              currentDisk:
+                description: |-
+                  CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+                  Extracted from migration pod events
+                type: string
               phase:
                 description: Phase is the current phase of the migration
                 enum:

@@ -183,6 +183,10 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
+
+	// Extract current disk being copied from events
+	r.ExtractCurrentDisk(migration, filteredEvents)
+
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
@@ -426,4 +430,45 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	return &podList.Items[0], nil
+}
+
+// ExtractCurrentDisk extracts which disk is currently being copied from pod events
+func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Look for the most recent "Copying disk X" message in events
+	// Events are sorted by timestamp (newest first)
+	for i := range events.Items {
+		msg := events.Items[i].Message
+		if strings.Contains(msg, "Copying disk") {
+			// Extract disk number from message like "Copying disk 0, Completed: 50%"
+			parts := strings.Split(msg, "Copying disk")
+			if len(parts) > 1 {
+				// Get the number after "disk "
+				diskPart := strings.TrimSpace(parts[1])
+				// Extract just the digit (e.g., "0" from "0, Completed: 50%")
+				if len(diskPart) > 0 {
+					diskNum := strings.Split(diskPart, ",")[0]
+					diskNum = strings.Split(diskNum, " ")[0]
+					migration.Status.CurrentDisk = strings.TrimSpace(diskNum)
+					return
+				}
+			}
+		}
+	}
+
+	// Also check conditions for disk info
+	for _, condition := range migration.Status.Conditions {
+		msg := condition.Message
+		if strings.Contains(msg, "Copying disk") {
+			parts := strings.Split(msg, "Copying disk")
+			if len(parts) > 1 {
+				diskInfo := strings.TrimSpace(parts[1])
+				if len(diskInfo) > 0 {
+					diskNum := strings.Split(diskInfo, ",")[0]
+					diskNum = strings.Split(diskNum, " ")[0]
+					migration.Status.CurrentDisk = strings.TrimSpace(diskNum)
+					return
+				}
+			}
+		}
+	}
 }
