@@ -472,7 +472,7 @@ process_ifquery_infrastructure() {
             fi
         done < "$DEBIAN_IF_DIR"
     }
-
+    ID_INDEX=1
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
@@ -482,7 +482,15 @@ process_ifquery_infrastructure() {
         fi
         
         if [[ -z "$FOUND_IP" ]]; then
-            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
+            echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "vjb$ID_INDEX")\""
+            {
+            echo ""
+            echo "auto vjb$ID_INDEX"
+            echo "allow-hotplug vjb$ID_INDEX"
+            echo "iface vjb$ID_INDEX inet manual"
+            echo ""
+            } >> "$DEBIAN_IF_DIR"
+            ID_INDEX=$((ID_INDEX + 1))
             continue
         fi
 
