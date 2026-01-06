@@ -51,6 +51,10 @@ parse_address_pair() {
     if echo "$1" | grep -qE '^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$'; then
         FOUND_MAC=$(echo "$1" | sed -nE 's/^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:.*$/\1/p')
         FOUND_IP=$(echo "$1" | sed -nE 's/^.*:ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$/\1/p')
+    elif echo "$1" | grep -qE '^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:$'; then
+        # Handle MAC:ip: (empty IP) case
+        FOUND_MAC=$(echo "$1" | sed -nE 's/^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:.*$/\1/p')
+        FOUND_IP=""
     fi
 }
 
@@ -92,17 +96,22 @@ process_ifcfg_infrastructure() {
         return 0
     fi
 
+    local VJB_INDEX=1
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
-            display_msg "Skipping malformed mapping entry: $line_entry"
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
         # Locate script matching the IP
         local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null)
-        local VJB_INDEX=1
         
         if [[ -z "$CFG_FILE" ]]; then
             display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
@@ -147,7 +156,13 @@ process_network_manager_files() {
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -200,7 +215,13 @@ process_nm_leases() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -246,7 +267,13 @@ process_dhclient_history() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -356,7 +383,13 @@ process_netplan_logic() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -388,31 +421,68 @@ process_netplan_logic() {
 }
 
 # Processes interfaces via the ifquery utility
+# Processes interfaces via parsing /etc/network/interfaces directly
 process_ifquery_infrastructure() {
-    if ! ${IN_TEST_MODE:-false} && ! command -v "$QUERY_TOOL" >/dev/null 2>&1; then
-        display_msg "Notice: Tool $QUERY_TOOL not found."
+    # Check if interfaces file exists
+    if [[ ! -f "$DEBIAN_IF_DIR" ]]; then
+        display_msg "Notice: Interfaces file $DEBIAN_IF_DIR not found."
         return 0
     fi
 
-    # Helper to call ifquery against the specific interfaces dir
-    invoke_ifquery() {
-        "$QUERY_TOOL" -i "$DEBIAN_IF_DIR" "$@" 2>&3
-    }
-
     find_if_matching_ip() {
         local search_ip="$1"
-        invoke_ifquery -l | while read -r INTERFACE; do
-            if invoke_ifquery "$INTERFACE" | grep -q "$search_ip"; then
-                echo "$INTERFACE"
-                return
+        local current_iface=""
+        local in_iface_block=false
+        
+        while IFS= read -r line; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "${line// }" ]] && continue
+            
+            # Check for interface definition
+            if [[ "$line" =~ ^[[:space:]]*(iface|auto|allow-hotplug)[[:space:]]+([a-zA-Z0-9]+) ]]; then
+                current_iface="${BASH_REMATCH[2]}"
+                in_iface_block=true
+                continue
             fi
-        done
+            
+            # Check if we're still in an interface block
+            if [[ "$line" =~ ^[[:space:]]+[a-zA-Z] ]]; then
+                if [[ "$in_iface_block" == true && -n "$current_iface" ]]; then
+                    # Look for IP address in various formats
+                    if [[ "$line" =~ [[:space:]]+address[[:space:]]+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}) ]]; then
+                        local iface_ip="${BASH_REMATCH[1]}"
+                        if [[ "$iface_ip" == "$search_ip" ]]; then
+                            echo "$current_iface"
+                            return
+                        fi
+                    fi
+                    # Also check for inet static with address on same line
+                    if [[ "$line" =~ [[:space:]]+inet[[:space:]]+static[[:space:]]+.*address[[:space:]]+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}) ]]; then
+                        local iface_ip="${BASH_REMATCH[1]}"
+                        if [[ "$iface_ip" == "$search_ip" ]]; then
+                            echo "$current_iface"
+                            return
+                        fi
+                    fi
+                fi
+            else
+                # Reset when we hit a new non-indented section
+                in_iface_block=false
+            fi
+        done < "$DEBIAN_IF_DIR"
     }
 
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -423,8 +493,6 @@ process_ifquery_infrastructure() {
         fi
     done
 }
-
-
 # Filters out any duplicate hardware addresses before writing
 validate_hardware_uniqueness() {
     local RAW_CONTENT=$(cat)

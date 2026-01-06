@@ -301,6 +301,11 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 			if err != nil {
 				return err
 			}
+		} else if len(ips) == 0 {
+			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, "")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
