@@ -2,6 +2,7 @@
 export { default as DesignSystemForm } from './rhf/DesignSystemForm'
 export { default as RHFCheckbox } from './rhf/RHFCheckbox'
 export { default as RHFDateField } from './rhf/RHFDateField'
+export { default as RHFDateTimeField } from './rhf/RHFDateTimeField'
 export { default as RHFFileField } from './rhf/RHFFileField'
 export { default as RHFAutocomplete } from './rhf/RHFAutocomplete'
 export { default as RHFOpenstackRCFileField } from './rhf/RHFOpenstackRCFileField'

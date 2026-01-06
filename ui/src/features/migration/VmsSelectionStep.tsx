@@ -54,6 +54,7 @@ import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import axios from 'axios'
 import { RdmDiskConfigurationPanel } from './components'
+import { FieldLabel } from 'src/components'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -1418,6 +1419,9 @@ function VmsSelectionStep({
             </Box>
           </Alert>
         )}
+        <Box sx={{ mb: 1 }}>
+          <FieldLabel label="Virtual Machines" required align="flex-start" />
+        </Box>
         <FormControl error={!!error} required>
           <Paper sx={{ width: '100%', height: 389 }}>
             <DataGrid
