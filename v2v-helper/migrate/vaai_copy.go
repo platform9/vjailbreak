@@ -12,6 +12,7 @@ import (
 	cindervolumes "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/cinder"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
