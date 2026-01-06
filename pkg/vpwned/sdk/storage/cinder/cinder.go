@@ -8,12 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/platform9/vjailbreak/cinder-poc/pkg/storage"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"k8s.io/klog/v2"
 )
+
+func init() {
+	storage.RegisterStorageProvider("cinder", &CinderStorageProvider{})
+}
 
 // CinderStorageProvider implements a thin generic provider backed by OpenStack Cinder
 type CinderStorageProvider struct {
@@ -28,18 +32,21 @@ func New(provider storage.StorageAccessInfo) *CinderStorageProvider {
 	}
 }
 
-func (c *CinderStorageProvider) Connect(ctx context.Context) error {
+func (c *CinderStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
+	// Store access info
+	c.accessInfo = accessInfo
+
 	// Create auth options
 	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: c.accessInfo.Hostname,
-		Username:         c.accessInfo.Username,
-		Password:         c.accessInfo.Password,
-		TenantName:       c.accessInfo.TenantName,
-		DomainName:       c.accessInfo.DomainName,
+		IdentityEndpoint: accessInfo.Hostname,
+		Username:         accessInfo.Username,
+		Password:         accessInfo.Password,
+		TenantName:       accessInfo.TenantName,
+		DomainName:       accessInfo.DomainName,
 		AllowReauth:      true,
 		Scope: &gophercloud.AuthScope{
-			ProjectName: c.accessInfo.TenantName,
-			DomainName:  c.accessInfo.DomainName, // project domain
+			ProjectName: accessInfo.TenantName,
+			DomainName:  accessInfo.DomainName, // project domain
 		},
 	}
 
@@ -47,7 +54,7 @@ func (c *CinderStorageProvider) Connect(ctx context.Context) error {
 	var providerClient *gophercloud.ProviderClient
 	var err error
 
-	if c.accessInfo.Insecure {
+	if accessInfo.Insecure || accessInfo.SkipSSLVerification {
 		// Create custom HTTP client with TLS verification disabled
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -55,21 +62,21 @@ func (c *CinderStorageProvider) Connect(ctx context.Context) error {
 		httpClient := &http.Client{Transport: transport}
 
 		// Create provider client with custom HTTP client
-		providerClient, err = openstack.NewClient(c.accessInfo.Hostname)
+		providerClient, err = openstack.NewClient(accessInfo.Hostname)
 		if err != nil {
 			return fmt.Errorf("failed to create provider client: %w", err)
 		}
 		providerClient.HTTPClient = *httpClient
 
-		// Authenticate
-		err = openstack.Authenticate(providerClient, opts)
+		// Authenticate with context
+		err = openstack.Authenticate(ctx, providerClient, opts)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 		klog.Infof("TLS verification disabled (insecure mode)")
 	} else {
-		// Use standard authenticated client
-		providerClient, err = openstack.AuthenticatedClient(opts)
+		// Use standard authenticated client with context
+		providerClient, err = openstack.AuthenticatedClient(ctx, opts)
 		if err != nil {
 			return fmt.Errorf("failed to create OpenStack provider client: %w", err)
 		}
@@ -89,7 +96,7 @@ func (c *CinderStorageProvider) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (c *CinderStorageProvider) Disconnect(ctx context.Context) error {
+func (c *CinderStorageProvider) Disconnect() error {
 	c.isConnected = false
 	c.client = nil
 	return nil
@@ -100,73 +107,73 @@ func (c *CinderStorageProvider) ValidateCredentials(ctx context.Context) error {
 		return fmt.Errorf("not connected")
 	}
 	// simple smoke test: list a page of volumes
-	_, err := volumes.List(c.client, volumes.ListOpts{Limit: 1}).AllPages()
+	_, err := volumes.List(c.client, volumes.ListOpts{Limit: 1}).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("validation list failed: %w", err)
 	}
 	return nil
 }
 
-// CreateVolume accepts volumeName, sizeBytes and optional volumeType
-func (c *CinderStorageProvider) CreateVolume(ctx context.Context, volumeName string, sizeBytes int64, volumeType string) (*storage.Volume, error) {
+// CreateVolume creates a volume with the given name and size in bytes
+func (c *CinderStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
+	ctx := context.Background()
 	if !c.isConnected {
-		return nil, fmt.Errorf("not connected")
+		return storage.Volume{}, fmt.Errorf("not connected")
 	}
 	// convert bytes -> GB (round up)
-	gb := int((sizeBytes + (1024*1024*1024 - 1)) / (1024 * 1024 * 1024))
+	gb := int((size + (1024*1024*1024 - 1)) / (1024 * 1024 * 1024))
 	createOpts := volumes.CreateOpts{
 		Name: volumeName,
 		Size: gb,
 	}
-	if volumeType != "" {
-		createOpts.VolumeType = volumeType
-	}
 
-	vol, err := volumes.Create(c.client, createOpts).Extract()
+	vol, err := volumes.Create(ctx, c.client, createOpts, nil).Extract()
 	if err != nil {
-		return nil, fmt.Errorf("create volume failed: %w", err)
+		return storage.Volume{}, fmt.Errorf("create volume failed: %w", err)
 	}
 
 	// wait for available
-	if err := c.waitForVolumeStatus(vol.ID, "available", 3*time.Minute); err != nil {
-		return nil, fmt.Errorf("volume %s did not become available: %w", vol.ID, err)
+	if err := c.waitForVolumeStatus(ctx, vol.ID, "available", 3*time.Minute); err != nil {
+		return storage.Volume{}, fmt.Errorf("volume %s did not become available: %w", vol.ID, err)
 	}
 
-	return &storage.Volume{
-		ID:        vol.ID,
-		Name:      vol.Name,
-		SizeBytes: int64(vol.Size) * 1024 * 1024 * 1024,
+	return storage.Volume{
+		Id:   vol.ID,
+		Name: vol.Name,
+		Size: int64(vol.Size) * 1024 * 1024 * 1024,
 	}, nil
 }
 
-func (c *CinderStorageProvider) DeleteVolume(ctx context.Context, volumeName string) error {
-	vol, err := c.findVolumeByName(volumeName)
+func (c *CinderStorageProvider) DeleteVolume(volumeName string) error {
+	ctx := context.Background()
+	vol, err := c.findVolumeByName(ctx, volumeName)
 	if err != nil {
 		return err
 	}
-	if err := volumes.Delete(c.client, vol.ID, nil).ExtractErr(); err != nil {
+	if err := volumes.Delete(ctx, c.client, vol.ID, nil).ExtractErr(); err != nil {
 		return fmt.Errorf("delete volume: %w", err)
 	}
 	// optional: wait for deletion - omitted for brevity
 	return nil
 }
 
-func (c *CinderStorageProvider) GetVolumeInfo(ctx context.Context, volumeName string) (storage.Volume, error) {
-	vol, err := c.findVolumeByName(volumeName)
+func (c *CinderStorageProvider) GetVolumeInfo(volumeName string) (storage.VolumeInfo, error) {
+	ctx := context.Background()
+	vol, err := c.findVolumeByName(ctx, volumeName)
 	if err != nil {
-		return storage.Volume{}, err
+		return storage.VolumeInfo{}, err
 	}
-	v := storage.Volume{
-		ID:        vol.ID,
-		Name:      vol.Name,
-		SizeBytes: int64(vol.Size) * 1024 * 1024 * 1024,
-		NAA:       c.getVolumeNAA(vol),
+	v := storage.VolumeInfo{
+		Name: vol.Name,
+		Size: int64(vol.Size) * 1024 * 1024 * 1024,
+		NAA:  c.getVolumeNAA(vol),
 	}
 	return v, nil
 }
 
-func (c *CinderStorageProvider) ListAllVolumes(ctx context.Context) ([]storage.Volume, error) {
-	pages, err := volumes.List(c.client, volumes.ListOpts{}).AllPages()
+func (c *CinderStorageProvider) ListAllVolumes() ([]storage.VolumeInfo, error) {
+	ctx := context.Background()
+	pages, err := volumes.List(c.client, volumes.ListOpts{}).AllPages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list volumes: %w", err)
 	}
@@ -174,20 +181,19 @@ func (c *CinderStorageProvider) ListAllVolumes(ctx context.Context) ([]storage.V
 	if err != nil {
 		return nil, fmt.Errorf("extract volumes: %w", err)
 	}
-	out := make([]storage.Volume, 0, len(all))
+	out := make([]storage.VolumeInfo, 0, len(all))
 	for _, vv := range all {
-		out = append(out, storage.Volume{
-			ID:        vv.ID,
-			Name:      vv.Name,
-			SizeBytes: int64(vv.Size) * 1024 * 1024 * 1024,
-			NAA:       c.getVolumeNAA(&vv),
+		out = append(out, storage.VolumeInfo{
+			Name: vv.Name,
+			Size: int64(vv.Size) * 1024 * 1024 * 1024,
+			NAA:  c.getVolumeNAA(&vv),
 		})
 	}
 	return out, nil
 }
 
-func (c *CinderStorageProvider) GetAllVolumeNAAs(ctx context.Context) ([]string, error) {
-	vols, err := c.ListAllVolumes(ctx)
+func (c *CinderStorageProvider) GetAllVolumeNAAs() ([]string, error) {
+	vols, err := c.ListAllVolumes()
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +207,8 @@ func (c *CinderStorageProvider) GetAllVolumeNAAs(ctx context.Context) ([]string,
 }
 
 // CreateOrUpdateInitiatorGroup: store iqns in context; optionally pre-create via temp volume
-func (c *CinderStorageProvider) CreateOrUpdateInitiatorGroup(ctx context.Context, initiatorGroupName string, hbaIdentifiers []string, precreate bool) (storage.MappingContext, error) {
+func (c *CinderStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
+	precreate := false // Don't precreate hosts by default
 	klog.Infof("CreateOrUpdateInitiatorGroup %s iqns=%v precreate=%v", initiatorGroupName, hbaIdentifiers, precreate)
 	if len(hbaIdentifiers) == 0 {
 		return nil, fmt.Errorf("no initiators provided")
@@ -217,7 +224,7 @@ func (c *CinderStorageProvider) CreateOrUpdateInitiatorGroup(ctx context.Context
 		for idx, iqn := range hbaIdentifiers {
 			tempName := fmt.Sprintf("vj-init-%s-%d", initiatorGroupName, idx)
 			klog.Infof("Creating temp vol %s to precreate host for IQN %s", tempName, iqn)
-			temp, err := c.CreateVolume(ctx, tempName, 1*1024*1024*1024, "") // 1GB
+			temp, err := c.CreateVolume(tempName, 1*1024*1024*1024) // 1GB
 			if err != nil {
 				klog.Warningf("temp create failed: %v", err)
 				continue
@@ -228,7 +235,7 @@ func (c *CinderStorageProvider) CreateOrUpdateInitiatorGroup(ctx context.Context
 				"platform":  "VMware_ESXi",
 				"os_type":   "vmware",
 			}
-			if _, err := c.initializeConnection(temp.ID, connector); err != nil {
+			if _, err := c.initializeConnection(temp.Id, connector); err != nil {
 				klog.Warningf("init connection failed for %s: %v", iqn, err)
 			} else {
 				created := ctxMap["created_hosts"].([]string)
@@ -236,15 +243,16 @@ func (c *CinderStorageProvider) CreateOrUpdateInitiatorGroup(ctx context.Context
 				ctxMap["created_hosts"] = created
 			}
 			// try to terminate and delete
-			_ = c.terminateConnection(temp.ID, connector)
-			_ = c.DeleteVolume(ctx, temp.Name)
+			_ = c.terminateConnection(temp.Id, connector)
+			_ = c.DeleteVolume(temp.Name)
 		}
 	}
 	return ctxMap, nil
 }
 
 // MapVolumeToGroup uses initialize_connection to map the named volume to each IQN (creates host & mapping)
-func (c *CinderStorageProvider) MapVolumeToGroup(ctx context.Context, initiatorGroupName string, targetVolume storage.Volume, contextMap storage.MappingContext) (storage.Volume, error) {
+func (c *CinderStorageProvider) MapVolumeToGroup(initiatorGroupName string, targetVolume storage.Volume, contextMap storage.MappingContext) (storage.Volume, error) {
+	ctx := context.Background()
 	iqnsVal, ok := contextMap["iqns"]
 	if !ok {
 		return storage.Volume{}, fmt.Errorf("iqns missing in mapping context")
@@ -254,7 +262,7 @@ func (c *CinderStorageProvider) MapVolumeToGroup(ctx context.Context, initiatorG
 		return storage.Volume{}, fmt.Errorf("invalid iqns")
 	}
 	// find volume
-	volPage, err := volumes.List(c.client, volumes.ListOpts{Name: targetVolume.Name}).AllPages()
+	volPage, err := volumes.List(c.client, volumes.ListOpts{Name: targetVolume.Name}).AllPages(ctx)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("find volume: %w", err)
 	}
@@ -285,12 +293,13 @@ func (c *CinderStorageProvider) MapVolumeToGroup(ctx context.Context, initiatorG
 	}
 	// update returned volume info
 	targetVolume.NAA = c.extractNAAFromConnectionInfo(connectionInfo)
-	targetVolume.ID = vol.ID
+	targetVolume.Id = vol.ID
 	klog.Infof("Extracted NAA: %s for volume %s", targetVolume.NAA, vol.Name)
 	return targetVolume, nil
 }
 
-func (c *CinderStorageProvider) UnmapVolumeFromGroup(ctx context.Context, initiatorGroupName string, targetVolume storage.Volume, contextMap storage.MappingContext) error {
+func (c *CinderStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, targetVolume storage.Volume, contextMap storage.MappingContext) error {
+	ctx := context.Background()
 	iqnsVal, ok := contextMap["iqns"]
 	if !ok {
 		return nil
@@ -299,7 +308,7 @@ func (c *CinderStorageProvider) UnmapVolumeFromGroup(ctx context.Context, initia
 	if !ok || len(iqns) == 0 {
 		return nil
 	}
-	vol, err := c.findVolumeByName(targetVolume.Name)
+	vol, err := c.findVolumeByName(ctx, targetVolume.Name)
 	if err != nil {
 		return err
 	}
@@ -315,8 +324,9 @@ func (c *CinderStorageProvider) UnmapVolumeFromGroup(ctx context.Context, initia
 	return nil
 }
 
-func (c *CinderStorageProvider) GetMappedHosts(ctx context.Context, targetVolume storage.Volume) ([]string, error) {
-	vol, err := c.findVolumeByName(targetVolume.Name)
+func (c *CinderStorageProvider) GetMappedGroups(targetVolume storage.Volume, contextMap storage.MappingContext) ([]string, error) {
+	ctx := context.Background()
+	vol, err := c.findVolumeByName(ctx, targetVolume.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -329,15 +339,16 @@ func (c *CinderStorageProvider) GetMappedHosts(ctx context.Context, targetVolume
 	return hosts, nil
 }
 
-func (c *CinderStorageProvider) ResolveCinderVolumeToLUN(ctx context.Context, volumeID string) (storage.Volume, error) {
-	vol, err := volumes.Get(c.client, volumeID).Extract()
+func (c *CinderStorageProvider) ResolveCinderVolumeToLUN(volumeName string) (storage.Volume, error) {
+	ctx := context.Background()
+	vol, err := c.findVolumeByName(ctx, volumeName)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("get volume: %w", err)
 	}
 	return storage.Volume{
-		ID:           vol.ID,
+		Id:           vol.ID,
 		Name:         vol.Name,
-		SizeBytes:    int64(vol.Size) * 1024 * 1024 * 1024,
+		Size:         int64(vol.Size) * 1024 * 1024 * 1024,
 		NAA:          c.getVolumeNAA(vol),
 		SerialNumber: c.getVolumeSerial(vol),
 	}, nil
@@ -349,8 +360,8 @@ func (c *CinderStorageProvider) WhoAmI() string {
 
 // ---------- helpers ----------
 
-func (c *CinderStorageProvider) findVolumeByName(name string) (*volumes.Volume, error) {
-	page, err := volumes.List(c.client, volumes.ListOpts{Name: name}).AllPages()
+func (c *CinderStorageProvider) findVolumeByName(ctx context.Context, name string) (*volumes.Volume, error) {
+	page, err := volumes.List(c.client, volumes.ListOpts{Name: name}).AllPages(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -364,10 +375,10 @@ func (c *CinderStorageProvider) findVolumeByName(name string) (*volumes.Volume, 
 	return &all[0], nil
 }
 
-func (c *CinderStorageProvider) waitForVolumeStatus(volumeID, want string, timeout time.Duration) error {
+func (c *CinderStorageProvider) waitForVolumeStatus(ctx context.Context, volumeID, want string, timeout time.Duration) error {
 	start := time.Now()
 	for {
-		vol, err := volumes.Get(c.client, volumeID).Extract()
+		vol, err := volumes.Get(ctx, c.client, volumeID).Extract()
 		if err != nil {
 			return err
 		}
@@ -415,6 +426,11 @@ func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string
 		// Extract NAA from device path
 		if idx := strings.Index(devicePath, "naa."); idx != -1 {
 			naa := devicePath[idx:]
+			// Pure Storage may return "naa.36..." but ESXi expects "naa.6..."
+			// Strip the "3" after "naa." prefix if present
+			if strings.HasPrefix(naa, "naa.36") {
+				naa = "naa." + naa[5:] // Keep "naa." + rest without "3"
+			}
 			klog.Infof("Extracted NAA from device_path: %s", naa)
 			return naa
 		}
@@ -422,13 +438,26 @@ func (c *CinderStorageProvider) extractNAAFromConnectionInfo(connInfo map[string
 
 	// Check for explicit "naa" field
 	if naa, ok := data["naa"].(string); ok {
+		// Normalize: strip "naa." if present, handle "36" prefix, then re-add "naa."
+		naa = strings.TrimPrefix(naa, "naa.")
+		if strings.HasPrefix(naa, "36") {
+			naa = naa[1:] // Strip leading "3"
+		}
+		naa = "naa." + naa
 		klog.Infof("Found explicit NAA field: %s", naa)
 		return naa
 	}
 
 	// Check for wwn field (Pure Storage uses this)
 	if wwn, ok := data["wwn"].(string); ok {
-		naa := fmt.Sprintf("naa.%s", strings.ToLower(wwn))
+		wwn = strings.ToLower(wwn)
+		// Pure Storage returns wwn with "36" prefix (e.g., "3624a937..."),
+		// but ESXi expects "6" prefix (e.g., "624a937...").
+		// Strip the leading "3" if present for ESXi compatibility.
+		if strings.HasPrefix(wwn, "36") {
+			wwn = wwn[1:] // Remove the leading "3"
+		}
+		naa := fmt.Sprintf("naa.%s", wwn)
 		klog.Infof("Extracted NAA from wwn: %s", naa)
 		return naa
 	}
@@ -449,6 +478,7 @@ func (c *CinderStorageProvider) getVolumeSerial(vol *volumes.Volume) string {
 }
 
 func (c *CinderStorageProvider) initializeConnection(volumeID string, connector map[string]interface{}) (map[string]interface{}, error) {
+	ctx := context.Background()
 	url := c.client.ServiceURL("volumes", volumeID, "action")
 	req := map[string]interface{}{
 		"os-initialize_connection": map[string]interface{}{
@@ -457,7 +487,7 @@ func (c *CinderStorageProvider) initializeConnection(volumeID string, connector 
 	}
 	klog.Infof("Calling initialize_connection for volume %s with connector: %+v", volumeID, connector)
 	var resp map[string]interface{}
-	httpResp, err := c.client.Post(url, req, &resp, &gophercloud.RequestOpts{
+	httpResp, err := c.client.Post(ctx, url, req, &resp, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
 	if err != nil {
@@ -474,10 +504,6 @@ func (c *CinderStorageProvider) initializeConnection(volumeID string, connector 
 		case *gophercloud.ErrUnexpectedResponseCode:
 			klog.Errorf("*ErrUnexpectedResponseCode - Expected: %v, Actual: %d, Body: %s",
 				e.Expected, e.Actual, string(e.Body))
-		case gophercloud.ErrDefault500:
-			klog.Errorf("ErrDefault500 - Body: %s", string(e.Body))
-		case *gophercloud.ErrDefault500:
-			klog.Errorf("*ErrDefault500 - Body: %s", string(e.Body))
 		default:
 			klog.Errorf("Unknown error type, full error: %+v", err)
 		}
@@ -490,12 +516,13 @@ func (c *CinderStorageProvider) initializeConnection(volumeID string, connector 
 }
 
 func (c *CinderStorageProvider) terminateConnection(volumeID string, connector map[string]interface{}) error {
+	ctx := context.Background()
 	url := c.client.ServiceURL("volumes", volumeID, "action")
 	req := map[string]interface{}{
 		"os-terminate_connection": map[string]interface{}{
 			"connector": connector,
 		},
 	}
-	_, err := c.client.Post(url, req, nil, &gophercloud.RequestOpts{OkCodes: []int{202, 200}})
+	_, err := c.client.Post(ctx, url, req, nil, &gophercloud.RequestOpts{OkCodes: []int{202, 200}})
 	return err
 }
