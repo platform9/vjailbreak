@@ -30,9 +30,9 @@ const getSelectedAccent = (theme: Theme, status: Status) => {
     case 'attention':
       return theme.palette.error.main
     case 'optional':
-      return theme.palette.info.main
+      return theme.palette.grey[500]
     default:
-      return theme.palette.primary.main
+      return theme.palette.grey[500]
   }
 }
 
@@ -52,15 +52,15 @@ const getStatusChipSx = (status: Status) => {
       }
     case 'optional':
       return {
-        borderColor: (theme: Theme) => theme.palette.info.main,
-        backgroundColor: (theme: Theme) => theme.palette.info.light,
-        color: (theme: Theme) => theme.palette.info.contrastText
+        borderColor: (theme: Theme) => theme.palette.grey[400],
+        backgroundColor: (theme: Theme) => theme.palette.grey[200],
+        color: (theme: Theme) => theme.palette.grey[800]
       }
     default:
       return {
-        borderColor: (theme: Theme) => theme.palette.divider,
-        backgroundColor: (theme: Theme) => theme.palette.action.hover,
-        color: (theme: Theme) => theme.palette.text.primary
+        borderColor: (theme: Theme) => theme.palette.grey[400],
+        backgroundColor: (theme: Theme) => theme.palette.grey[200],
+        color: (theme: Theme) => theme.palette.grey[800]
       }
   }
 }
@@ -70,7 +70,7 @@ const getSelectedChipSx = (theme: Theme, status: Status) => {
   return {
     transform: 'scale(1.07)',
     borderColor: c,
-    boxShadow: `0 0 0 3px ${alpha(c, 0.22)}, 0 8px 18px ${alpha(theme.palette.common.black, 0.18)}`
+    boxShadow: `0 0 0 3px ${alpha(c, 0.22)}, 0 8px 18px ${alpha(theme.palette.common.white, 0.18)}`
   }
 }
 

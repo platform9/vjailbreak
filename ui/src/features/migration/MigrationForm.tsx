@@ -869,6 +869,24 @@ export default function MigrationFormDrawer({
   const reviewRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
+  const [touchedSections, setTouchedSections] = useState({
+    options: false
+  })
+
+  const markTouched = useCallback(
+    (key: keyof typeof touchedSections) => {
+      setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+    },
+    [setTouchedSections]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setTouchedSections({
+      options: false
+    })
+  }, [open])
+
   const isStep1Complete = Boolean(
     params.vmwareCluster &&
       params.pcdCluster &&
@@ -917,7 +935,36 @@ export default function MigrationFormDrawer({
     ).length
   }, [availableVmwareDatastores, params.storageMappings])
 
-  const reviewedAndReady = Boolean(isStep1Complete && isStep2Complete && isStep3Complete)
+  const step1HasErrors = Boolean(
+    fieldErrors['vmwareCluster'] ||
+      fieldErrors['pcdCluster'] ||
+      fieldErrors['vmwareCreds'] ||
+      fieldErrors['openstackCreds']
+  )
+
+  const step2HasErrors = Boolean(
+    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
+  )
+
+  const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
+
+  const step4Complete = Boolean(
+    (params.securityGroups && params.securityGroups.length > 0) || params.serverGroup
+  )
+
+  const step5HasErrors = Boolean(
+    (selectedMigrationOptions.dataCopyStartTime && fieldErrors['dataCopyStartTime']) ||
+      (selectedMigrationOptions.cutoverOption &&
+        (fieldErrors['cutoverOption'] ||
+          (params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            (fieldErrors['cutoverStartTime'] || fieldErrors['cutoverEndTime'])) ||
+          (params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+            selectedMigrationOptions.periodicSyncEnabled &&
+            fieldErrors['periodicSyncInterval']))) ||
+      (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript'])
+  )
+
+  const step5Complete = Boolean(touchedSections.options && !step5HasErrors)
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
@@ -925,40 +972,44 @@ export default function MigrationFormDrawer({
         id: 'source-destination',
         title: 'Source And Destination',
         description: 'Pick clusters and credentials',
-        status: isStep1Complete ? 'complete' : 'attention'
+        status: isStep1Complete ? 'complete' : step1HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'select-vms',
         title: 'Select VMs',
         description: 'Choose VMs and assign required fields',
-        status: isStep2Complete ? 'complete' : 'attention'
+        status: isStep2Complete ? 'complete' : step2HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'map-resources',
         title: 'Map Networks And Storage',
         description: 'Map VMware networks/datastores to PCD',
-        status: isStep3Complete ? 'complete' : 'attention'
+        status: isStep3Complete ? 'complete' : step3HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'security',
         title: 'Security And Placement',
         description: 'Security groups and server group',
-        status: 'optional'
+        status: step4Complete ? 'complete' : 'incomplete'
       },
       {
         id: 'options',
         title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: 'optional'
-      },
-      {
-        id: 'review',
-        title: 'Preview',
-        description: 'Confirm selections before starting',
-        status: 'optional'
+        status: step5HasErrors ? 'attention' : step5Complete ? 'complete' : 'incomplete'
       }
     ],
-    [isStep1Complete, isStep2Complete, isStep3Complete, reviewedAndReady]
+    [
+      isStep1Complete,
+      isStep2Complete,
+      isStep3Complete,
+      step4Complete,
+      step1HasErrors,
+      step2HasErrors,
+      step3HasErrors,
+      step5HasErrors,
+      step5Complete
+    ]
   )
 
   const scrollToSection = useCallback((id: string) => {
@@ -967,8 +1018,7 @@ export default function MigrationFormDrawer({
       'select-vms': section2Ref,
       'map-resources': section3Ref,
       security: section4Ref,
-      options: section5Ref,
-      review: reviewRef
+      options: section5Ref
     }
 
     const el = map[id]?.current
@@ -993,8 +1043,7 @@ export default function MigrationFormDrawer({
         section2Ref.current,
         section3Ref.current,
         section4Ref.current,
-        section5Ref.current,
-        reviewRef.current
+        section5Ref.current
       ].filter(Boolean) as HTMLDivElement[]
 
       if (!root || nodes.length === 0) {
@@ -1007,8 +1056,7 @@ export default function MigrationFormDrawer({
         [section2Ref.current as HTMLDivElement, 'select-vms'],
         [section3Ref.current as HTMLDivElement, 'map-resources'],
         [section4Ref.current as HTMLDivElement, 'security'],
-        [section5Ref.current as HTMLDivElement, 'options'],
-        [reviewRef.current as HTMLDivElement, 'review']
+        [section5Ref.current as HTMLDivElement, 'options']
       ])
 
       observer = new IntersectionObserver(
@@ -1232,7 +1280,14 @@ export default function MigrationFormDrawer({
             <Divider />
 
             {/* Step 5 */}
-            <Box ref={section5Ref} data-testid="migration-form-step-options">
+            <Box
+              ref={section5Ref}
+              data-testid="migration-form-step-options"
+              onChangeCapture={() => markTouched('options')}
+              onInputCapture={() => markTouched('options')}
+              onClickCapture={() => markTouched('options')}
+              onKeyDownCapture={() => markTouched('options')}
+            >
               <SurfaceCard
                 variant="section"
                 title="Migration Options"
