@@ -574,6 +574,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleSourceClusterChange = (value) => {
+    markTouched('sourceDestination')
     setSourceCluster(value)
 
     if (value) {
@@ -586,6 +587,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleDestinationPCDChange = (value) => {
+    markTouched('sourceDestination')
     setDestinationPCD(value)
 
     if (value) {
@@ -831,6 +833,7 @@ export default function RollingMigrationFormDrawer({
   }, [openstackFlavors, vmsWithAssignments])
 
   const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
+    markTouched('mapResources')
     if (key === 'networkMappings') {
       setNetworkMappings(value)
       setNetworkMappingError('')
@@ -1206,6 +1209,34 @@ export default function RollingMigrationFormDrawer({
   const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
+  const [touchedSections, setTouchedSections] = useState({
+    sourceDestination: false,
+    baremetal: false,
+    hosts: false,
+    vms: false,
+    mapResources: false,
+    options: false
+  })
+
+  const markTouched = useCallback(
+    (key: keyof typeof touchedSections) => {
+      setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+    },
+    [setTouchedSections]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setTouchedSections({
+      sourceDestination: false,
+      baremetal: false,
+      hosts: false,
+      vms: false,
+      mapResources: false,
+      options: false
+    })
+  }, [open])
+
   const contentRootRef = React.useRef<HTMLDivElement | null>(null)
   const section1Ref = React.useRef<HTMLDivElement | null>(null)
   const section2Ref = React.useRef<HTMLDivElement | null>(null)
@@ -1213,7 +1244,6 @@ export default function RollingMigrationFormDrawer({
   const section4Ref = React.useRef<HTMLDivElement | null>(null)
   const section5Ref = React.useRef<HTMLDivElement | null>(null)
   const section6Ref = React.useRef<HTMLDivElement | null>(null)
-  const section7Ref = React.useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -1232,8 +1262,7 @@ export default function RollingMigrationFormDrawer({
         section3Ref.current,
         section4Ref.current,
         section5Ref.current,
-        section6Ref.current,
-        section7Ref.current
+        section6Ref.current
       ].filter(Boolean) as HTMLDivElement[]
 
       if (!root || nodes.length === 0) {
@@ -1247,8 +1276,7 @@ export default function RollingMigrationFormDrawer({
         [section3Ref.current as HTMLDivElement, 'hosts'],
         [section4Ref.current as HTMLDivElement, 'vms'],
         [section5Ref.current as HTMLDivElement, 'map-resources'],
-        [section6Ref.current as HTMLDivElement, 'options'],
-        [section7Ref.current as HTMLDivElement, 'preview']
+        [section6Ref.current as HTMLDivElement, 'options']
       ])
 
       observer = new IntersectionObserver(
@@ -1279,61 +1307,77 @@ export default function RollingMigrationFormDrawer({
     }
   }, [open])
 
+  const step1HasErrors = Boolean(!sourceCluster || !destinationPCD)
+
+  const step2HasErrors = Boolean(!selectedMaasConfig)
+
+  const step3HasErrors = Boolean(esxHostConfigValidation.hasError)
+
+  const step4HasErrors = Boolean(vmIpValidation.hasError || osValidation.hasError)
+
+  const step5HasErrors = Boolean(networkMappingError || storageMappingError)
+
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
       {
         id: 'source-destination',
         title: 'Source And Destination',
         description: 'Pick clusters',
-        status: sourceCluster && destinationPCD ? 'complete' : 'attention'
+        status: step1HasErrors
+          ? 'attention'
+          : touchedSections.sourceDestination && sourceCluster && destinationPCD
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'baremetal',
         title: 'Bare Metal Config',
         description: 'Verify configuration',
-        status: selectedMaasConfig ? 'complete' : 'attention'
+        status: step2HasErrors
+          ? 'attention'
+          : touchedSections.baremetal && selectedMaasConfig
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'hosts',
         title: 'ESXi Hosts',
         description: 'Assign host configs',
-        status:
-          orderedESXHosts.length > 0 && !esxHostConfigValidation.hasError ? 'complete' : 'attention'
+        status: step3HasErrors
+          ? 'attention'
+          : touchedSections.hosts && orderedESXHosts.length > 0
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'vms',
         title: 'Select VMs',
         description: 'Choose VMs and required fields',
-        status:
-          selectedVMs.length > 0 && !vmIpValidation.hasError && !osValidation.hasError
+        status: step4HasErrors
+          ? 'attention'
+          : touchedSections.vms && selectedVMs.length > 0
             ? 'complete'
-            : 'attention'
+            : 'incomplete'
       },
       {
         id: 'map-resources',
         title: 'Map Networks And Storage',
         description: 'Map VMware resources to PCD',
-        status:
-          sourceCluster &&
-          destinationPCD &&
-          !networkMappingError &&
-          !storageMappingError &&
-          availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
-          availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+        status: step5HasErrors
+          ? 'attention'
+          : touchedSections.mapResources &&
+              sourceCluster &&
+              destinationPCD &&
+              availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
+              availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
             ? 'complete'
-            : 'attention'
+            : 'incomplete'
       },
       {
         id: 'options',
         title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: 'optional'
-      },
-      {
-        id: 'preview',
-        title: 'Preview',
-        description: 'Verify selections before starting',
-        status: 'optional'
+        status: touchedSections.options ? 'complete' : 'incomplete'
       }
     ],
     [
@@ -1350,7 +1394,13 @@ export default function RollingMigrationFormDrawer({
       availableVmwareNetworks,
       availableVmwareDatastores,
       networkMappings,
-      storageMappings
+      storageMappings,
+      step1HasErrors,
+      step2HasErrors,
+      step3HasErrors,
+      step4HasErrors,
+      step5HasErrors,
+      touchedSections
     ]
   )
 
@@ -1361,8 +1411,7 @@ export default function RollingMigrationFormDrawer({
       hosts: section3Ref,
       vms: section4Ref,
       'map-resources': section5Ref,
-      options: section6Ref,
-      preview: section7Ref
+      options: section6Ref
     }
 
     const el = map[id]?.current
@@ -1370,6 +1419,22 @@ export default function RollingMigrationFormDrawer({
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setActiveSectionId(id)
   }, [])
+
+  const onOptionsChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (getParamsUpdater as any)(key)(value)
+    },
+    [getParamsUpdater, markTouched]
+  )
+
+  const onOptionsSelectionChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (updateSelectedMigrationOptions as any)(key)(value)
+    },
+    [markTouched, updateSelectedMigrationOptions]
+  )
 
   const uniqueVmwareNetworks = useMemo(() => {
     return Array.from(new Set(availableVmwareNetworks))
@@ -1385,6 +1450,7 @@ export default function RollingMigrationFormDrawer({
   }, [availableVmwareDatastores, storageMappings])
 
   const handleViewMaasConfig = () => {
+    markTouched('baremetal')
     setMaasDetailsModalOpen(true)
   }
 
@@ -1410,6 +1476,8 @@ export default function RollingMigrationFormDrawer({
       handleClosePcdHostConfigDialog()
       return
     }
+
+    markTouched('hosts')
 
     setUpdatingPcdMapping(true)
 
@@ -2152,6 +2220,7 @@ export default function RollingMigrationFormDrawer({
 
   const handleIndividualHostConfigChange = async (hostId: string, configName: string) => {
     try {
+      markTouched('hosts')
       // Update the ESX host with the selected host config
       const updatedESXHosts = orderedESXHosts.map((host) => {
         if (host.id === hostId) {
@@ -2539,6 +2608,7 @@ export default function RollingMigrationFormDrawer({
                     rowHeight={52}
                     checkboxSelection
                     onRowSelectionModelChange={(selectedRowIds) => {
+                      markTouched('vms')
                       setSelectedVMs(selectedRowIds)
                     }}
                     rowSelectionModel={selectedVMs.filter((vmId) =>
@@ -2646,9 +2716,9 @@ export default function RollingMigrationFormDrawer({
                 <MigrationOptions
                   stepNumber="6"
                   params={params}
-                  onChange={getParamsUpdater}
+                  onChange={onOptionsChange}
                   selectedMigrationOptions={selectedMigrationOptions}
-                  updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                  updateSelectedMigrationOptions={onOptionsSelectionChange}
                   errors={fieldErrors}
                   getErrorsUpdater={getFieldErrorsUpdater}
                   showHeader={false}
@@ -2658,7 +2728,7 @@ export default function RollingMigrationFormDrawer({
 
             <Divider />
 
-            <Box ref={section7Ref} data-testid="rolling-migration-form-step-preview">
+            <Box data-testid="rolling-migration-form-step-preview">
               <SurfaceCard
                 variant="section"
                 title="Preview"
