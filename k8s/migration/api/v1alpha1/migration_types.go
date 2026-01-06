@@ -82,6 +82,22 @@ type MigrationSpec struct {
 	// AssignedIP is the comma-separated list of user-assigned IPs for cold migration
 	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
 	AssignedIP string `json:"assignedIP,omitempty"`
+
+	// MigrationType indicates whether this is a hot (live) or cold migration
+	// This is set at migration creation time from the MigrationPlan strategy
+	// +optional
+	// +kubebuilder:validation:Enum=hot;cold
+	MigrationType string `json:"migrationType,omitempty"`
+
+	// Region is the OpenStack region name where the VM is being migrated
+	// This is set at migration creation time from the OpenStack credentials
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Tenant is the OpenStack tenant/project name where the VM is being migrated
+	// This is set at migration creation time from the OpenStack credentials
+	// +optional
+	Tenant string `json:"tenant,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
@@ -94,6 +110,11 @@ type MigrationStatus struct {
 
 	// AgentName is the name of the agent where migration is running
 	AgentName string `json:"agentName,omitempty"`
+
+	// CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+	// Extracted from migration pod events
+	// +optional
+	CurrentDisk string `json:"currentDisk,omitempty"`
 }
 
 // +kubebuilder:object:root=true

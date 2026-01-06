@@ -1,8 +1,9 @@
 import { GridColDef, GridRowSelectionModel, GridToolbarContainer } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Stack } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useState, useMemo } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
@@ -17,6 +18,19 @@ import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
+import { keyframes } from '@mui/material/styles'
+
+const pulse = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+`
 
 const STATUS_ORDER = {
   Running: 0,
@@ -49,7 +63,11 @@ const IN_PROGRESS_PHASES = [
   Phase.AwaitingAdminCutOver
 ]
 
-const getProgressText = (phase: Phase | undefined, conditions: Condition[] | undefined) => {
+const getProgressText = (
+  phase: Phase | undefined,
+  conditions: Condition[] | undefined,
+  currentDisk?: string
+) => {
   if (!phase || phase === Phase.Unknown) {
     return 'Unknown Status'
   }
@@ -67,7 +85,14 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
     return `${phase} - ${message}`
   }
 
-  return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
+  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
+  
+  // Add disk info if available during copy phases
+  if (currentDisk && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
+    progressText += ` (disk ${currentDisk})`
+  }
+
+  return progressText
 }
 
 const columns: GridColDef[] = [
@@ -75,7 +100,48 @@ const columns: GridColDef[] = [
     field: 'name',
     headerName: 'Name',
     valueGetter: (_, row) => row.spec?.vmName,
-    flex: 0.7
+    flex: 0.7,
+    renderCell: (params) => {
+      const vmName = params.row?.spec?.vmName
+      const migrationType = params.row?.spec?.migrationType
+      const region = params.row?.spec?.region
+      const tenant = params.row?.spec?.tenant
+      const isLiveMigration = migrationType?.toLowerCase() === 'hot'
+      
+      // Build destination info
+      const destination = [region, tenant].filter(Boolean).join('/')
+      
+      return (
+        <Stack direction="column" spacing={0.25}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {isLiveMigration && (
+              <Tooltip title="Live Migration">
+                <FiberManualRecordIcon 
+                  sx={{ 
+                    fontSize: 12, 
+                    color: '#4caf50',
+                    animation: `${pulse} 2s ease-in-out infinite`
+                  }} 
+                />
+              </Tooltip>
+            )}
+            <Typography variant="body2">{vmName}</Typography>
+          </Box>
+          {destination && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                color: 'text.secondary',
+                fontSize: '0.75rem',
+                lineHeight: 1.2
+              }}
+            >
+              → {destination}
+            </Typography>
+          )}
+        </Stack>
+      )
+    }
   },
   {
     field: 'status',
@@ -114,13 +180,18 @@ const columns: GridColDef[] = [
   {
     field: 'status.conditions',
     headerName: 'Progress',
-    valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+    valueGetter: (_, row) => 
+      getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk),
     flex: 2,
     renderCell: (params) => {
       const phase = params.row?.status?.phase
       const conditions = params.row?.status?.conditions
+      const currentDisk = params.row?.status?.currentDisk
       return conditions ? (
-        <MigrationProgress phase={phase} progressText={getProgressText(phase, conditions)} />
+        <MigrationProgress 
+          phase={phase} 
+          progressText={getProgressText(phase, conditions, currentDisk)} 
+        />
       ) : null
     }
   },
