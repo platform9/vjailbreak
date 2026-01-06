@@ -51,6 +51,10 @@ parse_address_pair() {
     if echo "$1" | grep -qE '^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$'; then
         FOUND_MAC=$(echo "$1" | sed -nE 's/^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:.*$/\1/p')
         FOUND_IP=$(echo "$1" | sed -nE 's/^.*:ip:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*$/\1/p')
+    elif echo "$1" | grep -qE '^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:$'; then
+        # Handle MAC:ip: (empty IP) case
+        FOUND_MAC=$(echo "$1" | sed -nE 's/^([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}):ip:.*$/\1/p')
+        FOUND_IP=""
     fi
 }
 
@@ -96,8 +100,13 @@ process_ifcfg_infrastructure() {
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
-            display_msg "Skipping malformed mapping entry: $line_entry"
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -147,7 +156,13 @@ process_network_manager_files() {
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -200,7 +215,13 @@ process_nm_leases() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -246,7 +267,13 @@ process_dhclient_history() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -356,7 +383,13 @@ process_netplan_logic() {
     while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
@@ -443,7 +476,13 @@ process_ifquery_infrastructure() {
     cat "$NET_MAPPING_DATA" | while read -r line_entry; do
         parse_address_pair "$line_entry"
 
-        if [[ -z "$FOUND_MAC" || -z "$FOUND_IP" ]]; then
+        if [[ -z "$FOUND_MAC" ]]; then
+            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+            continue
+        fi
+        
+        if [[ -z "$FOUND_IP" ]]; then
+            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
             continue
         fi
 
