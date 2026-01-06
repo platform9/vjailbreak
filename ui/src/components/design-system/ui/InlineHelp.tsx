@@ -1,6 +1,7 @@
-import { Box, Typography, BoxProps, Theme } from '@mui/material'
+import { Box, IconButton, Typography, BoxProps, Theme, useTheme } from '@mui/material'
 import {
   CheckCircleOutline,
+  Close,
   ErrorOutline,
   InfoOutlined,
   WarningAmberOutlined
@@ -19,28 +20,46 @@ export interface InlineHelpProps extends BoxProps {
 
   variant?: InlineHelpVariant
   icon?: InlineHelpIcon | ReactElement
+
+  onClose?: () => void
+  closeAriaLabel?: string
 }
 
 const getToneStyles = (tone: InlineHelpTone, variant: InlineHelpVariant, theme: Theme) => {
   switch (tone) {
-    case 'positive':
+    case 'positive': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.success.light
       return {
-        color: variant === 'outline' ? theme.palette.success.main : theme.palette.common.white,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.success.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.success.main
+            : theme.palette.getContrastText(theme.palette.success.light),
+        backgroundColor,
         borderColor: theme.palette.success.main
       }
-    case 'critical':
+    }
+    case 'critical': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.error.light
       return {
-        color: theme.palette.error.main,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.error.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.error.main
+            : theme.palette.getContrastText(theme.palette.error.light),
+        backgroundColor,
         borderColor: theme.palette.error.main
       }
-    case 'warning':
+    }
+    case 'warning': {
+      const backgroundColor = variant === 'outline' ? 'transparent' : theme.palette.warning.light
       return {
-        color: variant === 'outline' ? theme.palette.warning.main : theme.palette.common.white,
-        backgroundColor: variant === 'outline' ? 'transparent' : theme.palette.warning.light,
+        color:
+          variant === 'outline'
+            ? theme.palette.warning.main
+            : theme.palette.getContrastText(theme.palette.warning.light),
+        backgroundColor,
         borderColor: theme.palette.warning.main
       }
+    }
     default:
       return {
         color: theme.palette.text.secondary,
@@ -82,36 +101,57 @@ const getIconNode = (icon: InlineHelpIcon, tone: InlineHelpTone) => {
 }
 
 const InlineHelp = forwardRef<HTMLDivElement, InlineHelpProps>(function InlineHelp(
-  { children, tone = 'default', variant = 'contained', icon = 'none', ...rest },
+  {
+    children,
+    tone = 'default',
+    variant = 'outline',
+    icon = 'none',
+    onClose,
+    closeAriaLabel = 'Close',
+    sx,
+    ...rest
+  },
   ref
 ) {
+  const theme = useTheme()
   const iconNode = typeof icon === 'string' ? getIconNode(icon, tone) : icon
+  const hasLeadingIcon = Boolean(iconNode)
+
+  const baseSx = {
+    p: 1,
+    borderRadius: 1,
+    border: 1,
+    fontSize: '0.875rem',
+    ...getToneStyles(tone, variant, theme),
+    display: 'flex',
+    gap: 1,
+    alignItems: 'center'
+  }
+
+  const mergedSx = Array.isArray(sx) ? [baseSx, ...sx] : [baseSx, sx]
 
   return (
-    <Box
-      ref={ref}
-      sx={(theme) => ({
-        p: 1.5,
-        borderRadius: 1,
-        border: 1,
-        fontSize: '0.875rem',
-        ...getToneStyles(tone, variant, theme),
-        ...(iconNode
-          ? {
-              display: 'flex',
-              gap: 1,
-              alignItems: 'center'
-            }
-          : null)
-      })}
-      {...rest}
-    >
-      {iconNode ? (
-        <Box sx={{ fontSize: 18, lineHeight: 1, flexShrink: 0, display: 'flex' }}>{iconNode}</Box>
+    <Box ref={ref} sx={mergedSx} {...rest}>
+      {hasLeadingIcon ? (
+        <Box sx={{ fontSize: 18, lineHeight: 1, flexShrink: 0, display: 'flex', mt: '2px' }}>
+          {iconNode}
+        </Box>
       ) : null}
-      <Typography variant="body2" component="div">
-        {children}
-      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" component="div">
+          {children}
+        </Typography>
+      </Box>
+      {onClose ? (
+        <IconButton
+          aria-label={closeAriaLabel}
+          size="small"
+          onClick={onClose}
+          sx={{ mt: '-2px', mr: '-4px' }}
+        >
+          <Close fontSize="small" />
+        </IconButton>
+      ) : null}
     </Box>
   )
 })

@@ -17,12 +17,13 @@ import (
 	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
 	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 
 	// Import for side effects - registers the base provider implementation
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
@@ -186,6 +187,12 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	cloudInit := string(secret.Data[constants.CloudInitConfigKey])
 	cloudInit = strings.ReplaceAll(cloudInit, "HOST_ID", hostID)
 
+	// Get vjailbreak settings to check if automatic PXE boot is enabled
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
 	// Create ReclaimBM request
 	reclaimRequest := service.ReclaimBMRequest{
 		AccessInfo: &service.BMProvisionerAccessInfo{
@@ -193,9 +200,10 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 			ApiKey:      bmConfig.Spec.APIKey,
 			UseInsecure: bmConfig.Spec.Insecure,
 		},
-		UserData:   cloudInit,
-		ResourceId: resourceID,
-		PowerCycle: true,
+		UserData:           cloudInit,
+		ResourceId:         resourceID,
+		PowerCycle:         true,
+		ManualPowerControl: !vjailbreakSettings.AutoPXEBootOnConversion,
 		BootSource: &service.BootsourceSelections{
 			Release: bmConfig.Spec.BootSource.Release,
 		},

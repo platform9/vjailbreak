@@ -87,6 +87,9 @@ const (
 	// PauseMigrationLabel is the label for pausing rolling migration plan
 	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
+	// PauseMigrationValue is the value for pausing migration
+	PauseMigrationValue = "true"
+
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
 
@@ -128,6 +131,9 @@ const (
 
 	// VjailbreakNodePhaseNodeReady is the phase for node ready
 	VjailbreakNodePhaseNodeReady = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
+
+	// VjailbreakNodePhaseError is the phase for node in error state
+	VjailbreakNodePhaseError = vjailbreakv1alpha1.VjailbreakNodePhase("Error")
 
 	// NamespaceMigrationSystem is the namespace for migration system
 	NamespaceMigrationSystem = "migration-system"
@@ -233,13 +239,16 @@ const (
 	// ConfigMap settings keys
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionDefault = false
+	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
 	K3sCloudInitScript = `#cloud-config
-password: %s
-chpasswd: { expire: False }
 write_files:
 - path: %s
   content: |
@@ -267,15 +276,16 @@ runcmd:
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
 		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
 		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:         2,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   3,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    4,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  5,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     6,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           7,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 8,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     9,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                10,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  11,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

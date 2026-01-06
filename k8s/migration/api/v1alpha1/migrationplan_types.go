@@ -58,6 +58,8 @@ type AdvancedOptions struct {
 	PeriodicSyncInterval string `json:"periodicSyncInterval,omitempty"`
 	// PeriodicSyncEnabled is a boolean to enable periodic sync
 	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
+	// NetworkPersistence instructs the migration helper to persist the source networking configuration
+	NetworkPersistence bool `json:"networkPersistence,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine

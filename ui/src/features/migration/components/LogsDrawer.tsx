@@ -24,7 +24,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Clear'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import ReplayIcon from '@mui/icons-material/Replay'
-import { DrawerShell, DrawerHeader, DrawerBody } from 'src/components'
+import { DrawerShell, DrawerHeader } from 'src/components'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
 import LogLine from './LogLine'
@@ -195,19 +195,36 @@ export default function LogsDrawer({
     )
   }, [filteredLogs])
 
+  const vmDisplayName = useMemo(() => {
+    const fromMigration = (() => {
+      if (!migrationName) return null
+      const withoutPrefix = migrationName.replace(/^migration-/, '')
+      const withoutSuffix = withoutPrefix.replace(/-[0-9a-f]{5}$/i, '')
+      return withoutSuffix || null
+    })()
+
+    if (fromMigration) return fromMigration
+
+    if (!podName) return null
+    const withoutPrefix = podName.replace(/^v2v-helper-/, '')
+    const parts = withoutPrefix.split('-')
+    if (parts.length >= 4) {
+      return parts.slice(0, -3).join('-') || withoutPrefix
+    }
+    if (parts.length >= 3) {
+      return parts.slice(0, -2).join('-') || withoutPrefix
+    }
+    return withoutPrefix
+  }, [migrationName, podName])
+
   const headerTitle = logSource === 'pod' ? 'Migration Pod Logs' : 'Controller Logs'
-  const headerSubtitleBase =
-    logSource === 'pod'
-      ? `${podName} (${namespace})`
-      : 'migration-controller-manager (migration-system)'
-  const headerSubtitle = migrationName
-    ? `${headerSubtitleBase} • Migration: ${migrationName}`
-    : headerSubtitleBase
+  const headerSubtitle = vmDisplayName || ''
 
   return (
     <DrawerShell
       open={open}
       onClose={handleClose}
+      requireCloseConfirmation={false}
       header={
         <DrawerHeader
           title={headerTitle}
@@ -217,8 +234,21 @@ export default function LogsDrawer({
         />
       }
     >
-      <DrawerBody data-testid="logs-drawer-body">
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box
+        data-testid="logs-drawer-body"
+        sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      >
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 2,
+            backgroundColor: (t) => t.palette.background.paper,
+            pt: 1,
+            mx: -4,
+            px: 4
+          }}
+        >
           {/* Log Source Toggle */}
           <Box
             sx={{
@@ -285,6 +315,7 @@ export default function LogsDrawer({
                   label="Follow"
                 />
               </Box>
+
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Tooltip title={`Filter by level: ${logLevelFilter}`}>
                   <IconButton
@@ -297,6 +328,7 @@ export default function LogsDrawer({
                     </Badge>
                   </IconButton>
                 </Tooltip>
+
                 <Menu
                   anchorEl={filterMenuAnchor}
                   open={Boolean(filterMenuAnchor)}
@@ -374,6 +406,7 @@ export default function LogsDrawer({
                     SUCCESS
                   </MenuItem>
                 </Menu>
+
                 <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
                   <IconButton
                     onClick={handleCopyLogs}
@@ -384,6 +417,7 @@ export default function LogsDrawer({
                     <ContentCopyIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
+
                 <Chip
                   label={`${filteredLogs.length} / ${currentLogs.length} lines`}
                   size="small"
@@ -417,6 +451,7 @@ export default function LogsDrawer({
               ON to resume streaming.
             </Alert>
           )}
+        </Box>
 
           {/* Loading State */}
           {(currentIsLoading || isTransitioning) && (
@@ -529,8 +564,7 @@ export default function LogsDrawer({
               </Box>
             </Paper>
           )}
-        </Box>
-      </DrawerBody>
+      </Box>
     </DrawerShell>
   )
 }

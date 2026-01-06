@@ -64,12 +64,27 @@ export const calculateTimeElapsed = (creationTimestamp: string, status?: any): s
     let endTime = new Date() // Default to current time for running migrations
 
     // For completed migrations, use the completion time
-    if (status?.phase === 'Succeeded' || status?.phase === 'Failed') {
+    if (status?.phase === 'Succeeded' || status?.phase === 'Failed' || status?.phase === 'ValidationFailed') {
       // For succeeded migrations, look for the Migrated condition type
       // For failed migrations, look for the Failed condition type
-      const targetConditionType = status.phase === 'Succeeded' ? 'Migrated' : 'Failed'
+      // For validation failed migrations, look for the Validated condition type with VMValidationFailed reason
+      let targetConditionType: string
+      let targetReason: string
+
+      if (status.phase === 'Succeeded') {
+        targetConditionType = 'Migrated'
+        targetReason = 'Migration'
+      } else if (status.phase === 'Failed') {
+        targetConditionType = 'Failed'
+        targetReason = 'Migration'
+      } else {
+        // ValidationFailed
+        targetConditionType = 'Validated'
+        targetReason = 'VMValidationFailed'
+      }
+
       const completionCondition = status.conditions?.find(
-        (condition) => condition.type === targetConditionType && condition.reason === 'Migration'
+        (condition) => condition.type === targetConditionType && condition.reason === targetReason
       )
 
       if (completionCondition?.lastTransitionTime) {
