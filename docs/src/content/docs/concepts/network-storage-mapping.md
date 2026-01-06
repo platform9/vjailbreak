@@ -10,6 +10,10 @@ A large scale VMWare migration may require a large number of VMs to be migrated.
 vJailbreak recognizes the different types of networks in VMware and OpenStack/PCD environments.
 We recommend to create the OpenStack/PCD networks in advance such that some multi-VM applications can continue to run while the migration is in progress.
 
+:::note
+If you enable **Persist source network interfaces**, network persistence may not work for cross network migration and will be blocked in such cases. Read more in [Migration Options](../migration-options/#persist-source-network-interfaces).
+:::
+
 ### VMware Network Types
 For VMware environment, the networks are typically of type  `vSphere Standard Port Group` or `vSphere Distributed Port Group`. Currently, vJailbreak supports only these two types of networks and not `NSX` created networks.
 

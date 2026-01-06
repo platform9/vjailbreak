@@ -6,6 +6,13 @@ description: prerequisites for vJailbreak
 ### Are IPs and MAC addresses persisted?
 Yes, if your OpenStack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
 
+### Are network interface names persisted?
+Yes, vJailbreak can preserve network interface names during migration.
+
+To enable this behavior, select **Persist source network interfaces** in the migration form under **Migration Options**.
+
+Read more in [Migration Options](../../concepts/migration-options/#persist-source-network-interfaces).
+
 ### What OS versions are supported?
 We internally use virt-v2v, so all operating systems supported for conversion by virt-v2v are supported by vJailbreak. You can find a detailed list of them [here](https://libguestfs.org/virt-v2v-support.1.html#guests).
 
