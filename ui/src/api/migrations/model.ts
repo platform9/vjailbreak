@@ -89,6 +89,7 @@ export interface StatusClass {
   phase: Phase
   agentName?: string
   currentDisk?: string
+  totalDisks?: number
 }
 
 export interface Condition {

@@ -773,6 +773,10 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 				Tenant:                  tenant,
 			},
+			Status: vjailbreakv1alpha1.MigrationStatus{
+				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
+				TotalDisks: len(vminfo.Disks),
+			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
 		err = r.createResource(ctx, migrationplan, migrationobj)
