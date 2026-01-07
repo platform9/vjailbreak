@@ -312,7 +312,7 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	}
 
 	// Construct YAML
-	log.Println("Created macToIP file with entries")
+	log.Println("Created macToIP file for os type: ", ostype)
 	filePath := ""
 	switch ostype {
 	case constants.OSFamilyWindows:

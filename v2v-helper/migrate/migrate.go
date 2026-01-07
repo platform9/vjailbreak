@@ -1094,7 +1094,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if osType == constants.OSFamilyWindows {
 		persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 		if persisNetwork {
-			if err := virtv2v.InjectMacToIps(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac, vminfo.OSType); err != nil {
+			if err := virtv2v.InjectMacToIps(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac, osType); err != nil {
 				return errors.Wrap(err, "failed to inject mac to ips")
 			}
 			utils.PrintLog("Mac to ips injection completed successfully")
