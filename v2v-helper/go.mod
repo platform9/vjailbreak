@@ -9,6 +9,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
+	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000

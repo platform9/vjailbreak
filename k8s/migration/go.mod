@@ -15,6 +15,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
+	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
@@ -115,6 +116,6 @@ require (
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
-replace github.com/platform9/vjailbreak/pkg/validation => ../../pkg/validation
+replace github.com/platform9/vjailbreak/common/validation => ../../common/validation
 
-replace github.com/platform9/vjailbreak/pkg/openstack => ../../pkg/openstack
+replace github.com/platform9/vjailbreak/common/openstack => ../../common/openstack
