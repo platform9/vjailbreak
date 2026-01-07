@@ -13,6 +13,7 @@ export interface NavigationItem {
   disabled?: boolean
   hidden?: boolean
   external?: boolean
+  externalUrl?: string
   separator?: boolean
   children?: NavigationItem[]
 }

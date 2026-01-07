@@ -4,7 +4,8 @@ import AgentsIcon from '@mui/icons-material/Computer'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
-import MonitoringIcon from '@mui/icons-material/Analytics'
+import MonitoringIcon from '@mui/icons-material/Insights';
+import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
@@ -50,6 +51,14 @@ export const navigationItems: NavigationItem[] = [
     path: '/grafana',
     icon: <MonitoringIcon />,
     external: true
+  },
+  {
+    id: 'docs',
+    label: 'Docs',
+    path: '/docs',
+    icon: <DescriptionIcon />,
+    external: true,
+    externalUrl: 'https://platform9.github.io/vjailbreak/introduction/getting_started/'
   }
 ]
 
