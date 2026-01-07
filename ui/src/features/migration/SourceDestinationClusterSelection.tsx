@@ -92,9 +92,13 @@ export default function SourceDestinationClusterSelection({
   // Filter PCD data based on search term
   const filteredPcdData = React.useMemo(() => {
     if (!pcdSearchTerm) return pcdData
-    return pcdData.filter((pcd) =>
-      pcd.tenantName.toLowerCase().includes(pcdSearchTerm.toLowerCase())
-    )
+    const term = pcdSearchTerm.toLowerCase().trim()
+    return pcdData.filter((pcd) => {
+      const clusterName = (pcd.name || '').toLowerCase()
+      const credName = (pcd.openstackCredName || '').toLowerCase()
+      const tenantName = (pcd.tenantName || '').toLowerCase()
+      return clusterName.includes(term) || credName.includes(term) || tenantName.includes(term)
+    })
   }, [pcdData, pcdSearchTerm])
 
   // Use external loading states if provided, otherwise use hook loading states
@@ -423,7 +427,7 @@ export default function SourceDestinationClusterSelection({
               >
                 <TextField
                   size="small"
-                  placeholder="Search by tenant name"
+                  placeholder="Search by cluster, credential, or tenant"
                   fullWidth
                   value={pcdSearchTerm}
                   onChange={(e) => {
