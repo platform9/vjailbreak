@@ -54,7 +54,7 @@ export const navigationItems: NavigationItem[] = [
   },
   {
     id: 'docs',
-    label: 'Docs',
+    label: 'Documentation',
     path: '/docs',
     icon: <DescriptionIcon />,
     external: true,
