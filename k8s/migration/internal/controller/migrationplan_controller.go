@@ -735,12 +735,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
-	// Get region and tenant from OpenStack credentials
-	region, tenant, err := r.GetRegionAndTenantFromCredentials(ctx, migrationplan)
+	// Get tenant from OpenStack credentials
+	tenant, err := r.GetTenantFromCredentials(ctx, migrationplan)
 	if err != nil {
-		ctxlog.Error(err, "Failed to get region and tenant from credentials")
-		// Continue with empty values instead of failing
-		region = ""
+		ctxlog.Error(err, "Failed to get tenant from credentials")
+		// Continue with empty value instead of failing
 		tenant = ""
 	}
 
@@ -772,7 +771,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
-				Region:                  region,
 				Tenant:                  tenant,
 			},
 		}
@@ -785,15 +783,15 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
-// GetRegionAndTenantFromCredentials fetches region and tenant from OpenStack credentials secret
-func (r *MigrationPlanReconciler) GetRegionAndTenantFromCredentials(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (region, tenant string, err error) {
+// GetTenantFromCredentials fetches tenant from OpenStack credentials secret
+func (r *MigrationPlanReconciler) GetTenantFromCredentials(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (tenant string, err error) {
 	// Get the migration template
 	migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      migrationplan.Spec.MigrationTemplate,
 		Namespace: migrationplan.Namespace,
 	}, migrationTemplate); err != nil {
-		return "", "", errors.Wrap(err, "failed to get migration template")
+		return "", errors.Wrap(err, "failed to get migration template")
 	}
 
 	// Get the OpenStack credentials reference
@@ -806,18 +804,15 @@ func (r *MigrationPlanReconciler) GetRegionAndTenantFromCredentials(ctx context.
 		Name:      secretName,
 		Namespace: migrationplan.Namespace,
 	}, secret); err != nil {
-		return "", "", errors.Wrap(err, "failed to get openstack secret")
+		return "", errors.Wrap(err, "failed to get openstack secret")
 	}
 
-	// Extract region and tenant from secret data (base64 encoded)
-	if regionBytes, ok := secret.Data["OS_REGION_NAME"]; ok {
-		region = string(regionBytes)
-	}
+	// Extract tenant from secret data (base64 encoded)
 	if tenantBytes, ok := secret.Data["OS_TENANT_NAME"]; ok {
 		tenant = string(tenantBytes)
 	}
 
-	return region, tenant, nil
+	return tenant, nil
 }
 
 // CreateJob creates a job to run v2v-helper

@@ -67,7 +67,6 @@ export interface Spec {
   initiateCutover?: boolean
   disconnectSourceNetwork?: boolean
   assignedIP?: string
-  region?: string
   tenant?: string
 }
 
