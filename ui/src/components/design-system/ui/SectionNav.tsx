@@ -40,27 +40,24 @@ const getStatusChipSx = (status: Status) => {
   switch (status) {
     case 'complete':
       return {
-        borderColor: (theme: Theme) => theme.palette.success.main,
         backgroundColor: (theme: Theme) => theme.palette.success.light,
         color: (theme: Theme) => theme.palette.success.contrastText
       }
     case 'attention':
       return {
-        borderColor: (theme: Theme) => theme.palette.error.main,
         backgroundColor: (theme: Theme) => theme.palette.error.light,
         color: (theme: Theme) => theme.palette.error.contrastText
       }
     case 'optional':
       return {
-        borderColor: (theme: Theme) => theme.palette.grey[400],
-        backgroundColor: (theme: Theme) => theme.palette.grey[200],
-        color: (theme: Theme) => theme.palette.grey[800]
+        backgroundColor: (theme: Theme) =>
+          alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+        color: (theme: Theme) => theme.palette.text.primary
       }
     default:
       return {
-        borderColor: (theme: Theme) => theme.palette.grey[400],
-        backgroundColor: (theme: Theme) => theme.palette.grey[200],
-        color: (theme: Theme) => theme.palette.grey[800]
+        backgroundColor: (theme: Theme) => theme.palette.info.light,
+        color: (theme: Theme) => theme.palette.info.contrastText
       }
   }
 }
@@ -69,8 +66,7 @@ const getSelectedChipSx = (theme: Theme, status: Status) => {
   const c = getSelectedAccent(theme, status)
   return {
     transform: 'scale(1.07)',
-    borderColor: c,
-    boxShadow: `0 0 0 3px ${alpha(c, 0.22)}, 0 8px 18px ${alpha(theme.palette.common.white, 0.18)}`
+    boxShadow: `0 0 0 1px ${alpha(c, 0.22)}, 0 8px 18px ${alpha(theme.palette.common.white, 0.18)}`
   }
 }
 
@@ -174,7 +170,6 @@ export default function SectionNav({
                       width: chipSize,
                       height: chipSize,
                       borderRadius: 999,
-                      border: '2px solid',
                       display: 'grid',
                       placeItems: 'center',
                       fontVariantNumeric: 'tabular-nums',
@@ -206,7 +201,11 @@ export default function SectionNav({
                     width: 2,
                     height: connectorHeight,
                     borderRadius: 999,
-                    backgroundColor: (theme) => theme.palette.divider,
+                    backgroundColor: (theme) =>
+                      alpha(
+                        theme.palette.text.primary,
+                        theme.palette.mode === 'dark' ? 0.22 : 0.16
+                      ),
                     my: connectorMarginY
                   }}
                 />
