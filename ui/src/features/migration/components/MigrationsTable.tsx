@@ -66,7 +66,8 @@ const IN_PROGRESS_PHASES = [
 const getProgressText = (
   phase: Phase | undefined,
   conditions: Condition[] | undefined,
-  currentDisk?: string
+  currentDisk?: string,
+  totalDisks?: number
 ) => {
   if (!phase || phase === Phase.Unknown) {
     return 'Unknown Status'
@@ -85,12 +86,14 @@ const getProgressText = (
     return `${phase} - ${message}`
   }
 
-  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
-  
+  let diskInfo = ''
   // Add disk info if available during copy phases
-  if (currentDisk && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
-    progressText += ` (disk ${currentDisk})`
+  if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
+    const currentDiskNum = parseInt(currentDisk) + 1 // Convert to 1-based
+    diskInfo = ` (${currentDiskNum}/${totalDisks})`
   }
+
+  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase}${diskInfo} - ${message}`
 
   return progressText
 }
@@ -191,16 +194,17 @@ const columns: GridColDef[] = [
     field: 'status.conditions',
     headerName: 'Progress',
     valueGetter: (_, row) => 
-      getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk),
+      getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk, row.status?.totalDisks),
     flex: 2,
     renderCell: (params) => {
       const phase = params.row?.status?.phase
       const conditions = params.row?.status?.conditions
       const currentDisk = params.row?.status?.currentDisk
+      const totalDisks = params.row?.status?.totalDisks
       return conditions ? (
         <MigrationProgress 
           phase={phase} 
-          progressText={getProgressText(phase, conditions, currentDisk)} 
+          progressText={getProgressText(phase, conditions, currentDisk, totalDisks)} 
         />
       ) : null
     }

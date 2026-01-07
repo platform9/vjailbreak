@@ -110,6 +110,11 @@ type MigrationStatus struct {
 	// Extracted from migration pod events
 	// +optional
 	CurrentDisk string `json:"currentDisk,omitempty"`
+
+	// TotalDisks is the total number of disks to be migrated
+	// Set from VMwareMachine spec.VMInfo.Disks count
+	// +optional
+	TotalDisks int `json:"totalDisks,omitempty"`
 }
 
 // +kubebuilder:object:root=true
