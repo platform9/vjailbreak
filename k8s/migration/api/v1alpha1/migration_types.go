@@ -89,11 +89,6 @@ type MigrationSpec struct {
 	// +kubebuilder:validation:Enum=hot;cold
 	MigrationType string `json:"migrationType,omitempty"`
 
-	// Region is the OpenStack region name where the VM is being migrated
-	// This is set at migration creation time from the OpenStack credentials
-	// +optional
-	Region string `json:"region,omitempty"`
-
 	// Tenant is the OpenStack tenant/project name where the VM is being migrated
 	// This is set at migration creation time from the OpenStack credentials
 	// +optional

@@ -82,11 +82,6 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
-              region:
-                description: |-
-                  Region is the OpenStack region name where the VM is being migrated
-                  This is set at migration creation time from the OpenStack credentials
-                type: string
               tenant:
                 description: |-
                   Tenant is the OpenStack tenant/project name where the VM is being migrated

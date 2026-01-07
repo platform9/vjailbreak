@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel, GridToolbarContainer } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Stack } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
@@ -104,42 +104,52 @@ const columns: GridColDef[] = [
     renderCell: (params) => {
       const vmName = params.row?.spec?.vmName
       const migrationType = params.row?.spec?.migrationType
-      const region = params.row?.spec?.region
-      const tenant = params.row?.spec?.tenant
-      const isLiveMigration = migrationType?.toLowerCase() === 'hot'
+      const phase = params.row?.status?.phase
+      const isHotMigration = migrationType?.toLowerCase() === 'hot'
+      const isColdMigration = migrationType?.toLowerCase() === 'cold'
       
-      // Build destination info
-      const destination = [region, tenant].filter(Boolean).join('/')
+      // Check if migration is in progress (not failed or succeeded)
+      const activePhases = new Set([
+        Phase.Pending,
+        Phase.Validating,
+        Phase.AwaitingDataCopyStart,
+        Phase.CopyingBlocks,
+        Phase.CopyingChangedBlocks,
+        Phase.ConvertingDisk,
+        Phase.AwaitingCutOverStartTime,
+        Phase.AwaitingAdminCutOver,
+        Phase.Unknown
+      ])
+      
+      const isInProgress = activePhases.has(phase)
+      const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
       
       return (
-        <Stack direction="column" spacing={0.25}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {isLiveMigration && (
-              <Tooltip title="Live Migration">
-                <FiberManualRecordIcon 
-                  sx={{ 
-                    fontSize: 12, 
-                    color: '#4caf50',
-                    animation: `${pulse} 2s ease-in-out infinite`
-                  }} 
-                />
-              </Tooltip>
-            )}
-            <Typography variant="body2">{vmName}</Typography>
-          </Box>
-          {destination && (
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: 'text.secondary',
-                fontSize: '0.75rem',
-                lineHeight: 1.2
-              }}
-            >
-              → {destination}
-            </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isHotMigration && (
+            <Tooltip title="Hot Migration">
+              <FiberManualRecordIcon 
+                sx={{ 
+                  fontSize: 12, 
+                  color: '#FFAE42',
+                  ...(isInProgress && { animation: syncedPulse })
+                }} 
+              />
+            </Tooltip>
           )}
-        </Stack>
+          {isColdMigration && (
+            <Tooltip title="Cold Migration">
+              <FiberManualRecordIcon 
+                sx={{ 
+                  fontSize: 12, 
+                  color: '#4293FF',
+                  ...(isInProgress && { animation: syncedPulse })
+                }} 
+              />
+            </Tooltip>
+          )}
+          <Typography variant="body2">{vmName}</Typography>
+        </Box>
       )
     }
   },
@@ -258,6 +268,22 @@ const columns: GridColDef[] = [
             />
           )}
 
+          <Tooltip title={'Delete migration'}>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation()
+                params.row.onDelete(params.row.metadata?.name)
+              }}
+              size="small"
+              sx={{
+                cursor: 'pointer',
+                position: 'relative'
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+
           {showRetryButton && (
             <Tooltip title="Retry migration">
               <IconButton
@@ -276,21 +302,6 @@ const columns: GridColDef[] = [
             </Tooltip>
           )}
 
-          <Tooltip title={'Delete migration'}>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation()
-                params.row.onDelete(params.row.metadata?.name)
-              }}
-              size="small"
-              sx={{
-                cursor: 'pointer',
-                position: 'relative'
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
         </Box>
       )
     }
