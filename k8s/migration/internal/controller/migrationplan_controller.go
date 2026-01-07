@@ -34,7 +34,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
+	openstackpkg "github.com/platform9/vjailbreak/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 

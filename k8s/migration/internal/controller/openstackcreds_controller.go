@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
-	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
+	openstackpkg "github.com/platform9/vjailbreak/common/openstack"
+	openstackvalidation "github.com/platform9/vjailbreak/common/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"

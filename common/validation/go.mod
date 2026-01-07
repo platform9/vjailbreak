@@ -1,11 +1,12 @@
-module github.com/platform9/vjailbreak/pkg/validation
+module github.com/platform9/vjailbreak/common/validation
 
-go 1.24.0
+go 1.24.10
 
 require (
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20250904115639-c2134e9ef3b9
+	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/vmware/govmomi v0.51.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
@@ -34,7 +35,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gophercloud/gophercloud v1.14.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
@@ -55,6 +55,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
+	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000 // indirect
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a // indirect
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
@@ -69,12 +70,12 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
@@ -99,5 +100,9 @@ require (
 replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+
+replace github.com/platform9/vjailbreak/common/utils => ../utils
+
+replace github.com/platform9/vjailbreak/common/openstack => ../openstack
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
