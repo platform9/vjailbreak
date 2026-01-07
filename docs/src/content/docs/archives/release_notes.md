@@ -397,3 +397,19 @@ description: Archived Release Notes for vJailbreak
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.1...v0.3.2
+## v0.3.3
+
+### What's Changed
+* Fixed artifacts availability check by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/851
+* fill networks based on network devices  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/846
+* equate mac id case insensitive by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/857
+* get bootable index for windows LDM by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/855
+* Added MAX Keys to hotplug metadata and made it specific to PCD by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/860
+* UI and backend for multiple ip by @spai-p9 in https://github.com/platform9/vjailbreak/pull/833
+* Fix admin cutover by @spai-p9 in https://github.com/platform9/vjailbreak/pull/862
+* locked versions for nbdkit by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/865
+* fetch rpm from main by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/870
+* Fixed the os assigment in the migration form by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/867
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.2...v0.3.3
