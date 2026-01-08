@@ -750,6 +750,11 @@ spec:
                 - Failed
                 - Unknown
                 type: string
+              totalDisks:
+                description: |-
+                  TotalDisks is the total number of disks to be migrated
+                  Set from VMwareMachine spec.VMInfo.Disks count
+                type: integer
             required:
             - phase
             type: object

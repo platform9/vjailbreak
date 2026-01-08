@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,6 +187,15 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
+
+	// Persist total disks in status (status subresource); source it from the label set at creation time.
+	if migration.Status.TotalDisks == 0 {
+		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				migration.Status.TotalDisks = n
+			}
+		}
+	}
 
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
