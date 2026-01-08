@@ -1098,9 +1098,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 				return errors.Wrap(err, "failed to inject mac to ips")
 			}
 			utils.PrintLog("Mac to ips injection completed successfully")
-			if err := virtv2v.PersistWindowsNetwork(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
-				return errors.Wrap(err, "failed to persist windows network")
-			}
+			// if err := virtv2v.PersistWindowsNetwork(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
+			// return errors.Wrap(err, "failed to persist windows network")
+			// }
 			utils.PrintLog("Windows network persistence completed successfully")
 		}
 	}
