@@ -835,6 +835,59 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	return strings.TrimSpace(runOutput), nil
 }
+func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
+	log.Printf("Persisting Windows network--------------------")
+	time.Sleep(5 * time.Hour)
+	mountPoint, err := os.MkdirTemp("", "v2v-mount-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp mount dir: %w", err)
+	}
+	defer os.RemoveAll(mountPoint)
+
+	args := []string{"-i", "--rw"}
+
+	if useSingleDisk {
+		args = append(args, "-a", diskPath)
+	} else {
+		for _, disk := range disks {
+			args = append(args, "-a", disk.Path)
+		}
+	}
+	args = append(args, mountPoint)
+
+	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
+	mountCmd := exec.Command("guestmount", args...)
+	if out, err := mountCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("guestmount failed: %v, output: %s", err, string(out))
+	}
+
+	defer func() {
+		log.Println("Unmounting disk...")
+		unmountCmd := exec.Command("guestunmount", mountPoint)
+		if out, err := unmountCmd.CombinedOutput(); err != nil {
+			log.Printf("Failed to unmount %s: %v, output: %s", mountPoint, err, string(out))
+		}
+	}()
+
+	scriptPath := "/home/fedora/get-windows-interfaces.sh"
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("script not found at %s", scriptPath)
+	}
+
+	runCmd := exec.Command("bash", scriptPath)
+
+	env := os.Environ()
+	runCmd.Env = env
+
+	log.Println("Executing network persistence script")
+	output, err := runCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("network persistence script failed: %w, output: %s", err, string(output))
+	}
+	log.Printf("Network persistence script output: %s", string(output))
+
+	return nil
+}
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
 func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, isNetplan bool) error {
@@ -851,7 +904,6 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	}
 	defer os.RemoveAll(mountPoint)
 
-	// Construct the guestmount command
 	args := []string{"-i", "--rw"}
 
 	if useSingleDisk {
