@@ -22,11 +22,13 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import InlineHelp from 'src/components/design-system/ui/InlineHelp'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
+import VDDKUploadTab from './VDDKUploadTab'
 import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
@@ -85,7 +87,8 @@ const DEFAULTS: SettingsForm = {
 }
 
 const helpers = getGlobalSettingsHelpers(DEFAULTS)
-type TabKey = 'general' | 'retry' | 'network' | 'advanced'
+type FormUpdater = (prev: SettingsForm) => SettingsForm
+type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -116,10 +119,11 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
     'AUTO_FSTAB_UPDATE'
-  ]
+  ],
+  vddk: []
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced', 'vddk']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -142,6 +146,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     label: 'Advanced',
     helper: 'Tune integration defaults and automation flags for PCD and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
+  },
+  vddk: {
+    label: 'VDDK Upload',
+    helper: 'Upload and manage VDDK (Virtual Disk Development Kit) files for VMware integration.',
+    icon: <CloudUploadIcon fontSize="small" />
   }
 }
 
@@ -1151,7 +1160,6 @@ export default function GlobalSettingsPage() {
               ))}
             </FormGrid>
           </TabPanel>
-
           <Box sx={{ flexGrow: 1 }} />
 
           <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
