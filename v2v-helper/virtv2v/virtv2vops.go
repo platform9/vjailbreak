@@ -289,6 +289,8 @@ func GetOsRelease(path string) (string, error) {
 func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
+	// log the macToIPs
+	log.Println("Mac to IP map:", macToIPs)
 	macToIPsFile := "/home/fedora/macToIP"
 	f, err := os.Create(macToIPsFile)
 	if err != nil {
@@ -298,6 +300,11 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	for mac, ips := range macToIPs {
 		if len(ips) > 0 {
 			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, ips[0].IP)
+			if err != nil {
+				return err
+			}
+		} else if len(ips) == 0 {
+			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, "")
 			if err != nil {
 				return err
 			}
