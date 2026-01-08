@@ -78,6 +78,7 @@ type OpenstackInfo struct {
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
+// +kubebuilder:object:generate=false
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
@@ -144,6 +145,16 @@ func (in *OpenstackCredsSpec) DeepCopyInto(out *OpenstackCredsSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+}
+
+// DeepCopy is a custom deepcopy function
+func (in *OpenstackCredsSpec) DeepCopy() *OpenstackCredsSpec {
+	if in == nil {
+		return nil
+	}
+	out := new(OpenstackCredsSpec)
+	in.DeepCopyInto(out)
+	return out
 }
 
 func init() {

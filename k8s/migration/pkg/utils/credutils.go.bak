@@ -403,7 +403,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 
 	// Fetch server groups
 	openstackservergroups := make([]vjailbreakv1alpha1.ServerGroupInfo, 0)
-	allServerGroupPages, err := servergroups.List(ConvertServiceClientV2ToV1(openstackClients.ComputeClient), servergroups.ListOpts{}).AllPages()
+	allServerGroupPages, err := servergroups.List(convertServiceClientV2ToV1(openstackClients.ComputeClient), servergroups.ListOpts{}).AllPages()
 	if err == nil {
 		allServerGroups, err := servergroups.ExtractServerGroups(allServerGroupPages)
 		if err == nil {
@@ -1524,7 +1524,7 @@ func CreateOrUpdateRDMDisks(ctx context.Context, client client.Client,
 
 // getCinderVolumeBackendPools retrieves the list of Cinder volume backend pools from OpenStack
 func getCinderVolumeBackendPools(ctx context.Context, openstackClients *OpenStackClients) ([]string, error) {
-	allStoragePoolPages, err := schedulerstats.List(ConvertServiceClientV2ToV1(openstackClients.BlockStorageClient), nil).AllPages()
+	allStoragePoolPages, err := schedulerstats.List(convertServiceClientV2ToV1(openstackClients.BlockStorageClient), nil).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list all storage backend pools")
 	}
@@ -1913,7 +1913,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	}
 
 	// Get pool backend info
-	poolPages, err := schedulerstats.List(ConvertServiceClientV2ToV1(cinderClient), schedulerstats.ListOpts{Detail: true}).AllPages()
+	poolPages, err := schedulerstats.List(convertServiceClientV2ToV1(cinderClient), schedulerstats.ListOpts{Detail: true}).AllPages()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list backend pools")
 	}

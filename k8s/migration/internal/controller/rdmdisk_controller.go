@@ -232,9 +232,9 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
 		}
 		osclient := &v2vutils.OpenStackClients{
-			BlockStorageClient: openstackClient.BlockStorageClient,
-			ComputeClient:      openstackClient.ComputeClient,
-			NetworkingClient:   openstackClient.NetworkingClient,
+			BlockStorageClient: utils.ConvertServiceClientV2ToV1(openstackClient.BlockStorageClient),
+			ComputeClient:      utils.ConvertServiceClientV2ToV1(openstackClient.ComputeClient),
+			NetworkingClient:   utils.ConvertServiceClientV2ToV1(openstackClient.NetworkingClient),
 			K8sClient:          r.Client,
 		}
 
