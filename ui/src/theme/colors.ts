@@ -12,7 +12,7 @@ export const LIGHT_BG_DEFAULT = '#f5f5f5' // grey[50]
 export const LIGHT_BG_PAPER = '#ffffff'
 
 // Text colors
-export const LIGHT_TEXT_PRIMARY = 'rgba(0, 0, 0, 0.87)'
+export const LIGHT_TEXT_PRIMARY = '#3d3d57'
 export const LIGHT_TEXT_SECONDARY = 'rgba(0, 0, 0, 0.6)'
 export const DARK_TEXT_PRIMARY = '#ffffff'
 export const DARK_TEXT_SECONDARY = 'rgba(255, 255, 255, 0.7)'

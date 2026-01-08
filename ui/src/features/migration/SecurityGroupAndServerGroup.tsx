@@ -1,9 +1,6 @@
-import { Box, Chip } from '@mui/material'
-import { Step } from 'src/shared/components/forms'
-import { SectionHeader, Row } from 'src/components'
-import Autocomplete from '@mui/material/Autocomplete'
-import TextField from '@mui/material/TextField'
-import Checkbox from '@mui/material/Checkbox'
+import { Box } from '@mui/material'
+import { Step, RHFAutocomplete } from 'src/shared/components/forms'
+import { FormGrid } from 'src/components'
 import {
   OpenstackCreds,
   SecurityGroupOption,
@@ -41,105 +38,52 @@ export default function SecurityGroupAndServerGroup({
         <Step stepNumber={stepNumber} label="Security Groups & Server Group (Optional)" />
       ) : null}
       <Box>
-        <Row gap={3} flexWrap="wrap">
-          {/* Left side: Security Groups */}
-          <Box sx={{ flex: 1, minWidth: 300 }}>
-            <SectionHeader
-              title="Security Groups"
-              subtitle="Assign security groups to the selected VMs."
-            />
-            <Autocomplete
+        <FormGrid minWidth={320} gap={3}>
+          <Box>
+            <RHFAutocomplete<SecurityGroupOption>
+              name="securityGroups"
               multiple
               options={securityGroupOptions}
+              label="Security Groups"
+              placeholder={
+                params.securityGroups && params.securityGroups.length > 0
+                  ? ''
+                  : 'Select Security Groups'
+              }
               getOptionLabel={(option) =>
                 option.requiresIdDisplay
                   ? `${option.name} (${option.id.substring(0, 8)}...)`
                   : option.name
               }
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              value={securityGroupOptions.filter((option) =>
-                (params.securityGroups || []).includes(option.id)
-              )}
-              onChange={(_, value) => {
-                const selectedIds = value.map((option) => option.id)
-                onChange('securityGroups')(selectedIds)
-              }}
-              renderInput={(inputParams) => (
-                <TextField
-                  {...inputParams}
-                  label="Security Groups"
-                  placeholder={
-                    params.securityGroups && params.securityGroups.length > 0
-                      ? ''
-                      : 'Select Security Groups'
-                  }
-                  size="small"
-                />
-              )}
-              renderTags={(value) =>
-                value.map((option, index) => (
-                  <Chip
-                    key={index}
-                    label={
-                      option.requiresIdDisplay
-                        ? `${option.name} (${option.id.substring(0, 8)}...)`
-                        : option.name
-                    }
-                    size="small"
-                    onDelete={() => {
-                      const currentIds = value.map((v) => v.id)
-                      currentIds.splice(index, 1)
-                      onChange('securityGroups')(currentIds)
-                    }}
-                  />
-                ))
+              getOptionValue={(option) => option.id}
+              renderOptionLabel={(option) =>
+                option.requiresIdDisplay
+                  ? `${option.name} (${option.id.substring(0, 8)}...)`
+                  : option.name
               }
-              renderOption={(props, option, { selected }) => (
-                <li {...props}>
-                  <Checkbox style={{ marginRight: 8 }} checked={selected} size="small" />
-                  {option.requiresIdDisplay
-                    ? `${option.name} (${option.id.substring(0, 8)}...)`
-                    : option.name}
-                </li>
-              )}
-              disableCloseOnSelect
-              size="small"
-              sx={{ width: '100%' }}
+              showCheckboxes
+              onValueChange={(value) => onChange('securityGroups')(value)}
+              data-testid="security-groups-autocomplete"
+              labelProps={{ tooltip: 'Assign security groups to the selected VMs.' }}
             />
           </Box>
 
           {/* Right side: Server Group */}
-          <Box sx={{ flex: 1, minWidth: 300 }}>
-            <SectionHeader
-              title="Server Group"
-              subtitle="Control VM affinity/anti-affinity placement."
-            />
-            <Autocomplete
+          <Box>
+            <RHFAutocomplete<ServerGroupOption>
+              name="serverGroup"
               options={serverGroupOptions}
+              label="Server Group"
+              placeholder="Select Server Group"
               getOptionLabel={(option) => `${option.name} (${option.policy})`}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              value={serverGroupOptions.find((opt) => opt.id === params.serverGroup) || null}
-              onChange={(_, value) => {
-                onChange('serverGroup')(value?.id || '')
-              }}
-              renderInput={(inputParams) => (
-                <TextField
-                  {...inputParams}
-                  label="Server Group"
-                  placeholder="Select Server Group"
-                  size="small"
-                />
-              )}
-              renderOption={(props, option) => (
-                <li {...props}>
-                  {option.name} ({option.policy})
-                </li>
-              )}
-              size="small"
-              sx={{ width: '100%' }}
+              getOptionValue={(option) => option.id}
+              renderOptionLabel={(option) => `${option.name} (${option.policy})`}
+              onValueChange={(value) => onChange('serverGroup')(value)}
+              data-testid="server-group-autocomplete"
+              labelProps={{ tooltip: 'Control VM affinity/anti-affinity placement.' }}
             />
           </Box>
-        </Row>
+        </FormGrid>
       </Box>
     </Box>
   )

@@ -7,17 +7,16 @@ import {
   Tooltip,
   Box,
   Button,
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  FormLabel,
   MenuItem,
   Select,
   Typography,
   Snackbar,
   Alert,
-  TextField,
   CircularProgress,
   GlobalStyles,
   InputAdornment
@@ -54,6 +53,9 @@ import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import axios from 'axios'
 import { RdmDiskConfigurationPanel } from './components'
+import { FieldLabel } from 'src/components'
+import { ActionButton } from 'src/components'
+import { TextField as SharedTextField } from 'src/shared/components/forms'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -1231,10 +1233,6 @@ function VmsSelectionStep({
     setSelectedFlavor('')
   }
 
-  const handleFlavorChange = (event) => {
-    setSelectedFlavor(event.target.value)
-  }
-
   const handleApplyFlavor = async () => {
     if (!selectedFlavor) {
       handleCloseFlavorDialog()
@@ -1418,6 +1416,9 @@ function VmsSelectionStep({
             </Box>
           </Alert>
         )}
+        <Box sx={{ mb: 1 }}>
+          <FieldLabel label="Virtual Machines" required align="flex-start" />
+        </Box>
         <FormControl error={!!error} required>
           <Paper sx={{ width: '100%', height: 389 }}>
             <DataGrid
@@ -1431,7 +1432,9 @@ function VmsSelectionStep({
                 columns: {
                   columnVisibilityModel: {
                     vmState: false, // Hide the vmState column that we use only for sorting
-                    rdmDisks: false // Hide the RDM disks column by default
+                    rdmDisks: false, // Hide the RDM disks column by default
+                    networks: false, // Hide the networks column by default
+                    esxHost: false // Hide the esxHost column by default
                   }
                 }
               }}
@@ -1539,49 +1542,50 @@ function VmsSelectionStep({
         </DialogTitle>
         <DialogContent>
           <Box sx={{ my: 2 }}>
-            <FormLabel>Select Flavor</FormLabel>
-            <Select
-              fullWidth
-              value={selectedFlavor}
-              onChange={handleFlavorChange}
-              size="small"
+            <FieldLabel label="Select Flavor" align="flex-start" />
+            <Autocomplete
               sx={{ mt: 1 }}
-              displayEmpty
-            >
-              <MenuItem value="">
-                <em>Select a flavor</em>
-              </MenuItem>
-              <MenuItem value="auto-assign">
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  <Typography variant="body1">Auto Assign</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Let PCD automatically assign the most suitable flavor
-                  </Typography>
-                </Box>
-              </MenuItem>
-              {openstackFlavors.map((flavor) => (
-                <MenuItem key={flavor.id} value={flavor.id}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="body1">{flavor.name}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {flavor.vcpus} vCPU, {flavor.ram / 1024}GB RAM, {flavor.disk}GB Storage
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
+              size="small"
+              options={[
+                { id: 'auto-assign', name: 'Auto-assign', vcpus: 0, ram: 0, disk: 0 },
+                ...openstackFlavors
+              ]}
+              value={
+                selectedFlavor
+                  ? ([
+                      { id: 'auto-assign', name: 'Auto-assign', vcpus: 0, ram: 0, disk: 0 },
+                      ...openstackFlavors
+                    ].find((f) => f.id === selectedFlavor) ?? null)
+                  : null
+              }
+              onChange={(_e, value) => {
+                setSelectedFlavor(value?.id ?? '')
+              }}
+              getOptionLabel={(option) => {
+                if (option.id === 'auto-assign') return option.name
+                return `${option.name} (${option.vcpus} vCPU, ${option.ram}MB RAM, ${option.disk}GB Disk)`
+              }}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderInput={(params) => (
+                <SharedTextField {...params} placeholder="Search flavors" fullWidth />
+              )}
+            />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
-          <Button
+        <DialogActions
+          sx={{ justifyContent: 'flex-end', alignItems: 'center', gap: 1, px: 3, py: 2 }}
+        >
+          <ActionButton tone="secondary" onClick={handleCloseFlavorDialog} disabled={updating}>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
             onClick={handleApplyFlavor}
-            variant="contained"
-            color="primary"
             disabled={!selectedFlavor || updating}
+            loading={updating}
           >
-            {updating ? 'Applying...' : 'Apply to selected VMs'}
-          </Button>
+            Apply to selected VMs
+          </ActionButton>
         </DialogActions>
       </Dialog>
 
@@ -1629,25 +1633,30 @@ function VmsSelectionStep({
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={handleCloseRdmConfigurationDialog} variant="outlined">
+        <DialogActions
+          sx={{ justifyContent: 'flex-end', alignItems: 'center', gap: 1, px: 3, py: 2 }}
+        >
+          <ActionButton
+            tone="secondary"
+            onClick={handleCloseRdmConfigurationDialog}
+            disabled={updating}
+          >
             Close
-          </Button>
+          </ActionButton>
           {rdmValidation.hasRdmVMs && rdmDisks.length > 0 && (
-            <Button
+            <ActionButton
+              tone="primary"
               onClick={handleApplyRdmConfigurations}
-              variant="contained"
-              color="primary"
               disabled={
                 updating ||
                 !rdmConfigurations ||
                 rdmConfigurations.length === 0 ||
                 rdmConfigurations.some((config) => !config.cinderBackendPool || !config.volumeType)
               }
-              startIcon={updating ? <CircularProgress size={16} /> : undefined}
+              loading={updating}
             >
-              {updating ? 'Applying Configuration...' : 'Apply RDM Configuration'}
-            </Button>
+              Apply RDM Configuration
+            </ActionButton>
           )}
         </DialogActions>
       </Dialog>
@@ -1735,7 +1744,7 @@ function VmsSelectionStep({
                               Current: {networkInterface?.ipAddress || vm.ipAddress || '—'}
                             </Typography>
                           </Box>
-                          <TextField
+                          <SharedTextField
                             value={ip}
                             onChange={(e) =>
                               handleBulkIpChange(vmName, interfaceIndex, e.target.value)
@@ -1757,16 +1766,24 @@ function VmsSelectionStep({
             </Box>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
-          <Button
-            onClick={handleApplyBulkIPs}
-            variant="contained"
-            color="primary"
-            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
+        <DialogActions
+          sx={{ justifyContent: 'flex-end', alignItems: 'center', gap: 1, px: 3, py: 2 }}
+        >
+          <ActionButton
+            tone="secondary"
+            onClick={handleCloseBulkEditDialog}
+            disabled={assigningIPs}
           >
-            {assigningIPs ? 'Applying...' : 'Apply Changes'}
-          </Button>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleApplyBulkIPs}
+            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
+            loading={assigningIPs}
+          >
+            Apply Changes
+          </ActionButton>
         </DialogActions>
       </Dialog>
 

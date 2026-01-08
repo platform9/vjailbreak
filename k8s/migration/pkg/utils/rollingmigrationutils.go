@@ -563,7 +563,7 @@ func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize in
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
-		var allVMs []string
+		allVMs := make([]string, 0, len(cluster.VMSequence))
 		for _, vm := range cluster.VMSequence {
 			allVMs = append(allVMs, vm.VMName)
 		}

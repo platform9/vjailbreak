@@ -2,6 +2,7 @@ import { FormControl, FormHelperText, styled, Typography, Box } from '@mui/mater
 import { useEffect, useMemo } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
+import { FieldLabel } from 'src/components'
 // import ResourceMapping from "../../components/forms/ResourceMapping"
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
@@ -120,7 +121,7 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <Typography variant="subtitle2">Map Networks</Typography>
+                <FieldLabel label="Map Networks" required align="flex-start" />
                 {networksFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All networks mapped ✓
@@ -143,6 +144,7 @@ export default function NetworkAndStorageMappingStep({
                 values={params.networkMappings || []}
                 onChange={(value) => onChange('networkMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="networkMapping"
               />
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
@@ -155,7 +157,7 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <Typography variant="subtitle2">Map Storage</Typography>
+                <FieldLabel label="Map Storage" required align="flex-start" />
                 {storageFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All storage mapped ✓
@@ -178,6 +180,7 @@ export default function NetworkAndStorageMappingStep({
                 values={params.storageMappings || []}
                 onChange={(value) => onChange('storageMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="storageMapping"
               />
               {storageMappingError && <FormHelperText error>{storageMappingError}</FormHelperText>}
             </FormControl>

@@ -166,7 +166,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
           MuiPaper: {
             styleOverrides: {
               root: {
-                backgroundImage: 'none'
+                backgroundImage: 'none',
+                color: mode === 'dark' ? DARK_TEXT_PRIMARY : LIGHT_TEXT_PRIMARY
               }
             }
           },
