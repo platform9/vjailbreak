@@ -88,7 +88,7 @@ const getProgressText = (
 
   let diskInfo = ''
   if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
-    const currentDiskNum = parseInt(currentDisk) + 1
+    const currentDiskNum = currentDisk ? (parseInt(currentDisk, 10) + 1) || 1 : 1
     diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
   }
 
