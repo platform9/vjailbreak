@@ -41,19 +41,18 @@ type VCenterClient struct {
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
 
-	host = strings.TrimRight(host, "/")
-
-	// Validate and add protocol
-	if !strings.HasPrefix(host, "http") {
-		host = "https://" + host
+	rawHost := strings.TrimSpace(host)
+	if !strings.HasPrefix(rawHost, "http") {
+		rawHost = "https://" + rawHost
 	}
 
-	// Add SDK endpoint
-	if !strings.HasSuffix(host, "/sdk") {
-		host += "/sdk"
+	u, err := url.Parse(rawHost)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
 	}
+	u.Path = "/sdk"
 
-	u, err := url.Parse(host)
+	u, err = url.Parse(u.String())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
 	}

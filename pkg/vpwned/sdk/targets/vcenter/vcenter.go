@@ -74,12 +74,16 @@ func findBootDevice(devices []types.BaseVirtualMachineBootOptionsBootableDevice)
 func (v *Vcenter) connect(ctx context.Context, a api.TargetAccessInfo) (*govmomi.Client, *find.Finder, error) {
 	logrus.Info("Connecting to vCenter...")
 	// Parse vCenter URL
-	trimmedHost := strings.TrimRight(a.HostnameOrIp, "/")
-	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", trimmedHost))
+	rawHost := strings.TrimSpace(a.HostnameOrIp)
+	if !strings.HasPrefix(rawHost, "http") {
+		rawHost = "https://" + rawHost
+	}
 
+	u, err := url.Parse(rawHost)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse vCenter URL: %v", err)
 	}
+	u.Path = "/sdk"
 
 	// Set credentials
 	u.User = url.UserPassword(a.Username, a.Password)

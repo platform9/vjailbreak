@@ -518,18 +518,17 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
 
-	host = strings.TrimRight(host, "/")
+	rawHost := strings.TrimSpace(host)
+	if !strings.HasPrefix(rawHost, "http") {
+		rawHost = "https://" + rawHost
+	}
 
-	if !strings.HasPrefix(host, "http") {
-		host = "https://" + host
-	}
-	if !strings.HasSuffix(host, sdkPath) {
-		host += sdkPath
-	}
-	u, err := url.Parse(host)
+	u, err := url.Parse(rawHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
+	u.Path = "/sdk"
+
 	u.User = url.UserPassword(username, password)
 	// Connect and log in to ESX or vCenter
 	s := &cache.Session{
