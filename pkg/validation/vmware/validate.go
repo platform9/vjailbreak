@@ -91,16 +91,23 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	datacenter := vmwareCredsinfo.Datacenter
 
 	// Normalize URL
-	host = strings.TrimRight(host, "/")
-
-	if !strings.HasPrefix(host, "http") {
-		host = "https://" + host
-	}
-	if !strings.HasSuffix(host, sdkPath) {
-		host += sdkPath
+	rawHost := strings.TrimSpace(host)
+	if !strings.HasPrefix(rawHost, "http") {
+		rawHost = "https://" + rawHost
 	}
 
-	u, err := url.Parse(host)
+	u, err := url.Parse(rawHost)
+	if err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("Failed to parse URL: %s", err.Error()),
+			Error:   err,
+		}
+	}
+	u.Path = "/sdk"
+	host = u.String()
+
+	u, err = url.Parse(host)
 	if err != nil {
 		return ValidationResult{
 			Valid:   false,
