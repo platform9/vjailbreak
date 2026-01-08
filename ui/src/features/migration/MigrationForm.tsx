@@ -1158,7 +1158,10 @@ export default function MigrationFormDrawer({
     let rafId: number | undefined
 
     const init = () => {
-      if (cancelled) return
+      if (cancelled) {
+        if (rafId) cancelAnimationFrame(rafId)
+        return
+      }
 
       const root = contentRootRef.current?.parentElement ?? undefined
       const nodes = [
@@ -1206,7 +1209,7 @@ export default function MigrationFormDrawer({
     return () => {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
-      observer?.disconnect()
+      if (observer) observer.disconnect()
     }
   }, [open])
 

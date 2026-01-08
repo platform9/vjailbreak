@@ -224,7 +224,7 @@ export default function SourceDestinationClusterSelection({
               >
                 <TextField
                   size="small"
-                  placeholder="Search clusters, vCenter, or datacenter"
+                  placeholder="Search clusters or datacenters"
                   fullWidth
                   value={vmwareSearchTerm}
                   onChange={(e) => {

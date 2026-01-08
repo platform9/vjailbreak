@@ -1253,7 +1253,10 @@ export default function RollingMigrationFormDrawer({
     let rafId: number | undefined
 
     const init = () => {
-      if (cancelled) return
+      if (cancelled) {
+        if (rafId) cancelAnimationFrame(rafId)
+        return
+      }
 
       const root = contentRootRef.current?.parentElement ?? undefined
       const nodes = [
@@ -1303,7 +1306,7 @@ export default function RollingMigrationFormDrawer({
     return () => {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
-      observer?.disconnect()
+      if (observer) observer.disconnect()
     }
   }, [open])
 
