@@ -190,13 +190,17 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
 
-	if migration.Status.TotalDisks == 0 {
-		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
-			if n, err := strconv.Atoi(v); err == nil {
-				migration.Status.TotalDisks = n
-			}
+if migration.Status.TotalDisks == 0 {
+	if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			migration.Status.TotalDisks = n
+		} else {
+			log.FromContext(ctx).Error(err, "Failed to parse total disks value", 
+				"label", constants.NumberOfDisksLabel, 
+				"value", v)
 		}
 	}
+}
 
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
