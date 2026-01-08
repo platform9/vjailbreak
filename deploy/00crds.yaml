@@ -651,20 +651,14 @@ spec:
                 description: MigrationPlan is the name of the migration plan
                 type: string
               migrationType:
-                description: |-
-                  MigrationType indicates whether this is a hot (live) or cold migration
-                  This is set at migration creation time from the MigrationPlan strategy
+                description: MigrationType indicates whether this is a hot (live)
+                  or cold migration
                 enum:
                 - hot
                 - cold
                 type: string
               podRef:
                 description: PodRef is the name of the pod
-                type: string
-              tenant:
-                description: |-
-                  Tenant is the OpenStack tenant/project name where the VM is being migrated
-                  This is set at migration creation time from the OpenStack credentials
                 type: string
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
@@ -751,9 +745,7 @@ spec:
                 - Unknown
                 type: string
               totalDisks:
-                description: |-
-                  TotalDisks is the total number of disks to be migrated
-                  Set from VMwareMachine spec.VMInfo.Disks count
+                description: TotalDisks is the total number of disks to be migrated
                 type: integer
             required:
             - phase

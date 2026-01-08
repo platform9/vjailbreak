@@ -74,6 +74,8 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
+//
+//nolint:gocyclo
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -188,7 +190,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
 
-	// Persist total disks in status (status subresource); source it from the label set at creation time.
 	if migration.Status.TotalDisks == 0 {
 		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
 			if n, err := strconv.Atoi(v); err == nil {
@@ -444,17 +445,13 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 
 // ExtractCurrentDisk extracts which disk is currently being copied from pod events
 func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
-	// Look for the most recent "Copying disk X" message in events
 	// Events are sorted by timestamp (newest first)
 	for i := range events.Items {
 		msg := events.Items[i].Message
 		if strings.Contains(msg, "Copying disk") {
-			// Extract disk number from message like "Copying disk 0, Completed: 50%"
 			parts := strings.Split(msg, "Copying disk")
 			if len(parts) > 1 {
-				// Get the number after "disk "
 				diskPart := strings.TrimSpace(parts[1])
-				// Extract just the digit (e.g., "0" from "0, Completed: 50%")
 				if len(diskPart) > 0 {
 					diskNum := strings.Split(diskPart, ",")[0]
 					diskNum = strings.Split(diskNum, " ")[0]
@@ -465,7 +462,6 @@ func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.M
 		}
 	}
 
-	// Also check conditions for disk info
 	for _, condition := range migration.Status.Conditions {
 		msg := condition.Message
 		if strings.Contains(msg, "Copying disk") {
