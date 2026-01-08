@@ -40,15 +40,16 @@ type VCenterClient struct {
 }
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
-	// Validate and add protocol to host if not present
-	if len(host) >= 4 && host[:4] != "http" {
-		host = "https://" + host
-	} else if len(host) < 4 {
+
+	host = strings.TrimRight(host, "/")
+
+	// Validate and add protocol
+	if !strings.HasPrefix(host, "http") {
 		host = "https://" + host
 	}
 
-	// Add SDK endpoint if not present
-	if len(host) >= 4 && host[len(host)-4:] != "/sdk" {
+	// Add SDK endpoint
+	if !strings.HasSuffix(host, "/sdk") {
 		host += "/sdk"
 	}
 
