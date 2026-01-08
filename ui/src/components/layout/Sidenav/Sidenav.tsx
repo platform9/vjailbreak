@@ -401,7 +401,10 @@ export default function Sidenav({
     if (onItemClick) {
       onItemClick(item)
     } else if (item.external) {
-      window.open(`https://${window.location.host}${item.path}`, '_blank')
+      const url = item.externalUrl && item.externalUrl.trim()
+        ? item.externalUrl
+        : `https://${window.location.host}${item.path}`
+      window.open(url, '_blank', 'noopener,noreferrer')
     } else {
       navigate(item.path)
     }
