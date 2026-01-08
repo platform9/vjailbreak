@@ -90,7 +90,7 @@ const getProgressText = (
   // Add disk info if available during copy phases
   if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
     const currentDiskNum = parseInt(currentDisk) + 1 // Convert to 1-based
-    diskInfo = ` (${currentDiskNum}/${totalDisks})`
+    diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
   }
 
   let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase}${diskInfo} - ${message}`
