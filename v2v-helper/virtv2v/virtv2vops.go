@@ -289,6 +289,8 @@ func GetOsRelease(path string) (string, error) {
 func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
+	// log the macToIPs
+	log.Println("Mac to IP map:", macToIPs)
 	macToIPsFile := "/home/fedora/macToIP"
 	f, err := os.Create(macToIPsFile)
 	if err != nil {
@@ -298,6 +300,11 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	for mac, ips := range macToIPs {
 		if len(ips) > 0 {
 			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, ips[0].IP)
+			if err != nil {
+				return err
+			}
+		} else if len(ips) == 0 {
+			_, err := fmt.Fprintf(f, "%s:ip:%s\n", mac, "")
 			if err != nil {
 				return err
 			}
@@ -823,7 +830,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
-func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
+func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, isNetplan bool) error {
 	// Skip this entirely for Windows as it doesn't use these udev rules/bash scripts
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		log.Println("Skipping offline network persistence for Windows guest")
@@ -864,7 +871,7 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 		}
 	}()
 
-	scriptPath := "/home/fedora/network_config_util.sh"
+	scriptPath := "/home/fedora/generate-udev-mapping.sh"
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("script not found at %s", scriptPath)
 	}
@@ -873,19 +880,18 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 
 	// Configure environment variables to point the script to the Mount Point
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("V2V_MAP_FILE=%s", filepath.Join(mountPoint, "/etc/macToIP")))
-	env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR=%s", filepath.Join(mountPoint, "/etc/sysconfig/network-scripts")))
-	env = append(env, fmt.Sprintf("NETWORK_SCRIPTS_DIR_SUSE=%s", filepath.Join(mountPoint, "/etc/sysconfig/network")))
-	env = append(env, fmt.Sprintf("NETWORK_CONNECTIONS_DIR=%s", filepath.Join(mountPoint, "/etc/NetworkManager/system-connections")))
-	env = append(env, fmt.Sprintf("NM_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/NetworkManager")))
-	env = append(env, fmt.Sprintf("DHCLIENT_LEASES_DIR=%s", filepath.Join(mountPoint, "/var/lib/dhclient")))
-	env = append(env, fmt.Sprintf("NETWORK_INTERFACES_DIR=%s", filepath.Join(mountPoint, "/etc/network/interfaces")))
-	env = append(env, fmt.Sprintf("SYSTEMD_NETWORK_DIR=%s", filepath.Join(mountPoint, "/run/systemd/network")))
-	env = append(env, fmt.Sprintf("UDEV_RULES_FILE=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
-	env = append(env, fmt.Sprintf("WILDCARD_NETPLAN=%s", filepath.Join(mountPoint, "/etc/netplan/99-netcfg.yaml")))
-
-	env = append(env, fmt.Sprintf("NETPLAN_DIR=%s", mountPoint))
-
+	env = append(env, fmt.Sprintf("NET_MAPPING_DATA=%s", filepath.Join(mountPoint, "/etc/macToIP")))
+	env = append(env, fmt.Sprintf("RHEL_NET_DIR=%s", filepath.Join(mountPoint, "/etc/sysconfig/network-scripts")))
+	env = append(env, fmt.Sprintf("SUSE_NET_DIR=%s", filepath.Join(mountPoint, "/etc/sysconfig/network")))
+	env = append(env, fmt.Sprintf("NM_CONN_PATH=%s", filepath.Join(mountPoint, "/etc/NetworkManager/system-connections")))
+	env = append(env, fmt.Sprintf("NM_RUNTIME_DATA=%s", filepath.Join(mountPoint, "/var/lib/NetworkManager")))
+	env = append(env, fmt.Sprintf("DHCP_LEASE_PATH=%s", filepath.Join(mountPoint, "/var/lib/dhclient")))
+	env = append(env, fmt.Sprintf("DEBIAN_IF_DIR=%s", filepath.Join(mountPoint, "/etc/network/interfaces")))
+	env = append(env, fmt.Sprintf("SYSTEMD_NET_PATH=%s", filepath.Join(mountPoint, "/run/systemd/network")))
+	env = append(env, fmt.Sprintf("UDEV_OUTPUT_TARGET=%s", filepath.Join(mountPoint, "/etc/udev/rules.d/70-persistent-net.rules")))
+	env = append(env, fmt.Sprintf("NETPLAN_EXT_CONF=%s", filepath.Join(mountPoint, "/etc/netplan/99-netcfg.yaml")))
+	env = append(env, fmt.Sprintf("NETPLAN_BASE_DIR=%s", mountPoint))
+	env = append(env, fmt.Sprintf("USE_NETPLAN_LOGIC=%t", isNetplan))
 	runCmd.Env = env
 
 	log.Println("Executing network persistence script")

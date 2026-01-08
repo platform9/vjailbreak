@@ -14,7 +14,8 @@ import {
   GlobalStyles,
   FormLabel,
   Snackbar,
-  useMediaQuery
+  useMediaQuery,
+  Divider
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
@@ -573,6 +574,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleSourceClusterChange = (value) => {
+    markTouched('sourceDestination')
     setSourceCluster(value)
 
     if (value) {
@@ -585,6 +587,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleDestinationPCDChange = (value) => {
+    markTouched('sourceDestination')
     setDestinationPCD(value)
 
     if (value) {
@@ -830,6 +833,7 @@ export default function RollingMigrationFormDrawer({
   }, [openstackFlavors, vmsWithAssignments])
 
   const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
+    markTouched('mapResources')
     if (key === 'networkMappings') {
       setNetworkMappings(value)
       setNetworkMappingError('')
@@ -1205,6 +1209,34 @@ export default function RollingMigrationFormDrawer({
   const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
+  const [touchedSections, setTouchedSections] = useState({
+    sourceDestination: false,
+    baremetal: false,
+    hosts: false,
+    vms: false,
+    mapResources: false,
+    options: false
+  })
+
+  const markTouched = useCallback(
+    (key: keyof typeof touchedSections) => {
+      setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+    },
+    [setTouchedSections]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setTouchedSections({
+      sourceDestination: false,
+      baremetal: false,
+      hosts: false,
+      vms: false,
+      mapResources: false,
+      options: false
+    })
+  }, [open])
+
   const contentRootRef = React.useRef<HTMLDivElement | null>(null)
   const section1Ref = React.useRef<HTMLDivElement | null>(null)
   const section2Ref = React.useRef<HTMLDivElement | null>(null)
@@ -1212,107 +1244,143 @@ export default function RollingMigrationFormDrawer({
   const section4Ref = React.useRef<HTMLDivElement | null>(null)
   const section5Ref = React.useRef<HTMLDivElement | null>(null)
   const section6Ref = React.useRef<HTMLDivElement | null>(null)
-  const section7Ref = React.useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const root = contentRootRef.current?.parentElement ?? undefined
-    const nodes = [
-      section1Ref.current,
-      section2Ref.current,
-      section3Ref.current,
-      section4Ref.current,
-      section5Ref.current,
-      section6Ref.current,
-      section7Ref.current
-    ].filter(Boolean) as HTMLDivElement[]
+    if (!open) return
 
-    if (!root || nodes.length === 0) return
+    let cancelled = false
+    let observer: IntersectionObserver | undefined
+    let rafId: number | undefined
 
-    const idByNode = new Map<Element, string>([
-      [section1Ref.current as HTMLDivElement, 'source-destination'],
-      [section2Ref.current as HTMLDivElement, 'baremetal'],
-      [section3Ref.current as HTMLDivElement, 'hosts'],
-      [section4Ref.current as HTMLDivElement, 'vms'],
-      [section5Ref.current as HTMLDivElement, 'map-resources'],
-      [section6Ref.current as HTMLDivElement, 'options'],
-      [section7Ref.current as HTMLDivElement, 'preview']
-    ])
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
-
-        if (!visible) return
-        const id = idByNode.get(visible.target)
-        if (id) setActiveSectionId(id)
-      },
-      {
-        root,
-        threshold: [0.2, 0.35, 0.5, 0.65]
+    const init = () => {
+      if (cancelled) {
+        if (rafId) cancelAnimationFrame(rafId)
+        return
       }
-    )
 
-    nodes.forEach((n) => observer.observe(n))
-    return () => observer.disconnect()
+      const root = contentRootRef.current?.parentElement ?? undefined
+      const nodes = [
+        section1Ref.current,
+        section2Ref.current,
+        section3Ref.current,
+        section4Ref.current,
+        section5Ref.current,
+        section6Ref.current
+      ].filter(Boolean) as HTMLDivElement[]
+
+      if (!root || nodes.length === 0) {
+        rafId = requestAnimationFrame(init)
+        return
+      }
+
+      const idByNode = new Map<Element, string>([
+        [section1Ref.current as HTMLDivElement, 'source-destination'],
+        [section2Ref.current as HTMLDivElement, 'baremetal'],
+        [section3Ref.current as HTMLDivElement, 'hosts'],
+        [section4Ref.current as HTMLDivElement, 'vms'],
+        [section5Ref.current as HTMLDivElement, 'map-resources'],
+        [section6Ref.current as HTMLDivElement, 'options']
+      ])
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting)
+            .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
+
+          if (!visible) return
+          const id = idByNode.get(visible.target)
+          if (id) setActiveSectionId(id)
+        },
+        {
+          root,
+          threshold: [0.2, 0.35, 0.5, 0.65]
+        }
+      )
+
+      nodes.forEach((n) => observer?.observe(n))
+    }
+
+    rafId = requestAnimationFrame(init)
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+      if (observer) observer.disconnect()
+    }
   }, [open])
+
+  const step1HasErrors = Boolean(!sourceCluster || !destinationPCD)
+
+  const step2HasErrors = Boolean(!selectedMaasConfig)
+
+  const step3HasErrors = Boolean(esxHostConfigValidation.hasError)
+
+  const step4HasErrors = Boolean(vmIpValidation.hasError || osValidation.hasError)
+
+  const step5HasErrors = Boolean(networkMappingError || storageMappingError)
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
       {
         id: 'source-destination',
-        title: '1. Source And Destination',
+        title: 'Source And Destination',
         description: 'Pick clusters',
-        status: sourceCluster && destinationPCD ? 'complete' : 'attention'
+        status: step1HasErrors
+          ? 'attention'
+          : touchedSections.sourceDestination && sourceCluster && destinationPCD
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'baremetal',
-        title: '2. Bare Metal Config',
+        title: 'Bare Metal Config',
         description: 'Verify configuration',
-        status: selectedMaasConfig ? 'complete' : 'attention'
+        status: step2HasErrors
+          ? 'attention'
+          : touchedSections.baremetal && selectedMaasConfig
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'hosts',
-        title: '3. ESXi Hosts',
+        title: 'ESXi Hosts',
         description: 'Assign host configs',
-        status:
-          orderedESXHosts.length > 0 && !esxHostConfigValidation.hasError ? 'complete' : 'attention'
+        status: step3HasErrors
+          ? 'attention'
+          : touchedSections.hosts && orderedESXHosts.length > 0
+            ? 'complete'
+            : 'incomplete'
       },
       {
         id: 'vms',
-        title: '4. Select VMs',
+        title: 'Select VMs',
         description: 'Choose VMs and required fields',
-        status:
-          selectedVMs.length > 0 && !vmIpValidation.hasError && !osValidation.hasError
+        status: step4HasErrors
+          ? 'attention'
+          : touchedSections.vms && selectedVMs.length > 0
             ? 'complete'
-            : 'attention'
+            : 'incomplete'
       },
       {
         id: 'map-resources',
-        title: '5. Map Networks And Storage',
+        title: 'Map Networks And Storage',
         description: 'Map VMware resources to PCD',
-        status:
-          sourceCluster &&
-          destinationPCD &&
-          !networkMappingError &&
-          !storageMappingError &&
-          availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
-          availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+        status: step5HasErrors
+          ? 'attention'
+          : touchedSections.mapResources &&
+              sourceCluster &&
+              destinationPCD &&
+              availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
+              availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
             ? 'complete'
-            : 'attention'
+            : 'incomplete'
       },
       {
         id: 'options',
-        title: '6. Migration Options',
+        title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: 'optional'
-      },
-      {
-        id: 'preview',
-        title: '7. Preview',
-        description: 'Verify selections before starting',
-        status: 'optional'
+        status: touchedSections.options ? 'complete' : 'incomplete'
       }
     ],
     [
@@ -1329,7 +1397,13 @@ export default function RollingMigrationFormDrawer({
       availableVmwareNetworks,
       availableVmwareDatastores,
       networkMappings,
-      storageMappings
+      storageMappings,
+      step1HasErrors,
+      step2HasErrors,
+      step3HasErrors,
+      step4HasErrors,
+      step5HasErrors,
+      touchedSections
     ]
   )
 
@@ -1340,8 +1414,7 @@ export default function RollingMigrationFormDrawer({
       hosts: section3Ref,
       vms: section4Ref,
       'map-resources': section5Ref,
-      options: section6Ref,
-      preview: section7Ref
+      options: section6Ref
     }
 
     const el = map[id]?.current
@@ -1349,6 +1422,22 @@ export default function RollingMigrationFormDrawer({
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setActiveSectionId(id)
   }, [])
+
+  const onOptionsChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (getParamsUpdater as any)(key)(value)
+    },
+    [getParamsUpdater, markTouched]
+  )
+
+  const onOptionsSelectionChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (updateSelectedMigrationOptions as any)(key)(value)
+    },
+    [markTouched, updateSelectedMigrationOptions]
+  )
 
   const uniqueVmwareNetworks = useMemo(() => {
     return Array.from(new Set(availableVmwareNetworks))
@@ -1364,6 +1453,7 @@ export default function RollingMigrationFormDrawer({
   }, [availableVmwareDatastores, storageMappings])
 
   const handleViewMaasConfig = () => {
+    markTouched('baremetal')
     setMaasDetailsModalOpen(true)
   }
 
@@ -1389,6 +1479,8 @@ export default function RollingMigrationFormDrawer({
       handleClosePcdHostConfigDialog()
       return
     }
+
+    markTouched('hosts')
 
     setUpdatingPcdMapping(true)
 
@@ -2131,6 +2223,7 @@ export default function RollingMigrationFormDrawer({
 
   const handleIndividualHostConfigChange = async (hostId: string, configName: string) => {
     try {
+      markTouched('hosts')
       // Update the ESX host with the selected host config
       const updatedESXHosts = orderedESXHosts.map((host) => {
         if (host.id === hostId) {
@@ -2327,7 +2420,7 @@ export default function RollingMigrationFormDrawer({
           data-testid="rolling-migration-form-content"
           sx={{
             display: 'grid',
-            gridTemplateColumns: isSmallNav ? '1fr' : '260px 1fr',
+            gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
             gap: 3
           }}
         >
@@ -2367,7 +2460,8 @@ export default function RollingMigrationFormDrawer({
 
             <Box ref={section1Ref} data-testid="rolling-migration-form-step-source-destination">
               <SurfaceCard
-                title="1. Source And Destination"
+                variant="section"
+                title="Source And Destination"
                 subtitle="Choose where you convert from and where you convert to"
                 data-testid="rolling-migration-form-step1-card"
               >
@@ -2385,9 +2479,12 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
+            <Divider />
+
             <Box ref={section2Ref} data-testid="rolling-migration-form-step-baremetal">
               <SurfaceCard
-                title="2. Bare Metal Config"
+                variant="section"
+                title="Bare Metal Config"
                 subtitle="Verify the selected configuration"
                 data-testid="rolling-migration-form-step2-card"
               >
@@ -2414,9 +2511,12 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
+            <Divider />
+
             <Box ref={section3Ref} data-testid="rolling-migration-form-step-hosts">
               <SurfaceCard
-                title="3. ESXi Hosts"
+                variant="section"
+                title="ESXi Hosts"
                 subtitle="Assign PCD host configurations to all ESXi hosts"
                 data-testid="rolling-migration-form-step3-card"
               >
@@ -2477,9 +2577,12 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
+            <Divider />
+
             <Box ref={section4Ref} data-testid="rolling-migration-form-step-vms">
               <SurfaceCard
-                title="4. Select VMs"
+                variant="section"
+                title="Select VMs"
                 subtitle="Choose the virtual machines to convert and assign required fields"
                 data-testid="rolling-migration-form-step4-card"
               >
@@ -2488,7 +2591,7 @@ export default function RollingMigrationFormDrawer({
                   color="text.secondary"
                   sx={{ mt: 1, display: 'block', mb: 1 }}
                 >
-                  💡 Tip: Powered-off VMs require IP Address and OS assignment for proper migration
+                  Tip: Powered-off VMs require IP Address and OS assignment for proper migration
                   configuration
                 </Typography>
                 <Paper
@@ -2508,6 +2611,7 @@ export default function RollingMigrationFormDrawer({
                     rowHeight={52}
                     checkboxSelection
                     onRowSelectionModelChange={(selectedRowIds) => {
+                      markTouched('vms')
                       setSelectedVMs(selectedRowIds)
                     }}
                     rowSelectionModel={selectedVMs.filter((vmId) =>
@@ -2570,9 +2674,12 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
+            <Divider />
+
             <Box ref={section5Ref} data-testid="rolling-migration-form-step-map-resources">
               <SurfaceCard
-                title="5. Map Networks And Storage"
+                variant="section"
+                title="Map Networks And Storage"
                 subtitle="Ensure VMware networks/datastores have PCD targets"
                 data-testid="rolling-migration-form-step5-card"
               >
@@ -2600,18 +2707,21 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
+            <Divider />
+
             <Box ref={section6Ref} data-testid="rolling-migration-form-step-options">
               <SurfaceCard
-                title="6. Migration Options"
+                variant="section"
+                title="Migration Options"
                 subtitle="Optional scheduling, cutover behavior, and advanced settings"
                 data-testid="rolling-migration-form-step6-card"
               >
                 <MigrationOptions
                   stepNumber="6"
                   params={params}
-                  onChange={getParamsUpdater}
+                  onChange={onOptionsChange}
                   selectedMigrationOptions={selectedMigrationOptions}
-                  updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                  updateSelectedMigrationOptions={onOptionsSelectionChange}
                   errors={fieldErrors}
                   getErrorsUpdater={getFieldErrorsUpdater}
                   showHeader={false}
@@ -2619,9 +2729,12 @@ export default function RollingMigrationFormDrawer({
               </SurfaceCard>
             </Box>
 
-            <Box ref={section7Ref} data-testid="rolling-migration-form-step-preview">
+            <Divider />
+
+            <Box data-testid="rolling-migration-form-step-preview">
               <SurfaceCard
-                title="7. Preview"
+                variant="section"
+                title="Preview"
                 subtitle="Verify your selections before starting the conversion"
                 data-testid="rolling-migration-form-step7-card"
               >

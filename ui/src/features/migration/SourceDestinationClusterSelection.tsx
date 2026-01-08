@@ -17,6 +17,7 @@ import { useClusterData } from './useClusterData'
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from '@cds/core/icon'
 import { Step } from 'src/shared/components'
+import { FieldLabel } from 'src/components'
 
 ClarityIcons.addIcons(buildingIcon, clusterIcon, searchIcon)
 
@@ -91,9 +92,13 @@ export default function SourceDestinationClusterSelection({
   // Filter PCD data based on search term
   const filteredPcdData = React.useMemo(() => {
     if (!pcdSearchTerm) return pcdData
-    return pcdData.filter((pcd) =>
-      pcd.tenantName.toLowerCase().includes(pcdSearchTerm.toLowerCase())
-    )
+    const term = pcdSearchTerm.toLowerCase().trim()
+    return pcdData.filter((pcd) => {
+      const clusterName = (pcd.name || '').toLowerCase()
+      const credName = (pcd.openstackCredName || '').toLowerCase()
+      const tenantName = (pcd.tenantName || '').toLowerCase()
+      return clusterName.includes(term) || credName.includes(term) || tenantName.includes(term)
+    })
   }, [pcdData, pcdSearchTerm])
 
   // Use external loading states if provided, otherwise use hook loading states
@@ -160,9 +165,9 @@ export default function SourceDestinationClusterSelection({
       {showHeader ? <Step stepNumber={stepNumber} label={stepLabel} /> : null}
       <SideBySideContainer>
         <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: '500' }}>
-            VMware Source Cluster
-          </Typography>
+          <Box sx={{ mb: 1 }}>
+            <FieldLabel label="VMware Source Cluster" required align="flex-start" />
+          </Box>
           <FormControl fullWidth variant="outlined" size="small">
             <Select
               value={currentVmwareCluster}
@@ -182,7 +187,8 @@ export default function SourceDestinationClusterSelection({
                 const credName = parts[0]
 
                 const sourceItem = sourceData.find(
-                  (item) => item.credName === credName && item.clusters.some((c) => c.id === selected)
+                  (item) =>
+                    item.credName === credName && item.clusters.some((c) => c.id === selected)
                 )
                 const cluster = sourceItem?.clusters.find((c) => c.id === selected)
                 const vcenterName = sourceItem?.vcenterName || credName
@@ -192,9 +198,7 @@ export default function SourceDestinationClusterSelection({
                   ? `${vcenterName} - ${datacenterDisplay} - ${
                       cluster?.displayName || cluster?.name || 'Unknown Cluster'
                     }`
-                  : `${vcenterName} - ${
-                      cluster?.displayName || cluster?.name || 'Unknown Cluster'
-                    }`
+                  : `${vcenterName} - ${cluster?.displayName || cluster?.name || 'Unknown Cluster'}`
               }}
               endAdornment={
                 loadingVMware ? (
@@ -220,7 +224,7 @@ export default function SourceDestinationClusterSelection({
               >
                 <TextField
                   size="small"
-                  placeholder="Search clusters, vCenter, or datacenter"
+                  placeholder="Search clusters or datacenters"
                   fullWidth
                   value={vmwareSearchTerm}
                   onChange={(e) => {
@@ -367,9 +371,9 @@ export default function SourceDestinationClusterSelection({
         </Box>
 
         <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: '500' }}>
-            PCD Destination Cluster
-          </Typography>
+          <Box sx={{ mb: 1 }}>
+            <FieldLabel label="PCD Destination Cluster" required align="flex-start" />
+          </Box>
           <FormControl fullWidth variant="outlined" size="small">
             <Select
               value={currentPcdCluster}
@@ -423,7 +427,7 @@ export default function SourceDestinationClusterSelection({
               >
                 <TextField
                   size="small"
-                  placeholder="Search by tenant name"
+                  placeholder="Search by cluster, credential, or tenant"
                   fullWidth
                   value={pcdSearchTerm}
                   onChange={(e) => {

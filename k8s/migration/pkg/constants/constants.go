@@ -276,15 +276,16 @@ runcmd:
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
 		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
 		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:         2,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   3,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    4,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  5,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     6,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           7,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 8,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     9,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                10,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  11,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

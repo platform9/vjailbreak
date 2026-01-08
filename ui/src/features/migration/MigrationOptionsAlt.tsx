@@ -6,16 +6,15 @@ import {
   MenuItem,
   Select,
   styled,
-  TextField,
   Typography
 } from '@mui/material'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
 import { useCallback, useEffect } from 'react'
-import { Step } from 'src/shared/components/forms'
+import { useFormContext } from 'react-hook-form'
+import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
 import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
@@ -100,6 +99,7 @@ export default function MigrationOptionsAlt({
   stepNumber,
   showHeader = true
 }: MigrationOptionsPropsInterface) {
+  const { setValue } = useFormContext()
   const { data: globalConfigMap, refetch: refetchConfigMap } = useSettingsConfigMapQuery()
 
   // Iniitialize fields
@@ -197,10 +197,8 @@ export default function MigrationOptionsAlt({
             <TimePicker
               label="Data Copy Start Time"
               identifier="dataCopyStartTime"
-              params={params}
               errors={errors}
               getErrorsUpdater={getErrorsUpdater}
-              onChange={onChange}
               disabled={!selectedMigrationOptions.dataCopyStartTime}
               required={!!selectedMigrationOptions.dataCopyStartTime}
               disablePast
@@ -265,20 +263,16 @@ export default function MigrationOptionsAlt({
                     <TimePicker
                       label="Cutover Start Time"
                       identifier="cutoverStartTime"
-                      params={params}
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
-                      onChange={onChange}
                       required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                       disablePast
                     />
                     <TimePicker
                       label="Cutover End Time"
                       identifier="cutoverEndTime"
-                      params={params}
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
-                      onChange={onChange}
                       required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                       minDateTime={getMinEndTime()}
                       disablePast
@@ -343,6 +337,12 @@ export default function MigrationOptionsAlt({
                     checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
                     onChange={(e) => {
                       const isChecked = e.target.checked
+
+                      setValue(
+                        'postMigrationActionSuffix',
+                        isChecked ? params.postMigrationAction?.suffix || '_migrated_to_pcd' : ''
+                      )
+
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         renameVm: isChecked,
@@ -365,17 +365,10 @@ export default function MigrationOptionsAlt({
                 Append a suffix to the source VM name after migration.
               </OptionHelp>
             </OptionLeft>
-            <TextField
-              size="small"
+            <RHFTextField
+              name="postMigrationActionSuffix"
               label="VM Rename Suffix"
               disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-              value={params.postMigrationAction?.suffix || ''}
-              onChange={(e) => {
-                onChange('postMigrationAction')({
-                  ...params.postMigrationAction,
-                  suffix: e.target.value?.trim() || undefined
-                })
-              }}
               placeholder="_migrated_to_pcd"
             />
           </OptionRow>
@@ -389,6 +382,12 @@ export default function MigrationOptionsAlt({
                     checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
                     onChange={(e) => {
                       const isChecked = e.target.checked
+
+                      setValue(
+                        'postMigrationActionFolderName',
+                        isChecked ? params.postMigrationAction?.folderName || 'vjailbreakedVMs' : ''
+                      )
+
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         moveToFolder: isChecked,
@@ -411,17 +410,10 @@ export default function MigrationOptionsAlt({
                 Organize migrated VMs into a vCenter folder.
               </OptionHelp>
             </OptionLeft>
-            <TextField
-              size="small"
+            <RHFTextField
+              name="postMigrationActionFolderName"
               label="Folder Name"
               disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-              value={params.postMigrationAction?.folderName || ''}
-              onChange={(e) => {
-                onChange('postMigrationAction')({
-                  ...params.postMigrationAction,
-                  folderName: e.target.value?.trim() || undefined
-                })
-              }}
               placeholder="vjailbreakedVMs"
             />
           </OptionRow>
@@ -610,44 +602,19 @@ export default function MigrationOptionsAlt({
   )
 }
 
-const TimePicker = ({
-  identifier,
-  params,
-  onChange,
-  errors,
-  getErrorsUpdater,
-  helperText = '',
-  ...restProps
-}) => {
-  const value = params?.[identifier] ? dayjs(params?.[identifier]) : null
-
-  const handleTimeChange = useCallback(
-    (newValue: dayjs.Dayjs | null, identifier) => {
-      // Use format() with timezone offset instead of toISOString() which converts to UTC
-      // This preserves the user's local timezone (e.g., "2025-11-20T12:40:00+05:30" for IST)
-      const formattedTime = newValue?.format()
-      onChange(identifier)(String(formattedTime))
-    },
-    [onChange]
-  )
-
+const TimePicker = ({ identifier, errors, getErrorsUpdater, helperText = '', ...restProps }) => {
   return (
-    <DateTimePicker
-      ampm={false}
-      value={value}
-      onChange={(newValue: dayjs.Dayjs | null) => handleTimeChange(newValue, identifier)}
-      onError={(error) => {
+    <RHFDateTimeField
+      name={identifier}
+      label={restProps.label}
+      disabled={restProps.disabled}
+      required={restProps.required}
+      disablePast={restProps.disablePast}
+      minDateTime={restProps.minDateTime}
+      helperText={!!errors[identifier] && !restProps?.disabled ? helperText : ''}
+      onPickerError={(error) => {
         getErrorsUpdater(identifier)(error)
       }}
-      slotProps={{
-        textField: {
-          size: 'small',
-          required: restProps?.required,
-          error: !!errors[identifier] && !restProps?.disabled, // Show error if validation fails
-          helperText: !!errors[identifier] && !restProps?.disabled ? helperText : ''
-        }
-      }}
-      {...restProps}
     />
   )
 }

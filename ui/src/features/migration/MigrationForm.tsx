@@ -1,4 +1,4 @@
-import { Box, Alert, Divider, Typography, Select, MenuItem, useMediaQuery } from '@mui/material'
+import { Box, Alert, Divider, Typography, useMediaQuery } from '@mui/material'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
@@ -38,7 +38,6 @@ import VmsSelectionStep from './VmsSelectionStep'
 import { CUTOVER_TYPES } from './constants'
 import { uniq } from 'ramda'
 import { flatten } from 'ramda'
-import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
 import { useClusterData } from './useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
@@ -52,15 +51,36 @@ import {
   DrawerFooter,
   DrawerHeader,
   DrawerShell,
+  NavTab,
+  NavTabs,
   SectionNav,
   SurfaceCard
 } from 'src/components'
 import type { SectionNavItem } from 'src/components'
 import { useTheme } from '@mui/material/styles'
+import { useForm, useWatch } from 'react-hook-form'
+import { DesignSystemForm } from 'src/shared/components/forms'
 
 const stringsCompareFn = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
 
-const drawerWidth = 1200
+const drawerWidth = 1400
+
+type MigrationDrawerRHFValues = {
+  securityGroups: string[]
+  serverGroup: string
+  dataCopyStartTime: string
+  cutoverStartTime: string
+  cutoverEndTime: string
+  postMigrationActionSuffix: string
+  postMigrationActionFolderName: string
+}
+
+const stringArrayEqual = (a: string[] | undefined, b: string[] | undefined) => {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((v, i) => v === b[i])
+}
 
 export interface FormValues extends Record<string, unknown> {
   vmwareCreds?: {
@@ -197,6 +217,160 @@ export default function MigrationFormDrawer({
 
   // Generate a unique session ID for this form instance
   const [sessionId] = useState(() => `form-session-${Date.now()}`)
+
+  const form = useForm<MigrationDrawerRHFValues, any, MigrationDrawerRHFValues>({
+    defaultValues: {
+      securityGroups: params.securityGroups ?? [],
+      serverGroup: params.serverGroup ?? '',
+      dataCopyStartTime: params.dataCopyStartTime ?? '',
+      cutoverStartTime: params.cutoverStartTime ?? '',
+      cutoverEndTime: params.cutoverEndTime ?? '',
+      postMigrationActionSuffix: params.postMigrationAction?.suffix ?? '',
+      postMigrationActionFolderName: params.postMigrationAction?.folderName ?? ''
+    }
+  })
+
+  const rhfSecurityGroups = useWatch({ control: form.control, name: 'securityGroups' })
+  const rhfServerGroup = useWatch({ control: form.control, name: 'serverGroup' })
+  const rhfDataCopyStartTime = useWatch({ control: form.control, name: 'dataCopyStartTime' })
+  const rhfCutoverStartTime = useWatch({ control: form.control, name: 'cutoverStartTime' })
+  const rhfCutoverEndTime = useWatch({ control: form.control, name: 'cutoverEndTime' })
+  const rhfPostMigrationActionSuffix = useWatch({
+    control: form.control,
+    name: 'postMigrationActionSuffix'
+  })
+  const rhfPostMigrationActionFolderName = useWatch({
+    control: form.control,
+    name: 'postMigrationActionFolderName'
+  })
+
+  useEffect(() => {
+    const nextSecurityGroups = params.securityGroups ?? []
+    const nextServerGroup = params.serverGroup ?? ''
+
+    const nextDataCopyStartTime = params.dataCopyStartTime ?? ''
+    const nextCutoverStartTime = params.cutoverStartTime ?? ''
+    const nextCutoverEndTime = params.cutoverEndTime ?? ''
+    const nextPostMigrationActionSuffix = params.postMigrationAction?.suffix ?? ''
+    const nextPostMigrationActionFolderName = params.postMigrationAction?.folderName ?? ''
+
+    const currentSecurityGroups = form.getValues('securityGroups') ?? []
+    const currentServerGroup = form.getValues('serverGroup') ?? ''
+    const currentDataCopyStartTime = form.getValues('dataCopyStartTime') ?? ''
+    const currentCutoverStartTime = form.getValues('cutoverStartTime') ?? ''
+    const currentCutoverEndTime = form.getValues('cutoverEndTime') ?? ''
+    const currentPostMigrationActionSuffix = form.getValues('postMigrationActionSuffix') ?? ''
+    const currentPostMigrationActionFolderName =
+      form.getValues('postMigrationActionFolderName') ?? ''
+
+    if (!stringArrayEqual(currentSecurityGroups, nextSecurityGroups)) {
+      form.setValue('securityGroups', nextSecurityGroups)
+    }
+    if (currentServerGroup !== nextServerGroup) {
+      form.setValue('serverGroup', nextServerGroup)
+    }
+
+    if (currentDataCopyStartTime !== nextDataCopyStartTime) {
+      form.setValue('dataCopyStartTime', nextDataCopyStartTime)
+    }
+    if (currentCutoverStartTime !== nextCutoverStartTime) {
+      form.setValue('cutoverStartTime', nextCutoverStartTime)
+    }
+    if (currentCutoverEndTime !== nextCutoverEndTime) {
+      form.setValue('cutoverEndTime', nextCutoverEndTime)
+    }
+    if (currentPostMigrationActionSuffix !== nextPostMigrationActionSuffix) {
+      form.setValue('postMigrationActionSuffix', nextPostMigrationActionSuffix)
+    }
+    if (currentPostMigrationActionFolderName !== nextPostMigrationActionFolderName) {
+      form.setValue('postMigrationActionFolderName', nextPostMigrationActionFolderName)
+    }
+  }, [
+    form,
+    params.securityGroups,
+    params.serverGroup,
+    params.dataCopyStartTime,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    params.postMigrationAction
+  ])
+
+  useEffect(() => {
+    const nextDataCopyStartTime = (rhfDataCopyStartTime ?? '') as string
+    if ((params.dataCopyStartTime ?? '') !== nextDataCopyStartTime) {
+      getParamsUpdater('dataCopyStartTime')(nextDataCopyStartTime)
+    }
+  }, [getParamsUpdater, params.dataCopyStartTime, rhfDataCopyStartTime])
+
+  useEffect(() => {
+    const nextCutoverStartTime = (rhfCutoverStartTime ?? '') as string
+    if ((params.cutoverStartTime ?? '') !== nextCutoverStartTime) {
+      getParamsUpdater('cutoverStartTime')(nextCutoverStartTime)
+    }
+  }, [getParamsUpdater, params.cutoverStartTime, rhfCutoverStartTime])
+
+  useEffect(() => {
+    const nextCutoverEndTime = (rhfCutoverEndTime ?? '') as string
+    if ((params.cutoverEndTime ?? '') !== nextCutoverEndTime) {
+      getParamsUpdater('cutoverEndTime')(nextCutoverEndTime)
+    }
+  }, [getParamsUpdater, params.cutoverEndTime, rhfCutoverEndTime])
+
+  useEffect(() => {
+    const nextSuffix = String(rhfPostMigrationActionSuffix ?? '')
+    const normalized = nextSuffix.trim() ? nextSuffix.trim() : ''
+    const current = params.postMigrationAction?.suffix ?? ''
+
+    const renameEnabled = !!selectedMigrationOptions.postMigrationAction?.renameVm
+    if (!renameEnabled) return
+
+    if (current !== normalized) {
+      getParamsUpdater('postMigrationAction')({
+        ...params.postMigrationAction,
+        suffix: normalized ? normalized : undefined
+      })
+    }
+  }, [
+    getParamsUpdater,
+    params.postMigrationAction,
+    rhfPostMigrationActionSuffix,
+    selectedMigrationOptions.postMigrationAction?.renameVm
+  ])
+
+  useEffect(() => {
+    const nextFolderName = String(rhfPostMigrationActionFolderName ?? '')
+    const normalized = nextFolderName.trim() ? nextFolderName.trim() : ''
+    const current = params.postMigrationAction?.folderName ?? ''
+
+    const moveToFolderEnabled = !!selectedMigrationOptions.postMigrationAction?.moveToFolder
+    if (!moveToFolderEnabled) return
+
+    if (current !== normalized) {
+      getParamsUpdater('postMigrationAction')({
+        ...params.postMigrationAction,
+        folderName: normalized ? normalized : undefined
+      })
+    }
+  }, [
+    getParamsUpdater,
+    params.postMigrationAction,
+    rhfPostMigrationActionFolderName,
+    selectedMigrationOptions.postMigrationAction?.moveToFolder
+  ])
+
+  useEffect(() => {
+    const next = (rhfSecurityGroups ?? []) as string[]
+    if (!stringArrayEqual(params.securityGroups ?? [], next)) {
+      getParamsUpdater('securityGroups')(next)
+    }
+  }, [params.securityGroups, rhfSecurityGroups, getParamsUpdater])
+
+  useEffect(() => {
+    const next = (rhfServerGroup ?? '') as string
+    if ((params.serverGroup ?? '') !== next) {
+      getParamsUpdater('serverGroup')(next)
+    }
+  }, [params.serverGroup, rhfServerGroup, getParamsUpdater])
 
   const vmwareCredsValidated = vmwareCredentials?.status?.vmwareValidationStatus === 'Succeeded'
 
@@ -809,14 +983,6 @@ export default function MigrationFormDrawer({
     params.openstackCreds
   ])
 
-  // Handle keyboard events
-  useKeyboardSubmit({
-    open,
-    isSubmitDisabled: disableSubmit || submitting,
-    onSubmit: handleSubmit,
-    onClose: handleClose
-  })
-
   const contentRootRef = useRef<HTMLDivElement | null>(null)
   const section1Ref = useRef<HTMLDivElement | null>(null)
   const section2Ref = useRef<HTMLDivElement | null>(null)
@@ -825,6 +991,24 @@ export default function MigrationFormDrawer({
   const section5Ref = useRef<HTMLDivElement | null>(null)
   const reviewRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
+
+  const [touchedSections, setTouchedSections] = useState({
+    options: false
+  })
+
+  const markTouched = useCallback(
+    (key: keyof typeof touchedSections) => {
+      setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+    },
+    [setTouchedSections]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setTouchedSections({
+      options: false
+    })
+  }, [open])
 
   const isStep1Complete = Boolean(
     params.vmwareCluster &&
@@ -874,48 +1058,81 @@ export default function MigrationFormDrawer({
     ).length
   }, [availableVmwareDatastores, params.storageMappings])
 
-  const reviewedAndReady = Boolean(isStep1Complete && isStep2Complete && isStep3Complete)
+  const step1HasErrors = Boolean(
+    fieldErrors['vmwareCluster'] ||
+      fieldErrors['pcdCluster'] ||
+      fieldErrors['vmwareCreds'] ||
+      fieldErrors['openstackCreds']
+  )
+
+  const step2HasErrors = Boolean(
+    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
+  )
+
+  const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
+
+  const step4Complete = Boolean(
+    (params.securityGroups && params.securityGroups.length > 0) || params.serverGroup
+  )
+
+  const step5HasErrors = Boolean(
+    (selectedMigrationOptions.dataCopyStartTime && fieldErrors['dataCopyStartTime']) ||
+      (selectedMigrationOptions.cutoverOption &&
+        (fieldErrors['cutoverOption'] ||
+          (params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+            (fieldErrors['cutoverStartTime'] || fieldErrors['cutoverEndTime'])) ||
+          (params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+            selectedMigrationOptions.periodicSyncEnabled &&
+            fieldErrors['periodicSyncInterval']))) ||
+      (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript'])
+  )
+
+  const step5Complete = Boolean(touchedSections.options && !step5HasErrors)
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
       {
         id: 'source-destination',
-        title: '1. Source And Destination',
+        title: 'Source And Destination',
         description: 'Pick clusters and credentials',
-        status: isStep1Complete ? 'complete' : 'attention'
+        status: isStep1Complete ? 'complete' : step1HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'select-vms',
-        title: '2. Select VMs',
+        title: 'Select VMs',
         description: 'Choose VMs and assign required fields',
-        status: isStep2Complete ? 'complete' : 'attention'
+        status: isStep2Complete ? 'complete' : step2HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'map-resources',
-        title: '3. Map Networks And Storage',
+        title: 'Map Networks And Storage',
         description: 'Map VMware networks/datastores to PCD',
-        status: isStep3Complete ? 'complete' : 'attention'
+        status: isStep3Complete ? 'complete' : step3HasErrors ? 'attention' : 'incomplete'
       },
       {
         id: 'security',
-        title: '4. Security And Placement',
+        title: 'Security And Placement',
         description: 'Security groups and server group',
-        status: 'optional'
+        status: step4Complete ? 'complete' : 'incomplete'
       },
       {
         id: 'options',
-        title: '5. Migration Options',
+        title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: 'optional'
-      },
-      {
-        id: 'review',
-        title: '6. Preview',
-        description: 'Confirm selections before starting',
-        status: 'optional'
+        status: step5HasErrors ? 'attention' : step5Complete ? 'complete' : 'incomplete'
       }
     ],
-    [isStep1Complete, isStep2Complete, isStep3Complete, reviewedAndReady]
+    [
+      isStep1Complete,
+      isStep2Complete,
+      isStep3Complete,
+      step4Complete,
+      step1HasErrors,
+      step2HasErrors,
+      step3HasErrors,
+      step5HasErrors,
+      step5Complete
+    ]
   )
 
   const scrollToSection = useCallback((id: string) => {
@@ -924,8 +1141,7 @@ export default function MigrationFormDrawer({
       'select-vms': section2Ref,
       'map-resources': section3Ref,
       security: section4Ref,
-      options: section5Ref,
-      review: reviewRef
+      options: section5Ref
     }
 
     const el = map[id]?.current
@@ -935,45 +1151,66 @@ export default function MigrationFormDrawer({
   }, [])
 
   useEffect(() => {
-    const root = contentRootRef.current?.parentElement ?? undefined
-    const nodes = [
-      section1Ref.current,
-      section2Ref.current,
-      section3Ref.current,
-      section4Ref.current,
-      section5Ref.current,
-      reviewRef.current
-    ].filter(Boolean) as HTMLDivElement[]
+    if (!open) return
 
-    if (!root || nodes.length === 0) return
+    let cancelled = false
+    let observer: IntersectionObserver | undefined
+    let rafId: number | undefined
 
-    const idByNode = new Map<Element, string>([
-      [section1Ref.current as HTMLDivElement, 'source-destination'],
-      [section2Ref.current as HTMLDivElement, 'select-vms'],
-      [section3Ref.current as HTMLDivElement, 'map-resources'],
-      [section4Ref.current as HTMLDivElement, 'security'],
-      [section5Ref.current as HTMLDivElement, 'options'],
-      [reviewRef.current as HTMLDivElement, 'review']
-    ])
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
-
-        if (!visible) return
-        const id = idByNode.get(visible.target)
-        if (id) setActiveSectionId(id)
-      },
-      {
-        root,
-        threshold: [0.2, 0.35, 0.5, 0.65]
+    const init = () => {
+      if (cancelled) {
+        if (rafId) cancelAnimationFrame(rafId)
+        return
       }
-    )
 
-    nodes.forEach((n) => observer.observe(n))
-    return () => observer.disconnect()
+      const root = contentRootRef.current?.parentElement ?? undefined
+      const nodes = [
+        section1Ref.current,
+        section2Ref.current,
+        section3Ref.current,
+        section4Ref.current,
+        section5Ref.current
+      ].filter(Boolean) as HTMLDivElement[]
+
+      if (!root || nodes.length === 0) {
+        rafId = requestAnimationFrame(init)
+        return
+      }
+
+      const idByNode = new Map<Element, string>([
+        [section1Ref.current as HTMLDivElement, 'source-destination'],
+        [section2Ref.current as HTMLDivElement, 'select-vms'],
+        [section3Ref.current as HTMLDivElement, 'map-resources'],
+        [section4Ref.current as HTMLDivElement, 'security'],
+        [section5Ref.current as HTMLDivElement, 'options']
+      ])
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting)
+            .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
+
+          if (!visible) return
+          const id = idByNode.get(visible.target)
+          if (id) setActiveSectionId(id)
+        },
+        {
+          root,
+          threshold: [0.2, 0.35, 0.5, 0.65]
+        }
+      )
+
+      nodes.forEach((n) => observer?.observe(n))
+    }
+
+    rafId = requestAnimationFrame(init)
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+      if (observer) observer.disconnect()
+    }
   }, [open])
 
   const submitDisabled = disableSubmit || submitting
@@ -1017,221 +1254,254 @@ export default function MigrationFormDrawer({
         </DrawerFooter>
       }
     >
-      <Box
-        ref={contentRootRef}
-        data-testid="migration-form-content"
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: isSmallNav ? '1fr' : '260px 1fr',
-          gap: 3
+      <DesignSystemForm
+        form={form}
+        onSubmit={async () => {
+          await handleSubmit()
+        }}
+        keyboardSubmitProps={{
+          open,
+          onClose: handleClose,
+          isSubmitDisabled: disableSubmit || submitting
         }}
       >
-        {!isSmallNav ? (
-          <SectionNav
-            data-testid="migration-form-section-nav"
-            items={sectionNavItems}
-            activeId={activeSectionId}
-            onSelect={scrollToSection}
-            dense
-            showDescriptions={false}
-          />
-        ) : null}
-
-        <Box sx={{ display: 'grid', gap: 3 }}>
-          {isSmallNav ? (
-            <SurfaceCard
-              title="Steps"
-              subtitle="Jump to any section"
-              data-testid="migration-form-steps-card"
-            >
-              <Select
-                size="small"
-                value={activeSectionId}
-                onChange={(e) => scrollToSection(e.target.value as string)}
-                fullWidth
-                data-testid="migration-form-steps-select"
-              >
-                {sectionNavItems.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.title}
-                  </MenuItem>
-                ))}
-              </Select>
-            </SurfaceCard>
+        <Box
+          ref={contentRootRef}
+          data-testid="migration-form-content"
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
+            gap: 3
+          }}
+        >
+          {!isSmallNav ? (
+            <SectionNav
+              data-testid="migration-form-section-nav"
+              items={sectionNavItems}
+              activeId={activeSectionId}
+              onSelect={scrollToSection}
+              dense
+              showDescriptions={false}
+            />
           ) : null}
 
-          {/* Step 1 */}
-          <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
-            <SurfaceCard
-              title="1. Source And Destination"
-              subtitle="Choose where you migrate from and where you migrate to"
-              data-testid="migration-form-step1-card"
+          <Box sx={{ display: 'grid', gap: 3 }}>
+            {isSmallNav ? (
+              <SurfaceCard
+                title="Steps"
+                subtitle="Jump to any section"
+                data-testid="migration-form-steps-card"
+              >
+                <NavTabs
+                  value={activeSectionId}
+                  onChange={(_e, value) => scrollToSection(value as string)}
+                  data-testid="migration-form-steps-tabs"
+                >
+                  {sectionNavItems.map((item) => (
+                    <NavTab
+                      key={item.id}
+                      value={item.id}
+                      label={item.title}
+                      description={item.description}
+                      data-testid={`migration-form-steps-tab-${item.id}`}
+                    />
+                  ))}
+                </NavTabs>
+              </SurfaceCard>
+            ) : null}
+
+            {/* Step 1 */}
+            <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
+              <SurfaceCard
+                variant="section"
+                title="Source And Destination"
+                subtitle="Choose where you migrate from and where you migrate to"
+                data-testid="migration-form-step1-card"
+              >
+                <SourceDestinationClusterSelection
+                  onChange={getParamsUpdater}
+                  errors={fieldErrors}
+                  vmwareCluster={params.vmwareCluster}
+                  pcdCluster={params.pcdCluster}
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+
+            <Divider />
+
+            {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
+            <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
+              <SurfaceCard
+                variant="section"
+                title="Select VMs"
+                subtitle="Pick the virtual machines you want to migrate"
+                data-testid="migration-form-step2-card"
+              >
+                <VmsSelectionStep
+                  onChange={getParamsUpdater}
+                  error={fieldErrors['vms']}
+                  open={open}
+                  vmwareCredsValidated={vmwareCredsValidated}
+                  openstackCredsValidated={openstackCredsValidated}
+                  sessionId={sessionId}
+                  openstackFlavors={openstackCredentials?.spec?.flavors}
+                  vmwareCredName={params.vmwareCreds?.existingCredName}
+                  openstackCredName={params.openstackCreds?.existingCredName}
+                  openstackCredentials={openstackCredentials}
+                  vmwareCluster={params.vmwareCluster}
+                  useGPU={params.useGPU}
+                  showHeader={false}
+                />
+                {vmValidation.hasError && (
+                  <Alert severity="warning">{vmValidation.errorMessage}</Alert>
+                )}
+                {rdmValidation.hasConfigError && (
+                  <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                )}
+              </SurfaceCard>
+            </Box>
+            <Divider />
+
+            {/* Step 3 */}
+            <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
+              <SurfaceCard
+                variant="section"
+                title="Map Networks And Storage"
+                subtitle="Ensure all VMware networks and datastores have PCD targets"
+                data-testid="migration-form-step3-card"
+              >
+                <NetworkAndStorageMappingStep
+                  vmwareNetworks={availableVmwareNetworks}
+                  vmWareStorage={availableVmwareDatastores}
+                  openstackNetworks={sortedOpenstackNetworks}
+                  openstackStorage={sortedOpenstackVolumeTypes}
+                  params={params}
+                  onChange={getParamsUpdater}
+                  networkMappingError={fieldErrors['networksMapping']}
+                  storageMappingError={fieldErrors['storageMapping']}
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+            <Divider />
+
+            {/* Step 4 */}
+            <Box ref={section4Ref} data-testid="migration-form-step-security">
+              <SurfaceCard
+                variant="section"
+                title="Security groups and server group"
+                subtitle="Optional placement and security settings"
+                data-testid="migration-form-step4-card"
+              >
+                <SecurityGroupAndServerGroupStep
+                  params={params}
+                  onChange={getParamsUpdater}
+                  openstackCredentials={openstackCredentials}
+                  stepNumber="4"
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+            <Divider />
+
+            {/* Step 5 */}
+            <Box
+              ref={section5Ref}
+              data-testid="migration-form-step-options"
+              onChangeCapture={() => markTouched('options')}
+              onInputCapture={() => markTouched('options')}
+              onClickCapture={() => markTouched('options')}
+              onKeyDownCapture={() => markTouched('options')}
             >
-              <SourceDestinationClusterSelection
-                onChange={getParamsUpdater}
-                errors={fieldErrors}
-                vmwareCluster={params.vmwareCluster}
-                pcdCluster={params.pcdCluster}
-                showHeader={false}
-              />
-            </SurfaceCard>
-          </Box>
+              <SurfaceCard
+                variant="section"
+                title="Migration Options"
+                subtitle="Optional scheduling, cutover behavior, and advanced settings"
+                data-testid="migration-form-step5-card"
+              >
+                <MigrationOptions
+                  params={params}
+                  onChange={getParamsUpdater}
+                  openstackCredentials={openstackCredentials}
+                  selectedMigrationOptions={selectedMigrationOptions}
+                  updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                  errors={fieldErrors}
+                  getErrorsUpdater={getFieldErrorsUpdater}
+                  stepNumber="5"
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+            <Divider />
 
-          {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
-          <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
-            <SurfaceCard
-              title="2. Select VMs"
-              subtitle="Pick the virtual machines you want to migrate"
-              data-testid="migration-form-step2-card"
-            >
-              <VmsSelectionStep
-                onChange={getParamsUpdater}
-                error={fieldErrors['vms']}
-                open={open}
-                vmwareCredsValidated={vmwareCredsValidated}
-                openstackCredsValidated={openstackCredsValidated}
-                sessionId={sessionId}
-                openstackFlavors={openstackCredentials?.spec?.flavors}
-                vmwareCredName={params.vmwareCreds?.existingCredName}
-                openstackCredName={params.openstackCreds?.existingCredName}
-                openstackCredentials={openstackCredentials}
-                vmwareCluster={params.vmwareCluster}
-                useGPU={params.useGPU}
-                showHeader={false}
-              />
-              {vmValidation.hasError && (
-                <Alert severity="warning">{vmValidation.errorMessage}</Alert>
-              )}
-              {rdmValidation.hasConfigError && (
-                <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
-              )}
-            </SurfaceCard>
-          </Box>
+            <Box ref={reviewRef} data-testid="migration-form-step-review">
+              <SurfaceCard
+                variant="section"
+                title="Preview"
+                subtitle="Verify your selections before starting the migration"
+                data-testid="migration-form-step6-card"
+              >
+                <Box sx={{ display: 'grid', gap: 1.5 }}>
+                  <Typography variant="subtitle2">Summary</Typography>
+                  <Divider />
 
-          {/* Step 3 */}
-          <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
-            <SurfaceCard
-              title="3. Map Networks And Storage"
-              subtitle="Ensure all VMware networks and datastores have PCD targets"
-              data-testid="migration-form-step3-card"
-            >
-              <NetworkAndStorageMappingStep
-                vmwareNetworks={availableVmwareNetworks}
-                vmWareStorage={availableVmwareDatastores}
-                openstackNetworks={sortedOpenstackNetworks}
-                openstackStorage={sortedOpenstackVolumeTypes}
-                params={params}
-                onChange={getParamsUpdater}
-                networkMappingError={fieldErrors['networksMapping']}
-                storageMappingError={fieldErrors['storageMapping']}
-                showHeader={false}
-              />
-            </SurfaceCard>
-          </Box>
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Source
+                      </Typography>
+                      <Typography variant="body2">{params.vmwareCluster || '—'}</Typography>
+                    </Box>
 
-          {/* Step 4 */}
-          <Box ref={section4Ref} data-testid="migration-form-step-security">
-            <SurfaceCard
-              title="4. Security groups and server group"
-              subtitle="Optional placement and security settings"
-              data-testid="migration-form-step4-card"
-            >
-              <SecurityGroupAndServerGroupStep
-                params={params}
-                onChange={getParamsUpdater}
-                openstackCredentials={openstackCredentials}
-                stepNumber="4"
-                showHeader={false}
-              />
-            </SurfaceCard>
-          </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Destination
+                      </Typography>
+                      <Typography variant="body2">
+                        {targetPCDClusterName || params.pcdCluster || '—'}
+                      </Typography>
+                    </Box>
 
-          {/* Step 5 */}
-          <Box ref={section5Ref} data-testid="migration-form-step-options">
-            <SurfaceCard
-              title="5. Migration Options"
-              subtitle="Optional scheduling, cutover behavior, and advanced settings"
-              data-testid="migration-form-step5-card"
-            >
-              <MigrationOptions
-                params={params}
-                onChange={getParamsUpdater}
-                openstackCredentials={openstackCredentials}
-                selectedMigrationOptions={selectedMigrationOptions}
-                updateSelectedMigrationOptions={updateSelectedMigrationOptions}
-                errors={fieldErrors}
-                getErrorsUpdater={getFieldErrorsUpdater}
-                stepNumber="5"
-                showHeader={false}
-              />
-            </SurfaceCard>
-          </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        VMs selected
+                      </Typography>
+                      <Typography variant="body2">{params.vms?.length || 0}</Typography>
+                    </Box>
 
-          <Box ref={reviewRef} data-testid="migration-form-step-review">
-            <SurfaceCard
-              title="6. Preview"
-              subtitle="Verify your selections before starting the migration"
-              data-testid="migration-form-step6-card"
-            >
-              <Box sx={{ display: 'grid', gap: 1.5 }}>
-                <Typography variant="subtitle2">Summary</Typography>
-                <Divider />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Network mappings
+                      </Typography>
+                      <Typography variant="body2">
+                        {availableVmwareNetworks.length === 0
+                          ? '—'
+                          : unmappedNetworksCount === 0
+                            ? 'All mapped'
+                            : `${unmappedNetworksCount} unmapped`}
+                      </Typography>
+                    </Box>
 
-                <Box sx={{ display: 'grid', gap: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Source
-                    </Typography>
-                    <Typography variant="body2">{params.vmwareCluster || '—'}</Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Destination
-                    </Typography>
-                    <Typography variant="body2">
-                      {targetPCDClusterName || params.pcdCluster || '—'}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      VMs selected
-                    </Typography>
-                    <Typography variant="body2">{params.vms?.length || 0}</Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Network mappings
-                    </Typography>
-                    <Typography variant="body2">
-                      {availableVmwareNetworks.length === 0
-                        ? '—'
-                        : unmappedNetworksCount === 0
-                          ? 'All mapped'
-                          : `${unmappedNetworksCount} unmapped`}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Storage mappings
-                    </Typography>
-                    <Typography variant="body2">
-                      {availableVmwareDatastores.length === 0
-                        ? '—'
-                        : unmappedStorageCount === 0
-                          ? 'All mapped'
-                          : `${unmappedStorageCount} unmapped`}
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Storage mappings
+                      </Typography>
+                      <Typography variant="body2">
+                        {availableVmwareDatastores.length === 0
+                          ? '—'
+                          : unmappedStorageCount === 0
+                            ? 'All mapped'
+                            : `${unmappedStorageCount} unmapped`}
+                      </Typography>
+                    </Box>
                   </Box>
                 </Box>
-              </Box>
-            </SurfaceCard>
+              </SurfaceCard>
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </DesignSystemForm>
     </DrawerShell>
   )
 }

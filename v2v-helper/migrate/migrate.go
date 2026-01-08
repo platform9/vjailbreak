@@ -911,9 +911,14 @@ func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMIn
 			return errors.Wrap(err, "failed to inject mac to ips")
 		}
 		utils.PrintLog("Mac to ips injection completed successfully")
-
+		versionID := parseVersionID(osRelease)
+		if versionID == "" {
+			return errors.Errorf("failed to get version ID")
+		}
+		isNetplan := isNetplanSupported(versionID) && strings.Contains(osRelease, "ubuntu")
+		utils.PrintLog(fmt.Sprintf("Is netplan: %v", isNetplan))
 		utils.PrintLog("Running network persistence script")
-		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType); err != nil {
+		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, isNetplan); err != nil {
 			utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
 		} else {
 			utils.PrintLog("Network persistence script executed successfully")

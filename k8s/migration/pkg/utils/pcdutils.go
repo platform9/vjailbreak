@@ -6,9 +6,9 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
-	"encoding/json"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -216,20 +216,20 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 	err := json.Unmarshal(host.Extensions, &extData)
 	if err == nil {
 		for name, itface := range extData.Interfaces.Data.IfaceInfo {
-				// Collect all IP addresses from the interface
-				ipAddresses := []string{}
-				for _, iface := range itface.Ifaces {
-					ipAddresses = append(ipAddresses, iface.Addr)
-				}
-
-				// Create the interface with all IPs and the MAC address
-				interfaces = append(interfaces, vjailbreakv1alpha1.PCDHostInterface{
-					IPAddresses: ipAddresses,
-					MACAddress:  itface.MAC,
-					Name:        name,
-				})
+			// Collect all IP addresses from the interface
+			ipAddresses := make([]string, 0, len(itface.Ifaces))
+			for _, iface := range itface.Ifaces {
+				ipAddresses = append(ipAddresses, iface.Addr)
 			}
+
+			// Create the interface with all IPs and the MAC address
+			interfaces = append(interfaces, vjailbreakv1alpha1.PCDHostInterface{
+				IPAddresses: ipAddresses,
+				MACAddress:  itface.MAC,
+				Name:        name,
+			})
 		}
+	}
 	pcdHost := vjailbreakv1alpha1.PCDHost{
 		ObjectMeta: metav1.ObjectMeta{
 			// Use the host ID as the name to ensure uniqueness
