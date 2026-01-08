@@ -517,10 +517,13 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
-	if host[:4] != "http" {
+
+	host = strings.TrimRight(host, "/")
+
+	if !strings.HasPrefix(host, "http") {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != sdkPath {
+	if !strings.HasSuffix(host, sdkPath) {
 		host += sdkPath
 	}
 	u, err := url.Parse(host)
@@ -726,11 +729,11 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	// Create a semaphore to limit concurrent goroutines
 	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
-	
-	// Collect all VMs from all target datacenters 
+
+	// Collect all VMs from all target datacenters
 	allVMs := make([]*object.VirtualMachine, 0)
 	vmToDatacenter := make(map[string]string)
-	
+
 	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get client: %w", err)
@@ -744,7 +747,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 			continue
 		}
 		finder.SetDatacenter(dc)
-		
+
 		vms, err := finder.VirtualMachineList(ctx, "*")
 		if err != nil {
 			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
