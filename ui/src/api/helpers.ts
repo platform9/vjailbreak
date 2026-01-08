@@ -41,14 +41,14 @@ export const cleanupAllResources = async () => {
     console.error('Error cleaning up vmware creds', e)
   }
 
-  // Clean up openstack creds
+  // Clean up PCD creds
   try {
     const openstackCreds = await getOpenstackCredentialsList()
     for (const openstackCred of openstackCreds) {
       await deleteOpenstackCredentials(openstackCred.metadata.name)
     }
   } catch (e) {
-    console.error('Error cleaning up openstack creds', e)
+    console.error('Error cleaning up PCD creds', e)
   }
 
   // Clean up network mappings
