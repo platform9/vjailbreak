@@ -517,10 +517,13 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
-	if host[:4] != "http" {
+
+	host = strings.TrimRight(host, "/")
+
+	if !strings.HasPrefix(host, "http") {
 		host = "https://" + host
 	}
-	if host[len(host)-4:] != sdkPath {
+	if !strings.HasSuffix(host, sdkPath) {
 		host += sdkPath
 	}
 	u, err := url.Parse(host)
