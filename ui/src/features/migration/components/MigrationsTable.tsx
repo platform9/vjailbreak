@@ -87,9 +87,8 @@ const getProgressText = (
   }
 
   let diskInfo = ''
-  // Add disk info if available during copy phases
   if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
-    const currentDiskNum = parseInt(currentDisk) + 1 // Convert to 1-based
+    const currentDiskNum = parseInt(currentDisk) + 1
     diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
   }
 
@@ -111,7 +110,7 @@ const columns: GridColDef[] = [
       const isHotMigration = migrationType?.toLowerCase() === 'hot'
       const isColdMigration = migrationType?.toLowerCase() === 'cold'
       
-      // Check if migration is in progress (not failed or succeeded)
+      // Check if migration is in progress
       const activePhases = new Set([
         Phase.Pending,
         Phase.Validating,

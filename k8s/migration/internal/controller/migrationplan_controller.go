@@ -735,14 +735,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
-	// Get tenant from OpenStack credentials
-	tenant, err := r.GetTenantFromCredentials(ctx, migrationplan)
-	if err != nil {
-		ctxlog.Error(err, "Failed to get tenant from credentials")
-		// Continue with empty value instead of failing
-		tenant = ""
-	}
-
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -771,7 +763,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
-				Tenant:                  tenant,
 			},
 			Status: vjailbreakv1alpha1.MigrationStatus{
 				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -785,38 +776,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		}
 	}
 	return migrationobj, nil
-}
-
-// GetTenantFromCredentials fetches tenant from OpenStack credentials secret
-func (r *MigrationPlanReconciler) GetTenantFromCredentials(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (tenant string, err error) {
-	// Get the migration template
-	migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      migrationplan.Spec.MigrationTemplate,
-		Namespace: migrationplan.Namespace,
-	}, migrationTemplate); err != nil {
-		return "", errors.Wrap(err, "failed to get migration template")
-	}
-
-	// Get the OpenStack credentials reference
-	openstackRef := migrationTemplate.Spec.Destination.OpenstackRef
-	secretName := fmt.Sprintf("%s-openstack-secret", openstackRef)
-
-	// Fetch the secret
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: migrationplan.Namespace,
-	}, secret); err != nil {
-		return "", errors.Wrap(err, "failed to get openstack secret")
-	}
-
-	// Extract tenant from secret data (base64 encoded)
-	if tenantBytes, ok := secret.Data["OS_TENANT_NAME"]; ok {
-		tenant = string(tenantBytes)
-	}
-
-	return tenant, nil
 }
 
 // CreateJob creates a job to run v2v-helper

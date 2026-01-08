@@ -84,15 +84,9 @@ type MigrationSpec struct {
 	AssignedIP string `json:"assignedIP,omitempty"`
 
 	// MigrationType indicates whether this is a hot (live) or cold migration
-	// This is set at migration creation time from the MigrationPlan strategy
 	// +optional
 	// +kubebuilder:validation:Enum=hot;cold
 	MigrationType string `json:"migrationType,omitempty"`
-
-	// Tenant is the OpenStack tenant/project name where the VM is being migrated
-	// This is set at migration creation time from the OpenStack credentials
-	// +optional
-	Tenant string `json:"tenant,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
@@ -112,7 +106,6 @@ type MigrationStatus struct {
 	CurrentDisk string `json:"currentDisk,omitempty"`
 
 	// TotalDisks is the total number of disks to be migrated
-	// Set from VMwareMachine spec.VMInfo.Disks count
 	// +optional
 	TotalDisks int `json:"totalDisks,omitempty"`
 }

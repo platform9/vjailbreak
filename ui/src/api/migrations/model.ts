@@ -67,7 +67,6 @@ export interface Spec {
   initiateCutover?: boolean
   disconnectSourceNetwork?: boolean
   assignedIP?: string
-  tenant?: string
 }
 
 export enum MigrationPlan {
