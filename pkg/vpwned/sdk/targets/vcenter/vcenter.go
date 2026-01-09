@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	commonutils "github.com/platform9/vjailbreak/common/utils"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/targets"
 	"github.com/sirupsen/logrus"
@@ -74,16 +75,10 @@ func findBootDevice(devices []types.BaseVirtualMachineBootOptionsBootableDevice)
 func (v *Vcenter) connect(ctx context.Context, a api.TargetAccessInfo) (*govmomi.Client, *find.Finder, error) {
 	logrus.Info("Connecting to vCenter...")
 	// Parse vCenter URL
-	rawHost := strings.TrimSpace(a.HostnameOrIp)
-	if !strings.HasPrefix(rawHost, "http") {
-		rawHost = "https://" + rawHost
-	}
-
-	u, err := url.Parse(rawHost)
+	u, err := commonutils.NormalizeVCenterURL(a.HostnameOrIp)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse vCenter URL: %v", err)
 	}
-	u.Path = "/sdk"
 
 	// Set credentials
 	u.User = url.UserPassword(a.Username, a.Password)
