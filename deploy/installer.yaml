@@ -650,6 +650,13 @@ spec:
               migrationPlan:
                 description: MigrationPlan is the name of the migration plan
                 type: string
+              migrationType:
+                description: MigrationType indicates whether this is a hot (live)
+                  or cold migration
+                enum:
+                - hot
+                - cold
+                type: string
               podRef:
                 description: PodRef is the name of the pod
                 type: string
@@ -716,6 +723,11 @@ spec:
                   - type
                   type: object
                 type: array
+              currentDisk:
+                description: |-
+                  CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+                  Extracted from migration pod events
+                type: string
               phase:
                 description: Phase is the current phase of the migration
                 enum:
@@ -732,6 +744,9 @@ spec:
                 - Failed
                 - Unknown
                 type: string
+              totalDisks:
+                description: TotalDisks is the total number of disks to be migrated
+                type: integer
             required:
             - phase
             type: object

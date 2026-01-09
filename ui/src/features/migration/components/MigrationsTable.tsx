@@ -3,6 +3,7 @@ import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useState, useMemo } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
@@ -17,6 +18,19 @@ import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
+import { keyframes } from '@mui/material/styles'
+
+const pulse = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+`
 
 const STATUS_ORDER = {
   Running: 0,
@@ -49,7 +63,12 @@ const IN_PROGRESS_PHASES = [
   Phase.AwaitingAdminCutOver
 ]
 
-const getProgressText = (phase: Phase | undefined, conditions: Condition[] | undefined) => {
+const getProgressText = (
+  phase: Phase | undefined,
+  conditions: Condition[] | undefined,
+  currentDisk?: string,
+  totalDisks?: number
+) => {
   if (!phase || phase === Phase.Unknown) {
     return 'Unknown Status'
   }
@@ -67,7 +86,15 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
     return `${phase} - ${message}`
   }
 
-  return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
+  let diskInfo = ''
+  if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
+    const currentDiskNum = currentDisk ? (parseInt(currentDisk, 10) + 1) || 1 : 1
+    diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
+  }
+
+  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase}${diskInfo} - ${message}`
+
+  return progressText
 }
 
 const columns: GridColDef[] = [
@@ -75,7 +102,58 @@ const columns: GridColDef[] = [
     field: 'name',
     headerName: 'Name',
     valueGetter: (_, row) => row.spec?.vmName,
-    flex: 0.7
+    flex: 0.7,
+    renderCell: (params) => {
+      const vmName = params.row?.spec?.vmName
+      const migrationType = params.row?.spec?.migrationType
+      const phase = params.row?.status?.phase
+      const isHotMigration = migrationType?.toLowerCase() === 'hot'
+      const isColdMigration = migrationType?.toLowerCase() === 'cold'
+      
+      // Check if migration is in progress
+      const activePhases = new Set([
+        Phase.Pending,
+        Phase.Validating,
+        Phase.AwaitingDataCopyStart,
+        Phase.CopyingBlocks,
+        Phase.CopyingChangedBlocks,
+        Phase.ConvertingDisk,
+        Phase.AwaitingCutOverStartTime,
+        Phase.AwaitingAdminCutOver,
+        Phase.Unknown
+      ])
+      
+      const isInProgress = activePhases.has(phase)
+      const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
+      
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isHotMigration && (
+            <Tooltip title="Hot Migration">
+              <FiberManualRecordIcon 
+                sx={{ 
+                  fontSize: 12, 
+                  color: '#FFAE42',
+                  ...(isInProgress && { animation: syncedPulse })
+                }} 
+              />
+            </Tooltip>
+          )}
+          {isColdMigration && (
+            <Tooltip title="Cold Migration">
+              <FiberManualRecordIcon 
+                sx={{ 
+                  fontSize: 12, 
+                  color: '#4293FF',
+                  ...(isInProgress && { animation: syncedPulse })
+                }} 
+              />
+            </Tooltip>
+          )}
+          <Typography variant="body2">{vmName}</Typography>
+        </Box>
+      )
+    }
   },
   {
     field: 'status',
@@ -114,13 +192,19 @@ const columns: GridColDef[] = [
   {
     field: 'status.conditions',
     headerName: 'Progress',
-    valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+    valueGetter: (_, row) => 
+      getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk, row.status?.totalDisks),
     flex: 2,
     renderCell: (params) => {
       const phase = params.row?.status?.phase
       const conditions = params.row?.status?.conditions
+      const currentDisk = params.row?.status?.currentDisk
+      const totalDisks = params.row?.status?.totalDisks
       return conditions ? (
-        <MigrationProgress phase={phase} progressText={getProgressText(phase, conditions)} />
+        <MigrationProgress 
+          phase={phase} 
+          progressText={getProgressText(phase, conditions, currentDisk, totalDisks)} 
+        />
       ) : null
     }
   },
@@ -187,6 +271,22 @@ const columns: GridColDef[] = [
             />
           )}
 
+          <Tooltip title={'Delete migration'}>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation()
+                params.row.onDelete(params.row.metadata?.name)
+              }}
+              size="small"
+              sx={{
+                cursor: 'pointer',
+                position: 'relative'
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+
           {showRetryButton && (
             <Tooltip title="Retry migration">
               <IconButton
@@ -205,21 +305,6 @@ const columns: GridColDef[] = [
             </Tooltip>
           )}
 
-          <Tooltip title={'Delete migration'}>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation()
-                params.row.onDelete(params.row.metadata?.name)
-              }}
-              size="small"
-              sx={{
-                cursor: 'pointer',
-                position: 'relative'
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
         </Box>
       )
     }
