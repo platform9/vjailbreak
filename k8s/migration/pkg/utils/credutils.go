@@ -22,6 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
+	commonutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -518,16 +519,10 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
 
-	rawHost := strings.TrimSpace(host)
-	if !strings.HasPrefix(rawHost, "http") {
-		rawHost = "https://" + rawHost
-	}
-
-	u, err := url.Parse(rawHost)
+	u, err := commonutils.NormalizeVCenterURL(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
+		return nil, err
 	}
-	u.Path = "/sdk"
 
 	u.User = url.UserPassword(username, password)
 	// Connect and log in to ESX or vCenter
@@ -1906,15 +1901,10 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != sdkPath {
-		host += sdkPath
-	}
-	u, err := url.Parse(host)
+	u, err := commonutils.NormalizeVCenterURL(host)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+		log.FromContext(ctx).Error(err, "Error normalizing vCenter URL for logout")
+		return err
 	}
 	u.User = url.UserPassword(username, password)
 	// Connect and log in to ESX or vCenter

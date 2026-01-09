@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	commonutils "github.com/platform9/vjailbreak/common/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/cli/esx"
 	"github.com/vmware/govmomi/find"
@@ -41,20 +42,9 @@ type VCenterClient struct {
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
 
-	rawHost := strings.TrimSpace(host)
-	if !strings.HasPrefix(rawHost, "http") {
-		rawHost = "https://" + rawHost
-	}
-
-	u, err := url.Parse(rawHost)
+	u, err := commonutils.NormalizeVCenterURL(host)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
-	}
-	u.Path = "/sdk"
-
-	u, err = url.Parse(u.String())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
+		return nil, nil, err
 	}
 	u.User = url.UserPassword(username, password)
 
