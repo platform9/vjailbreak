@@ -106,6 +106,8 @@ func VCenterClientBuilder(ctx context.Context, username, password, host string, 
 
 func GetThumbprint(host string) (string, error) {
 	// Get the thumbprint of the vCenter server
+	host = strings.TrimRight(host, "/")
+
 	// Establish a TLS connection to the server
 	conn, err := tls.Dial("tcp", host+":443", &tls.Config{
 		InsecureSkipVerify: true, // Skip verification
