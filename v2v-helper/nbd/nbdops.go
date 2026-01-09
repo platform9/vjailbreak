@@ -83,6 +83,8 @@ var fixedOptArgs = libnbd.BlockStatusOptargs{
 }
 
 func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
+	server = strings.TrimRight(server, "/")
+
 	tmp_dir, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %v", err)
@@ -175,7 +177,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
-		
+
 		lastLoggedProgress := -1
 		const logInterval = 5
 		lastChannelProgress := 0
