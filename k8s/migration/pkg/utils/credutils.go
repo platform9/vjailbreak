@@ -22,7 +22,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
-	commonutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -519,7 +518,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
 
-	u, err := commonutils.NormalizeVCenterURL(host)
+	u, err := netutils.NormalizeVCenterURL(host)
 	if err != nil {
 		return nil, err
 	}
@@ -1901,7 +1900,7 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
-	u, err := commonutils.NormalizeVCenterURL(host)
+	u, err := netutils.NormalizeVCenterURL(host)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "Error normalizing vCenter URL for logout")
 		return err
