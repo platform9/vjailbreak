@@ -517,16 +517,12 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
 	datacenter := vmwareCredsinfo.Datacenter
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != sdkPath {
-		host += sdkPath
-	}
-	u, err := url.Parse(host)
+
+	u, err := netutils.NormalizeVCenterURL(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
+		return nil, err
 	}
+
 	u.User = url.UserPassword(username, password)
 	// Connect and log in to ESX or vCenter
 	s := &cache.Session{
@@ -726,11 +722,11 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	// Create a semaphore to limit concurrent goroutines
 	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
-	
-	// Collect all VMs from all target datacenters 
+
+	// Collect all VMs from all target datacenters
 	allVMs := make([]*object.VirtualMachine, 0)
 	vmToDatacenter := make(map[string]string)
-	
+
 	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get client: %w", err)
@@ -744,7 +740,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 			continue
 		}
 		finder.SetDatacenter(dc)
-		
+
 		vms, err := finder.VirtualMachineList(ctx, "*")
 		if err != nil {
 			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
@@ -1903,15 +1899,10 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 	username := vmwareCredsinfo.Username
 	password := vmwareCredsinfo.Password
 	disableSSLVerification := vmwareCredsinfo.Insecure
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != sdkPath {
-		host += sdkPath
-	}
-	u, err := url.Parse(host)
+	u, err := netutils.NormalizeVCenterURL(host)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "Error parsing vCenter URL")
+		log.FromContext(ctx).Error(err, "Error normalizing vCenter URL for logout")
+		return err
 	}
 	u.User = url.UserPassword(username, password)
 	// Connect and log in to ESX or vCenter
