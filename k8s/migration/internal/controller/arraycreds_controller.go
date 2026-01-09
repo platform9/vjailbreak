@@ -115,7 +115,7 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	arrayCredential, err := utils.GetArrayCredentialsFromSecret(ctx, r.Client, arraycreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get storage array credentials from secret", "secretName", arraycreds.Spec.SecretRef.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = "Failed"
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ValidationStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Failed to get credentials from secret: %v", err)
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
@@ -127,7 +127,7 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	// Validate credentials using storage SDK
 	if err := r.validateArrayCredentials(ctx, arraycreds.Spec.VendorType, arrayCredential); err != nil {
 		ctxlog.Error(err, "Error validating ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = "Failed"
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ValidationStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Validation failed: %v", err)
 		ctxlog.Info("Updating status to failed", "arraycreds", scope.ArrayCreds.Name, "message", err.Error())
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
@@ -184,6 +184,8 @@ func (r *ArrayCredsReconciler) reconcileDelete(ctx context.Context, scope *scope
 
 // validateArrayCredentials validates storage array credentials using the storage SDK
 func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo) error {
+	ctxlog := log.FromContext(ctx)
+
 	// Get the storage provider
 	provider, err := storagesdk.NewStorageProvider(vendorType)
 	if err != nil {
@@ -203,7 +205,11 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 	if err := provider.Connect(ctx, accessInfo); err != nil {
 		return errors.Wrap(err, "failed to connect to storage array")
 	}
-	defer provider.Disconnect()
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			ctxlog.Error(err, "Failed to disconnect from storage array")
+		}
+	}()
 
 	// Validate credentials
 	if err := provider.ValidateCredentials(ctx); err != nil {

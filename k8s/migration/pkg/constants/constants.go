@@ -234,6 +234,9 @@ const (
 	// MigrationPlan status message prefix
 	MigrationPlanValidationFailedPrefix = "Migration plan validation failed"
 
+	// ValidationStatusFailed is the status value for failed validation
+	ValidationStatusFailed = "Failed"
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
