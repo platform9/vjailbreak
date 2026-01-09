@@ -84,13 +84,6 @@ type Disk struct {
 	DatastoreID string `json:"datastoreId,omitempty"`
 }
 
-type Disk struct {
-	Name        string `json:"name,omitempty"`
-	CapacityGB  int    `json:"capacityGB,omitempty"`
-	Datastore   string `json:"datastore,omitempty"`
-	DatastoreId string `json:"datastoreId,omitempty"`
-}
-
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
 	Network   string `json:"network,omitempty" `
