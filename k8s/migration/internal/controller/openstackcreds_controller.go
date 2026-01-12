@@ -177,27 +177,27 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		// 	return ctrl.Result{}, err
 		// }
 		// ctxlog.Info("Successfully updated status to failed")
-	} else {
-		// Update the status of the OpenstackCreds object
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-		ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
-		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
-		}
-		ctxlog.Info("Successfully updated status to success")
+	}
 
-		// Discover storage arrays from Cinder configuration
-		if err := r.discoverStorageArrays(ctx, scope); err != nil {
-			ctxlog.Error(err, "Failed to discover storage arrays")
-			// Don't fail reconciliation, just log error
-		}
+	// Update the status of the OpenstackCreds object
+	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
+	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		return ctrl.Result{}, err
+	}
+	ctxlog.Info("Successfully updated status to success")
 
-		err := handleValidatedCreds(ctx, r, scope)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	// Discover storage arrays from Cinder configuration
+	if err := r.discoverStorageArrays(ctx, scope); err != nil {
+		ctxlog.Error(err, "Failed to discover storage arrays")
+		// Don't fail reconciliation, just log error
+	}
+
+	err := handleValidatedCreds(ctx, r, scope)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
@@ -273,7 +273,6 @@ func (r *OpenstackCredsReconciler) discoverStorageArrays(ctx context.Context, sc
 	for backendName, backendInfo := range backendMap {
 		ctxlog.Info("Processing backend pool", "backendName", backendName, "backendInfo", backendInfo)
 		r.createArrayCreds(ctx, scope, backendName, backendInfo)
-
 	}
 
 	return nil

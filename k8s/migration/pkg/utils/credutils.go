@@ -1531,6 +1531,7 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 	vminfoMu.Unlock()
 }
 
+// GetFinderForVMwareCreds creates a vSphere finder for the specified VMware credentials and datacenter
 func GetFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
@@ -1868,6 +1869,7 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 	}
 }
 
+// GetBackendPools discovers and returns Cinder backend pools from OpenStack
 func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Discovering backend pools from OpenStack Cinder")
@@ -1909,7 +1911,6 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	// Map backend name -> vendor/type info for quick lookup
 	backendMap := make(map[string]map[string]string)
 	for _, pool := range backendPools {
-
 		vendor := pool.Capabilities.VendorName
 		driver := pool.Capabilities.DriverVersion
 		volumeType, backendName := parsePoolName(pool.Name)
@@ -1960,6 +1961,7 @@ func extractCinderHost(fullPoolName string) string {
 	return parts[0]
 }
 
+// GetArrayVendor normalizes storage array vendor name to a supported vendor type
 func GetArrayVendor(vendor string) string {
 	// Convert vendor to lowercase
 	vendor = strings.ToLower(vendor)
@@ -1970,6 +1972,7 @@ func GetArrayVendor(vendor string) string {
 	return "unsupported"
 }
 
+// Contains checks if a datastore exists in the provided list of datastores
 func Contains(datastores []vjailbreakv1alpha1.DatastoreInfo, datastore vjailbreakv1alpha1.DatastoreInfo) bool {
 	for _, ds := range datastores {
 		if ds.Name == datastore.Name && ds.BackingDevice == datastore.BackingDevice {

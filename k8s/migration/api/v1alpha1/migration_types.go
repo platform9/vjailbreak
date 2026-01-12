@@ -42,8 +42,7 @@ const (
 	VMMigrationPhaseValidationFailed VMMigrationPhase = "ValidationFailed"
 	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
-	// VAAI XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
-	// VMMigrationPhaseConnectingToESXi indicates connecting to ESXi host via SSH
+	// VMMigrationPhaseConnectingToESXi indicates connecting to ESXi host via SSH for VAAI XCOPY
 	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
 	// VMMigrationPhaseCreatingInitiatorGroup indicates creating initiator group on storage array
 	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
