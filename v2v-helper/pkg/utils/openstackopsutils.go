@@ -916,10 +916,10 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 
 	return &volume, nil
 }
-func (osclient *OpenStackClients) GetServerGroups(projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
+func (osclient *OpenStackClients) GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching server groups for project %s", projectName))
 
-	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages(context.Background())
+	allPages, err := servergroups.List(osclient.ComputeClient, servergroups.ListOpts{}).AllPages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list server groups: %w", err)
 	}
