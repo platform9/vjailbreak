@@ -3,12 +3,14 @@
 package esxissh
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -22,6 +24,13 @@ const (
 	SSHOperationClone   SSHOperation = "clone"
 	SSHOperationStatus  SSHOperation = "status"
 	SSHOperationCleanup SSHOperation = "cleanup"
+)
+
+// Package-level storage for known ESXi host keys (Trust-On-First-Use pattern)
+// Maps hostname -> SSH public key
+var (
+	knownHostsMutex sync.RWMutex
+	knownHosts      = make(map[string]ssh.PublicKey)
 )
 
 // VmkfstoolsTask represents the result of a vmkfstools operation
@@ -76,6 +85,30 @@ func (c *Client) SetCommandTimeout(timeout time.Duration) {
 	c.commandTimeout = timeout
 }
 
+// trustOnFirstUseCallback implements the Trust-On-First-Use (TOFU) pattern for SSH host key verification
+// On first connection: accepts and stores the host key
+// On subsequent connections: verifies the host key matches the stored key
+func (c *Client) trustOnFirstUseCallback(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	knownHostsMutex.Lock()
+	defer knownHostsMutex.Unlock()
+
+	storedKey, exists := knownHosts[hostname]
+	if !exists {
+		// First connection - trust and store the key
+		knownHosts[hostname] = key
+		utils.PrintLog(fmt.Sprintf("ESXi host %s: accepted and stored SSH host key (first connection)", hostname))
+		return nil
+	}
+
+	// Subsequent connection - verify the key matches
+	if !bytes.Equal(storedKey.Marshal(), key.Marshal()) {
+		return fmt.Errorf("SSH host key mismatch for %s - possible man-in-the-middle attack (key changed)", hostname)
+	}
+
+	utils.PrintLog(fmt.Sprintf("ESXi host %s: SSH host key verified successfully", hostname))
+	return nil
+}
+
 func (c *Client) Connect(ctx context.Context, hostname, username string, privateKey []byte) error {
 	c.hostname = hostname
 	c.username = username
@@ -90,21 +123,15 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		// SECURITY RISK ACCEPTANCE: InsecureIgnoreHostKey bypasses host key verification
-		//
-		// This is an ACCEPTED RISK for the following reasons:
-		// 1. ESXi hosts use self-signed certificates - no PKI infrastructure
-		// 2. All connections are within VPN/private network environments
-		// 3. ESXi host identities are already verified through vCenter credentials
-		//
-		// FUTURE WORK: Implement Trust-On-First-Use (TOFU) pattern in follow-up PR
-		// - Accept and store host key on first connection
-		// - Verify against stored key on subsequent connections
-		//
-		// Suppression tags for security scanners:
-		// nosemgrep: go.lang.security.audit.crypto.ssh.ssh-insecure-ignore-host-key
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // Accepted risk - will implement TOFU in follow-up
-		Timeout:         2 * time.Minute,
+		// SECURITY: Using Trust-On-First-Use (TOFU) pattern for host key verification
+		// - First connection: accepts and stores the ESXi host's SSH public key
+		// - Subsequent connections: verifies the key matches the stored key
+		// - Protects against MITM attacks after initial connection
+		// - Appropriate for ESXi environments where hosts use self-signed certificates
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return c.trustOnFirstUseCallback(hostname, remote, key)
+		},
+		Timeout: 2 * time.Minute,
 	}
 
 	addr := net.JoinHostPort(hostname, "22")
