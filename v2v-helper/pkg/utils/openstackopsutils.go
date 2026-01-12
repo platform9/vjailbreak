@@ -433,6 +433,15 @@ func (osclient *OpenStackClients) GetPort(ctx context.Context, portID string) (*
 	return port, nil
 }
 
+func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
+	err := ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
+	if err != nil {
+		return fmt.Errorf("failed to delete port: %s", err)
+	}
+	return nil
+}
+
 func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*subnets.Subnet, error) {
 	parsedIp := net.ParseIP(ip)
 	if parsedIp == nil {
