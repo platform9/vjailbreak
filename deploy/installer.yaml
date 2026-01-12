@@ -12,6 +12,295 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: arraycreds.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ArrayCreds
+    listKind: ArrayCredsList
+    plural: arraycreds
+    singular: arraycreds
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.vendorType
+      name: Vendor
+      type: string
+    - jsonPath: .spec.openstackMapping.volumeType
+      name: VolumeType
+      type: string
+    - jsonPath: .spec.openstackMapping.cinderBackendName
+      name: Backend
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.arrayValidationStatus
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ArrayCreds is the Schema for the storage array credentials API that defines authentication
+          and connection details for storage arrays. It provides a secure way to store and validate
+          storage array credentials for use in migration operations, supporting multiple vendors including
+          Pure Storage, NetApp ONTAP, HPE Alletra, and others.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ArrayCredsSpec defines the desired state of ArrayCreds
+            properties:
+              autoDiscovered:
+                description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
+                  from OpenStack
+                type: boolean
+              openstackMapping:
+                description: OpenStackMapping is the openstack mapping for this array
+                properties:
+                  cinderBackendName:
+                    description: |-
+                      CinderBackendName is the Cinder backend name for this mapping
+                      This is the backend configured in cinder.conf (e.g., "pure-01")
+                    type: string
+                  cinderBackendPool:
+                    description: CinderBackendPool is the pool name within the backend
+                      (optional)
+                    type: string
+                  cinderHost:
+                    description: |-
+                      CinderHost is the full Cinder host string for manage API
+                      Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+                    type: string
+                  volumeType:
+                    description: VolumeType is the Cinder volume type associated with
+                      this mapping
+                    type: string
+                required:
+                - cinderBackendName
+                - volumeType
+                type: object
+              secretRef:
+                description: SecretRef is the reference to the Kubernetes secret holding
+                  storage array credentials
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vendorType:
+                description: VendorType is the storage array vendor type (e.g., pure,
+                  ontap, hpalletra)
+                type: string
+            required:
+            - vendorType
+            type: object
+          status:
+            description: ArrayCredsStatus defines the observed state of ArrayCreds
+            properties:
+              arrayValidationMessage:
+                description: ArrayValidationMessage is the message associated with
+                  the storage array validation
+                type: string
+              arrayValidationStatus:
+                description: |-
+                  ArrayValidationStatus is the status of the storage array validation
+                  Possible values: Pending, Succeeded, Failed, AwaitingCredentials
+                type: string
+              dataStore:
+                description: DataStore is the list of datastores associated with this
+                  array
+                items:
+                  description: DatastoreInfo holds datastore information including
+                    backing device NAA
+                  properties:
+                    backingNAA:
+                      type: string
+                    backingUUID:
+                      type: string
+                    capacity:
+                      format: int64
+                      type: integer
+                    freeSpace:
+                      format: int64
+                      type: integer
+                    moID:
+                      type: string
+                    name:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - backingNAA
+                  - backingUUID
+                  - capacity
+                  - freeSpace
+                  - moID
+                  - name
+                  - type
+                  type: object
+                type: array
+              phase:
+                description: |-
+                  Phase indicates the current phase of the ArrayCreds
+                  Possible values: Discovered, Configured, Validated, Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: arraycredsmappings.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ArrayCredsMapping
+    listKind: ArrayCredsMappingList
+    plural: arraycredsmappings
+    singular: arraycredsmapping
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validationStatus
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ArrayCredsMapping is the Schema for the arraycredsmappings API that defines
+          mappings between VMware datastores and ArrayCreds for vendor-based storage migration
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ArrayCredsMappingSpec defines the desired state of ArrayCredsMapping including
+              mappings between VMware datastores and ArrayCreds for vendor-based data copy
+            properties:
+              mappings:
+                description: Mappings is a list of datastore to ArrayCreds mappings
+                items:
+                  description: DatastoreArrayCredsMapping represents a mapping between
+                    a VMware datastore and ArrayCreds
+                  properties:
+                    source:
+                      description: Source is the name of the source datastore in VMware
+                      type: string
+                    target:
+                      description: Target is the name of the ArrayCreds resource to
+                        use for this datastore
+                      type: string
+                  required:
+                  - source
+                  - target
+                  type: object
+                type: array
+            required:
+            - mappings
+            type: object
+          status:
+            description: ArrayCredsMappingStatus defines the observed state of ArrayCredsMapping
+            properties:
+              validationMessage:
+                description: |-
+                  ValidationMessage provides detailed validation information including
+                  information about available ArrayCreds and any validation errors
+                type: string
+              validationStatus:
+                description: |-
+                  ValidationStatus indicates the validation status of the ArrayCreds mapping
+                  Valid states include: "Valid", "Invalid", "Pending", "ValidationFailed"
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: bmconfigs.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -723,6 +1012,13 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - ConnectingToESXi
+                - CreatingInitiatorGroup
+                - CreatingVolume
+                - ImportingToCinder
+                - MappingVolume
+                - RescanningStorage
+                - XCOPYInProgress
                 type: string
             required:
             - phase
@@ -779,6 +1075,11 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
               including source/destination environments and mappings
             properties:
+              arrayCredsMapping:
+                description: |-
+                  ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
+                  This is used for vendor-based data copy method
+                type: string
               destination:
                 description: Destination is the destination details for the virtual
                   machine
@@ -810,9 +1111,19 @@ spec:
                 required:
                 - vmwareRef
                 type: object
+              storageCopyMethod:
+                default: normal
+                description: |-
+                  StorageCopyMethod indicates the method to use for storage migration
+                  Valid values: "normal" (default), "vendor-based"
+                enum:
+                - normal
+                - vendor-based
+                type: string
               storageMapping:
-                description: StorageMapping is the reference to the StorageMapping
-                  resource that defines source to destination storage mappings
+                description: |-
+                  StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
+                  This is used for normal data copy method
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
@@ -834,7 +1145,6 @@ spec:
             - destination
             - networkMapping
             - source
-            - storageMapping
             type: object
         type: object
     served: true
@@ -2403,7 +2713,16 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
-                      type: string
+                      properties:
+                        capacityGB:
+                          type: integer
+                        datastore:
+                          type: string
+                        datastoreId:
+                          type: string
+                        name:
+                          type: string
+                      type: object
                     type: array
                   esxiName:
                     description: ESXiName is the name of the ESXi host
@@ -2833,6 +3152,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds
   - bmconfigs
   - clustermigrations
   - esximigrations
@@ -2862,6 +3182,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/finalizers
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
@@ -2881,6 +3202,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/status
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
@@ -3779,7 +4101,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.3.7
+        image: quay.io/platform9/vjailbreak-controller:v0.4.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3862,7 +4184,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.3.7
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

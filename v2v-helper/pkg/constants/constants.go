@@ -96,6 +96,17 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
 
+	// VAAI XCOPY specific event messages
+	EventMessageEsxiSSHConnect     = "Connecting to ESXi"
+	EventMessageEsxiSSHTest        = "Testing ESXi connection"
+	EventMessageEsxiConnected      = "Connected to ESXi"
+	EventMessageInitiatorGroup     = "Creating/updating initiator group"
+	EventMessageVAAICreatingVolume = "Creating target volume"
+	EventMessageVAAICinderManage   = "Cinder managing the volume"
+	EventMessageVAAIMappingVolume  = "Mapping target volume"
+	EventMessageVAAIRescanStorage  = "Waiting for target volume"
+	EventMessageVAAITargetDevice   = "Target device is visible:"
+
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
 
@@ -157,6 +168,8 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 
+	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
+	ESXiSSHSecretName = "esxi-ssh-key"
 	// AutoFstabUpdate is the default value for automatic fstab update
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update

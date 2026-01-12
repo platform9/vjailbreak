@@ -169,6 +169,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateVAAICondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
@@ -326,6 +327,30 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopying]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAIRescanStorage) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAIMappingVolume) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseMappingVolume]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseMappingVolume
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAICinderManage) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAICreatingVolume) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageInitiatorGroup) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageEsxiSSHConnect) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:

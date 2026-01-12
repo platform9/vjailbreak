@@ -120,6 +120,18 @@ const (
 	// ArrayCredsFinalizer is the finalizer for storage array credentials
 	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 
+	// ArrayCreds phases
+	ArrayCredsPhaseDiscovered = "Discovered"
+	ArrayCredsPhaseConfigured = "Configured"
+	ArrayCredsPhaseValidated  = "Validated"
+	ArrayCredsPhaseFailed     = "Failed"
+
+	// ArrayCreds validation statuses
+	ArrayCredsStatusPending             = "Pending"
+	ArrayCredsStatusSucceeded           = "Succeeded"
+	ArrayCredsStatusFailed              = "Failed"
+	ArrayCredsStatusAwaitingCredentials = "AwaitingCredentials"
+
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 
@@ -266,19 +278,30 @@ runcmd:
 	// MigrationConditionTypeMigrated represents the condition type for successful completion
 	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
+	// MigrationConditionTypeVAAI represents the condition type for VAAI XCOPY phases
+	MigrationConditionTypeVAAI corev1.PodConditionType = "VAAI"
+
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
-		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
-		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
+		vjailbreakv1alpha1.VMMigrationPhasePending:               0,
+		vjailbreakv1alpha1.VMMigrationPhaseValidating:            1,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                2,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart: 3,
+		// VAAI XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
+		vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi:       4,
+		vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup: 5,
+		vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume:         6,
+		vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder:      7,
+		vjailbreakv1alpha1.VMMigrationPhaseMappingVolume:          8,
+		vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage:      9,
+		// Common phases to both the copy methods.
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  10,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     11,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           12,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 13,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     14,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                15,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  16,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

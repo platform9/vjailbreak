@@ -1,5 +1,12 @@
-import { Box, Drawer, styled, Alert } from '@mui/material'
+import { Alert, Box, Drawer, styled } from '@mui/material'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
+import Header from '../../components/forms/Header'
+import Footer from '../../components/forms/Footer'
+import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
+import VmsSelectionStep from './VmsSelectionStep'
+import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup' // Component exported as SecurityGroupAndServerGroup
+import MigrationOptions from './MigrationOptions'
 import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useEffect, useMemo, useState, useCallback } from 'react'
@@ -8,7 +15,6 @@ import { createMigrationPlanJson } from 'src/api/migration-plans/helpers'
 import { postMigrationPlan } from 'src/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/api/migration-plans/model'
 import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -21,36 +27,36 @@ import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import {
   getOpenstackCredentials,
-  deleteOpenstackCredentials
-} from 'src/api/openstack-creds/openstackCreds'
-import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
-import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { VMwareCreds } from 'src/api/vmware-creds/model'
-import { getVmwareCredentials, deleteVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
-import { THREE_SECONDS } from 'src/constants'
-import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
-import { VMWARE_MACHINES_BASE_KEY } from 'src/hooks/api/useVMwareMachinesQuery'
-import { useInterval } from 'src/hooks/useInterval'
-import useParams from 'src/hooks/useParams'
-import { isNilOrEmpty } from 'src/utils'
-import Footer from '../../components/forms/Footer'
-import Header from '../../components/forms/Header'
-import MigrationOptions from './MigrationOptionsAlt'
-import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
-import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
-import VmsSelectionStep from './VmsSelectionStep'
-import { CUTOVER_TYPES } from './constants'
-import { uniq } from 'ramda'
-import { flatten } from 'ramda'
-import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
-import { useClusterData } from './useClusterData'
-import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
-import { useAmplitude } from 'src/hooks/useAmplitude'
-import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+  deleteOpenstackCredentials,
+} from "src/api/openstack-creds/openstackCreds"
+import { createStorageMappingJson } from "src/api/storage-mappings/helpers"
+import { postStorageMapping } from "src/api/storage-mappings/storageMappings"
+import { createArrayCredsMappingJson } from "src/api/arraycreds-mapping/helpers"
+import { postArrayCredsMapping } from "src/api/arraycreds-mapping/arrayCredsMapping"
+import { VMwareCreds } from "src/api/vmware-creds/model"
+import {
+  getVmwareCredentials,
+  deleteVmwareCredentials,
+} from "src/api/vmware-creds/vmwareCreds"
+import { THREE_SECONDS } from "src/constants"
+import { MIGRATIONS_QUERY_KEY } from "src/hooks/api/useMigrationsQuery"
+import { VMWARE_MACHINES_BASE_KEY } from "src/hooks/api/useVMwareMachinesQuery"
+import { useInterval } from "src/hooks/useInterval"
+import useParams from "src/hooks/useParams"
+import { isNilOrEmpty } from "src/utils"
+import { CUTOVER_TYPES } from "./constants"
+import { uniq } from "ramda"
+import { flatten } from "ramda"
+import { useKeyboardSubmit } from "src/hooks/ui/useKeyboardSubmit"
+import { useClusterData } from "./useClusterData"
+import { useErrorHandler } from "src/hooks/useErrorHandler"
+import { useRdmConfigValidation } from "src/hooks/useRdmConfigValidation"
+import { useRdmDisksQuery } from "src/hooks/api/useRdmDisksQuery"
+import { useAmplitude } from "src/hooks/useAmplitude"
+import { AMPLITUDE_EVENTS } from "src/types/amplitude"
 
-const stringsCompareFn = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
+const stringsCompareFn = (a: string, b: string) =>
+  a.toLowerCase().localeCompare(b.toLowerCase())
 
 const StyledDrawer = styled(Drawer)(({ theme }) => ({
   '& .MuiDrawer-paper': {
@@ -97,6 +103,8 @@ export interface FormValues extends Record<string, unknown> {
   }>
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
+  storageCopyMethod?: string  // 'normal' or 'vendor-based'
+  arrayCredsMappings?: { source: string; target: string }[]
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   vmwareClusterDisplayName?: string
@@ -389,9 +397,11 @@ export default function MigrationFormDrawer({
     })
 
     try {
-      const data = postNetworkMapping(body)
+      const data = await postNetworkMapping(body)
+      console.log('Network mapping created:', data)
       return data
     } catch (err) {
+      console.error('Error creating network mapping:', err)
       setError({
         title: 'Error creating network mapping',
         message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
@@ -400,6 +410,7 @@ export default function MigrationFormDrawer({
         'Error creating network mapping : ' +
           (axios.isAxiosError(err) ? err?.response?.data?.message : err)
       )
+      return null
     }
   }
 
@@ -408,7 +419,8 @@ export default function MigrationFormDrawer({
       storageMappings: storageMappingsParams
     })
     try {
-      const data = postStorageMapping(body)
+      const data = await postStorageMapping(body)
+      console.log('Storage mapping created:', data)
       return data
     } catch (err) {
       console.error('Error creating storage mapping', err)
@@ -427,24 +439,83 @@ export default function MigrationFormDrawer({
         'Error creating storage mapping : ' +
           (axios.isAxiosError(err) ? err?.response?.data?.message : err)
       )
+      return null
     }
   }
 
-  const updateMigrationTemplate = async (migrationTemplate, networkMappings, storageMappings) => {
+  const createArrayCredsMapping = async (arrayCredsMappingsParams) => {
+    const body = createArrayCredsMappingJson({
+      mappings: arrayCredsMappingsParams,
+    })
+    try {
+      const data = await postArrayCredsMapping(body)
+      console.log('ArrayCreds mapping created:', data)
+      return data
+    } catch (err) {
+      console.error("Error creating ArrayCreds mapping", err)
+      reportError(err as Error, {
+        context: 'arraycreds-mapping-creation',
+        metadata: {
+          arrayCredsMappingsParams: arrayCredsMappingsParams,
+          action: 'create-arraycreds-mapping'
+        }
+      })
+      setError({
+        title: "Error creating ArrayCreds mapping",
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : "",
+      })
+      getFieldErrorsUpdater("storageMapping")(
+        "Error creating ArrayCreds mapping : " + (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      )
+      return null
+    }
+  }
+
+  const updateMigrationTemplate = async (
+    migrationTemplate,
+    networkMappings,
+    storageMappings,
+    arrayCredsMapping: any = null
+  ) => {
     const migrationTemplateName = migrationTemplate?.metadata?.name
-    const updatedMigrationTemplateFields = {
+    const storageCopyMethod = params.storageCopyMethod || 'normal'
+    
+    console.log('updateMigrationTemplate called with:', {
+      storageCopyMethod,
+      networkMappings: networkMappings?.metadata?.name,
+      storageMappings: storageMappings?.metadata?.name,
+      arrayCredsMapping: arrayCredsMapping?.metadata?.name
+    })
+    
+    const updatedMigrationTemplateFields: any = {
       spec: {
         networkMapping: networkMappings.metadata.name,
-        storageMapping: storageMappings.metadata.name
+        storageCopyMethod,
       }
     }
+    
+    // Add either arrayCredsMapping or storageMapping based on method
+    if (storageCopyMethod === 'vendor-based' && arrayCredsMapping) {
+      console.log('Adding arrayCredsMapping:', arrayCredsMapping.metadata.name)
+      updatedMigrationTemplateFields.spec.arrayCredsMapping = arrayCredsMapping.metadata.name
+    } else if (storageMappings) {
+      console.log('Adding storageMapping:', storageMappings.metadata.name)
+      updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
+    } else {
+      console.error('No storage mapping added! storageCopyMethod:', storageCopyMethod, 'arrayCredsMapping:', arrayCredsMapping, 'storageMappings:', storageMappings)
+    }
+    
+    console.log('Final template fields:', updatedMigrationTemplateFields)
+    
     try {
       const data = await patchMigrationTemplate(
         migrationTemplateName,
         updatedMigrationTemplateFields
       )
+      console.log('Migration template updated:', data)
       return data
     } catch (err) {
+      console.error('Error updating migration template:', err)
       setError({
         title: 'Error updating migration template',
         message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
@@ -601,22 +672,48 @@ export default function MigrationFormDrawer({
     setSubmitting(true)
     setError(null)
 
+    const storageCopyMethod = params.storageCopyMethod || 'normal'
+    console.log('Storage copy method:', storageCopyMethod)
+    console.log('Params:', { 
+      networkMappings: params.networkMappings,
+      storageMappings: params.storageMappings,
+      arrayCredsMappings: params.arrayCredsMappings
+    })
+
     // Create NetworkMapping
     const networkMappings = await createNetworkMapping(params.networkMappings)
+    console.log('Network mappings result:', networkMappings)
 
-    // Create StorageMapping
-    const storageMappings = await createStorageMapping(params.storageMappings)
-
-    if (!networkMappings || !storageMappings) {
-      setSubmitting(false)
-      return
+    // Create StorageMapping or ArrayCredsMapping based on method
+    let storageMappings: any = null
+    let arrayCredsMapping: any = null
+    
+    if (storageCopyMethod === 'vendor-based') {
+      console.log('Creating ArrayCreds mapping...')
+      arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings)
+      console.log('ArrayCreds mapping result:', arrayCredsMapping)
+      if (!networkMappings || !arrayCredsMapping) {
+        console.error('Missing mappings - network:', networkMappings, 'arrayCreds:', arrayCredsMapping)
+        setSubmitting(false)
+        return
+      }
+    } else {
+      console.log('Creating Storage mapping...')
+      storageMappings = await createStorageMapping(params.storageMappings)
+      console.log('Storage mapping result:', storageMappings)
+      if (!networkMappings || !storageMappings) {
+        console.error('Missing mappings - network:', networkMappings, 'storage:', storageMappings)
+        setSubmitting(false)
+        return
+      }
     }
 
-    // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
+    // Update MigrationTemplate with NetworkMapping and StorageMapping/ArrayCredsMapping resource names
     const updatedMigrationTemplate = await updateMigrationTemplate(
       migrationTemplate,
       networkMappings,
-      storageMappings
+      storageMappings,
+      arrayCredsMapping
     )
 
     // Create MigrationPlan
@@ -635,9 +732,12 @@ export default function MigrationFormDrawer({
   }, [
     params.networkMappings,
     params.storageMappings,
+    params.arrayCredsMappings,
+    params.storageCopyMethod,
     migrationTemplate,
     createNetworkMapping,
     createStorageMapping,
+    createArrayCredsMapping,
     updateMigrationTemplate,
     createMigrationPlan,
     queryClient,
@@ -730,22 +830,31 @@ export default function MigrationFormDrawer({
     rdmDisks: rdmDisks
   })
 
+  const storageCopyMethod = params.storageCopyMethod || 'normal'
+  const storageValidation = storageCopyMethod === 'vendor-based' 
+    ? !isNilOrEmpty(params.arrayCredsMappings) && 
+      !availableVmwareDatastores.some(datastore =>
+        !params.arrayCredsMappings?.some(mapping => mapping.source === datastore))
+    : !isNilOrEmpty(params.storageMappings) &&
+      !availableVmwareDatastores.some(datastore =>
+        !params.storageMappings?.some(mapping => mapping.source === datastore))
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
     isNilOrEmpty(params.networkMappings) ||
-    isNilOrEmpty(params.storageMappings) ||
     isNilOrEmpty(params.vmwareCluster) ||
     isNilOrEmpty(params.pcdCluster) ||
     // Check if all networks are mapped
+    availableVmwareNetworks.some(network =>
+      !params.networkMappings?.some(mapping => mapping.source === network)) ||
+    // Check if all datastores are mapped (based on storage copy method)
+    !storageValidation ||
     availableVmwareNetworks.some(
       (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
     ) ||
-    // Check if all datastores are mapped
-    availableVmwareDatastores.some(
-      (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
-    ) ||
+
     !migrationOptionValidated ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
@@ -887,12 +996,10 @@ export default function MigrationFormDrawer({
           <MigrationOptions
             params={params}
             onChange={getParamsUpdater}
-            openstackCredentials={openstackCredentials}
             selectedMigrationOptions={selectedMigrationOptions}
             updateSelectedMigrationOptions={updateSelectedMigrationOptions}
             errors={fieldErrors}
             getErrorsUpdater={getFieldErrorsUpdater}
-            stepNumber="5"
           />
         </Box>
       </DrawerContent>

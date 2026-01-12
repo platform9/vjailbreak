@@ -17,6 +17,8 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/pure"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -69,6 +71,17 @@ type Migrate struct {
 	TenantName              string
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
+	StorageCopyMethod       string
+	// Array credentials for vendor-based storage migration
+	ArrayHost         string
+	ArrayUser         string
+	ArrayPassword     string
+	ArrayInsecure     bool
+	VendorType        string
+	ArrayCredsMapping string
+	StorageProvider   storage.StorageProvider
+	ESXiSSHPrivateKey []byte
+	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 }
 
 type MigrationTimes struct {
@@ -109,6 +122,11 @@ func (migobj *Migrate) logMessage(message string) {
 		migobj.EventReporter <- message
 	}
 	utils.PrintLog(message)
+}
+
+// LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.
+func (migobj *Migrate) LogMessage(message string) {
+	migobj.logMessage(message)
 }
 
 // This function creates volumes in OpenStack and attaches them to the helper vm
@@ -1400,7 +1418,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if len(vminfo.VMDisks) != len(migobj.Volumetypes) {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != "vendor-based" {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1415,36 +1433,60 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
 
-	// Create and Add Volumes to Host
-	vminfo, err = migobj.CreateVolumes(ctx, vminfo)
-	if err != nil {
-		return errors.Wrap(err, "failed to add volumes to host")
-	}
-	// Enable CBT
-	err = migobj.EnableCBTWrapper()
-	if err != nil {
-		migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
-		return errors.Wrap(err, "CBT Failure")
-	}
-
-	// Create NBD servers
-	for range vminfo.VMDisks {
-		migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
-	}
-
-	// Live Replicate Disks
-	vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
-	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+	if migobj.StorageCopyMethod == "vendor-based" {
+		// Initialize storage provider if using vendor-based migration
+		if err := migobj.InitializeStorageProvider(ctx); err != nil {
+			return errors.Wrap(err, "failed to initialize storage provider")
 		}
-		return errors.Wrap(err, "failed to live replicate disks")
+		defer func() {
+			if migobj.StorageProvider != nil {
+				migobj.StorageProvider.Disconnect()
+			}
+		}()
+
+		// Perform pre requisites for vaai
+		if err := migobj.ValidateVAAIPrerequisites(ctx); err != nil {
+			return errors.Wrap(err, "VAAI prerequisites validation failed")
+		}
+
+		// Perform the copy here.
+		if _, err := migobj.VAAICopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform VAAI copy")
+		}
+
+	} else {
+		// Create and Add Volumes to Host
+		vminfo, err = migobj.CreateVolumes(vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to add volumes to host")
+		}
+		// Enable CBT
+		err = migobj.EnableCBTWrapper()
+		if err != nil {
+			migobj.cleanup(vminfo, fmt.Sprintf("CBT Failure: %s", err))
+			return errors.Wrap(err, "CBT Failure")
+		}
+
+		// Create NBD servers
+		for range vminfo.VMDisks {
+			migobj.Nbdops = append(migobj.Nbdops, &nbd.NBDServer{})
+		}
+
+		// Live Replicate Disks
+		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
+		if err != nil {
+			if cleanuperror := migobj.cleanup(vminfo, fmt.Sprintf("failed to live replicate disks: %s", err)); cleanuperror != nil {
+				// combine both errors
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "failed to live replicate disks")
+		}
 	}
 	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
+
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
@@ -1643,4 +1685,73 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
+}
+
+// InitializeStorageProvider initializes and validates the storage provider for vendor-based migration
+func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
+	if migobj.StorageCopyMethod != "vendor-based" {
+		migobj.logMessage("Storage copy method is not vendor-based, skipping storage provider initialization")
+		return nil
+	}
+
+	migobj.logMessage("Initializing storage provider for vendor-based migration")
+
+	// Validate required credentials
+	if migobj.ArrayHost == "" {
+		return fmt.Errorf("ARRAY_HOST is required for vendor-based storage migration")
+	}
+	if migobj.ArrayUser == "" {
+		return fmt.Errorf("ARRAY_USER is required for vendor-based storage migration")
+	}
+	if migobj.ArrayPassword == "" {
+		return fmt.Errorf("ARRAY_PASSWORD is required for vendor-based storage migration")
+	}
+
+	// Create storage access info
+	accessInfo := storage.StorageAccessInfo{
+		Hostname:            migobj.ArrayHost,
+		Username:            migobj.ArrayUser,
+		Password:            migobj.ArrayPassword,
+		SkipSSLVerification: migobj.ArrayInsecure,
+		VendorType:          migobj.VendorType,
+	}
+
+	// Create storage provider
+	provider, err := storage.NewStorageProvider(accessInfo.VendorType)
+	if err != nil {
+		return fmt.Errorf("failed to create storage provider: %w", err)
+	}
+
+	// Connect to storage array
+	migobj.logMessage(fmt.Sprintf("Connecting to storage array: %s", migobj.ArrayHost))
+	if err := provider.Connect(ctx, accessInfo); err != nil {
+		return fmt.Errorf("failed to connect to storage array: %w", err)
+	}
+
+	// Validate credentials
+	migobj.logMessage("Validating storage array credentials...")
+	if err := provider.ValidateCredentials(ctx); err != nil {
+		return fmt.Errorf("storage array credential validation failed: %w", err)
+	}
+
+	migobj.StorageProvider = provider
+	migobj.logMessage(fmt.Sprintf("Storage provider initialized successfully: %s", provider.WhoAmI()))
+
+	return nil
+}
+
+// LoadESXiSSHKey loads the ESXi SSH private key from the Kubernetes secret
+func (migobj *Migrate) LoadESXiSSHKey(ctx context.Context) error {
+
+	migobj.logMessage(fmt.Sprintf("Loading ESXi SSH private key from secret: %s", constants.ESXiSSHSecretName))
+
+	privateKey, err := k8sutils.GetESXiSSHPrivateKey(ctx, migobj.K8sClient, constants.ESXiSSHSecretName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to load ESXi SSH private key from secret %s", constants.ESXiSSHSecretName)
+	}
+
+	migobj.ESXiSSHPrivateKey = privateKey
+	migobj.logMessage("ESXi SSH private key loaded successfully")
+
+	return nil
 }

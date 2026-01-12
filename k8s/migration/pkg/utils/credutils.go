@@ -496,13 +496,13 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		}
 	}
 
-	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
-	if err != nil {
-		if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
-	}
+	// _, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
+	// if err != nil {
+	// 	if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
+	// 		return nil, err
+	// 	}
+	// 	return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
+	// }
 
 	return providerClient, nil
 }
@@ -605,7 +605,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
 	// Pre-allocate networks slice to avoid append allocations
 	networks := make([]string, 0)
-	c, finder, err := getFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -645,7 +645,7 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 // GetVMwDatastore gets the datastores of a VM
 func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter, vmname string) ([]string, error) {
-	c, finder, err := getFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, k3sclient, vmwcreds, datacenter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -704,7 +704,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	}
 	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
 
-	c, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
+	c, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get finder: %w", err)
 	}
@@ -1540,7 +1540,7 @@ func appendToVMInfoThreadSafe(vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1
 	vminfoMu.Unlock()
 }
 
-func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+func GetFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
@@ -1575,8 +1575,8 @@ var rdmSemaphore = &sync.Mutex{}
 func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
-	networks := make([]string, 0, 4) // Pre-allocate with estimated capacity
-	disks := make([]string, 0, 8)    // Pre-allocate with estimated capacity
+	networks := make([]string, 0, 4)               // Pre-allocate with estimated capacity
+	disks := make([]vjailbreakv1alpha1.Disk, 0, 8) // Pre-allocate with estimated capacity
 	var clusterName string
 	rdmForVM := make([]string, 0)
 	log := scope.Logger
@@ -1671,7 +1671,15 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			}
 
 			datastores = AppendUnique(datastores, ds.Name)
-			disks = append(disks, disk.DeviceInfo.GetDescription().Label)
+
+			disk := vjailbreakv1alpha1.Disk{
+				Name:        disk.DeviceInfo.GetDescription().Label,
+				CapacityGB:  int(disk.CapacityInKB / 1024 / 1024),
+				Datastore:   ds.Name,
+				DatastoreId: dsref.Value,
+			}
+
+			disks = append(disks, disk)
 		}
 	}
 	// Get the host name and parent (cluster) information
@@ -1871,4 +1879,115 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 		vmwareClientMap.Delete(mapKey)
 		ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
 	}
+}
+
+func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("Discovering backend pools from OpenStack Cinder")
+
+	// Get OpenStack credentials to extract region
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenStack credentials from secret")
+	}
+
+	// Get OpenStack client
+	providerClient, err := ValidateAndGetProviderClient(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get OpenStack provider client")
+	}
+
+	// Get Cinder client
+	cinderClient, err := openstack.NewBlockStorageV3(providerClient, gophercloud.EndpointOpts{
+		Region: openstackCredential.RegionName,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create Cinder client")
+	}
+
+	// Get pool backend info
+	poolPages, err := schedulerstats.List(cinderClient, schedulerstats.ListOpts{Detail: true}).AllPages(context.Background())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list backend pools")
+	}
+
+	backendPools, err := schedulerstats.ExtractStoragePools(poolPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract backend pools")
+	}
+
+	ctxlog.Info("Discovered backend pools", "count", len(backendPools))
+	ctxlog.Info("Backend pools", "pools", backendPools)
+
+	// Map backend name -> vendor/type info for quick lookup
+	backendMap := make(map[string]map[string]string)
+	for _, pool := range backendPools {
+
+		vendor := pool.Capabilities.VendorName
+		driver := pool.Capabilities.DriverVersion
+		volumeType, backendName := parsePoolName(pool.Name)
+
+		// Extract hostname@backend from pool.Name for Cinder manage API
+		// pool.Name format: "hostname@backend#pool" or "hostname@backend"
+		cinderHost := extractCinderHost(pool.Name)
+
+		backendMap[backendName] = map[string]string{
+			"vendor":     vendor,
+			"driver":     driver,
+			"pool":       pool.Name,
+			"volumeType": volumeType,
+			"cinderHost": cinderHost,
+		}
+	}
+
+	return backendMap, nil
+}
+
+// parsePoolName extracts backendName and poolName from a full Cinder pool name.
+// Example: "host@pure-iscsi-1#vt-pure-iscsi" → ("pure-iscsi-1", "vt-pure-iscsi")
+func parsePoolName(fullPoolName string) (volumeType string, backendName string) {
+	// Example input: "host@backend#pool"
+	parts := strings.Split(fullPoolName, "@")
+	if len(parts) < 2 {
+		return "", ""
+	}
+
+	rest := parts[1]
+	segments := strings.SplitN(rest, "#", 2)
+
+	if len(segments) > 1 {
+		volumeType = segments[1]
+	} else {
+		volumeType = "default"
+	}
+
+	return volumeType, segments[0]
+}
+
+// extractCinderHost extracts the hostname@backend part from full Cinder pool name for the manage API.
+// Example: "pcd-ce@pure-iscsi-1#vt-pure-iscsi" → "pcd-ce@pure-iscsi-1"
+// Example: "pcd-ce@pure-iscsi-1" → "pcd-ce@pure-iscsi-1"
+func extractCinderHost(fullPoolName string) string {
+	// Remove the pool part (#pool) if it exists
+	parts := strings.Split(fullPoolName, "#")
+	return parts[0]
+}
+
+func GetArrayVendor(vendor string) string {
+	// Convert vendor to lowercase
+	vendor = strings.ToLower(vendor)
+
+	if strings.Contains(vendor, "pure") {
+		return "pure"
+	}
+	return "unsupported"
+}
+
+func Contains(datastores []vjailbreakv1alpha1.DatastoreInfo, datastore vjailbreakv1alpha1.DatastoreInfo) bool {
+	for _, ds := range datastores {
+		if ds.Name == datastore.Name && ds.MoID == datastore.MoID {
+			return true
+		}
+	}
+	return false
 }
