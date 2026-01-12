@@ -121,6 +121,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			PeriodicSyncMaxRetries:              constants.PeriodicSyncMaxRetries,
 			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
 			AutoFstabUpdate:                     constants.AutoFstabUpdate,
+			AutoPXEBootOnConversion:             constants.AutoPXEBootOnConversionDefault,
 		}, nil
 	}
 
@@ -191,6 +192,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] = strconv.FormatBool(constants.AutoFstabUpdate)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey] == "" {
+		vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey] = strconv.FormatBool(constants.AutoPXEBootOnConversionDefault)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -210,6 +215,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
 		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
 		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
+		AutoPXEBootOnConversion:             strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey])) == "true",
 	}, nil
 }
 

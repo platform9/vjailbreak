@@ -1,7 +1,8 @@
 import { FormControl, FormHelperText, styled, Typography, Box } from '@mui/material'
 import { useEffect, useMemo } from 'react'
-import ResourceMappingTable from 'src/components/forms/ResourceMappingTableNew'
-import Step from '../../components/forms/Step'
+import { ResourceMappingTableNew as ResourceMappingTable } from './components'
+import { Step } from 'src/shared/components/forms'
+import { FieldLabel } from 'src/components'
 // import ResourceMapping from "../../components/forms/ResourceMapping"
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
@@ -11,7 +12,6 @@ const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
 
 const FieldsContainer = styled('div')(({ theme }) => ({
   display: 'grid',
-  marginLeft: theme.spacing(6),
   gridGap: theme.spacing(2)
 }))
 
@@ -34,6 +34,7 @@ interface NetworkAndStorageMappingStepProps {
   storageMappingError?: string
   stepNumber?: string
   loading?: boolean
+  showHeader?: boolean
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -46,7 +47,8 @@ export default function NetworkAndStorageMappingStep({
   networkMappingError,
   storageMappingError,
   stepNumber = '3',
-  loading = false
+  loading = false,
+  showHeader = true
 }: NetworkAndStorageMappingStepProps) {
   // Filter out any mappings that don't match the available networks/storage
   const filteredNetworkMappings = useMemo(
@@ -102,11 +104,11 @@ export default function NetworkAndStorageMappingStep({
 
   return (
     <VmsSelectionStepContainer>
-      <Step stepNumber={stepNumber} label="Network and Storage Mapping" />
+      {showHeader ? <Step stepNumber={stepNumber} label="Network And Storage Mapping" /> : null}
       <FieldsContainer>
         {loading ? (
           <Typography variant="body2" color="text.secondary">
-            Loading OpenStack networks and storage options...
+            Loading PCD networks and storage options...
           </Typography>
         ) : (
           <>
@@ -119,7 +121,7 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <Typography variant="subtitle2">Map Networks</Typography>
+                <FieldLabel label="Map Networks" required align="flex-start" />
                 {networksFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All networks mapped ✓
@@ -138,10 +140,11 @@ export default function NetworkAndStorageMappingStep({
                 sourceItems={vmwareNetworks}
                 targetItems={openstackNetworks}
                 sourceLabel="VMware Network"
-                targetLabel="OpenStack Network"
+                targetLabel="PCD Network"
                 values={params.networkMappings || []}
                 onChange={(value) => onChange('networkMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="networkMapping"
               />
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
@@ -154,7 +157,7 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <Typography variant="subtitle2">Map Storage</Typography>
+                <FieldLabel label="Map Storage" required align="flex-start" />
                 {storageFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All storage mapped ✓
@@ -167,16 +170,17 @@ export default function NetworkAndStorageMappingStep({
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Select source and target storage to automatically create mappings. All storage
-                devices must be mapped to proceed.
+                devices must be mapped in order to proceed.
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmWareStorage}
                 targetItems={openstackStorage}
                 sourceLabel="VMware Datastore"
-                targetLabel="OpenStack VolumeType"
+                targetLabel="PCD Volume Type"
                 values={params.storageMappings || []}
                 onChange={(value) => onChange('storageMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="storageMapping"
               />
               {storageMappingError && <FormHelperText error>{storageMappingError}</FormHelperText>}
             </FormControl>

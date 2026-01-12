@@ -145,7 +145,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -495,11 +495,62 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 	}
 
 	if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
-		ctxlog.Info("Syncing PCD info because openstackcreds is PCD", "openstackcreds", scope.OpenstackCreds.Name)
-		err = utils.SyncPCDInfo(ctx, r.Client, *scope.OpenstackCreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to sync PCD info")
+		// Check if a sync is already in progress
+		if scope.OpenstackCreds.Annotations == nil {
+			scope.OpenstackCreds.Annotations = make(map[string]string)
 		}
+		
+		syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
+		if syncInProgress == "true" {
+			ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
+			return nil
+		}
+		
+		// Mark sync as in progress
+		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = "true"
+		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
+			return nil
+		}
+		
+		ctxlog.Info("Starting asynchronous PCD sync", "openstackcreds", scope.OpenstackCreds.Name)
+		
+		// Run sync asynchronously to avoid blocking the controller
+		go func() {
+			// Create a new context for the background operation (not tied to reconciliation)
+			syncCtx := context.Background()
+			
+			err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
+			
+			// Get the latest version of the resource to update annotations
+			latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+			if getErr := r.Get(syncCtx, client.ObjectKey{
+				Name:      scope.OpenstackCreds.Name,
+				Namespace: scope.OpenstackCreds.Namespace,
+			}, latestCreds); getErr != nil {
+				ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
+				return
+			}
+			
+			if latestCreds.Annotations == nil {
+				latestCreds.Annotations = make(map[string]string)
+			}
+			
+			// Clear the in-progress flag
+			delete(latestCreds.Annotations, "pcd-sync-in-progress")
+			
+			if err != nil {
+				ctxlog.Error(err, "PCD sync failed")
+				latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
+			} else {
+				ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
+				delete(latestCreds.Annotations, "pcd-sync-last-error")
+			}
+			
+			if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
+				ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
+			}
+		}()
 	}
 	return nil
 }

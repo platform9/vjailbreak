@@ -748,6 +748,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  networkPersistence:
+                    description: NetworkPersistence instructs the migration helper
+                      to persist the source networking configuration
+                    type: boolean
                   periodicSyncEnabled:
                     description: PeriodicSyncEnabled is a boolean to enable periodic
                       sync
@@ -774,6 +778,9 @@ spec:
                   migration
                 properties:
                   adminInitiatedCutOver:
+                    default: false
+                    type: boolean
+                  arrayOffload:
                     default: false
                     type: boolean
                   dataCopyStart:
@@ -1003,6 +1010,7 @@ spec:
                 enum:
                 - Pending
                 - Validating
+                - ValidationFailed
                 - AwaitingDataCopyStart
                 - CopyingBlocks
                 - CopyingChangedBlocks
@@ -1906,6 +1914,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  networkPersistence:
+                    description: NetworkPersistence instructs the migration helper
+                      to persist the source networking configuration
+                    type: boolean
                   periodicSyncEnabled:
                     description: PeriodicSyncEnabled is a boolean to enable periodic
                       sync
@@ -2018,6 +2030,9 @@ spec:
                   migration
                 properties:
                   adminInitiatedCutOver:
+                    default: false
+                    type: boolean
+                  arrayOffload:
                     default: false
                     type: boolean
                   dataCopyStart:
@@ -2555,8 +2570,6 @@ spec:
               vcenterHost:
                 description: VcenterHost is the vCenter host
                 type: string
-            required:
-            - datacenter
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds

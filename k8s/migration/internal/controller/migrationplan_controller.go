@@ -29,12 +29,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -45,6 +45,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -329,6 +330,11 @@ func createVCenterClientAndDC(
 	}
 	ctxlog.Info("vCenter client created successfully")
 
+	if datacenterName == "" {
+		ctxlog.Info("No datacenter specified, returning client without datacenter scope")
+		return vcClient, nil, nil
+	}
+
 	ctxlog.Info("Using datacenter", "datacenter", datacenterName)
 	dc, err := vcClient.VCFinder.Datacenter(ctx, datacenterName)
 	if err != nil {
@@ -406,6 +412,8 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 }
 
 // ReconcileMigrationPlanJob reconciles jobs created by the migration plan
+//
+//nolint:gocyclo
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
@@ -426,27 +434,33 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for retry check")
 		}
 
-		if len(migrationList.Items) == 0 {
-			// No Migration objects exist - this could be either:
-			// Checking the failure message to determine which scenario this is
-			// If migrationplan validation failure - should NOT retry
-			// If user-initiated retry - should retry
+		// ValidationFailed objects are considered terminal skips and shouldn't block retries.
+		hasExistingFailures := false
+		for _, m := range migrationList.Items {
+			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+				hasExistingFailures = true
+				break
+			}
+		}
+
+		// If the specific "Failed" objects are gone (user deleted them for retry),
+		// but the plan still says "Failed", we reset the plan status.
+		if !hasExistingFailures {
 			if strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
-				r.ctxlog.Info("Migration plan validation failed, skipping retry",
-					"migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
 				return ctrl.Result{}, nil
 			}
-			r.ctxlog.Info("No Migration objects found for failed MigrationPlan, resetting status for retry", "migrationplan", migrationplan.Name)
+
+			r.ctxlog.Info("Failed Migration objects cleared, resetting Plan status for retry", "migrationplan", migrationplan.Name)
 			migrationplan.Status.MigrationStatus = ""
 			migrationplan.Status.MigrationMessage = ""
 			if err := r.Status().Update(ctx, migrationplan); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to reset migration plan status for retry")
+				return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
 			}
-		} else {
-			// Migration objects still exist, keep the failed status
-			r.ctxlog.Info("Migration already failed, skipping job reconciliation", "migrationplan", migrationplan.Name, "reason", migrationplan.Status.MigrationMessage)
-			return ctrl.Result{}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
+
+		r.ctxlog.Info("Migration failures still exist, skipping reconciliation", "migrationplan", migrationplan.Name)
+		return ctrl.Result{}, nil
 	}
 
 	migrationtemplate, vmwcreds, _, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
@@ -456,22 +470,62 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// Validate VM OS types before proceeding with migration
-	validVMs, skippedVMs, err := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
-	if err != nil {
-		if validVMs == nil && skippedVMs == nil {
-			// Both are nil, meaning no VMs were found at all
-			if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodSucceeded,
-				fmt.Sprintf("Marking migration plan as succeeded due to no VMs found: %v", err)); updateErr != nil {
-				r.ctxlog.Error(updateErr, "Failed to update migration plan status after validation error")
+	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+
+	allVMNames := []string{}
+	for _, group := range migrationplan.Spec.VirtualMachines {
+		allVMNames = append(allVMNames, group...)
+	}
+
+	if validationErr != nil {
+		r.ctxlog.Error(validationErr, "Migration plan validation failed", "migrationplan", migrationplan.Name)
+
+		for _, vmName := range allVMNames {
+			vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
+			if err != nil {
+				r.ctxlog.Error(err, "Failed to get vmMachine for pre-creation", "vm", vmName)
+				continue
 			}
-			return ctrl.Result{}, nil
+
+			migrationObj, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
+			if createErr != nil {
+				r.ctxlog.Error(createErr, "Failed to create migration object during validation failure documentation", "vm", vmName)
+				continue
+			}
+
+			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
 		}
-		r.ctxlog.Error(err, "VM validation failed")
-		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-			fmt.Sprintf("Migration plan validation failed: %v", err)); updateErr != nil {
-			r.ctxlog.Error(updateErr, "Failed to update migration plan status after validation error")
+
+		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
+			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, validationErr
+	}
+
+	for _, vmName := range allVMNames {
+		vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to get vmMachine for migration creation", "vm", vmName)
+			continue
+		}
+
+		migrationObj, createErr := r.CreateMigration(ctx, migrationplan, vmName, vmMachine)
+		if createErr != nil {
+			r.ctxlog.Error(createErr, "Failed to create migration object", "vm", vmName)
+			continue
+		}
+
+		isValid := false
+		for _, v := range validVMs {
+			if v.Spec.VMInfo.Name == vmName {
+				isValid = true
+				break
+			}
+		}
+
+		if !isValid {
+			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
+		}
 	}
 
 	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
@@ -484,32 +538,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
 		false, openstackcreds); !ok {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
-	}
-
-	var arraycreds *vjailbreakv1alpha1.ArrayCreds
-	// Check if StorageCopyMethod is vendor-based
-	if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
-		// Fetch ArrayCredsMapping CR first
-		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
-		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCredsMapping '%s'", migrationtemplate.Spec.ArrayCredsMapping)
-		}
-
-		// Validate ArrayCredsMapping has mappings
-		if len(arrayCredsMapping.Spec.Mappings) == 0 {
-			return ctrl.Result{}, errors.Errorf("ArrayCredsMapping '%s' has no mappings defined", migrationtemplate.Spec.ArrayCredsMapping)
-		}
-		for _, mapping := range arrayCredsMapping.Spec.Mappings {
-			arraycreds = &vjailbreakv1alpha1.ArrayCreds{}
-			if err := r.Get(ctx, types.NamespacedName{Name: mapping.Target, Namespace: migrationtemplate.Namespace}, arraycreds); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "failed to get ArrayCreds '%s' from mapping", mapping.Target)
-			}
-			if arraycreds.Status.ArrayValidationStatus != string(corev1.PodSucceeded) {
-				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
-			}
-		}
-	} else {
-		arraycreds = nil
 	}
 
 	// Starting the Migrations
@@ -533,18 +561,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return r.handleRDMDiskMigrationError(ctx, migrationplan, err)
 	}
 
-	if utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
-		migrationplan.Status.MigrationStatus = "Paused"
-		migrationplan.Status.MigrationMessage = "Migration plan is paused"
-		if err := r.Update(ctx, migrationplan); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-		}
-		return ctrl.Result{}, nil
+	if paused, err := r.checkAndHandlePausedPlan(ctx, migrationplan); paused {
+		return ctrl.Result{}, err
 	}
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, migrationtemplate, vmMachinesArr)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -552,37 +575,79 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			}
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
-		for i := 0; i < len(migrationobjs.Items); i++ {
-			switch migrationobjs.Items[i].Status.Phase {
-			case vjailbreakv1alpha1.VMMigrationPhaseFailed:
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-					fmt.Sprintf("Migration for VM '%s' failed", migrationobjs.Items[i].Spec.VMName))
-				if err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
-				}
-				return ctrl.Result{}, nil
-			case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-				err := r.reconcilePostMigration(ctx, scope, migrationobjs.Items[i].Spec.VMName)
-				if err != nil {
-					r.ctxlog.Error(err, fmt.Sprintf("Post-migration actions failed for VM '%s'", migrationobjs.Items[i].Spec.VMName))
-					return ctrl.Result{}, errors.Wrap(err, "failed to reconcile post migration")
-				}
-				continue
-			default:
-				r.ctxlog.Info(fmt.Sprintf("Waiting for all VMs in parallel batch %d to complete: %v", i+1, parallelvms))
-				return ctrl.Result{}, nil
-			}
+
+		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if !allFinished {
+			r.ctxlog.Info("Migration(s) still in progress, requeuing plan", "migrationplan", migrationplan.Name)
+			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 		}
 	}
+
 	r.ctxlog.Info(fmt.Sprintf("All VMs in MigrationPlan '%s' have been successfully migrated", migrationplan.Name))
 	migrationplan.Status.MigrationStatus = corev1.PodSucceeded
+	migrationplan.Status.MigrationMessage = "All migrations completed successfully"
 	err = r.Status().Update(ctx, migrationplan)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status")
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// checkAndHandlePausedPlan checks if migration plan is paused and handles it
+func (r *MigrationPlanReconciler) checkAndHandlePausedPlan(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (bool, error) {
+	if !utils.IsMigrationPlanPaused(ctx, migrationplan.Name, r.Client) {
+		return false, nil
+	}
+	migrationplan.Status.MigrationStatus = "Paused"
+	migrationplan.Status.MigrationMessage = "Migration plan is paused"
+	if err := r.Update(ctx, migrationplan); err != nil {
+		return true, errors.Wrap(err, "failed to update migration plan status")
+	}
+	return true, nil
+}
+
+// processMigrationPhases processes migration phases for triggered migrations
+func (r *MigrationPlanReconciler) processMigrationPhases(
+	ctx context.Context,
+	scope *scope.MigrationPlanScope,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationobjs *vjailbreakv1alpha1.MigrationList,
+	parallelvms []string,
+) (bool, error) {
+	allFinished := true
+
+	for i := 0; i < len(migrationobjs.Items); i++ {
+		migration := migrationobjs.Items[i]
+
+		switch migration.Status.Phase {
+		case vjailbreakv1alpha1.VMMigrationPhaseFailed, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:
+			r.ctxlog.Info("Migration failed for VM", "vm", migration.Spec.VMName)
+			err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
+				fmt.Sprintf("Migration for VM '%s' failed: %s", migration.Spec.VMName, migration.Status.Conditions[0].Message))
+			return false, err
+
+		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
+			if err != nil {
+				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
+				return false, errors.Wrap(err, "failed post-migration")
+			}
+			continue
+
+		default:
+			r.ctxlog.Info("VM migration still in progress",
+				"vm", migration.Spec.VMName,
+				"phase", migration.Status.Phase,
+				"currentBatch", parallelvms)
+			allFinished = false
+		}
+	}
+	return allFinished, nil
 }
 
 // handleRDMDiskMigrationError handles errors that occur during RDM disk migration
@@ -717,8 +782,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
-	vmMachine *vjailbreakv1alpha1.VMwareMachine,
-	arrayCredsSecretRef string) error {
+	vmMachine *vjailbreakv1alpha1.VMwareMachine) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
@@ -819,13 +883,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										SecretRef: &corev1.SecretEnvSource{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: openstackSecretRef,
-											},
-										},
-									},
-									{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: arrayCredsSecretRef,
 											},
 										},
 									},
@@ -973,8 +1030,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
-	arraycreds *vjailbreakv1alpha1.ArrayCreds) (*corev1.ConfigMap, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*corev1.ConfigMap, error) {
 	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
@@ -1043,6 +1099,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 				"PERIODIC_SYNC_ENABLED":      strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
+				"NETWORK_PERSISTENCE":        strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
@@ -1104,12 +1161,6 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
 		}
 
-		if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
-			configMap.Data["STORAGE_COPY_METHOD"] = "vendor-based"
-			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
-			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
-		}
-
 		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
@@ -1167,21 +1218,19 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string) (openstacknws, openstackvolumetypes []string, err error) {
-	ctxlog := r.ctxlog.WithValues("reconcileMapping", vm)
-	ctxlog.Info("Reconciling mapping for VM")
-	openstacknws, err = r.reconcileNetwork(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
+	// Get datacenter from VM's cluster annotation
+	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get datacenter for VM")
+	}
+
+	openstacknws, err = r.reconcileNetwork(ctx, migrationtemplate, openstackcreds, vmwcreds, vm, datacenter)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
-	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
-	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
-	// Skip storage mapping reconciliation for vendor-based storage copy method
-	// as it uses ArrayCredsMapping instead of StorageMapping
-	if migrationtemplate.Spec.StorageCopyMethod != "vendor-based" {
-		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
-		}
+	openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm, datacenter)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to reconcile storage")
 	}
 	return openstacknws, openstackvolumetypes, nil
 }
@@ -1191,8 +1240,9 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string) ([]string, error) {
-	vmnws, err := utils.GetVMwNetworks(ctx, r.Client, vmwcreds, vmwcreds.Spec.DataCenter, vm)
+	vm string,
+	datacenter string) ([]string, error) {
+	vmnws, err := utils.GetVMwNetworks(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get network")
 	}
@@ -1251,8 +1301,9 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-	vm string) ([]string, error) {
-	vmds, err := utils.GetVMwDatastore(ctx, r.Client, vmwcreds, vmwcreds.Spec.DataCenter, vm)
+	vm string,
+	datacenter string) ([]string, error) {
+	vmds, err := utils.GetVMwDatastore(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get datastores")
 	}
@@ -1295,7 +1346,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	arrayCreds *vjailbreakv1alpha1.ArrayCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []*vjailbreakv1alpha1.VMwareMachine) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
@@ -1352,7 +1402,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arrayCreds)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
@@ -1373,8 +1423,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
-			vmMachineObj,
-			arrayCreds.Spec.SecretRef.Name)
+			vmMachineObj)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}
@@ -1741,4 +1790,71 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	}
 
 	return validVMs, skippedVMs, nil
+}
+
+// getDatacenterForVM retrieves the datacenter for a given VM from its VMwareMachine annotation
+func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm string, vmwcreds *vjailbreakv1alpha1.VMwareCreds, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) (string, error) {
+	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
+	}
+
+	if vmMachine.Annotations == nil {
+		return "", fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
+	}
+
+	datacenter, exists := vmMachine.Annotations[constants.VMwareDatacenterLabel]
+	if !exists || datacenter == "" {
+		return "", fmt.Errorf("VMwareMachine %s has no datacenter annotation", vmMachine.Name)
+	}
+
+	return datacenter, nil
+}
+
+// markMigrationValidationFailed updates a Migration status to ValidationFailed
+func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, vmName string, message string) {
+	migration := &vjailbreakv1alpha1.Migration{}
+	pollErr := wait.PollUntilContextTimeout(
+		ctx,
+		200*time.Millisecond,
+		5*time.Second,
+		true,
+		func(pctx context.Context) (bool, error) {
+			getErr := r.Get(pctx, types.NamespacedName{
+				Name:      migrationObj.Name,
+				Namespace: migrationObj.Namespace,
+			}, migration)
+
+			if apierrors.IsNotFound(getErr) {
+				return false, nil
+			}
+			return getErr == nil, getErr
+		},
+	)
+
+	if pollErr != nil {
+		r.ctxlog.Error(pollErr, "Migration object never appeared in API server, cannot mark as failed", "vm", vmName)
+		return
+	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &vjailbreakv1alpha1.Migration{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latest); err != nil {
+			return err
+		}
+
+		latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+		latest.Status.Conditions = append(latest.Status.Conditions, corev1.PodCondition{
+			Type:               "Validated",
+			Status:             corev1.ConditionFalse,
+			Reason:             "VMValidationFailed",
+			Message:            message,
+			LastTransitionTime: metav1.Now(),
+		})
+		return r.Status().Update(ctx, latest)
+	})
+
+	if retryErr != nil {
+		r.ctxlog.Error(retryErr, "Failed to mark VM as ValidationFailed after retries", "vm", vmName)
+	}
 }

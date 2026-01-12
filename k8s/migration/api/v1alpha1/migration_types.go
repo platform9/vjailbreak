@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -38,6 +38,8 @@ const (
 	VMMigrationPhasePending VMMigrationPhase = "Pending"
 	// VMMigrationPhaseValidating indicates the migration prerequisites are being validated
 	VMMigrationPhaseValidating VMMigrationPhase = "Validating"
+	// VMMigrationPhaseValidationFailed indicates the migration prerequisites validation failed
+	VMMigrationPhaseValidationFailed VMMigrationPhase = "ValidationFailed"
 	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
 	// VMMigrationPhaseCopying indicates initial block copying is in progress
@@ -56,22 +58,6 @@ const (
 	VMMigrationPhaseFailed VMMigrationPhase = "Failed"
 	// VMMigrationPhaseUnknown indicates the migration state is unknown
 	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
-
-	// VAAI XCOPY specific phases
-	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established
-	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
-	// VMMigrationPhaseCreatingInitiatorGroup indicates initiator group is being created/updated
-	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
-	// VMMigrationPhaseCreatingVolume indicates volume is being created on storage array
-	VMMigrationPhaseCreatingVolume VMMigrationPhase = "CreatingVolume"
-	// VMMigrationPhaseImportingToCinder indicates volume is being imported to OpenStack Cinder
-	VMMigrationPhaseImportingToCinder VMMigrationPhase = "ImportingToCinder"
-	// VMMigrationPhaseMappingVolume indicates volume is being mapped to ESXi host
-	VMMigrationPhaseMappingVolume VMMigrationPhase = "MappingVolume"
-	// VMMigrationPhaseRescanningStorage indicates ESXi storage adapters are being rescanned
-	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
-	// VMMigrationPhaseXCOPYInProgress indicates VAAI XCOPY operation is in progress
-	VMMigrationPhaseXCOPYInProgress VMMigrationPhase = "XCOPYInProgress"
 )
 
 // MigrationSpec defines the desired state of Migration

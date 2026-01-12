@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { VmData } from 'src/api/migration-templates/model'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 
 interface RdmConfigValidationProps {

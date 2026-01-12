@@ -213,7 +213,7 @@ func AddVMsToESXIMigrationStatus(ctx context.Context, scope *scope.ClusterMigrat
 }
 
 // GetESXiHostSystem returns a reference to an ESXi host system using VMware credentials
-func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (*object.HostSystem, *vim25.Client, error) {
+func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference, datacenter string) (*object.HostSystem, *vim25.Client, error) {
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
@@ -233,7 +233,11 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 		}()
 	}
 	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
+	dcName := datacenter
+	if dcName == "" {
+		dcName = vmwarecreds.Spec.DataCenter
+	}
+	dc, err := finder.Datacenter(ctx, dcName)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find datacenter")
 	}
@@ -249,7 +253,7 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 
 // PutESXiInMaintenanceMode places the ESXi host into maintenance mode to prepare for migration
 func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -299,7 +303,7 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, sc
 		return false, errors.Wrap(err, "failed to get vmware credentials")
 	}
 
-	hs, err := GetESXiSummary(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
+	hs, err := GetESXiSummary(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, vmwarecreds, "")
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get ESXi summary")
 	}
@@ -312,13 +316,13 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, sc
 }
 
 // GetESXiSummary retrieves detailed host system information for the given ESXi host
-func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) (mo.HostSystem, error) {
+func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (mo.HostSystem, error) {
 	// Create a temporary reference to use with our common function
 	vmwareCredsRef := corev1.LocalObjectReference{
 		Name: vmwareCreds.Name,
 	}
 
-	hostSystem, c, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+	hostSystem, c, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef, datacenter)
 	if err != nil {
 		return mo.HostSystem{}, errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -336,7 +340,7 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 // RemoveESXiFromVCenter removes an ESXi host from vCenter inventory
 // This should only be called after the host is in maintenance mode and has no VMs
 func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -377,7 +381,7 @@ func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *
 
 // CountVMsOnESXi counts the number of virtual machines currently hosted on the ESXi host
 func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (int, error) {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -559,7 +563,7 @@ func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize in
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
-		var allVMs []string
+		allVMs := make([]string, 0, len(cluster.VMSequence))
 		for _, vm := range cluster.VMSequence {
 			allVMs = append(allVMs, vm.VMName)
 		}
@@ -811,11 +815,6 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("failed to get rolling migration plan validation config")
 	}
 
-	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
-	if err != nil {
-		return false, "", errors.Wrap(err, "failed to get vmware credentials")
-	}
-
 	// TODO(vpwned): validate vmwarecreds have enough permissions
 
 	// TODO(vpwned): validate there is enough space on underlying storage array
@@ -824,7 +823,19 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("BMConfig is not valid")
 	}
 
-	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName)
+	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials")
+	}
+
+	vmwareCredsInfo, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, vmwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials from secret")
+	}
+
+	clusterK8sID := GetClusterK8sID(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCredsInfo.Datacenter)
+
+	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to filter vmware hosts for cluster")
 	}
@@ -942,7 +953,7 @@ func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScop
 		}
 
 		// Get ESXi summary to extract MAC addresses
-		hs, err := GetESXiSummary(ctx, scope.Client, vmwarehost.Spec.Name, vmwarecreds)
+		hs, err := GetESXiSummary(ctx, scope.Client, vmwarehost.Spec.Name, vmwarecreds, "")
 		if err != nil {
 			return false, "", errors.Wrap(err, "failed to get ESXi summary")
 		}

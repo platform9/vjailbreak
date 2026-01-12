@@ -45,6 +45,7 @@ type MigrationParams struct {
 	VendorType              string
 	ArrayCredsMapping       string
 	PeriodicSyncEnabled     bool
+	NetworkPersistance      bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -91,5 +92,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		VendorType:              string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:       string(configMap.Data["ARRAY_CREDS_MAPPING"]),
 		PeriodicSyncEnabled:     string(configMap.Data["PERIODIC_SYNC_ENABLED"]) == constants.TrueString,
+		NetworkPersistance:      string(configMap.Data["NETWORK_PERSISTENCE"]) == constants.TrueString,
 	}, nil
 }

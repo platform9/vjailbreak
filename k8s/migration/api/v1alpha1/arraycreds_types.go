@@ -21,17 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DatastoreInfo holds datastore information including backing device NAA
-type DatastoreInfo struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Capacity    int64  `json:"capacity"`
-	FreeSpace   int64  `json:"freeSpace"`
-	BackingNAA  string `json:"backingNAA"`  // NAA identifier of the backing LUN (for VMFS datastores)
-	BackingUUID string `json:"backingUUID"` // UUID of the backing device
-	MoID        string `json:"moID"`        // Managed object ID of the datastore
-}
-
 // ArrayCredsInfo holds the actual storage array credentials after decoding from secret
 type ArrayCredsInfo struct {
 	// Hostname is the storage array IP address or hostname
@@ -51,49 +40,19 @@ type ArrayCredsSpec struct {
 
 	// SecretRef is the reference to the Kubernetes secret holding storage array credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
-
-	// OpenStackMapping is the openstack mapping for this array
-	OpenStackMapping OpenstackMapping `json:"openstackMapping,omitempty"`
-
-	// AutoDiscovered indicates if this ArrayCreds was auto-discovered from OpenStack
-	// +optional
-	AutoDiscovered bool `json:"autoDiscovered,omitempty"`
-}
-
-// OpenstackMapping holds the OpenStack Cinder configuration mapping
-type OpenstackMapping struct {
-	// VolumeType is the Cinder volume type associated with this mapping
-	VolumeType string `json:"volumeType"`
-	// CinderBackendName is the Cinder backend name for this mapping
-	// This is the backend configured in cinder.conf (e.g., "pure-01")
-	CinderBackendName string `json:"cinderBackendName"`
-	// CinderBackendPool is the pool name within the backend (optional)
-	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
-	// CinderHost is the full Cinder host string for manage API
-	// Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
-	CinderHost string `json:"cinderHost,omitempty"`
 }
 
 // ArrayCredsStatus defines the observed state of ArrayCreds
 type ArrayCredsStatus struct {
 	// ArrayValidationStatus is the status of the storage array validation
-	// Possible values: Pending, Succeeded, Failed, AwaitingCredentials
 	ArrayValidationStatus string `json:"arrayValidationStatus,omitempty"`
 	// ArrayValidationMessage is the message associated with the storage array validation
 	ArrayValidationMessage string `json:"arrayValidationMessage,omitempty"`
-	// DataStore is the list of datastores associated with this array
-	DataStore []DatastoreInfo `json:"dataStore,omitempty"`
-	// Phase indicates the current phase of the ArrayCreds
-	// Possible values: Discovered, Configured, Validated, Failed
-	Phase string `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.spec.vendorType`,name=Vendor,type=string
-// +kubebuilder:printcolumn:JSONPath=`.spec.openstackMapping.volumeType`,name=VolumeType,type=string
-// +kubebuilder:printcolumn:JSONPath=`.spec.openstackMapping.cinderBackendName`,name=Backend,type=string
-// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name=Phase,type=string
 // +kubebuilder:printcolumn:JSONPath=`.status.arrayValidationStatus`,name=Status,type=string
 
 // ArrayCreds is the Schema for the storage array credentials API that defines authentication

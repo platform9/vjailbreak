@@ -1,11 +1,9 @@
 import {
   Box,
   Typography,
-  Drawer,
   styled,
   Paper,
   Tooltip,
-  Button,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -15,8 +13,11 @@ import {
   MenuItem,
   GlobalStyles,
   FormLabel,
-  Snackbar
+  Snackbar,
+  useMediaQuery,
+  Divider
 } from '@mui/material'
+import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
@@ -26,12 +27,8 @@ import {
   GridToolbarColumnsButton
 } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
-import Footer from '../../components/forms/Footer'
-import Header from '../../components/forms/Header'
-import Step from '../../components/forms/Step'
-import { DrawerContent } from 'src/components/forms/StyledDrawer'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
-import CustomSearchToolbar from 'src/components/grid/CustomSearchToolbar'
+import { CustomSearchToolbar } from 'src/components/grid'
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getVMwareHosts, patchVMwareHost } from 'src/api/vmware-hosts/vmwareHosts'
@@ -41,8 +38,11 @@ import { VMwareMachine } from 'src/api/vmware-machines/model'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { getBMConfigList, getBMConfig } from 'src/api/bmconfig/bmconfig'
 import { BMConfig } from 'src/api/bmconfig/model'
-import MaasConfigDetailsModal from 'src/pages/dashboard/BMConfigDetailsModal'
-import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
+import MaasConfigDetailsModal from './components/MaasConfigDetailsModal'
+import {
+  getOpenstackCredentials,
+  validateOpenstackIPs
+} from 'src/api/openstack-creds/openstackCreds'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import NetworkAndStorageMappingStep, { ResourceMap } from './NetworkAndStorageMappingStep'
 import {
@@ -57,8 +57,8 @@ import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { createMigrationTemplateJson } from 'src/api/migration-templates/helpers'
-import { postMigrationTemplate } from 'src/api/migration-templates/migrationTemplates'
+import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
+import { postMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from './MigrationOptionsAlt'
 import { CUTOVER_TYPES } from './constants'
@@ -71,13 +71,16 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import { TextField, CircularProgress } from '@mui/material'
-import { validateOpenstackIPs } from 'src/api/openstack-creds/openstackCreds'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from '@cds/core/icon'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+
+import { DrawerShell, DrawerHeader, DrawerFooter, SectionNav, SurfaceCard } from 'src/components'
+import type { SectionNavItem } from 'src/components'
+import { useTheme } from '@mui/material/styles'
 
 // Define types for MigrationOptions
 interface FormValues extends Record<string, unknown> {
@@ -124,18 +127,7 @@ const CdsIconWrapper = styled('div')({
   justifyContent: 'center'
 })
 
-const StyledDrawer = styled(Drawer)(({ theme }) => ({
-  '& .MuiDrawer-paper': {
-    display: 'grid',
-    gridTemplateRows: 'max-content 1fr max-content',
-    width: '1400px',
-    maxWidth: '90vw',
-    zIndex: theme.zIndex.modal
-  },
-  '& .hidden-column': {
-    display: 'none'
-  }
-}))
+const drawerWidth = 1400
 
 interface ESXHost {
   id: string
@@ -187,13 +179,13 @@ const CustomToolbarWithActions = (props) => {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {rowSelectionModel && rowSelectionModel.length > 0 && (
           <>
-            <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
+            <ActionButton variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
-            </Button>
+            </ActionButton>
             {hasPoweredOffVMs && (
-              <Button variant="text" color="primary" onClick={onAssignIP} size="small">
+              <ActionButton variant="text" color="primary" onClick={onAssignIP} size="small">
                 Assign IP ({rowSelectionModel.length})
-              </Button>
+              </ActionButton>
             )}
           </>
         )}
@@ -207,16 +199,18 @@ const CustomESXToolbarWithActions = (props) => {
   const { onAssignHostConfig, ...toolbarProps } = props
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', padding: '4px 8px' }}>
-      <Button
-        variant="text"
-        color="primary"
-        onClick={onAssignHostConfig}
-        size="small"
-        sx={{ ml: 1 }}
-      >
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        width: '100%',
+        padding: '4px 8px',
+        gap: 1
+      }}
+    >
+      <ActionButton variant="text" color="primary" onClick={onAssignHostConfig} size="small">
         Assign Host Config
-      </Button>
+      </ActionButton>
       <CustomSearchToolbar {...toolbarProps} />
     </Box>
   )
@@ -580,6 +574,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleSourceClusterChange = (value) => {
+    markTouched('sourceDestination')
     setSourceCluster(value)
 
     if (value) {
@@ -592,6 +587,7 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleDestinationPCDChange = (value) => {
+    markTouched('sourceDestination')
     setDestinationPCD(value)
 
     if (value) {
@@ -837,6 +833,7 @@ export default function RollingMigrationFormDrawer({
   }, [openstackFlavors, vmsWithAssignments])
 
   const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
+    markTouched('mapResources')
     if (key === 'networkMappings') {
       setNetworkMappings(value)
       setNetworkMappingError('')
@@ -1208,7 +1205,255 @@ export default function RollingMigrationFormDrawer({
     onClose: handleClose
   })
 
+  const theme = useTheme()
+  const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
+  const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
+
+  const [touchedSections, setTouchedSections] = useState({
+    sourceDestination: false,
+    baremetal: false,
+    hosts: false,
+    vms: false,
+    mapResources: false,
+    options: false
+  })
+
+  const markTouched = useCallback(
+    (key: keyof typeof touchedSections) => {
+      setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+    },
+    [setTouchedSections]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setTouchedSections({
+      sourceDestination: false,
+      baremetal: false,
+      hosts: false,
+      vms: false,
+      mapResources: false,
+      options: false
+    })
+  }, [open])
+
+  const contentRootRef = React.useRef<HTMLDivElement | null>(null)
+  const section1Ref = React.useRef<HTMLDivElement | null>(null)
+  const section2Ref = React.useRef<HTMLDivElement | null>(null)
+  const section3Ref = React.useRef<HTMLDivElement | null>(null)
+  const section4Ref = React.useRef<HTMLDivElement | null>(null)
+  const section5Ref = React.useRef<HTMLDivElement | null>(null)
+  const section6Ref = React.useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+    let observer: IntersectionObserver | undefined
+    let rafId: number | undefined
+
+    const init = () => {
+      if (cancelled) {
+        if (rafId) cancelAnimationFrame(rafId)
+        return
+      }
+
+      const root = contentRootRef.current?.parentElement ?? undefined
+      const nodes = [
+        section1Ref.current,
+        section2Ref.current,
+        section3Ref.current,
+        section4Ref.current,
+        section5Ref.current,
+        section6Ref.current
+      ].filter(Boolean) as HTMLDivElement[]
+
+      if (!root || nodes.length === 0) {
+        rafId = requestAnimationFrame(init)
+        return
+      }
+
+      const idByNode = new Map<Element, string>([
+        [section1Ref.current as HTMLDivElement, 'source-destination'],
+        [section2Ref.current as HTMLDivElement, 'baremetal'],
+        [section3Ref.current as HTMLDivElement, 'hosts'],
+        [section4Ref.current as HTMLDivElement, 'vms'],
+        [section5Ref.current as HTMLDivElement, 'map-resources'],
+        [section6Ref.current as HTMLDivElement, 'options']
+      ])
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting)
+            .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0]
+
+          if (!visible) return
+          const id = idByNode.get(visible.target)
+          if (id) setActiveSectionId(id)
+        },
+        {
+          root,
+          threshold: [0.2, 0.35, 0.5, 0.65]
+        }
+      )
+
+      nodes.forEach((n) => observer?.observe(n))
+    }
+
+    rafId = requestAnimationFrame(init)
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+      if (observer) observer.disconnect()
+    }
+  }, [open])
+
+  const step1HasErrors = Boolean(!sourceCluster || !destinationPCD)
+
+  const step2HasErrors = Boolean(!selectedMaasConfig)
+
+  const step3HasErrors = Boolean(esxHostConfigValidation.hasError)
+
+  const step4HasErrors = Boolean(vmIpValidation.hasError || osValidation.hasError)
+
+  const step5HasErrors = Boolean(networkMappingError || storageMappingError)
+
+  const sectionNavItems = useMemo<SectionNavItem[]>(
+    () => [
+      {
+        id: 'source-destination',
+        title: 'Source And Destination',
+        description: 'Pick clusters',
+        status: step1HasErrors
+          ? 'attention'
+          : touchedSections.sourceDestination && sourceCluster && destinationPCD
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
+        id: 'baremetal',
+        title: 'Bare Metal Config',
+        description: 'Verify configuration',
+        status: step2HasErrors
+          ? 'attention'
+          : touchedSections.baremetal && selectedMaasConfig
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
+        id: 'hosts',
+        title: 'ESXi Hosts',
+        description: 'Assign host configs',
+        status: step3HasErrors
+          ? 'attention'
+          : touchedSections.hosts && orderedESXHosts.length > 0
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
+        id: 'vms',
+        title: 'Select VMs',
+        description: 'Choose VMs and required fields',
+        status: step4HasErrors
+          ? 'attention'
+          : touchedSections.vms && selectedVMs.length > 0
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
+        id: 'map-resources',
+        title: 'Map Networks And Storage',
+        description: 'Map VMware resources to PCD',
+        status: step5HasErrors
+          ? 'attention'
+          : touchedSections.mapResources &&
+              sourceCluster &&
+              destinationPCD &&
+              availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
+              availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
+        id: 'options',
+        title: 'Migration Options',
+        description: 'Scheduling and advanced behavior',
+        status: touchedSections.options ? 'complete' : 'incomplete'
+      }
+    ],
+    [
+      sourceCluster,
+      destinationPCD,
+      selectedMaasConfig,
+      orderedESXHosts.length,
+      esxHostConfigValidation.hasError,
+      selectedVMs.length,
+      vmIpValidation.hasError,
+      osValidation.hasError,
+      networkMappingError,
+      storageMappingError,
+      availableVmwareNetworks,
+      availableVmwareDatastores,
+      networkMappings,
+      storageMappings,
+      step1HasErrors,
+      step2HasErrors,
+      step3HasErrors,
+      step4HasErrors,
+      step5HasErrors,
+      touchedSections
+    ]
+  )
+
+  const scrollToSection = useCallback((id: string) => {
+    const map: Record<string, React.RefObject<HTMLDivElement | null>> = {
+      'source-destination': section1Ref,
+      baremetal: section2Ref,
+      hosts: section3Ref,
+      vms: section4Ref,
+      'map-resources': section5Ref,
+      options: section6Ref
+    }
+
+    const el = map[id]?.current
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setActiveSectionId(id)
+  }, [])
+
+  const onOptionsChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (getParamsUpdater as any)(key)(value)
+    },
+    [getParamsUpdater, markTouched]
+  )
+
+  const onOptionsSelectionChange = useCallback(
+    (key: string | number) => (value: any) => {
+      markTouched('options')
+      return (updateSelectedMigrationOptions as any)(key)(value)
+    },
+    [markTouched, updateSelectedMigrationOptions]
+  )
+
+  const uniqueVmwareNetworks = useMemo(() => {
+    return Array.from(new Set(availableVmwareNetworks))
+  }, [availableVmwareNetworks])
+
+  const unmappedNetworksCount = useMemo(() => {
+    return uniqueVmwareNetworks.filter((n) => !networkMappings.some((m) => m.source === n)).length
+  }, [uniqueVmwareNetworks, networkMappings])
+
+  const unmappedStorageCount = useMemo(() => {
+    return availableVmwareDatastores.filter((d) => !storageMappings.some((m) => m.source === d))
+      .length
+  }, [availableVmwareDatastores, storageMappings])
+
   const handleViewMaasConfig = () => {
+    markTouched('baremetal')
     setMaasDetailsModalOpen(true)
   }
 
@@ -1234,6 +1479,8 @@ export default function RollingMigrationFormDrawer({
       handleClosePcdHostConfigDialog()
       return
     }
+
+    markTouched('hosts')
 
     setUpdatingPcdMapping(true)
 
@@ -1976,6 +2223,7 @@ export default function RollingMigrationFormDrawer({
 
   const handleIndividualHostConfigChange = async (hostId: string, configName: string) => {
     try {
+      markTouched('hosts')
       // Update the ESX host with the selected host config
       const updatedESXHosts = orderedESXHosts.map((host) => {
         if (host.id === hostId) {
@@ -2128,34 +2376,118 @@ export default function RollingMigrationFormDrawer({
           }
         }}
       />
-      <StyledDrawer
-        anchor="right"
+      <DrawerShell
+        data-testid="rolling-migration-form-drawer"
         open={open}
         onClose={handleClose}
+        width={drawerWidth}
         ModalProps={{
           keepMounted: false,
           style: { zIndex: 1300 }
         }}
+        header={
+          <DrawerHeader
+            data-testid="rolling-migration-form-header"
+            title="Start Cluster Conversion"
+            subtitle="Select source/destination, configure hosts and VMs, map resources, and start"
+            icon={<ClusterIcon />}
+            onClose={handleClose}
+          />
+        }
+        footer={
+          <DrawerFooter data-testid="rolling-migration-form-footer">
+            <ActionButton
+              tone="secondary"
+              onClick={handleClose}
+              data-testid="rolling-migration-form-cancel"
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              onClick={handleSubmit}
+              disabled={isSubmitDisabled}
+              loading={submitting}
+              data-testid="rolling-migration-form-submit"
+            >
+              Start Conversion
+            </ActionButton>
+          </DrawerFooter>
+        }
       >
-        <Header title="Cluster Conversion" icon={<ClusterIcon />} />
-
-        <DrawerContent>
-          <Box sx={{ display: 'grid', gap: 4 }}>
-            <SourceDestinationClusterSelection
-              onChange={() => () => {}}
-              errors={{}}
-              stepNumber="1"
-              stepLabel="Source & Destination"
-              onVmwareClusterChange={handleSourceClusterChange}
-              onPcdClusterChange={handleDestinationPCDChange}
-              vmwareCluster={sourceCluster}
-              pcdCluster={destinationPCD}
-              loadingVMware={loading}
-              loadingPCD={loadingPCD}
+        <Box
+          ref={contentRootRef}
+          data-testid="rolling-migration-form-content"
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
+            gap: 3
+          }}
+        >
+          {!isSmallNav ? (
+            <SectionNav
+              data-testid="rolling-migration-form-section-nav"
+              items={sectionNavItems}
+              activeId={activeSectionId}
+              onSelect={scrollToSection}
+              dense
+              showDescriptions={false}
             />
-            <Box>
-              <Step stepNumber="2" label="Bare Metal Config (Verify the configuration)" />
-              <Box sx={{ ml: 5, mt: 1 }}>
+          ) : null}
+
+          <Box sx={{ display: 'grid', gap: 3 }}>
+            {isSmallNav ? (
+              <SurfaceCard
+                title="Steps"
+                subtitle="Jump to any section"
+                data-testid="rolling-migration-form-steps-card"
+              >
+                <Select
+                  size="small"
+                  value={activeSectionId}
+                  onChange={(e) => scrollToSection(e.target.value as string)}
+                  fullWidth
+                  data-testid="rolling-migration-form-steps-select"
+                >
+                  {sectionNavItems.map((item) => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {item.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </SurfaceCard>
+            ) : null}
+
+            <Box ref={section1Ref} data-testid="rolling-migration-form-step-source-destination">
+              <SurfaceCard
+                variant="section"
+                title="Source And Destination"
+                subtitle="Choose where you convert from and where you convert to"
+                data-testid="rolling-migration-form-step1-card"
+              >
+                <SourceDestinationClusterSelection
+                  onChange={() => () => {}}
+                  errors={{}}
+                  onVmwareClusterChange={handleSourceClusterChange}
+                  onPcdClusterChange={handleDestinationPCDChange}
+                  vmwareCluster={sourceCluster}
+                  pcdCluster={destinationPCD}
+                  loadingVMware={loading}
+                  loadingPCD={loadingPCD}
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+
+            <Divider />
+
+            <Box ref={section2Ref} data-testid="rolling-migration-form-step-baremetal">
+              <SurfaceCard
+                variant="section"
+                title="Bare Metal Config"
+                subtitle="Verify the selected configuration"
+                data-testid="rolling-migration-form-step2-card"
+              >
                 {loadingMaasConfig ? (
                   <Typography variant="body2">Loading Bare Metal Config...</Typography>
                 ) : maasConfigs.length === 0 ? (
@@ -2164,6 +2496,7 @@ export default function RollingMigrationFormDrawer({
                   <Typography
                     variant="subtitle2"
                     component="a"
+                    data-testid="rolling-migration-form-baremetal-view-details"
                     sx={{
                       color: 'primary.main',
                       textDecoration: 'underline',
@@ -2175,12 +2508,18 @@ export default function RollingMigrationFormDrawer({
                     View Bare Metal Config Details
                   </Typography>
                 )}
-              </Box>
+              </SurfaceCard>
             </Box>
 
-            <Box>
-              <Step stepNumber="3" label="ESXi Hosts" />
-              <Box sx={{ ml: 5, mt: 2 }}>
+            <Divider />
+
+            <Box ref={section3Ref} data-testid="rolling-migration-form-step-hosts">
+              <SurfaceCard
+                variant="section"
+                title="ESXi Hosts"
+                subtitle="Assign PCD host configurations to all ESXi hosts"
+                data-testid="rolling-migration-form-step3-card"
+              >
                 <Box
                   sx={{
                     display: 'flex',
@@ -2202,7 +2541,10 @@ export default function RollingMigrationFormDrawer({
                     </Typography>
                   )}
                 </Box>
-                <Paper sx={{ width: '100%', height: 389 }}>
+                <Paper
+                  sx={{ width: '100%', height: 389 }}
+                  data-testid="rolling-migration-form-hosts-grid"
+                >
                   <DataGrid
                     rows={orderedESXHosts}
                     columns={esxColumns}
@@ -2232,33 +2574,30 @@ export default function RollingMigrationFormDrawer({
                     {esxHostConfigValidationError}
                   </Alert>
                 )}
-              </Box>
+              </SurfaceCard>
             </Box>
 
-            <Box>
-              <Step stepNumber="4" label="Select Virtual Machines to Migrate" />
-              <Box sx={{ ml: 5, mt: 2 }}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 1
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    Select VMs to migrate
-                  </Typography>
-                </Box>
+            <Divider />
+
+            <Box ref={section4Ref} data-testid="rolling-migration-form-step-vms">
+              <SurfaceCard
+                variant="section"
+                title="Select VMs"
+                subtitle="Choose the virtual machines to convert and assign required fields"
+                data-testid="rolling-migration-form-step4-card"
+              >
                 <Typography
                   variant="caption"
                   color="text.secondary"
                   sx={{ mt: 1, display: 'block', mb: 1 }}
                 >
-                  💡 Tip: Powered-off VMs require IP Address and OS assignment for proper migration
+                  Tip: Powered-off VMs require IP Address and OS assignment for proper migration
                   configuration
                 </Typography>
-                <Paper sx={{ width: '100%', height: 389 }}>
+                <Paper
+                  sx={{ width: '100%', height: 389 }}
+                  data-testid="rolling-migration-form-vms-grid"
+                >
                   <DataGrid
                     rows={vmsWithAssignments}
                     columns={vmColumns}
@@ -2272,6 +2611,7 @@ export default function RollingMigrationFormDrawer({
                     rowHeight={52}
                     checkboxSelection
                     onRowSelectionModelChange={(selectedRowIds) => {
+                      markTouched('vms')
                       setSelectedVMs(selectedRowIds)
                     }}
                     rowSelectionModel={selectedVMs.filter((vmId) =>
@@ -2331,12 +2671,19 @@ export default function RollingMigrationFormDrawer({
                     {osValidationError}
                   </Alert>
                 )}
-              </Box>
+              </SurfaceCard>
             </Box>
 
-            <Box>
-              {sourceCluster && destinationPCD ? (
-                <>
+            <Divider />
+
+            <Box ref={section5Ref} data-testid="rolling-migration-form-step-map-resources">
+              <SurfaceCard
+                variant="section"
+                title="Map Networks And Storage"
+                subtitle="Ensure VMware networks/datastores have PCD targets"
+                data-testid="rolling-migration-form-step5-card"
+              >
+                {sourceCluster && destinationPCD ? (
                   <NetworkAndStorageMappingStep
                     vmwareNetworks={availableVmwareNetworks}
                     vmWareStorage={availableVmwareDatastores}
@@ -2349,112 +2696,179 @@ export default function RollingMigrationFormDrawer({
                     onChange={handleMappingsChange}
                     networkMappingError={networkMappingError}
                     storageMappingError={storageMappingError}
-                    stepNumber="5"
                     loading={loadingOpenstackDetails}
+                    showHeader={false}
                   />
-                  <MigrationOptions
-                    stepNumber="6"
-                    params={params}
-                    onChange={getParamsUpdater}
-                    selectedMigrationOptions={selectedMigrationOptions}
-                    updateSelectedMigrationOptions={updateSelectedMigrationOptions}
-                    errors={fieldErrors}
-                    getErrorsUpdater={getFieldErrorsUpdater}
-                  />
-                </>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Please select both source cluster and destination PCD to configure mappings.
-                </Typography>
-              )}
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Please select both source cluster and destination PCD to configure mappings.
+                  </Typography>
+                )}
+              </SurfaceCard>
+            </Box>
+
+            <Divider />
+
+            <Box ref={section6Ref} data-testid="rolling-migration-form-step-options">
+              <SurfaceCard
+                variant="section"
+                title="Migration Options"
+                subtitle="Optional scheduling, cutover behavior, and advanced settings"
+                data-testid="rolling-migration-form-step6-card"
+              >
+                <MigrationOptions
+                  stepNumber="6"
+                  params={params}
+                  onChange={onOptionsChange}
+                  selectedMigrationOptions={selectedMigrationOptions}
+                  updateSelectedMigrationOptions={onOptionsSelectionChange}
+                  errors={fieldErrors}
+                  getErrorsUpdater={getFieldErrorsUpdater}
+                  showHeader={false}
+                />
+              </SurfaceCard>
+            </Box>
+
+            <Divider />
+
+            <Box data-testid="rolling-migration-form-step-preview">
+              <SurfaceCard
+                variant="section"
+                title="Preview"
+                subtitle="Verify your selections before starting the conversion"
+                data-testid="rolling-migration-form-step7-card"
+              >
+                <Box sx={{ display: 'grid', gap: 1.5 }}>
+                  <Typography variant="subtitle2">Summary</Typography>
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Source
+                      </Typography>
+                      <Typography variant="body2">{sourceCluster || '—'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Destination
+                      </Typography>
+                      <Typography variant="body2">{destinationPCD || '—'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        VMs selected
+                      </Typography>
+                      <Typography variant="body2">{selectedVMs.length}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Network mappings
+                      </Typography>
+                      <Typography variant="body2">
+                        {uniqueVmwareNetworks.length === 0
+                          ? '—'
+                          : unmappedNetworksCount === 0
+                            ? 'All mapped'
+                            : `${unmappedNetworksCount} unmapped`}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Storage mappings
+                      </Typography>
+                      <Typography variant="body2">
+                        {availableVmwareDatastores.length === 0
+                          ? '—'
+                          : unmappedStorageCount === 0
+                            ? 'All mapped'
+                            : `${unmappedStorageCount} unmapped`}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </SurfaceCard>
             </Box>
           </Box>
-        </DrawerContent>
-        <Footer
-          submitButtonLabel="Run"
-          onClose={handleClose}
-          onSubmit={handleSubmit}
-          disableSubmit={isSubmitDisabled}
-          submitting={submitting}
-        />
+        </Box>
+      </DrawerShell>
 
-        <MaasConfigDialog
-          open={maasConfigDialogOpen}
-          onClose={handleCloseMaasConfig}
-          aria-labelledby="baremetal-config-dialog-title"
-        >
-          <DialogTitle id="baremetal-config-dialog-title">
-            <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>
-          </DialogTitle>
-          <DialogContent dividers>
-            {loadingMaasConfig ? (
-              <Typography>Loading configuration details...</Typography>
-            ) : !selectedMaasConfig ? (
-              <Typography>No configuration available</Typography>
-            ) : (
-              <>
+      <MaasConfigDialog
+        open={maasConfigDialogOpen}
+        onClose={handleCloseMaasConfig}
+        aria-labelledby="baremetal-config-dialog-title"
+        data-testid="rolling-migration-form-baremetal-dialog"
+      >
+        <DialogTitle id="baremetal-config-dialog-title">
+          <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          {loadingMaasConfig ? (
+            <Typography>Loading configuration details...</Typography>
+          ) : !selectedMaasConfig ? (
+            <Typography>No configuration available</Typography>
+          ) : (
+            <>
+              <ConfigSection>
+                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
+                  Provider Configuration
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
+                  <ConfigField>
+                    <FieldLabel>Provider Type:</FieldLabel>
+                    <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
+                  </ConfigField>
+                  <ConfigField>
+                    <FieldLabel>Bare Metal Provider URL:</FieldLabel>
+                    <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
+                  </ConfigField>
+                  <ConfigField>
+                    <FieldLabel>Insecure:</FieldLabel>
+                    <FieldValue>{selectedMaasConfig.spec.insecure ? 'Yes' : 'No'}</FieldValue>
+                  </ConfigField>
+                  {selectedMaasConfig.spec.os && (
+                    <ConfigField>
+                      <FieldLabel>OS:</FieldLabel>
+                      <FieldValue>{selectedMaasConfig.spec.os}</FieldValue>
+                    </ConfigField>
+                  )}
+                  <ConfigField>
+                    <FieldLabel>Status:</FieldLabel>
+                    <FieldValue>
+                      {selectedMaasConfig.status?.validationStatus || 'Pending validation'}
+                    </FieldValue>
+                  </ConfigField>
+                  {selectedMaasConfig.status?.validationMessage && (
+                    <ConfigField>
+                      <FieldLabel>Validation Message:</FieldLabel>
+                      <FieldValue>{selectedMaasConfig.status.validationMessage}</FieldValue>
+                    </ConfigField>
+                  )}
+                </Box>
+              </ConfigSection>
+
+              {selectedMaasConfig.spec.userDataSecretRef && (
                 <ConfigSection>
                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
-                    Provider Configuration
+                    Cloud-Init Configuration
                   </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
-                    <ConfigField>
-                      <FieldLabel>Provider Type:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
-                    </ConfigField>
-                    <ConfigField>
-                      <FieldLabel>Bare Metal Provider URL:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
-                    </ConfigField>
-                    <ConfigField>
-                      <FieldLabel>Insecure:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.spec.insecure ? 'Yes' : 'No'}</FieldValue>
-                    </ConfigField>
-                    {selectedMaasConfig.spec.os && (
-                      <ConfigField>
-                        <FieldLabel>OS:</FieldLabel>
-                        <FieldValue>{selectedMaasConfig.spec.os}</FieldValue>
-                      </ConfigField>
-                    )}
-                    <ConfigField>
-                      <FieldLabel>Status:</FieldLabel>
-                      <FieldValue>
-                        {selectedMaasConfig.status?.validationStatus || 'Pending validation'}
-                      </FieldValue>
-                    </ConfigField>
-                    {selectedMaasConfig.status?.validationMessage && (
-                      <ConfigField>
-                        <FieldLabel>Validation Message:</FieldLabel>
-                        <FieldValue>{selectedMaasConfig.status.validationMessage}</FieldValue>
-                      </ConfigField>
-                    )}
-                  </Box>
-                </ConfigSection>
-
-                {selectedMaasConfig.spec.userDataSecretRef && (
-                  <ConfigSection>
-                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
-                      Cloud-Init Configuration
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ mb: 1, display: 'block', color: 'text.secondary' }}
+                  <Typography
+                    variant="caption"
+                    sx={{ mb: 1, display: 'block', color: 'text.secondary' }}
+                  >
+                    User data is stored in a secret:{' '}
+                    {selectedMaasConfig.spec.userDataSecretRef.name}
+                  </Typography>
+                  <CodeEditorContainer>
+                    <SyntaxHighlighter
+                      language="yaml"
+                      style={oneLight}
+                      showLineNumbers
+                      wrapLongLines
+                      customStyle={{
+                        margin: 0,
+                        maxHeight: '100%'
+                      }}
                     >
-                      User data is stored in a secret:{' '}
-                      {selectedMaasConfig.spec.userDataSecretRef.name}
-                    </Typography>
-                    <CodeEditorContainer>
-                      <SyntaxHighlighter
-                        language="yaml"
-                        style={oneLight}
-                        showLineNumbers
-                        wrapLongLines
-                        customStyle={{
-                          margin: 0,
-                          maxHeight: '100%'
-                        }}
-                      >
-                        {`# Cloud-init configuration is stored in Kubernetes Secret: 
+                      {`# Cloud-init configuration is stored in Kubernetes Secret: 
 # ${selectedMaasConfig.spec.userDataSecretRef.name}
 # in namespace: ${selectedMaasConfig.spec.userDataSecretRef.namespace || VJAILBREAK_DEFAULT_NAMESPACE}
 
@@ -2466,263 +2880,286 @@ export default function RollingMigrationFormDrawer({
 # - and other system setup parameters
 
 # This will be used when provisioning ESXi hosts in the bare metal environment.`}
-                      </SyntaxHighlighter>
-                    </CodeEditorContainer>
-                  </ConfigSection>
-                )}
-
-                <ConfigSection>
-                  <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
-                    Resource Information
-                  </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
-                    <ConfigField>
-                      <FieldLabel>Name:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.metadata.name}</FieldValue>
-                    </ConfigField>
-                    <ConfigField>
-                      <FieldLabel>Namespace:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.metadata.namespace}</FieldValue>
-                    </ConfigField>
-                    <ConfigField>
-                      <FieldLabel>Created:</FieldLabel>
-                      <FieldValue>
-                        {new Date(selectedMaasConfig.metadata.creationTimestamp).toLocaleString()}
-                      </FieldValue>
-                    </ConfigField>
-                  </Box>
+                    </SyntaxHighlighter>
+                  </CodeEditorContainer>
                 </ConfigSection>
-              </>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button variant="contained" onClick={handleCloseMaasConfig}>
-              Close
-            </Button>
-          </DialogActions>
-        </MaasConfigDialog>
+              )}
 
-        {maasConfigs && maasConfigs.length > 0 && (
-          <MaasConfigDetailsModal
-            open={maasDetailsModalOpen}
-            onClose={handleCloseMaasDetailsModal}
-            configName={maasConfigs[0].metadata.name}
-            namespace={maasConfigs[0].metadata.namespace}
-          />
-        )}
+              <ConfigSection>
+                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
+                  Resource Information
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
+                  <ConfigField>
+                    <FieldLabel>Name:</FieldLabel>
+                    <FieldValue>{selectedMaasConfig.metadata.name}</FieldValue>
+                  </ConfigField>
+                  <ConfigField>
+                    <FieldLabel>Namespace:</FieldLabel>
+                    <FieldValue>{selectedMaasConfig.metadata.namespace}</FieldValue>
+                  </ConfigField>
+                  <ConfigField>
+                    <FieldLabel>Created:</FieldLabel>
+                    <FieldValue>
+                      {new Date(selectedMaasConfig.metadata.creationTimestamp).toLocaleString()}
+                    </FieldValue>
+                  </ConfigField>
+                </Box>
+              </ConfigSection>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ gap: 1, p: 2 }}>
+          <ActionButton
+            tone="primary"
+            onClick={handleCloseMaasConfig}
+            data-testid="rolling-migration-form-baremetal-dialog-close"
+          >
+            Close
+          </ActionButton>
+        </DialogActions>
+      </MaasConfigDialog>
 
-        {/* PCD Host Config Assignment Dialog */}
-        <Dialog
-          open={pcdHostConfigDialogOpen}
-          onClose={handleClosePcdHostConfigDialog}
-          fullWidth
-          maxWidth="sm"
-        >
-          <DialogTitle>Assign Host Config to All ESXi Hosts</DialogTitle>
-          <DialogContent>
-            <Box sx={{ my: 2 }}>
-              <Typography variant="body2" gutterBottom>
-                Select Host Configuration
-              </Typography>
-              <Select
-                fullWidth
-                value={selectedPcdHostConfig}
-                onChange={handlePcdHostConfigChange}
-                size="small"
-                sx={{ mt: 1 }}
-                displayEmpty
-              >
-                <MenuItem value="">
-                  <em>Select a host configuration</em>
-                </MenuItem>
-                {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
-                  <MenuItem key={config.id} value={config.id}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="body1">{config.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Management Interface: {config.mgmtInterface}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClosePcdHostConfigDialog}>Cancel</Button>
-            <Button
-              onClick={handleApplyPcdHostConfig}
-              variant="contained"
-              color="primary"
-              disabled={!selectedPcdHostConfig || updatingPcdMapping}
+      {maasConfigs && maasConfigs.length > 0 && (
+        <MaasConfigDetailsModal
+          open={maasDetailsModalOpen}
+          onClose={handleCloseMaasDetailsModal}
+          config={maasConfigs[0]}
+        />
+      )}
+
+      {/* PCD Host Config Assignment Dialog */}
+      <Dialog
+        open={pcdHostConfigDialogOpen}
+        onClose={handleClosePcdHostConfigDialog}
+        fullWidth
+        maxWidth="sm"
+        data-testid="rolling-migration-form-host-config-dialog"
+      >
+        <DialogTitle>Assign Host Config To All ESXi Hosts</DialogTitle>
+        <DialogContent>
+          <Box sx={{ my: 2 }}>
+            <Typography variant="body2" gutterBottom>
+              Select Host Configuration
+            </Typography>
+            <Select
+              fullWidth
+              value={selectedPcdHostConfig}
+              onChange={handlePcdHostConfigChange}
+              size="small"
+              sx={{ mt: 1 }}
+              displayEmpty
+              data-testid="rolling-migration-form-host-config-select"
             >
-              {updatingPcdMapping ? 'Applying...' : 'Apply to all hosts'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Bulk IP Editor Dialog */}
-        <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="lg">
-          <DialogTitle>
-            Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
-          </DialogTitle>
-          <DialogContent>
-            <Box sx={{ my: 2 }}>
-              {/* Quick Actions */}
-              <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
-                  Clear All
-                </Button>
-              </Box>
-
-              {/* IP Editor Fields */}
-              <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
-                {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
-                  const vm = vmsWithAssignments.find((v) => v.id === vmId)
-                  if (!vm) return null
-
-                  return (
-                    <Box
-                      key={vmId}
-                      sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
-                        {vm.name}
-                      </Typography>
-
-                      {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
-                        const interfaceIndex = parseInt(interfaceIndexStr)
-                        const networkInterface = vm.networkInterfaces?.[interfaceIndex]
-                        const status = bulkValidationStatus[vmId]?.[interfaceIndex]
-                        const message = bulkValidationMessages[vmId]?.[interfaceIndex]
-
-                        return (
-                          <Box
-                            key={interfaceIndex}
-                            sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
-                          >
-                            <Box sx={{ width: 120, flexShrink: 0 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
-                              </Typography>
-                              <Typography variant="caption" display="block" color="text.secondary">
-                                Current: {networkInterface?.ipAddress || vm.ip || '—'}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <TextField
-                                value={ip}
-                                onChange={(e) =>
-                                  handleBulkIpChange(vmId, interfaceIndex, e.target.value)
-                                }
-                                placeholder="Enter IP address"
-                                size="small"
-                                sx={{ flex: 1 }}
-                                error={status === 'invalid'}
-                                helperText={message}
-                              />
-                              <Box sx={{ width: 24, display: 'flex' }}>
-                                {status === 'validating' && <CircularProgress size={20} />}
-                                {status === 'valid' && (
-                                  <CheckCircleIcon color="success" fontSize="small" />
-                                )}
-                                {status === 'invalid' && (
-                                  <ErrorIcon color="error" fontSize="small" />
-                                )}
-                              </Box>
-                            </Box>
-                          </Box>
-                        )
-                      })}
-                    </Box>
-                  )
-                })}
-              </Box>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseBulkEditDialog}>Cancel</Button>
-            <Button
-              onClick={handleApplyBulkIPs}
-              variant="contained"
-              color="primary"
-              disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
-            >
-              {assigningIPs ? 'Applying...' : 'Apply Changes'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Flavor Assignment Dialog */}
-        <Dialog open={flavorDialogOpen} onClose={handleCloseFlavorDialog} fullWidth maxWidth="sm">
-          <DialogTitle>
-            Assign Flavor to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
-          </DialogTitle>
-          <DialogContent>
-            <Box sx={{ my: 2 }}>
-              <FormLabel>Select Flavor</FormLabel>
-              <Select
-                fullWidth
-                value={selectedFlavor}
-                onChange={handleFlavorChange}
-                size="small"
-                sx={{ mt: 1 }}
-                displayEmpty
-              >
-                <MenuItem value="">
-                  <em>Select a flavor</em>
-                </MenuItem>
-                <MenuItem value="auto-assign">
+              <MenuItem value="">
+                <em>Select a host configuration</em>
+              </MenuItem>
+              {(openstackCredData?.spec?.pcdHostConfig || []).map((config) => (
+                <MenuItem key={config.id} value={config.id}>
                   <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="body1">Auto Assign</Typography>
+                    <Typography variant="body1">{config.name}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Let OpenStack automatically assign the most suitable flavor
+                      Management Interface: {config.mgmtInterface}
                     </Typography>
                   </Box>
                 </MenuItem>
-                {openstackFlavors.map((flavor) => (
-                  <MenuItem key={flavor.id} value={flavor.id}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="body1">{flavor.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {flavor.vcpus} vCPU, {flavor.ram / 1024}GB RAM, {flavor.disk}GB Storage
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseFlavorDialog}>Cancel</Button>
-            <Button
-              onClick={handleApplyFlavor}
-              variant="contained"
-              color="primary"
-              disabled={!selectedFlavor || updating}
-            >
-              {updating ? 'Applying...' : 'Apply to selected VMs'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Toast Notification */}
-        <Snackbar
-          open={toastOpen}
-          autoHideDuration={4000}
-          onClose={handleCloseToast}
-          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <Alert
-            onClose={handleCloseToast}
-            severity={toastSeverity}
-            sx={{ width: '100%' }}
-            variant="standard"
+              ))}
+            </Select>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ gap: 1, p: 2 }}>
+          <ActionButton
+            tone="secondary"
+            onClick={handleClosePcdHostConfigDialog}
+            data-testid="rolling-migration-form-host-config-cancel"
           >
-            {toastMessage}
-          </Alert>
-        </Snackbar>
-      </StyledDrawer>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleApplyPcdHostConfig}
+            disabled={!selectedPcdHostConfig || updatingPcdMapping}
+            loading={updatingPcdMapping}
+            data-testid="rolling-migration-form-host-config-apply"
+          >
+            Apply To All Hosts
+          </ActionButton>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk IP Editor Dialog */}
+      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="lg">
+        <DialogTitle>
+          Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ my: 2 }}>
+            {/* Quick Actions */}
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+              <ActionButton
+                size="small"
+                tone="secondary"
+                onClick={handleClearAllIPs}
+                data-testid="rolling-migration-form-bulk-ip-clear"
+              >
+                Clear All
+              </ActionButton>
+            </Box>
+
+            {/* IP Editor Fields */}
+            <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+              {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
+                const vm = vmsWithAssignments.find((v) => v.id === vmId)
+                if (!vm) return null
+
+                return (
+                  <Box
+                    key={vmId}
+                    sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                      {vm.name}
+                    </Typography>
+
+                    {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
+                      const interfaceIndex = parseInt(interfaceIndexStr)
+                      const networkInterface = vm.networkInterfaces?.[interfaceIndex]
+                      const status = bulkValidationStatus[vmId]?.[interfaceIndex]
+                      const message = bulkValidationMessages[vmId]?.[interfaceIndex]
+
+                      return (
+                        <Box
+                          key={interfaceIndex}
+                          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
+                        >
+                          <Box sx={{ width: 120, flexShrink: 0 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
+                            </Typography>
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              Current: {networkInterface?.ipAddress || vm.ip || '—'}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <TextField
+                              value={ip}
+                              onChange={(e) =>
+                                handleBulkIpChange(vmId, interfaceIndex, e.target.value)
+                              }
+                              placeholder="Enter IP address"
+                              size="small"
+                              sx={{ flex: 1 }}
+                              error={status === 'invalid'}
+                              helperText={message}
+                            />
+                            <Box sx={{ width: 24, display: 'flex' }}>
+                              {status === 'validating' && <CircularProgress size={20} />}
+                              {status === 'valid' && (
+                                <CheckCircleIcon color="success" fontSize="small" />
+                              )}
+                              {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
+                            </Box>
+                          </Box>
+                        </Box>
+                      )
+                    })}
+                  </Box>
+                )
+              })}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ gap: 1, p: 2 }}>
+          <ActionButton
+            tone="secondary"
+            onClick={handleCloseBulkEditDialog}
+            data-testid="rolling-migration-form-bulk-ip-cancel"
+          >
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleApplyBulkIPs}
+            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
+            loading={assigningIPs}
+            data-testid="rolling-migration-form-bulk-ip-apply"
+          >
+            Apply Changes
+          </ActionButton>
+        </DialogActions>
+      </Dialog>
+
+      {/* Flavor Assignment Dialog */}
+      <Dialog open={flavorDialogOpen} onClose={handleCloseFlavorDialog} fullWidth maxWidth="sm">
+        <DialogTitle>
+          Assign Flavor to {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ my: 2 }}>
+            <FormLabel>Select Flavor</FormLabel>
+            <Select
+              fullWidth
+              value={selectedFlavor}
+              onChange={handleFlavorChange}
+              size="small"
+              sx={{ mt: 1 }}
+              displayEmpty
+            >
+              <MenuItem value="">
+                <em>Select a flavor</em>
+              </MenuItem>
+              <MenuItem value="auto-assign">
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="body1">Auto Assign</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Let OpenStack automatically assign the most suitable flavor
+                  </Typography>
+                </Box>
+              </MenuItem>
+              {openstackFlavors.map((flavor) => (
+                <MenuItem key={flavor.id} value={flavor.id}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="body1">{flavor.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {flavor.vcpus} vCPU, {flavor.ram / 1024}GB RAM, {flavor.disk}GB Storage
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ gap: 1, p: 2 }}>
+          <ActionButton tone="secondary" onClick={handleCloseFlavorDialog}>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            tone="primary"
+            onClick={handleApplyFlavor}
+            disabled={!selectedFlavor || updating}
+            loading={updating}
+          >
+            Apply to selected VMs
+          </ActionButton>
+        </DialogActions>
+      </Dialog>
+
+      {/* Toast Notification */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={4000}
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleCloseToast}
+          severity={toastSeverity}
+          sx={{ width: '100%' }}
+          variant="standard"
+        >
+          {toastMessage}
+        </Alert>
+      </Snackbar>
     </>
   )
 }

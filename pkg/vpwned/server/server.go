@@ -59,7 +59,7 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 func startgRPCServer(ctx context.Context, network, port string) error {
 	grpcServer = grpc.NewServer()
 
-	_, err := CreateInClusterClient()
+	k8sClient, err := CreateInClusterClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to create k8s client for grpc server")
 	}
@@ -69,7 +69,7 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
 	api.RegisterVCenterServer(grpcServer, &targetVcenterGRPC{})
 	api.RegisterBMProviderServer(grpcServer, &providersGRPC{})
-	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{})
+	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{K8sClient: k8sClient})
 	api.RegisterStorageArrayServer(grpcServer, &storageArrayGRPC{})
 	reflection.Register(grpcServer)
 	connection, err := net.Listen(network, port)

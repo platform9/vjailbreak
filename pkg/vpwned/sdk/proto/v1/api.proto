@@ -514,6 +514,17 @@ message RevalidateCredentialsResponse {
   string message = 1;
 }
 
+message InjectEnvVariablesRequest {
+  string http_proxy = 1;
+  string https_proxy = 2;
+  string no_proxy = 3;
+}
+
+message InjectEnvVariablesResponse {
+  bool success = 1;
+  string message = 2;
+}
+
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
@@ -525,6 +536,13 @@ service VailbreakProxy {
     rpc RevalidateCredentials(RevalidateCredentialsRequest) returns (RevalidateCredentialsResponse) {
       option (google.api.http) = {
         post: "/vpw/v1/revalidate_credentials"
+        body: "*"
+      };
+    }
+
+    rpc InjectEnvVariables(InjectEnvVariablesRequest) returns (InjectEnvVariablesResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/inject_env_variables"
         body: "*"
       };
     }

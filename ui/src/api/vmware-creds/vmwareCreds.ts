@@ -46,11 +46,11 @@ export const createVMwareCredsWithSecret = async (
   name: string,
   secretName: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
-  datacenter: string
+  datacenter?: string
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vmwarecreds`
 
-  const credBody = {
+  const credBody: any = {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
     kind: 'VMwareCreds',
     metadata: {
@@ -59,11 +59,14 @@ export const createVMwareCredsWithSecret = async (
     },
     spec: {
       secretRef: {
-        name: secretName
-      },
-      datacenter
+        name: secretName,
+        namespace
+      }
     }
   }
+
+  // Use empty string when datacenter is not provided
+  credBody.spec.datacenter = datacenter?.trim() || ''
 
   const response = await axios.post<VMwareCreds>({
     endpoint,

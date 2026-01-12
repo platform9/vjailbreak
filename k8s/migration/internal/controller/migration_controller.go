@@ -87,6 +87,29 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Handle deletion reconciliation first, even for ValidationFailed migrations.
+	if !migration.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+		ctxlog.Info(
+			"Migration is ValidationFailed; skipping reconciliation and requeue",
+			"migration", migration.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
 	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
@@ -103,21 +126,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			reterr = err
 		}
 	}()
-
-	// Handle deletion reconciliation
-	if !migration.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
-			if err := r.reconcileDelete(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
 
 	// Adding finalizer if it doesn't exist
 	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
@@ -189,6 +197,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseValidationFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
@@ -286,7 +295,8 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
-		vjailbreakv1alpha1.VMMigrationPhasePending}
+		vjailbreakv1alpha1.VMMigrationPhasePending,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
 
 loop:
 	for i := range events.Items {
