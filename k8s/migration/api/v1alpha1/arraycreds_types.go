@@ -40,14 +40,51 @@ type ArrayCredsSpec struct {
 
 	// SecretRef is the reference to the Kubernetes secret holding storage array credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+
+	// OpenStackMapping is the openstack mapping for this array
+	OpenStackMapping OpenstackMapping `json:"openstackMapping,omitempty"`
+
+	// AutoDiscovered indicates if this ArrayCreds was auto-discovered from OpenStack
+	// +optional
+	AutoDiscovered bool `json:"autoDiscovered,omitempty"`
+}
+
+// OpenstackMapping holds the OpenStack Cinder configuration mapping
+type OpenstackMapping struct {
+	// VolumeType is the Cinder volume type associated with this mapping
+	VolumeType string `json:"volumeType"`
+	// CinderBackendName is the Cinder backend name for this mapping
+	// This is the backend configured in cinder.conf (e.g., "pure-01")
+	CinderBackendName string `json:"cinderBackendName"`
+	// CinderBackendPool is the pool name within the backend (optional)
+	CinderBackendPool string `json:"cinderBackendPool,omitempty"`
+	// CinderHost is the full Cinder host string for manage API
+	// Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+	CinderHost string `json:"cinderHost,omitempty"`
+}
+
+// DatastoreInfo holds information about a datastore associated with an array
+type DatastoreInfo struct {
+	// Name is the datastore name
+	Name string `json:"name"`
+	// CapacityGB is the datastore capacity in GB
+	CapacityGB int64 `json:"capacityGB,omitempty"`
+	// BackingDevice is the storage array backing device (e.g., NAA ID)
+	BackingDevice string `json:"backingDevice,omitempty"`
 }
 
 // ArrayCredsStatus defines the observed state of ArrayCreds
 type ArrayCredsStatus struct {
 	// ArrayValidationStatus is the status of the storage array validation
+	// Possible values: Pending, Succeeded, Failed, AwaitingCredentials
 	ArrayValidationStatus string `json:"arrayValidationStatus,omitempty"`
 	// ArrayValidationMessage is the message associated with the storage array validation
 	ArrayValidationMessage string `json:"arrayValidationMessage,omitempty"`
+	// DataStore is the list of datastores associated with this array
+	DataStore []DatastoreInfo `json:"dataStore,omitempty"`
+	// Phase indicates the current phase of the ArrayCreds
+	// Possible values: Discovered, Configured, Validated, Failed
+	Phase string `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true

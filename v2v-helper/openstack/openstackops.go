@@ -50,7 +50,8 @@ type OpenstackOperations interface {
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(ctx context.Context, volumeID string) error
 	FindDevice(volumeID string) (string, error)
-	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	WaitUntilVMActive(vmID string) (bool, error)
+	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 }
 
 func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {

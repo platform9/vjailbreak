@@ -18,7 +18,7 @@ require (
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260109170433-38ba015c1d27
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/zap v1.27.0
