@@ -71,3 +71,5 @@ require (
 replace github.com/platform9/vjailbreak/k8s/migration => ../k8s/migration
 
 replace github.com/platform9/vjailbreak/pkg/openstack => ../pkg/openstack
+
+replace github.com/platform9/vjailbreak/pkg/vpwned => ../pkg/vpwned
