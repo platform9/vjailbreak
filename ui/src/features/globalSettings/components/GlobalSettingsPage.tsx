@@ -22,13 +22,13 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import InlineHelp from 'src/components/design-system/ui/InlineHelp'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
 import VDDKUploadTab from './VDDKUploadTab'
+import type { VddkUploadStatus } from './VDDKUploadTab'
 import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
@@ -38,6 +38,8 @@ import {
   VERSION_NAMESPACE
 } from 'src/api/settings/settings'
 import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
+import { CloudUploadOutlined } from '@mui/icons-material'
+import { uploadVddkFile } from 'src/api/vddk'
 
 const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -87,7 +89,6 @@ const DEFAULTS: SettingsForm = {
 }
 
 const helpers = getGlobalSettingsHelpers(DEFAULTS)
-type FormUpdater = (prev: SettingsForm) => SettingsForm
 type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
@@ -150,7 +151,7 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
   vddk: {
     label: 'VDDK Upload',
     helper: 'Upload and manage VDDK (Virtual Disk Development Kit) files for VMware integration.',
-    icon: <CloudUploadIcon fontSize="small" />
+    icon: <CloudUploadOutlined fontSize="small" />
   }
 }
 
@@ -753,6 +754,80 @@ export default function GlobalSettingsPage() {
 
   const [proxyHelpDismissed, setProxyHelpDismissed] = useState(false)
 
+  const [vddkFile, setVddkFile] = useState<File | null>(null)
+  const [vddkStatus, setVddkStatus] = useState<VddkUploadStatus>('idle')
+  const [vddkProgress, setVddkProgress] = useState(0)
+  const [vddkMessage, setVddkMessage] = useState('')
+  const [vddkExtractedPath, setVddkExtractedPath] = useState('')
+
+  const validateVddkFile = useCallback((file: File) => {
+    const validExtensions = ['.tar', '.tar.gz', '.tgz']
+    const isValid = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+    if (!isValid) {
+      return 'Invalid file type. Please select a .tar or .tar.gz file.'
+    }
+    if (file.size > 500 * 1024 * 1024) {
+      return 'File size exceeds 500MB limit.'
+    }
+    return null
+  }, [])
+
+  const handleVddkFileSelected = useCallback((file: File | null) => {
+    if (!file) return
+
+    setVddkFile(file)
+    setVddkStatus('idle')
+    setVddkProgress(0)
+    setVddkMessage('')
+    setVddkExtractedPath('')
+  }, [])
+
+  const handleVddkClear = useCallback(() => {
+    setVddkFile(null)
+    setVddkStatus('idle')
+    setVddkProgress(0)
+    setVddkMessage('')
+    setVddkExtractedPath('')
+  }, [])
+
+  const handleSave = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+
+      if (vddkStatus === 'uploading') return
+
+      if (vddkFile) {
+        const error = validateVddkFile(vddkFile)
+        if (error) {
+          setVddkStatus('error')
+          setVddkMessage(error)
+          return
+        }
+
+        try {
+          setVddkStatus('uploading')
+          setVddkProgress(0)
+          setVddkMessage('Uploading VDDK file...')
+
+          const response = await uploadVddkFile(vddkFile, {
+            onProgress: (next) => setVddkProgress(next)
+          })
+
+          setVddkStatus('success')
+          setVddkMessage(response.message || 'VDDK file uploaded and extracted successfully!')
+          setVddkExtractedPath(response.extracted_path || '')
+        } catch (err) {
+          setVddkStatus('error')
+          setVddkMessage(err instanceof Error ? err.message : 'Upload failed')
+          return
+        }
+      }
+
+      await onSave(e)
+    },
+    [onSave, validateVddkFile, vddkFile, vddkStatus]
+  )
+
   useEffect(() => {
     if (!form.PROXY_ENABLED) {
       setProxyHelpDismissed(false)
@@ -790,7 +865,7 @@ export default function GlobalSettingsPage() {
       <FormProvider {...rhfForm}>
         <Box
           component="form"
-          onSubmit={onSave}
+          onSubmit={handleSave}
           data-testid="global-settings-form"
           sx={{
             display: 'flex',
@@ -1160,6 +1235,19 @@ export default function GlobalSettingsPage() {
               ))}
             </FormGrid>
           </TabPanel>
+
+          <TabPanel activeTab={activeTab} value="vddk">
+            <VDDKUploadTab
+              selectedFile={vddkFile}
+              status={vddkStatus}
+              progress={vddkProgress}
+              message={vddkMessage}
+              extractedPath={vddkExtractedPath}
+              onFileSelected={handleVddkFileSelected}
+              onClear={handleVddkClear}
+            />
+          </TabPanel>
+
           <Box sx={{ flexGrow: 1 }} />
 
           <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
@@ -1179,11 +1267,15 @@ export default function GlobalSettingsPage() {
               variant="contained"
               type="submit"
               color="primary"
-              disabled={saving}
-              startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
+              disabled={saving || vddkStatus === 'uploading'}
+              startIcon={
+                saving || vddkStatus === 'uploading' ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : null
+              }
               data-testid="global-settings-save"
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving || vddkStatus === 'uploading' ? 'Saving...' : 'Save'}
             </Button>
           </Footer>
         </Box>

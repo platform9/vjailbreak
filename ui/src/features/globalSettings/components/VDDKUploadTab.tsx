@@ -1,273 +1,194 @@
-import React, { useState, useCallback } from 'react'
-import {
-  Box,
-  Button,
-  Typography,
-  LinearProgress,
-  Alert,
-  Paper,
-  styled
-} from '@mui/material'
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import { Alert, Box, Button, Chip, IconButton, LinearProgress, Typography } from '@mui/material'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import FieldLabel from 'src/components/design-system/ui/FieldLabel'
+import { FieldLabel, FileDropzone, SurfaceCard } from 'src/components'
 
-const UploadContainer = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(3),
-  border: `2px dashed ${theme.palette.divider}`,
-  borderRadius: theme.shape.borderRadius,
-  textAlign: 'center',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  '&:hover': {
-    borderColor: theme.palette.primary.main,
-    backgroundColor: theme.palette.action.hover
-  },
-  '&.dragging': {
-    borderColor: theme.palette.primary.main,
-    backgroundColor: theme.palette.action.selected
-  }
-}))
+export type VddkUploadStatus = 'idle' | 'uploading' | 'success' | 'error'
 
-const HiddenInput = styled('input')({
-  display: 'none'
-})
-
-type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
-
-interface UploadResponse {
-  success: boolean
+export type VDDKUploadTabProps = {
+  selectedFile: File | null
+  status: VddkUploadStatus
+  progress: number
   message: string
-  file_path?: string
-  extracted_path?: string
+  extractedPath?: string
+  onFileSelected: (file: File | null) => void
+  onClear: () => void
 }
 
-export default function VDDKUploadTab() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle')
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadMessage, setUploadMessage] = useState('')
-  const [extractedPath, setExtractedPath] = useState('')
-  const [isDragging, setIsDragging] = useState(false)
+export default function VDDKUploadTab({
+  selectedFile,
+  status,
+  progress,
+  message,
+  extractedPath,
+  onFileSelected,
+  onClear
+}: VDDKUploadTabProps) {
+  const fileSizeLabel = selectedFile
+    ? selectedFile.size >= 1024 * 1024
+      ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.round(selectedFile.size / 1024)} KB`
+    : ''
 
-  const handleFileSelect = useCallback((file: File | null) => {
-    if (!file) return
-
-    const validExtensions = ['.tar', '.tar.gz', '.tgz']
-    const isValid = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
-
-    if (!isValid) {
-      setUploadStatus('error')
-      setUploadMessage('Invalid file type. Please select a .tar or .tar.gz file.')
-      return
-    }
-
-    if (file.size > 500 * 1024 * 1024) {
-      setUploadStatus('error')
-      setUploadMessage('File size exceeds 500MB limit.')
-      return
-    }
-
-    setSelectedFile(file)
-    setUploadStatus('idle')
-    setUploadMessage('')
-  }, [])
-
-  const handleFileInputChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0] || null
-      handleFileSelect(file)
-    },
-    [handleFileSelect]
-  )
-
-  const handleDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragging(false)
-  }, [])
-
-  const handleDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault()
-      setIsDragging(false)
-      const file = event.dataTransfer.files?.[0] || null
-      handleFileSelect(file)
-    },
-    [handleFileSelect]
-  )
-
-  const handleUpload = useCallback(async () => {
-    if (!selectedFile) return
-
-    setUploadStatus('uploading')
-    setUploadProgress(0)
-    setUploadMessage('Uploading VDDK file...')
-
-    const formData = new FormData()
-    formData.append('vddk_file', selectedFile)
-
-    try {
-      const xhr = new XMLHttpRequest()
-
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = (event.loaded / event.total) * 100
-          setUploadProgress(percentComplete)
-        }
-      })
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-          try {
-            const response: UploadResponse = JSON.parse(xhr.responseText)
-            setUploadStatus('success')
-            setUploadMessage(response.message || 'VDDK file uploaded and extracted successfully!')
-            setExtractedPath(response.extracted_path || '')
-          } catch (e) {
-            setUploadStatus('error')
-            setUploadMessage('Upload succeeded but failed to parse response.')
-          }
-        } else {
-          setUploadStatus('error')
-          setUploadMessage(`Upload failed: ${xhr.statusText}`)
-        }
-      })
-
-      xhr.addEventListener('error', () => {
-        setUploadStatus('error')
-        setUploadMessage('Network error occurred during upload.')
-      })
-
-      xhr.open('POST', '/dev-api/sdk/vpw/v1/vddk/upload')
-      xhr.send(formData)
-    } catch (error) {
-      setUploadStatus('error')
-      setUploadMessage(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }, [selectedFile])
-
-  const handleReset = useCallback(() => {
-    setSelectedFile(null)
-    setUploadStatus('idle')
-    setUploadProgress(0)
-    setUploadMessage('')
-    setExtractedPath('')
-  }, [])
+  const statusChip =
+    status === 'uploading' ? (
+      <Chip label="Uploading" size="small" color="info" />
+    ) : status === 'success' ? (
+      <Chip label="Uploaded" size="small" color="success" />
+    ) : status === 'error' ? (
+      <Chip label="Needs attention" size="small" color="error" />
+    ) : selectedFile ? (
+      <Chip label="Ready to upload" size="small" color="default" />
+    ) : (
+      <Chip label="No file" size="small" color="default" />
+    )
 
   return (
-    <Box sx={{ pt: 3 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Upload VDDK (Virtual Disk Development Kit) tar files for VMware integration. The file will
-        be automatically extracted after upload.
-      </Typography>
-
-      <Box sx={{ maxWidth: 600 }}>
-        <FieldLabel
-          label="VDDK File"
-          tooltip="Upload a VDDK tar or tar.gz file (max 500MB)"
-        />
-
-        <UploadContainer
-          className={isDragging ? 'dragging' : ''}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => document.getElementById('vddk-file-input')?.click()}
-          elevation={0}
-        >
-          <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="body1" gutterBottom>
-            {selectedFile ? selectedFile.name : 'Drag and drop VDDK file here'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            or click to browse
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Supported formats: .tar, .tar.gz (max 500MB)
-          </Typography>
-        </UploadContainer>
-
-        <HiddenInput
-          id="vddk-file-input"
-          type="file"
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 360px' },
+        gap: 2,
+        alignItems: 'start',
+        width: '100%'
+      }}
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <FieldLabel label="VDDK File" tooltip="Upload a VDDK tar or tar.gz file (max 500MB)" />
+        <FileDropzone
           accept=".tar,.tgz,application/x-tar,application/gzip,application/x-gzip,application/x-compressed-tar"
-          onChange={handleFileInputChange}
+          file={selectedFile}
+          placeholder="Drag and drop VDDK file here"
+          helperText="or click to browse"
+          caption="Supported formats: .tar, .tar.gz (max 500MB)"
+          onFileSelected={onFileSelected}
+          disabled={status === 'uploading'}
+          data-testid="vddk-file-dropzone"
         />
-
-        {selectedFile && uploadStatus === 'idle' && (
-          <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<CloudUploadIcon />}
-              onClick={handleUpload}
-              fullWidth
-            >
-              Upload and Extract
-            </Button>
-            <Button variant="outlined" onClick={handleReset}>
-              Clear
-            </Button>
-          </Box>
-        )}
-
-        {uploadStatus === 'uploading' && (
-          <Box sx={{ mt: 3 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              {uploadMessage}
-            </Typography>
-            <LinearProgress variant="determinate" value={uploadProgress} sx={{ mt: 1 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              {Math.round(uploadProgress)}% complete
-            </Typography>
-          </Box>
-        )}
-
-        {uploadStatus === 'success' && (
-          <Alert
-            severity="success"
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 3 }}
-            action={
-              <Button color="inherit" size="small" onClick={handleReset}>
-                Upload Another
-              </Button>
-            }
-          >
-            <Typography variant="body2" fontWeight={600}>
-              {uploadMessage}
-            </Typography>
-            {extractedPath && (
-              <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                Extracted to: {extractedPath}
-              </Typography>
-            )}
-          </Alert>
-        )}
-
-        {uploadStatus === 'error' && (
-          <Alert
-            severity="error"
-            icon={<ErrorIcon />}
-            sx={{ mt: 3 }}
-            action={
-              <Button color="inherit" size="small" onClick={handleReset}>
-                Try Again
-              </Button>
-            }
-          >
-            <Typography variant="body2" fontWeight={600}>
-              {uploadMessage}
-            </Typography>
-          </Alert>
-        )}
       </Box>
+
+      <SurfaceCard
+        variant="card"
+        title={
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="subtitle2" fontWeight={700}>
+              Upload details
+            </Typography>
+            {statusChip}
+          </Box>
+        }
+        actions={
+          selectedFile ? (
+            <IconButton
+              size="small"
+              onClick={onClear}
+              disabled={status === 'uploading'}
+              aria-label="Remove selected file"
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          ) : null
+        }
+        sx={{
+          borderRadius: 2,
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          height: 'fit-content',
+          mt: 3
+        }}
+        data-testid="vddk-upload-details"
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
+            {selectedFile ? selectedFile.name : 'No file selected'}
+          </Typography>
+
+          {selectedFile ? (
+            <Typography variant="body2" color="text.secondary">
+              Size: {fileSizeLabel}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Select a tar/tar.gz file. The upload runs when you click Save.
+            </Typography>
+          )}
+
+          {status === 'uploading' ? (
+            <Box sx={{ mt: 0.5 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                {message}
+              </Typography>
+              <LinearProgress variant="determinate" value={progress} />
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5, display: 'block' }}
+              >
+                {Math.round(progress)}% complete
+              </Typography>
+            </Box>
+          ) : null}
+
+          {selectedFile && status === 'idle' ? (
+            <Typography variant="body2" color="text.secondary">
+              Ready. Click Save to upload & extract.
+            </Typography>
+          ) : null}
+
+          {/* {selectedFile ? (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="text"
+                color="inherit"
+                size="small"
+                onClick={onClear}
+                disabled={status === 'uploading'}
+              >
+                Remove file
+              </Button>
+            </Box>
+          ) : null} */}
+        </Box>
+      </SurfaceCard>
+
+      {status === 'success' && (
+        <Alert
+          severity="success"
+          icon={<CheckCircleIcon />}
+          sx={{ mt: 2, gridColumn: { xs: '1', md: '1 / -1' } }}
+          action={
+            <Button color="inherit" size="small" onClick={onClear}>
+              Upload Another
+            </Button>
+          }
+        >
+          <Typography variant="body2" fontWeight={600}>
+            {message}
+          </Typography>
+          {extractedPath && (
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              Extracted to: {extractedPath}
+            </Typography>
+          )}
+        </Alert>
+      )}
+
+      {status === 'error' && (
+        <Alert
+          severity="error"
+          icon={<ErrorIcon />}
+          sx={{ mt: 2, gridColumn: { xs: '1', md: '1 / -1' } }}
+          action={
+            <Button color="inherit" size="small" onClick={onClear}>
+              Try Again
+            </Button>
+          }
+        >
+          <Typography variant="body2" fontWeight={600}>
+            {message}
+          </Typography>
+        </Alert>
+      )}
     </Box>
   )
 }
