@@ -17,7 +17,7 @@ export const uploadVddkFile = async (
   formData.append('vddk_file', file)
 
   return axios.post<VddkUploadResponse>({
-    endpoint: '/sdk/vpw/v1/vddk/upload',
+    endpoint: '/dev-api/sdk/vpw/v1/vddk/upload',
     data: formData,
     config: {
       headers: {
