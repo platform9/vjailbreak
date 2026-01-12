@@ -828,12 +828,10 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.Wrap(err, "failed to get vmware credentials")
 	}
 
-	vmwareCredsInfo, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, vmwareCreds.Spec.SecretRef.Name)
+	clusterK8sID, err := GetK8sCompatibleVMWareObjectName(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCreds.Name)
 	if err != nil {
-		return false, "", errors.Wrap(err, "failed to get vmware credentials from secret")
+		return false, "", errors.Wrap(err, "failed to get K8s compatible cluster name")
 	}
-
-	clusterK8sID := GetClusterK8sID(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCredsInfo.Datacenter)
 
 	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
 	if err != nil {
