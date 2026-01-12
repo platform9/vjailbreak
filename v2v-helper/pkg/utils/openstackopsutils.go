@@ -439,7 +439,7 @@ func (osclient *OpenStackClients) GetSubnet(subnetList []string, ip string) (*su
 		return nil, fmt.Errorf("invalid IP address: %s", ip)
 	}
 	for _, subnet := range subnetList {
-		sn, err := subnets.Get(ctx, osclient.NetworkingClient, subnet).Extract()
+		sn, err := subnets.Get(context.Background(), osclient.NetworkingClient, subnet).Extract()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get subnet: %s", err)
 		}
@@ -484,7 +484,7 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 					if !slices.Contains(fixedIps, ipIdx.IP) {
 						contain_all = false
 					}
-					subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipIdx.IP)
+					subnetId, err := osclient.GetSubnet(network.Subnets, ipIdx.IP)
 					if err != nil {
 						return nil, fmt.Errorf("subnet not found for IP %s", ipIdx.IP)
 					}
@@ -527,7 +527,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	if len(ipEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
 		for _, ipEntry := range ipEntries {
-			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
+			subnetId, err := osclient.GetSubnet(network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
 			} else {
@@ -597,7 +597,7 @@ func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, networ
 	}
 	ipPerMac[mac] = []vm.IpEntry{}
 	for _, iAddr := range dhcpPort.FixedIPs {
-		dhcpSubnetId, err := osclient.GetSubnet(ctx, network.Subnets, iAddr.IPAddress)
+		dhcpSubnetId, err := osclient.GetSubnet(network.Subnets, iAddr.IPAddress)
 		if err != nil {
 			return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
 		}
@@ -868,6 +868,7 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 
 	var result map[string]interface{}
 	response, err := osclient.BlockStorageClient.Post(
+		context.Background(),
 		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
 		volumePayload,
 		&result,
