@@ -153,30 +153,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		ctxlog.Info("Successfully updated status to failed")
 		return ctrl.Result{}, nil
-		// TODO: Uncomment before committing
-
-		// // Update the status of the OpenstackCreds object
-		// errMsg := err.Error()
-		// if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
-		// 	if r.Local {
-		// 		// At this point creds are valid but controller is not able to fetch metadata
-		// 		// that is why we are getting this above error
-		// 		err := handleValidatedCreds(ctx, r, scope)
-		// 		if err != nil {
-		// 			return ctrl.Result{}, err
-		// 		}
-		// 	}
-		// 	errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
-		// }
-		// ctxlog.Error(err, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		// scope.OpenstackCreds.Status.OpenStackValidationStatus = "Failed"
-		// scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
-		// ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
-		// if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-		// 	ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		// 	return ctrl.Result{}, err
-		// }
-		// ctxlog.Info("Successfully updated status to failed")
 	}
 
 	// Update the status of the OpenstackCreds object
