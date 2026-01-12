@@ -42,6 +42,19 @@ const (
 	VMMigrationPhaseValidationFailed VMMigrationPhase = "ValidationFailed"
 	// VMMigrationPhaseAwaitingDataCopyStart indicates the migration is waiting to begin data copy
 	VMMigrationPhaseAwaitingDataCopyStart VMMigrationPhase = "AwaitingDataCopyStart"
+	// VAAI XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
+	// VMMigrationPhaseConnectingToESXi indicates connecting to ESXi host via SSH
+	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
+	// VMMigrationPhaseCreatingInitiatorGroup indicates creating initiator group on storage array
+	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
+	// VMMigrationPhaseCreatingVolume indicates creating volume on storage array
+	VMMigrationPhaseCreatingVolume VMMigrationPhase = "CreatingVolume"
+	// VMMigrationPhaseImportingToCinder indicates importing volume to Cinder
+	VMMigrationPhaseImportingToCinder VMMigrationPhase = "ImportingToCinder"
+	// VMMigrationPhaseMappingVolume indicates mapping volume to ESXi host
+	VMMigrationPhaseMappingVolume VMMigrationPhase = "MappingVolume"
+	// VMMigrationPhaseRescanningStorage indicates rescanning storage on ESXi host
+	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
 	// VMMigrationPhaseCopying indicates initial block copying is in progress
 	VMMigrationPhaseCopying VMMigrationPhase = "CopyingBlocks"
 	// VMMigrationPhaseCopyingChangedBlocks indicates copying of changed blocks is in progress

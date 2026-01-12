@@ -152,13 +152,6 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
-                - ConnectingToESXi
-                - CreatingInitiatorGroup
-                - CreatingVolume
-                - ImportingToCinder
-                - MappingVolume
-                - RescanningStorage
-                - XCOPYInProgress
                 type: string
             required:
             - phase
