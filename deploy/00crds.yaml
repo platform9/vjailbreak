@@ -2726,8 +2726,6 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
-                      description: Disk represents a virtual disk attached to a virtual
-                        machine
                       properties:
                         capacityGB:
                           type: integer
@@ -4079,12 +4077,6 @@ kind: Ingress
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: HTTP
-    nginx.ingress.kubernetes.io/proxy-body-size: 500m
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
   name: migration-vpwned-ingress

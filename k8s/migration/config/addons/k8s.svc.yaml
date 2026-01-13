@@ -35,8 +35,6 @@ spec:
         - name: hosts-file
           mountPath: /etc/hosts
           readOnly: true
-        - mountPath: /home/ubuntu
-          name: vddk-storage
         envFrom:
         - configMapRef:
             name: pf9-env
@@ -51,10 +49,6 @@ spec:
         hostPath:
           path: /etc/hosts
           type: File
-      - name: vddk-storage
-        hostPath:
-          path: /home/ubuntu
-          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -79,12 +73,6 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
 spec:
   ingressClassName: nginx
   rules:
