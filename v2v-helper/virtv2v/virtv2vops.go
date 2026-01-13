@@ -866,8 +866,8 @@ func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 		return err
 	}
 	// Run Get-Windows-interfaces script in pod not in guest
-	scriptPath := "/home/fedora/get-windows-interfaces.ps1"
-	cmd := exec.Command("pwsh", "-File", scriptPath)
+	scriptPath := "/home/fedora/get-windows-interfaces.sh"
+	cmd := exec.Command("sh", scriptPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
