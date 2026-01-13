@@ -281,9 +281,6 @@ runcmd:
 	// MigrationConditionTypeMigrated represents the condition type for successful completion
 	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
-	// MigrationConditionTypeVAAI represents the condition type for VAAI XCOPY phases
-	MigrationConditionTypeVAAI corev1.PodConditionType = "VAAI"
-
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
 		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
@@ -291,21 +288,13 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:         2,
 		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   3,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    4,
-		// VAAI XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
-		vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi:         5,
-		vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup:   6,
-		vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume:           7,
-		vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder:        8,
-		vjailbreakv1alpha1.VMMigrationPhaseMappingVolume:            9,
-		vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage:        10,
-		// Common phases to both the copy methods
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  11,
-		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     12,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           13,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 14,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     15,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                16,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  17,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  5,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     6,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           7,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 8,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     9,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                10,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  11,
 	}
 
 	// MigrationJobTTL is the TTL for migration job
