@@ -26,11 +26,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -43,7 +38,12 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -142,9 +142,6 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	}
 	if password == "" {
 		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
-	}
-	if datacenter == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_DATACENTER is missing in secret '%s'", secretName)
 	}
 
 	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
@@ -452,7 +449,8 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 
 // ValidateAndGetProviderClient is a function to get provider client
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
-	openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (*gophercloud.ProviderClient, error) {
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+) (*gophercloud.ProviderClient, error) {
 	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
@@ -880,7 +878,8 @@ func AppendUnique(slice []string, values ...string) []string {
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo) error {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo,
+) error {
 	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
@@ -1039,7 +1038,8 @@ func GetClosestFlavour(cpu, memory int, allFlavors []flavors.Flavor) (*flavors.F
 
 // CreateOrUpdateLabel creates or updates a label on a VMwareMachine resource
 func CreateOrUpdateLabel(ctx context.Context, client client.Client,
-	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string) error {
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, key, value string,
+) error {
 	_, err := controllerutil.CreateOrUpdate(ctx, client, vmwvm, func() error {
 		if vmwvm.Labels == nil {
 			vmwvm.Labels = make(map[string]string)
@@ -1058,7 +1058,8 @@ func CreateOrUpdateLabel(ctx context.Context, client client.Client,
 
 // FilterVMwareMachinesForCreds returns all VMwareMachine objects associated with a VMwareCreds resource
 func FilterVMwareMachinesForCreds(ctx context.Context, k8sClient client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachineList, error) {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+) (*vjailbreakv1alpha1.VMwareMachineList, error) {
 	vmList := vjailbreakv1alpha1.VMwareMachineList{}
 	if err := k8sClient.List(ctx, &vmList, client.InNamespace(constants.NamespaceMigrationSystem), client.MatchingLabels{constants.VMwareCredsLabel: vmwcreds.Name}); err != nil {
 		return nil, errors.Wrap(err, "Error listing VMs")
@@ -1483,7 +1484,8 @@ func getClusterNameFromHost(ctx context.Context, c *vim25.Client, host mo.HostSy
 
 // CreateOrUpdateRDMDisks creates or updates CreateOrUpdateRDMDisks objects for the given VMs
 func CreateOrUpdateRDMDisks(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, sm *sync.Map) error {
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, sm *sync.Map,
+) error {
 	logger := log.FromContext(ctx)
 	var values []vjailbreakv1alpha1.RDMDisk
 	sm.Range(func(_, value interface{}) bool {
