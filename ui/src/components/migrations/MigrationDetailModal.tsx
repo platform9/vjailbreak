@@ -556,15 +556,11 @@ export default function MigrationDetailModal({
                         }}
                       >
                         <Typography
-                          variant="body2"
+                          variant="caption"
                           component="pre"
                           sx={{
                             m: 0,
-                            whiteSpace: 'pre-wrap',
-                            fontSize: 13,
-                            lineHeight: 1.6,
-                            fontFamily:
-                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+                            whiteSpace: 'pre-wrap'
                           }}
                         >
                           {postMigrationScript}
