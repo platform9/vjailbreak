@@ -70,6 +70,10 @@ func main() {
 		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
 		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
 		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+		arrayHost         = strings.TrimSpace(os.Getenv("ARRAY_HOSTNAME"))
+		arrayUser         = strings.TrimSpace(os.Getenv("ARRAY_USERNAME"))
+		arrayPassword     = strings.TrimSpace(os.Getenv("ARRAY_PASSWORD"))
+		arrayInsecure     = strings.EqualFold(strings.TrimSpace(os.Getenv("ARRAY_INSECURE")), constants.TrueString)
 	)
 
 	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -147,6 +151,13 @@ func main() {
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
+		StorageCopyMethod:      migrationparams.StorageCopyMethod,
+		ArrayHost:              arrayHost,
+		ArrayUser:              arrayUser,
+		ArrayPassword:          arrayPassword,
+		ArrayInsecure:          arrayInsecure,
+		VendorType:             migrationparams.VendorType,
+		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 	}
 
 	if migrationobj.ServerGroup != "" {
@@ -165,7 +176,7 @@ func main() {
 
 		// Try to power on the VM if migration failed
 		if PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
-		msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
+			msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
 		} else {
 			powerOnErr := vmops.VMPowerOn()
 			if powerOnErr != nil {

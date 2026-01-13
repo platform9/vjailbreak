@@ -27,6 +27,12 @@ import (
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	storagesdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
+
+	// Import storage providers to register them
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -111,11 +117,32 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// Check if secretRef is provided - if not, this is an auto-discovered array awaiting credentials
+	if arraycreds.Spec.SecretRef.Name == "" {
+		ctxlog.Info("ArrayCreds is awaiting credentials (no secretRef)", "arraycreds", arraycreds.Name)
+
+		// Update status to indicate waiting for credentials
+		if scope.ArrayCreds.Status.Phase != constants.ArrayCredsPhaseDiscovered {
+			scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseDiscovered
+			scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusAwaitingCredentials
+			scope.ArrayCreds.Status.ArrayValidationMessage = "Array discovered from OpenStack. Awaiting storage array credentials."
+
+			if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+				ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Don't requeue - wait for user to add secretRef
+		return ctrl.Result{}, nil
+	}
+
 	// Get credentials from secret
 	arrayCredential, err := utils.GetArrayCredentialsFromSecret(ctx, r.Client, arraycreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get storage array credentials from secret", "secretName", arraycreds.Spec.SecretRef.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ValidationStatusFailed
+		scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseFailed
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Failed to get credentials from secret: %v", err)
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
@@ -127,7 +154,8 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	// Validate credentials using storage SDK
 	if err := r.validateArrayCredentials(ctx, arraycreds.Spec.VendorType, arrayCredential); err != nil {
 		ctxlog.Error(err, "Error validating ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
-		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ValidationStatusFailed
+		scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseFailed
+		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Validation failed: %v", err)
 		ctxlog.Info("Updating status to failed", "arraycreds", scope.ArrayCreds.Name, "message", err.Error())
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
@@ -137,10 +165,23 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
-	// Successfully validated
+	// Successfully validated - now discover datastores
 	ctxlog.Info("Successfully authenticated to storage array", "vendor", arraycreds.Spec.VendorType, "hostname", arrayCredential.Hostname)
-	scope.ArrayCreds.Status.ArrayValidationStatus = string(corev1.PodSucceeded)
-	scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Successfully authenticated to %s storage array", arraycreds.Spec.VendorType)
+
+	// Discover datastores backed by this array
+	datastores, err := r.discoverDatastores(ctx, arraycreds.Spec.VendorType, arrayCredential, scope)
+	if err != nil {
+		ctxlog.Error(err, "Failed to discover datastores", "arraycreds", scope.ArrayCreds.Name)
+		// Don't fail validation, just log warning
+		scope.ArrayCreds.Status.DataStore = []vjailbreakv1alpha1.DatastoreInfo{}
+	} else {
+		ctxlog.Info("Discovered datastores", "count", len(datastores), "datastores", datastores)
+		scope.ArrayCreds.Status.DataStore = datastores
+	}
+
+	scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseValidated
+	scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusSucceeded
+	scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
 	ctxlog.Info("Updating status to success", "arraycreds", scope.ArrayCreds.Name)
 	if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
 		ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
@@ -148,7 +189,7 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	}
 	ctxlog.Info("Successfully updated status to success")
 
-	// Requeue periodically to re-validate credentials
+	// Requeue periodically to re-validate credentials and refresh datastore list
 	return ctrl.Result{Requeue: true, RequeueAfter: 15 * time.Minute}, nil
 }
 
@@ -184,8 +225,6 @@ func (r *ArrayCredsReconciler) reconcileDelete(ctx context.Context, scope *scope
 
 // validateArrayCredentials validates storage array credentials using the storage SDK
 func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo) error {
-	ctxlog := log.FromContext(ctx)
-
 	// Get the storage provider
 	provider, err := storagesdk.NewStorageProvider(vendorType)
 	if err != nil {
@@ -205,11 +244,7 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 	if err := provider.Connect(ctx, accessInfo); err != nil {
 		return errors.Wrap(err, "failed to connect to storage array")
 	}
-	defer func() {
-		if err := provider.Disconnect(); err != nil {
-			ctxlog.Error(err, "Failed to disconnect from storage array")
-		}
-	}()
+	defer provider.Disconnect()
 
 	// Validate credentials
 	if err := provider.ValidateCredentials(ctx); err != nil {
@@ -217,6 +252,137 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 	}
 
 	return nil
+}
+
+// discoverDatastores discovers vCenter datastores backed by volumes from this storage array
+func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo, scope *scope.ArrayCredsScope) ([]vjailbreakv1alpha1.DatastoreInfo, error) {
+	ctxlog := scope.Logger
+	ctxlog.Info("Discovering datastores", "vendorType", vendorType)
+	// Step 1: Get all volume NAAs from the storage array
+	// Get the storage provider
+	provider, err := storagesdk.NewStorageProvider(vendorType)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get storage provider for vendor type '%s'", vendorType)
+	}
+
+	// Create access info
+	accessInfo := storagesdk.StorageAccessInfo{
+		Hostname:            creds.Hostname,
+		Username:            creds.Username,
+		Password:            creds.Password,
+		SkipSSLVerification: creds.SkipSSLVerification,
+		VendorType:          vendorType,
+	}
+
+	// Connect to storage array
+	if err := provider.Connect(ctx, accessInfo); err != nil {
+		return nil, errors.Wrap(err, "failed to connect to storage array")
+	}
+	defer provider.Disconnect()
+
+	naaIdentifiers, err := provider.GetAllVolumeNAAs()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get volume NAAs from storage array")
+	}
+
+	if len(naaIdentifiers) == 0 {
+		return []vjailbreakv1alpha1.DatastoreInfo{}, nil
+	}
+	ctxlog.Info("Found volume NAAs", "naaIdentifiers", naaIdentifiers)
+
+	// Step 2: Get vmware credentials to query datastores
+	vmwareCreds, err := r.getVMwareCredentials(ctx)
+	if vmwareCreds == nil {
+		return nil, errors.New("vmware credentials not found")
+	}
+
+	datastoresPresentInarray := []vjailbreakv1alpha1.DatastoreInfo{}
+
+	for _, vmwareCred := range vmwareCreds.Items {
+		// Get VMware credentials from secret to extract datacenter
+		vmwareCredsInfo, err := utils.GetVMwareCredentialsFromSecret(ctx, r.Client, vmwareCred.Spec.SecretRef.Name)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get VMware credentials from secret", "secretName", vmwareCred.Spec.SecretRef.Name)
+			continue // Skip this VMware credential and try the next one
+		}
+
+		_, finder, err := utils.GetFinderForVMwareCreds(ctx, r.Client, &vmwareCred, vmwareCredsInfo.Datacenter)
+		if err != nil {
+			ctxlog.Error(err, "Failed to get finder for vmware credentials", "datacenter", vmwareCredsInfo.Datacenter)
+			continue // Skip this VMware credential and try the next one
+		}
+
+		// 1. Get all datastores
+		datastores, err := finder.DatastoreList(ctx, "*")
+		if err != nil {
+			ctxlog.Error(err, "Failed to list datastores", "datacenter", vmwareCredsInfo.Datacenter)
+			continue // Skip this VMware credential and try the next one
+		}
+
+		// 2. Get datastore info
+		for _, ds := range datastores {
+			// 3. Get datastore info
+			datastoreInfo, err := getDatastoreInfo(ctx, ds)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get datastore info")
+			}
+			ctxlog.Info("Datastore info", "datastore", datastoreInfo.Name, "backingNAA", datastoreInfo.BackingNAA)
+
+			// 4. Check if datastore is backed by any of the volume NAAs
+			for _, naa := range naaIdentifiers {
+				if datastoreInfo.BackingNAA == naa {
+					// Check if datastore is already present in the list
+					if !utils.Contains(datastoresPresentInarray, datastoreInfo) {
+						datastoresPresentInarray = append(datastoresPresentInarray, datastoreInfo)
+					}
+				}
+			}
+
+		}
+	}
+	return datastoresPresentInarray, nil
+}
+
+// getDatastoreInfo gets the backing info etc of a datastore.
+func getDatastoreInfo(ctx context.Context, ds *object.Datastore) (vjailbreakv1alpha1.DatastoreInfo, error) {
+	var mds mo.Datastore
+
+	// Retrieve the datastore managed object properties we need
+	err := ds.Properties(ctx, ds.Reference(), []string{"summary", "info"}, &mds)
+	if err != nil {
+		return vjailbreakv1alpha1.DatastoreInfo{}, fmt.Errorf("failed to get datastore properties: %w", err)
+	}
+
+	info := vjailbreakv1alpha1.DatastoreInfo{
+		Name:      mds.Summary.Name,
+		Type:      mds.Summary.Type,
+		Capacity:  mds.Summary.Capacity,
+		FreeSpace: mds.Summary.FreeSpace,
+	}
+
+	// Extract VMFS or NFS specific backing details
+	switch dsInfo := mds.Info.(type) {
+	case *types.VmfsDatastoreInfo:
+		if dsInfo.Vmfs != nil && len(dsInfo.Vmfs.Extent) > 0 {
+			extent := dsInfo.Vmfs.Extent[0]
+			info.BackingNAA = extent.DiskName
+			info.BackingUUID = dsInfo.Vmfs.Uuid
+			info.MoID = ds.Reference().Value
+		}
+	}
+
+	return info, nil
+}
+
+// getVMwareCredentials retrieves vmware credentials from the secret
+func (r *ArrayCredsReconciler) getVMwareCredentials(ctx context.Context) (*vjailbreakv1alpha1.VMwareCredsList, error) {
+	// Get vmwarecreds
+	vmwareCredsList := &vjailbreakv1alpha1.VMwareCredsList{}
+	// get all the vmwarecreds
+	if err := r.List(ctx, vmwareCredsList); err != nil {
+		return nil, errors.Wrap(err, "failed to list vmware credentials")
+	}
+	return vmwareCredsList, nil
 }
 
 // SetupWithManager sets up the controller with the Manager
