@@ -73,8 +73,8 @@ func NewHostPathType(pathType string) *corev1.HostPathType {
 	return &hostPathType
 }
 
-// ValidateMigrationPlan validates a MigrationPlan object
-func ValidateMigrationPlan(migrationplan *vjailbreakv1alpha1.MigrationPlan) error {
+// WaitForCutOverStartTime validates a MigrationPlan object
+func WaitForCutOverStartTime(migrationplan *vjailbreakv1alpha1.MigrationPlan) error {
 	// Validate Time Field
 	if migrationplan.Spec.MigrationStrategy.VMCutoverStart.After(migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Time) {
 		return fmt.Errorf("cutover start time is after cutover end time")
