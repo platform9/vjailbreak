@@ -239,16 +239,21 @@ export default function MigrationsTable({
     }
   }, [migrations, statusFilter, dateFilter])
 
+  const planQueryKey = useMemo(() => {
+    const namespaces = Array.from(new Set(filteredMigrations.map((m) => m.metadata?.namespace))).sort().join(',')
+    const planNames = Array.from(
+      new Set(
+        filteredMigrations
+          .map((m) => (m.spec as any)?.migrationPlan || (m.metadata as any)?.labels?.migrationplan)
+          .filter(Boolean)
+      )
+    ).sort().join(',')
+    
+    return ['migration-plan-destinations', namespaces, planNames]
+  }, [filteredMigrations])
+
   const destinationByPlanQuery = useQuery({
-    queryKey: [
-      'migration-plan-destinations',
-      filteredMigrations.map((m) => m.metadata?.namespace).join(','),
-      filteredMigrations
-        .map((m) => (m.spec as any)?.migrationPlan || (m.metadata as any)?.labels?.migrationplan)
-        .filter(Boolean)
-        .sort()
-        .join(',')
-    ],
+    queryKey: planQueryKey,
     enabled: filteredMigrations.length > 0,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
@@ -256,7 +261,8 @@ export default function MigrationsTable({
       const safeGet = async <T,>(fn: () => Promise<T>): Promise<T | null> => {
         try {
           return await fn()
-        } catch {
+        } catch (error) {
+          console.error('Error in safeGet:', error)
           return null
         }
       }
@@ -342,6 +348,7 @@ export default function MigrationsTable({
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
+                  e.preventDefault()
                   params.row.setSelectedMigrationDetail?.(params.row)
                   params.row.setMigrationDetailModalOpen?.(true)
                 }}
