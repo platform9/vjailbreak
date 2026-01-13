@@ -50,3 +50,6 @@ export type { SectionNavProps, SectionNavItem, SectionNavStatus } from './Sectio
 
 export { default as TooltipContent } from './TooltipContent'
 export type { TooltipContentProps } from './TooltipContent'
+
+export { default as ClickableTableCell } from './ClickableTableCell'
+export type { ClickableTableCellProps } from './ClickableTableCell'

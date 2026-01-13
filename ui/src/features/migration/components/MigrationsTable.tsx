@@ -18,7 +18,7 @@ import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
-import { TooltipContent } from 'src/components'
+import { TooltipContent, ClickableTableCell } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 
 const STATUS_ORDER = {
@@ -248,46 +248,15 @@ export default function MigrationsTable({
           )
 
           return (
-            <Tooltip title={tooltipTitle} arrow>
-              <Box
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  pl: 1,
-                  cursor: 'pointer',
-                  position: 'relative',
-                  '&:hover': {
-                    '& .click-indicator': { opacity: 1 },
-                    '& .vm-name-text': { color: 'primary.main' }
-                  }
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                  params.row.setSelectedMigrationDetail?.(params.row)
-                  params.row.setMigrationDetailModalOpen?.(true)
-                }}
-              >
-                <Box
-                  className="click-indicator"
-                  sx={{
-                    position: 'absolute',
-                    left: 0,
-                    width: '3px',
-                    height: '60%',
-                    bgcolor: 'primary.main',
-                    borderRadius: '0 4px 4px 0',
-                    opacity: 0,
-                    transition: 'opacity 0.2s'
-                  }}
-                />
-                <Typography variant="body2" className="vm-name-text" sx={{ transition: 'color 0.2s' }}>
-                  {name}
-                </Typography>
-              </Box>
-            </Tooltip>
+            <ClickableTableCell
+              tooltipTitle={tooltipTitle}
+              onClick={() => {
+                params.row.setSelectedMigrationDetail?.(params.row)
+                params.row.setMigrationDetailModalOpen?.(true)
+              }}
+            >
+              {name}
+            </ClickableTableCell>
           )
         }
       },
