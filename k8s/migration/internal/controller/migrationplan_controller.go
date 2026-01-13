@@ -1374,10 +1374,31 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
+				validationMsg := fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)
 				// added constant prefix for the filter in reconciler
-				if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)); err != nil {
-					return errors.Wrap(err, "failed to update migration plan status after flavor discovery failure")
+				if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, validationMsg); updateErr != nil {
+					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
 				}
+
+				migrationList := &vjailbreakv1alpha1.MigrationList{}
+				listOpts := []client.ListOption{
+					client.InNamespace(migrationplan.Namespace),
+					client.MatchingLabels{"migrationplan": migrationplan.Name},
+				}
+				if listErr := r.List(ctx, migrationList, listOpts...); listErr != nil {
+					ctxlog.Error(listErr, "Failed to list Migration objects to mark ValidationFailed after flavor discovery failure")
+				} else {
+					for i := range migrationList.Items {
+						m := migrationList.Items[i]
+						if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+							m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+							m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+							continue
+						}
+						r.markMigrationValidationFailed(ctx, &m, m.Spec.VMName, validationMsg)
+					}
+				}
+
 				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
 			}
 
