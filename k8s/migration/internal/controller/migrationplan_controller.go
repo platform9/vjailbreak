@@ -422,6 +422,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
+	allVMNames := []string{}
+	for _, group := range migrationplan.Spec.VirtualMachines {
+		allVMNames = append(allVMNames, group...)
+	}
+
 	if migrationplan.Status.MigrationStatus == corev1.PodFailed {
 		// Check if any Migration objects exist for this MigrationPlan
 		migrationList := &vjailbreakv1alpha1.MigrationList{}
@@ -434,20 +439,33 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for retry check")
 		}
 
-		// ValidationFailed objects are considered terminal skips and shouldn't block retries.
+		// Map existing migrations by VM Name to detect deletions
+		existingMigrationMap := make(map[string]bool)
 		hasExistingFailures := false
 		for _, m := range migrationList.Items {
+			existingMigrationMap[m.Spec.VMName] = true
 			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
 				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
 				hasExistingFailures = true
+			}
+		}
+
+		retryTriggeredByDeletion := false
+		for _, name := range allVMNames {
+			if !existingMigrationMap[name] {
+				retryTriggeredByDeletion = true
 				break
 			}
 		}
 
 		// If the specific "Failed" objects are gone (user deleted them for retry),
 		// but the plan still says "Failed", we reset the plan status.
-		if !hasExistingFailures {
-			r.ctxlog.Info("Failed Migration objects cleared, resetting Plan status for retry", "migrationplan", migrationplan.Name)
+		if !hasExistingFailures || retryTriggeredByDeletion {
+			r.ctxlog.Info("Resetting Plan status for retry",
+				"migrationplan", migrationplan.Name,
+				"allCleared", !hasExistingFailures,
+				"granularRetry", retryTriggeredByDeletion)
+
 			migrationplan.Status.MigrationStatus = ""
 			migrationplan.Status.MigrationMessage = ""
 			if err := r.Status().Update(ctx, migrationplan); err != nil {
@@ -468,11 +486,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	// Validate VM OS types before proceeding with migration
 	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
-
-	allVMNames := []string{}
-	for _, group := range migrationplan.Spec.VirtualMachines {
-		allVMNames = append(allVMNames, group...)
-	}
 
 	if validationErr != nil {
 		r.ctxlog.Error(validationErr, "Migration plan validation failed", "migrationplan", migrationplan.Name)
@@ -496,7 +509,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
 			r.ctxlog.Error(err, "Failed to update migration plan status after validation failure")
 		}
-		return ctrl.Result{}, validationErr
+		return ctrl.Result{}, nil
 	}
 
 	for _, vmName := range allVMNames {
@@ -570,7 +583,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
-			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
+			return ctrl.Result{}, err
 		}
 
 		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
@@ -1397,7 +1410,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 					}
 				}
 
-				return errors.Wrap(err, validationMsg)
+				return nil
 			}
 
 			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
