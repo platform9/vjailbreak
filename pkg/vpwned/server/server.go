@@ -109,10 +109,6 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	//TODO: Move this path to a direct path in the /tmp or a path in the container
 	// or take it via config or env variable
 	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/dist/"))
-
-	// Register VDDK upload handler first with specific path
-	mux.HandleFunc("/vpw/v1/vddk/upload", HandleVDDKUpload)
-
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -139,18 +135,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	if err := api.RegisterStorageArrayHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for StorageArray")
 	}
-
-	// Wrap gatewayMuxer to handle all other routes
-	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
-		// Skip VDDK upload endpoint - it's already registered
-		if r.URL.Path == "/vpw/v1/vddk/upload" {
-			// This shouldn't be reached due to more specific pattern, but just in case
-			HandleVDDKUpload(w, r)
-			return
-		}
-		APILogger(gatewayMuxer).ServeHTTP(w, r)
-	})
-
+	mux.Handle("/", APILogger(gatewayMuxer))
 	return mux, nil
 }
 
@@ -172,9 +157,8 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	}
 	logrus.Info("starting http server.....")
 	httpServer = &http.Server{
-		Addr:           apiHost + ":" + apiPort,
-		Handler:        mux,
-		MaxHeaderBytes: 1 << 20, // 1 MB for headers
+		Addr:    apiHost + ":" + apiPort,
+		Handler: mux,
 	}
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		logrus.Error("cannot start http server", err)

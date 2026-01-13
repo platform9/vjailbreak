@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/vmware/govmomi/cli/esx"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -28,8 +27,6 @@ import (
 type VCenterOperations interface {
 	getDatacenters(ctx context.Context) ([]*object.Datacenter, error)
 	GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error)
-	RunCommandOnEsxi(ctx context.Context, host object.HostSystem, command []string) ([]esx.Values, error)
-	GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error)
 }
 
 type VCenterClient struct {
@@ -233,46 +230,4 @@ func (vcclient *VCenterClient) MoveVMFolder(ctx context.Context, vmName, folderN
 	}
 
 	return nil
-}
-
-// RunCommandOnEsxi runs a command on an ESXi host
-func (vcclient *VCenterClient) RunCommandOnEsxi(ctx context.Context, host object.HostSystem, command []string) ([]esx.Values, error) {
-	esxCliExec, err := esx.NewExecutor(ctx, vcclient.VCClient, host.Reference())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create esxcli executor: %v", err)
-	}
-
-	response, err := esxCliExec.Run(ctx, command)
-	if err != nil {
-		fmt.Println("Failed to run command on ESXi host: ", err)
-		if fault, ok := err.(*esx.Fault); ok {
-			fmt.Println("ESXi CLI Fault: ", fault)
-		}
-		return nil, fmt.Errorf("failed to run command on ESXi host: %v", err)
-
-	}
-
-	for _, value := range response.Values {
-		message, ok := value["message"]
-		if ok {
-			fmt.Println("ESXi CLI Message: ", message)
-		}
-		status, ok := value["status"]
-		if ok && strings.Join(status, "") != "0" {
-			fmt.Println("ESXi CLI Status: ", status)
-			return nil, fmt.Errorf("failed to run command on ESXi host: %v", err)
-		}
-	}
-
-	return response.Values, nil
-
-}
-
-// GetDataStore gives the datastore object for the name
-func (vcclient *VCenterClient) GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error) {
-	datastoreRef, err := vcclient.VCFinder.Datastore(ctx, datastore)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find datastore '%s': %v", datastore, err)
-	}
-	return datastoreRef, nil
 }

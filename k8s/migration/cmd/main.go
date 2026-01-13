@@ -249,14 +249,6 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
 		return err
 	}
-	if err := (&controller.ArrayCredsReconciler{
-		Client:                  mgr.GetClient(),
-		Scheme:                  mgr.GetScheme(),
-		MaxConcurrentReconciles: maxConcurrentReconciles,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ArrayCreds")
-		return err
-	}
 	if err := (&controller.StorageMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
 			Client: mgr.GetClient(),
