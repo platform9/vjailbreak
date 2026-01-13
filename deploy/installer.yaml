@@ -731,6 +731,13 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - ConnectingToESXi
+                - CreatingInitiatorGroup
+                - CreatingVolume
+                - ImportingToCinder
+                - MappingVolume
+                - RescanningStorage
+                - XCOPYInProgress
                 type: string
             required:
             - phase
@@ -787,6 +794,11 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
               including source/destination environments and mappings
             properties:
+              arrayCredsMapping:
+                description: |-
+                  ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
+                  This is used for vendor-based data copy method
+                type: string
               destination:
                 description: Destination is the destination details for the virtual
                   machine
@@ -818,9 +830,19 @@ spec:
                 required:
                 - vmwareRef
                 type: object
+              storageCopyMethod:
+                default: normal
+                description: |-
+                  StorageCopyMethod indicates the method to use for storage migration
+                  Valid values: "normal" (default), "vendor-based"
+                enum:
+                - normal
+                - vendor-based
+                type: string
               storageMapping:
-                description: StorageMapping is the reference to the StorageMapping
-                  resource that defines source to destination storage mappings
+                description: |-
+                  StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
+                  This is used for normal data copy method
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
@@ -842,7 +864,6 @@ spec:
             - destination
             - networkMapping
             - source
-            - storageMapping
             type: object
         type: object
     served: true
@@ -2416,6 +2437,8 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
+                      description: Disk represents a virtual disk attached to a virtual
+                        machine
                       properties:
                         capacityGB:
                           type: integer
@@ -2855,6 +2878,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds
   - bmconfigs
   - clustermigrations
   - esximigrations
@@ -2884,6 +2908,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/finalizers
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
@@ -2903,6 +2928,7 @@ rules:
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
+  - arraycreds/status
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status

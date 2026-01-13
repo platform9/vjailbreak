@@ -789,6 +789,68 @@ func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID st
 	return true, nil
 }
 
+// ManageExistingVolume manages an existing volume on the storage backend into Cinder
+// Uses the manageable_volumes endpoint which is the standard Cinder manage API
+func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Managing existing volume %s on host %s with type %s", name, host, volumeType))
+
+	// Build the manage request payload
+	// This matches the format used by the tested RDM disk controller
+	volumePayload := map[string]interface{}{
+		"volume": map[string]interface{}{
+			"host":        host,
+			"ref":         ref,
+			"name":        name,
+			"volume_type": volumeType,
+			"description": "Volume managed by vjailbreak VAAI copy",
+			"bootable":    false,
+		},
+	}
+
+	PrintLog(fmt.Sprintf("OPENSTACK API: Manage volume payload: %+v", volumePayload))
+
+	var result map[string]interface{}
+	response, err := osclient.BlockStorageClient.Post(
+		context.Background(),
+		osclient.BlockStorageClient.ServiceURL("manageable_volumes"),
+		volumePayload,
+		&result,
+		&gophercloud.RequestOpts{
+			OkCodes:     []int{202}, // Accepted
+			MoreHeaders: map[string]string{"OpenStack-API-Version": "volume 3.8"},
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to manage existing volume: %w", err)
+	}
+
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+
+	// Extract volume from response
+	volumeMap, ok := result["volume"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to extract volume from response: %+v", result)
+	}
+
+	// Marshal and unmarshal to convert to volumes.Volume struct
+	volumeJSON, err := json.Marshal(volumeMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal volume map: %w", err)
+	}
+
+	var volume volumes.Volume
+	if err := json.Unmarshal(volumeJSON, &volume); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal volume: %w", err)
+	}
+
+	PrintLog(fmt.Sprintf("OPENSTACK API: Successfully managed volume %s with ID %s", name, volume.ID))
+
+	return &volume, nil
+}
+
 func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error) {
 	if len(groupNames) == 0 {
 		return nil, nil

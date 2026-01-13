@@ -19,6 +19,21 @@ type StorageProvider interface {
 	// ValidateCredentials validates the credentials and connectivity
 	ValidateCredentials(ctx context.Context) error
 
+	// CreateVolume creates a new volume on the storage array
+	CreateVolume(volumeName string, size int64) (Volume, error)
+
+	// DeleteVolume deletes a volume from the storage array
+	DeleteVolume(volumeName string) error
+
+	// GetVolumeInfo retrieves information about a volume from the storage array
+	GetVolumeInfo(volumeName string) (VolumeInfo, error)
+
+	// ListAllVolumes retrieves all volumes from the storage array
+	ListAllVolumes() ([]VolumeInfo, error)
+
+	// GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
+	GetAllVolumeNAAs() ([]string, error)
+
 	// CreateOrUpdateInitiatorGroup creates or updates an initiator group with the provided HBA identifiers.
 	// Returns a MappingContext that contains provider-specific information needed for mapping.
 	CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (MappingContext, error)
@@ -51,6 +66,12 @@ type Volume struct {
 	Id           string
 	SerialNumber string
 	NAA          string // Network Address Authority identifier
+	OpenstackVol OpenstackVolume
+}
+
+// OpenstackVolume represents a Cinder volume
+type OpenstackVolume struct {
+	ID string
 }
 
 // StorageAccessInfo holds connection information for storage arrays
@@ -73,10 +94,10 @@ type ArrayInfo struct {
 
 // VolumeInfo holds volume information
 type VolumeInfo struct {
-	Name       string
-	Size       int64
-	Created    string
-	VolumeType string
+	Name    string
+	Size    int64
+	Created string
+	NAA     string
 }
 
 // CapacityInfo holds capacity information
