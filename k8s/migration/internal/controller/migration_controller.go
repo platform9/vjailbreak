@@ -450,35 +450,38 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 // ExtractCurrentDisk extracts which disk is currently being copied from pod events
 func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
 	// Events are sorted by timestamp (newest first)
+	parseCurrentDisk := func(msg string) (string, bool) {
+		if !strings.Contains(msg, "Copying disk") {
+			return "", false
+		}
+		parts := strings.Split(msg, "Copying disk")
+		if len(parts) <= 1 {
+			return "", false
+		}
+		diskPart := strings.TrimSpace(parts[1])
+		if len(diskPart) == 0 {
+			return "", false
+		}
+		diskNum := strings.Split(diskPart, ",")[0]
+		diskNum = strings.Split(diskNum, " ")[0]
+		diskNum = strings.TrimSpace(diskNum)
+		if diskNum == "" {
+			return "", false
+		}
+		return diskNum, true
+	}
+
 	for i := range events.Items {
-		msg := events.Items[i].Message
-		if strings.Contains(msg, "Copying disk") {
-			parts := strings.Split(msg, "Copying disk")
-			if len(parts) > 1 {
-				diskPart := strings.TrimSpace(parts[1])
-				if len(diskPart) > 0 {
-					diskNum := strings.Split(diskPart, ",")[0]
-					diskNum = strings.Split(diskNum, " ")[0]
-					migration.Status.CurrentDisk = strings.TrimSpace(diskNum)
-					return
-				}
-			}
+		if diskNum, ok := parseCurrentDisk(events.Items[i].Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
 		}
 	}
 
 	for _, condition := range migration.Status.Conditions {
-		msg := condition.Message
-		if strings.Contains(msg, "Copying disk") {
-			parts := strings.Split(msg, "Copying disk")
-			if len(parts) > 1 {
-				diskInfo := strings.TrimSpace(parts[1])
-				if len(diskInfo) > 0 {
-					diskNum := strings.Split(diskInfo, ",")[0]
-					diskNum = strings.Split(diskNum, " ")[0]
-					migration.Status.CurrentDisk = strings.TrimSpace(diskNum)
-					return
-				}
-			}
+		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
 		}
 	}
 }

@@ -88,7 +88,8 @@ const getProgressText = (
 
   let diskInfo = ''
   if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
-    const currentDiskNum = currentDisk ? (parseInt(currentDisk, 10) + 1) || 1 : 1
+    const parsedDisk = parseInt(currentDisk, 10)
+    const currentDiskNum = Number.isNaN(parsedDisk) ? 1 : parsedDisk + 1
     diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
   }
 
@@ -124,7 +125,7 @@ const columns: GridColDef[] = [
       ])
       
       const isInProgress = activePhases.has(phase)
-      const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
+      const syncedPulse = `${pulse} 2s ease-in-out infinite`
       
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
