@@ -183,4 +183,8 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// StorageCopyMethod is the default value for storage copy method
 	StorageCopyMethod = "StorageAcceleratedCopy"
+	// Parser constants
+
+	ServiceFile = "/home/fedora/registry/service.reg"
+	NetworkFile = "/home/fedora/registry/network.reg"
 )
