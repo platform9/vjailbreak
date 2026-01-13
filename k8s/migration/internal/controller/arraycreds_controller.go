@@ -306,6 +306,11 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 			continue // Skip this VMware credential and try the next one
 		}
 
+		// If datacenter is not specified, query all datacenters
+		if vmwareCredsInfo.Datacenter == "" {
+			vmwareCredsInfo.Datacenter = "*"
+		}
+
 		_, finder, err := utils.GetFinderForVMwareCreds(ctx, r.Client, &vmwareCred, vmwareCredsInfo.Datacenter)
 		if err != nil {
 			ctxlog.Error(err, "Failed to get finder for vmware credentials", "datacenter", vmwareCredsInfo.Datacenter)
