@@ -835,57 +835,48 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	return strings.TrimSpace(runOutput), nil
 }
-func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
-	log.Printf("Persisting Windows network--------------------")
-	time.Sleep(5 * time.Hour)
-	mountPoint, err := os.MkdirTemp("", "v2v-mount-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp mount dir: %w", err)
-	}
-	defer os.RemoveAll(mountPoint)
-
-	args := []string{"-i", "--rw"}
-
+func GetSystemRegistry(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	var err error
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
 	if useSingleDisk {
-		args = append(args, "-a", diskPath)
+		command := "download /Windows/System32/config/SYSTEM /home/fedora/SYSTEM"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "download /Windows/System32/config/SYSTEM /home/fedora/SYSTEM"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
 	} else {
-		for _, disk := range disks {
-			args = append(args, "-a", disk.Path)
+		command := "download"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/Windows/System32/config/SYSTEM", "/home/fedora/SYSTEM")
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 		}
 	}
-	args = append(args, mountPoint)
+	return nil
 
-	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
-	mountCmd := exec.Command("guestmount", args...)
-	if out, err := mountCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("guestmount failed: %v, output: %s", err, string(out))
-	}
-
-	defer func() {
-		log.Println("Unmounting disk...")
-		unmountCmd := exec.Command("guestunmount", mountPoint)
-		if out, err := unmountCmd.CombinedOutput(); err != nil {
-			log.Printf("Failed to unmount %s: %v, output: %s", mountPoint, err, string(out))
-		}
-	}()
-
-	scriptPath := "/home/fedora/get-windows-interfaces.sh"
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("script not found at %s", scriptPath)
-	}
-
-	runCmd := exec.Command("bash", scriptPath)
-
-	env := os.Environ()
-	runCmd.Env = env
-
-	log.Println("Executing network persistence script")
-	output, err := runCmd.CombinedOutput()
+}
+func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
+	err := GetSystemRegistry(disks, useSingleDisk, diskPath)
 	if err != nil {
-		return fmt.Errorf("network persistence script failed: %w, output: %s", err, string(output))
+		return err
 	}
-	log.Printf("Network persistence script output: %s", string(output))
-
+	// Run Get-Windows-interfaces script in pod not in guest
+	scriptPath := "/home/fedora/get-windows-interfaces.ps1"
+	cmd := exec.Command("pwsh", "-File", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		log.Println("Failed to run Get-Windows-interfaces script", err)
+		time.Sleep(24 * time.Hour)
+		return err
+	}
+	time.Sleep(24 * time.Hour)
 	return nil
 }
 
