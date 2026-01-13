@@ -43,6 +43,7 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
@@ -193,6 +194,34 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
 			return ctrl.Result{}, err
 		}
+
+		// Update metrics after status change
+		if oldStatus.Phase == "" {
+			// First time seeing this migration - record start
+			metrics.RecordMigrationStarted(
+				migration.Name,
+				migration.Spec.VMName,
+				migration.Namespace,
+				migration.Spec.MigrationPlan,
+				migration.CreationTimestamp.Time,
+			)
+		}
+
+		// Update phase metrics
+		metrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.Phase)
+
+		// Update duration for active migrations
+		if migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseSucceeded &&
+			migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseFailed &&
+			migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+			metrics.RecordMigrationProgress(migration.Name, migration.Spec.VMName, migration.Namespace, migration.CreationTimestamp.Time)
+		}
+
+		// Record completion for terminal states
+		if (oldStatus.Phase != vjailbreakv1alpha1.VMMigrationPhaseSucceeded && migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded) ||
+			(oldStatus.Phase != vjailbreakv1alpha1.VMMigrationPhaseFailed && migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed) {
+			metrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.Phase)
+		}
 	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
@@ -208,6 +237,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vjailbreakv1alpha1.Migration) error {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 	ctxlog.Info("Reconciling deletion of Migration, resetting VMwareMachine status", "MigrationName", migration.Name)
+
+	// Clean up metrics for this migration
+	metrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace)
 
 	if migration.Spec.VMName == "" {
 		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
