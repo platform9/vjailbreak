@@ -3,7 +3,7 @@ import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
-import { useState, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
@@ -18,6 +18,7 @@ import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
+import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 
 const STATUS_ORDER = {
@@ -177,9 +178,9 @@ export default function MigrationsTable({
     migrationName?: string
   } | null>(null)
 
-  const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
+  const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
-  }
+  }, [])
 
   const filteredMigrations = useMemo(() => {
     if (!migrations) return []
@@ -239,18 +240,11 @@ export default function MigrationsTable({
           const key = namespace && planName ? `${namespace}::${planName}` : ''
           const destination = key ? destinationByPlan[key] : null
 
+          const destinationTenant = destination?.destinationTenant || 'N/A'
+          const destinationCluster = destination?.destinationCluster || 'N/A'
+
           const tooltipTitle = (
-            <Box sx={{ display: 'grid', gap: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                Destination
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Tenant: {destination?.destinationTenant || 'N/A'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Cluster: {destination?.destinationCluster || 'N/A'}
-              </Typography>
-            </Box>
+            <TooltipContent title="Destination" lines={[`Tenant: ${destinationTenant}`, `Cluster: ${destinationCluster}`]} />
           )
 
           return (
@@ -461,13 +455,16 @@ export default function MigrationsTable({
     ]
   }, [destinationByPlan])
 
-  const selectedMigrations =
-    migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || []
-  const eligibleForCutover = selectedMigrations.filter(
-    (migration) => migration.status?.phase === Phase.AwaitingAdminCutOver
+  const selectedMigrations = useMemo(
+    () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],
+    [migrations, selectedRows]
+  )
+  const eligibleForCutover = useMemo(
+    () => selectedMigrations.filter((migration) => migration.status?.phase === Phase.AwaitingAdminCutOver),
+    [selectedMigrations]
   )
 
-  const handleBulkAdminCutover = async () => {
+  const handleBulkAdminCutover = useCallback(async () => {
     if (eligibleForCutover.length === 0) return
 
     setBulkCutoverError(null)
@@ -499,25 +496,36 @@ export default function MigrationsTable({
     } finally {
       setIsBulkCutoverLoading(false)
     }
-  }
+  }, [eligibleForCutover, refetchMigrations])
 
-  const handleCloseBulkCutoverDialog = () => {
+  const handleCloseBulkCutoverDialog = useCallback(() => {
     if (!isBulkCutoverLoading) {
       setBulkCutoverDialogOpen(false)
       setBulkCutoverError(null)
     }
-  }
+  }, [isBulkCutoverLoading])
 
-  const migrationsWithActions =
-    filteredMigrations?.map((migration) => ({
-      ...migration,
-      onDelete: onDeleteMigration,
+  const migrationsWithActions = useMemo(
+    () =>
+      filteredMigrations?.map((migration) => ({
+        ...migration,
+        onDelete: onDeleteMigration,
+        refetchMigrations,
+        setSelectedPod,
+        setLogsDrawerOpen,
+        setMigrationDetailModalOpen,
+        setSelectedMigrationDetail
+      })) || [],
+    [
+      filteredMigrations,
+      onDeleteMigration,
       refetchMigrations,
-      setSelectedPod,
       setLogsDrawerOpen,
       setMigrationDetailModalOpen,
-      setSelectedMigrationDetail
-    })) || []
+      setSelectedMigrationDetail,
+      setSelectedPod
+    ]
+  )
 
   return (
     <>

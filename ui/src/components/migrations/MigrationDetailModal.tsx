@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
-import { SyntheticEvent, useEffect, useMemo, useState } from 'react'
+import { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActionButton,
   DrawerFooter,
@@ -191,11 +191,14 @@ export default function MigrationDetailModal({
   const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
   const destinationTenant = (data?.openstackCreds?.spec as any)?.projectName || 'N/A'
 
-  const rawNetworkMappings = normalizeMappingRows(
-    ((((data?.networkMapping?.spec as any)?.networks as any[]) || []) as any) || []
+  const rawNetworkMappings = useMemo(
+    () => normalizeMappingRows(((((data?.networkMapping?.spec as any)?.networks as any[]) || []) as any) || []),
+    [data?.networkMapping]
   )
-  const rawStorageMappings = normalizeMappingRows(
-    ((((data?.storageMapping?.spec as any)?.storages as any[]) || []) as any) || []
+
+  const rawStorageMappings = useMemo(
+    () => normalizeMappingRows(((((data?.storageMapping?.spec as any)?.storages as any[]) || []) as any) || []),
+    [data?.storageMapping]
   )
 
   const vmSourceNetworks = useMemo(() => {
@@ -301,9 +304,48 @@ export default function MigrationDetailModal({
     return raw
   }, [planSpec?.firstBootScript])
 
-  const handleTabChange = (_: SyntheticEvent, newValue: number) => {
+  const handleTabChange = useCallback((_: SyntheticEvent, newValue: number) => {
     setTab(newValue)
-  }
+  }, [])
+
+  const rdmDisksSummary = useMemo(() => {
+    if (data?.rdmDisks?.length) return `${data.rdmDisks.length} disk(s)`
+    if (Array.isArray(vmSpec?.rdmDisks) && vmSpec.rdmDisks.length) return `${vmSpec.rdmDisks.length} disk(s)`
+    return 'N/A'
+  }, [data?.rdmDisks, vmSpec?.rdmDisks])
+
+  const generalInfoItems = useMemo(
+    () => [
+      { label: 'VM Name', value: vmName || 'N/A' },
+      { label: 'Migration Type', value: migrationType },
+      { label: 'Assigned IP(s)', value: assignedIps },
+      { label: 'Created At', value: createdAt },
+      { label: 'Guest OS', value: guestOS },
+      { label: 'CPU', value: cpu },
+      { label: 'Memory', value: memory },
+      { label: 'Total Disks', value: diskCount },
+      { label: 'Network Adapters', value: networkAdapterCount },
+      { label: 'vJailbreak Agent', value: (migrationStatus?.agentName as string) || 'N/A' },
+      { label: 'RDM Disks', value: rdmDisksSummary }
+    ],
+    [
+      assignedIps,
+      cpu,
+      createdAt,
+      diskCount,
+      guestOS,
+      memory,
+      migrationStatus?.agentName,
+      migrationType,
+      networkAdapterCount,
+      rdmDisksSummary,
+      vmName
+    ]
+  )
+
+  const handleOnlyShowOverridesChange = useCallback((checked: boolean) => {
+    setOnlyShowOverrides(checked)
+  }, [])
 
   const migrationPolicyValues = useMemo(
     () => ({
@@ -417,28 +459,7 @@ export default function MigrationDetailModal({
                 </SurfaceCard>
 
                 <SurfaceCard variant="card" title="General Info" subtitle="VM specifications">
-                  <KeyValueGrid
-                    items={[
-                      { label: 'VM Name', value: vmName || 'N/A' },
-                      { label: 'Migration Type', value: migrationType },
-                      { label: 'Assigned IP(s)', value: assignedIps },
-                      { label: 'Created At', value: createdAt },
-                      { label: 'Guest OS', value: guestOS },
-                      { label: 'CPU', value: cpu },
-                      { label: 'Memory', value: memory },
-                      { label: 'Total Disks', value: diskCount },
-                      { label: 'Network Adapters', value: networkAdapterCount },
-                      { label: 'vJailbreak Agent', value: (migrationStatus?.agentName as string) || 'N/A' },
-                      {
-                        label: 'RDM Disks',
-                        value: data?.rdmDisks?.length
-                          ? `${data.rdmDisks.length} disk(s)`
-                          : Array.isArray(vmSpec?.rdmDisks) && vmSpec.rdmDisks.length
-                            ? `${vmSpec.rdmDisks.length} disk(s)`
-                            : 'N/A'
-                      }
-                    ]}
-                  />
+                  <KeyValueGrid items={generalInfoItems} />
 
                   {data?.rdmDisks?.length ? (
                     <Box sx={{ mt: 2 }}>
@@ -507,7 +528,7 @@ export default function MigrationDetailModal({
                       <Switch
                         size="small"
                         checked={onlyShowOverrides}
-                        onChange={(e) => setOnlyShowOverrides(e.target.checked)}
+                        onChange={(e) => handleOnlyShowOverridesChange(e.target.checked)}
                       />
                     }
                     label={<Typography variant="body2">View only enabled options</Typography>}
