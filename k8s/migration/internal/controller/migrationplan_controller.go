@@ -466,11 +466,24 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				"allCleared", !hasExistingFailures,
 				"granularRetry", retryTriggeredByDeletion)
 
-			migrationplan.Status.MigrationStatus = ""
-			migrationplan.Status.MigrationMessage = ""
-			if err := r.Status().Update(ctx, migrationplan); err != nil {
+			err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				latest := &vjailbreakv1alpha1.MigrationPlan{}
+				if getErr := r.Get(ctx, types.NamespacedName{
+					Name:      migrationplan.Name,
+					Namespace: migrationplan.Namespace,
+				}, latest); getErr != nil {
+					return getErr
+				}
+
+				latest.Status.MigrationStatus = ""
+				latest.Status.MigrationMessage = ""
+				return r.Status().Update(ctx, latest)
+			})
+
+			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
 			}
+
 			return ctrl.Result{Requeue: true}, nil
 		}
 
