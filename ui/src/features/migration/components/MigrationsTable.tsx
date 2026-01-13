@@ -133,7 +133,7 @@ const columns: GridColDef[] = [
       const initiateCutover = params.row?.spec?.initiateCutover
       const migrationName = params.row?.metadata?.name
       const namespace = params.row?.metadata?.namespace
-      const showRetryButton = phase === Phase.Failed
+      const showRetryButton = phase === Phase.Failed || phase === Phase.ValidationFailed
 
       const handleRetry = async () => {
         if (!migrationName || !namespace) {

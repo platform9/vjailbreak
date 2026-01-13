@@ -446,10 +446,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		// If the specific "Failed" objects are gone (user deleted them for retry),
 		// but the plan still says "Failed", we reset the plan status.
 		if !hasExistingFailures {
-			if strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
-				return ctrl.Result{}, nil
-			}
-
 			r.ctxlog.Info("Failed Migration objects cleared, resetting Plan status for retry", "migrationplan", migrationplan.Name)
 			migrationplan.Status.MigrationStatus = ""
 			migrationplan.Status.MigrationMessage = ""
@@ -1374,7 +1370,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				validationMsg := fmt.Sprintf("%s to discover base flavor for flavorless migration", constants.MigrationPlanValidationFailedPrefix)
+				validationMsg := "failed to discover base flavor for flavorless migration"
 				// added constant prefix for the filter in reconciler
 				if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, validationMsg); updateErr != nil {
 					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
