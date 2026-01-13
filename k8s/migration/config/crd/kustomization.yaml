@@ -20,6 +20,8 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_pcdclusters.yaml
 - bases/vjailbreak.k8s.pf9.io_pcdhosts.yaml
 - bases/vjailbreak.k8s.pf9.io_rdmdisks.yaml
+- bases/vjailbreak.k8s.pf9.io_arraycredsmappings.yaml
+- bases/vjailbreak.k8s.pf9.io_arraycreds.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
