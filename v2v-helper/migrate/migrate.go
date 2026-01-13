@@ -1094,7 +1094,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if osType == constants.OSFamilyWindows {
 		persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 		if persisNetwork {
-			err := virtv2v.PersistWindowsNetwork(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType)
+			err := virtv2v.PersistWindowsNetwork(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, vminfo.IPperMac)
 			if err != nil {
 				return errors.Wrap(err, "failed to persist windows network")
 			}

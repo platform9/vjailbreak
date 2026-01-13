@@ -185,6 +185,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	StorageCopyMethod = "StorageAcceleratedCopy"
 	// Parser constants
 
-	ServiceFile = "/home/fedora/registry/service.reg"
-	NetworkFile = "/home/fedora/registry/network.reg"
+	ServiceFile                   = "/home/fedora/registry/service.reg"
+	NetworkFile                   = "/home/fedora/registry/network.reg"
+	WindowsInterfaceRenameCommand = `Get-NetAdapter | Where-Object { $_.MacAddress -eq "%s" } | Rename-NetAdapter -NewName "%s" `
 )

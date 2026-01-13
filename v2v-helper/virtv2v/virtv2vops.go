@@ -861,7 +861,7 @@ func GetSystemRegistry(disks []vm.VMDisk, useSingleDisk bool, diskPath string) e
 	return nil
 
 }
-func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string) error {
+func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, ippermac map[string][]vm.IpEntry) error {
 	err := GetSystemRegistry(disks, useSingleDisk, diskPath)
 	if err != nil {
 		return err
@@ -886,6 +886,26 @@ func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 		return err
 	}
 	mappings := registryParser.GenerateMapping()
+	script := ""
+	for _, mapping := range mappings {
+		for key, ipEntry := range ippermac {
+			for _, ip := range ipEntry {
+				if ip.IP == mapping.IP {
+					mac := strings.ReplaceAll(key, ":", "-")
+					command := fmt.Sprintf(constants.WindowsInterfaceRenameCommand, mac, mapping.InterfaceName)
+					script += command + "\n"
+				}
+			}
+		}
+	}
+	log.Println(script)
+	// write script to file /home/fedora/persist-network.ps1
+	windowsScriptPath := "/home/fedora/persist-network.ps1"
+	err = os.WriteFile(windowsScriptPath, []byte(script), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create persist-network.ps1: %s", err)
+	}
+	log.Println("Successfully created persist-network.ps1")
 	log.Println(registryParser.PrintMappingTable(mappings))
 	return nil
 }
