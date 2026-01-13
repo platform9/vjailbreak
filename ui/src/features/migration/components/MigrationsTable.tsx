@@ -12,16 +12,13 @@ import { Condition, Migration, Phase } from '../api/migrations'
 import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
 import MigrationProgress from '../components/MigrationProgress'
 import { QueryObserverResult } from '@tanstack/react-query'
-import { useQuery } from '@tanstack/react-query'
 import { RefetchOptions } from '@tanstack/react-query'
-import { calculateTimeElapsed } from 'src/utils'
+import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
-import { getMigrationPlan } from 'src/api/migration-plans/migrationPlans'
-import { getMigrationTemplate } from 'src/api/migration-templates/migrationTemplates'
-import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
+import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 
 const STATUS_ORDER = {
   Running: 0,
@@ -73,21 +70,6 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
   }
 
   return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
-}
-
-const formatCreatedAt = (value: unknown) => {
-  if (!value) return '-'
-  const d = value instanceof Date ? value : new Date(String(value))
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
 }
 
 interface CustomToolbarProps {
@@ -239,66 +221,7 @@ export default function MigrationsTable({
     }
   }, [migrations, statusFilter, dateFilter])
 
-  const planQueryKey = useMemo(() => {
-    const namespaces = Array.from(new Set(filteredMigrations.map((m) => m.metadata?.namespace))).sort().join(',')
-    const planNames = Array.from(
-      new Set(
-        filteredMigrations
-          .map((m) => (m.spec as any)?.migrationPlan || (m.metadata as any)?.labels?.migrationplan)
-          .filter(Boolean)
-      )
-    ).sort().join(',')
-    
-    return ['migration-plan-destinations', namespaces, planNames]
-  }, [filteredMigrations])
-
-  const destinationByPlanQuery = useQuery({
-    queryKey: planQueryKey,
-    enabled: filteredMigrations.length > 0,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const safeGet = async <T,>(fn: () => Promise<T>): Promise<T | null> => {
-        try {
-          return await fn()
-        } catch (error) {
-          console.error('Error in safeGet:', error)
-          return null
-        }
-      }
-
-      const planKeys = Array.from(
-        new Set(
-          filteredMigrations
-            .map((m) => {
-              const namespace = m.metadata?.namespace
-              const planName = (m.spec as any)?.migrationPlan || (m.metadata as any)?.labels?.migrationplan
-              if (!namespace || !planName) return ''
-              return `${namespace}::${planName}`
-            })
-            .filter(Boolean)
-        )
-      )
-
-      const results = await Promise.all(
-        planKeys.map(async (key) => {
-          const [namespace, planName] = key.split('::')
-          const plan = await safeGet(() => getMigrationPlan(planName, namespace))
-          const templateName = (plan?.spec as any)?.migrationTemplate as string | undefined
-          const template = templateName ? await safeGet(() => getMigrationTemplate(templateName, namespace)) : null
-          const templateSpec = (template?.spec as any) || {}
-          const openstackRef = templateSpec?.destination?.openstackRef as string | undefined
-          const creds = openstackRef ? await safeGet(() => getOpenstackCredentials(openstackRef, namespace)) : null
-
-          const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
-          const destinationTenant = (creds?.spec as any)?.projectName || 'N/A'
-          return [key, { destinationCluster, destinationTenant }] as const
-        })
-      )
-
-      return Object.fromEntries(results)
-    }
-  })
+  const destinationByPlanQuery = useMigrationPlanDestinationsQuery(filteredMigrations)
 
   const destinationByPlan = destinationByPlanQuery.data || {}
 
@@ -397,7 +320,7 @@ export default function MigrationsTable({
         valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
         flex: 0.8,
         renderCell: (params) => {
-          const createdAt = formatCreatedAt(params.row.metadata?.creationTimestamp)
+          const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
           const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
           return (
             <Tooltip title={tooltip} arrow>
@@ -419,7 +342,7 @@ export default function MigrationsTable({
       {
         field: 'createdAt',
         headerName: 'Created At',
-        valueGetter: (_, row) => formatCreatedAt(row.metadata?.creationTimestamp),
+        valueGetter: (_, row) => formatDateTime(row.metadata?.creationTimestamp),
         flex: 1
       },
       {

@@ -13,6 +13,9 @@ export type { ActionButtonProps } from './ActionButton'
 export { default as SurfaceCard } from './SurfaceCard'
 export type { SurfaceCardProps } from './SurfaceCard'
 
+export { default as KeyValueGrid } from './KeyValueGrid'
+export type { KeyValueGridProps, KeyValueItem } from './KeyValueGrid'
+
 export { NavTabs, NavTab } from './NavTabs'
 export type { NavTabsProps, NavTabProps } from './NavTabs'
 
@@ -35,6 +38,9 @@ export type { InlineHelpProps, InlineHelpTone } from './InlineHelp'
 
 export { default as Row } from './Row'
 export type { RowProps } from './Row'
+
+export { default as StatusChip } from './StatusChip'
+export type { StatusChipProps, StatusChipTone } from './StatusChip'
 
 export { default as OperationStatus } from './OperationStatus'
 export type { OperationStatusProps, OperationStatusLayout } from './OperationStatus'
