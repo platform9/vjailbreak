@@ -41,6 +41,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/internal/controller"
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	// +kubebuilder:scaffold:imports
 )
 
