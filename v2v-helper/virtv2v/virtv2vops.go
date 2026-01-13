@@ -23,6 +23,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/parser"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -873,10 +874,19 @@ func PersistWindowsNetwork(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	err = cmd.Run()
 	if err != nil {
 		log.Println("Failed to run Get-Windows-interfaces script", err)
-		time.Sleep(24 * time.Hour)
 		return err
 	}
-	time.Sleep(24 * time.Hour)
+	registryParser := parser.NewRegistryParser()
+	if err := registryParser.ParseServiceFile(constants.ServiceFile); err != nil {
+		log.Println("Failed to parse service file", err)
+		return err
+	}
+	if err := registryParser.ParseNetworkFile(constants.NetworkFile); err != nil {
+		log.Println("Failed to parse network file", err)
+		return err
+	}
+	mappings := registryParser.GenerateMapping()
+	log.Println(registryParser.PrintMappingTable(mappings))
 	return nil
 }
 
