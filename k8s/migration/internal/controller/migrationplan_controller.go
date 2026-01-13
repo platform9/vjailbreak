@@ -437,7 +437,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		// ValidationFailed objects are considered terminal skips and shouldn't block retries.
 		hasExistingFailures := false
 		for _, m := range migrationList.Items {
-			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
 				hasExistingFailures = true
 				break
 			}
@@ -1370,7 +1371,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 			baseFlavor, err := utils.FindHotplugBaseFlavor(osClients.ComputeClient)
 			if err != nil {
-				validationMsg := "failed to discover base flavor for flavorless migration"
+				validationMsg := "Failed to discover base flavor for flavorless migration"
+
 				// added constant prefix for the filter in reconciler
 				if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, validationMsg); updateErr != nil {
 					return errors.Wrap(updateErr, "failed to update migration plan status after flavor discovery failure")
@@ -1395,7 +1397,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 					}
 				}
 
-				return errors.Wrap(err, "failed to discover base flavor for flavorless migration")
+				return errors.Wrap(err, validationMsg)
 			}
 
 			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
