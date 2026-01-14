@@ -100,23 +100,6 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 	}
 
-	// Verify credentials match current environment
-	_, err = verifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
-	if err != nil {
-		if strings.Contains(err.Error(), "Creds are valid but for a different OpenStack environment") {
-			return ValidationResult{
-				Valid:   false,
-				Message: "Creds are valid but for a different OpenStack environment",
-				Error:   err,
-			}
-		}
-		return ValidationResult{
-			Valid:   false,
-			Message: fmt.Sprintf("Failed to verify credentials against current environment: %s", err.Error()),
-			Error:   err,
-		}
-	}
-
 	return ValidationResult{
 		Valid:   true,
 		Message: "Successfully authenticated to Openstack",
