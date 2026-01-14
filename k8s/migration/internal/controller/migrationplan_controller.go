@@ -63,6 +63,9 @@ import (
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
+// StorageCopyMethodVendorBased is the storage copy method value for StorageCopyMethodVendorBased VAAI copy
+const StorageCopyMethodVendorBased = "StorageCopyMethodVendorBased"
+
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
@@ -541,8 +544,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
-	// Check if StorageCopyMethod is vendor-based
-	if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
+	// Check if StorageCopyMethod is StorageCopyMethodVendorBased
+	if migrationtemplate.Spec.StorageCopyMethod == "StorageCopyMethodVendorBased" {
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
@@ -1197,8 +1200,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
 		}
 
-		if migrationtemplate.Spec.StorageCopyMethod == "vendor-based" {
-			configMap.Data["STORAGE_COPY_METHOD"] = "vendor-based"
+		if migrationtemplate.Spec.StorageCopyMethod == "StorageCopyMethodVendorBased" {
+			configMap.Data["STORAGE_COPY_METHOD"] = "StorageCopyMethodVendorBased"
 			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
 		}
@@ -1274,9 +1277,9 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	}
 	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
 	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
-	// Skip storage mapping reconciliation for vendor-based storage copy method
+	// Skip storage mapping reconciliation for StorageCopyMethodVendorBased storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
-	if migrationtemplate.Spec.StorageCopyMethod != "vendor-based" {
+	if migrationtemplate.Spec.StorageCopyMethod != "StorageCopyMethodVendorBased" {
 		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm, datacenter)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to reconcile storage")

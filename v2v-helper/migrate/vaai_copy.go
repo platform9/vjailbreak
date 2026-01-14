@@ -147,7 +147,8 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 // copyDiskViaVAAI copies a single disk using VAAI XCOPY
 func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client,
-	idx int, vminfo *vm.VMInfo, hostIP string) (storage.Volume, error) {
+	idx int, vminfo *vm.VMInfo, hostIP string,
+) (storage.Volume, error) {
 	startTime := time.Now()
 
 	vmDisk := vminfo.VMDisks[idx]

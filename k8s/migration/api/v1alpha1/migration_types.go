@@ -59,8 +59,7 @@ const (
 	// VMMigrationPhaseUnknown indicates the migration state is unknown
 	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
 
-	// VAAI XCOPY specific phases
-	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established
+	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (VAAI XCOPY specific phase)
 	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
 	// VMMigrationPhaseCreatingInitiatorGroup indicates initiator group is being created/updated
 	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
