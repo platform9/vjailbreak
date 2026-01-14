@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	commonutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
@@ -91,18 +92,11 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	datacenter := vmwareCredsinfo.Datacenter
 
 	// Normalize URL
-	if host[:4] != "http" {
-		host = "https://" + host
-	}
-	if host[len(host)-4:] != sdkPath {
-		host += sdkPath
-	}
-
-	u, err := url.Parse(host)
+	u, err := commonutils.NormalizeVCenterURL(host)
 	if err != nil {
 		return ValidationResult{
 			Valid:   false,
-			Message: fmt.Sprintf("Failed to parse URL: %s", err.Error()),
+			Message: fmt.Sprintf("Failed to normalize URL: %s", err.Error()),
 			Error:   err,
 		}
 	}
