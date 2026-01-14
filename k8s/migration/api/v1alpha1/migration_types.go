@@ -59,7 +59,7 @@ const (
 	// VMMigrationPhaseUnknown indicates the migration state is unknown
 	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
 
-	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (VAAI XCOPY specific phase)
+	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (StorageAcceleratedCopy specific phase)
 	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
 	// VMMigrationPhaseCreatingInitiatorGroup indicates initiator group is being created/updated
 	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
@@ -71,8 +71,8 @@ const (
 	VMMigrationPhaseMappingVolume VMMigrationPhase = "MappingVolume"
 	// VMMigrationPhaseRescanningStorage indicates ESXi storage adapters are being rescanned
 	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
-	// VMMigrationPhaseXCOPYInProgress indicates VAAI XCOPY operation is in progress
-	VMMigrationPhaseXCOPYInProgress VMMigrationPhase = "XCOPYInProgress"
+	// VMMigrationPhaseStorageAcceleratedCopyInProgress indicates StorageAcceleratedCopy operation is in progress
+	VMMigrationPhaseStorageAcceleratedCopyInProgress VMMigrationPhase = "StorageAcceleratedCopyInProgress"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -97,6 +97,11 @@ type MigrationSpec struct {
 	// AssignedIP is the comma-separated list of user-assigned IPs for cold migration
 	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
 	AssignedIP string `json:"assignedIP,omitempty"`
+
+	// MigrationType indicates whether this is a hot (live) or cold migration
+	// +optional
+	// +kubebuilder:validation:Enum=hot;cold
+	MigrationType string `json:"migrationType,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
@@ -109,6 +114,15 @@ type MigrationStatus struct {
 
 	// AgentName is the name of the agent where migration is running
 	AgentName string `json:"agentName,omitempty"`
+
+	// CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+	// Extracted from migration pod events
+	// +optional
+	CurrentDisk string `json:"currentDisk,omitempty"`
+
+	// TotalDisks is the total number of disks to be migrated
+	// +optional
+	TotalDisks int `json:"totalDisks,omitempty"`
 }
 
 // +kubebuilder:object:root=true

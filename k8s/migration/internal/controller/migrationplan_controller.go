@@ -63,11 +63,8 @@ import (
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
-// StorageCopyMethodVendorBased is the storage copy method value for vendor-based VAAI copy
-const (
-	StorageCopyMethodVendorBased = "vendor-based"
-	StorageCopyMethod            = "StorageCopyMethodVendorBased"
-)
+// StorageCopyMethod is the storage copy method value for Storage Accelerated copy
+const StorageCopyMethod = "StorageAcceleratedCopy"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -570,8 +567,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
-	// Check if StorageCopyMethod is StorageCopyMethodVendorBased
-	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethodVendorBased {
+	// Check if StorageCopyMethod is StorageAcceleratedCopy
+	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
@@ -819,6 +816,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,
+				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
+			},
+			Status: vjailbreakv1alpha1.MigrationStatus{
+				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
+				TotalDisks: len(vminfo.Disks),
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)
@@ -930,36 +932,41 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									Privileged: &pointtrue,
 								},
 								Env: envVars,
-								EnvFrom: []corev1.EnvFromSource{
-									{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: vmwareSecretRef,
+								EnvFrom: func() []corev1.EnvFromSource {
+									envFrom := []corev1.EnvFromSource{
+										{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: vmwareSecretRef,
+												},
 											},
 										},
-									},
-									{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: openstackSecretRef,
+										{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: openstackSecretRef,
+												},
 											},
 										},
-									},
-									{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: arrayCredsSecretRef,
+									}
+									if arrayCredsSecretRef != "" {
+										envFrom = append(envFrom, corev1.EnvFromSource{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: arrayCredsSecretRef,
+												},
 											},
-										},
-									},
-									{
+										})
+									}
+									envFrom = append(envFrom, corev1.EnvFromSource{
 										ConfigMapRef: &corev1.ConfigMapEnvSource{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: "pf9-env",
 											},
 										},
-									},
-								},
+									})
+									return envFrom
+								}(),
 								VolumeMounts: []corev1.VolumeMount{
 									{
 										Name:      "vddk",
@@ -1519,6 +1526,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return err
 		}
 
+		arraycredsSecretRef := ""
+		if arraycreds != nil {
+			arraycredsSecretRef = arraycreds.Spec.SecretRef.Name
+		}
+
 		err = r.CreateJob(ctx,
 			migrationplan,
 			migrationtemplate,
@@ -1528,7 +1540,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
 			vmMachineObj,
-			arraycreds.Spec.SecretRef.Name)
+			arraycredsSecretRef)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}

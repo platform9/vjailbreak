@@ -26,7 +26,7 @@ spec:
       openAPIV3Schema:
         description: |-
           ArrayCredsMapping is the Schema for the arraycredsmappings API that defines
-          mappings between VMware datastores and ArrayCreds for vendor-based storage migration
+          mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy storage migration
         properties:
           apiVersion:
             description: |-
@@ -48,7 +48,7 @@ spec:
           spec:
             description: |-
               ArrayCredsMappingSpec defines the desired state of ArrayCredsMapping including
-              mappings between VMware datastores and ArrayCreds for vendor-based data copy
+              mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy data copy
             properties:
               mappings:
                 description: Mappings is a list of datastore to ArrayCreds mappings

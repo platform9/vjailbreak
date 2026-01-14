@@ -96,16 +96,16 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
 
-	// VAAI XCOPY specific event messages
-	EventMessageEsxiSSHConnect     = "Connecting to ESXi"
-	EventMessageEsxiSSHTest        = "Testing ESXi connection"
-	EventMessageEsxiConnected      = "Connected to ESXi"
-	EventMessageInitiatorGroup     = "Creating/updating initiator group"
-	EventMessageVAAICreatingVolume = "Creating target volume"
-	EventMessageVAAICinderManage   = "Cinder managing the volume"
-	EventMessageVAAIMappingVolume  = "Mapping target volume"
-	EventMessageVAAIRescanStorage  = "Waiting for target volume"
-	EventMessageVAAITargetDevice   = "Target device is visible:"
+	// StorageAcceleratedCopy specific event messages
+	EventMessageEsxiSSHConnect                       = "Connecting to ESXi"
+	EventMessageEsxiSSHTest                          = "Testing ESXi connection"
+	EventMessageEsxiConnected                        = "Connected to ESXi"
+	EventMessageInitiatorGroup                       = "Creating/updating initiator group"
+	EventMessageStorageAcceleratedCopyCreatingVolume = "Creating target volume"
+	EventMessageStorageAcceleratedCopyCinderManage   = "Cinder managing the volume"
+	EventMessageStorageAcceleratedCopyMappingVolume  = "Mapping target volume"
+	EventMessageStorageAcceleratedCopyRescanStorage  = "Waiting for target volume"
+	EventMessageStorageAcceleratedCopyTargetDevice   = "Target device is visible:"
 
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
@@ -180,4 +180,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	AutoPXEBootOnConversionDefault = false
 	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
 	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
+
+	// StorageCopyMethod is the default value for storage copy method
+	StorageCopyMethod = "StorageAcceleratedCopy"
 )
