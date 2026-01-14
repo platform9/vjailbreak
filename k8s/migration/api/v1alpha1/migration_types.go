@@ -123,6 +123,11 @@ type MigrationStatus struct {
 	// TotalDisks is the total number of disks to be migrated
 	// +optional
 	TotalDisks int `json:"totalDisks,omitempty"`
+	// Retryable indicates whether this migration can be retried when it fails.
+	// Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
+	// as RDM disk migration state prevents automatic retry.
+	// +optional
+	Retryable *bool `json:"retryable,omitempty"`
 }
 
 // +kubebuilder:object:root=true
