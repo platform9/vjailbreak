@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,8 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
+//
+//nolint:gocyclo
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -184,6 +187,22 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
+
+	// Extract current disk being copied from events
+	r.ExtractCurrentDisk(migration, filteredEvents)
+
+if migration.Status.TotalDisks == 0 {
+	if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			migration.Status.TotalDisks = n
+		} else {
+			log.FromContext(ctx).Error(err, "Failed to parse total disks value", 
+				"label", constants.NumberOfDisksLabel, 
+				"value", v)
+		}
+	}
+}
+
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
@@ -451,4 +470,43 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	return &podList.Items[0], nil
+}
+
+// ExtractCurrentDisk extracts which disk is currently being copied from pod events
+func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	parseCurrentDisk := func(msg string) (string, bool) {
+		if !strings.Contains(msg, "Copying disk") {
+			return "", false
+		}
+		parts := strings.Split(msg, "Copying disk")
+		if len(parts) <= 1 {
+			return "", false
+		}
+		diskPart := strings.TrimSpace(parts[1])
+		if len(diskPart) == 0 {
+			return "", false
+		}
+		diskNum := strings.Split(diskPart, ",")[0]
+		diskNum = strings.Split(diskNum, " ")[0]
+		diskNum = strings.TrimSpace(diskNum)
+		if diskNum == "" {
+			return "", false
+		}
+		return diskNum, true
+	}
+
+	for i := range events.Items {
+		if diskNum, ok := parseCurrentDisk(events.Items[i].Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+
+	for _, condition := range migration.Status.Conditions {
+		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
 }

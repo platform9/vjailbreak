@@ -795,6 +795,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,
+				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
+			},
+			Status: vjailbreakv1alpha1.MigrationStatus{
+				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
+				TotalDisks: len(vminfo.Disks),
 			},
 		}
 		migrationobj.Labels = MergeLabels(migrationobj.Labels, migrationplan.Labels)

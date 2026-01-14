@@ -63,6 +63,10 @@ export interface Spec {
   migrationPlan: MigrationPlan
   podRef: PodRef
   vmName: VMName
+  migrationType?: string
+  initiateCutover?: boolean
+  disconnectSourceNetwork?: boolean
+  assignedIP?: string
 }
 
 export enum MigrationPlan {
@@ -82,6 +86,9 @@ export enum VMName {
 export interface StatusClass {
   conditions: Condition[]
   phase: Phase
+  agentName?: string
+  currentDisk?: string
+  totalDisks?: number
 }
 
 export interface Condition {
