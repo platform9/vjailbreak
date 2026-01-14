@@ -247,7 +247,6 @@ func (r *OpenstackCredsReconciler) discoverStorageArrays(ctx context.Context, sc
 	for backendName, backendInfo := range backendMap {
 		ctxlog.Info("Processing backend pool", "backendName", backendName, "backendInfo", backendInfo)
 		r.createArrayCreds(ctx, scope, backendName, backendInfo)
-
 	}
 
 	return nil

@@ -244,7 +244,11 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 	if err := provider.Connect(ctx, accessInfo); err != nil {
 		return errors.Wrap(err, "failed to connect to storage array")
 	}
-	defer provider.Disconnect()
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			ctxlog.Error(err, "failed to disconnect from storage array")
+		}
+	}()
 
 	// Validate credentials
 	if err := provider.ValidateCredentials(ctx); err != nil {
@@ -278,7 +282,11 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 	if err := provider.Connect(ctx, accessInfo); err != nil {
 		return nil, errors.Wrap(err, "failed to connect to storage array")
 	}
-	defer provider.Disconnect()
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			ctxlog.Error(err, "failed to disconnect from storage array")
+		}
+	}()
 
 	naaIdentifiers, err := provider.GetAllVolumeNAAs()
 	if err != nil {
@@ -292,6 +300,9 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 
 	// Step 2: Get vmware credentials to query datastores
 	vmwareCreds, err := r.getVMwareCredentials(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get vmware credentials")
+	}
 	if vmwareCreds == nil {
 		return nil, errors.New("vmware credentials not found")
 	}
@@ -332,7 +343,6 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 				return nil, errors.Wrap(err, "failed to get datastore info")
 			}
 			ctxlog.Info("Datastore info", "datastore", datastoreInfo.Name, "backingNAA", datastoreInfo.BackingNAA)
-
 			// 4. Check if datastore is backed by any of the volume NAAs
 			for _, naa := range naaIdentifiers {
 				if datastoreInfo.BackingNAA == naa {
@@ -366,8 +376,7 @@ func getDatastoreInfo(ctx context.Context, ds *object.Datastore) (vjailbreakv1al
 	}
 
 	// Extract VMFS or NFS specific backing details
-	switch dsInfo := mds.Info.(type) {
-	case *types.VmfsDatastoreInfo:
+	if dsInfo, ok := mds.Info.(*types.VmfsDatastoreInfo); ok {
 		if dsInfo.Vmfs != nil && len(dsInfo.Vmfs.Extent) > 0 {
 			extent := dsInfo.Vmfs.Extent[0]
 			info.BackingNAA = extent.DiskName
