@@ -875,6 +875,15 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
+		if persisNetwork {
+			firstbootscriptname := "persist-network-windows"
+			firstbootscript := constants.WindowsFirstBootScript
+			firstbootscripts = append(firstbootscripts, firstbootscriptname)
+
+			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
+				return errors.Wrap(err, "failed to add first boot script")
+			}
+		}
 	}
 
 	// Add first boot scripts for RHEL family
@@ -1094,9 +1103,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	if osType == constants.OSFamilyWindows {
 		persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 		if persisNetwork {
-			err := virtv2v.PersistWindowsNetwork(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, vminfo.IPperMac)
-			if err != nil {
+			if err := virtv2v.GenerateWindowsNetworkPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, vminfo.IPperMac); err != nil {
 				return errors.Wrap(err, "failed to persist windows network")
+			}
+			//TODO : Add the script as a first boot script
+			if err := virtv2v.InjectFirstBootWindowsScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+				return errors.Wrap(err, "failed to inject first boot script")
 			}
 		}
 	}
