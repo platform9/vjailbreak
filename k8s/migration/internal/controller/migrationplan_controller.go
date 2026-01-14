@@ -1912,7 +1912,9 @@ func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Cont
 		Message:            message,
 		LastTransitionTime: metav1.Now(),
 	}
-	r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed, condition, vmName)
+	if err := r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed, condition, vmName); err != nil {
+		r.ctxlog.Error(err, "Failed to mark migration as ValidationFailed", "vm", vmName)
+	}
 }
 
 // markMigrationFailed updates a Migration status to Failed
