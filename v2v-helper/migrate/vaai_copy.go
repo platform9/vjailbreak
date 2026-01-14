@@ -51,14 +51,14 @@ func sanitizeVolumeName(name string) string {
 	return sanitized
 }
 
-// VAAICopyDisks performs VAAI XCOPY-based disk copy for all VM disks
+// StorageAcceleratedCopyCopyDisks performs StorageAcceleratedCopy XCOPY-based disk copy for all VM disks
 // This offloads the copy operation to the storage array, which is much faster than NBD
-func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]storage.Volume, error) {
-	migobj.logMessage("Starting VAAI XCOPY-based disk copy")
+func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]storage.Volume, error) {
+	migobj.logMessage("Starting StorageAcceleratedCopy XCOPY-based disk copy")
 
 	// Validate prerequisites
 	if migobj.StorageProvider == nil {
-		return []storage.Volume{}, fmt.Errorf("storage provider not initialized for VAAI copy")
+		return []storage.Volume{}, fmt.Errorf("storage provider not initialized for StorageAcceleratedCopy copy")
 	}
 
 	// Get ESXi host information
@@ -92,7 +92,7 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 	migobj.logMessage("Connected to ESXi host via SSH")
 
-	// Verify VM is powered off before attempting VAAI copy
+	// Verify VM is powered off before attempting StorageAcceleratedCopy copy
 	// The VM should already be powered off by the migration flow before calling this function
 	if vminfo.State != "poweredOff" {
 		migobj.logMessage(fmt.Sprintf("VM %s is not powered off (state: %s). VM must be powered off before storage copy can proceed", vminfo.Name, vminfo.State))
@@ -103,7 +103,7 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 		migobj.logMessage("VM powered off successfully")
 	}
 
-	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with VAAI copy", vminfo.Name))
+	migobj.logMessage(fmt.Sprintf("VM %s is powered off, proceeding with StorageAcceleratedCopy copy", vminfo.Name))
 
 	// Wait for ESXi to release file locks on VMDK files after VM power off
 	// This is necessary to avoid "Failed to lock the file" errors during vmkfstools clone
@@ -116,10 +116,10 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 	for idx, vmdisk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), vmdisk.Name))
 
-		// Perform VAAI copy for this disk
-		clonedVolume, err := migobj.copyDiskViaVAAI(ctx, esxiClient, idx, &vminfo, hostIP)
+		// Perform StorageAcceleratedCopy copy for this disk
+		clonedVolume, err := migobj.copyDiskViaStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
 		if err != nil {
-			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via VAAI", vmdisk.Name)
+			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via StorageAcceleratedCopy", vmdisk.Name)
 		}
 
 		// Update the disk with the OpenStack volume info from the cloned volume
@@ -138,15 +138,15 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 		vminfo.VMDisks[idx].Path = devicePath
 		volumes = append(volumes, clonedVolume)
 
-		migobj.logMessage(fmt.Sprintf("Successfully copied disk %s via VAAI XCOPY", vmdisk.Name))
+		migobj.logMessage(fmt.Sprintf("Successfully copied disk %s via StorageAcceleratedCopy XCOPY", vmdisk.Name))
 	}
 
-	migobj.logMessage("VAAI XCOPY-based disk copy completed successfully")
+	migobj.logMessage("StorageAcceleratedCopy XCOPY-based disk copy completed successfully")
 	return volumes, nil
 }
 
-// copyDiskViaVAAI copies a single disk using VAAI XCOPY
-func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client,
+// copyDiskViaStorageAcceleratedCopy copies a single disk using StorageAcceleratedCopy XCOPY
+func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, esxiClient *esxissh.Client,
 	idx int, vminfo *vm.VMInfo, hostIP string,
 ) (storage.Volume, error) {
 	startTime := time.Now()
@@ -154,7 +154,7 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	vmDisk := vminfo.VMDisks[idx]
 
 	defer func() {
-		migobj.logMessage(fmt.Sprintf("VAAI XCOPY completed in %s (total: %s) for disk %s",
+		migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY completed in %s (total: %s) for disk %s",
 			time.Since(startTime).Round(time.Second), time.Since(startTime).Round(time.Second), vmDisk.Name))
 		migobj.StorageProvider.Disconnect()
 	}()
@@ -247,14 +247,14 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	migobj.logMessage("Waiting 10 seconds for device to be fully initialized...")
 	time.Sleep(10 * time.Second)
 
-	// Step 7: Perform VAAI XCOPY clone directly to raw device (RDM format)
+	// Step 7: Perform StorageAcceleratedCopy XCOPY clone directly to raw device (RDM format)
 	// This clones directly to the raw device without needing a datastore
-	migobj.logMessage(fmt.Sprintf("Starting VAAI XCOPY clone: %s -> %s (RDM)", vmDisk.Path, targetDevicePath))
+	migobj.logMessage(fmt.Sprintf("Starting StorageAcceleratedCopy XCOPY clone: %s -> %s (RDM)", vmDisk.Path, targetDevicePath))
 
 	cloneStart := time.Now()
 	task, err := esxiClient.StartVmkfstoolsRDMClone(vmDisk.Path, targetDevicePath)
 	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to start VAAI RDM clone for disk %s", vmDisk.Name)
+		return storage.Volume{}, errors.Wrapf(err, "failed to start StorageAcceleratedCopy RDM clone for disk %s", vmDisk.Name)
 	}
 
 	// Step 8: Monitor clone progress
@@ -280,9 +280,9 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	return targetVolume, nil
 }
 
-// ValidateVAAIPrerequisites validates that all prerequisites for VAAI copy are met
-func (migobj *Migrate) ValidateVAAIPrerequisites(ctx context.Context) error {
-	migobj.logMessage("Validating VAAI prerequisites")
+// ValidateStorageAcceleratedCopyPrerequisites validates that all prerequisites for StorageAcceleratedCopy copy are met
+func (migobj *Migrate) ValidateStorageAcceleratedCopyPrerequisites(ctx context.Context) error {
+	migobj.logMessage("Validating StorageAcceleratedCopy prerequisites")
 
 	// Check storage provider
 	if migobj.StorageProvider == nil {
@@ -301,7 +301,7 @@ func (migobj *Migrate) ValidateVAAIPrerequisites(ctx context.Context) error {
 		return errors.Wrap(err, "storage provider credential validation failed")
 	}
 
-	migobj.logMessage("VAAI prerequisites validated successfully")
+	migobj.logMessage("StorageAcceleratedCopy prerequisites validated successfully")
 	return nil
 }
 

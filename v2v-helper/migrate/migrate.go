@@ -72,7 +72,7 @@ type Migrate struct {
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
 	StorageCopyMethod       string
-	// Array credentials for vendor-based storage migration
+	// Array credentials for StorageAcceleratedCopy storage migration
 	ArrayHost         string
 	ArrayUser         string
 	ArrayPassword     string
@@ -1438,7 +1438,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != "vendor-based" {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1457,8 +1457,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
 
-	if migobj.StorageCopyMethod == "vendor-based" {
-		// Initialize storage provider if using vendor-based migration
+	if migobj.StorageCopyMethod == constants.StorageCopyMethod {
+		// Initialize storage provider if using StorageAcceleratedCopy migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
 			return errors.Wrap(err, "failed to initialize storage provider")
 		}
@@ -1467,13 +1467,13 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 				migobj.StorageProvider.Disconnect()
 			}
 		}()
-		if err := migobj.ValidateVAAIPrerequisites(ctx); err != nil {
-			return errors.Wrap(err, "VAAI prerequisites validation failed")
+		if err := migobj.ValidateStorageAcceleratedCopyPrerequisites(ctx); err != nil {
+			return errors.Wrap(err, "StorageAcceleratedCopy prerequisites validation failed")
 		}
 
 		// Perform the copy here.
-		if _, err := migobj.VAAICopyDisks(ctx, vminfo); err != nil {
-			return errors.Wrap(err, "failed to perform VAAI copy")
+		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform StorageAcceleratedCopy copy")
 		}
 
 	} else {
@@ -1710,24 +1710,24 @@ func (migobj *Migrate) LogMessage(message string) {
 	migobj.logMessage(message)
 }
 
-// InitializeStorageProvider initializes and validates the storage provider for vendor-based migration
+// InitializeStorageProvider initializes and validates the storage provider for StorageAcceleratedCopy migration
 func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
-	if migobj.StorageCopyMethod != "vendor-based" {
-		migobj.logMessage("Storage copy method is not vendor-based, skipping storage provider initialization")
+	if migobj.StorageCopyMethod != constants.StorageCopyMethod {
+		migobj.logMessage("Storage copy method is not StorageAcceleratedCopy, skipping storage provider initialization")
 		return nil
 	}
 
-	migobj.logMessage("Initializing storage provider for vendor-based migration")
+	migobj.logMessage("Initializing storage provider for StorageAcceleratedCopy migration")
 
 	// Validate required credentials
 	if migobj.ArrayHost == "" {
-		return fmt.Errorf("ARRAY_HOST is required for vendor-based storage migration")
+		return fmt.Errorf("ARRAY_HOST is required for StorageAcceleratedCopy storage migration")
 	}
 	if migobj.ArrayUser == "" {
-		return fmt.Errorf("ARRAY_USER is required for vendor-based storage migration")
+		return fmt.Errorf("ARRAY_USER is required for StorageAcceleratedCopy storage migration")
 	}
 	if migobj.ArrayPassword == "" {
-		return fmt.Errorf("ARRAY_PASSWORD is required for vendor-based storage migration")
+		return fmt.Errorf("ARRAY_PASSWORD is required for StorageAcceleratedCopy storage migration")
 	}
 
 	// Create storage access info

@@ -48,7 +48,7 @@ spec:
               arrayCredsMapping:
                 description: |-
                   ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
-                  This is used for vendor-based data copy method
+                  This is used for StorageAcceleratedCopy data copy method
                 type: string
               destination:
                 description: Destination is the destination details for the virtual
@@ -85,10 +85,10 @@ spec:
                 default: normal
                 description: |-
                   StorageCopyMethod indicates the method to use for storage migration
-                  Valid values: "normal" (default), "vendor-based"
+                  Valid values: "normal" (default), "StorageAcceleratedCopy"
                 enum:
                 - normal
-                - vendor-based
+                - StorageAcceleratedCopy
                 type: string
               storageMapping:
                 description: |-

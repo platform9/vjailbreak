@@ -290,8 +290,8 @@ runcmd:
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
-	// MigrationConditionTypeVAAI represents the condition type for VAAI XCOPY phases
-	MigrationConditionTypeVAAI corev1.PodConditionType = "VAAI"
+	// MigrationConditionTypeStorageAcceleratedCopy represents the condition type for StorageAcceleratedCopy phases
+	MigrationConditionTypeStorageAcceleratedCopy corev1.PodConditionType = "StorageAcceleratedCopy"
 
 	// MigrationConditionTypeMigrated represents the condition type for successful completion
 	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
@@ -303,7 +303,7 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:      2,
 		vjailbreakv1alpha1.VMMigrationPhaseFailed:                3,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart: 4,
-		// VAAI XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
+		// StorageAcceleratedCopy XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
 		vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi:       5,
 		vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup: 6,
 		vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume:         7,

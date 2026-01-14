@@ -59,7 +59,7 @@ const (
 	// VMMigrationPhaseUnknown indicates the migration state is unknown
 	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
 
-	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (VAAI XCOPY specific phase)
+	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (StorageAcceleratedCopy specific phase)
 	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
 	// VMMigrationPhaseCreatingInitiatorGroup indicates initiator group is being created/updated
 	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
@@ -71,8 +71,8 @@ const (
 	VMMigrationPhaseMappingVolume VMMigrationPhase = "MappingVolume"
 	// VMMigrationPhaseRescanningStorage indicates ESXi storage adapters are being rescanned
 	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
-	// VMMigrationPhaseXCOPYInProgress indicates VAAI XCOPY operation is in progress
-	VMMigrationPhaseXCOPYInProgress VMMigrationPhase = "XCOPYInProgress"
+	// VMMigrationPhaseStorageAcceleratedCopyInProgress indicates StorageAcceleratedCopy operation is in progress
+	VMMigrationPhaseStorageAcceleratedCopyInProgress VMMigrationPhase = "StorageAcceleratedCopyInProgress"
 )
 
 // MigrationSpec defines the desired state of Migration

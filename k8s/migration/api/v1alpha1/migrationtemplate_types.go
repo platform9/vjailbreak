@@ -45,12 +45,12 @@ type MigrationTemplateSpec struct {
 	// This is used for normal data copy method
 	StorageMapping string `json:"storageMapping,omitempty"`
 	// ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
-	// This is used for vendor-based data copy method
+	// This is used for StorageAcceleratedCopy data copy method
 	// +optional
 	ArrayCredsMapping string `json:"arrayCredsMapping,omitempty"`
 	// StorageCopyMethod indicates the method to use for storage migration
-	// Valid values: "normal" (default), "vendor-based"
-	// +kubebuilder:validation:Enum=normal;vendor-based
+	// Valid values: "normal" (default), "StorageAcceleratedCopy"
+	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy
 	// +kubebuilder:default:=normal
 	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
