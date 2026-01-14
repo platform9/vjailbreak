@@ -4,7 +4,7 @@ go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
-replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../../pkg/common/utils
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
@@ -15,9 +15,9 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/common/validation v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/vmware/govmomi v0.51.0
@@ -114,6 +114,6 @@ require (
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
-replace github.com/platform9/vjailbreak/common/validation => ../../common/validation
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../../pkg/common/validation
 
-replace github.com/platform9/vjailbreak/common/openstack => ../../common/openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../../pkg/common/openstack

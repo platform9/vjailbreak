@@ -2,15 +2,15 @@ module github.com/platform9/vjailbreak/v2v-helper
 
 go 1.24.10
 
-replace github.com/platform9/vjailbreak/common/utils => ../common/utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../pkg/common/utils
 
 require (
 	github.com/golang/mock v1.6.0
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
@@ -67,4 +67,4 @@ require (
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../k8s/migration
 
-replace github.com/platform9/vjailbreak/common/openstack => ../common/openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../pkg/common/openstack

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	netutils "github.com/platform9/vjailbreak/common/utils"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"go.uber.org/zap"
 )
 
