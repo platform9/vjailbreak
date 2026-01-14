@@ -1,11 +1,11 @@
-module github.com/platform9/vjailbreak/common/validation
+module github.com/platform9/vjailbreak/pkg/common/validation
 
 go 1.24.10
 
 require (
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/vmware/govmomi v0.51.0
 	k8s.io/api v0.33.3
@@ -55,7 +55,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
-	github.com/platform9/vjailbreak/common/openstack v0.0.0-00010101000000-000000000000 // indirect
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000 // indirect
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20250514181030-212ced07628a // indirect
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
@@ -97,12 +97,12 @@ require (
 	sigs.k8s.io/yaml v1.5.0 // indirect
 )
 
-replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration
+replace github.com/platform9/vjailbreak/k8s/migration => ../../../k8s/migration
 
-replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+replace github.com/platform9/vjailbreak/v2v-helper => ../../../v2v-helper
 
-replace github.com/platform9/vjailbreak/common/utils => ../utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../utils
 
-replace github.com/platform9/vjailbreak/common/openstack => ../openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../openstack
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5

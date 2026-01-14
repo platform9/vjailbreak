@@ -4,7 +4,7 @@ go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
-replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../../pkg/common/utils
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
@@ -116,6 +116,6 @@ require (
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
-replace github.com/platform9/vjailbreak/common/validation => ../../common/validation
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../../pkg/common/validation
 
-replace github.com/platform9/vjailbreak/common/openstack => ../../common/openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../../pkg/common/openstack

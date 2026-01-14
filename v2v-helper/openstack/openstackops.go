@@ -22,7 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
-	netutils "github.com/platform9/vjailbreak/common/utils"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
