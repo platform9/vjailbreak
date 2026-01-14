@@ -185,10 +185,11 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	StorageCopyMethod = "StorageAcceleratedCopy"
 	// Parser constants
 
-	ServiceFile                   = "/home/fedora/registry/service.reg"
-	NetworkFile                   = "/home/fedora/registry/network.reg"
-	WindowsInterfaceRenameCommand = `Get-NetAdapter | Where-Object { $_.MacAddress -eq "%s" } | Rename-NetAdapter -NewName "%s" `
-	WindowsFirstBootScript        = `@echo off
+	ServiceFile                      = "/home/fedora/registry/service.reg"
+	NetworkFile                      = "/home/fedora/registry/network.reg"
+	WindowsOldInterfaceRenameCommand = `Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -eq "%s" -or $_.InterfaceAlias -eq "%s" } | Rename-NetAdapter -NewName "%s-old" -PassThru`
+	WindowsInterfaceRenameCommand    = `Get-NetAdapter | Where-Object { $_.MacAddress -eq "%s" } | Rename-NetAdapter -NewName "%s" `
+	WindowsFirstBootScript           = `@echo off
 powershell.exe -ExecutionPolicy Bypass -File C:\Windows\persist-network.ps1 > C:\Windows\Temp\persist-network.log 2>&1
 `
 )

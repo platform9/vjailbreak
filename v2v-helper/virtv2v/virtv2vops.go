@@ -892,7 +892,9 @@ func GenerateWindowsNetworkPersistenceScript(disks []vm.VMDisk, useSingleDisk bo
 			for _, ip := range ipEntry {
 				if ip.IP == mapping.IP {
 					mac := strings.ReplaceAll(key, ":", "-")
-					command := fmt.Sprintf(constants.WindowsInterfaceRenameCommand, mac, mapping.InterfaceName)
+					command := fmt.Sprintf(constants.WindowsOldInterfaceRenameCommand, mapping.InterfaceName, mapping.InterfaceName, mapping.InterfaceName)
+					script += command + "\n"
+					command = fmt.Sprintf(constants.WindowsInterfaceRenameCommand, mac, mapping.InterfaceName)
 					script += command + "\n"
 				}
 			}
