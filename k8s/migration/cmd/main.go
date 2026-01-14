@@ -272,7 +272,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int,
 			return err
 		}
 	} else {
-		setupLog.Info("Array integration feature disabled, skipping ArrayCreds controller registration. Use --enable-array-integration flag to enable vendor-based storage offload (VAAI)")
+		setupLog.Info("Array integration feature disabled, skipping ArrayCreds controller registration. Set ENABLE_ARRAY_INTEGRATION=true environment variable to enable vendor-based storage offload (VAAI)")
 	}
 
 	if err := (&controller.StorageMappingReconciler{
