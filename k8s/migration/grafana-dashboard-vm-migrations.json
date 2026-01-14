@@ -78,7 +78,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(vjailbreak_active_migrations{namespace=~\"$namespace\"})",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
           "refId": "A"
         }
       ],
@@ -407,7 +407,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(vjailbreak_active_migrations{namespace=~\"$namespace\"}) or vector(0)",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0) or vector(0)",
           "refId": "A"
         }
       ],
@@ -497,7 +497,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(vjailbreak_active_migrations{namespace=~\"$namespace\"})",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
           "legendFormat": "Active Migrations",
           "refId": "A"
         }

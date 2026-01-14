@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metrics provides Prometheus metrics for tracking VM migration progress and status.
 package metrics
 
 import (
@@ -72,15 +73,6 @@ var (
 		[]string{"namespace"},
 	)
 
-	// ActiveMigrationsGauge tracks total number of active (non-terminal) migrations
-	ActiveMigrationsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "vjailbreak_active_migrations",
-			Help: "Number of currently active migrations (not in Succeeded/Failed state)",
-		},
-		[]string{"namespace"},
-	)
-
 	// MigrationInfo provides metadata about migrations
 	MigrationInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -99,16 +91,14 @@ func init() {
 		MigrationStartedTotal,
 		MigrationCompletedTotal,
 		MigrationExpectedDurationSeconds,
-		ActiveMigrationsGauge,
 		MigrationInfo,
 	)
 }
 
 // RecordMigrationStarted records when a migration starts
-func RecordMigrationStarted(migrationName, vmName, namespace, migrationPlan string, startTime time.Time) {
+func RecordMigrationStarted(migrationName, vmName, namespace, migrationPlan string) {
 	MigrationStartedTotal.WithLabelValues(vmName, namespace).Inc()
 	MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(vjailbreakv1alpha1.VMMigrationPhasePending), namespace).Set(1)
-	ActiveMigrationsGauge.WithLabelValues(namespace).Inc()
 	MigrationInfo.WithLabelValues(migrationName, vmName, namespace, migrationPlan).Set(1)
 }
 
@@ -159,9 +149,6 @@ func RecordMigrationCompleted(migrationName, vmName, namespace string, phase vja
 
 	// Clear duration metric for completed migrations
 	MigrationDurationSeconds.DeleteLabelValues(migrationName, vmName, namespace)
-
-	// Decrement active migrations
-	ActiveMigrationsGauge.WithLabelValues(namespace).Dec()
 }
 
 // SetExpectedDuration sets the expected duration threshold for alerting
@@ -170,7 +157,7 @@ func SetExpectedDuration(namespace string, durationSeconds float64) {
 }
 
 // CleanupMigrationMetrics removes all metrics for a specific migration (when CR is deleted)
-func CleanupMigrationMetrics(migrationName, vmName, namespace string) {
+func CleanupMigrationMetrics(migrationName, vmName, namespace, migrationPlan string) {
 	// Clean up all phase metrics
 	allPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -192,5 +179,5 @@ func CleanupMigrationMetrics(migrationName, vmName, namespace string) {
 	}
 
 	MigrationDurationSeconds.DeleteLabelValues(migrationName, vmName, namespace)
-	MigrationInfo.DeleteLabelValues(migrationName, vmName, namespace, "")
+	MigrationInfo.DeleteLabelValues(migrationName, vmName, namespace, migrationPlan)
 }
