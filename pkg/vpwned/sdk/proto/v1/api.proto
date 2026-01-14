@@ -587,35 +587,35 @@ service StorageArray {
             body: "*"
         };
     }
-    
+
     rpc CreateOrUpdateInitiatorGroup(CreateInitiatorGroupRequest) returns (CreateInitiatorGroupResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/storage/initiator_group"
             body: "*"
         };
     }
-    
+
     rpc MapVolumeToGroup(MapVolumeRequest) returns (MapVolumeResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/storage/map_volume"
             body: "*"
         };
     }
-    
+
     rpc UnmapVolumeFromGroup(UnmapVolumeRequest) returns (UnmapVolumeResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/storage/unmap_volume"
             body: "*"
         };
     }
-    
+
     rpc GetMappedGroups(GetMappedGroupsRequest) returns (GetMappedGroupsResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/storage/mapped_groups"
             body: "*"
         };
     }
-    
+
     rpc ResolveCinderVolume(ResolveCinderVolumeRequest) returns (ResolveCinderVolumeResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/storage/resolve_volume"
