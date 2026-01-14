@@ -63,8 +63,11 @@ import (
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
-// StorageCopyMethodVendorBased is the storage copy method value for StorageCopyMethodVendorBased VAAI copy
-const StorageCopyMethodVendorBased = "StorageCopyMethodVendorBased"
+// StorageCopyMethodVendorBased is the storage copy method value for vendor-based VAAI copy
+const (
+	StorageCopyMethodVendorBased = "vendor-based"
+	StorageCopyMethod            = "StorageCopyMethodVendorBased"
+)
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -168,7 +171,8 @@ func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *sc
 //nolint:unparam //future use
 func (r *MigrationPlanReconciler) reconcileDelete(
 	ctx context.Context,
-	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	scope *scope.MigrationPlanScope,
+) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -419,7 +423,8 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 //nolint:gocyclo
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	scope *scope.MigrationPlanScope,
+) (ctrl.Result, error) {
 	if migrationplan.Status.MigrationStatus == corev1.PodSucceeded {
 		r.ctxlog.Info("Migration already completed, skipping job reconciliation", "migrationplan", migrationplan.Name)
 		return ctrl.Result{}, nil
@@ -545,7 +550,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
 	// Check if StorageCopyMethod is StorageCopyMethodVendorBased
-	if migrationtemplate.Spec.StorageCopyMethod == "StorageCopyMethodVendorBased" {
+	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethodVendorBased {
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
@@ -718,7 +723,8 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 
 // UpdateMigrationPlanStatus updates the status of a MigrationPlan
 func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string) error {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, status corev1.PodPhase, message string,
+) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		// Get the latest version of the MigrationPlan
 		latest := &vjailbreakv1alpha1.MigrationPlan{}
@@ -750,7 +756,8 @@ func (r *MigrationPlanReconciler) UpdateMigrationPlanStatus(ctx context.Context,
 // CreateMigration creates a new Migration resource
 func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine) (*vjailbreakv1alpha1.Migration, error) {
+	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
+) (*vjailbreakv1alpha1.Migration, error) {
 	ctxlog := r.ctxlog.WithValues("vm", vm)
 	ctxlog.Info("Creating Migration for VM")
 
@@ -1030,7 +1037,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 
 // CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
-	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration, vm string) (*corev1.ConfigMap, error) {
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration, vm string,
+) (*corev1.ConfigMap, error) {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
@@ -1069,7 +1077,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
-	arraycreds *vjailbreakv1alpha1.ArrayCreds) (*corev1.ConfigMap, error) {
+	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+) (*corev1.ConfigMap, error) {
 	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
@@ -1200,8 +1209,8 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
 		}
 
-		if migrationtemplate.Spec.StorageCopyMethod == "StorageCopyMethodVendorBased" {
-			configMap.Data["STORAGE_COPY_METHOD"] = "StorageCopyMethodVendorBased"
+		if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
+			configMap.Data["STORAGE_COPY_METHOD"] = StorageCopyMethod
 			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
 		}
@@ -1231,7 +1240,8 @@ func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner meta
 func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 	namespace, credsname string,
 	isvmware bool,
-	credsobj client.Object) (bool, error) {
+	credsobj client.Object,
+) (bool, error) {
 	client := r.Client
 	err := client.Get(ctx, types.NamespacedName{Name: credsname, Namespace: namespace}, credsobj)
 	if err != nil {
@@ -1262,7 +1272,8 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
-	vm string) (openstacknws, openstackvolumetypes []string, err error) {
+	vm string,
+) (openstacknws, openstackvolumetypes []string, err error) {
 	ctxlog := r.ctxlog.WithValues("reconcileMapping", vm)
 	ctxlog.Info("Reconciling mapping for VM")
 	// Get datacenter from VM's cluster annotation
@@ -1277,9 +1288,9 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	}
 	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
 	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
-	// Skip storage mapping reconciliation for StorageCopyMethodVendorBased storage copy method
+	// Skip storage mapping reconciliation for StorageCopyMethod storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
-	if migrationtemplate.Spec.StorageCopyMethod != "StorageCopyMethodVendorBased" {
+	if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
 		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm, datacenter)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
@@ -1295,7 +1306,8 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
-	datacenter string) ([]string, error) {
+	datacenter string,
+) ([]string, error) {
 	vmnws, err := utils.GetVMwNetworks(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get network")
@@ -1356,7 +1368,8 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vm string,
-	datacenter string) ([]string, error) {
+	datacenter string,
+) ([]string, error) {
 	vmds, err := utils.GetVMwDatastore(ctx, r.Client, vmwcreds, datacenter, vm)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get datastores")
@@ -1402,11 +1415,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	parallelvms []*vjailbreakv1alpha1.VMwareMachine) error {
+	parallelvms []*vjailbreakv1alpha1.VMwareMachine,
+) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
-	var (
-		fbcm *corev1.ConfigMap
-	)
+	var fbcm *corev1.ConfigMap
 
 	nodeList := &corev1.NodeList{}
 	err := r.List(ctx, nodeList)
@@ -1591,7 +1603,6 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 
 			return r.Status().Update(ctx, currentMigration)
 		})
-
 		if err != nil {
 			return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
 		}
@@ -1651,7 +1662,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 					Name:      strings.TrimSpace(rdmDisk),
 					Namespace: migrationplan.Namespace,
 				}, rdmDiskCR)
-
 				if err != nil {
 					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 				}
@@ -1740,7 +1750,6 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 
 			return nil
 		})
-
 		if err != nil {
 			// if still failing after retries, bubble up
 			return err
@@ -1792,10 +1801,9 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
-	var (
-		validVMs, skippedVMs []*vjailbreakv1alpha1.VMwareMachine
-	)
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
+	var validVMs, skippedVMs []*vjailbreakv1alpha1.VMwareMachine
 
 	if len(migrationplan.Spec.VirtualMachines) == 0 {
 		return nil, nil, fmt.Errorf("no VMs to migrate in migration plan")

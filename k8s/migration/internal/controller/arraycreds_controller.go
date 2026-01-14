@@ -354,7 +354,6 @@ func (r *ArrayCredsReconciler) discoverDatastores(ctx context.Context, vendorTyp
 					}
 				}
 			}
-
 		}
 	}
 	return datastoresPresentInarray, nil
