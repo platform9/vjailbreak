@@ -18,7 +18,7 @@ import (
 )
 
 // ArrayCredsMappingSpec defines the desired state of ArrayCredsMapping including
-// mappings between VMware datastores and ArrayCreds for vendor-based data copy
+// mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy data copy
 type ArrayCredsMappingSpec struct {
 	// Mappings is a list of datastore to ArrayCreds mappings
 	Mappings []DatastoreArrayCredsMapping `json:"mappings"`
@@ -48,7 +48,7 @@ type ArrayCredsMappingStatus struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ArrayCredsMapping is the Schema for the arraycredsmappings API that defines
-// mappings between VMware datastores and ArrayCreds for vendor-based storage migration
+// mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy storage migration
 type ArrayCredsMapping struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

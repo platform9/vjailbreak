@@ -802,7 +802,7 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 			"ref":         ref,
 			"name":        name,
 			"volume_type": volumeType,
-			"description": "Volume managed by vjailbreak VAAI copy",
+			"description": "Volume managed by vjailbreak StorageAcceleratedCopy copy",
 			"bootable":    false,
 		},
 	}

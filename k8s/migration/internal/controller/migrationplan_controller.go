@@ -63,11 +63,8 @@ import (
 // VDDKDirectory is the path to VMware VDDK installation directory used for VM disk conversion
 const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 
-// StorageCopyMethodVendorBased is the storage copy method value for vendor-based VAAI copy
-const (
-	StorageCopyMethodVendorBased = "vendor-based"
-	StorageCopyMethod            = "StorageCopyMethodVendorBased"
-)
+// StorageCopyMethod is the storage copy method value for Storage Accelerated copy
+const StorageCopyMethod = "StorageAcceleratedCopy"
 
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
@@ -549,8 +546,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
-	// Check if StorageCopyMethod is StorageCopyMethodVendorBased
-	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethodVendorBased {
+	// Check if StorageCopyMethod is StorayAcceleratedCopy
+	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {

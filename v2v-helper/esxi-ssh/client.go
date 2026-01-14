@@ -203,7 +203,7 @@ func (c *Client) TestConnection() error {
 }
 
 // StartVmkfstoolsClone starts a vmkfstools clone operation from source VMDK to target LUN
-// This will automatically use XCOPY/VAAI hardware offload if available on the storage array
+// This will automatically use StorageAcceleratedCopy if available on the storage array
 // The clone runs in the background and returns immediately
 func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*VmkfstoolsTask, error) {
 	utils.PrintLog(fmt.Sprintf("Starting vmkfstools clone: source=%s, target=%s", sourceVMDK, targetLUN))
@@ -229,7 +229,7 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	logFile := fmt.Sprintf("/tmp/vmkfstools_clone_%d.log", time.Now().Unix())
 
 	// Run vmkfstools in background
-	// Use vmkfstools -i (clone/import) which automatically uses XCOPY on VAAI-capable storage
+	// Use vmkfstools -i (clone/import) which automatically uses XCOPY on StorageAcceleratedCopy-capable storage
 	// -d thin creates thin provisioned disk (can also use eagerzeroedthick, zeroedthick)
 	// Capture output to log file for debugging
 	command := fmt.Sprintf("vmkfstools -i %s %s -d thin >%s 2>&1 & echo $!", sourceVMDK, targetLUN, logFile)
@@ -291,7 +291,7 @@ func convertDatastorePathToFilesystemPath(datastorePath string) string {
 }
 
 // StartVmkfstoolsRDMClone starts a vmkfstools clone operation from source VMDK to target raw device (RDM)
-// This uses VAAI XCOPY to clone directly to a raw device without creating a datastore
+// This uses StorageAcceleratedCopy XCOPY to clone directly to a raw device without creating a datastore
 // Command format: vmkfstools -i <source> -d rdm:<target_device> <rdm_descriptor_vmdk>
 func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*VmkfstoolsTask, error) {
 	utils.PrintLog("=== Starting vmkfstools RDM clone ===")
@@ -494,16 +494,16 @@ func (c *Client) DeleteVMDKFiles(vmdkPath string) error {
 	return nil
 }
 
-// CheckVMKernelLogsForXCopy checks vmkernel logs for VAAI XCOPY operations
-// Returns recent log lines containing XCOPY/VAAI indicators
+// CheckVMKernelLogsForXCopy checks vmkernel logs for StorageAcceleratedCopy XCOPY operations
+// Returns recent log lines containing XCOPY/StorageAcceleratedCopy indicators
 func (c *Client) CheckVMKernelLogsForXCopy(timeWindowMinutes int) (string, error) {
 	if c.sshClient == nil {
 		return "", fmt.Errorf("not connected to ESXi host")
 	}
 
 	// Search for XCOPY-related keywords in vmkernel logs
-	// Common indicators: "XCOPY", "VAAI", "ExtendedCopy", "vmw_ahci"
-	cmd := fmt.Sprintf("tail -n 1000 /var/log/vmkernel.log | grep -i -E 'xcopy|vaai|extendedcopy|clone' | tail -n 50")
+	// Common indicators: "XCOPY", "StorageAcceleratedCopy", "ExtendedCopy", "vmw_ahci"
+	cmd := fmt.Sprintf("tail -n 1000 /var/log/vmkernel.log | grep -i -E 'xcopy|StorageAcceleratedCopy|extendedcopy|clone' | tail -n 50")
 
 	output, err := c.ExecuteCommand(cmd)
 	if err != nil {
@@ -513,18 +513,18 @@ func (c *Client) CheckVMKernelLogsForXCopy(timeWindowMinutes int) (string, error
 	return output, nil
 }
 
-// CheckStorageIOStats checks storage I/O statistics to verify VAAI usage
+// CheckStorageIOStats checks storage I/O statistics to verify StorageAcceleratedCopy usage
 func (c *Client) CheckStorageIOStats(deviceName string) (string, error) {
 	if c.sshClient == nil {
 		return "", fmt.Errorf("not connected to ESXi host")
 	}
 
-	// Get VAAI statistics for a device
-	cmd := fmt.Sprintf("esxcli storage core device vaai status get -d %s", deviceName)
+	// Get StorageAcceleratedCopy statistics for a device
+	cmd := fmt.Sprintf("esxcli storage core device StorageAcceleratedCopy status get -d %s", deviceName)
 
 	output, err := c.ExecuteCommand(cmd)
 	if err != nil {
-		return "", fmt.Errorf("failed to get VAAI stats: %w", err)
+		return "", fmt.Errorf("failed to get StorageAcceleratedCopy stats: %w", err)
 	}
 
 	return output, nil
