@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
@@ -194,4 +195,20 @@ func NewVjbNet() *VjbNet {
 		UseProxyFromEnv: true,
 		proxyCfg:        httpproxy.FromEnvironment(),
 	}
+}
+
+// NormalizeVCenterURL normalizes a vCenter host URL
+func NormalizeVCenterURL(host string) (*url.URL, error) {
+	rawHost := strings.TrimSpace(host)
+
+	if !strings.Contains(rawHost, "://") {
+		rawHost = "https://" + rawHost
+	}
+
+	u, err := url.Parse(rawHost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	return u.JoinPath("sdk"), nil
 }
