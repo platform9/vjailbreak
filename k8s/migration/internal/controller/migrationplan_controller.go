@@ -417,7 +417,11 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
-	allVMNames := []string{}
+	totalVMs := 0
+	for _, group := range migrationplan.Spec.VirtualMachines {
+		totalVMs += len(group)
+	}
+	allVMNames := make([]string, 0, totalVMs)
 	for _, group := range migrationplan.Spec.VirtualMachines {
 		allVMNames = append(allVMNames, group...)
 	}
@@ -1848,8 +1852,14 @@ func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm str
 	return datacenter, nil
 }
 
-// markMigrationValidationFailed updates a Migration status to ValidationFailed
-func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, vmName string, message string) {
+// updateMigrationPhaseWithRetry updates a Migration's phase and condition with retry logic
+func (r *MigrationPlanReconciler) updateMigrationPhaseWithRetry(
+	ctx context.Context,
+	migrationObj *vjailbreakv1alpha1.Migration,
+	phase vjailbreakv1alpha1.VMMigrationPhase,
+	condition corev1.PodCondition,
+	identifier string,
+) error {
 	migration := &vjailbreakv1alpha1.Migration{}
 	pollErr := wait.PollUntilContextTimeout(
 		ctx,
@@ -1870,55 +1880,7 @@ func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Cont
 	)
 
 	if pollErr != nil {
-		r.ctxlog.Error(pollErr, "Migration object never appeared in API server, cannot mark as failed", "vm", vmName)
-		return
-	}
-
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &vjailbreakv1alpha1.Migration{}
-		if err := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latest); err != nil {
-			return err
-		}
-
-		latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-		latest.Status.Conditions = append(latest.Status.Conditions, corev1.PodCondition{
-			Type:               "Validated",
-			Status:             corev1.ConditionFalse,
-			Reason:             "VMValidationFailed",
-			Message:            message,
-			LastTransitionTime: metav1.Now(),
-		})
-		return r.Status().Update(ctx, latest)
-	})
-
-	if retryErr != nil {
-		r.ctxlog.Error(retryErr, "Failed to mark VM as ValidationFailed after retries", "vm", vmName)
-	}
-}
-
-// markMigrationFailed updates a Migration status to Failed
-func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, message string) error {
-	migration := &vjailbreakv1alpha1.Migration{}
-	pollErr := wait.PollUntilContextTimeout(
-		ctx,
-		200*time.Millisecond,
-		5*time.Second,
-		true,
-		func(pctx context.Context) (bool, error) {
-			getErr := r.Get(pctx, types.NamespacedName{
-				Name:      migrationObj.Name,
-				Namespace: migrationObj.Namespace,
-			}, migration)
-
-			if apierrors.IsNotFound(getErr) {
-				return false, nil
-			}
-			return getErr == nil, getErr
-		},
-	)
-
-	if pollErr != nil {
-		r.ctxlog.Error(pollErr, "Migration object never appeared in API server, cannot mark as failed", "migration", migrationObj.Name)
+		r.ctxlog.Error(pollErr, "Migration object never appeared in API server", "identifier", identifier)
 		return pollErr
 	}
 
@@ -1928,21 +1890,39 @@ func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migra
 			return err
 		}
 
-		latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
-		latest.Status.Conditions = append(latest.Status.Conditions, corev1.PodCondition{
-			Type:               "Failed",
-			Status:             corev1.ConditionTrue,
-			Reason:             "MigrationFailed",
-			Message:            message,
-			LastTransitionTime: metav1.Now(),
-		})
+		latest.Status.Phase = phase
+		latest.Status.Conditions = append(latest.Status.Conditions, condition)
 		return r.Status().Update(ctx, latest)
 	})
 
 	if retryErr != nil {
-		r.ctxlog.Error(retryErr, "Failed to mark Migration as Failed after retries", "migration", migrationObj.Name)
+		r.ctxlog.Error(retryErr, "Failed to update migration phase after retries", "phase", phase, "identifier", identifier)
 		return retryErr
 	}
 
 	return nil
+}
+
+// markMigrationValidationFailed updates a Migration status to ValidationFailed
+func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, vmName string, message string) {
+	condition := corev1.PodCondition{
+		Type:               "Validated",
+		Status:             corev1.ConditionFalse,
+		Reason:             "VMValidationFailed",
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
+	r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed, condition, vmName)
+}
+
+// markMigrationFailed updates a Migration status to Failed
+func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, message string) error {
+	condition := corev1.PodCondition{
+		Type:               "Failed",
+		Status:             corev1.ConditionTrue,
+		Reason:             "MigrationFailed",
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
+	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
 }
