@@ -225,6 +225,8 @@ func (r *ArrayCredsReconciler) reconcileDelete(ctx context.Context, scope *scope
 
 // validateArrayCredentials validates storage array credentials using the storage SDK
 func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo) error {
+	ctxlog := log.FromContext(ctx)
+
 	// Get the storage provider
 	provider, err := storagesdk.NewStorageProvider(vendorType)
 	if err != nil {
