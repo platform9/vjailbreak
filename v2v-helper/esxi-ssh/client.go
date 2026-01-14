@@ -520,7 +520,7 @@ func (c *Client) CheckStorageIOStats(deviceName string) (string, error) {
 	}
 
 	// Get StorageAcceleratedCopy statistics for a device
-	cmd := fmt.Sprintf("esxcli storage core device StorageAcceleratedCopy status get -d %s", deviceName)
+	cmd := fmt.Sprintf("esxcli storage core device vaai status get -d %s", deviceName)
 
 	output, err := c.ExecuteCommand(cmd)
 	if err != nil {

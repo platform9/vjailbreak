@@ -546,7 +546,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
-	// Check if StorageCopyMethod is StorayAcceleratedCopy
+	// Check if StorageCopyMethod is StorageAcceleratedCopy
 	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
