@@ -4,16 +4,17 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
-import { useState, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { LogsDrawer } from '.'
 import { Condition, Migration, Phase } from '../api/migrations'
+import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
 import MigrationProgress from '../components/MigrationProgress'
 import { QueryObserverResult } from '@tanstack/react-query'
 import { RefetchOptions } from '@tanstack/react-query'
-import { calculateTimeElapsed } from 'src/utils'
+import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
@@ -31,6 +32,8 @@ const pulse = keyframes`
     opacity: 1;
   }
 `
+import { TooltipContent, ClickableTableCell } from 'src/components'
+import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 
 const STATUS_ORDER = {
   Running: 0,
@@ -406,6 +409,8 @@ export default function MigrationsTable({
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
   const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null)
+  const [migrationDetailModalOpen, setMigrationDetailModalOpen] = useState(false)
+  const [selectedMigrationDetail, setSelectedMigrationDetail] = useState<Migration | null>(null)
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
   const [logsDrawerOpen, setLogsDrawerOpen] = useState(false)
@@ -415,9 +420,9 @@ export default function MigrationsTable({
     migrationName?: string
   } | null>(null)
 
-  const handleSelectionChange = (newSelection: GridRowSelectionModel) => {
+  const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
-  }
+  }, [])
 
   const filteredMigrations = useMemo(() => {
     if (!migrations) return []
@@ -459,13 +464,218 @@ export default function MigrationsTable({
     }
   }, [migrations, statusFilter, dateFilter])
 
-  const selectedMigrations =
-    migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || []
-  const eligibleForCutover = selectedMigrations.filter(
-    (migration) => migration.status?.phase === Phase.AwaitingAdminCutOver
+  const destinationByPlanQuery = useMigrationPlanDestinationsQuery(filteredMigrations)
+
+  const destinationByPlan = destinationByPlanQuery.data || {}
+
+  const columns: GridColDef[] = useMemo(() => {
+    return [
+      {
+        field: 'name',
+        headerName: 'Name',
+        valueGetter: (_, row) => row.spec?.vmName,
+        flex: 0.7,
+        renderCell: (params) => {
+          const name = (params.value as string) || params.row.spec?.vmName || '-'
+          const namespace = params.row.metadata?.namespace
+          const planName = (params.row.spec as any)?.migrationPlan || (params.row.metadata as any)?.labels?.migrationplan
+          const key = namespace && planName ? `${namespace}::${planName}` : ''
+          const destination = key ? destinationByPlan[key] : null
+
+          const destinationTenant = destination?.destinationTenant || 'N/A'
+          const destinationCluster = destination?.destinationCluster || 'N/A'
+
+          const tooltipTitle = (
+            <TooltipContent title="Destination" lines={[`Tenant: ${destinationTenant}`, `Cluster: ${destinationCluster}`]} />
+          )
+
+          return (
+            <ClickableTableCell
+              tooltipTitle={tooltipTitle}
+              onClick={() => {
+                params.row.setSelectedMigrationDetail?.(params.row)
+                params.row.setMigrationDetailModalOpen?.(true)
+              }}
+            >
+              {name}
+            </ClickableTableCell>
+          )
+        }
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        valueGetter: (_, row) => row?.status?.phase || 'Pending',
+        flex: 0.5,
+        sortComparator: (v1, v2) => {
+          const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER
+          const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER
+          return order1 - order2
+        }
+      },
+      {
+        field: 'agent',
+        headerName: 'Agent',
+        valueGetter: (_, row) => row.status?.agentName,
+        flex: 1
+      },
+      {
+        field: 'timeElapsed',
+        headerName: 'Time Elapsed',
+        valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
+        flex: 0.8,
+        renderCell: (params) => {
+          const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
+          const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
+          return (
+            <Tooltip title={tooltip} arrow>
+              <Typography
+                variant="body2"
+                sx={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}
+              >
+                {String(params.value ?? '-')}
+              </Typography>
+            </Tooltip>
+          )
+        }
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Created At',
+        valueGetter: (_, row) => formatDateTime(row.metadata?.creationTimestamp),
+        flex: 1
+      },
+      {
+        field: 'status.conditions',
+        headerName: 'Progress',
+        valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+        flex: 2,
+        renderCell: (params) => {
+          const phase = params.row?.status?.phase
+          const conditions = params.row?.status?.conditions
+          return conditions ? (
+            <MigrationProgress phase={phase} progressText={getProgressText(phase, conditions)} />
+          ) : null
+        }
+      },
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        flex: 1,
+        renderCell: (params) => {
+          const phase = params.row?.status?.phase
+          const initiateCutover = params.row?.spec?.initiateCutover
+          const migrationName = params.row?.metadata?.name
+          const namespace = params.row?.metadata?.namespace
+          const showRetryButton = phase === Phase.Failed
+
+          const handleRetry = async () => {
+            if (!migrationName || !namespace) {
+              console.error('Cannot retry: migration name or namespace is missing.')
+              return
+            }
+            try {
+              await deleteMigration(migrationName, namespace)
+              params.row.refetchMigrations?.()
+            } catch (error) {
+              console.error(`Failed to delete migration '${migrationName}' for retry:`, error)
+            }
+          }
+
+          const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
+
+          return (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {params.row.spec?.podRef && (
+                <Tooltip title="View pod logs">
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      params.row.setSelectedPod({
+                        name: params.row.spec.podRef,
+                        namespace: params.row.metadata?.namespace || '',
+                        migrationName: params.row.metadata?.name || ''
+                      })
+                      params.row.setLogsDrawerOpen(true)
+                    }}
+                    size="small"
+                    sx={{
+                      cursor: 'pointer',
+                      position: 'relative'
+                    }}
+                  >
+                    <ListAltIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+
+              {showAdminCutover && (
+                <TriggerAdminCutoverButton
+                  migrationName={migrationName}
+                  onSuccess={() => {
+                    params.row.refetchMigrations?.()
+                  }}
+                  onError={(error) => {
+                    console.error('Failed to trigger cutover:', error)
+                  }}
+                />
+              )}
+
+              {showRetryButton && (
+                <Tooltip title="Retry migration">
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRetry()
+                    }}
+                    size="small"
+                    sx={{
+                      cursor: 'pointer',
+                      position: 'relative'
+                    }}
+                  >
+                    <ReplayIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+
+              <Tooltip title={'Delete migration'}>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    params.row.onDelete(params.row.metadata?.name)
+                  }}
+                  size="small"
+                  sx={{
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )
+        }
+      }
+    ]
+  }, [destinationByPlan])
+
+  const selectedMigrations = useMemo(
+    () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],
+    [migrations, selectedRows]
+  )
+  const eligibleForCutover = useMemo(
+    () => selectedMigrations.filter((migration) => migration.status?.phase === Phase.AwaitingAdminCutOver),
+    [selectedMigrations]
   )
 
-  const handleBulkAdminCutover = async () => {
+  const handleBulkAdminCutover = useCallback(async () => {
     if (eligibleForCutover.length === 0) return
 
     setBulkCutoverError(null)
@@ -497,23 +707,36 @@ export default function MigrationsTable({
     } finally {
       setIsBulkCutoverLoading(false)
     }
-  }
+  }, [eligibleForCutover, refetchMigrations])
 
-  const handleCloseBulkCutoverDialog = () => {
+  const handleCloseBulkCutoverDialog = useCallback(() => {
     if (!isBulkCutoverLoading) {
       setBulkCutoverDialogOpen(false)
       setBulkCutoverError(null)
     }
-  }
+  }, [isBulkCutoverLoading])
 
-  const migrationsWithActions =
-    filteredMigrations?.map((migration) => ({
-      ...migration,
-      onDelete: onDeleteMigration,
+  const migrationsWithActions = useMemo(
+    () =>
+      filteredMigrations?.map((migration) => ({
+        ...migration,
+        onDelete: onDeleteMigration,
+        refetchMigrations,
+        setSelectedPod,
+        setLogsDrawerOpen,
+        setMigrationDetailModalOpen,
+        setSelectedMigrationDetail
+      })) || [],
+    [
+      filteredMigrations,
+      onDeleteMigration,
       refetchMigrations,
-      setSelectedPod,
-      setLogsDrawerOpen
-    })) || []
+      setLogsDrawerOpen,
+      setMigrationDetailModalOpen,
+      setSelectedMigrationDetail,
+      setSelectedPod
+    ]
+  )
 
   return (
     <>
@@ -528,6 +751,11 @@ export default function MigrationsTable({
           pagination: { paginationModel: { page: 0, pageSize: 25 } },
           sorting: {
             sortModel: [{ field: 'status', sort: 'asc' }]
+          },
+          columns: {
+            columnVisibilityModel: {
+              createdAt: false
+            }
           }
         }}
         pageSizeOptions={[25, 50, 100]}
@@ -598,6 +826,12 @@ export default function MigrationsTable({
         podName={selectedPod?.name || ''}
         namespace={selectedPod?.namespace || ''}
         migrationName={selectedPod?.migrationName || ''}
+      />
+
+      <MigrationDetailModal
+        open={migrationDetailModalOpen}
+        migration={selectedMigrationDetail}
+        onClose={() => setMigrationDetailModalOpen(false)}
       />
     </>
   )

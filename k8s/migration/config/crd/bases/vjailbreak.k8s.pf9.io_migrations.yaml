@@ -164,6 +164,13 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - ConnectingToESXi
+                - CreatingInitiatorGroup
+                - CreatingVolume
+                - ImportingToCinder
+                - MappingVolume
+                - RescanningStorage
+                - XCOPYInProgress
                 type: string
               totalDisks:
                 description: TotalDisks is the total number of disks to be migrated

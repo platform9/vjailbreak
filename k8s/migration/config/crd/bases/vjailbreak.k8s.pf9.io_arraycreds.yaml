@@ -18,6 +18,15 @@ spec:
     - jsonPath: .spec.vendorType
       name: Vendor
       type: string
+    - jsonPath: .spec.openstackMapping.volumeType
+      name: VolumeType
+      type: string
+    - jsonPath: .spec.openstackMapping.cinderBackendName
+      name: Backend
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     - jsonPath: .status.arrayValidationStatus
       name: Status
       type: string
@@ -27,8 +36,8 @@ spec:
         description: |-
           ArrayCreds is the Schema for the storage array credentials API that defines authentication
           and connection details for storage arrays. It provides a secure way to store and validate
-          storage array credentials for use in migration operations, supporting multiple vendors including
-          Pure Storage, NetApp ONTAP, HPE Alletra, and others.
+          storage array credentials for use in migration operations, supporting multiple vendors, but as of now
+          We have qualified pure storage flash array.
         properties:
           apiVersion:
             description: |-
@@ -50,6 +59,35 @@ spec:
           spec:
             description: ArrayCredsSpec defines the desired state of ArrayCreds
             properties:
+              autoDiscovered:
+                description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
+                  from OpenStack
+                type: boolean
+              openstackMapping:
+                description: OpenStackMapping is the openstack mapping for this array
+                properties:
+                  cinderBackendName:
+                    description: |-
+                      CinderBackendName is the Cinder backend name for this mapping
+                      This is the backend configured in cinder.conf (e.g., "pure-01")
+                    type: string
+                  cinderBackendPool:
+                    description: CinderBackendPool is the pool name within the backend
+                      (optional)
+                    type: string
+                  cinderHost:
+                    description: |-
+                      CinderHost is the full Cinder host string for manage API
+                      Format: hostname@backend or hostname@backend#pool (e.g., "pcd-ce@pure-iscsi-1#vt-pure-iscsi")
+                    type: string
+                  volumeType:
+                    description: VolumeType is the Cinder volume type associated with
+                      this mapping
+                    type: string
+                required:
+                - cinderBackendName
+                - volumeType
+                type: object
               secretRef:
                 description: SecretRef is the reference to the Kubernetes secret holding
                   storage array credentials
@@ -109,8 +147,47 @@ spec:
                   the storage array validation
                 type: string
               arrayValidationStatus:
-                description: ArrayValidationStatus is the status of the storage array
-                  validation
+                description: |-
+                  ArrayValidationStatus is the status of the storage array validation
+                  Possible values: Pending, Succeeded, Failed, AwaitingCredentials
+                type: string
+              dataStore:
+                description: DataStore is the list of datastores associated with this
+                  array
+                items:
+                  description: DatastoreInfo holds datastore information including
+                    backing device NAA
+                  properties:
+                    backingNAA:
+                      type: string
+                    backingUUID:
+                      type: string
+                    capacity:
+                      format: int64
+                      type: integer
+                    freeSpace:
+                      format: int64
+                      type: integer
+                    moID:
+                      type: string
+                    name:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - backingNAA
+                  - backingUUID
+                  - capacity
+                  - freeSpace
+                  - moID
+                  - name
+                  - type
+                  type: object
+                type: array
+              phase:
+                description: |-
+                  Phase indicates the current phase of the ArrayCreds
+                  Possible values: Discovered, Configured, Validated, Failed
                 type: string
             type: object
         type: object

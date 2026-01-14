@@ -43,7 +43,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 		return nil, errors.Wrap(err, "failed to get vCenter credentials")
 	}
 
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
@@ -209,11 +209,11 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 		if existingCluster.Annotations == nil {
 			existingCluster.Annotations = make(map[string]string)
 		}
-		needsUpdate := existingCluster.Spec.Name != cluster.Name || 
-			!reflect.DeepEqual(existingCluster.Labels, vmwareCluster.Labels) || 
+		needsUpdate := existingCluster.Spec.Name != cluster.Name ||
+			!reflect.DeepEqual(existingCluster.Labels, vmwareCluster.Labels) ||
 			!reflect.DeepEqual(existingCluster.Annotations, vmwareCluster.Annotations) ||
 			!reflect.DeepEqual(existingCluster.Spec.Hosts, vmwareCluster.Spec.Hosts)
-		
+
 		if needsUpdate {
 			log.Info("Updating VMware cluster", "cluster", cluster.Name, "datacenter", cluster.Datacenter, "hasAnnotations", len(vmwareCluster.Annotations) > 0)
 			existingCluster.Spec = vmwareCluster.Spec
@@ -273,7 +273,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 		return errors.Wrap(err, "failed to get vCenter credentials")
 	}
 
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
@@ -401,7 +401,7 @@ func FetchStandAloneESXHostsFromVcenter(ctx context.Context, scope *scope.VMware
 	}
 
 	// Get finder for vCenter
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
@@ -454,7 +454,7 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 		return errors.Wrap(err, "failed to get vCenter credentials")
 	}
 
-	_, finder, err := getFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
+	_, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get finder for vCenter credentials")
 	}
