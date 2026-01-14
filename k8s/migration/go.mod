@@ -18,7 +18,7 @@ require (
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260109170433-38ba015c1d27
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260113094714-8b5cc668b1b6
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/zap v1.27.0
@@ -38,6 +38,7 @@ require (
 	github.com/canonical/gomaasclient v0.12.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/devans10/pugo/flasharray v0.0.0-20241116160615-6bb8c469c9a0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fatih/color v1.18.0 // indirect

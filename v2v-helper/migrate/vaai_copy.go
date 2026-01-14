@@ -124,11 +124,11 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 		// Update the disk with the OpenStack volume info from the cloned volume
 		vminfo.VMDisks[idx].OpenstackVol = &cindervolumes.Volume{
-			ID:   clonedVolume.Id,
+			ID:   clonedVolume.OpenstackVol.ID,
 			Name: clonedVolume.Name,
 			Size: int(clonedVolume.Size / (1024 * 1024 * 1024)), // Convert bytes to GB
 		}
-		migobj.logMessage(fmt.Sprintf("Updated disk %s with Cinder volume ID: %s", vmdisk.Name, clonedVolume.Id))
+		migobj.logMessage(fmt.Sprintf("Updated disk %s with Cinder volume ID: %s", vmdisk.Name, clonedVolume.OpenstackVol.ID))
 
 		// Attach the Cinder volume to get the device path
 		devicePath, err := migobj.AttachVolume(ctx, vminfo.VMDisks[idx])
@@ -147,7 +147,8 @@ func (migobj *Migrate) VAAICopyDisks(ctx context.Context, vminfo vm.VMInfo) ([]s
 
 // copyDiskViaVAAI copies a single disk using VAAI XCOPY
 func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.Client,
-	idx int, vminfo *vm.VMInfo, hostIP string) (storage.Volume, error) {
+	idx int, vminfo *vm.VMInfo, hostIP string,
+) (storage.Volume, error) {
 	startTime := time.Now()
 
 	vmDisk := vminfo.VMDisks[idx]
@@ -185,7 +186,6 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 	sanitizedName := sanitizeVolumeName(vminfo.Name + "-" + vmDisk.Name)
 	migobj.logMessage(fmt.Sprintf("Creating target volume %s (sanitized from: %s) with size %d bytes (%d GB)",
 		sanitizedName, vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
-
 	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, diskSizeBytes)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %s", sanitizedName)
@@ -214,7 +214,9 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		Name: cinderVolumeName, // Use the Cinder-renamed volume name
 		NAA:  targetVolume.NAA,
 		Size: targetVolume.Size,
-		Id:   cinderVolumeId,
+		OpenstackVol: storage.OpenstackVolume{
+			ID: cinderVolumeId,
+		},
 	}
 	_, err = migobj.StorageProvider.MapVolumeToGroup(initiatorGroup, targetVol, mappingContext)
 	if err != nil {
@@ -271,7 +273,9 @@ func (migobj *Migrate) copyDiskViaVAAI(ctx context.Context, esxiClient *esxissh.
 		cloneDuration.Round(time.Second), totalDuration.Round(time.Second), vmDisk.Name))
 
 	// Update the target volume with Cinder info
-	targetVolume.Id = cinderVolumeId
+	targetVolume.OpenstackVol = storage.OpenstackVolume{
+		ID: cinderVolumeId,
+	}
 
 	return targetVolume, nil
 }

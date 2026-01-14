@@ -44,8 +44,8 @@ spec:
         description: |-
           ArrayCreds is the Schema for the storage array credentials API that defines authentication
           and connection details for storage arrays. It provides a secure way to store and validate
-          storage array credentials for use in migration operations, supporting multiple vendors including
-          Pure Storage, NetApp ONTAP, HPE Alletra, and others.
+          storage array credentials for use in migration operations, supporting multiple vendors, but as of now
+          We have qualified pure storage flash array.
         properties:
           apiVersion:
             description: |-

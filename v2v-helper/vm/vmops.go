@@ -254,7 +254,6 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 					}
 				}
 			}
-
 			vmdisks = append(vmdisks, VMDisk{
 				Name:        disk.DeviceInfo.GetDescription().Label,
 				Size:        disk.CapacityInBytes,

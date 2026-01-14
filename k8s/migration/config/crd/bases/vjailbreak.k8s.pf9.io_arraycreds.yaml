@@ -18,6 +18,15 @@ spec:
     - jsonPath: .spec.vendorType
       name: Vendor
       type: string
+    - jsonPath: .spec.openstackMapping.volumeType
+      name: VolumeType
+      type: string
+    - jsonPath: .spec.openstackMapping.cinderBackendName
+      name: Backend
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     - jsonPath: .status.arrayValidationStatus
       name: Status
       type: string
@@ -27,8 +36,8 @@ spec:
         description: |-
           ArrayCreds is the Schema for the storage array credentials API that defines authentication
           and connection details for storage arrays. It provides a secure way to store and validate
-          storage array credentials for use in migration operations, supporting multiple vendors including
-          Pure Storage, NetApp ONTAP, HPE Alletra, and others.
+          storage array credentials for use in migration operations, supporting multiple vendors, but as of now
+          We have qualified pure storage flash array.
         properties:
           apiVersion:
             description: |-
@@ -146,22 +155,33 @@ spec:
                 description: DataStore is the list of datastores associated with this
                   array
                 items:
-                  description: DatastoreInfo holds information about a datastore associated
-                    with an array
+                  description: DatastoreInfo holds datastore information including
+                    backing device NAA
                   properties:
-                    backingDevice:
-                      description: BackingDevice is the storage array backing device
-                        (e.g., NAA ID)
+                    backingNAA:
                       type: string
-                    capacityGB:
-                      description: CapacityGB is the datastore capacity in GB
+                    backingUUID:
+                      type: string
+                    capacity:
                       format: int64
                       type: integer
+                    freeSpace:
+                      format: int64
+                      type: integer
+                    moID:
+                      type: string
                     name:
-                      description: Name is the datastore name
+                      type: string
+                    type:
                       type: string
                   required:
+                  - backingNAA
+                  - backingUUID
+                  - capacity
+                  - freeSpace
+                  - moID
                   - name
+                  - type
                   type: object
                 type: array
               phase:

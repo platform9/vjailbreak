@@ -124,11 +124,6 @@ func (migobj *Migrate) logMessage(message string) {
 	utils.PrintLog(message)
 }
 
-// LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.
-func (migobj *Migrate) LogMessage(message string) {
-	migobj.logMessage(message)
-}
-
 // This function creates volumes in OpenStack and attaches them to the helper vm
 func (migobj *Migrate) CreateVolumes(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	openstackops := migobj.Openstackclients
@@ -1206,7 +1201,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	// Wait for VM to become active
 	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
 		migobj.logMessage(fmt.Sprintf("Waiting for VM to become active: %d/%d retries\n", i+1, vjailbreakSettings.VMActiveWaitRetryLimit))
-		active, err := openstackops.WaitUntilVMActive(newVM.ID)
+		active, err := openstackops.WaitUntilVMActive(ctx, newVM.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to wait for VM to become active")
 		}
@@ -1457,11 +1452,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to reserve ports for VM")
 	}
-
-	// Get vjailbreak settings for cleanup and other operations
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
+		return errors.Wrap(err, "failed to get vcenter settings")
 	}
 
 	if migobj.StorageCopyMethod == "vendor-based" {
@@ -1474,8 +1467,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 				migobj.StorageProvider.Disconnect()
 			}
 		}()
-
-		// Perform pre requisites for vaai
 		if err := migobj.ValidateVAAIPrerequisites(ctx); err != nil {
 			return errors.Wrap(err, "VAAI prerequisites validation failed")
 		}
@@ -1486,6 +1477,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 
 	} else {
+
 		// Create and Add Volumes to Host
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
@@ -1494,7 +1486,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
-			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vjailbreakSettings)
+			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
 			return errors.Wrap(err, "CBT Failure")
 		}
 
@@ -1506,18 +1498,13 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Live Replicate Disks
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 		if err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vjailbreakSettings); cleanuperror != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
 				// combine both errors
 				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
 			return errors.Wrap(err, "failed to live replicate disks")
 		}
 	}
-	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vcenter settings")
-	}
-
 	// Convert the Boot Disk to raw format
 	err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
@@ -1716,6 +1703,11 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
+}
+
+// LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.
+func (migobj *Migrate) LogMessage(message string) {
+	migobj.logMessage(message)
 }
 
 // InitializeStorageProvider initializes and validates the storage provider for vendor-based migration

@@ -57,6 +57,7 @@ var (
 )
 
 func GetCurrentInstanceUUID() (string, error) {
+
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
@@ -437,8 +438,9 @@ func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string)
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
 	err := ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
 	if err != nil {
-		return fmt.Errorf("failed to delete port: %s", err)
+		return fmt.Errorf("failed to delete port %s: %s", portID, err)
 	}
+	PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
 	return nil
 }
 
@@ -776,8 +778,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	return server, nil
 }
 
-func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
-	result, err := servers.Get(context.Background(), osclient.ComputeClient, vmID).Extract()
+func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID string) (bool, error) {
+	result, err := servers.Get(ctx, osclient.ComputeClient, vmID).Extract()
 	if err != nil {
 		return false, fmt.Errorf("failed to get server: %s", err)
 	}
@@ -785,74 +787,6 @@ func (osclient *OpenStackClients) WaitUntilVMActive(vmID string) (bool, error) {
 		return false, fmt.Errorf("server is not active")
 	}
 	return true, nil
-}
-
-func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error) {
-	if len(groupNames) == 0 {
-		return nil, nil
-	}
-
-	if projectName == "" {
-		return nil, fmt.Errorf("projectName is required for security group lookup")
-	}
-
-	// check if string is UUID
-	isUUID := func(s string) bool {
-		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-		return re.MatchString(s)
-	}
-
-	// build a map name -> ID
-	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create identity client: %w", err)
-	}
-
-	listOpts := projects.ListOpts{Name: projectName}
-	allPages, err := projects.List(identityClient, listOpts).AllPages(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
-	}
-	allProjects, err := projects.ExtractProjects(allPages)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract projects: %w", err)
-	}
-	if len(allProjects) == 0 {
-		return nil, fmt.Errorf("no project found with name %s", projectName)
-	}
-	projectID := allProjects[0].ID
-
-	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
-		TenantID: projectID,
-	}).AllPages(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list security groups: %w", err)
-	}
-	allGroups, err := groups.ExtractGroups(allPages)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract security groups: %w", err)
-	}
-
-	nameToIDMap := make(map[string]string)
-	for _, group := range allGroups {
-		nameToIDMap[group.Name] = group.ID
-	}
-
-	var groupIDs []string
-	for _, g := range groupNames {
-		if isUUID(g) {
-			groupIDs = append(groupIDs, g)
-			continue
-		}
-
-		id, found := nameToIDMap[g]
-		if !found {
-			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", g, projectName)
-		}
-		groupIDs = append(groupIDs, id)
-	}
-
-	return groupIDs, nil
 }
 
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
@@ -916,6 +850,75 @@ func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[stri
 
 	return &volume, nil
 }
+
+func (osclient *OpenStackClients) GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error) {
+	if len(groupNames) == 0 {
+		return nil, nil
+	}
+
+	if projectName == "" {
+		return nil, fmt.Errorf("projectName is required for security group lookup")
+	}
+
+	//check if string is UUID
+	isUUID := func(s string) bool {
+		re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+		return re.MatchString(s)
+	}
+
+	//build a map name -> ID
+	identityClient, err := openstack.NewIdentityV3(osclient.NetworkingClient.ProviderClient, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity client: %w", err)
+	}
+
+	listOpts := projects.ListOpts{Name: projectName}
+	allPages, err := projects.List(identityClient, listOpts).AllPages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects with name %s: %w", projectName, err)
+	}
+	allProjects, err := projects.ExtractProjects(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract projects: %w", err)
+	}
+	if len(allProjects) == 0 {
+		return nil, fmt.Errorf("no project found with name %s", projectName)
+	}
+	projectID := allProjects[0].ID
+
+	allPages, err = groups.List(osclient.NetworkingClient, groups.ListOpts{
+		TenantID: projectID,
+	}).AllPages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list security groups: %w", err)
+	}
+	allGroups, err := groups.ExtractGroups(allPages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract security groups: %w", err)
+	}
+
+	nameToIDMap := make(map[string]string)
+	for _, group := range allGroups {
+		nameToIDMap[group.Name] = group.ID
+	}
+
+	var groupIDs []string
+	for _, g := range groupNames {
+		if isUUID(g) {
+			groupIDs = append(groupIDs, g)
+			continue
+		}
+
+		id, found := nameToIDMap[g]
+		if !found {
+			return nil, fmt.Errorf("security group with name '%s' not found in project '%s'", g, projectName)
+		}
+		groupIDs = append(groupIDs, id)
+	}
+
+	return groupIDs, nil
+}
+
 func (osclient *OpenStackClients) GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching server groups for project %s", projectName))
 

@@ -12,7 +12,7 @@ require (
 	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
 	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260109170433-38ba015c1d27
+	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260113094714-8b5cc668b1b6
 	github.com/prometheus-community/pro-bing v0.4.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vmware/govmomi v0.51.0

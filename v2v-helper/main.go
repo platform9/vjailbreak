@@ -176,7 +176,7 @@ func main() {
 
 		// Try to power on the VM if migration failed
 		if PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
-		msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
+			msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
 		} else {
 			powerOnErr := vmops.VMPowerOn()
 			if powerOnErr != nil {

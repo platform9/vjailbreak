@@ -270,7 +270,7 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	}
 
 	log.Printf("Fetching all VMs")
-	vminfo, rdmDiskMap, err := utils.GetAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
+	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch VMs")
 	}

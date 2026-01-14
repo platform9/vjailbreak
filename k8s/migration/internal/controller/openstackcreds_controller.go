@@ -53,8 +53,6 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=openstackcreds/finalizers,verbs=update
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=arraycreds,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=arraycreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdhosts/finalizers,verbs=update
@@ -147,33 +145,32 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
+		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 			return ctrl.Result{}, err
 		}
 		ctxlog.Info("Successfully updated status to failed")
-		return ctrl.Result{}, nil
-	}
+	} else {
+		// Update the status of the OpenstackCreds object
+		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+		ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+			return ctrl.Result{}, err
+		}
+		ctxlog.Info("Successfully updated status to success")
+		err := handleValidatedCreds(ctx, r, scope)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-	// Update the status of the OpenstackCreds object
-	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
-	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		return ctrl.Result{}, err
-	}
-	ctxlog.Info("Successfully updated status to success")
-
-	// Discover storage arrays from Cinder configuration
-	if err := r.discoverStorageArrays(ctx, scope); err != nil {
-		ctxlog.Error(err, "Failed to discover storage arrays")
-		// Don't fail reconciliation, just log error
-	}
-
-	err := handleValidatedCreds(ctx, r, scope)
-	if err != nil {
-		return ctrl.Result{}, err
+		// Discover storage arrays from Cinder configuration
+		if err := r.discoverStorageArrays(ctx, scope); err != nil {
+			ctxlog.Error(err, "Failed to discover storage arrays")
+			// Don't fail reconciliation, just log error
+		}
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
@@ -230,6 +227,7 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -359,6 +357,7 @@ func generateArrayCredsName(volumeType, backendName string) string {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Get max concurrent reconciles from vjailbreak settings configmap
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.OpenstackCreds{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
@@ -474,29 +473,29 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		if scope.OpenstackCreds.Annotations == nil {
 			scope.OpenstackCreds.Annotations = make(map[string]string)
 		}
-		
+
 		syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
 		if syncInProgress == "true" {
 			ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
 			return nil
 		}
-		
+
 		// Mark sync as in progress
 		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = "true"
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
 			return nil
 		}
-		
+
 		ctxlog.Info("Starting asynchronous PCD sync", "openstackcreds", scope.OpenstackCreds.Name)
-		
+
 		// Run sync asynchronously to avoid blocking the controller
 		go func() {
 			// Create a new context for the background operation (not tied to reconciliation)
 			syncCtx := context.Background()
-			
+
 			err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
-			
+
 			// Get the latest version of the resource to update annotations
 			latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
 			if getErr := r.Get(syncCtx, client.ObjectKey{
@@ -506,14 +505,14 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 				ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
 				return
 			}
-			
+
 			if latestCreds.Annotations == nil {
 				latestCreds.Annotations = make(map[string]string)
 			}
-			
+
 			// Clear the in-progress flag
 			delete(latestCreds.Annotations, "pcd-sync-in-progress")
-			
+
 			if err != nil {
 				ctxlog.Error(err, "PCD sync failed")
 				latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
@@ -521,7 +520,7 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 				ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
 				delete(latestCreds.Annotations, "pcd-sync-last-error")
 			}
-			
+
 			if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
 				ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
 			}
