@@ -175,6 +175,7 @@ const CustomToolbar = ({
           startIcon={<AddIcon />}
           onClick={onAddVMwareCredential}
           sx={{ height: 40 }}
+          data-tour="add-vmware-creds"
         >
           Add VMware Credentials
         </Button>
@@ -184,6 +185,7 @@ const CustomToolbar = ({
           startIcon={<AddIcon />}
           onClick={onAddOpenstackCredential}
           sx={{ height: 40 }}
+          data-tour="add-pcd-creds"
         >
           Add PCD Credentials
         </Button>

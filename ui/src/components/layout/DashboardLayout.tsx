@@ -1,5 +1,5 @@
 import { Paper, styled } from '@mui/material'
-import { Outlet, Navigate, useLocation } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import Sidenav from './Sidenav'
 import { navigationItems } from 'src/config/navigation'
 
@@ -42,11 +42,6 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 }))
 
 export default function DashboardLayout() {
-  const location = useLocation()
-  if (location.pathname === '/dashboard') {
-    return <Navigate to="/dashboard/migrations" replace />
-  }
-
   return (
     <DashboardContainer>
       <Sidenav items={navigationItems} />

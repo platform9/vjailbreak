@@ -1,6 +1,7 @@
 import { styled, Snackbar, Alert } from '@mui/material'
-import { useState } from 'react'
-import { Route, Routes, useLocation, Navigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Route, Routes, useLocation, Navigate, useNavigate } from 'react-router-dom'
+import Joyride, { CallBackProps, Step as JoyrideStep } from 'react-joyride'
 import './assets/reset.css'
 import { AppBar, DashboardLayout } from './components/layout'
 import { RouteCompatibility } from './components/providers'
@@ -13,6 +14,8 @@ import ClusterConversionsPage from './features/clusterConversions/pages/ClusterC
 import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
+import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
+import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -34,16 +37,269 @@ const AppContent = styled('div')(({ theme }) => ({
   }
 }))
 
+const GETTING_STARTED_DISMISSED_KEY = 'getting-started-dismissed'
+const VDDK_UPLOADED_KEY = 'vddk-uploaded'
+
+function useLocalStorageFlag(key: string) {
+  const [value, setValue] = useState(() => localStorage.getItem(key) === 'true')
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key) return
+      setValue(e.newValue === 'true')
+    }
+
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [key])
+
+  const refresh = () => setValue(localStorage.getItem(key) === 'true')
+
+  return { value, refresh }
+}
+
+function useHasAnyCredentials() {
+  const {
+    data: vmwareCredentials,
+    isLoading: vmwareLoading,
+    isError: vmwareError
+  } = useVmwareCredentialsQuery(undefined, { staleTime: 0, refetchOnMount: true })
+
+  const {
+    data: openstackCredentials,
+    isLoading: openstackLoading,
+    isError: openstackError
+  } = useOpenstackCredentialsQuery(undefined, { staleTime: 0, refetchOnMount: true })
+
+  const isLoading = vmwareLoading || openstackLoading
+  const isError = vmwareError || openstackError
+
+  const hasAnyCredentials = useMemo(() => {
+    const vmwareCount = Array.isArray(vmwareCredentials) ? vmwareCredentials.length : 0
+    const openstackCount = Array.isArray(openstackCredentials) ? openstackCredentials.length : 0
+    return vmwareCount + openstackCount > 0
+  }, [openstackCredentials, vmwareCredentials])
+
+  return { hasAnyCredentials, isLoading, isError }
+}
+
+function DashboardIndexRedirect() {
+  const { hasAnyCredentials, isLoading, isError } = useHasAnyCredentials()
+  const { value: vddkUploaded, refresh: refreshVddkUploaded } =
+    useLocalStorageFlag(VDDK_UPLOADED_KEY)
+
+  useEffect(() => {
+    refreshVddkUploaded()
+  }, [refreshVddkUploaded])
+
+  if (isLoading) return null
+  if (isError) return <Navigate to="/dashboard/migrations" replace />
+
+  if (!vddkUploaded) {
+    return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
+  }
+
+  return hasAnyCredentials ? (
+    <Navigate to="/dashboard/migrations" replace />
+  ) : (
+    <Navigate to="/dashboard/credentials" replace />
+  )
+}
+
 function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
+  const [joyrideRun, setJoyrideRun] = useState(false)
+  const [joyrideSnoozed, setJoyrideSnoozed] = useState(false)
+  const [joyrideReady, setJoyrideReady] = useState(false)
   const [notification, setNotification] = useState({
     open: false,
     message: '',
     severity: 'success' as 'error' | 'info' | 'success' | 'warning'
   })
   const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
+
+  const { hasAnyCredentials, isLoading: credsLoading } = useHasAnyCredentials()
+  const { value: vddkUploaded, refresh: refreshVddkUploaded } =
+    useLocalStorageFlag(VDDK_UPLOADED_KEY)
+
+  const missingCredentials = !hasAnyCredentials
+  const missingVddk = !vddkUploaded
+  const shouldShowGuide = missingCredentials || missingVddk
+
+  const expectedJoyrideTarget = useMemo(() => {
+    if (missingVddk) return '[data-tour="vddk-dropzone"]'
+    if (missingCredentials) return '[data-tour="add-vmware-creds"]'
+    return null
+  }, [missingCredentials, missingVddk])
+
+  const isOnExpectedPage = useMemo(() => {
+    if (missingVddk) return location.pathname === '/dashboard/global-settings'
+    if (missingCredentials) return location.pathname === '/dashboard/credentials'
+    return false
+  }, [location.pathname, missingCredentials, missingVddk])
+
+  const joyrideSteps: JoyrideStep[] = useMemo(() => {
+    if (missingVddk) {
+      return [
+        {
+          target: '[data-tour="vddk-dropzone"]',
+          placement: 'right',
+          spotlightPadding: 10,
+          disableBeacon: true,
+          content:
+            'Upload the VMware VDDK library from Global Settings (VDDK Upload tab). This is mandatory before adding credentials.'
+        }
+      ]
+    }
+
+    if (missingCredentials) {
+      return [
+        {
+          target: '[data-tour="add-vmware-creds"]',
+          placement: 'bottom',
+          spotlightPadding: 8,
+          disableBeacon: true,
+          content:
+            'Add your PCD and VMware credentials from the Credentials page. Then you can start migrations.'
+        }
+      ]
+    }
+
+    return []
+  }, [missingCredentials, missingVddk])
+
+  useEffect(() => {
+    // If the user navigates away while a step is active, stop Joyride immediately
+    // to avoid react-floater trying to attach to an unmounted element.
+    if (!isOnExpectedPage) {
+      setJoyrideRun(false)
+    }
+  }, [isOnExpectedPage])
+
+  useEffect(() => {
+    // Mark Joyride as "ready" only when we're on the right page and the target exists.
+    // The target can mount after the route change (tabs/content), so we observe DOM changes.
+    if (!expectedJoyrideTarget || !isOnExpectedPage) {
+      setJoyrideReady(false)
+      return
+    }
+
+    const check = () => Boolean(document.querySelector(expectedJoyrideTarget))
+    if (check()) {
+      setJoyrideReady(true)
+      return
+    }
+
+    setJoyrideReady(false)
+
+    const observer = new MutationObserver(() => {
+      if (!isOnExpectedPage) return
+      if (check()) {
+        setJoyrideReady(true)
+        observer.disconnect()
+      }
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [expectedJoyrideTarget, isOnExpectedPage])
+
+  useEffect(() => {
+    if (credsLoading) return
+    refreshVddkUploaded()
+    const dismissed = localStorage.getItem(GETTING_STARTED_DISMISSED_KEY) === 'true'
+
+    if (!shouldShowGuide) {
+      setJoyrideSnoozed(false)
+      setJoyrideRun(false)
+      return
+    }
+
+    if (dismissed || joyrideSnoozed) {
+      setJoyrideRun(false)
+      return
+    }
+
+    // Redirect + popup logic:
+    // 1) VDDK missing: force user to Global Settings -> VDDK tab
+    // 2) Else credentials missing: force user to Credentials page
+    if (missingVddk) {
+      if (location.pathname !== '/dashboard/global-settings') {
+        navigate('/dashboard/global-settings', { replace: true, state: { tab: 'vddk' } })
+      } else {
+        // ensure VDDK tab is active even if already on the page
+        const currentTab = (location.state as any)?.tab
+        if (currentTab !== 'vddk') {
+          navigate(location.pathname, { replace: true, state: { tab: 'vddk' } })
+        }
+      }
+      setJoyrideRun(true)
+      return
+    }
+
+    if (missingCredentials && location.pathname !== '/dashboard/credentials') {
+      navigate('/dashboard/credentials', { replace: true })
+      setJoyrideRun(true)
+      return
+    }
+
+    if (missingCredentials && location.pathname === '/dashboard/credentials') {
+      setJoyrideRun(true)
+      return
+    }
+
+    setJoyrideRun(false)
+  }, [
+    credsLoading,
+    location.pathname,
+    joyrideSnoozed,
+    missingCredentials,
+    missingVddk,
+    navigate,
+    refreshVddkUploaded,
+    shouldShowGuide
+  ])
+
+  const handleJoyrideCallback = (data: CallBackProps) => {
+    const { action, status, type } = data
+
+    // Close/X should hide temporarily (do not persist dismissal)
+    // Joyride may emit close as action="close" or as a skipped status.
+    if (action === 'close') {
+      setJoyrideSnoozed(true)
+      setJoyrideRun(false)
+      return
+    }
+
+    if (action === 'skip') {
+      localStorage.setItem(GETTING_STARTED_DISMISSED_KEY, 'true')
+      setJoyrideRun(false)
+      return
+    }
+
+    // If target isn't found, don't spam the user; hide temporarily.
+    if (type === 'error:target_not_found') {
+      setJoyrideSnoozed(true)
+      setJoyrideRun(false)
+      return
+    }
+
+    if (status === 'skipped') {
+      // Joyride can report status=skipped for both Skip and Close.
+      // If it wasn't an explicit skip action, treat it as a temporary snooze.
+      setJoyrideSnoozed(true)
+      setJoyrideRun(false)
+      return
+    }
+
+    if (status === 'finished') {
+      localStorage.setItem(GETTING_STARTED_DISMISSED_KEY, 'true')
+      setJoyrideRun(false)
+    }
+  }
 
   const handleOpenMigrationForm = (open, type = 'standard') => {
     setOpenMigrationForm(open)
@@ -61,6 +317,29 @@ function App() {
   return (
     <AppFrame>
       <RouteCompatibility />
+      <Joyride
+        steps={joyrideReady && isOnExpectedPage ? joyrideSteps : []}
+        run={joyrideRun && joyrideSteps.length > 0 && joyrideReady && isOnExpectedPage}
+        stepIndex={0}
+        continuous={false}
+        showSkipButton
+        disableScrolling
+        scrollToFirstStep={false}
+        floaterProps={{
+          styles: {
+            floater: {
+              position: 'fixed'
+            }
+          }
+        }}
+        disableOverlayClose={false}
+        callback={handleJoyrideCallback}
+        styles={{
+          options: {
+            zIndex: 20000
+          }
+        }}
+      />
       <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
       <AppContent>
         {openMigrationForm && migrationType === 'standard' && (
@@ -74,8 +353,9 @@ function App() {
           <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
         )}
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard/migrations" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
+            <Route index element={<DashboardIndexRedirect />} />
             <Route path="migrations" element={<MigrationsPage />} />
             <Route path="agents" element={<AgentsPage />} />
             <Route path="credentials" element={<CredentialsPage />} />
