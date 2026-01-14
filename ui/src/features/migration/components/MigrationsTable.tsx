@@ -3,6 +3,7 @@ import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
@@ -18,6 +19,19 @@ import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
+import { keyframes } from '@mui/material/styles'
+
+const pulse = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+`
 import { TooltipContent, ClickableTableCell } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 
@@ -52,7 +66,12 @@ const IN_PROGRESS_PHASES = [
   Phase.AwaitingAdminCutOver
 ]
 
-const getProgressText = (phase: Phase | undefined, conditions: Condition[] | undefined) => {
+const getProgressText = (
+  phase: Phase | undefined,
+  conditions: Condition[] | undefined,
+  currentDisk?: string,
+  totalDisks?: number
+) => {
   if (!phase || phase === Phase.Unknown) {
     return 'Unknown Status'
   }
@@ -70,8 +89,18 @@ const getProgressText = (phase: Phase | undefined, conditions: Condition[] | und
     return `${phase} - ${message}`
   }
 
-  return `STEP ${stepNumber}/${totalSteps}: ${phase} - ${message}`
+  let diskInfo = ''
+  if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
+    const parsedDisk = parseInt(currentDisk, 10)
+    const currentDiskNum = Number.isNaN(parsedDisk) ? 1 : parsedDisk + 1
+    diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
+  }
+
+  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase}${diskInfo} - ${message}`
+
+  return progressText
 }
+
 
 interface CustomToolbarProps {
   numSelected: number
@@ -231,12 +260,17 @@ export default function MigrationsTable({
       {
         field: 'name',
         headerName: 'Name',
-        valueGetter: (_, row) => row.spec?.vmName,
         flex: 0.7,
+        valueGetter: (_, row) => row.spec?.vmName,
         renderCell: (params) => {
-          const name = (params.value as string) || params.row.spec?.vmName || '-'
+          const vmName = params.row?.spec?.vmName || '-'
+          const migrationType = params.row?.spec?.migrationType
+          const phase = params.row?.status?.phase
+          const isHotMigration = migrationType?.toLowerCase() === 'hot'
+          const isColdMigration = migrationType?.toLowerCase() === 'cold'
+          
           const namespace = params.row.metadata?.namespace
-          const planName = (params.row.spec as any)?.migrationPlan || (params.row.metadata as any)?.labels?.migrationplan
+          const planName = params.row.spec?.migrationPlan || params.row.metadata?.labels?.migrationplan
           const key = namespace && planName ? `${namespace}::${planName}` : ''
           const destination = key ? destinationByPlan[key] : null
 
@@ -247,16 +281,47 @@ export default function MigrationsTable({
             <TooltipContent title="Destination" lines={[`Tenant: ${destinationTenant}`, `Cluster: ${destinationCluster}`]} />
           )
 
+          // Logic for the blinking pulse
+          const activePhases = new Set([
+            Phase.Pending, Phase.Validating, Phase.AwaitingDataCopyStart,
+            Phase.CopyingBlocks, Phase.CopyingChangedBlocks, Phase.ConvertingDisk,
+            Phase.AwaitingCutOverStartTime, Phase.AwaitingAdminCutOver, Phase.Unknown
+          ])
+          const isInProgress = activePhases.has(phase)
+          const syncedPulse = `${pulse} 2s ease-in-out -20s infinite` 
+
           return (
-            <ClickableTableCell
-              tooltipTitle={tooltipTitle}
-              onClick={() => {
-                params.row.setSelectedMigrationDetail?.(params.row)
-                params.row.setMigrationDetailModalOpen?.(true)
-              }}
-            >
-              {name}
-            </ClickableTableCell>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {isHotMigration && (
+                <Tooltip title="Hot Migration">
+                  <FiberManualRecordIcon 
+                    sx={{ 
+                      fontSize: 12, color: '#FFAE42',
+                      ...(isInProgress && { animation: syncedPulse })
+                    }} 
+                  />
+                </Tooltip>
+              )}
+              {isColdMigration && (
+                <Tooltip title="Cold Migration">
+                  <FiberManualRecordIcon 
+                    sx={{ 
+                      fontSize: 12, color: '#4293FF',
+                      ...(isInProgress && { animation: syncedPulse })
+                    }} 
+                  />
+                </Tooltip>
+              )}
+              <ClickableTableCell
+                tooltipTitle={tooltipTitle}
+                onClick={() => {
+                  params.row.setSelectedMigrationDetail?.(params.row)
+                  params.row.setMigrationDetailModalOpen?.(true)
+                }}
+              >
+                {vmName}
+              </ClickableTableCell>
+            </Box>
           )
         }
       },
@@ -284,18 +349,10 @@ export default function MigrationsTable({
         flex: 0.8,
         renderCell: (params) => {
           const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
-          const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
+          const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}` 
           return (
             <Tooltip title={tooltip} arrow>
-              <Typography
-                variant="body2"
-                sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-              >
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {String(params.value ?? '-')}
               </Typography>
             </Tooltip>
@@ -311,13 +368,19 @@ export default function MigrationsTable({
       {
         field: 'status.conditions',
         headerName: 'Progress',
-        valueGetter: (_, row) => getProgressText(row.status?.phase, row.status?.conditions),
+        valueGetter: (_, row) =>
+          getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk, row.status?.totalDisks),
         flex: 2,
         renderCell: (params) => {
           const phase = params.row?.status?.phase
           const conditions = params.row?.status?.conditions
+          const currentDisk = params.row?.status?.currentDisk
+          const totalDisks = params.row?.status?.totalDisks
           return conditions ? (
-            <MigrationProgress phase={phase} progressText={getProgressText(phase, conditions)} />
+            <MigrationProgress
+              phase={phase}
+              progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+            />
           ) : null
         }
       },
@@ -333,15 +396,12 @@ export default function MigrationsTable({
           const showRetryButton = phase === Phase.Failed
 
           const handleRetry = async () => {
-            if (!migrationName || !namespace) {
-              console.error('Cannot retry: migration name or namespace is missing.')
-              return
-            }
+            if (!migrationName || !namespace) return
             try {
               await deleteMigration(migrationName, namespace)
               params.row.refetchMigrations?.()
             } catch (error) {
-              console.error(`Failed to delete migration '${migrationName}' for retry:`, error)
+              console.error('Failed retry:', error)
             }
           }
 
@@ -362,46 +422,24 @@ export default function MigrationsTable({
                       params.row.setLogsDrawerOpen(true)
                     }}
                     size="small"
-                    sx={{
-                      cursor: 'pointer',
-                      position: 'relative'
-                    }}
                   >
                     <ListAltIcon />
                   </IconButton>
                 </Tooltip>
               )}
-
               {showAdminCutover && (
                 <TriggerAdminCutoverButton
                   migrationName={migrationName}
-                  onSuccess={() => {
-                    params.row.refetchMigrations?.()
-                  }}
-                  onError={(error) => {
-                    console.error('Failed to trigger cutover:', error)
-                  }}
+                  onSuccess={() => params.row.refetchMigrations?.()}
                 />
               )}
-
               {showRetryButton && (
                 <Tooltip title="Retry migration">
-                  <IconButton
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleRetry()
-                    }}
-                    size="small"
-                    sx={{
-                      cursor: 'pointer',
-                      position: 'relative'
-                    }}
-                  >
+                  <IconButton onClick={(e) => { e.stopPropagation(); handleRetry() }} size="small">
                     <ReplayIcon />
                   </IconButton>
                 </Tooltip>
               )}
-
               <Tooltip title={'Delete migration'}>
                 <IconButton
                   onClick={(e) => {
@@ -409,10 +447,6 @@ export default function MigrationsTable({
                     params.row.onDelete(params.row.metadata?.name)
                   }}
                   size="small"
-                  sx={{
-                    cursor: 'pointer',
-                    position: 'relative'
-                  }}
                 >
                   <DeleteIcon />
                 </IconButton>
@@ -422,7 +456,7 @@ export default function MigrationsTable({
         }
       }
     ]
-  }, [destinationByPlan])
+  }, [destinationByPlan, pulse])
 
   const selectedMigrations = useMemo(
     () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],
