@@ -41,6 +41,7 @@ type VirtV2VOperations interface {
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
+	ConfigureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) error
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
@@ -901,5 +902,26 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	}
 	log.Printf("Network persistence script output: %s", string(output))
 
+	return nil
+}
+func ConfigureWindowsNetwork(ctx context.Context, disks []vm.VMDisk, useSingleDisk bool, diskPath string, vminfo vm.VMInfo) error {
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
+	var err error
+	if useSingleDisk {
+		command := "copy-in /home/fedora/NIC-Recovery /"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+	} else {
+		command := "copy-in"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
+	}
+	if err != nil {
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
+	}
 	return nil
 }

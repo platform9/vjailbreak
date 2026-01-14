@@ -72,3 +72,4 @@ COPY --from=builder /workspace/manager /home/fedora/manager
 COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
 COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
+COPY scripts/firstboot/windows/network /home/fedora/NIC-Recovery

@@ -875,6 +875,14 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
+		if persisNetwork {
+			winFirstbootScriptName := "network-persist"
+			winFirstbootScript := constants.WindowsNetworkPersistenceScript
+			firstbootscripts = append(firstbootscripts, winFirstbootScriptName)
+			if err := virtv2v.AddFirstBootScript(winFirstbootScript, winFirstbootScriptName); err != nil {
+				return errors.Wrap(err, "failed to add first boot script")
+			}
+		}
 	}
 
 	// Add first boot scripts for RHEL family
@@ -1090,7 +1098,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 			return err
 		}
 	}
-
+	if osType == constants.OSFamilyWindows {
+		if err := virtv2v.ConfigureWindowsNetwork(ctx, vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo); err != nil {
+			return err
+		}
+	}
 	// Step 10: Detach all volumes
 	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
 		return errors.Wrap(err, "Failed to detach all volumes from VM")

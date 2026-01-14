@@ -183,4 +183,49 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// StorageCopyMethod is the default value for storage copy method
 	StorageCopyMethod = "StorageAcceleratedCopy"
+	// Windows Network Persistence
+	WindowsNetworkPersistenceScript = `@echo off
+SETLOCAL ENABLEEXTENSIONS
+
+REM -----------------------------
+REM Ensure running as Administrator
+REM -----------------------------
+net session >nul 2>&1
+IF %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] This script must be run as Administrator.
+    pause
+    exit /b 1
+)
+
+REM -----------------------------
+REM Set working directory
+REM -----------------------------
+SET SCRIPT_DIR=C:\NIC-Recovery
+SET PS_SCRIPT=%SCRIPT_DIR%\Orchestrate-NICRecovery.ps1
+
+IF NOT EXIST "%PS_SCRIPT%" (
+    echo [ERROR] Orchestrator script not found: %PS_SCRIPT%
+    pause
+    exit /b 1
+)
+
+REM -----------------------------
+REM Execute PowerShell Orchestrator
+REM -----------------------------
+echo Starting NIC recovery orchestration...
+
+powershell.exe ^
+  -NoProfile ^
+  -ExecutionPolicy Bypass ^
+  -File "%PS_SCRIPT%"
+
+IF %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PowerShell script returned an error.
+    pause
+    exit /b 1
+)
+
+echo NIC recovery orchestration started successfully.
+exit /b 0
+`
 )
