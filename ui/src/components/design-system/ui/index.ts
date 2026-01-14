@@ -48,6 +48,8 @@ export type { OperationStatusProps, OperationStatusLayout } from './OperationSta
 export { default as SectionNav } from './SectionNav'
 export type { SectionNavProps, SectionNavItem, SectionNavStatus } from './SectionNav'
 
+export { default as FileDropzone } from './FileDropzone'
+export type { FileDropzoneProps } from './FileDropzone'
 export { default as TooltipContent } from './TooltipContent'
 export type { TooltipContentProps } from './TooltipContent'
 
