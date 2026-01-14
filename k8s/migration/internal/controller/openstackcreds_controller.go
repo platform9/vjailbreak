@@ -23,12 +23,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
-	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/openstack"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/validation/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -165,6 +165,12 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Discover storage arrays from Cinder configuration
+		if err := r.discoverStorageArrays(ctx, scope); err != nil {
+			ctxlog.Error(err, "Failed to discover storage arrays")
+			// Don't fail reconciliation, just log error
+		}
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
@@ -225,6 +231,130 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 	return nil
 }
 
+// discoverStorageArrays discovers storage arrays from OpenStack Cinder configuration
+func (r *OpenstackCredsReconciler) discoverStorageArrays(ctx context.Context, scope *scope.OpenstackCredsScope) error {
+	ctxlog := scope.Logger
+	ctxlog.Info("Discovering storage arrays from OpenStack Cinder")
+
+	backendMap, err := utils.GetBackendPools(ctx, r.Client, scope.OpenstackCreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to get backend pools")
+	}
+
+	ctxlog.Info("Discovered backend pools", "count", len(backendMap))
+
+	// Process each volume type
+	for backendName, backendInfo := range backendMap {
+		ctxlog.Info("Processing backend pool", "backendName", backendName, "backendInfo", backendInfo)
+		r.createArrayCreds(ctx, scope, backendName, backendInfo)
+	}
+
+	return nil
+}
+
+func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *scope.OpenstackCredsScope, backendName string, backendInfo map[string]string) {
+	ctxlog := scope.Logger
+	// Create ArrayCreds name: <volumeType>-<backendName>
+	arrayCredsName := generateArrayCredsName(backendInfo["volumeType"], backendName)
+
+	// Create a unique identifier label for this array configuration
+	// This allows users to rename the ArrayCreds while preventing duplicates
+	arrayIdentifier := fmt.Sprintf("%s-%s", backendInfo["volumeType"], backendName)
+	arrayIdentifierLabel := fmt.Sprintf("vjailbreak.k8s.pf9.io/array-id-%s", arrayIdentifier)
+
+	// Check if ArrayCreds with this identifier already exists (by label)
+	existingArrayCredsList := &vjailbreakv1alpha1.ArrayCredsList{}
+	labelSelector := client.MatchingLabels{arrayIdentifierLabel: "true"}
+	err := r.List(ctx, existingArrayCredsList, client.InNamespace(constants.NamespaceMigrationSystem), labelSelector)
+
+	if err != nil {
+		ctxlog.Error(err, "Failed to list ArrayCreds", "label", arrayIdentifierLabel)
+	}
+
+	if len(existingArrayCredsList.Items) > 0 {
+		ctxlog.Info("ArrayCreds with this array configuration already exists (possibly renamed by user), skipping",
+			"existingName", existingArrayCredsList.Items[0].Name,
+			"volumeType", backendInfo["volumeType"],
+			"backend", backendName)
+		return
+	}
+
+	ctxlog.Info("Creating ArrayCreds", "name", arrayCredsName, "volumeType", backendInfo["volumeType"], "backend", backendName)
+
+	vendor := utils.GetArrayVendor(backendInfo["vendor"])
+	if vendor == "unsupported" {
+		ctxlog.Error(errors.New("unsupported array vendor"), "Failed to create ArrayCreds", "name", arrayCredsName)
+	}
+
+	// Create new ArrayCreds
+	arrayCreds := &vjailbreakv1alpha1.ArrayCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      arrayCredsName,
+			Namespace: constants.NamespaceMigrationSystem,
+			Labels: map[string]string{
+				constants.OpenstackCredsLabel:           scope.OpenstackCreds.Name,
+				"vjailbreak.k8s.pf9.io/auto-discovered": "true",
+				arrayIdentifierLabel:                    "true", // Unique identifier for this array config
+			},
+		},
+		Spec: vjailbreakv1alpha1.ArrayCredsSpec{
+			VendorType:     vendor,
+			AutoDiscovered: true,
+			OpenStackMapping: vjailbreakv1alpha1.OpenstackMapping{
+				VolumeType:        backendInfo["volumeType"],
+				CinderBackendName: backendName,
+				CinderHost:        backendInfo["cinderHost"],
+			},
+			SecretRef: corev1.ObjectReference{
+				Name:      "", // Empty - awaiting user input
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+		},
+	}
+
+	// Set owner reference
+	if err := controllerutil.SetControllerReference(scope.OpenstackCreds, arrayCreds, r.Scheme); err != nil {
+		ctxlog.Error(err, "Failed to set owner reference", "arrayCredsName", arrayCredsName)
+	}
+
+	// Create ArrayCreds
+	if err := r.Create(ctx, arrayCreds); err != nil {
+		ctxlog.Error(err, "Failed to create ArrayCreds", "name", arrayCredsName)
+	}
+
+	ctxlog.Info("Successfully created ArrayCreds", "name", arrayCredsName, "volumeType", backendInfo["volumeType"], "backend", backendName)
+}
+
+// generateArrayCredsName generates a name for ArrayCreds
+func generateArrayCredsName(volumeType, backendName string) string {
+	// Sanitize names to be valid Kubernetes resource names
+	sanitize := func(s string) string {
+		s = strings.ToLower(s)
+		s = strings.ReplaceAll(s, "_", "-")
+		s = strings.ReplaceAll(s, " ", "-")
+		// Remove any characters that aren't alphanumeric or hyphen
+		var result strings.Builder
+		for _, r := range s {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+				result.WriteRune(r)
+			}
+		}
+		return result.String()
+	}
+
+	name := fmt.Sprintf("%s-%s", sanitize(volumeType), sanitize(backendName))
+
+	// Ensure name doesn't exceed 63 characters
+	if len(name) > 63 {
+		name = name[:63]
+	}
+
+	// Remove trailing hyphens
+	name = strings.TrimRight(name, "-")
+
+	return name
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Get max concurrent reconciles from vjailbreak settings configmap
@@ -266,10 +396,10 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return errors.Wrap(err, "failed to get Openstack credentials from secret")
 	}
 
-if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
-	ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
-	scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
-}
+	if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && openstackCredential.TenantName != "" {
+		ctxlog.Info("Updating spec.projectName from secret", "oldName", scope.OpenstackCreds.Spec.ProjectName, "newName", openstackCredential.TenantName)
+		scope.OpenstackCreds.Spec.ProjectName = openstackCredential.TenantName
+	}
 
 	if err = r.Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -343,29 +473,29 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 		if scope.OpenstackCreds.Annotations == nil {
 			scope.OpenstackCreds.Annotations = make(map[string]string)
 		}
-		
+
 		syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
 		if syncInProgress == "true" {
 			ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
 			return nil
 		}
-		
+
 		// Mark sync as in progress
 		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = "true"
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
 			return nil
 		}
-		
+
 		ctxlog.Info("Starting asynchronous PCD sync", "openstackcreds", scope.OpenstackCreds.Name)
-		
+
 		// Run sync asynchronously to avoid blocking the controller
 		go func() {
 			// Create a new context for the background operation (not tied to reconciliation)
 			syncCtx := context.Background()
-			
+
 			err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
-			
+
 			// Get the latest version of the resource to update annotations
 			latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
 			if getErr := r.Get(syncCtx, client.ObjectKey{
@@ -375,14 +505,14 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 				ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
 				return
 			}
-			
+
 			if latestCreds.Annotations == nil {
 				latestCreds.Annotations = make(map[string]string)
 			}
-			
+
 			// Clear the in-progress flag
 			delete(latestCreds.Annotations, "pcd-sync-in-progress")
-			
+
 			if err != nil {
 				ctxlog.Error(err, "PCD sync failed")
 				latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
@@ -390,7 +520,7 @@ if scope.OpenstackCreds.Spec.ProjectName != openstackCredential.TenantName && op
 				ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
 				delete(latestCreds.Annotations, "pcd-sync-last-error")
 			}
-			
+
 			if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
 				ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
 			}
