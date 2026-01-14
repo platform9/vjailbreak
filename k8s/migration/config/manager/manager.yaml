@@ -63,6 +63,10 @@ spec:
         env:
           - name: MAX_CONCURRENT_RECONCILES
             value: "5"
+          # Uncomment to enable array integration for vendor-based storage offload (VAAI)
+          # Requires ArrayCreds CRD to be installed
+          # - name: ENABLE_ARRAY_INTEGRATION
+          #   value: "true"
         envFrom:
           - configMapRef:
               name: pf9-env

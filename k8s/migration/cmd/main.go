@@ -117,6 +117,15 @@ func main() {
 		maxConcurrentReconciles = 5
 	}
 
+	// Check if array integration feature is enabled via environment variable
+	// Used for vendor-based storage offload (VAAI) migrations
+	enableArrayIntegration := os.Getenv("ENABLE_ARRAY_INTEGRATION") == "true"
+	if enableArrayIntegration {
+		setupLog.Info("Array integration feature enabled via ENABLE_ARRAY_INTEGRATION environment variable")
+	} else {
+		setupLog.Info("Array integration feature disabled. Set ENABLE_ARRAY_INTEGRATION=true to enable vendor-based storage offload (VAAI)")
+	}
+
 	// create manager
 	mgr, err := GetManager(metricsAddr, secureMetrics, tlsOpts, webhookServer, probeAddr, enableLeaderElection)
 	if err != nil {
@@ -124,7 +133,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = SetupControllers(mgr, local, maxConcurrentReconciles); err != nil {
+	if err = SetupControllers(mgr, local, maxConcurrentReconciles, enableArrayIntegration); err != nil {
 		setupLog.Error(err, "unable to set up controllers")
 		os.Exit(1)
 	}
@@ -224,7 +233,7 @@ func GetManager(metricsAddr string,
 }
 
 // SetupControllers initializes and sets up all controllers with the manager
-func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int) error {
+func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int, enableArrayIntegration bool) error {
 	if err := (&controller.MigrationReconciler{
 		Client:                  mgr.GetClient(),
 		Scheme:                  mgr.GetScheme(),
@@ -249,14 +258,23 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
 		return err
 	}
-	if err := (&controller.ArrayCredsReconciler{
-		Client:                  mgr.GetClient(),
-		Scheme:                  mgr.GetScheme(),
-		MaxConcurrentReconciles: maxConcurrentReconciles,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ArrayCreds")
-		return err
+
+	// ArrayCreds controller is optional - only register if feature flag is enabled
+	// This is used for vendor-based array offload migrations (VAAI)
+	if enableArrayIntegration {
+		setupLog.Info("Array integration feature enabled, registering ArrayCreds controller")
+		if err := (&controller.ArrayCredsReconciler{
+			Client:                  mgr.GetClient(),
+			Scheme:                  mgr.GetScheme(),
+			MaxConcurrentReconciles: maxConcurrentReconciles,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ArrayCreds")
+			return err
+		}
+	} else {
+		setupLog.Info("Array integration feature disabled, skipping ArrayCreds controller registration. Use --enable-array-integration flag to enable vendor-based storage offload (VAAI)")
 	}
+
 	if err := (&controller.StorageMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
 			Client: mgr.GetClient(),
