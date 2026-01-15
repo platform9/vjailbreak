@@ -23,6 +23,8 @@ import {
 } from 'src/api/openstack-creds/openstackCreds'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
+import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
+import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { getVmwareCredentials, deleteVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import { THREE_SECONDS } from 'src/constants'
@@ -112,6 +114,8 @@ export interface FormValues extends Record<string, unknown> {
   }>
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
+  arrayCredsMappings?: { source: string; target: string }[]
+  storageCopyMethod?: 'normal' | 'vendor-based'
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   pcdCluster?: string // PCD cluster ID
@@ -601,14 +605,56 @@ export default function MigrationFormDrawer({
     }
   }
 
-  const updateMigrationTemplate = async (migrationTemplate, networkMappings, storageMappings) => {
+  const createArrayCredsMapping = async (arrayCredsMappingsParams: { source: string; target: string }[]) => {
+    const body = createArrayCredsMappingJson({
+      mappings: arrayCredsMappingsParams
+    })
+    try {
+      const data = await postArrayCredsMapping(body)
+      return data
+    } catch (err) {
+      console.error('Error creating ArrayCreds mapping', err)
+      reportError(err as Error, {
+        context: 'arraycreds-mapping-creation',
+        metadata: {
+          arrayCredsMappingsParams: arrayCredsMappingsParams,
+          action: 'create-arraycreds-mapping'
+        }
+      })
+      setError({
+        title: 'Error creating ArrayCreds mapping',
+        message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
+      })
+      getFieldErrorsUpdater('storageMapping')(
+        'Error creating ArrayCreds mapping : ' +
+          (axios.isAxiosError(err) ? err?.response?.data?.message : err)
+      )
+    }
+  }
+
+  const updateMigrationTemplate = async (
+    migrationTemplate,
+    networkMappings,
+    storageMappings,
+    arrayCredsMapping: any = null
+  ) => {
     const migrationTemplateName = migrationTemplate?.metadata?.name
-    const updatedMigrationTemplateFields = {
+    const storageCopyMethod = params.storageCopyMethod || 'normal'
+
+    const updatedMigrationTemplateFields: any = {
       spec: {
         networkMapping: networkMappings.metadata.name,
-        storageMapping: storageMappings.metadata.name
+        storageCopyMethod
       }
     }
+
+    // Add either arrayCredsMapping or storageMapping based on method
+    if (storageCopyMethod === 'vendor-based' && arrayCredsMapping) {
+      updatedMigrationTemplateFields.spec.arrayCredsMapping = arrayCredsMapping.metadata.name
+    } else if (storageMappings) {
+      updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
+    }
+
     try {
       const data = await patchMigrationTemplate(
         migrationTemplateName,
@@ -775,22 +821,41 @@ export default function MigrationFormDrawer({
     setSubmitting(true)
     setError(null)
 
+    const storageCopyMethod = params.storageCopyMethod || 'normal'
+
     // Create NetworkMapping
     const networkMappings = await createNetworkMapping(params.networkMappings)
 
-    // Create StorageMapping
-    const storageMappings = await createStorageMapping(params.storageMappings)
-
-    if (!networkMappings || !storageMappings) {
+    if (!networkMappings) {
       setSubmitting(false)
       return
     }
 
-    // Update MigrationTemplate with NetworkMapping and StorageMapping resource names
+    let storageMappings: any = null
+    let arrayCredsMapping: any = null
+
+    if (storageCopyMethod === 'vendor-based') {
+      // Create ArrayCredsMapping for vendor-based copy
+      arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings || [])
+      if (!arrayCredsMapping) {
+        setSubmitting(false)
+        return
+      }
+    } else {
+      // Create StorageMapping for normal copy
+      storageMappings = await createStorageMapping(params.storageMappings)
+      if (!storageMappings) {
+        setSubmitting(false)
+        return
+      }
+    }
+
+    // Update MigrationTemplate with NetworkMapping and StorageMapping/ArrayCredsMapping resource names
     const updatedMigrationTemplate = await updateMigrationTemplate(
       migrationTemplate,
       networkMappings,
-      storageMappings
+      storageMappings,
+      arrayCredsMapping
     )
 
     // Create MigrationPlan
@@ -809,9 +874,12 @@ export default function MigrationFormDrawer({
   }, [
     params.networkMappings,
     params.storageMappings,
+    params.arrayCredsMappings,
+    params.storageCopyMethod,
     migrationTemplate,
     createNetworkMapping,
     createStorageMapping,
+    createArrayCredsMapping,
     updateMigrationTemplate,
     createMigrationPlan,
     queryClient,
@@ -904,22 +972,33 @@ export default function MigrationFormDrawer({
     rdmDisks: rdmDisks
   })
 
+  const storageCopyMethod = params.storageCopyMethod || 'normal'
+
+  // Storage validation based on copy method
+  const storageValidation =
+    storageCopyMethod === 'vendor-based'
+      ? !isNilOrEmpty(params.arrayCredsMappings) &&
+        !availableVmwareDatastores.some(
+          (datastore) => !params.arrayCredsMappings?.some((mapping) => mapping.source === datastore)
+        )
+      : !isNilOrEmpty(params.storageMappings) &&
+        !availableVmwareDatastores.some(
+          (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
+        )
+
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
     isNilOrEmpty(params.networkMappings) ||
-    isNilOrEmpty(params.storageMappings) ||
     isNilOrEmpty(params.vmwareCluster) ||
     isNilOrEmpty(params.pcdCluster) ||
     // Check if all networks are mapped
     availableVmwareNetworks.some(
       (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
     ) ||
-    // Check if all datastores are mapped
-    availableVmwareDatastores.some(
-      (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
-    ) ||
+    // Check if all datastores are mapped (based on storage copy method)
+    !storageValidation ||
     !migrationOptionValidated ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
@@ -1033,14 +1112,24 @@ export default function MigrationFormDrawer({
     const networkMapped = availableVmwareNetworks.every((network) =>
       (params.networkMappings || []).some((m) => m.source === network)
     )
-    const storageMapped = availableVmwareDatastores.every((datastore) =>
-      (params.storageMappings || []).some((m) => m.source === datastore)
-    )
+
+    const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
+    const storageMapped =
+      currentStorageCopyMethod === 'vendor-based'
+        ? availableVmwareDatastores.every((datastore) =>
+            (params.arrayCredsMappings || []).some((m) => m.source === datastore)
+          )
+        : availableVmwareDatastores.every((datastore) =>
+            (params.storageMappings || []).some((m) => m.source === datastore)
+          )
+
     return networkMapped && storageMapped
   }, [
     params.vms,
     params.networkMappings,
     params.storageMappings,
+    params.arrayCredsMappings,
+    params.storageCopyMethod,
     availableVmwareNetworks,
     availableVmwareDatastores,
     fieldErrors
@@ -1053,10 +1142,16 @@ export default function MigrationFormDrawer({
   }, [availableVmwareNetworks, params.networkMappings])
 
   const unmappedStorageCount = useMemo(() => {
+    const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
+    if (currentStorageCopyMethod === 'vendor-based') {
+      return availableVmwareDatastores.filter(
+        (ds) => !(params.arrayCredsMappings || []).some((m) => m.source === ds)
+      ).length
+    }
     return availableVmwareDatastores.filter(
       (ds) => !(params.storageMappings || []).some((m) => m.source === ds)
     ).length
-  }, [availableVmwareDatastores, params.storageMappings])
+  }, [availableVmwareDatastores, params.storageMappings, params.arrayCredsMappings, params.storageCopyMethod])
 
   const step1HasErrors = Boolean(
     fieldErrors['vmwareCluster'] ||
