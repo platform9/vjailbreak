@@ -1,2 +1,2 @@
-export * from './arrayCreds'
 export * from './model'
+export * from './arrayCreds'

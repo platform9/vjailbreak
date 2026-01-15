@@ -6,7 +6,7 @@ import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Insights';
 import DescriptionIcon from '@mui/icons-material/Description'
-import { Storage } from '@mui/icons-material'
+import { Storage, Storage as StorageIcon } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -32,6 +32,12 @@ export const navigationItems: NavigationItem[] = [
     label: 'Agents',
     path: '/dashboard/agents',
     icon: <AgentsIcon />
+  },
+  {
+    id: 'storage-management',
+    label: 'Storage Management',
+    path: '/dashboard/storage-management',
+    icon: <StorageIcon />
   },
   {
     id: 'baremetal-config',

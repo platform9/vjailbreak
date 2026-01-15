@@ -1,7 +1,6 @@
 export { default as CredentialsTable } from './CredentialsTable'
 export { default as VMwareCredentialsDrawer } from './VMwareCredentialsDrawer'
 export { default as OpenstackCredentialsDrawer } from './OpenstackCredentialsDrawer'
-export { default as ArrayCredentialsDrawer } from './ArrayCredentialsDrawer'
 export { default as CredentialSelector } from './CredentialSelector'
 export { default as OpenstackCredentialsForm } from './OpenstackCredentialsForm'
 export { default as VmwareCredentialsForm } from './VmwareCredentialsForm'

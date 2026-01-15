@@ -7,7 +7,7 @@ export const ARRAY_CREDS_QUERY_KEY = ['arrayCreds']
 type Options = Omit<UseQueryOptions<ArrayCreds[]>, 'queryKey' | 'queryFn'>
 
 export const useArrayCredentialsQuery = (
-  namespace = undefined,
+  namespace?: string,
   options: Options = {}
 ): UseQueryResult<ArrayCreds[]> => {
   return useQuery<ArrayCreds[]>({

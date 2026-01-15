@@ -10,17 +10,17 @@ export interface ArrayCreds {
   kind: string
   metadata: ArrayCredsMetadata
   spec: ArrayCredsSpec
-  status: ArrayCredsStatus
+  status?: ArrayCredsStatus
 }
 
 export interface ArrayCredsMetadata {
   annotations?: Annotations
-  creationTimestamp: Date
-  generation: number
+  creationTimestamp?: Date
+  generation?: number
   name: string
   namespace: string
-  resourceVersion: string
-  uid: string
+  resourceVersion?: string
+  uid?: string
   labels?: Record<string, string>
 }
 
@@ -60,17 +60,17 @@ export interface GetArrayCredsListMetadata {
 }
 
 export interface ArrayCredsStatus {
-  arrayValidationStatus: string
-  arrayValidationMessage: string
+  arrayValidationStatus?: string
+  arrayValidationMessage?: string
   dataStore?: DatastoreInfo[]
   phase?: string
 }
 
 // Supported vendor types for storage arrays
 export const ARRAY_VENDOR_TYPES = [
-  { value: 'pure', label: 'Pure Storage FlashArray' },
+  { value: 'pure', label: 'Pure Storage' },
   { value: 'ontap', label: 'NetApp ONTAP' },
-  { value: 'hpalletra', label: 'HPE Alletra' }
+  { value: 'unsupported', label: 'Unsupported' }
 ] as const
 
 export type ArrayVendorType = (typeof ARRAY_VENDOR_TYPES)[number]['value']
