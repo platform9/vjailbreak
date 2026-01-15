@@ -154,12 +154,11 @@ const getColumns = (
 ]
 
 interface CustomToolbarProps {
-  loading: boolean
   onRefresh: () => void
   onAddCredential: () => void
 }
 
-const CustomToolbar = ({ loading, onRefresh, onAddCredential }: CustomToolbarProps) => {
+const CustomToolbar = ({ onRefresh, onAddCredential }: CustomToolbarProps) => {
   return (
     <GridToolbarContainer
       sx={{
@@ -321,7 +320,6 @@ export default function StorageArrayTable() {
         slots={{
           toolbar: () => (
             <CustomToolbar
-              loading={isLoading || deleting}
               onRefresh={handleRefresh}
               onAddCredential={handleOpenAddDrawer}
             />
