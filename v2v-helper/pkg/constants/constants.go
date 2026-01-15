@@ -190,6 +190,31 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	WindowsOldInterfaceRenameCommand = `Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -eq "%s" -or $_.InterfaceAlias -eq "%s" } | Rename-NetAdapter -NewName "%s-old" -PassThru`
 	WindowsInterfaceRenameCommand    = `Get-NetAdapter | Where-Object { $_.MacAddress -eq "%s" } | Rename-NetAdapter -NewName "%s" `
 	WindowsFirstBootScript           = `@echo off
-powershell.exe -ExecutionPolicy Bypass -File C:\Windows\persist-network.ps1 > C:\Windows\Temp\persist-network.log 2>&1
+set LOG_FILE=C:\Windows\Temp\persist-network.log
+echo [%DATE% %TIME%] Starting network persistence script >> %LOG_FILE% 2>&1
+
+:: Check if already run successfully
+if exist "C:\Windows\persist-network.done" (
+    echo [%DATE% %TIME%] Network persistence already completed, skipping >> %LOG_FILE% 2>&1
+goto :cleanup
+)
+
+:: Run the PowerShell script
+powershell.exe -ExecutionPolicy Bypass -File C:\Windows\persist-network.ps1 -LogFile "%LOG_FILE%"
+if %ERRORLEVEL% NEQ 0 (
+    echo [%DATE% %TIME%] PowerShell script failed with error: %ERRORLEVEL% >> %LOG_FILE% 2>&1
+    exit /b %ERRORLEVEL%
+)
+
+:: Mark as completed
+echo [%DATE% %TIME%] Network persistence completed successfully >> %LOG_FILE% 2>&1
+echo %DATE% %TIME% > C:\Windows\persist-network.done
+
+:cleanup
+:: Remove the scheduled task that runs this script
+schtasks /delete /tn "NetworkPersistence" /f >> %LOG_FILE% 2>&1
+:: Remove the script itself
+del /f /q "%~f0" >> %LOG_FILE% 2>&1
+del /f /q "C:\Windows\persist-network.ps1" >> %LOG_FILE% 2>&1
 `
 )
