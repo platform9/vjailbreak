@@ -886,7 +886,7 @@ func GenerateWindowsNetworkPersistenceScript(disks []vm.VMDisk, useSingleDisk bo
 		return err
 	}
 	mappings := registryParser.GenerateMapping()
-	script := ""
+	script := "Get-PnpDevice -Class Net | Where-Object { $_.Status -eq \"Unknown\" -or $_.Status -eq \"Error\" } | ForEach-Object { Write-Host \"Removing $($_.FriendlyName) - $($_.InstanceId)\"; pnputil /remove-device $_.InstanceId }\n"
 	for _, mapping := range mappings {
 		for key, ipEntry := range ippermac {
 			for _, ip := range ipEntry {
