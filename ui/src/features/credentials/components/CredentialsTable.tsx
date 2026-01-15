@@ -10,8 +10,10 @@ import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import { useArrayCredentialsQuery, ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { VmwareCredential } from './VmwareCredentialsForm'
 import { OpenstackCredential } from './OpenstackCredentialsForm'
+import { ArrayCreds } from 'src/api/array-creds/model'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { VMWARE_CREDS_QUERY_KEY } from 'src/hooks/api/useVmwareCredentialsQuery'
@@ -19,19 +21,21 @@ import { OPENSTACK_CREDS_QUERY_KEY } from 'src/hooks/api/useOpenstackCredentials
 import {
   deleteVMwareCredsWithSecretFlow,
   deleteOpenStackCredsWithSecretFlow,
+  deleteArrayCredsWithSecretFlow,
   revalidateCredentials
 } from 'src/api/helpers'
 import VMwareCredentialsDrawer from './VMwareCredentialsDrawer'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import OpenstackCredentialsDrawer from './OpenstackCredentialsDrawer'
+import ArrayCredentialsDrawer from './ArrayCredentialsDrawer'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 
 interface CredentialItem {
   id: string
   name: string
-  type: 'VMware' | 'OpenStack'
+  type: 'VMware' | 'OpenStack' | 'StorageArray'
   status: string
-  credObject: VmwareCredential | OpenstackCredential
+  credObject: VmwareCredential | OpenstackCredential | ArrayCreds
 }
 
 const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info' | 'default' => {
@@ -49,8 +53,20 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
   return 'default'
 }
 
+const getTypeChipColor = (type: string): 'primary' | 'secondary' | 'info' => {
+  if (type === 'VMware') return 'primary'
+  if (type === 'OpenStack') return 'secondary'
+  return 'info'
+}
+
+const getTypeLabel = (type: string): string => {
+  if (type === 'OpenStack') return 'PCD'
+  if (type === 'StorageArray') return 'Storage Array'
+  return type
+}
+
 const getColumns = (
-  onDeleteClick: (id: string, type: 'VMware' | 'OpenStack') => void,
+  onDeleteClick: (id: string, type: 'VMware' | 'OpenStack' | 'StorageArray') => void,
   onRevalidateClick: (row: CredentialItem) => void,
   revalidatingId: string | null
 ): GridColDef[] => [
@@ -65,8 +81,8 @@ const getColumns = (
     flex: 1,
     renderCell: (params) => (
       <Chip
-        label={params.value === 'OpenStack' ? 'PCD' : params.value}
-        color={params.value === 'VMware' ? 'primary' : 'secondary'}
+        label={getTypeLabel(params.value)}
+        color={getTypeChipColor(params.value)}
         variant="outlined"
         size="small"
       />
@@ -143,6 +159,7 @@ interface CustomToolbarProps {
   onRefresh: () => void
   onAddVMwareCredential: () => void
   onAddOpenstackCredential: () => void
+  onAddArrayCredential: () => void
 }
 
 const CustomToolbar = ({
@@ -151,7 +168,8 @@ const CustomToolbar = ({
   loading,
   onRefresh,
   onAddVMwareCredential,
-  onAddOpenstackCredential
+  onAddOpenstackCredential,
+  onAddArrayCredential
 }: CustomToolbarProps) => {
   return (
     <GridToolbarContainer
@@ -186,6 +204,15 @@ const CustomToolbar = ({
           sx={{ height: 40 }}
         >
           Add PCD Credentials
+        </Button>
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={onAddArrayCredential}
+          sx={{ height: 40 }}
+        >
+          Add Storage Array
         </Button>
         {numSelected > 0 && (
           <Button
@@ -230,6 +257,16 @@ export default function CredentialsTable() {
     refetchInterval: revalidatingId ? 5000 : false
   })
 
+  const {
+    data: arrayCredentials,
+    isLoading: loadingArray,
+    refetch: refetchArray
+  } = useArrayCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchInterval: revalidatingId ? 5000 : false
+  })
+
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([])
@@ -237,6 +274,7 @@ export default function CredentialsTable() {
   const [deleting, setDeleting] = useState(false)
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
+  const [arrayCredDrawerOpen, setArrayCredDrawerOpen] = useState(false)
 
   const revalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -246,6 +284,7 @@ export default function CredentialsTable() {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
         queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
+        queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       }, 500)
     },
     onError: (error: any, variables) => {
@@ -282,7 +321,16 @@ export default function CredentialsTable() {
       credObject: cred
     })) || []
 
-  const allCredentials = [...vmwareItems, ...openstackItems]
+  const arrayItems: CredentialItem[] =
+    arrayCredentials?.map((cred: ArrayCreds) => ({
+      id: `array-${cred.metadata.name}`,
+      name: cred.metadata.name,
+      type: 'StorageArray' as const,
+      status: cred.status?.arrayValidationStatus || 'Unknown',
+      credObject: cred
+    })) || []
+
+  const allCredentials = [...vmwareItems, ...openstackItems, ...arrayItems]
 
   useEffect(() => {
     if (revalidatingId) {
@@ -317,32 +365,49 @@ export default function CredentialsTable() {
   useEffect(() => {
     refetchVmware()
     refetchOpenstack()
-  }, [refetchVmware, refetchOpenstack])
+    refetchArray()
+  }, [refetchVmware, refetchOpenstack, refetchArray])
 
   const handleRefresh = useCallback(() => {
     refetchVmware()
     refetchOpenstack()
-  }, [refetchVmware, refetchOpenstack])
+    refetchArray()
+  }, [refetchVmware, refetchOpenstack, refetchArray])
 
-  const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
-    const credentialName = id.startsWith('vmware-')
-      ? id.replace('vmware-', '')
-      : id.replace('openstack-', '')
+  const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack' | 'StorageArray') => {
+    let credentialName = ''
+    if (id.startsWith('vmware-')) {
+      credentialName = id.replace('vmware-', '')
+    } else if (id.startsWith('openstack-')) {
+      credentialName = id.replace('openstack-', '')
+    } else if (id.startsWith('array-')) {
+      credentialName = id.replace('array-', '')
+    }
 
-    const credential =
-      type === 'VMware'
-        ? vmwareCredentials?.find((cred) => cred.metadata.name === credentialName)
-        : openstackCredentials?.find((cred) => cred.metadata.name === credentialName)
+    let credential: VmwareCredential | OpenstackCredential | ArrayCreds | undefined
+    if (type === 'VMware') {
+      credential = vmwareCredentials?.find((cred) => cred.metadata.name === credentialName)
+    } else if (type === 'OpenStack') {
+      credential = openstackCredentials?.find((cred) => cred.metadata.name === credentialName)
+    } else if (type === 'StorageArray') {
+      credential = arrayCredentials?.find((cred) => cred.metadata.name === credentialName)
+    }
 
     if (credential) {
+      let status = 'Unknown'
+      if (type === 'VMware') {
+        status = (credential as VmwareCredential).status?.vmwareValidationStatus || 'Unknown'
+      } else if (type === 'OpenStack') {
+        status = (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown'
+      } else if (type === 'StorageArray') {
+        status = (credential as ArrayCreds).status?.arrayValidationStatus || 'Unknown'
+      }
+
       const credItem: CredentialItem = {
         id,
         name: credential.metadata.name,
         type,
-        status:
-          type === 'VMware'
-            ? (credential as VmwareCredential).status?.vmwareValidationStatus || 'Unknown'
-            : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
+        status,
         credObject: credential
       }
       setSelectedForDeletion([credItem])
@@ -375,10 +440,17 @@ export default function CredentialsTable() {
       revalidationTimeoutRef.current = null
     }, 120000)
 
+    let kind: 'VmwareCreds' | 'OpenstackCreds' | 'ArrayCreds' = 'VmwareCreds'
+    if (row.type === 'OpenStack') {
+      kind = 'OpenstackCreds'
+    } else if (row.type === 'StorageArray') {
+      kind = 'ArrayCreds'
+    }
+
     revalidate({
       name: credObject.metadata.name,
       namespace: credObject.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE,
-      kind: row.type === 'VMware' ? 'VmwareCreds' : 'OpenstackCreds'
+      kind
     })
   }
 
@@ -403,6 +475,7 @@ export default function CredentialsTable() {
     try {
       const vmwareCreds = selectedForDeletion.filter((cred) => cred.type === 'VMware')
       const openstackCreds = selectedForDeletion.filter((cred) => cred.type === 'OpenStack')
+      const arrayCreds = selectedForDeletion.filter((cred) => cred.type === 'StorageArray')
 
       await Promise.all(
         vmwareCreds.map((cred) => {
@@ -418,8 +491,16 @@ export default function CredentialsTable() {
         })
       )
 
+      await Promise.all(
+        arrayCreds.map((cred) => {
+          const credName = cred.id.replace('array-', '')
+          return deleteArrayCredsWithSecretFlow(credName)
+        })
+      )
+
       queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
 
       setSelectedIds([])
       handleDeleteClose()
@@ -449,7 +530,7 @@ export default function CredentialsTable() {
 
   const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId)
 
-  const isLoading = loadingVmware || loadingOpenstack || deleting
+  const isLoading = loadingVmware || loadingOpenstack || loadingArray || deleting
 
   const handleOpenVMwareCredDrawer = () => {
     setVmwareCredDrawerOpen(true)
@@ -467,6 +548,15 @@ export default function CredentialsTable() {
   const handleCloseOpenstackCredDrawer = () => {
     setOpenstackCredDrawerOpen(false)
     refetchOpenstack()
+  }
+
+  const handleOpenArrayCredDrawer = () => {
+    setArrayCredDrawerOpen(true)
+  }
+
+  const handleCloseArrayCredDrawer = () => {
+    setArrayCredDrawerOpen(false)
+    refetchArray()
   }
 
   return (
@@ -497,6 +587,7 @@ export default function CredentialsTable() {
               onRefresh={handleRefresh}
               onAddVMwareCredential={handleOpenVMwareCredDrawer}
               onAddOpenstackCredential={handleOpenOpenstackCredDrawer}
+              onAddArrayCredential={handleOpenArrayCredDrawer}
             />
           )
         }}
@@ -547,6 +638,13 @@ export default function CredentialsTable() {
         <OpenstackCredentialsDrawer
           open={openstackCredDrawerOpen}
           onClose={handleCloseOpenstackCredDrawer}
+        />
+      )}
+
+      {arrayCredDrawerOpen && (
+        <ArrayCredentialsDrawer
+          open={arrayCredDrawerOpen}
+          onClose={handleCloseArrayCredDrawer}
         />
       )}
     </div>

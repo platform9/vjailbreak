@@ -14,9 +14,11 @@ import { deleteVmwareCredentials, getVmwareCredentialsList } from './vmware-cred
 import {
   createOpenstackCredsSecret,
   createVMwareCredsSecret,
+  createArrayCredsSecret,
   deleteSecret
 } from './secrets/secrets'
 import { createVMwareCredsWithSecret } from './vmware-creds/vmwareCreds'
+import { deleteArrayCredentials, createArrayCredsWithSecret } from './array-creds/arrayCreds'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from './constants'
 import { AMPLITUDE_EVENTS, EventProperties } from 'src/types/amplitude'
 import { enrichEventProperties, getTrackingBehavior } from 'src/config/amplitude'
@@ -186,7 +188,7 @@ export const deleteOpenStackCredsWithSecretFlow = async (
 export interface RevalidateCredentialsRequest {
   name: string
   namespace: string
-  kind: 'VmwareCreds' | 'OpenstackCreds'
+  kind: 'VmwareCreds' | 'OpenstackCreds' | 'ArrayCreds'
 }
 
 export interface RevalidateCredentialsResponse {
@@ -236,7 +238,58 @@ export const getPf9EnvConfig = async (): Promise<Pf9EnvConfigMap> => {
   })
 }
 
-// Simplified API call tracking
+// Create storage array credentials with secret
+export const createArrayCredsWithSecretFlow = async (
+  credName: string,
+  credentials: {
+    ARRAY_HOSTNAME: string
+    ARRAY_USERNAME: string
+    ARRAY_PASSWORD: string
+    ARRAY_SKIP_SSL_VERIFICATION?: boolean
+    VENDOR_TYPE: string
+    OPENSTACK_MAPPING?: {
+      volumeType?: string
+      cinderBackendName?: string
+      cinderBackendPool?: string
+      cinderHost?: string
+    }
+  },
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretName = `${credName}-array-secret`
+
+  await createArrayCredsSecret(secretName, {
+    ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
+    ARRAY_USERNAME: credentials.ARRAY_USERNAME,
+    ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
+    ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION
+  }, namespace)
+
+  return createArrayCredsWithSecret(
+    credName,
+    secretName,
+    credentials.VENDOR_TYPE,
+    credentials.OPENSTACK_MAPPING,
+    namespace
+  )
+}
+
+// Delete storage array credentials and associated secret
+export const deleteArrayCredsWithSecretFlow = async (
+  credName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  try {
+    const secretName = `${credName}-array-secret`
+    await deleteArrayCredentials(credName, namespace)
+    await deleteSecret(secretName, namespace)
+    return { success: true }
+  } catch (error) {
+    console.error(`Error deleting storage array credential ${credName}:`, error)
+    throw error
+  }
+}
+
 export const trackApiCall = async <T>(
   operation: () => Promise<T>,
   successEvent: keyof typeof AMPLITUDE_EVENTS,
