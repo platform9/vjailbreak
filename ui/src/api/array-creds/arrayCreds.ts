@@ -38,7 +38,12 @@ export const patchArrayCredentials = async (
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/arraycreds/${name}`
   const response = await axios.patch<ArrayCreds>({
     endpoint,
-    data
+    data,
+    config: {
+      headers: {
+        'Content-Type': 'application/merge-patch+json'
+      }
+    }
   })
   return response
 }
@@ -148,7 +153,12 @@ export const updateArrayCredsWithSecret = async (
 
   const response = await axios.patch<ArrayCreds>({
     endpoint,
-    data: patchBody
+    data: patchBody,
+    config: {
+      headers: {
+        'Content-Type': 'application/merge-patch+json'
+      }
+    }
   })
 
   return response
