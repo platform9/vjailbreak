@@ -42,7 +42,6 @@ interface FormData {
   skipSslVerification: boolean
 }
 
-type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
 
 export default function EditArrayCredentialsDrawer({
   open,
