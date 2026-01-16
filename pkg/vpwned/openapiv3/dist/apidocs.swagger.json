@@ -14,6 +14,12 @@
     },
     {
       "name": "BMProvider"
+    },
+    {
+      "name": "VailbreakProxy"
+    },
+    {
+      "name": "StorageArray"
     }
   ],
   "consumes": [
@@ -306,6 +312,38 @@
         ],
         "tags": [
           "VCenter"
+        ]
+      }
+    },
+    "/vpw/v1/inject_env_variables": {
+      "post": {
+        "operationId": "VailbreakProxy_InjectEnvVariables",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiInjectEnvVariablesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiInjectEnvVariablesRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
         ]
       }
     },
@@ -659,6 +697,220 @@
         ]
       }
     },
+    "/vpw/v1/storage/initiator_group": {
+      "post": {
+        "operationId": "StorageArray_CreateOrUpdateInitiatorGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCreateInitiatorGroupResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCreateInitiatorGroupRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/map_volume": {
+      "post": {
+        "operationId": "StorageArray_MapVolumeToGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiMapVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiMapVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/mapped_groups": {
+      "post": {
+        "operationId": "StorageArray_GetMappedGroups",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetMappedGroupsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiGetMappedGroupsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/resolve_volume": {
+      "post": {
+        "operationId": "StorageArray_ResolveCinderVolume",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiResolveCinderVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiResolveCinderVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/unmap_volume": {
+      "post": {
+        "operationId": "StorageArray_UnmapVolumeFromGroup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUnmapVolumeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUnmapVolumeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/storage/validate": {
+      "post": {
+        "operationId": "StorageArray_ValidateCredentials",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiValidateStorageCredsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiValidateStorageCredsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "StorageArray"
+        ]
+      }
+    },
+    "/vpw/v1/tags": {
+      "get": {
+        "operationId": "Version_GetAvailableTags",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiAvailableUpdatesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    },
     "/vpw/v1/un_cordon_host": {
       "post": {
         "operationId": "VCenter_UnCordonHost",
@@ -688,6 +940,156 @@
         ],
         "tags": [
           "VCenter"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade": {
+      "post": {
+        "operationId": "Version_InitiateUpgrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/cleanup_step": {
+      "post": {
+        "operationId": "Version_CleanupStep",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCleanupStepResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCleanupStepRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/confirm_cleanup": {
+      "post": {
+        "operationId": "Version_ConfirmCleanupAndUpgrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/upgrade/progress": {
+      "get": {
+        "operationId": "Version_GetUpgradeProgress",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpgradeProgressResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Version"
+        ]
+      }
+    },
+    "/vpw/v1/validate_openstack_ip": {
+      "post": {
+        "operationId": "VailbreakProxy_ValidateOpenstackIp",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiValidateOpenstackIpResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiValidateOpenstackIpRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
         ]
       }
     },
@@ -737,6 +1139,18 @@
     }
   },
   "definitions": {
+    "apiAvailableUpdatesResponse": {
+      "type": "object",
+      "properties": {
+        "updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiReleaseInfo"
+          }
+        }
+      }
+    },
     "apiBMListMachinesResponse": {
       "type": "object",
       "properties": {
@@ -827,6 +1241,28 @@
         }
       }
     },
+    "apiCleanupStepRequest": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string"
+        }
+      }
+    },
+    "apiCleanupStepResponse": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiCordonHostRequest": {
       "type": "object",
       "properties": {
@@ -849,6 +1285,41 @@
         },
         "message": {
           "type": "string"
+        }
+      }
+    },
+    "apiCreateInitiatorGroupRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "hbaIdentifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiCreateInitiatorGroupResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
         }
       }
     },
@@ -880,6 +1351,35 @@
         }
       }
     },
+    "apiGetMappedGroupsRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiGetMappedGroupsResponse": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "apiGetResourceInfoResponse": {
       "type": "object",
       "properties": {
@@ -893,6 +1393,31 @@
       "properties": {
         "vm": {
           "$ref": "#/definitions/apiVMInfo"
+        }
+      }
+    },
+    "apiInjectEnvVariablesRequest": {
+      "type": "object",
+      "properties": {
+        "httpProxy": {
+          "type": "string"
+        },
+        "httpsProxy": {
+          "type": "string"
+        },
+        "noProxy": {
+          "type": "string"
+        }
+      }
+    },
+    "apiInjectEnvVariablesResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
         }
       }
     },
@@ -1038,6 +1563,66 @@
         }
       }
     },
+    "apiMapVolumeRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiMapVolumeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        }
+      }
+    },
+    "apiMappingContextEntry": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiOpenstackAccessInfo": {
+      "type": "object",
+      "properties": {
+        "secretName": {
+          "type": "string"
+        },
+        "secretNamespace": {
+          "type": "string"
+        }
+      }
+    },
     "apiPowerStatus": {
       "type": "string",
       "enum": [
@@ -1120,6 +1705,42 @@
         }
       }
     },
+    "apiReleaseInfo": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "releaseNotes": {
+          "type": "string"
+        }
+      }
+    },
+    "apiResolveCinderVolumeRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "volumeName": {
+          "type": "string"
+        }
+      }
+    },
+    "apiResolveCinderVolumeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        }
+      }
+    },
     "apiSetResourceBM2PXEBootRequest": {
       "type": "object",
       "properties": {
@@ -1181,6 +1802,27 @@
           "type": "string"
         }
       }
+    },
+    "apiStorageAccessInfo": {
+      "type": "object",
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "skipSslVerification": {
+          "type": "boolean"
+        },
+        "vendorType": {
+          "type": "string"
+        }
+      },
+      "title": "Storage Array APIs"
     },
     "apiTargetAccessInfo": {
       "type": "object",
@@ -1245,6 +1887,93 @@
         }
       }
     },
+    "apiUnmapVolumeRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        },
+        "initiatorGroupName": {
+          "type": "string"
+        },
+        "volume": {
+          "$ref": "#/definitions/apiVolumeInfo"
+        },
+        "mappingContext": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiMappingContextEntry"
+          }
+        }
+      }
+    },
+    "apiUnmapVolumeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpgradeProgressResponse": {
+      "type": "object",
+      "properties": {
+        "currentStep": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number",
+          "format": "float"
+        },
+        "status": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "string"
+        },
+        "endTime": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpgradeRequest": {
+      "type": "object",
+      "properties": {
+        "targetVersion": {
+          "type": "string"
+        },
+        "autoCleanup": {
+          "type": "boolean"
+        }
+      }
+    },
+    "apiUpgradeResponse": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "$ref": "#/definitions/apiValidationResult"
+        },
+        "upgradeStarted": {
+          "type": "boolean"
+        },
+        "cleanupRequired": {
+          "type": "boolean"
+        },
+        "customResourceList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "apiVMInfo": {
       "type": "object",
       "properties": {
@@ -1276,10 +2005,107 @@
         }
       }
     },
+    "apiValidateOpenstackIpRequest": {
+      "type": "object",
+      "properties": {
+        "ip": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "accessInfo": {
+          "$ref": "#/definitions/apiOpenstackAccessInfo"
+        }
+      }
+    },
+    "apiValidateOpenstackIpResponse": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "reason": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "apiValidateStorageCredsRequest": {
+      "type": "object",
+      "properties": {
+        "accessInfo": {
+          "$ref": "#/definitions/apiStorageAccessInfo"
+        }
+      }
+    },
+    "apiValidateStorageCredsResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiValidationResult": {
+      "type": "object",
+      "properties": {
+        "agentsScaledDown": {
+          "type": "boolean"
+        },
+        "vmwareCredsDeleted": {
+          "type": "boolean"
+        },
+        "openstackCredsDeleted": {
+          "type": "boolean"
+        },
+        "noMigrationPlans": {
+          "type": "boolean"
+        },
+        "noRollingMigrationPlans": {
+          "type": "boolean"
+        },
+        "noCustomResources": {
+          "type": "boolean"
+        },
+        "passedAll": {
+          "type": "boolean"
+        }
+      }
+    },
     "apiVersionResponse": {
       "type": "object",
       "properties": {
         "version": {
+          "type": "string"
+        }
+      }
+    },
+    "apiVolumeInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "format": "int64"
+        },
+        "id": {
+          "type": "string"
+        },
+        "serialNumber": {
+          "type": "string"
+        },
+        "naa": {
           "type": "string"
         }
       }

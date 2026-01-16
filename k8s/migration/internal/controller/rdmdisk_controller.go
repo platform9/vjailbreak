@@ -39,7 +39,8 @@ import (
 // RDMDiskReconciler reconciles a RDMDisk object
 type RDMDiskReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme    *runtime.Scheme
+	APIReader client.Reader
 }
 
 const (
@@ -83,7 +84,7 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Get the RDMDisk resource
 	rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
-	if err := r.Get(ctx, req.NamespacedName, rdmDisk); err != nil {
+	if err := r.APIReader.Get(ctx, req.NamespacedName, rdmDisk); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			ctxlog.Error(err, "unable to fetch RDMDisk")
 			return ctrl.Result{}, err
@@ -91,6 +92,12 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ctxlog.Error(err, "RDMDisk resource not found, likely deleted", "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
+	ctxlog.V(1).Info("Reconciling RDMDisk",
+		"RDMDisk", rdmDisk.Name,
+		"resourceVersion", rdmDisk.ResourceVersion,
+		"phase", rdmDisk.Status.Phase,
+		"importToCinder", rdmDisk.Spec.ImportToCinder,
+		"cinderVolumeID", rdmDisk.Status.CinderVolumeID)
 
 	switch rdmDisk.Status.Phase {
 	case "":
@@ -100,13 +107,19 @@ func (r *RDMDiskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	case RDMPhaseManaging:
 		return r.handleManagingPhase(ctx, req, rdmDisk, ctxlog)
 	case RDMPhaseManaged:
-		ctxlog.Info("RDMDisk is already managed", "CinderVolumeID", rdmDisk.Status.CinderVolumeID)
+		ctxlog.Info("RDMDisk is already managed",
+			"CinderVolumeID", rdmDisk.Status.CinderVolumeID,
+			"resourceVersion", rdmDisk.ResourceVersion)
 		return ctrl.Result{}, nil
 	case RDMPhaseError:
-		ctxlog.Info("RDMDisk is in error state, skipping reconciliation, to trigger a reconciliation re create rdm disk custom resource", "CinderVolumeID", rdmDisk.Status.CinderVolumeID)
+		ctxlog.Info("RDMDisk is in error state, skipping reconciliation, to trigger a reconciliation re create rdm disk custom resource",
+			"CinderVolumeID", rdmDisk.Status.CinderVolumeID,
+			"resourceVersion", rdmDisk.ResourceVersion)
 		return ctrl.Result{}, nil
 	default:
-		ctxlog.Info("Unknown phase", "phase", rdmDisk.Status.Phase)
+		ctxlog.Info("Unknown phase",
+			"phase", rdmDisk.Status.Phase,
+			"resourceVersion", rdmDisk.ResourceVersion)
 		return ctrl.Result{}, nil
 	}
 }
@@ -149,12 +162,21 @@ func (r *RDMDiskReconciler) handleInitialPhase(ctx context.Context, rdmDisk *vja
 		log.Error(err, "unable to update RDMDisk status")
 		return ctrl.Result{}, err
 	}
+	log.Info("RDMDisk validated and moved to Available phase",
+		"RDMDisk", rdmDisk.Name,
+		"resourceVersion", rdmDisk.ResourceVersion)
 	return ctrl.Result{RequeueAfter: RetryInterval}, nil
 }
 
 // handleAvailablePhase handles the Available phase of RDMDisk reconciliation
 func (r *RDMDiskReconciler) handleAvailablePhase(ctx context.Context, rdmDisk *vjailbreakv1alpha1.RDMDisk, log logr.Logger) (ctrl.Result, error) {
 	if rdmDisk.Spec.ImportToCinder {
+		log.Info("Transitioning to Managing phase",
+			"RDMDisk", rdmDisk.Name,
+			"resourceVersion", rdmDisk.ResourceVersion,
+			"currentPhase", rdmDisk.Status.Phase,
+			"cinderVolumeID", rdmDisk.Status.CinderVolumeID)
+
 		rdmDisk.Status.Phase = RDMPhaseManaging
 		updateStatusCondition(rdmDisk, metav1.Condition{
 			Type:    MigrationStarted,
@@ -166,14 +188,28 @@ func (r *RDMDiskReconciler) handleAvailablePhase(ctx context.Context, rdmDisk *v
 			log.Error(err, "unable to update RDMDisk status")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		log.Info("Status updated to Managing phase",
+			"RDMDisk", rdmDisk.Name,
+			"newPhase", rdmDisk.Status.Phase,
+			"resourceVersion", rdmDisk.ResourceVersion)
+		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, nil
 }
 
 // handleManagingPhase handles the managing phase of RDMDisk reconciliation
 func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Request, rdmDisk *vjailbreakv1alpha1.RDMDisk, log logr.Logger) (ctrl.Result, error) {
+	log.Info("Entered handleManagingPhase",
+		"RDMDisk", rdmDisk.Name,
+		"resourceVersion", rdmDisk.ResourceVersion,
+		"cinderVolumeID", rdmDisk.Status.CinderVolumeID,
+		"importToCinder", rdmDisk.Spec.ImportToCinder)
+
 	if rdmDisk.Spec.ImportToCinder && rdmDisk.Status.CinderVolumeID == "" {
+		log.Info("Starting LUN import process",
+			"RDMDisk", rdmDisk.Name,
+			"resourceVersion", rdmDisk.ResourceVersion)
+
 		openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
 		openstackCredsName := client.ObjectKey{
 			Namespace: req.Namespace,
@@ -187,7 +223,10 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			log.Error(err, "Failed to get OpenstackCreds resource", "openstackcreds", openstackCredsName)
 			return ctrl.Result{}, err
 		}
-		log.V(1).Info("Retrieved OpenstackCreds resource", "openstackcreds", openstackCredsName, "resourceVersion", openstackcreds.ResourceVersion)
+		log.V(1).Info("Retrieved OpenstackCreds resource",
+			"openstackcreds", openstackCredsName,
+			"resourceVersion", openstackcreds.ResourceVersion)
+
 		openstackClient, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
 		if err != nil {
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
@@ -198,10 +237,25 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			NetworkingClient:   openstackClient.NetworkingClient,
 			K8sClient:          r.Client,
 		}
+
+		log.Info("Calling ImportLUNToCinder (this will block for ~10 seconds)",
+			"RDMDisk", rdmDisk.Name,
+			"resourceVersion", rdmDisk.ResourceVersion)
+
 		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, *rdmDisk, blockStorageAPIVersion)
 		if err != nil {
+			log.Error(err, "Failed to import LUN to Cinder",
+				"RDMDisk", rdmDisk.Name,
+				"resourceVersion", rdmDisk.ResourceVersion,
+				"phase", rdmDisk.Status.Phase)
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", MigrationFailed, "FailedToImportLUNToCinder", err)
 		}
+
+		log.Info("ImportLUNToCinder completed successfully",
+			"RDMDisk", rdmDisk.Name,
+			"volumeID", volumeID,
+			"resourceVersion", rdmDisk.ResourceVersion)
+
 		rdmDisk.Status.Phase = RDMPhaseManaged
 		rdmDisk.Status.CinderVolumeID = volumeID
 		updateStatusCondition(rdmDisk, metav1.Condition{
@@ -211,11 +265,28 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 			Message: "Successfully imported RDM disk to Cinder",
 		})
 		if err := r.Status().Update(ctx, rdmDisk); err != nil {
-			log.Error(err, "unable to update RDMDisk status with volume ID")
+			log.Error(err, "unable to update RDMDisk status with volume ID",
+				"RDMDisk", rdmDisk.Name,
+				"volumeID", volumeID,
+				"resourceVersion", rdmDisk.ResourceVersion)
 			return ctrl.Result{}, err
 		}
+		log.Info("Successfully imported LUN to Cinder",
+			"RDMDisk", rdmDisk.Name,
+			"resourceVersion", rdmDisk.ResourceVersion,
+			"phase", rdmDisk.Status.Phase,
+			"volumeID", volumeID,
+			"importToCinder", rdmDisk.Spec.ImportToCinder)
 		return ctrl.Result{}, nil
 	}
+
+	if rdmDisk.Status.CinderVolumeID != "" {
+		log.Info("Skipping import, CinderVolumeID already set",
+			"RDMDisk", rdmDisk.Name,
+			"cinderVolumeID", rdmDisk.Status.CinderVolumeID,
+			"resourceVersion", rdmDisk.ResourceVersion)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -249,7 +320,9 @@ func ValidateRDMDiskFields(rdmDisk *vjailbreakv1alpha1.RDMDisk) error {
 // handleError updates the RDMDisk status with the provided error details and logs the error.
 func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alpha1.RDMDisk, phase string, conditionType string, reason string, err error) error {
 	log := log.FromContext(ctx)
-	log.Error(err, fmt.Sprintf("Failed during phase: %s", phase))
+	log.Error(err, fmt.Sprintf("Failed during phase: %s", phase),
+		"RDMDisk", rdmDisk.Name,
+		"resourceVersion", rdmDisk.ResourceVersion)
 	rdmDisk.Status.Phase = phase
 	failureCondition := metav1.Condition{
 		Type:    conditionType,
@@ -259,7 +332,9 @@ func handleError(ctx context.Context, r client.Client, rdmDisk *vjailbreakv1alph
 	}
 	meta.SetStatusCondition(&rdmDisk.Status.Conditions, failureCondition)
 	if updateErr := r.Status().Update(ctx, rdmDisk); updateErr != nil {
-		log.Error(updateErr, "unable to update RDMDisk status")
+		log.Error(updateErr, "unable to update RDMDisk status",
+			"RDMDisk", rdmDisk.Name,
+			"resourceVersion", rdmDisk.ResourceVersion)
 		return updateErr
 	}
 	return err

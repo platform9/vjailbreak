@@ -33,6 +33,9 @@ const (
 	// VMwareCredsControllerName is the name of the vmware credentials controller
 	VMwareCredsControllerName = "vmwarecreds-controller" //nolint:gosec // not a password string
 
+	// ArrayCredsControllerName is the name of the storage array credentials controller
+	ArrayCredsControllerName = "arraycreds-controller" //nolint:gosec // not a password string
+
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
@@ -53,6 +56,9 @@ const (
 
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
+
+	// VMwareDatacenterLabel is the label for the vSphere datacenter
+	VMwareDatacenterLabel = "vjailbreak.k8s.pf9.io/datacenter" //nolint:gosec // not a password string
 
 	// OpenstackCredsLabel is the label for openstack credentials
 	OpenstackCredsLabel = "vjailbreak.k8s.pf9.io/openstackcreds" //nolint:gosec // not a password string
@@ -84,6 +90,9 @@ const (
 	// PauseMigrationLabel is the label for pausing rolling migration plan
 	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
+	// PauseMigrationValue is the value for pausing migration
+	PauseMigrationValue = "true"
+
 	// UserDataSecretKey is the key for user data secret
 	UserDataSecretKey = "user-data"
 
@@ -114,6 +123,21 @@ const (
 	// VMwareCredsFinalizer is the finalizer for vmware credentials
 	VMwareCredsFinalizer = "vmwarecreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 
+	// ArrayCredsFinalizer is the finalizer for storage array credentials
+	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ArrayCreds phases
+	ArrayCredsPhaseDiscovered = "Discovered"
+	ArrayCredsPhaseConfigured = "Configured"
+	ArrayCredsPhaseValidated  = "Validated"
+	ArrayCredsPhaseFailed     = "Failed"
+
+	// ArrayCreds validation statuses
+	ArrayCredsStatusPending             = "Pending"
+	ArrayCredsStatusSucceeded           = "Succeeded"
+	ArrayCredsStatusFailed              = "Failed"
+	ArrayCredsStatusAwaitingCredentials = "AwaitingCredentials"
+
 	// VjailbreakNodePhaseVMCreating is the phase for creating VM
 	VjailbreakNodePhaseVMCreating = vjailbreakv1alpha1.VjailbreakNodePhase("CreatingVM")
 
@@ -125,6 +149,9 @@ const (
 
 	// VjailbreakNodePhaseNodeReady is the phase for node ready
 	VjailbreakNodePhaseNodeReady = vjailbreakv1alpha1.VjailbreakNodePhase("Ready")
+
+	// VjailbreakNodePhaseError is the phase for node in error state
+	VjailbreakNodePhaseError = vjailbreakv1alpha1.VjailbreakNodePhase("Error")
 
 	// NamespaceMigrationSystem is the namespace for migration system
 	NamespaceMigrationSystem = "migration-system"
@@ -185,6 +212,7 @@ const (
 	// ConfigMap default values
 	ChangedBlocksCopyIterationThreshold = 20
 
+	PeriodicSyncInterval = "1h"
 	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
 	VMActiveWaitIntervalSeconds = 20
 
@@ -206,21 +234,42 @@ const (
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
+	// CleanupPortsAfterMigrationFailure is the default value for cleanup ports after migration failure
+	CleanupPortsAfterMigrationFailure = false
+
 	// PopulateVMwareMachineFlavors is the default value for populate vmware machine flavors
 	PopulateVMwareMachineFlavors = true
+
+	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
+	ValidateRDMOwnerVMs = true
+
+	// MigrationPlan status message prefix
+	MigrationPlanValidationFailedPrefix = "Migration plan validation failed"
+
+	// ValidationStatusFailed is the status value for failed validation
+	ValidationStatusFailed = "Failed"
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 
 	// VCenterLoginRetryLimit is the number of retries for vcenter login
 	VCenterLoginRetryLimit = 5
+
+	MaxRetries = 3
+	RetryCap   = "3h"
+	// ConfigMap settings keys
+	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
+	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionDefault = false
+	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization
 var (
 	K3sCloudInitScript = `#cloud-config
-password: %s
-chpasswd: { expire: False }
 write_files:
 - path: %s
   content: |
@@ -241,19 +290,34 @@ runcmd:
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
 
+	// MigrationConditionTypeStorageAcceleratedCopy represents the condition type for StorageAcceleratedCopy phases
+	MigrationConditionTypeStorageAcceleratedCopy corev1.PodConditionType = "StorageAcceleratedCopy"
+
+	// MigrationConditionTypeMigrated represents the condition type for successful completion
+	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
+
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
-		vjailbreakv1alpha1.VMMigrationPhasePending:                  0,
-		vjailbreakv1alpha1.VMMigrationPhaseValidating:               1,
-		vjailbreakv1alpha1.VMMigrationPhaseFailed:                   2,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart:    3,
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  4,
-		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     5,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           6,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 7,
-		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     8,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                9,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  10,
+		vjailbreakv1alpha1.VMMigrationPhasePending:               0,
+		vjailbreakv1alpha1.VMMigrationPhaseValidating:            1,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:      2,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed:                3,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart: 4,
+		// StorageAcceleratedCopy XCOPY specific phases (numbered to fit between AwaitingDataCopyStart and Copying)
+		vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi:       5,
+		vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup: 6,
+		vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume:         7,
+		vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder:      8,
+		vjailbreakv1alpha1.VMMigrationPhaseMappingVolume:          9,
+		vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage:      10,
+		// Common phases to both the copy methods.
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  11,
+		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks:     12,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:           13,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 14,
+		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     15,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                16,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  17,
 	}
 
 	// MigrationJobTTL is the TTL for migration job
@@ -289,4 +353,12 @@ runcmd:
   - echo "Preparing the node..."
   - cloud-ctl prep-node
   - echo "Node preparation complete. Setup finished successfully."`
+)
+var (
+	// RDMPhaseManaging is the phase for RDMDisk when it is being managed
+	RDMPhaseManaging = "Managing"
+	// RDMPhaseManaged is the phase for RDMDisk when it has been successfully managed
+	RDMPhaseManaged = "Managed"
+	// RDMPhaseError is the phase for RDMDisk when there is an error
+	RDMPhaseError = "Error"
 )

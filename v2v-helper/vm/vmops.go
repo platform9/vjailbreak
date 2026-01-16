@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
@@ -46,12 +46,17 @@ type VMOperations interface {
 	DisconnectNetworkInterfaces() error
 }
 
+type IpEntry struct {
+	IP     string
+	Prefix int32
+}
+
 type VMInfo struct {
 	CPU               int32
 	Memory            int32
 	State             types.VirtualMachinePowerState
 	Mac               []string
-	IPs               []string
+	IPperMac          map[string][]IpEntry
 	UUID              string
 	Host              string
 	VMDisks           []VMDisk
@@ -61,6 +66,7 @@ type VMInfo struct {
 	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
+	GatewayIP         map[string]string
 }
 
 type NIC struct {
@@ -94,6 +100,8 @@ type VMDisk struct {
 	SnapBackingDisk string
 	ChangeID        string
 	Boot            bool
+	Datastore       string
+	DatastoreID     string
 }
 
 type VMOps struct {
@@ -111,9 +119,15 @@ func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name stri
 	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx, k8sClient: k8sClient}, nil
 
 }
-
+func (vmops *VMOps) GetVmPowerState() (types.VirtualMachinePowerState, error) {
+	return vmops.VMObj.PowerState(vmops.ctx)
+}
 func (vmops *VMOps) GetVMObj() *object.VirtualMachine {
 	return vmops.VMObj
+}
+
+func (vmops *VMOps) GetVCenterClient() *vcenter.VCenterClient {
+	return vmops.vcclient
 }
 
 func (vmops *VMOps) RefreshVM() error {
@@ -151,6 +165,8 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	}
 	// Get IP addresses of the VM from vmwaremachines
 	ips := []string{}
+	ipPerMac := make(map[string][]IpEntry)
+
 	// Get the vmware machine from k8s
 	vmk8sName, err := k8sutils.GetVMwareMachineName()
 	if err != nil {
@@ -167,15 +183,33 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
 			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
 				// Every mac should have a corresponding IP, Ignore link layer ip
-				if strings.EqualFold(guestNetwork.MAC, macAddresss) && !strings.Contains(guestNetwork.IP, ":") {
-					ips = append(ips, guestNetwork.IP)
+				if strings.EqualFold(guestNetwork.MAC, macAddresss) {
+					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
+						ipPerMac[guestNetwork.MAC] = []IpEntry{}
+					}
+					if !strings.Contains(guestNetwork.IP, ":") {
+						ips = append(ips, guestNetwork.IP)
+						ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], IpEntry{
+							IP:     guestNetwork.IP,
+							Prefix: guestNetwork.PrefixLength,
+						})
+					}
 				}
 			}
 		} else {
 			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
 				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss && !strings.Contains(networkInterface.IPAddress, ":") {
-						ips = append(ips, networkInterface.IPAddress)
+					if networkInterface.MAC == macAddresss {
+						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
+							ipPerMac[networkInterface.MAC] = []IpEntry{}
+						}
+						if !strings.Contains(networkInterface.IPAddress, ":") {
+							ips = append(ips, networkInterface.IPAddress)
+							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
+								IP:     networkInterface.IPAddress,
+								Prefix: 0,
+							})
+						}
 					}
 				}
 			}
@@ -192,10 +226,41 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 			if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
 				continue
 			}
+
+			// Get datastore information and VMDK path from disk backing
+			var datastoreName string
+			var datastoreID string
+			var vmdkPath string
+
+			if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
+				if backing.Datastore != nil {
+					datastoreID = backing.Datastore.Value
+					// Get datastore name
+					ds := object.NewDatastore(vmops.vcclient.VCClient, *backing.Datastore)
+					var dsObj mo.Datastore
+					if err := ds.Properties(vmops.ctx, ds.Reference(), []string{"name"}, &dsObj); err == nil {
+						datastoreName = dsObj.Name
+					}
+				}
+			} else if backing, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
+				if backing.Datastore != nil {
+					datastoreID = backing.Datastore.Value
+					ds := object.NewDatastore(vmops.vcclient.VCClient, *backing.Datastore)
+					var dsObj mo.Datastore
+					if err := ds.Properties(vmops.ctx, ds.Reference(), []string{"name"}, &dsObj); err == nil {
+						datastoreName = dsObj.Name
+					}
+				}
+			}
 			vmdisks = append(vmdisks, VMDisk{
-				Name: disk.DeviceInfo.GetDescription().Label,
-				Size: disk.CapacityInBytes,
-				Disk: disk,
+				Name:        disk.DeviceInfo.GetDescription().Label,
+				Size:        disk.CapacityInBytes,
+				Disk:        disk,
+				Path:        vmdkPath,
+				Datastore:   datastoreName,
+				DatastoreID: datastoreID,
 			})
 		}
 	}
@@ -226,7 +291,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		Memory:            o.Config.Hardware.MemoryMB,
 		State:             o.Runtime.PowerState,
 		Mac:               mac,
-		IPs:               ips,
+		IPperMac:          ipPerMac,
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,
@@ -236,6 +301,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		OSType:            ostype,
 		NetworkInterfaces: vmwareMachine.Spec.VMInfo.NetworkInterfaces,
 		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
+		GatewayIP:         make(map[string]string),
 	}
 	return vminfo, nil
 }

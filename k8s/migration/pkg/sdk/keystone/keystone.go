@@ -5,7 +5,6 @@ package keystone
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	"go.uber.org/zap"
 )
 
@@ -271,36 +271,29 @@ type Role struct {
 
 // HTTPClient implements the Client interface for interacting with Keystone API
 type HTTPClient struct {
-
-	// endpoint should contain the base path of keystone.
-	//
-	// Example: https://some-du.platform9.horse/keystone
-	endpoint string
-
+	endpoint   string
 	httpClient *http.Client
-
-	log *zap.Logger
+	log        *zap.Logger
 }
 
-// NewClient creates a new HTTPClient instance for interacting with the Keystone API
-func NewClient(endpoint string, insecure bool) *HTTPClient {
-	client := http.DefaultClient
-
+// NewClient creates a new HTTPClient for Keystone API communication with the specified endpoint and TLS settings.
+func NewClient(endpoint string, insecure bool) (*HTTPClient, error) {
+	client := netutils.NewVjbNet()
+	returnClient := &HTTPClient{}
 	// Turn off cert verification if running in airgapped mode
 	pmkEnv := os.Getenv("PMK_ENVIRONMENT")
 	if pmkEnv == "airgap" || insecure {
 		zap.L().Debug("running in airgapped mode - disabling cert verification")
-		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections for airgap environments
-		}
-		client = &http.Client{Transport: transport}
+		client.Insecure = true
 	}
-
-	return &HTTPClient{
-		endpoint:   strings.TrimRight(endpoint, "/"),
-		httpClient: client,
-		log:        zap.L(),
+	if err := client.CreateSecureHTTPClient(); err != nil {
+		zap.L().Error("failed to create secure HTTP client", zap.Error(err))
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
+	returnClient.httpClient = client.GetClient()
+	returnClient.endpoint = strings.TrimRight(endpoint, "/")
+	returnClient.log = zap.L()
+	return returnClient, nil
 }
 
 // Auth authenticates the user with the provided credentials.

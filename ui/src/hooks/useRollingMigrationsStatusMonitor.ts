@@ -1,16 +1,16 @@
-import { useEffect } from "react"
-import { RollingMigrationPlan } from "src/api/rolling-migration-plans/model"
-import { useAmplitude } from "./useAmplitude"
-import { useErrorHandler } from "./useErrorHandler"
-import { useStatusTracker } from "./useStatusMonitor"
-import { AMPLITUDE_EVENTS } from "src/types/amplitude"
+import { useEffect } from 'react'
+import { RollingMigrationPlan } from 'src/api/rolling-migration-plans/model'
+import { useAmplitude } from './useAmplitude'
+import { useErrorHandler } from './useErrorHandler'
+import { useStatusTracker } from './useStatusMonitor'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 export const useRollingMigrationsStatusMonitor = (
   rollingMigrationPlans: RollingMigrationPlan[] = []
 ) => {
-  const { track } = useAmplitude({ component: "RollingMigrationsStatusMonitor" })
+  const { track } = useAmplitude({ component: 'RollingMigrationsStatusMonitor' })
   const { reportError } = useErrorHandler({
-    component: "RollingMigrationsStatusMonitor",
+    component: 'RollingMigrationsStatusMonitor'
   })
   const { statusTrackerRef, autoCleanup } = useStatusTracker<string>()
 
@@ -18,7 +18,7 @@ export const useRollingMigrationsStatusMonitor = (
     if (!rollingMigrationPlans || rollingMigrationPlans.length === 0) return
 
     // Auto-cleanup old trackers
-    autoCleanup(rollingMigrationPlans.map(plan => plan.metadata?.name).filter(Boolean))
+    autoCleanup(rollingMigrationPlans.map((plan) => plan.metadata?.name).filter(Boolean))
 
     rollingMigrationPlans.forEach((rollingMigrationPlan) => {
       const planName = rollingMigrationPlan.metadata?.name
@@ -30,16 +30,18 @@ export const useRollingMigrationsStatusMonitor = (
       // Initialize tracker for new rolling migration plans
       if (!tracker) {
         statusTrackerRef.current[planName] = {
-          previousPhase: currentPhase,
+          previousPhase: currentPhase
         }
         return
       }
 
-      // Skip if phase hasn't changed or already reported
-      if (
-        tracker.previousPhase === currentPhase ||
-        tracker.lastReportedPhase === currentPhase
-      ) {
+      // Skip if phase hasn't changed
+      if (tracker.previousPhase === currentPhase) {
+        return
+      }
+
+      // Skip if this phase has already been reported (prevents duplicate events)
+      if (tracker.lastReportedPhase === currentPhase) {
         return
       }
 
@@ -49,12 +51,12 @@ export const useRollingMigrationsStatusMonitor = (
           message:
             rollingMigrationPlan.status?.migrationMessage ||
             `Rolling Migration Plan ${currentPhase}`,
-          phase: currentPhase,
+          phase: currentPhase
         }
       }
 
       // Handle rolling migration plan execution failures
-      const isFailed = currentPhase === "Failed"
+      const isFailed = currentPhase === 'Failed'
       if (isFailed && tracker.lastReportedPhase !== currentPhase) {
         const errorDetails = getErrorDetails()
 
@@ -67,9 +69,10 @@ export const useRollingMigrationsStatusMonitor = (
           errorMessage: errorDetails.message,
           bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
           clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
-          vmSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
+          vmSequenceLength:
+            rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
           namespace: rollingMigrationPlan.metadata?.namespace,
-          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type,
+          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
         })
 
         // Report to Bugsnag
@@ -77,7 +80,7 @@ export const useRollingMigrationsStatusMonitor = (
           `Rolling migration plan execution failed: ${errorDetails.message}`
         )
         reportError(bugsnagError, {
-          context: "rolling-migration-plan-execution-failure",
+          context: 'rolling-migration-plan-execution-failure',
           metadata: {
             rollingMigrationPlanName: planName,
             clusterName: rollingMigrationPlan.spec?.clusterSequence?.[0]?.clusterName,
@@ -86,26 +89,27 @@ export const useRollingMigrationsStatusMonitor = (
             errorMessage: errorDetails.message,
             bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
             clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
-            vmSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
+            vmSequenceLength:
+              rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
             namespace: rollingMigrationPlan.metadata?.namespace,
             migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type,
             fullStatus: rollingMigrationPlan.status,
-            action: "rolling-migration-plan-execution-failed",
-          },
+            action: 'rolling-migration-plan-execution-failed'
+          }
         })
 
-        console.error("Rolling migration plan execution failed:", {
+        console.error('Rolling migration plan execution failed:', {
           rollingMigrationPlanName: planName,
           errorDetails,
-          rollingMigrationPlan,
+          rollingMigrationPlan
         })
 
-        // Mark as reported
+        // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[planName].lastReportedPhase = currentPhase
       }
 
       // Handle rolling migration plan success (optional - for analytics)
-      const isSucceeded = currentPhase === "Succeeded"
+      const isSucceeded = currentPhase === 'Succeeded'
       if (isSucceeded && tracker.lastReportedPhase !== currentPhase) {
         track(AMPLITUDE_EVENTS.CLUSTER_CONVERSION_SUCCEEDED, {
           rollingMigrationPlanName: planName,
@@ -114,16 +118,17 @@ export const useRollingMigrationsStatusMonitor = (
           currentPhase,
           bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
           clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
-          vmSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
+          vmSequenceLength:
+            rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
           namespace: rollingMigrationPlan.metadata?.namespace,
-          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type,
+          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
         })
 
-        // Mark as reported
+        // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[planName].lastReportedPhase = currentPhase
       }
 
-      // Update previous phase
+      // Update previous phase (only after all event tracking is complete)
       if (statusTrackerRef.current[planName]) {
         statusTrackerRef.current[planName].previousPhase = currentPhase
       }

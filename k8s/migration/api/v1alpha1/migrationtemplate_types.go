@@ -42,7 +42,18 @@ type MigrationTemplateSpec struct {
 	// NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings
 	NetworkMapping string `json:"networkMapping"`
 	// StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
-	StorageMapping string `json:"storageMapping"`
+	// This is used for normal data copy method
+	StorageMapping string `json:"storageMapping,omitempty"`
+	// ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
+	// This is used for StorageAcceleratedCopy data copy method
+	// +optional
+	ArrayCredsMapping string `json:"arrayCredsMapping,omitempty"`
+	// StorageCopyMethod indicates the method to use for storage migration
+	// Valid values: "normal" (default), "StorageAcceleratedCopy"
+	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy
+	// +kubebuilder:default:=normal
+	// +optional
+	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
 	// Source is the source details for the virtual machine
 	Source MigrationTemplateSource `json:"source"`
 	// Destination is the destination details for the virtual machine
@@ -52,6 +63,9 @@ type MigrationTemplateSpec struct {
 	// UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
 	// +optional
 	UseFlavorless bool `json:"useFlavorless,omitempty"`
+	// UseGPUFlavor indicates if the migration should filter and use GPU-enabled flavors.
+	// +optional
+	UseGPUFlavor bool `json:"useGPUFlavor,omitempty"`
 }
 
 // +kubebuilder:object:root=true

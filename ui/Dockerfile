@@ -19,8 +19,11 @@ COPY tsconfig.json .
 
 RUN yarn build
 
-# Use a lightweight Nginx image to serve the built app
-FROM nginx:1.24-alpine3.17-slim
+# Use OpenResty image with Lua module support
+FROM openresty/openresty:alpine
+
+# Install envsubst (gettext package)
+RUN apk add --no-cache gettext
 
 # Copy built assets from the build stage
 COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
@@ -29,7 +32,7 @@ COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
 COPY public /usr/share/nginx/html
 
 # Copy the Nginx configuration file
-COPY default.conf /etc/nginx/conf.d/
+COPY default.conf /usr/local/openresty/nginx/conf/nginx.conf
 
 # Copy the startup script
 COPY startup.sh /usr/local/bin/start.sh

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { streamPodLogs } from "../api/kubernetes/pods"
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { streamPodLogs } from '../api/kubernetes/pods'
 
 interface UseDirectPodLogsParams {
   podName: string
   namespace: string
   enabled: boolean
+  sessionKey: number
 }
 
 interface UseDirectPodLogsReturn {
@@ -14,18 +15,22 @@ interface UseDirectPodLogsReturn {
   reconnect: () => void
 }
 
-const MAX_LOG_LINES = 1000
+const MAX_LOG_LINES = 5000
 
 export const useDirectPodLogs = ({
   podName,
   namespace,
   enabled,
+  sessionKey
 }: UseDirectPodLogsParams): UseDirectPodLogsReturn => {
   const [logs, setLogs] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasInitiallyLoadedRef = useRef(false)
+  const previousPodRef = useRef<string>('')
+  const seenLogsRef = useRef<Set<string>>(new Set())
 
   const cleanup = useCallback(() => {
     if (abortControllerRef.current) {
@@ -51,11 +56,17 @@ export const useDirectPodLogs = ({
       const abortController = new AbortController()
       abortControllerRef.current = abortController
 
+      const shouldFetchHistory = !hasInitiallyLoadedRef.current
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
-        tailLines: "100",
-        signal: abortController.signal,
+        tailLines: shouldFetchHistory ? '2000' : undefined,
+        limitBytes: 8 * 1024 * 1024,
+        signal: abortController.signal
       })
+
+      if (shouldFetchHistory) {
+        hasInitiallyLoadedRef.current = true
+      }
 
       setIsLoading(false)
 
@@ -70,15 +81,21 @@ export const useDirectPodLogs = ({
       const readStream = async (): Promise<void> => {
         try {
           const { done, value } = await reader.read()
-          
+
           if (done) {
             // Process any remaining buffer content
-            if (buffer.trim()) {
-              setLogs(prevLogs => {
-                const newLogs = [...prevLogs, buffer.trim()]
-                return newLogs.length > MAX_LOG_LINES 
-                  ? newLogs.slice(-MAX_LOG_LINES) 
-                  : newLogs
+            const remainingLine = buffer.trim()
+            if (remainingLine && !seenLogsRef.current.has(remainingLine)) {
+              seenLogsRef.current.add(remainingLine)
+              setLogs((prevLogs) => {
+                const newLogs = [...prevLogs, remainingLine]
+                if (newLogs.length > MAX_LOG_LINES) {
+                  // Remove oldest from seen set when trimming
+                  const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                  removed.forEach((log) => seenLogsRef.current.delete(log))
+                  return newLogs.slice(-MAX_LOG_LINES)
+                }
+                return newLogs
               })
             }
             return
@@ -86,18 +103,27 @@ export const useDirectPodLogs = ({
 
           // Decode the chunk and add to buffer
           buffer += decoder.decode(value, { stream: true })
-          
+
           // Split by newlines and process complete lines
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // Keep incomplete line in buffer
-          
+
           if (lines.length > 0) {
-            setLogs(prevLogs => {
-              const newLogs = [...prevLogs, ...lines.filter(line => line.trim())]
-              return newLogs.length > MAX_LOG_LINES 
-                ? newLogs.slice(-MAX_LOG_LINES) 
-                : newLogs
-            })
+            const filteredLines = lines.filter((line) => line.trim())
+            const uniqueLines = filteredLines.filter((line) => !seenLogsRef.current.has(line))
+            if (uniqueLines.length > 0) {
+              uniqueLines.forEach((line) => seenLogsRef.current.add(line))
+              setLogs((prevLogs) => {
+                const newLogs = [...prevLogs, ...uniqueLines]
+                if (newLogs.length > MAX_LOG_LINES) {
+                  // Remove oldest from seen set when trimming
+                  const removed = newLogs.slice(0, newLogs.length - MAX_LOG_LINES)
+                  removed.forEach((log) => seenLogsRef.current.delete(log))
+                  return newLogs.slice(-MAX_LOG_LINES)
+                }
+                return newLogs
+              })
+            }
           }
 
           // Continue reading
@@ -118,36 +144,45 @@ export const useDirectPodLogs = ({
         // Aborted, don't set error
         return
       }
-      
-      const errorMessage = err instanceof Error ? err.message : "Failed to connect to pod logs stream"
+
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to connect to pod logs stream'
       setError(errorMessage)
-      
-      // Attempt to reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (enabled) {
-          connect()
-        }
-      }, 3000)
     }
   }, [enabled, podName, namespace, cleanup])
 
   const reconnect = useCallback(() => {
     setLogs([])
+    hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
     connect()
   }, [connect])
 
   useEffect(() => {
+    setLogs([])
+    hasInitiallyLoadedRef.current = false
+    seenLogsRef.current.clear()
+  }, [sessionKey])
+
+  useEffect(() => {
+    const currentPodKey = `${namespace}/${podName}`
+    if (previousPodRef.current && previousPodRef.current !== currentPodKey) {
+      setLogs([])
+      hasInitiallyLoadedRef.current = false
+      seenLogsRef.current.clear()
+    }
+    previousPodRef.current = currentPodKey
+
     if (enabled && podName && namespace) {
       connect()
     } else {
       cleanup()
-      setLogs([])
       setIsLoading(false)
       setError(null)
     }
 
     return cleanup
-  }, [enabled, podName, namespace, connect, cleanup])
+  }, [enabled, podName, namespace, sessionKey, connect, cleanup])
 
   useEffect(() => {
     return cleanup
@@ -157,6 +192,6 @@ export const useDirectPodLogs = ({
     logs,
     isLoading,
     error,
-    reconnect,
+    reconnect
   }
 }

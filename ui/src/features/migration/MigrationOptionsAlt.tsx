@@ -1,72 +1,83 @@
 import {
+  Box,
   Checkbox,
+  Divider,
   FormControlLabel,
   MenuItem,
   Select,
   styled,
-  TextField,
-  Typography,
-} from "@mui/material"
-import customTypography from "../../theme/typography"
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
-import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker"
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
-import dayjs from "dayjs"
-import { useCallback, useEffect } from "react"
-import Step from "src/components/forms/Step"
-import {
-  FieldErrors,
-  FormValues,
-  SelectedMigrationOptionsType,
-} from "./MigrationForm"
+  Typography
+} from '@mui/material'
+import customTypography from '../../theme/typography'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import dayjs from 'dayjs'
+import { useCallback, useEffect } from 'react'
+import { useFormContext } from 'react-hook-form'
+import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
+import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
+import { IntervalField } from 'src/shared/components/forms'
+import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
-// Accordian Imports
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import Accordion from "@mui/material/Accordion"
-import AccordionDetails from "@mui/material/AccordionDetails"
-import AccordionSummary from "@mui/material/AccordionSummary"
-import { OpenstackCreds } from "src/api/openstack-creds/model";
-import {
-  CUTOVER_TYPES,
-  DATA_COPY_OPTIONS,
-  OS_TYPES,
-  OS_TYPES_OPTIONS,
-  VM_CUTOVER_OPTIONS,
-} from "./constants"
-
-// Styles
-const FieldsContainer = styled("div")(({ theme }) => ({
-  marginLeft: theme.spacing(4),
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gridGap: "32px 16px", // Adds spacing between the columns
-  alignItems: "start",
+const SectionBlock = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gap: theme.spacing(1.25)
 }))
 
-const Fields = styled("div")(() => ({
-  display: "grid",
-  gridGap: "12px",
+const SectionHeaderRow = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: theme.spacing(2),
+  marginBottom: theme.spacing(1)
+}))
+
+const OptionRow = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(240px, 1fr) minmax(240px, 1fr)',
+  gap: theme.spacing(2),
+  alignItems: 'start',
+  padding: `${theme.spacing(1)} 0`,
+  [theme.breakpoints.down('md')]: {
+    gridTemplateColumns: '1fr'
+  }
+}))
+
+const OptionLeft = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gap: theme.spacing(0.5)
+}))
+
+const OptionHelp = styled(Typography)(({ theme }) => ({
+  color: theme.palette.text.secondary,
+  marginLeft: 32
 }))
 
 const CustomTextField = styled(TextField)(() => ({
-  "& .MuiOutlinedInput-root": {
-    ...customTypography.monospace,
-  },
+  '& .MuiOutlinedInput-root': {
+    ...customTypography.monospace
+  }
 }))
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
-  params: FormValues & { useFlavorless?: boolean }
+  params: FormValues & { useFlavorless?: boolean; useGPU?: boolean }
   onChange: (key: string) => (value: unknown) => void
-  openstackCredentials?: OpenstackCreds;
+  openstackCredentials?: OpenstackCreds
   selectedMigrationOptions: SelectedMigrationOptionsType
   updateSelectedMigrationOptions: (
-    key: keyof SelectedMigrationOptionsType | "postMigrationAction.suffix" | "postMigrationAction.folderName"
+    key:
+      | keyof SelectedMigrationOptionsType
+      | 'postMigrationAction.suffix'
+      | 'postMigrationAction.folderName'
   ) => (value: unknown) => void
 
   errors: FieldErrors
   getErrorsUpdater: (key: string | number) => (value: string) => void
   stepNumber: string
+  showHeader?: boolean
 }
 
 // TODO - Commented out the non-required field from the options for now
@@ -86,139 +97,151 @@ export default function MigrationOptionsAlt({
   errors,
   getErrorsUpdater,
   stepNumber,
+  showHeader = true
 }: MigrationOptionsPropsInterface) {
+  const { setValue } = useFormContext()
+  const { data: globalConfigMap, refetch: refetchConfigMap } = useSettingsConfigMapQuery()
+
   // Iniitialize fields
   useEffect(() => {
-    onChange("dataCopyMethod")("cold")
-    onChange("cutoverOption")(CUTOVER_TYPES.IMMEDIATE)
-    onChange("osFamily")(OS_TYPES.AUTO_DETECT)
-  }, [])
+    const defaultMethod = globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD || 'cold'
+    onChange('dataCopyMethod')(defaultMethod)
+    onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
+    refetchConfigMap()
+  }, [refetchConfigMap, globalConfigMap])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
     if (selectedMigrationOptions.dataCopyStartTime) {
       // Which ever is greater
       minDate =
-        dayjs(params.cutoverStartTime).diff(
-          dayjs(params.dataCopyStartTime),
-          "seconds"
-        ) > 0
+        dayjs(params.cutoverStartTime).diff(dayjs(params.dataCopyStartTime), 'seconds') > 0
           ? params.cutoverStartTime
           : params.dataCopyStartTime
     }
 
-    return dayjs(minDate).add(1, "minute")
+    // Disabled selection of time in the past
+    const computedMin = dayjs(minDate).add(1, 'minute')
+    const now = dayjs()
+    return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
-  const isPCD = openstackCredentials?.metadata?.labels?.["vjailbreak.k8s.pf9.io/is-pcd"] === "true";
+  const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Accordion
-        sx={{
-          boxShadow: "none", // Removes box shadow
-          border: "none", // Removes border
-          "&:before": {
-            display: "none", // Removes the default divider line before the accordion
-          },
-        }}
-        defaultExpanded
-      >
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon />}
-          aria-controls="panel2-content"
-          id="panel2-header"
-        >
-          <Step
-            stepNumber={stepNumber}
-            label="Migration Options (Optional)"
-            sx={{ mb: "0" }}
-          />
-        </AccordionSummary>
-        <AccordionDetails>
-          <FieldsContainer>
-            {/* Data Copy */}
-            <Fields>
+      <Box sx={{ display: 'grid', gap: 2 }}>
+        {showHeader ? (
+          <Step stepNumber={stepNumber} label="Migration Options (Optional)" sx={{ mb: 0 }} />
+        ) : null}
+
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Data copy</Typography>
+            <Typography variant="caption" color="text.secondary">
+              How data is transferred before cutover
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
                 id="data-copy-method"
-                label="Data Copy Method"
+                label="Data copy method"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.dataCopyMethod}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("dataCopyMethod")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
                     }}
                   />
                 }
               />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.dataCopyMethod}
-                labelId="source-item-label"
-                value={params?.dataCopyMethod || "cold"}
-                onChange={(e) => {
-                  onChange("dataCopyMethod")(e.target.value)
-                }}
-              >
-                {DATA_COPY_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Fields>
+              <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
+            </OptionLeft>
+            <Select
+              size="small"
+              disabled={!selectedMigrationOptions.dataCopyMethod}
+              labelId="source-item-label"
+              value={params?.dataCopyMethod || 'cold'}
+              onChange={(e) => {
+                onChange('dataCopyMethod')(e.target.value)
+              }}
+            >
+              {DATA_COPY_OPTIONS.map((item) => (
+                <MenuItem key={item.value} value={item.value}>
+                  {item.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </OptionRow>
 
-            {/* Data Copy Time Window */}
-            <Fields>
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
-                label={"Data copy start time"}
+                label="Schedule data copy"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions?.dataCopyStartTime}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("dataCopyStartTime")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
                     }}
                   />
                 }
               />
-              <TimePicker
-                label="Data Copy Start Time"
-                identifier="dataCopyStartTime"
-                params={params}
-                errors={errors}
-                getErrorsUpdater={getErrorsUpdater}
-                onChange={onChange}
-                disabled={!selectedMigrationOptions.dataCopyStartTime}
-                required={!!selectedMigrationOptions.dataCopyStartTime}
-              />
-            </Fields>
+              <OptionHelp variant="caption">
+                Optionally start data copy at a specific time.
+              </OptionHelp>
+            </OptionLeft>
+            <TimePicker
+              label="Data Copy Start Time"
+              identifier="dataCopyStartTime"
+              errors={errors}
+              getErrorsUpdater={getErrorsUpdater}
+              disabled={!selectedMigrationOptions.dataCopyStartTime}
+              required={!!selectedMigrationOptions.dataCopyStartTime}
+              disablePast
+            />
+          </OptionRow>
+        </SectionBlock>
 
-            {/* Cutover settings*/}
-            <Fields>
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Cutover</Typography>
+            <Typography variant="caption" color="text.secondary">
+              When and how to switch traffic to the migrated VM
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
                 id="data-copy-method"
-                label="Cutover Options"
+                label="Cutover option"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.cutoverOption}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions("cutoverOption")(
-                        e.target.checked
-                      )
+                      updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
+                      updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+                      onChange('periodicSyncInterval')('')
                     }}
                   />
                 }
               />
+              <OptionHelp variant="caption">
+                Choose immediate, windowed, or admin-initiated cutover.
+              </OptionHelp>
+            </OptionLeft>
+            <Box sx={{ display: 'grid', gap: 1 }}>
               <Select
                 size="small"
                 disabled={!selectedMigrationOptions?.cutoverOption}
-                value={params?.cutoverOption || "0"}
+                value={params?.cutoverOption || '0'}
                 onChange={(e) => {
-                  onChange("cutoverOption")(e.target.value)
+                  onChange('cutoverOption')(e.target.value)
                 }}
               >
                 {VM_CUTOVER_OPTIONS.map((item) => (
@@ -230,247 +253,337 @@ export default function MigrationOptionsAlt({
 
               {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
                 selectedMigrationOptions.cutoverOption && (
-                  <Fields sx={{ gridTemplateColumns: "1fr 1fr" }}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      gap: 1
+                    }}
+                  >
                     <TimePicker
                       label="Cutover Start Time"
                       identifier="cutoverStartTime"
-                      params={params}
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
-                      onChange={onChange}
-                      required={
-                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                      }
+                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
+                      disablePast
                     />
                     <TimePicker
                       label="Cutover End Time"
                       identifier="cutoverEndTime"
-                      params={params}
                       errors={errors}
                       getErrorsUpdater={getErrorsUpdater}
-                      onChange={onChange}
-                      required={
-                        params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-                      }
+                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
                       minDateTime={getMinEndTime()}
+                      disablePast
                       helperText="Should be greater than data copy/cutover start time"
                     />
-                  </Fields>
+                  </Box>
                 )}
-            </Fields>
 
-            <Fields>
-              <FormControlLabel
-                label="Post Migration Script"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.postMigrationScript}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions("postMigrationScript")(
-                        e.target.checked
-                      )
-                    }}
-                  />
-                }
-              />
-              <CustomTextField
-                label="Post Migration Script"
-                size="small"
-                multiline
-                rows={4}
-                value={params?.postMigrationScript || ""}
-                onChange={(e) =>
-                  onChange("postMigrationScript")(String(e.target.value))
-                }
-                disabled={!selectedMigrationOptions.postMigrationScript}
-                error={!!errors["postMigrationScript"]}
-                required={selectedMigrationOptions.postMigrationScript}
-                placeholder="Enter your post-migration script here..."
-              />
-            </Fields>
+              {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+                selectedMigrationOptions.cutoverOption && (
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={selectedMigrationOptions.periodicSyncEnabled}
+                          onChange={(e) => {
+                            onChange('periodicSyncInterval')(
+                              globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
+                            )
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
+                          }}
+                        />
+                      }
+                      label="Periodic sync"
+                    />
+                    <IntervalField
+                      label="Periodic Sync"
+                      name="periodicSyncInterval"
+                      value={String(
+                        params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
+                          ? params.periodicSyncInterval
+                          : ''
+                      )}
+                      onChange={(e) => {
+                        onChange('periodicSyncInterval')(e.target.value?.trim() || '')
+                      }}
+                      error={errors.periodicSyncInterval}
+                      getErrorsUpdater={getErrorsUpdater}
+                      disabled={!selectedMigrationOptions.periodicSyncEnabled}
+                    />
+                  </Box>
+                )}
+            </Box>
+          </OptionRow>
+        </SectionBlock>
 
-            <Fields>
-              <FormControlLabel
-                id="os-family"
-                label="OS Family"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.osFamily}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions("osFamily")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions?.osFamily}
-                value={params?.osFamily || OS_TYPES.AUTO_DETECT}
-                onChange={(e) => {
-                  onChange("osFamily")(e.target.value)
-                }}
-              >
-                {OS_TYPES_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Fields>
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Post-migration actions</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Optional cleanup and organization in vCenter
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
 
-            <Fields sx={{ gridGap: "0" }}>
-              {/* Retry on failure */}
-              <FormControlLabel
-                label="Retry On Failure"
-                control={
-                  <Checkbox
-                    checked={params?.retryOnFailure || false}
-                    onChange={(e) => {
-                      onChange("retryOnFailure")(e.target.checked)
-                    }}
-                  />
-                }
-              />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                Select this option to retry the migration incase of failure
-              </Typography>
-            </Fields>
-            <Fields>
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
                 label="Rename VMware VM"
                 control={
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
                     onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
+                      const isChecked = e.target.checked
+
+                      setValue(
+                        'postMigrationActionSuffix',
+                        isChecked ? params.postMigrationAction?.suffix || '_migrated_to_pcd' : ''
+                      )
+
+                      updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked ? true : selectedMigrationOptions.postMigrationAction?.suffix
-                      });
-                      onChange("postMigrationAction")({
+                        suffix: isChecked
+                          ? true
+                          : selectedMigrationOptions.postMigrationAction?.suffix
+                      })
+                      onChange('postMigrationAction')({
                         ...params.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked ? (params.postMigrationAction?.suffix || "_migrated_to_pcd") : undefined
-                      });
+                        suffix: isChecked
+                          ? params.postMigrationAction?.suffix || '_migrated_to_pcd'
+                          : undefined
+                      })
                     }}
                   />
                 }
               />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
-                value={params.postMigrationAction?.suffix || "_migrated_to_pcd"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    suffix: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="_migrated_to_pcd">_migrated_to_pcd</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                This suffix will be appended to the source VM name after migration.
-              </Typography>
-            </Fields>
+              <OptionHelp variant="caption">
+                Append a suffix to the source VM name after migration.
+              </OptionHelp>
+            </OptionLeft>
+            <RHFTextField
+              name="postMigrationActionSuffix"
+              label="VM Rename Suffix"
+              disabled={!selectedMigrationOptions.postMigrationAction?.renameVm}
+              placeholder="_migrated_to_pcd"
+            />
+          </OptionRow>
 
-            <Fields>
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
-                label="Move to Folder in VMware"
+                label="Move to folder in VMware"
                 control={
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
                     onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      updateSelectedMigrationOptions("postMigrationAction")({
+                      const isChecked = e.target.checked
+
+                      setValue(
+                        'postMigrationActionFolderName',
+                        isChecked ? params.postMigrationAction?.folderName || 'vjailbreakedVMs' : ''
+                      )
+
+                      updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked ? true : selectedMigrationOptions.postMigrationAction?.folderName
-                      });
-                      onChange("postMigrationAction")({
+                        folderName: isChecked
+                          ? true
+                          : selectedMigrationOptions.postMigrationAction?.folderName
+                      })
+                      onChange('postMigrationAction')({
                         ...params.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked ? (params.postMigrationAction?.folderName || "vjailbreakedVMs") : undefined
-                      });
+                        folderName: isChecked
+                          ? params.postMigrationAction?.folderName || 'vjailbreakedVMs'
+                          : undefined
+                      })
                     }}
                   />
                 }
               />
-              <Select
-                size="small"
-                disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                value={params.postMigrationAction?.folderName || "vjailbreakedVMs"}
-                onChange={(e) => {
-                  onChange("postMigrationAction")({
-                    ...params.postMigrationAction,
-                    folderName: e.target.value
-                  });
-                }}
-              >
-                <MenuItem value="vjailbreakedVMs">vjailbreakedVMs</MenuItem>
-              </Select>
-              <Typography variant="caption">
-                This folder name will be used to organize the migrated VMs in vCenter.
-              </Typography>
-            </Fields>
+              <OptionHelp variant="caption">
+                Organize migrated VMs into a vCenter folder.
+              </OptionHelp>
+            </OptionLeft>
+            <RHFTextField
+              name="postMigrationActionFolderName"
+              label="Folder Name"
+              disabled={!selectedMigrationOptions.postMigrationAction?.moveToFolder}
+              placeholder="vjailbreakedVMs"
+            />
+          </OptionRow>
+        </SectionBlock>
 
-            <Fields sx={{ gridGap: "0" }}>
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Network and IP behavior</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Reduce IP conflicts and handle edge cases
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
               <FormControlLabel
-                label="Disconnect Source VM Network"
+                label="Disconnect source VM network"
                 control={
                   <Checkbox
                     checked={params?.disconnectSourceNetwork || false}
                     onChange={(e) => {
-                      onChange("disconnectSourceNetwork")(e.target.checked);
+                      onChange('disconnectSourceNetwork')(e.target.checked)
                     }}
                   />
                 }
               />
-              <Typography variant="caption" sx={{ marginLeft: "32px" }}>
+              <OptionHelp variant="caption">
                 Disconnect NICs on the source VM to prevent IP conflicts.
-              </Typography>
-            </Fields>
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
 
-              <Fields sx={{ gridGap: "0" }}>
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Fallback to DHCP"
+                control={
+                  <Checkbox
+                    checked={params?.fallbackToDHCP || false}
+                    onChange={(e) => {
+                      onChange('fallbackToDHCP')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">Use DHCP if static IP cannot be preserved.</OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Persist source network interfaces"
+                control={
+                  <Checkbox
+                    checked={params?.networkPersistence || false}
+                    onChange={(e) => {
+                      onChange('networkPersistence')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Retain the source VM's network interface names
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
+        </SectionBlock>
+
+        {isPCD ? (
+          <SectionBlock>
+            <SectionHeaderRow>
+              <Typography variant="subtitle2">PCD options</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Flavour selection helpers
+              </Typography>
+            </SectionHeaderRow>
+            <Divider />
+
+            <OptionRow>
+              <OptionLeft>
                 <FormControlLabel
-                  label="Fallback to DHCP"
+                  label="Use GPU-enabled flavours"
                   control={
                     <Checkbox
-                      checked={params?.fallbackToDHCP || false}
+                      checked={params?.useGPU || false}
                       onChange={(e) => {
-                        onChange("fallbackToDHCP")(e.target.checked);
+                        const isChecked = e.target.checked
+                        updateSelectedMigrationOptions('useGPU')(isChecked)
+                        onChange('useGPU')(isChecked)
                       }}
                     />
                   }
                 />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  Migrated VM will use IP from DHCP if static IP cannot be preserved.  
-                </Typography>
-              </Fields>
+                <OptionHelp variant="caption">
+                  Migration may fail if a suitable GPU flavour is not found. Ignored if a flavour is
+                  explicitly assigned per-VM.
+                </OptionHelp>
+              </OptionLeft>
+              <Box />
+            </OptionRow>
 
-            {isPCD && (
-              <Fields sx={{ gridGap: "0" }}>
+            <OptionRow>
+              <OptionLeft>
                 <FormControlLabel
-                  label="Use Dynamic Hotplug-Enabled Flavors"
+                  label="Use dynamic hotplug-enabled flavors"
                   control={
                     <Checkbox
                       checked={params?.useFlavorless || false}
                       onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        updateSelectedMigrationOptions("useFlavorless")(isChecked);
-                        onChange("useFlavorless")(isChecked);
+                        const isChecked = e.target.checked
+                        updateSelectedMigrationOptions('useFlavorless')(isChecked)
+                        onChange('useFlavorless')(isChecked)
                       }}
                     />
                   }
                 />
-                <Typography variant="caption" sx={{ marginLeft: "32px" }}>
-                  This will use the base flavor ID specified in PCD.
-                </Typography>
-              </Fields>
+                <OptionHelp variant="caption">
+                  Uses the base flavor ID configured in PCD.
+                </OptionHelp>
+              </OptionLeft>
+              <Box />
+            </OptionRow>
+          </SectionBlock>
+        ) : null}
 
-            )}
-            {/*
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Post-migration script</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Run a script after migration completes
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Enable script"
+                control={
+                  <Checkbox
+                    checked={selectedMigrationOptions.postMigrationScript}
+                    onChange={(e) => {
+                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">Provide a script to run after migration.</OptionHelp>
+            </OptionLeft>
+            <CustomTextField
+              // label="Script"
+              size="small"
+              multiline
+              rows={4}
+              value={params?.postMigrationScript || ''}
+              onChange={(e) => onChange('postMigrationScript')(String(e.target.value))}
+              disabled={!selectedMigrationOptions.postMigrationScript}
+              error={!!errors['postMigrationScript']}
+              required={selectedMigrationOptions.postMigrationScript}
+              placeholder="Enter your post-migration script here..."
+            />
+          </OptionRow>
+        </SectionBlock>
+
+        {/*
             Pre and Post Web Hooks
 // ...
               <Fields key={`${hook.label}-${hook.identifier}`}>
@@ -484,52 +597,24 @@ export default function MigrationOptionsAlt({
                 />
               </Fields>
             ))} */}
-          </FieldsContainer>
-        </AccordionDetails>
-      </Accordion>
+      </Box>
     </LocalizationProvider>
   )
 }
 
-const TimePicker = ({
-  identifier,
-  params,
-  onChange,
-  errors,
-  getErrorsUpdater,
-  helperText = "",
-  ...restProps
-}) => {
-  const value = params?.[identifier] ? dayjs(params?.[identifier]) : null
-
-  const handleTimeChange = useCallback(
-    (newValue: dayjs.Dayjs | null, identifier) => {
-      const formattedTime = newValue?.toISOString()
-      onChange(identifier)(String(formattedTime))
-    },
-    [onChange]
-  )
-
+const TimePicker = ({ identifier, errors, getErrorsUpdater, helperText = '', ...restProps }) => {
   return (
-    <DateTimePicker
-      ampm={false}
-      value={value}
-      onChange={(newValue: dayjs.Dayjs | null) =>
-        handleTimeChange(newValue, identifier)
-      }
-      onError={(error) => {
+    <RHFDateTimeField
+      name={identifier}
+      label={restProps.label}
+      disabled={restProps.disabled}
+      required={restProps.required}
+      disablePast={restProps.disablePast}
+      minDateTime={restProps.minDateTime}
+      helperText={!!errors[identifier] && !restProps?.disabled ? helperText : ''}
+      onPickerError={(error) => {
         getErrorsUpdater(identifier)(error)
       }}
-      slotProps={{
-        textField: {
-          size: "small",
-          required: restProps?.required,
-          error: !!errors[identifier] && !restProps?.disabled, // Show error if validation fails
-          helperText:
-            !!errors[identifier] && !restProps?.disabled ? helperText : "",
-        },
-      }}
-      {...restProps}
     />
   )
 }

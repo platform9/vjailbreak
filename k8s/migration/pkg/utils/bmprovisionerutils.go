@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,14 +14,16 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	netutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
 	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 
 	// Import for side effects - registers the base provider implementation
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers/base"
@@ -54,25 +55,97 @@ func ConvertESXiToPCDHost(ctx context.Context,
 		return err
 	}
 
-	hs, err := GetESXiSummary(ctx, scope.Client, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
+	if len(resources) == 0 {
+		return errors.New("no resources available from BM provisioner")
+	}
+
+	hs, err := GetESXiSummary(ctx, scope.Client, scope.ESXIMigration.Spec.ESXiName, vmwarecreds, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi summary")
 	}
 
-	for i := 0; i < len(resources); i++ {
-		if resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
-			ctxlog.Info("Found a matching resource", "resource", resources[i].HardwareUuid, "name", resources[i].Hostname, "serial", resources[i].Id)
-			err := ReclaimESXi(ctx, scope, bmProvider, resources[i].Id, hs.Hardware.SystemInfo.Uuid)
-			if err != nil {
-				scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
-				updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
-				if updateErr != nil {
-					return errors.Wrap(updateErr, "failed to update ESXi migration status")
-				}
-				return errors.Wrap(err, "failed to reclaim ESXi")
+	// First, try to match by hardware UUID
+	var matchedResourceID string
+	var matchedResourceIdx = -1
+
+	if hs.Hardware.SystemInfo.Uuid != "" {
+		for i := 0; i < len(resources); i++ {
+			if resources[i].HardwareUuid != "" && resources[i].HardwareUuid == hs.Hardware.SystemInfo.Uuid {
+				ctxlog.Info("Found a matching resource by hardware UUID",
+					"hardwareUuid", resources[i].HardwareUuid,
+					"name", resources[i].Hostname,
+					"id", resources[i].Id)
+				matchedResourceID = resources[i].Id
+				matchedResourceIdx = i
+				break
 			}
-			break
 		}
+	}
+
+	// If no UUID match found, fall back to MAC address matching
+	if matchedResourceIdx == -1 {
+		ctxlog.Info("esxi has empty hardware UUID or no hardware UUID match found, trying MAC address matching")
+
+		// Extract MAC addresses from ESXi host's physical network adapters
+		var hostMacAddresses []string
+		if hs.Config != nil && hs.Config.Network != nil && hs.Config.Network.Pnic != nil && len(hs.Config.Network.Pnic) > 0 {
+			for _, pnic := range hs.Config.Network.Pnic {
+				if pnic.Mac != "" {
+					// Normalize MAC address to lowercase for comparison
+					hostMacAddresses = append(hostMacAddresses, strings.ToLower(pnic.Mac))
+				}
+			}
+		}
+
+		if len(hostMacAddresses) == 0 {
+			return errors.New("no hardware UUID or MAC addresses found for matching")
+		}
+
+		ctxlog.Info("ESXi host MAC addresses", "macs", hostMacAddresses)
+
+		// Match resources based on MAC addresses (many-to-many)
+		for i := 0; i < len(resources); i++ {
+			if resources[i].MacAddress == "" {
+				continue
+			}
+
+			resourceMac := strings.ToLower(resources[i].MacAddress)
+
+			// Check if any host MAC address matches the resource MAC address
+			matched := false
+			for _, hostMac := range hostMacAddresses {
+				if hostMac != "" && hostMac == resourceMac {
+					matched = true
+					break
+				}
+			}
+
+			if matched {
+				ctxlog.Info("Found a matching resource by MAC address",
+					"resourceMAC", resourceMac,
+					"name", resources[i].Hostname,
+					"id", resources[i].Id,
+					"hardwareUuid", resources[i].HardwareUuid)
+				matchedResourceID = resources[i].Id
+				matchedResourceIdx = i
+				break
+			}
+		}
+	}
+
+	// If a match was found (either by UUID or MAC), reclaim the ESXi host
+	if matchedResourceIdx != -1 {
+		err := ReclaimESXi(ctx, scope, bmProvider, matchedResourceID, hs.Hardware.SystemInfo.Uuid)
+		if err != nil {
+			scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+			updateErr := scope.Client.Status().Update(ctx, scope.ESXIMigration)
+			if updateErr != nil {
+				return errors.Wrap(updateErr, "failed to update ESXi migration status")
+			}
+			return errors.Wrap(err, "failed to reclaim ESXi")
+		}
+	} else {
+		return errors.New("no matching resource found by hardware UUID or MAC address")
 	}
 
 	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseSucceeded
@@ -114,6 +187,12 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 	cloudInit := string(secret.Data[constants.CloudInitConfigKey])
 	cloudInit = strings.ReplaceAll(cloudInit, "HOST_ID", hostID)
 
+	// Get vjailbreak settings to check if automatic PXE boot is enabled
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
 	// Create ReclaimBM request
 	reclaimRequest := service.ReclaimBMRequest{
 		AccessInfo: &service.BMProvisionerAccessInfo{
@@ -121,9 +200,10 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 			ApiKey:      bmConfig.Spec.APIKey,
 			UseInsecure: bmConfig.Spec.Insecure,
 		},
-		UserData:   cloudInit,
-		ResourceId: resourceID,
-		PowerCycle: true,
+		UserData:           cloudInit,
+		ResourceId:         resourceID,
+		PowerCycle:         true,
+		ManualPowerControl: !vjailbreakSettings.AutoPXEBootOnConversion,
 		BootSource: &service.BootsourceSelections{
 			Release: bmConfig.Spec.BootSource.Release,
 		},
@@ -208,6 +288,38 @@ func MergeCloudInit(userData, cloudInit string) (string, error) {
 	return "#cloud-config\n" + string(result), nil
 }
 
+// appendScriptToRunCmd appends the pf9-setup.sh script execution to the runcmd section
+func appendScriptToRunCmd(cloudInit string) (string, error) {
+	// Parse the cloud-init YAML
+	cloudInitMap := make(map[string]interface{})
+	if err := yaml.Unmarshal([]byte(cloudInit), &cloudInitMap); err != nil {
+		return "", fmt.Errorf("failed to parse cloudInit: %v", err)
+	}
+
+	// Get or create the runcmd section
+	var runcmd []interface{}
+	if existingRuncmd, ok := cloudInitMap["runcmd"]; ok {
+		if runcmdSlice, ok := existingRuncmd.([]interface{}); ok {
+			runcmd = runcmdSlice
+		} else {
+			return "", fmt.Errorf("runcmd exists in cloud-init but is not a valid array/slice type")
+		}
+	}
+
+	// Append the script execution command
+	runcmd = append(runcmd, "/root/pf9-setup.sh")
+	cloudInitMap["runcmd"] = runcmd
+
+	// Marshal back to YAML
+	result, err := yaml.Marshal(cloudInitMap)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal cloud-init: %v", err)
+	}
+
+	// Ensure the #cloud-config directive is at the beginning
+	return "#cloud-config\n" + string(result), nil
+}
+
 // MergeCloudInitAndCreateSecret merges cloud-init configurations and creates a secret with the result
 func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigrationPlanScope, local bool) error {
 	// Get BMConfig for the rolling migration plan
@@ -238,6 +350,12 @@ func MergeCloudInitAndCreateSecret(ctx context.Context, scope *scope.RollingMigr
 	mergedCloudInit, err := MergeCloudInit(userData, cloudInit)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge cloud init and user data")
+	}
+
+	// Append script execution to runcmd
+	mergedCloudInit, err = appendScriptToRunCmd(mergedCloudInit)
+	if err != nil {
+		return errors.Wrap(err, "failed to append script to runcmd")
 	}
 
 	finalCloudInitSecret := &corev1.Secret{
@@ -448,12 +566,15 @@ func GetResmgrClient(openstackCreds vjailbreakv1alpha1.OpenStackCredsInfo) (resm
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get keystone authenticator")
 	}
-	resmgrHTTPClient := http.DefaultClient
+	var resmgrHTTPClient *http.Client
+	vjbNet := netutils.NewVjbNet()
 	if openstackCreds.Insecure {
-		transCfg := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Accepting insecure connections when needed
-		}
-		resmgrHTTPClient = &http.Client{Transport: transCfg}
+		vjbNet.Insecure = true
+	}
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		resmgrHTTPClient = vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
 	return resmgr.NewResmgrClient(
 		resmgr.Config{

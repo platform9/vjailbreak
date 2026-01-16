@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/pkg/errors"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/openapiv3"
 	"github.com/sirupsen/logrus"
@@ -58,12 +59,18 @@ func openAPIServer(mux *http.ServeMux, dir string) http.HandlerFunc {
 func startgRPCServer(ctx context.Context, network, port string) error {
 	grpcServer = grpc.NewServer()
 
+	k8sClient, err := CreateInClusterClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to create k8s client for grpc server")
+	}
+
 	//Register all services here
 	//TODO: Register proto servers here.
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
 	api.RegisterVCenterServer(grpcServer, &targetVcenterGRPC{})
 	api.RegisterBMProviderServer(grpcServer, &providersGRPC{})
-	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{})
+	api.RegisterVailbreakProxyServer(grpcServer, &vjailbreakProxy{K8sClient: k8sClient})
+	api.RegisterStorageArrayServer(grpcServer, &storageArrayGRPC{})
 	reflection.Register(grpcServer)
 	connection, err := net.Listen(network, port)
 	if err != nil {
@@ -102,12 +109,17 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	//TODO: Move this path to a direct path in the /tmp or a path in the container
 	// or take it via config or env variable
 	mux.HandleFunc("/swagger/", openAPIServer(mux, "/opt/platform9/vpwned/openapiv3/dist/"))
+
+	// Register VDDK upload handler first with specific path
+	mux.HandleFunc("/vpw/v1/vddk/upload", HandleVDDKUpload)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
+	// ctx, muxer, "127.0.0.1:3000", option
 	if err := api.RegisterVersionHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for version")
 	}
@@ -123,11 +135,26 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	if err := api.RegisterVailbreakProxyHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
 		logrus.Errorf("cannot start handler for VailbreakProxy")
 	}
-	mux.Handle("/", APILogger(gatewayMuxer))
+	// Register StorageArray service
+	if err := api.RegisterStorageArrayHandlerFromEndpoint(ctx, gatewayMuxer, grpcSocket, option); err != nil {
+		logrus.Errorf("cannot start handler for StorageArray")
+	}
+
+	// Wrap gatewayMuxer to handle all other routes
+	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
+		// Skip VDDK upload endpoint - it's already registered
+		if r.URL.Path == "/vpw/v1/vddk/upload" {
+			// This shouldn't be reached due to more specific pattern, but just in case
+			HandleVDDKUpload(w, r)
+			return
+		}
+		APILogger(gatewayMuxer).ServeHTTP(w, r)
+	})
+
 	return mux, nil
 }
 
-func StartServer(host, port, apiPort string) error {
+func StartServer(host, port, apiPort, apiHost string) error {
 	ctx := context.Background()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
@@ -138,21 +165,22 @@ func StartServer(host, port, apiPort string) error {
 		}
 	}()
 	logrus.Info("gRPC server started at:", host, ":", port)
-	mux, err := getHTTPServer(ctx, host+":"+apiPort, host+":"+port)
+	mux, err := getHTTPServer(ctx, apiHost+":"+apiPort, host+":"+port)
 	if err != nil {
 		logrus.Errorf("cannot start rest server: %v", err)
 		return err
 	}
 	logrus.Info("starting http server.....")
 	httpServer = &http.Server{
-		Addr:    host + ":" + apiPort,
-		Handler: mux,
+		Addr:           apiHost + ":" + apiPort,
+		Handler:        mux,
+		MaxHeaderBytes: 1 << 20, // 1 MB for headers
 	}
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		logrus.Error("cannot start http server", err)
 		return err
 	}
-	logrus.Info("Http server started at:", host, ":", apiPort)
+	logrus.Info("Http server started at:", apiHost, ":", apiPort)
 	return nil
 }
 

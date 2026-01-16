@@ -159,7 +159,7 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	if config.CheckVMsAreNotBlockedForMigration {
 		// Get properties for all VMs on the host
 		var vms []mo.VirtualMachine
-		var vmRefs []types.ManagedObjectReference
+		vmRefs := make([]types.ManagedObjectReference, 0, len(hostProps.Vm))
 		vmRefs = append(vmRefs, hostProps.Vm...)
 
 		err = pc.Retrieve(ctx, vmRefs, []string{"name", "runtime", "config", "summary"}, &vms)
@@ -168,7 +168,9 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		}
 
 		for _, vm := range vms {
-			blockedVMs = append(blockedVMs, CheckVMForMaintenanceMode(vm))
+			if reason := CheckVMForMaintenanceMode(vm); reason != "" {
+				blockedVMs = append(blockedVMs, reason)
+			}
 		}
 
 		if len(blockedVMs) > 0 {
@@ -370,7 +372,7 @@ func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context
 		"CheckDRSEnabled":                         trueString,
 		"CheckDRSIsFullyAutomated":                trueString,
 		"CheckIfThereAreMoreThanOneHostInCluster": trueString,
-		"CheckClusterRemainingHostCapacity":       trueString,
+		"CheckClusterRemainingHostCapacity":       falseString,
 		"CheckVMsAreNotBlockedForMigration":       trueString,
 		"CheckESXiInMAAS":                         trueString,
 		"CheckPCDHasClusterConfigured":            trueString,

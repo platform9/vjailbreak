@@ -151,8 +151,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.RDMDiskReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		APIReader: mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RDMDisk")
 		os.Exit(1)
@@ -248,6 +249,14 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
 		return err
 	}
+	if err := (&controller.ArrayCredsReconciler{
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ArrayCreds")
+		return err
+	}
 	if err := (&controller.StorageMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
 			Client: mgr.GetClient(),
@@ -272,13 +281,6 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MigrationPlan")
-		return err
-	}
-	if err := (&controller.MigrationTemplateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MigrationTemplate")
 		return err
 	}
 	if err := (&controller.VjailbreakNodeReconciler{

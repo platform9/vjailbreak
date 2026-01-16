@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,6 +74,8 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
+//
+//nolint:gocyclo
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -85,6 +89,31 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ctxlog.Error(err, fmt.Sprintf("Unexpected error reading Migration '%s' object", migration.Name))
 		return ctrl.Result{}, err
 	}
+
+	// Handle deletion reconciliation first, even for ValidationFailed migrations.
+	if !migration.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
+			if err := r.reconcileDelete(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
+			if err := r.Update(ctx, migration); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+		ctxlog.Info(
+			"Migration is ValidationFailed; skipping reconciliation and requeue",
+			"migration", migration.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
+	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
 		Logger:    ctxlog,
@@ -100,21 +129,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			reterr = err
 		}
 	}()
-
-	// Handle deletion reconciliation
-	if !migration.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
-			if err := r.reconcileDelete(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			controllerutil.RemoveFinalizer(migration, migrationFinalizer)
-			if err := r.Update(ctx, migration); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
 
 	// Adding finalizer if it doesn't exist
 	if !controllerutil.ContainsFinalizer(migration, migrationFinalizer) {
@@ -156,7 +170,8 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Check if the pod is in a valid state only then continue
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
-		return ctrl.Result{}, fmt.Errorf("pod is not Running, Failed nor Succeeded for migration %s", migration.Name)
+		ctxlog.Info("Pod is not in a terminal state, requeuing", "migration", migration.Name, "podStatus", pod.Status.Phase)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
@@ -165,21 +180,43 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateStorageAcceleratedCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
+
+	// Extract current disk being copied from events
+	r.ExtractCurrentDisk(migration, filteredEvents)
+
+if migration.Status.TotalDisks == 0 {
+	if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			migration.Status.TotalDisks = n
+		} else {
+			log.FromContext(ctx).Error(err, "Failed to parse total disks value", 
+				"label", constants.NumberOfDisksLabel, 
+				"value", v)
+		}
+	}
+}
+
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
-	if err := r.Status().Update(ctx, migration); err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
-		return ctrl.Result{}, err
+
+	if !reflect.DeepEqual(&migration.Status, oldStatus) {
+		if err := r.Status().Update(ctx, migration); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
+			return ctrl.Result{}, err
+		}
 	}
 
 	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseValidationFailed) &&
 		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
@@ -277,7 +314,8 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 	IgnoredPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
-		vjailbreakv1alpha1.VMMigrationPhasePending}
+		vjailbreakv1alpha1.VMMigrationPhasePending,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
 
 loop:
 	for i := range events.Items {
@@ -318,6 +356,30 @@ loop:
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopying]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyRescanStorage) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyMappingVolume) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseMappingVolume]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseMappingVolume
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCinderManage) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCreatingVolume) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageInitiatorGroup) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup
+			break loop
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageEsxiSSHConnect) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi
 			break loop
 		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:
@@ -385,7 +447,6 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 	sort.Slice(filteredEvents.Items, func(i, j int) bool {
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
-
 	return filteredEvents, nil
 }
 
@@ -409,4 +470,43 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	return &podList.Items[0], nil
+}
+
+// ExtractCurrentDisk extracts which disk is currently being copied from pod events
+func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	parseCurrentDisk := func(msg string) (string, bool) {
+		if !strings.Contains(msg, "Copying disk") {
+			return "", false
+		}
+		parts := strings.Split(msg, "Copying disk")
+		if len(parts) <= 1 {
+			return "", false
+		}
+		diskPart := strings.TrimSpace(parts[1])
+		if len(diskPart) == 0 {
+			return "", false
+		}
+		diskNum := strings.Split(diskPart, ",")[0]
+		diskNum = strings.Split(diskNum, " ")[0]
+		diskNum = strings.TrimSpace(diskNum)
+		if diskNum == "" {
+			return "", false
+		}
+		return diskNum, true
+	}
+
+	for i := range events.Items {
+		if diskNum, ok := parseCurrentDisk(events.Items[i].Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+
+	for _, condition := range migration.Status.Conditions {
+		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
 }

@@ -55,6 +55,11 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              assignedIP:
+                description: |-
+                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
+                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
+                type: string
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -65,6 +70,13 @@ spec:
                 type: boolean
               migrationPlan:
                 description: MigrationPlan is the name of the migration plan
+                type: string
+              migrationType:
+                description: MigrationType indicates whether this is a hot (live)
+                  or cold migration
+                enum:
+                - hot
+                - cold
                 type: string
               podRef:
                 description: PodRef is the name of the pod
@@ -132,11 +144,17 @@ spec:
                   - type
                   type: object
                 type: array
+              currentDisk:
+                description: |-
+                  CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+                  Extracted from migration pod events
+                type: string
               phase:
                 description: Phase is the current phase of the migration
                 enum:
                 - Pending
                 - Validating
+                - ValidationFailed
                 - AwaitingDataCopyStart
                 - CopyingBlocks
                 - CopyingChangedBlocks
@@ -146,7 +164,23 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - ConnectingToESXi
+                - CreatingInitiatorGroup
+                - CreatingVolume
+                - ImportingToCinder
+                - MappingVolume
+                - RescanningStorage
+                - XCOPYInProgress
                 type: string
+              totalDisks:
+                description: TotalDisks is the total number of disks to be migrated
+                type: integer
+              retryable:
+                description: |-
+                  Retryable indicates whether this migration can be retried when it fails.
+                  Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
+                  as RDM disk migration state prevents automatic retry.
+                type: boolean
             required:
             - phase
             type: object

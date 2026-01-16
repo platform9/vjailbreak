@@ -2,8 +2,10 @@ package k8sutils
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -102,28 +104,42 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	if vjailbreakSettingsCM.Data == nil {
 		return &VjailbreakSettings{
 			ChangedBlocksCopyIterationThreshold: constants.ChangedBlocksCopyIterationThreshold,
+			PeriodicSyncInterval:                constants.PeriodicSyncInterval,
 			VMActiveWaitIntervalSeconds:         constants.VMActiveWaitIntervalSeconds,
 			VMActiveWaitRetryLimit:              constants.VMActiveWaitRetryLimit,
 			DefaultMigrationMethod:              constants.DefaultMigrationMethod,
 			VCenterScanConcurrencyLimit:         constants.VCenterScanConcurrencyLimit,
 			CleanupVolumesAfterConvertFailure:   constants.CleanupVolumesAfterConvertFailure,
+			CleanupPortsAfterMigrationFailure:   constants.CleanupPortsAfterMigrationFailure,
 			PopulateVMwareMachineFlavors:        constants.PopulateVMwareMachineFlavors,
 			VolumeAvailableWaitIntervalSeconds:  constants.VolumeAvailableWaitIntervalSeconds,
 			VolumeAvailableWaitRetryLimit:       constants.VolumeAvailableWaitRetryLimit,
 			VCenterLoginRetryLimit:              constants.VCenterLoginRetryLimit,
 			OpenstackCredsRequeueAfterMinutes:   constants.OpenstackCredsRequeueAfterMinutes,
 			VMwareCredsRequeueAfterMinutes:      constants.VMwareCredsRequeueAfterMinutes,
+			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
+			PeriodicSyncMaxRetries:              constants.PeriodicSyncMaxRetries,
+			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
+			AutoFstabUpdate:                     constants.AutoFstabUpdate,
+			AutoPXEBootOnConversion:             constants.AutoPXEBootOnConversionDefault,
 		}, nil
 	}
 
 	if vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] == "" {
 		vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"] = strconv.Itoa(constants.ChangedBlocksCopyIterationThreshold)
 	}
-
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"] = strconv.Itoa(constants.PeriodicSyncMaxRetries)
+	}
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"] = constants.PeriodicSyncRetryCap
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"] = strconv.Itoa(constants.VMActiveWaitIntervalSeconds)
 	}
-
+	if vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"] == "" {
+		vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"] = constants.PeriodicSyncInterval
+	}
 	if vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] == "" {
 		vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"] = strconv.Itoa(constants.VMActiveWaitRetryLimit)
 	}
@@ -138,6 +154,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 
 	if vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "" {
 		vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] = strconv.FormatBool(constants.CleanupVolumesAfterConvertFailure)
+	}
+
+	if vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] == "" {
+		vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] = strconv.FormatBool(constants.CleanupPortsAfterMigrationFailure)
 	}
 
 	if vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "" {
@@ -164,18 +184,76 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"] = strconv.Itoa(constants.VMwareCredsRequeueAfterMinutes)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] == "" {
+		vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey] = strconv.FormatBool(constants.ValidateRDMOwnerVMs)
+	}
+
+	if vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] == "" {
+		vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey] = strconv.FormatBool(constants.AutoFstabUpdate)
+	}
+
+	if vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey] == "" {
+		vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey] = strconv.FormatBool(constants.AutoPXEBootOnConversionDefault)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
 		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
 		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
 		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
+		CleanupPortsAfterMigrationFailure:   vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] == "true",
 		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
 		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
 		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
 		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
 		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
 		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
+		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
+		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
+		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
+		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
+		AutoPXEBootOnConversion:             strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey])) == "true",
 	}, nil
+}
+
+func GetArrayCredsMapping(ctx context.Context, k8sClient client.Client, arrayCredsMappingName string) (vjailbreakv1alpha1.ArrayCredsMapping, error) {
+	arrayCredsMapping := vjailbreakv1alpha1.ArrayCredsMapping{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsMappingName, Namespace: constants.NamespaceMigrationSystem}, &arrayCredsMapping); err != nil {
+		return vjailbreakv1alpha1.ArrayCredsMapping{}, errors.Wrap(err, "failed to get array creds mapping configmap")
+	}
+	return arrayCredsMapping, nil
+}
+
+func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName string) (vjailbreakv1alpha1.ArrayCreds, error) {
+	arrayCreds := vjailbreakv1alpha1.ArrayCreds{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsName, Namespace: constants.NamespaceMigrationSystem}, &arrayCreds); err != nil {
+		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds configmap")
+	}
+	return arrayCreds, nil
+}
+
+// GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret
+func GetESXiSSHPrivateKey(ctx context.Context, k8sClient client.Client, secretName string) ([]byte, error) {
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      secretName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret); err != nil {
+		return nil, errors.Wrapf(err, "failed to get ESXi SSH secret %s", secretName)
+	}
+
+	// The secret should contain a key named "ssh-privatekey"
+	privateKey, ok := secret.Data["ssh-privatekey"]
+	if !ok {
+		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
+	}
+
+	if len(privateKey) == 0 {
+		return nil, fmt.Errorf("ESXi SSH private key in secret %s is empty", secretName)
+	}
+
+	return privateKey, nil
 }

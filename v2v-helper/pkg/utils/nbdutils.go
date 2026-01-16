@@ -84,9 +84,18 @@ func CleanupMigrationLogs(migrationName string) {
 
 // RunCommandWithLogFile runs a command with output redirected to a log file
 // and ensures the log file is properly closed after execution
+// WARNING: This logs the full command including all arguments. Do NOT use this
+// for commands containing sensitive data (passwords, tokens, etc.). Use
+// RunCommandWithLogFileRedacted instead and pass a redacted command string.
 func RunCommandWithLogFile(cmd *exec.Cmd) error {
-	// First ensure output is directed to a log file
-	AddDebugOutputToFile(cmd)
+	return RunCommandWithLogFileRedacted(cmd, cmd.String())
+}
+
+// RunCommandWithLogFileRedacted runs a command with output redirected to a log file
+// using a redacted command string for logging, and ensures the log file is properly closed
+func RunCommandWithLogFileRedacted(cmd *exec.Cmd, cmdString string) error {
+	// First ensure output is directed to a log file with redacted command
+	AddDebugOutputToFileWithCommand(cmd, cmdString)
 
 	// Run the command
 	err := cmd.Run()
@@ -97,7 +106,15 @@ func RunCommandWithLogFile(cmd *exec.Cmd) error {
 	return err
 }
 
+// AddDebugOutputToFile redirects command output to a debug log file
+// WARNING: This logs the full command including all arguments. Do NOT use this
+// for commands containing sensitive data (passwords, tokens, etc.). Use
+// AddDebugOutputToFileWithCommand instead and pass a redacted command string.
 func AddDebugOutputToFile(cmd *exec.Cmd) {
+	AddDebugOutputToFileWithCommand(cmd, cmd.String())
+}
+
+func AddDebugOutputToFileWithCommand(cmd *exec.Cmd, cmdString string) {
 	migrationName, err := GetMigrationObjectName()
 	if err != nil {
 		return
@@ -173,7 +190,6 @@ func AddDebugOutputToFile(cmd *exec.Cmd) {
 
 	// Write a separator for this command to make logs more readable
 	timePrefix := time.Now().Format("2006-01-02 15:04:05")
-	cmdString := cmd.String()
 	logFile.WriteString(fmt.Sprintf("\n\n==== %s: COMMAND: %s ====\n\n", timePrefix, cmdString))
 
 	// Redirect command output to this file

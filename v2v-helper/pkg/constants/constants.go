@@ -96,6 +96,17 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
 
+	// StorageAcceleratedCopy specific event messages
+	EventMessageEsxiSSHConnect                       = "Connecting to ESXi"
+	EventMessageEsxiSSHTest                          = "Testing ESXi connection"
+	EventMessageEsxiConnected                        = "Connected to ESXi"
+	EventMessageInitiatorGroup                       = "Creating/updating initiator group"
+	EventMessageStorageAcceleratedCopyCreatingVolume = "Creating target volume"
+	EventMessageStorageAcceleratedCopyCinderManage   = "Cinder managing the volume"
+	EventMessageStorageAcceleratedCopyMappingVolume  = "Mapping target volume"
+	EventMessageStorageAcceleratedCopyRescanStorage  = "Waiting for target volume"
+	EventMessageStorageAcceleratedCopyTargetDevice   = "Target device is visible:"
+
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
 
@@ -106,7 +117,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// ConfigMap default values
 	ChangedBlocksCopyIterationThreshold = 20
-
+	PeriodicSyncInterval                = "1h"
 	// VMActiveWaitIntervalSeconds is the interval to wait for vm to become active
 	VMActiveWaitIntervalSeconds = 20
 
@@ -120,7 +131,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	VolumeAvailableWaitRetryLimit = 15
 
 	// DefaultMigrationMethod is the default migration method
-	DefaultMigrationMethod = "hot"
+	DefaultMigrationMethod = "cold"
 
 	// VCenterScanConcurrencyLimit is the max number of vcenter scan pods
 	VCenterScanConcurrencyLimit = 100
@@ -128,8 +139,14 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// CleanupVolumesAfterConvertFailure is the default value for cleanup volumes after convert failure
 	CleanupVolumesAfterConvertFailure = true
 
+	// CleanupPortsAfterMigrationFailure is the default value for cleanup ports after migration failure
+	CleanupPortsAfterMigrationFailure = false
+
 	// PopulateVMwareMachineFlavors is the default value for populating VMwareMachine objects with OpenStack flavors
 	PopulateVMwareMachineFlavors = true
+
+	// ValidateRDMOwnerVMs is the default value for RDM owner VM validation
+	ValidateRDMOwnerVMs = true
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
@@ -142,4 +159,28 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// VMwareCredsRequeueAfterMinutes is the time to requeue after.
 	VMwareCredsRequeueAfterMinutes = 60
+
+	// PeriodicSyncMaxRetries is the max number of retries for CBT sync
+	PeriodicSyncMaxRetries = 3
+
+	// PeriodicSyncRetryCap is the max retry interval for CBT sync
+	PeriodicSyncRetryCap = "3h"
+	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
+	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
+	ESXiSSHSecretName = "esxi-ssh-key"
+
+	// AutoFstabUpdate is the default value for automatic fstab update
+	AutoFstabUpdate = false
+	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
+	AutoFstabUpdateKey = "AUTO_FSTAB_UPDATE"
+
+	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionDefault = false
+	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
+	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
+
+	// StorageCopyMethod is the default value for storage copy method
+	StorageCopyMethod = "StorageAcceleratedCopy"
 )

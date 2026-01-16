@@ -70,11 +70,35 @@ spec:
                   disks:
                     description: Disks is the list of disks for the virtual machine
                     items:
-                      type: string
+                      description: Disk represents a virtual disk attached to a virtual
+                        machine
+                      properties:
+                        capacityGB:
+                          type: integer
+                        datastore:
+                          type: string
+                        datastoreId:
+                          type: string
+                        name:
+                          type: string
+                      type: object
                     type: array
                   esxiName:
                     description: ESXiName is the name of the ESXi host
                     type: string
+                  gpu:
+                    description: GPU contains information about GPU devices attached
+                      to the VM
+                    properties:
+                      passthroughCount:
+                        description: PassthroughCount is the number of PCI passthrough
+                          GPU devices
+                        type: integer
+                      vgpuCount:
+                        description: VGPUCount is the number of vGPU (shared GPU)
+                          devices
+                        type: integer
+                    type: object
                   guestNetworks:
                     description: GuestNetworks is the list of network interfaces for
                       the virtual machine as reported by the guest

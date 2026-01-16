@@ -94,8 +94,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-            required:
-            - datacenter
+              vcenterHost:
+                description: VcenterHost is the vCenter host
+                type: string
             type: object
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds

@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -212,7 +213,7 @@ func AddVMsToESXIMigrationStatus(ctx context.Context, scope *scope.ClusterMigrat
 }
 
 // GetESXiHostSystem returns a reference to an ESXi host system using VMware credentials
-func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference) (*object.HostSystem, *vim25.Client, error) {
+func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCredsRef corev1.LocalObjectReference, datacenter string) (*object.HostSystem, *vim25.Client, error) {
 	vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: vmwareCredsRef.Name}, vmwarecreds)
 	if err != nil {
@@ -232,7 +233,11 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 		}()
 	}
 	finder := find.NewFinder(c, false)
-	dc, err := finder.Datacenter(ctx, vmwarecreds.Spec.DataCenter)
+	dcName := datacenter
+	if dcName == "" {
+		dcName = vmwarecreds.Spec.DataCenter
+	}
+	dc, err := finder.Datacenter(ctx, dcName)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find datacenter")
 	}
@@ -248,7 +253,7 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 
 // PutESXiInMaintenanceMode places the ESXi host into maintenance mode to prepare for migration
 func PutESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -298,7 +303,7 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, sc
 		return false, errors.Wrap(err, "failed to get vmware credentials")
 	}
 
-	hs, err := GetESXiSummary(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, vmwarecreds)
+	hs, err := GetESXiSummary(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, vmwarecreds, "")
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get ESXi summary")
 	}
@@ -311,13 +316,13 @@ func CheckESXiInMaintenanceMode(ctx context.Context, k8sClient client.Client, sc
 }
 
 // GetESXiSummary retrieves detailed host system information for the given ESXi host
-func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds) (mo.HostSystem, error) {
+func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName string, vmwareCreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (mo.HostSystem, error) {
 	// Create a temporary reference to use with our common function
 	vmwareCredsRef := corev1.LocalObjectReference{
 		Name: vmwareCreds.Name,
 	}
 
-	hostSystem, c, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef)
+	hostSystem, c, err := GetESXiHostSystem(ctx, k8sClient, esxiName, vmwareCredsRef, datacenter)
 	if err != nil {
 		return mo.HostSystem{}, errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -335,7 +340,7 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 // RemoveESXiFromVCenter removes an ESXi host from vCenter inventory
 // This should only be called after the host is in maintenance mode and has no VMs
 func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) error {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -376,7 +381,7 @@ func RemoveESXiFromVCenter(ctx context.Context, k8sClient client.Client, scope *
 
 // CountVMsOnESXi counts the number of virtual machines currently hosted on the ESXi host
 func CountVMsOnESXi(ctx context.Context, k8sClient client.Client, scope *scope.ESXIMigrationScope) (int, error) {
-	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef)
+	hostSystem, _, err := GetESXiHostSystem(ctx, k8sClient, scope.ESXIMigration.Spec.ESXiName, scope.ESXIMigration.Spec.VMwareCredsRef, "")
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get ESXi host system")
 	}
@@ -558,7 +563,7 @@ func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize in
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
-		var allVMs []string
+		allVMs := make([]string, 0, len(cluster.VMSequence))
 		for _, vm := range cluster.VMSequence {
 			allVMs = append(allVMs, vm.VMName)
 		}
@@ -810,11 +815,6 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("failed to get rolling migration plan validation config")
 	}
 
-	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
-	if err != nil {
-		return false, "", errors.Wrap(err, "failed to get vmware credentials")
-	}
-
 	// TODO(vpwned): validate vmwarecreds have enough permissions
 
 	// TODO(vpwned): validate there is enough space on underlying storage array
@@ -823,7 +823,19 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 		return false, "", errors.New("BMConfig is not valid")
 	}
 
-	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName)
+	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials")
+	}
+
+	vmwareCredsInfo, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, vmwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		return false, "", errors.Wrap(err, "failed to get vmware credentials from secret")
+	}
+
+	clusterK8sID := GetClusterK8sID(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCredsInfo.Datacenter)
+
+	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to filter vmware hosts for cluster")
 	}
@@ -882,6 +894,8 @@ func isBMConfigValid(ctx context.Context, client client.Client, name string) boo
 // EnsureESXiInMass verifies that an ESXi host is correctly registered in the Metal-as-a-Service system
 // and is in the appropriate state (Deployed or Allocated) for migration operations
 func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScope, vmwarehost vjailbreakv1alpha1.VMwareHost) (bool, string, error) {
+	ctxlog := log.FromContext(ctx)
+
 	// Get maas provider
 	bmConfig, err := GetBMConfigForRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
 	if err != nil {
@@ -898,15 +912,158 @@ func EnsureESXiInMass(ctx context.Context, scope *scope.RollingMigrationPlanScop
 		return false, "", errors.Wrap(err, "failed to list maas machines")
 	}
 
-	for i := range machines {
-		if machines[i].HardwareUuid == vmwarehost.Spec.HardwareUUID {
-			if machines[i].Status == "Deployed" || machines[i].Status == "Allocated" {
-				return true, "", nil
+	ctxlog.Info("Retrieved MAAS machines", "count", len(machines), "esxiName", vmwarehost.Spec.Name, "esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
+
+	// First, try to match by hardware UUID
+	var matchedMachineIdx = -1
+
+	if vmwarehost.Spec.HardwareUUID != "" {
+		ctxlog.Info("Attempting hardware UUID matching", "esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
+		for i := range machines {
+			ctxlog.V(1).Info("Checking MAAS machine",
+				"index", i,
+				"machineHardwareUuid", machines[i].HardwareUuid,
+				"machineName", machines[i].Hostname,
+				"machineId", machines[i].Id,
+				"machineStatus", machines[i].Status)
+			if machines[i].HardwareUuid != "" && machines[i].HardwareUuid == vmwarehost.Spec.HardwareUUID {
+				ctxlog.Info("Found a matching machine by hardware UUID",
+					"hardwareUuid", machines[i].HardwareUuid,
+					"name", machines[i].Hostname,
+					"id", machines[i].Id)
+				matchedMachineIdx = i
+				break
 			}
-			return false, fmt.Sprintf("ESXi %s is not in Deployed or Allocated state", vmwarehost.Spec.Name), nil
+		}
+		if matchedMachineIdx == -1 {
+			ctxlog.Info("No hardware UUID match found")
+		}
+	} else {
+		ctxlog.Info("ESXi has empty hardware UUID, skipping UUID matching")
+	}
+
+	// If no UUID match found, fall back to MAC address matching
+	if matchedMachineIdx == -1 {
+		ctxlog.Info("Falling back to MAC address matching")
+
+		// Get VMware credentials to fetch ESXi summary
+		vmwarecreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, scope.RollingMigrationPlan)
+		if err != nil {
+			return false, "", errors.Wrap(err, "failed to get vmware credentials")
+		}
+
+		// Get ESXi summary to extract MAC addresses
+		hs, err := GetESXiSummary(ctx, scope.Client, vmwarehost.Spec.Name, vmwarecreds, "")
+		if err != nil {
+			return false, "", errors.Wrap(err, "failed to get ESXi summary")
+		}
+
+		// Extract MAC addresses from ESXi host's physical network adapters
+		var hostMacAddresses []string
+		if hs.Config != nil && hs.Config.Network != nil && hs.Config.Network.Pnic != nil && len(hs.Config.Network.Pnic) > 0 {
+			ctxlog.Info("Extracting MAC addresses from ESXi physical NICs", "pnicCount", len(hs.Config.Network.Pnic))
+			for idx, pnic := range hs.Config.Network.Pnic {
+				if pnic.Mac != "" {
+					// Normalize MAC address to lowercase for comparison
+					normalizedMac := strings.ToLower(pnic.Mac)
+					hostMacAddresses = append(hostMacAddresses, normalizedMac)
+					ctxlog.V(1).Info("Found ESXi NIC MAC address",
+						"nicIndex", idx,
+						"device", pnic.Device,
+						"originalMac", pnic.Mac,
+						"normalizedMac", normalizedMac)
+				} else {
+					ctxlog.V(1).Info("Skipping ESXi NIC with empty MAC", "nicIndex", idx, "device", pnic.Device)
+				}
+			}
+		} else {
+			ctxlog.Info("ESXi host has no physical NIC configuration available")
+		}
+
+		if len(hostMacAddresses) == 0 {
+			return false, "", errors.New("no hardware UUID or MAC addresses found for matching")
+		}
+
+		ctxlog.Info("ESXi host MAC addresses extracted", "count", len(hostMacAddresses), "macs", hostMacAddresses)
+
+		// Match machines based on MAC addresses (many-to-many)
+		ctxlog.Info("Starting MAC address matching against MAAS machines", "machineCount", len(machines))
+		for i := range machines {
+			if machines[i].MacAddress == "" {
+				ctxlog.V(1).Info("Skipping MAAS machine with empty MAC address",
+					"index", i,
+					"machineName", machines[i].Hostname,
+					"machineId", machines[i].Id)
+				continue
+			}
+
+			machineMac := strings.ToLower(machines[i].MacAddress)
+			ctxlog.V(1).Info("Checking MAAS machine MAC",
+				"index", i,
+				"machineName", machines[i].Hostname,
+				"machineId", machines[i].Id,
+				"originalMac", machines[i].MacAddress,
+				"normalizedMac", machineMac)
+
+			// Check if any host MAC address matches the machine MAC address
+			matched := false
+			for hostMacIdx, hostMac := range hostMacAddresses {
+				if hostMac != "" && hostMac == machineMac {
+					ctxlog.Info("MAC address match found!",
+						"esxiMac", hostMac,
+						"esxiMacIndex", hostMacIdx,
+						"machineMac", machineMac,
+						"machineName", machines[i].Hostname,
+						"machineId", machines[i].Id)
+					matched = true
+					break
+				}
+			}
+
+			if matched {
+				ctxlog.Info("Found a matching machine by MAC address",
+					"machineMAC", machineMac,
+					"name", machines[i].Hostname,
+					"id", machines[i].Id,
+					"hardwareUuid", machines[i].HardwareUuid,
+					"status", machines[i].Status)
+				matchedMachineIdx = i
+				break
+			}
+		}
+
+		if matchedMachineIdx == -1 {
+			ctxlog.Info("No MAC address match found after checking all machines",
+				"esxiMacs", hostMacAddresses,
+				"machinesChecked", len(machines))
 		}
 	}
 
+	// If a match was found (either by UUID or MAC), check the status
+	if matchedMachineIdx != -1 {
+		ctxlog.Info("Checking matched machine status",
+			"machineName", machines[matchedMachineIdx].Hostname,
+			"machineId", machines[matchedMachineIdx].Id,
+			"status", machines[matchedMachineIdx].Status,
+			"requiredStatus", "Deployed or Allocated")
+		if machines[matchedMachineIdx].Status == "Deployed" || machines[matchedMachineIdx].Status == "Allocated" {
+			ctxlog.Info("ESXi host successfully validated in MAAS",
+				"esxiName", vmwarehost.Spec.Name,
+				"machineName", machines[matchedMachineIdx].Hostname,
+				"status", machines[matchedMachineIdx].Status)
+			return true, "", nil
+		}
+		ctxlog.Info("ESXi host found in MAAS but status is invalid",
+			"esxiName", vmwarehost.Spec.Name,
+			"machineName", machines[matchedMachineIdx].Hostname,
+			"currentStatus", machines[matchedMachineIdx].Status,
+			"requiredStatus", "Deployed or Allocated")
+		return false, fmt.Sprintf("ESXi %s is not in Deployed or Allocated state", vmwarehost.Spec.Name), nil
+	}
+
+	ctxlog.Info("ESXi host not found in MAAS after all matching attempts",
+		"esxiName", vmwarehost.Spec.Name,
+		"esxiHardwareUUID", vmwarehost.Spec.HardwareUUID)
 	return false, fmt.Sprintf("ESXi %s is not in MAAS", vmwarehost.Spec.Name), nil
 }
 

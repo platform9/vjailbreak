@@ -4,7 +4,9 @@ import AgentsIcon from '@mui/icons-material/Computer'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
-import MonitoringIcon from '@mui/icons-material/Analytics'
+import MonitoringIcon from '@mui/icons-material/Insights';
+import DescriptionIcon from '@mui/icons-material/Description'
+import { Storage } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -35,6 +37,12 @@ export const navigationItems: NavigationItem[] = [
     id: 'baremetal-config',
     label: 'Bare Metal Config',
     path: '/dashboard/baremetal-config',
+    icon: <Storage />
+  },
+  {
+    id: 'global-settings',
+    label: 'Global Settings',
+    path: '/dashboard/global-settings',
     icon: <ConfigIcon />
   },
   {
@@ -43,13 +51,21 @@ export const navigationItems: NavigationItem[] = [
     path: '/grafana',
     icon: <MonitoringIcon />,
     external: true
+  },
+  {
+    id: 'docs',
+    label: 'Documentation',
+    path: '/docs',
+    icon: <DescriptionIcon />,
+    external: true,
+    externalUrl: 'https://platform9.github.io/vjailbreak/introduction/getting_started/'
   }
 ]
 
 export const getNavigationItemById = (id: string): NavigationItem | undefined => {
-  return navigationItems.find(item => item.id === id)
+  return navigationItems.find((item) => item.id === id)
 }
 
 export const getNavigationItemByPath = (path: string): NavigationItem | undefined => {
-  return navigationItems.find(item => item.path === path)
+  return navigationItems.find((item) => item.path === path)
 }

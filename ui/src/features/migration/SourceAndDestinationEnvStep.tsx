@@ -1,29 +1,13 @@
+import { Box } from '@mui/material'
+import { useState } from 'react'
+import { Step } from 'src/shared/components/forms'
+import { Row, SectionHeader } from 'src/components'
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import {
-  styled,
-  Typography,
-  Box,
-} from "@mui/material"
-import { useState } from "react"
-import Step from "../../components/forms/Step"
-import { useVmwareCredentialsQuery } from "src/hooks/api/useVmwareCredentialsQuery"
-import { useOpenstackCredentialsQuery } from "src/hooks/api/useOpenstackCredentialsQuery"
-import VmwareCredentialsForm from "../../components/forms/VmwareCredentialsForm"
-import OpenstackCredentialsForm from "../../components/forms/OpenstackCredentialsForm"
-import { getSecret } from "src/api/secrets/secrets"
-import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
-
-const SourceAndDestinationStepContainer = styled("div")(({ theme }) => ({
-  display: "grid",
-  gridGap: theme.spacing(1),
-}))
-
-
-const SideBySideContainer = styled(Box)(({ theme }) => ({
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: theme.spacing(3),
-  marginLeft: theme.spacing(6),
-}))
+  VmwareCredentialsForm,
+  OpenstackCredentialsForm
+} from 'src/features/credentials/components'
 
 interface SourceAndDestinationEnvStepProps {
   onChange: (id: string) => (value: unknown) => void
@@ -32,77 +16,71 @@ interface SourceAndDestinationEnvStepProps {
 
 export default function SourceAndDestinationEnvStep({
   onChange,
-  errors,
+  errors
 }: SourceAndDestinationEnvStepProps) {
   const [selectedVmwareCred, setSelectedVmwareCred] = useState<string | null>(null)
   const [selectedOpenstackCred, setSelectedOpenstackCred] = useState<string | null>(null)
 
   const { data: vmwareCredsList = [], isLoading: loadingVmwareCreds } = useVmwareCredentialsQuery()
-  const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } = useOpenstackCredentialsQuery()
+  const { data: openstackCredsList = [], isLoading: loadingOpenstackCreds } =
+    useOpenstackCredentialsQuery()
 
   const handleVmwareCredSelect = async (credId: string | null) => {
     setSelectedVmwareCred(credId)
     if (credId) {
-      let mappedCreds = {}
-      const selectedCred = vmwareCredsList.find(cred => cred.metadata.name === credId)
+      const selectedCred = vmwareCredsList.find((cred) => cred.metadata.name === credId)
       if (selectedCred) {
         try {
-          if (selectedCred.spec.secretRef?.name) {
-            // Fetch the secret data
-            const secretName = selectedCred.spec.secretRef.name
-            const secret = await getSecret(secretName, selectedCred.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE)
-
-            if (secret?.data) {
-              // Add secret data to mappedCreds
-              mappedCreds = {
-                existingCredName: selectedCred.metadata.name,
-                secretRef: selectedCred.spec.secretRef,
-                datacenter: secret.data.VCENTER_DATACENTER,
-              }
-            }
+          const mappedCreds = {
+            existingCredName: selectedCred.metadata.name,
+            secretRef: selectedCred.spec.secretRef,
+            datacenter: selectedCred.spec.datacenter,
+            hostName: selectedCred.spec.hostName
           }
 
-          onChange("vmwareCreds")(mappedCreds)
+          onChange('vmwareCreds')(mappedCreds)
         } catch (error) {
-          console.error("Error fetching VMware credential secret:", error)
+          console.error('Error processing VMware credential:', error)
         }
       }
     } else {
       // Clear the selection
-      onChange("vmwareCreds")({})
+      onChange('vmwareCreds')({})
     }
   }
 
   const handleOpenstackCredSelect = async (credId: string | null) => {
     setSelectedOpenstackCred(credId)
     if (credId) {
-      const selectedCred = openstackCredsList.find(cred => cred.metadata.name === credId)
+      const selectedCred = openstackCredsList.find((cred) => cred.metadata.name === credId)
       if (selectedCred) {
         try {
+          // Use data directly from credential spec instead of fetching from secret
           const mappedCreds = {
             existingCredName: selectedCred.metadata.name,
+            projectName: selectedCred.spec.projectName
           }
 
-          onChange("openstackCreds")(mappedCreds)
+          onChange('openstackCreds')(mappedCreds)
         } catch (error) {
-          console.error("Error fetching OpenStack credential secret:", error)
+          console.error('Error processing OpenStack credential:', error)
         }
       }
     } else {
       // Clear the selection
-      onChange("openstackCreds")({})
+      onChange('openstackCreds')({})
     }
   }
   return (
-    <SourceAndDestinationStepContainer>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <Step stepNumber="1" label="Source and Destination Environments" />
-      <SideBySideContainer>
-        <Box>
-          <Typography variant="body1" sx={{ mb: 1 }}>Source VMware</Typography>
+      <Row gap={3} flexWrap="wrap" sx={{ ml: 6 }}>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          <SectionHeader title="Source VMware" sx={{ mb: 1 }} />
           <VmwareCredentialsForm
             credentialsList={vmwareCredsList}
             loadingCredentials={loadingVmwareCreds}
-            error={errors["vmwareCreds"]}
+            error={errors['vmwareCreds']}
             onCredentialSelect={handleVmwareCredSelect}
             selectedCredential={selectedVmwareCred}
             showCredentialSelector={true}
@@ -110,19 +88,19 @@ export default function SourceAndDestinationEnvStep({
           />
         </Box>
 
-        <Box>
-          <Typography variant="body1" sx={{ mb: 1 }}>Destination Platform</Typography>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          <SectionHeader title="Destination Platform" sx={{ mb: 1 }} />
           <OpenstackCredentialsForm
             credentialsList={openstackCredsList}
             loadingCredentials={loadingOpenstackCreds}
-            error={errors["openstackCreds"]}
+            error={errors['openstackCreds']}
             onCredentialSelect={handleOpenstackCredSelect}
             selectedCredential={selectedOpenstackCred}
             showCredentialSelector={true}
             showCredentialNameField={false}
           />
         </Box>
-      </SideBySideContainer>
-    </SourceAndDestinationStepContainer>
+      </Row>
+    </Box>
   )
 }

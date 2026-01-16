@@ -1,18 +1,18 @@
-import { FormControl, FormHelperText, styled, Typography, Box } from "@mui/material"
-import { useEffect, useMemo } from "react"
-import ResourceMappingTable from "src/components/forms/ResourceMappingTableNew"
-import Step from "../../components/forms/Step"
+import { FormControl, FormHelperText, styled, Typography, Box } from '@mui/material'
+import { useEffect, useMemo } from 'react'
+import { ResourceMappingTableNew as ResourceMappingTable } from './components'
+import { Step } from 'src/shared/components/forms'
+import { FieldLabel } from 'src/components'
 // import ResourceMapping from "../../components/forms/ResourceMapping"
 
-const VmsSelectionStepContainer = styled("div")(({ theme }) => ({
-  display: "grid",
-  gridGap: theme.spacing(1),
+const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
+  display: 'grid',
+  gridGap: theme.spacing(1)
 }))
 
-const FieldsContainer = styled("div")(({ theme }) => ({
-  display: "grid",
-  marginLeft: theme.spacing(6),
-  gridGap: theme.spacing(2),
+const FieldsContainer = styled('div')(({ theme }) => ({
+  display: 'grid',
+  gridGap: theme.spacing(2)
 }))
 
 export interface ResourceMap {
@@ -34,6 +34,7 @@ interface NetworkAndStorageMappingStepProps {
   storageMappingError?: string
   stepNumber?: string
   loading?: boolean
+  showHeader?: boolean
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -45,16 +46,16 @@ export default function NetworkAndStorageMappingStep({
   onChange,
   networkMappingError,
   storageMappingError,
-  stepNumber = "3",
+  stepNumber = '3',
   loading = false,
+  showHeader = true
 }: NetworkAndStorageMappingStepProps) {
   // Filter out any mappings that don't match the available networks/storage
   const filteredNetworkMappings = useMemo(
     () =>
       (params.networkMappings || []).filter(
         (mapping) =>
-          vmwareNetworks.includes(mapping.source) &&
-          openstackNetworks.includes(mapping.target)
+          vmwareNetworks.includes(mapping.source) && openstackNetworks.includes(mapping.target)
       ),
     [params.networkMappings, vmwareNetworks, openstackNetworks]
   )
@@ -63,58 +64,68 @@ export default function NetworkAndStorageMappingStep({
     () =>
       (params.storageMappings || []).filter(
         (mapping) =>
-          vmWareStorage.includes(mapping.source) &&
-          openstackStorage.includes(mapping.target)
+          vmWareStorage.includes(mapping.source) && openstackStorage.includes(mapping.target)
       ),
     [params.storageMappings, vmWareStorage, openstackStorage]
   )
 
   useEffect(() => {
     if (filteredNetworkMappings.length !== params.networkMappings?.length) {
-      onChange("networkMappings")(filteredNetworkMappings)
+      onChange('networkMappings')(filteredNetworkMappings)
     }
   }, [filteredNetworkMappings, onChange, params.networkMappings])
 
   useEffect(() => {
     if (filteredStorageMappings.length !== params.storageMappings?.length) {
-      onChange("storageMappings")(filteredStorageMappings)
+      onChange('storageMappings')(filteredStorageMappings)
     }
   }, [filteredStorageMappings, onChange, params.storageMappings])
 
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
-    () => vmwareNetworks.filter(network =>
-      !params.networkMappings?.some(mapping => mapping.source === network)
-    ),
+    () =>
+      vmwareNetworks.filter(
+        (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
+      ),
     [vmwareNetworks, params.networkMappings]
-  );
+  )
 
   const unmappedStorage = useMemo(
-    () => vmWareStorage.filter(storage =>
-      !params.storageMappings?.some(mapping => mapping.source === storage)
-    ),
+    () =>
+      vmWareStorage.filter(
+        (storage) => !params.storageMappings?.some((mapping) => mapping.source === storage)
+      ),
     [vmWareStorage, params.storageMappings]
-  );
+  )
 
   // Calculate completion status
-  const networksFullyMapped = unmappedNetworks.length === 0 && vmwareNetworks.length > 0;
-  const storageFullyMapped = unmappedStorage.length === 0 && vmWareStorage.length > 0;
+  const networksFullyMapped = unmappedNetworks.length === 0 && vmwareNetworks.length > 0
+  const storageFullyMapped = unmappedStorage.length === 0 && vmWareStorage.length > 0
 
   return (
     <VmsSelectionStepContainer>
-      <Step stepNumber={stepNumber} label="Network and Storage Mapping" />
+      {showHeader ? <Step stepNumber={stepNumber} label="Network And Storage Mapping" /> : null}
       <FieldsContainer>
         {loading ? (
           <Typography variant="body2" color="text.secondary">
-            Loading OpenStack networks and storage options...
+            Loading PCD networks and storage options...
           </Typography>
         ) : (
           <>
             <FormControl error={!!networkMappingError}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2">Map Networks</Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 1
+                }}
+              >
+                <FieldLabel label="Map Networks" required align="flex-start" />
                 {networksFullyMapped ? (
-                  <Typography variant="body2" color="success.main">All networks mapped ✓</Typography>
+                  <Typography variant="body2" color="success.main">
+                    All networks mapped ✓
+                  </Typography>
                 ) : (
                   <Typography variant="body2" color="warning.main">
                     {unmappedNetworks.length} of {vmwareNetworks.length} networks unmapped
@@ -122,26 +133,35 @@ export default function NetworkAndStorageMappingStep({
                 )}
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Select source and target networks to automatically create mappings. All networks must be mapped to proceed.
+                Select source and target networks to automatically create mappings. All networks
+                must be mapped to proceed.
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmwareNetworks}
                 targetItems={openstackNetworks}
                 sourceLabel="VMware Network"
-                targetLabel="OpenStack Network"
+                targetLabel="PCD Network"
                 values={params.networkMappings || []}
-                onChange={(value) => onChange("networkMappings")(value)}
+                onChange={(value) => onChange('networkMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="networkMapping"
               />
-              {networkMappingError && (
-                <FormHelperText error>{networkMappingError}</FormHelperText>
-              )}
+              {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
             <FormControl error={!!storageMappingError}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2">Map Storage</Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 1
+                }}
+              >
+                <FieldLabel label="Map Storage" required align="flex-start" />
                 {storageFullyMapped ? (
-                  <Typography variant="body2" color="success.main">All storage mapped ✓</Typography>
+                  <Typography variant="body2" color="success.main">
+                    All storage mapped ✓
+                  </Typography>
                 ) : (
                   <Typography variant="body2" color="warning.main">
                     {unmappedStorage.length} of {vmWareStorage.length} storage devices unmapped
@@ -149,20 +169,20 @@ export default function NetworkAndStorageMappingStep({
                 )}
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Select source and target storage to automatically create mappings. All storage devices must be mapped to proceed.
+                Select source and target storage to automatically create mappings. All storage
+                devices must be mapped in order to proceed.
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmWareStorage}
                 targetItems={openstackStorage}
                 sourceLabel="VMware Datastore"
-                targetLabel="OpenStack VolumeType"
+                targetLabel="PCD Volume Type"
                 values={params.storageMappings || []}
-                onChange={(value) => onChange("storageMappings")(value)}
+                onChange={(value) => onChange('storageMappings')(value)}
                 oneToManyMapping
+                fieldPrefix="storageMapping"
               />
-              {storageMappingError && (
-                <FormHelperText error>{storageMappingError}</FormHelperText>
-              )}
+              {storageMappingError && <FormHelperText error>{storageMappingError}</FormHelperText>}
             </FormControl>
           </>
         )}

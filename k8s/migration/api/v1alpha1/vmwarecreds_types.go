@@ -38,9 +38,11 @@ type VMwareCredsInfo struct {
 // VMwareCredsSpec defines the desired state of VMwareCreds
 type VMwareCredsSpec struct {
 	// DataCenter is the datacenter for the virtual machine
-	DataCenter string `json:"datacenter"`
+	DataCenter string `json:"datacenter,omitempty"`
 	// SecretRef is the reference to the Kubernetes secret holding VMware credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+	// VcenterHost is the vCenter host
+	VcenterHost string `json:"vcenterHost,omitempty"`
 }
 
 // VMwareCredsStatus defines the observed state of VMwareCreds

@@ -1,35 +1,30 @@
-import { useMemo } from "react"
-import { VmData } from "src/api/migration-templates/model"
+import { useMemo } from 'react'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 
 interface UseRdmValidationProps {
   selectedVMs: Set<string>
   allVMs: VmData[]
 }
 
-export const useRdmValidation = ({
-  selectedVMs,
-  allVMs,
-}: UseRdmValidationProps) => {
+export const useRdmValidation = ({ selectedVMs, allVMs }: UseRdmValidationProps) => {
   const rdmValidation = useMemo(() => {
     if (selectedVMs.size === 0) {
       return {
         hasRdmVMs: false,
         hasValidationError: false,
-        errorMessage: "",
+        errorMessage: '',
         hasPowerStateError: false,
-        powerStateErrorMessage: "",
+        powerStateErrorMessage: '',
         hasSelectionError: false,
-        selectionErrorMessage: "",
+        selectionErrorMessage: '',
         missingVMs: [],
         rdmGroups: {},
-        requiredVMs: [],
+        requiredVMs: []
       }
     }
 
     const selectedVmNames = Array.from(selectedVMs)
-    const selectedVMsData = allVMs.filter((vm) =>
-      selectedVmNames.includes(vm.name)
-    )
+    const selectedVMsData = allVMs.filter((vm) => selectedVmNames.includes(vm.name))
 
     // Check if any selected VM has RDM disks
     const vmsWithRdm = selectedVMsData.filter((vm) => vm.hasSharedRdm)
@@ -38,14 +33,14 @@ export const useRdmValidation = ({
       return {
         hasRdmVMs: false,
         hasValidationError: false,
-        errorMessage: "",
+        errorMessage: '',
         hasPowerStateError: false,
-        powerStateErrorMessage: "",
+        powerStateErrorMessage: '',
         hasSelectionError: false,
-        selectionErrorMessage: "",
+        selectionErrorMessage: '',
         missingVMs: [],
         rdmGroups: {},
-        requiredVMs: [],
+        requiredVMs: []
       }
     }
 
@@ -57,11 +52,7 @@ export const useRdmValidation = ({
       if (!vm.vmState) return false
       const powerState = vm.vmState.toLowerCase()
       // Consider VM as "powered on" if it's running, not if it's powered off or not running
-      return (
-        powerState === "running" ||
-        powerState === "poweredon" ||
-        powerState === "on"
-      )
+      return powerState === 'running' || powerState === 'poweredon' || powerState === 'on'
     })
 
     // Only check for power state validation errors
@@ -69,10 +60,10 @@ export const useRdmValidation = ({
     const hasValidationError = hasPoweredOnVMs
 
     // Only power state error message
-    let powerStateErrorMessage = ""
+    let powerStateErrorMessage = ''
 
     if (hasPoweredOnVMs) {
-      const poweredOnVmNames = poweredOnRdmVMs.map((vm) => vm.name).join(", ")
+      const poweredOnVmNames = poweredOnRdmVMs.map((vm) => vm.name).join(', ')
       powerStateErrorMessage = `All VMs with shared RDM disks must be powered off for migration. Currently powered on: ${poweredOnVmNames}`
     }
 
@@ -85,10 +76,10 @@ export const useRdmValidation = ({
       hasPowerStateError: hasPoweredOnVMs,
       powerStateErrorMessage,
       hasSelectionError: false,
-      selectionErrorMessage: "",
+      selectionErrorMessage: '',
       missingVMs: [],
       rdmGroups: {},
-      requiredVMs: [],
+      requiredVMs: []
     }
   }, [selectedVMs, allVMs])
 

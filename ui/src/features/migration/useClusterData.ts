@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react"
-import { getVmwareCredentialsList } from "src/api/vmware-creds/vmwareCreds"
-import { getVMwareClusters } from "src/api/vmware-clusters/vmwareClusters"
-import { getPCDClusters } from "src/api/pcd-clusters"
-import { getSecret, getSecrets } from "src/api/secrets/secrets"
-import { VJAILBREAK_DEFAULT_NAMESPACE } from "src/api/constants"
-import { VMwareCreds } from "src/api/vmware-creds/model"
-import { VMwareCluster } from "src/api/vmware-clusters/model"
-import { PCDCluster } from "src/api/pcd-clusters/model"
+import { useState, useEffect } from 'react'
+import { getVmwareCredentialsList } from 'src/api/vmware-creds/vmwareCreds'
+import { getVMwareClusters } from 'src/api/vmware-clusters/vmwareClusters'
+import { getPCDClusters } from 'src/api/pcd-clusters'
+import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
+import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { VMwareCreds } from 'src/api/vmware-creds/model'
+import { VMwareCluster } from 'src/api/vmware-clusters/model'
+import { PCDCluster } from 'src/api/pcd-clusters/model'
 
 export interface SourceDataItem {
   credName: string
@@ -42,26 +42,18 @@ interface ClusterDataActions {
 
 export type UseClusterDataReturn = ClusterDataState & ClusterDataActions
 
-export const useClusterData = (
-  autoFetch: boolean = true
-): UseClusterDataReturn => {
+export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn => {
   const [sourceData, setSourceData] = useState<SourceDataItem[]>([])
   const [pcdData, setPcdData] = useState<PcdDataItem[]>([])
   const [loadingVMware, setLoadingVMware] = useState(false)
   const [loadingPCD, setLoadingPCD] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fetchSecrets = async () => {
-    // This function is kept for compatibility with refetchAll
-    // but secrets are now fetched directly in fetchPcdData when needed
-    return await getSecrets(VJAILBREAK_DEFAULT_NAMESPACE)
-  }
+  // Removed fetchSecrets function - no longer needed
   const fetchSourceData = async () => {
     setLoadingVMware(true)
     setError(null)
     try {
-      const vmwareCreds = await getVmwareCredentialsList(
-        VJAILBREAK_DEFAULT_NAMESPACE
-      )
+      const vmwareCreds = await getVmwareCredentialsList(VJAILBREAK_DEFAULT_NAMESPACE)
 
       if (!vmwareCreds || vmwareCreds.length === 0) {
         setSourceData([])
@@ -70,55 +62,48 @@ export const useClusterData = (
 
       const sourceDataPromises = vmwareCreds.map(async (cred: VMwareCreds) => {
         const credName = cred.metadata.name
-        const datacenter = cred.spec.datacenter || credName
+        const fixedDatacenter = cred.spec.datacenter
 
-        // Default vcenterName to credential name
-        let vcenterName = credName
+        // Use hostName directly from credential spec instead of fetching from secret
+        const vcenterName = cred.spec.hostName || credName
 
-        // If credential has a secretRef, fetch the secret to get VCENTER_HOST
-        if (cred.spec.secretRef?.name) {
-          try {
-            const secret = await getSecret(
-              cred.spec.secretRef.name,
-              VJAILBREAK_DEFAULT_NAMESPACE
-            )
-            if (secret && secret.data && secret.data.VCENTER_HOST) {
-              vcenterName = secret.data.VCENTER_HOST
-            }
-          } catch (error) {
-            console.error(
-              `Failed to fetch secret for credential ${credName}:`,
-              error
-            )
+        const clustersResponse = await getVMwareClusters(VJAILBREAK_DEFAULT_NAMESPACE, credName)
+        
+        const clustersByDC: Record<string, typeof clustersResponse.items> = {}
+
+        clustersResponse.items.forEach((cluster: VMwareCluster) => {
+          const annotations = (cluster.metadata as any).annotations
+          const dcAnnotation = annotations?.['vjailbreak.k8s.pf9.io/datacenter'] || fixedDatacenter || 'Unknown'
+          if (!clustersByDC[dcAnnotation]) {
+            clustersByDC[dcAnnotation] = []
           }
-        }
+          clustersByDC[dcAnnotation].push(cluster)
+        })
 
-        const clustersResponse = await getVMwareClusters(
-          VJAILBREAK_DEFAULT_NAMESPACE,
-          credName
-        )
-
-        const clusters = clustersResponse.items.map(
-          (cluster: VMwareCluster) => ({
-            id: `${credName}:${cluster.metadata.name}`,
+        return Object.keys(clustersByDC).map(dcName => {
+           const clusters = clustersByDC[dcName].map((cluster: VMwareCluster) => ({
+            id: `${credName}:${dcName}:${cluster.metadata.name}`,
             name: cluster.metadata.name,
             displayName: cluster.spec.name,
-          })
-        )
+            datacenter: dcName
+          }))
 
-        return {
-          credName,
-          datacenter,
-          vcenterName,
-          clusters,
-        }
+          return {
+            credName,
+            datacenter: dcName,
+            vcenterName,
+            clusters
+          }
+        })
       })
 
-      const newSourceData = await Promise.all(sourceDataPromises)
-      setSourceData(newSourceData.filter((item) => item.clusters.length > 0))
+      const nestedResults = await Promise.all(sourceDataPromises)
+      const newSourceData = nestedResults.flat().filter((item) => item.clusters.length > 0)
+      
+      setSourceData(newSourceData)
     } catch (error) {
-      console.error("Failed to fetch VMware cluster data:", error)
-      setError("Failed to fetch VMware cluster data")
+      console.error('Failed to fetch VMware cluster data:', error)
+      setError('Failed to fetch VMware cluster data')
     } finally {
       setLoadingVMware(false)
     }
@@ -135,53 +120,44 @@ export const useClusterData = (
         return
       }
 
-      // Ensure we have fresh secrets data
-      const currentSecrets = await getSecrets(VJAILBREAK_DEFAULT_NAMESPACE)
+      const clusterDataPromises = pcdClusters.items.map(async (cluster: PCDCluster) => {
+        const clusterName = cluster.spec.clusterName
+        const openstackCredName =
+          cluster.metadata.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
 
-      const clusterDataPromises = pcdClusters.items.map(
-        async (cluster: PCDCluster) => {
-          const clusterName = cluster.spec.clusterName
-          const openstackCredName =
-            cluster.metadata.labels?.["vjailbreak.k8s.pf9.io/openstackcreds"] ||
-            ""
-
-          let tenantName = ""
-
-          // Try to find secret with exact name format: {openstackCredName}-openstack-secret
-          if (openstackCredName) {
-            // @ts-expect-error - currentSecrets is a SecretList
-            const secret = currentSecrets?.items?.find((secret) =>
-              secret?.metadata?.name?.includes(openstackCredName)
+        let tenantName = ''
+        if (openstackCredName) {
+          try {
+            const openstackCreds = await getOpenstackCredentials(
+              openstackCredName,
+              VJAILBREAK_DEFAULT_NAMESPACE
             )
-            if (secret?.data?.OS_TENANT_NAME) {
-              tenantName = atob(secret.data.OS_TENANT_NAME)
-            } else if (secret?.data?.OS_PROJECT_NAME) {
-              tenantName = atob(secret.data.OS_PROJECT_NAME)
-            }
-          }
-
-          return {
-            id: openstackCredName + " - " + tenantName + " - " + clusterName,
-            name: clusterName,
-            openstackCredName: openstackCredName,
-            tenantName: tenantName,
+            tenantName = openstackCreds?.spec?.projectName || ''
+          } catch (error) {
+            console.error(`Failed to fetch OpenStack credentials for ${openstackCredName}:`, error)
           }
         }
-      )
+
+        return {
+          id: openstackCredName + ' - ' + tenantName + ' - ' + clusterName,
+          name: clusterName,
+          openstackCredName: openstackCredName,
+          tenantName: tenantName
+        }
+      })
 
       const clusterData = await Promise.all(clusterDataPromises)
       setPcdData(clusterData)
     } catch (error) {
-      console.error("Failed to fetch PCD clusters:", error)
-      setError("Failed to fetch PCD clusters")
+      console.error('Failed to fetch PCD clusters:', error)
+      setError('Failed to fetch PCD clusters')
     } finally {
       setLoadingPCD(false)
     }
   }
 
   const refetchAll = async () => {
-    // First fetch secrets, then fetch other data in parallel
-    await fetchSecrets()
+    // Fetch source and PCD data in parallel
     await Promise.all([fetchSourceData(), fetchPcdData()])
   }
 
@@ -200,6 +176,6 @@ export const useClusterData = (
     error,
     refetchSourceData: fetchSourceData,
     refetchPcdData: fetchPcdData,
-    refetchAll,
+    refetchAll
   }
 }

@@ -11,6 +11,8 @@ export interface VMwareVM {
   osFamily?: string
   networkInterfaces?: VmNetworkInterface[]
   rdmDisks?: string[]
+  clusterName?: string
+  useGPU?: boolean
 }
 
 export interface VmNetworkInterface {

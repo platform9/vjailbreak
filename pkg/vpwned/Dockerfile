@@ -10,6 +10,8 @@ WORKDIR /app
 # Copy the source code
 COPY . .
 
+WORKDIR /app/pkg/vpwned
+
 # Download dependencies
 RUN make dep
 
@@ -27,15 +29,15 @@ RUN apk --no-cache add ca-certificates tzdata skopeo
 WORKDIR /root/
 
 # Copy the pre-built binary file from the builder stage
-COPY --from=builder /app/bin/vpwctl .
+COPY --from=builder /app/pkg/vpwned/bin/vpwctl .
 
 # Copy any additional files you need
 # Uncomment and modify as needed
-COPY --from=builder /app/openapiv3 /opt/platform9/vpwned/openapiv3
+COPY --from=builder /app/pkg/vpwned/openapiv3 /opt/platform9/vpwned/openapiv3
 
 # Set the timezone (optional)
 ENV TZ=UTC
-ENV LOG_LEVEL=error
+ENV LOG_LEVEL=info
 # Expose port if your application uses a network port
 EXPOSE 3001
 EXPOSE 3000

@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
@@ -31,6 +30,11 @@ func MigrationNameFromVMName(vmname string) string {
 // GetMigrationConfigMapName generates a config map name for a migration
 func GetMigrationConfigMapName(vmname string) string {
 	return fmt.Sprintf("migration-config-%s", vmname)
+}
+
+// GetFirstbootConfigMapName generates a config map name for a migration
+func GetFirstbootConfigMapName(vmname string) string {
+	return fmt.Sprintf("firstboot-config-%s", vmname)
 }
 
 // ConvertToK8sName converts a name to be Kubernetes-compatible
@@ -76,11 +80,17 @@ func ValidateMigrationPlan(migrationplan *vjailbreakv1alpha1.MigrationPlan) erro
 		return fmt.Errorf("cutover start time is after cutover end time")
 	}
 
-	// If advanced options are set, then there should only be 1 VM in the migrationplan
-	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) &&
+	// Check if granular options (VM-specific) are set
+	hasGranularOptions := len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 ||
+		len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 ||
+		len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0
+
+	// If granular options are set, then there should only be 1 VM in the migrationplan
+	// Periodic sync options are plan-level and can apply to multiple VMs
+	if hasGranularOptions &&
 		(len(migrationplan.Spec.VirtualMachines) != 1 || len(migrationplan.Spec.VirtualMachines[0]) != 1) {
-		return fmt.Errorf(`advanced options can only be set for a single VM.
-			Please remove advanced options or reduce the number of VMs in the migrationplan`)
+		return fmt.Errorf(`granular options (volumes/networks/ports) can only be set for a single VM.
+			Please remove granular options or reduce the number of VMs in the migrationplan`)
 	}
 	return nil
 }

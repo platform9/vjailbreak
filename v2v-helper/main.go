@@ -17,6 +17,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 func main() {
@@ -69,6 +70,10 @@ func main() {
 		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
 		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
 		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+		arrayHost         = strings.TrimSpace(os.Getenv("ARRAY_HOSTNAME"))
+		arrayUser         = strings.TrimSpace(os.Getenv("ARRAY_USERNAME"))
+		arrayPassword     = strings.TrimSpace(os.Getenv("ARRAY_PASSWORD"))
+		arrayInsecure     = strings.EqualFold(strings.TrimSpace(os.Getenv("ARRAY_INSECURE")), constants.TrueString)
 	)
 
 	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -88,7 +93,7 @@ func main() {
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
 	defer vcclient.VCClient.CloseIdleConnections()
 	// Validate OpenStack connection
-	openstackclients, err := openstack.NewOpenStackClients(openstackInsecure)
+	openstackclients, err := openstack.NewOpenStackClients(ctx, openstackInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
 	}
@@ -140,22 +145,45 @@ func main() {
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
 		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
+		ServerGroup:            migrationparams.ServerGroup,
 		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
 		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
+		StorageCopyMethod:      migrationparams.StorageCopyMethod,
+		ArrayHost:              arrayHost,
+		ArrayUser:              arrayUser,
+		ArrayPassword:          arrayPassword,
+		ArrayInsecure:          arrayInsecure,
+		VendorType:             migrationparams.VendorType,
+		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 	}
 
+	if migrationobj.ServerGroup != "" {
+		utils.PrintLog(fmt.Sprintf("Server group configured: %s", migrationobj.ServerGroup))
+	} else {
+		utils.PrintLog("No server group configured for this migration")
+	}
+
+	PreMigrationPowerState, err := vmops.GetVmPowerState()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get VM power state: %v", err))
+		PreMigrationPowerState = types.VirtualMachinePowerStatePoweredOn
+	}
 	if err := migrationobj.MigrateVM(ctx); err != nil {
-		msg := fmt.Sprintf("Failed to migrate VM: %v", err)
+		msg := fmt.Sprintf("Failed to migrate VM: %v. ", err)
 
 		// Try to power on the VM if migration failed
-		powerOnErr := vmops.VMPowerOn()
-		if powerOnErr != nil {
-			msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+		if PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
+			msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
 		} else {
-			msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			powerOnErr := vmops.VMPowerOn()
+			if powerOnErr != nil {
+				msg += fmt.Sprintf("\nAlso Failed to power on VM after migration failure: %v", powerOnErr)
+			} else {
+				msg += fmt.Sprintf("\nVM %s was powered on after migration failure", migrationparams.SourceVMName)
+			}
 		}
 
 		handleError(msg)

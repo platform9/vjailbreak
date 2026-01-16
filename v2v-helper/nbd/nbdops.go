@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -31,12 +32,17 @@ type NBDOperations interface {
 	StopNBDServer() error
 	CopyDisk(ctx context.Context, dest string, diskindex int) error
 	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
+	GetProgress() (int64, int64, time.Duration)
 }
 
 type NBDServer struct {
 	cmd          *exec.Cmd
 	tmp_dir      string
 	progresschan chan string
+	TotalSize    int64
+	StartTime    time.Time
+	CopiedSize   int64
+	Duration     time.Duration
 }
 
 type BlockStatusData struct {
@@ -44,6 +50,8 @@ type BlockStatusData struct {
 	Length int64
 	Flags  uint32
 }
+
+// copiedsize,totalsize,start time,current time
 
 const MaxChunkSize = 64 * 1024 * 1024
 
@@ -75,6 +83,8 @@ var fixedOptArgs = libnbd.BlockStatusOptargs{
 }
 
 func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
+	server = strings.TrimRight(server, "/")
+
 	tmp_dir, err := os.MkdirTemp("", "nbdkit-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %v", err)
@@ -116,10 +126,9 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		file,
 	)
 
-	// Log the command
+	// Log the command with password redacted
 	cmdstring := ""
 	for _, arg := range cmd.Args {
-
 		if strings.Contains(arg, password) {
 			cmdstring += "password=[REDACTED] "
 		} else {
@@ -127,7 +136,8 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		}
 	}
 
-	utils.AddDebugOutputToFile(cmd)
+	// Use the redacted command string for logging
+	utils.AddDebugOutputToFileWithCommand(cmd, cmdstring)
 
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdstring))
 	err = cmd.Start()
@@ -163,10 +173,15 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
-	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmd.String()))
+	cmdString := cmd.String()
+	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
 	go func() {
 		scanner := bufio.NewScanner(progressRead)
-		lastProgress := 0
+
+		lastLoggedProgress := -1
+		const logInterval = 5
+		lastChannelProgress := 0
+
 		for scanner.Scan() {
 			progressInt, _, err := utils.ParseFraction(scanner.Text())
 			if err != nil {
@@ -174,16 +189,20 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 				continue
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
-			utils.PrintLog(msg)
 
-			if lastProgress <= progressInt-10 {
+			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
+				utils.PrintLog(msg)
+				lastLoggedProgress = progressInt
+			}
+
+			if lastChannelProgress <= progressInt-10 {
 				nbdserver.progresschan <- msg
-				lastProgress = progressInt
+				lastChannelProgress = progressInt
 			}
 		}
 	}()
-	// Use the helper function to ensure log file is closed after command execution
-	err = utils.RunCommandWithLogFile(cmd)
+	// Use the helper function with command string to ensure log file is closed after command execution
+	err = utils.RunCommandWithLogFileRedacted(cmd, cmdString)
 	if err != nil {
 		// retry once with debug enabled, to get more details
 		cmd.Stdout = os.Stdout
@@ -364,7 +383,9 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 	}
 	return nil
 }
-
+func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
+	return nbdserver.CopiedSize, nbdserver.TotalSize, nbdserver.Duration
+}
 func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
@@ -397,13 +418,31 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	semaphore := make(chan struct{}, 16)
 	incrementalcopyprogress := make(chan int64)
 
+	maxRetries, capInterval := utils.GetRetryLimits()
+	errorChan := make(chan error)
+	retryChannel := make(chan struct{})
 	// Goroutine for updating progress
 	go func() {
 		copiedsize := int64(0)
+		lastLoggedPct := -1
+		const logInterval = 5
+		startTime := time.Now()
+		nbdserver.StartTime = startTime
+		nbdserver.TotalSize = totalsize
 		for progress := range incrementalcopyprogress {
 			copiedsize += progress
-			prog := fmt.Sprintf("Progress: %.2f%%", float64(copiedsize)/float64(totalsize)*100.0)
-			utils.PrintLog(prog)
+			nbdserver.CopiedSize = copiedsize
+			nbdserver.Duration = time.Since(startTime)
+
+			currentPct := int(float64(copiedsize) / float64(totalsize) * 100.0)
+
+			prog := fmt.Sprintf("Progress: %d%%", currentPct)
+
+			if currentPct == 0 || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
+				utils.PrintLog(prog)
+				lastLoggedPct = currentPct
+			}
+
 			nbdserver.progresschan <- prog
 		}
 	}()
@@ -414,9 +453,30 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			blocks := getBlockStatus(handle, extent)
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			for _, block := range blocks {
-				if err := copyRange(fd, handle, block); err != nil {
-					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v", err))
+			retries := uint64(0)
+			waitTime := 1 * time.Minute
+			var err error
+			for bidx := 0; bidx < len(blocks); {
+				if err = copyRange(fd, handle, blocks[bidx]); err != nil {
+					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
+					retries++
+					if retries >= maxRetries {
+						errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(waitTime):
+						waitTime = waitTime * 2
+						if waitTime > capInterval {
+							waitTime = capInterval
+						}
+						continue
+					}
+				} else {
+					bidx++
+					retries = uint64(0)
 				}
 			}
 			// check if context is cancelled
@@ -431,9 +491,17 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			}
 		}(extent)
 	}
-	wg.Wait()
-	close(incrementalcopyprogress)
-	return nil
+	go func() {
+		wg.Wait()
+		close(retryChannel)
+	}()
+	select {
+	case <-retryChannel:
+		close(incrementalcopyprogress)
+		return nil
+	case err := <-errorChan:
+		return err
+	}
 }
 
 func generateSockUrl(tmp_dir string) string {

@@ -6,6 +6,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -211,19 +212,23 @@ func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, host resmgr.Host) vjailbreakv1alpha1.PCDHost {
 	// Create a new PCDHost
 	interfaces := []vjailbreakv1alpha1.PCDHostInterface{}
-	for name, itface := range host.Extensions.Interfaces.Data.IfaceInfo {
-		// Collect all IP addresses from the interface
-		ipAddresses := []string{}
-		for _, iface := range itface.Ifaces {
-			ipAddresses = append(ipAddresses, iface.Addr)
-		}
+	var extData resmgr.ExtensionsData
+	err := json.Unmarshal(host.Extensions, &extData)
+	if err == nil {
+		for name, itface := range extData.Interfaces.Data.IfaceInfo {
+			// Collect all IP addresses from the interface
+			ipAddresses := make([]string, 0, len(itface.Ifaces))
+			for _, iface := range itface.Ifaces {
+				ipAddresses = append(ipAddresses, iface.Addr)
+			}
 
-		// Create the interface with all IPs and the MAC address
-		interfaces = append(interfaces, vjailbreakv1alpha1.PCDHostInterface{
-			IPAddresses: ipAddresses,
-			MACAddress:  itface.MAC,
-			Name:        name,
-		})
+			// Create the interface with all IPs and the MAC address
+			interfaces = append(interfaces, vjailbreakv1alpha1.PCDHostInterface{
+				IPAddresses: ipAddresses,
+				MACAddress:  itface.MAC,
+				Name:        name,
+			})
+		}
 	}
 	pcdHost := vjailbreakv1alpha1.PCDHost{
 		ObjectMeta: metav1.ObjectMeta{

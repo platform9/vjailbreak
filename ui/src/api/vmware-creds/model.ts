@@ -24,7 +24,7 @@ export interface ItemMetadata {
 }
 
 export interface Annotations {
-  "kubectl.kubernetes.io/last-applied-configuration": string
+  'kubectl.kubernetes.io/last-applied-configuration': string
 }
 
 export type Empty = object
@@ -34,6 +34,7 @@ export interface VMwareCredsSpec {
     name: string
   }
   datacenter?: string
+  hostName?: string
 }
 
 export interface GetVmwareCredsListMetadata {

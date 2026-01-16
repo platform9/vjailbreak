@@ -490,13 +490,8 @@ message IsBMRunningResponse {
 }
 
 message OpenstackAccessInfo {
-    string auth_url = 1;
-    string domain_name = 2;
-    bool insecure = 3;
-    string password = 4;
-    string region_name = 5;
-    string tenant_name = 6;
-    string username = 7;
+    string secret_name = 1;
+    string secret_namespace = 2;
 }
 
 message ValidateOpenstackIpRequest {
@@ -509,12 +504,47 @@ message ValidateOpenstackIpResponse {
     repeated string reason = 2;
 }
 
+message RevalidateCredentialsRequest {
+  string name = 1;
+  string namespace = 2;
+  string kind = 3;
+}
+
+message RevalidateCredentialsResponse {
+  string message = 1;
+}
+
+message InjectEnvVariablesRequest {
+  string http_proxy = 1;
+  string https_proxy = 2;
+  string no_proxy = 3;
+}
+
+message InjectEnvVariablesResponse {
+  bool success = 1;
+  string message = 2;
+}
+
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
             post: "/vpw/v1/validate_openstack_ip"
             body: "*"
         };
+    }
+
+    rpc RevalidateCredentials(RevalidateCredentialsRequest) returns (RevalidateCredentialsResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/revalidate_credentials"
+        body: "*"
+      };
+    }
+
+    rpc InjectEnvVariables(InjectEnvVariablesRequest) returns (InjectEnvVariablesResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/inject_env_variables"
+        body: "*"
+      };
     }
 }
 
@@ -526,4 +556,137 @@ message CleanupStepResponse {
     string step = 1;
     bool success = 2;
     string message = 3;
+}
+
+// Storage Array APIs
+message StorageAccessInfo {
+    string hostname = 1;
+    string username = 2;
+    string password = 3;
+    bool skip_ssl_verification = 4;
+    string vendor_type = 5;
+}
+
+message VolumeInfo {
+    string name = 1;
+    int64 size = 2;
+    string id = 3;
+    string serial_number = 4;
+    string naa = 5;
+}
+
+message MappingContextEntry {
+    string key = 1;
+    repeated string values = 2;
+}
+
+service StorageArray {
+    rpc ValidateCredentials(ValidateStorageCredsRequest) returns (ValidateStorageCredsResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/validate"
+            body: "*"
+        };
+    }
+
+    rpc CreateOrUpdateInitiatorGroup(CreateInitiatorGroupRequest) returns (CreateInitiatorGroupResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/initiator_group"
+            body: "*"
+        };
+    }
+
+    rpc MapVolumeToGroup(MapVolumeRequest) returns (MapVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/map_volume"
+            body: "*"
+        };
+    }
+
+    rpc UnmapVolumeFromGroup(UnmapVolumeRequest) returns (UnmapVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/unmap_volume"
+            body: "*"
+        };
+    }
+
+    rpc GetMappedGroups(GetMappedGroupsRequest) returns (GetMappedGroupsResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/mapped_groups"
+            body: "*"
+        };
+    }
+
+    rpc ResolveCinderVolume(ResolveCinderVolumeRequest) returns (ResolveCinderVolumeResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/storage/resolve_volume"
+            body: "*"
+        };
+    }
+}
+
+message ValidateStorageCredsRequest {
+    StorageAccessInfo access_info = 1;
+}
+
+message ValidateStorageCredsResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message CreateInitiatorGroupRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    repeated string hba_identifiers = 3;
+}
+
+message CreateInitiatorGroupResponse {
+    bool success = 1;
+    string message = 2;
+    repeated MappingContextEntry mapping_context = 3;
+}
+
+message MapVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    VolumeInfo volume = 3;
+    repeated MappingContextEntry mapping_context = 4;
+}
+
+message MapVolumeResponse {
+    bool success = 1;
+    string message = 2;
+    VolumeInfo volume = 3;
+}
+
+message UnmapVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string initiator_group_name = 2;
+    VolumeInfo volume = 3;
+    repeated MappingContextEntry mapping_context = 4;
+}
+
+message UnmapVolumeResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message GetMappedGroupsRequest {
+    StorageAccessInfo access_info = 1;
+    VolumeInfo volume = 2;
+    repeated MappingContextEntry mapping_context = 3;
+}
+
+message GetMappedGroupsResponse {
+    repeated string groups = 1;
+}
+
+message ResolveCinderVolumeRequest {
+    StorageAccessInfo access_info = 1;
+    string volume_name = 2;
+}
+
+message ResolveCinderVolumeResponse {
+    bool success = 1;
+    string message = 2;
+    VolumeInfo volume = 3;
 }
