@@ -1569,7 +1569,7 @@ func buildVMInfo(moVM mo.VirtualMachine, dsNames []string, disks []vjailbreakv1a
 	}
 }
 
-func processGuestNetworks(ctx context.Context, moVM mo.VirtualMachine, nicList []vjailbreakv1alpha1.NIC, vmwareMachineMap map[string]*vjailbreakv1alpha1.VMwareMachine, log logr.Logger) ([]vjailbreakv1alpha1.GuestNetwork, string, []vjailbreakv1alpha1.NIC, error) {
+func processGuestNetworks(_ context.Context, moVM mo.VirtualMachine, nicList []vjailbreakv1alpha1.NIC, vmwareMachineMap map[string]*vjailbreakv1alpha1.VMwareMachine, log logr.Logger) ([]vjailbreakv1alpha1.GuestNetwork, string, []vjailbreakv1alpha1.NIC, error) {
 	// Get the guest network info (already fetched in bulk via Property Collector)
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
 	if err != nil {
@@ -1633,37 +1633,6 @@ func processGuestNetworks(ctx context.Context, moVM mo.VirtualMachine, nicList [
 	}
 
 	return guestNetworks, osFamily, updatedNicList, nil
-}
-
-func getHostClusterInfo(ctx context.Context, moVM mo.VirtualMachine, client *vim25.Client, collector *property.Collector) (string, string, error) {
-	// Determine cluster name
-	val, ok := hostSystemMap.Load(moVM.Runtime.Host.Value)
-	if !ok {
-		// Get the host name and parent (cluster) information
-		host := mo.HostSystem{}
-		hostSystemMap.Store(host.Reference().Value, host)
-
-		err := collector.RetrieveOne(ctx, *moVM.Runtime.Host, []string{"name", "parent"}, &host)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to get host name: %w", err)
-		}
-		clusterName := getClusterNameFromHost(ctx, client, host)
-		if strings.TrimSpace(moVM.Config.Name) == "" {
-			return "", "", fmt.Errorf("VM has no name")
-		}
-		esxiName := host.Name
-		clusterDetails := clusterDetails{
-			ESXIName:    esxiName,
-			ClusterName: clusterName,
-		}
-		hostSystemMap.Store(moVM.Runtime.Host.Value, clusterDetails)
-		return clusterName, esxiName, nil
-	} else if val != nil {
-		if details, ok := val.(clusterDetails); ok {
-			return details.ClusterName, details.ESXIName, nil
-		}
-	}
-	return "", "", fmt.Errorf("unable to get host cluster info")
 }
 
 func processRDMDisks(ctx context.Context, moVM mo.VirtualMachine, hostStorageInfo *types.HostStorageDeviceInfo, attributes []string, rdmDiskMap *sync.Map, log logr.Logger) []string {
@@ -1788,7 +1757,7 @@ func collectVMReferences(fetchedVMs []mo.VirtualMachine) (map[types.ManagedObjec
 
 // bulkFetchVMwareMachines fetches all VMwareMachine objects in one K8s List API call
 // This eliminates N individual K8s Get calls during processGuestNetworks
-func bulkFetchVMwareMachines(ctx context.Context, scope *scope.VMwareCredsScope, fetchedVMs []mo.VirtualMachine, log logr.Logger) map[string]*vjailbreakv1alpha1.VMwareMachine {
+func bulkFetchVMwareMachines(ctx context.Context, scope *scope.VMwareCredsScope, _ []mo.VirtualMachine, log logr.Logger) map[string]*vjailbreakv1alpha1.VMwareMachine {
 	vmMachineMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine)
 
 	// List all VMwareMachine objects for this credential
@@ -1875,6 +1844,7 @@ func buildVMPropertyFilter(vms []*object.VirtualMachine) types.PropertyFilterSpe
 	}
 }
 
+//nolint:gocyclo // Complexity is necessary for bulk VM processing optimization to avoid vCenter throttling
 func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*object.VirtualMachine, client *vim25.Client) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	vmMap := make(map[string]*object.VirtualMachine)
 	for _, vm := range vms {
