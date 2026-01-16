@@ -685,6 +685,9 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 // GetAndCreateAllVMs gets all the VMs in a datacenter.
 func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
+	startTime := time.Now()
+	log.Info("[METRICS] Starting VM fetch operation", "startTime", startTime.Format(time.RFC3339), "datacenter", datacenter)
+
 	vmErrors := []vmError{}
 	errMu := sync.Mutex{}
 	panicMu := sync.Mutex{}
@@ -696,7 +699,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vjailbreak settings: %w", err)
 	}
-	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit)
+	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit, "datacenter", datacenter)
 
 	// Determine which datacenters to scan
 	targetDatacenters := []string{}
@@ -733,6 +736,8 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	}
 
 	for _, dcName := range targetDatacenters {
+		dcStartTime := time.Now()
+		log.Info("[METRICS] Starting datacenter scan", "datacenter", dcName, "startTime", dcStartTime.Format(time.RFC3339))
 		finder := find.NewFinder(c, false)
 		dc, err := finder.Datacenter(ctx, dcName)
 		if err != nil {
@@ -750,6 +755,16 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 			vmToDatacenter[vm.Reference().Value] = dcName
 		}
 		allVMs = append(allVMs, vms...)
+
+		dcEndTime := time.Now()
+		dcDuration := dcEndTime.Sub(dcStartTime)
+		log.Info("[METRICS] Completed datacenter scan",
+			"datacenter", dcName,
+			"vmCount", len(vms),
+			"startTime", dcStartTime.Format(time.RFC3339),
+			"endTime", dcEndTime.Format(time.RFC3339),
+			"durationSeconds", dcDuration.Seconds(),
+			"durationMs", dcDuration.Milliseconds())
 	}
 
 	// Pre-allocate vminfo slice
@@ -788,6 +803,17 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 			log.Error(e.err, "VM error details", "vmName", e.vmName)
 		}
 	}
+
+	endTime := time.Now()
+	totalDuration := endTime.Sub(startTime)
+	log.Info("[METRICS] Completed VM fetch operation for single datacenter",
+		"totalVMs", len(vminfo),
+		"datacenter", datacenter,
+		"startTime", startTime.Format(time.RFC3339),
+		"endTime", endTime.Format(time.RFC3339),
+		"totalDurationSeconds", totalDuration.Seconds(),
+		"totalDurationMs", totalDuration.Milliseconds())
+
 	return vminfo, rdmDiskMap, nil
 }
 
