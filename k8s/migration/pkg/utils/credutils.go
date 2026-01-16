@@ -710,6 +710,8 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 // GetAndCreateAllVMs gets all the VMs in a datacenter.
 func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
+	startTime := time.Now()
+	log.Info("[METRICS] Starting VM fetch operation", "startTime", startTime.Format(time.RFC3339), "datacenter", datacenter)
 
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
 	if err != nil {
@@ -723,18 +725,89 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 		return nil, nil, fmt.Errorf("failed to get finder for VMware credentials: %w", err)
 	}
 
-	// Get all VMs
+	c.Timeout = 5 * time.Minute
+	defer c.CloseIdleConnections()
+
+	// If no datacenter is specified, iterate through all datacenters
+	if datacenter == "" {
+		log.Info("No datacenter specified, scanning all datacenters")
+		datacenters, err := finder.DatacenterList(ctx, "*")
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to list datacenters: %w", err)
+		}
+
+		log.Info("[METRICS] Found datacenters to scan", "datacenterCount", len(datacenters))
+		var allVMData []vjailbreakv1alpha1.VMInfo
+		allRDMDiskMap := &sync.Map{}
+
+		for _, dc := range datacenters {
+			dcStartTime := time.Now()
+			log.Info("[METRICS] Starting datacenter scan", "datacenter", dc.Name(), "startTime", dcStartTime.Format(time.RFC3339))
+			finder.SetDatacenter(dc)
+
+			vms, err := finder.VirtualMachineList(ctx, "*")
+			if err != nil {
+				log.Error(err, "Failed to list VMs in datacenter", "datacenter", dc.Name())
+				continue
+			}
+
+			vmData, rdmDiskMap, err := getVMDetails(ctx, scope, vms, c)
+			if err != nil {
+				log.Error(err, "Failed to fetch VM data in datacenter", "datacenter", dc.Name())
+				continue
+			}
+
+			dcEndTime := time.Now()
+			dcDuration := dcEndTime.Sub(dcStartTime)
+			log.Info("[METRICS] Completed datacenter scan",
+				"datacenter", dc.Name(),
+				"vmCount", len(vmData),
+				"startTime", dcStartTime.Format(time.RFC3339),
+				"endTime", dcEndTime.Format(time.RFC3339),
+				"durationSeconds", dcDuration.Seconds(),
+				"durationMs", dcDuration.Milliseconds())
+
+			allVMData = append(allVMData, vmData...)
+
+			// Merge RDM disk maps
+			rdmDiskMap.Range(func(key, value interface{}) bool {
+				allRDMDiskMap.Store(key, value)
+				return true
+			})
+		}
+
+		endTime := time.Now()
+		totalDuration := endTime.Sub(startTime)
+		log.Info("[METRICS] Completed scanning all datacenters",
+			"totalVMs", len(allVMData),
+			"datacenterCount", len(datacenters),
+			"startTime", startTime.Format(time.RFC3339),
+			"endTime", endTime.Format(time.RFC3339),
+			"totalDurationSeconds", totalDuration.Seconds(),
+			"totalDurationMs", totalDuration.Milliseconds())
+		return allVMData, allRDMDiskMap, nil
+	}
+
+	// Single datacenter case
 	vms, err := finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list VMs: %w", err)
 	}
 
-	c.Timeout = 5 * time.Minute
-	defer c.CloseIdleConnections()
 	vmData, rdmDiskMap, err := getVMDetails(ctx, scope, vms, c)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fetch vm data: %w", err)
 	}
+
+	endTime := time.Now()
+	totalDuration := endTime.Sub(startTime)
+	log.Info("[METRICS] Completed VM fetch operation for single datacenter",
+		"totalVMs", len(vmData),
+		"datacenter", datacenter,
+		"startTime", startTime.Format(time.RFC3339),
+		"endTime", endTime.Format(time.RFC3339),
+		"totalDurationSeconds", totalDuration.Seconds(),
+		"totalDurationMs", totalDuration.Milliseconds())
 
 	return vmData, rdmDiskMap, nil
 }

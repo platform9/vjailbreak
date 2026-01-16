@@ -135,10 +135,22 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
 	}
+
+	vmFetchStartTime := time.Now()
+	ctxlog.Info("[METRICS] Starting VM fetch and creation", "startTime", vmFetchStartTime.Format(time.RFC3339), "vmwareCreds", scope.Name())
 	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
 	}
+	vmFetchEndTime := time.Now()
+	vmFetchDuration := vmFetchEndTime.Sub(vmFetchStartTime)
+	ctxlog.Info("[METRICS] Completed VM fetch from vCenter",
+		"vmCount", len(vminfo),
+		"vmwareCreds", scope.Name(),
+		"startTime", vmFetchStartTime.Format(time.RFC3339),
+		"endTime", vmFetchEndTime.Format(time.RFC3339),
+		"durationSeconds", vmFetchDuration.Seconds(),
+		"durationMs", vmFetchDuration.Milliseconds())
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "Error fetching VJAILBreak settings")
@@ -153,6 +165,14 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 
 	ctxlog.Info("Processing VMs in batches", "batchSize", batchSize)
+
+	vmProcessingStartTime := time.Now()
+	ctxlog.Info("[METRICS] Starting VMwareMachine CR creation/update", "startTime", vmProcessingStartTime.Format(time.RFC3339), "totalVMs", len(vminfo))
+
+	// Track first and last VMwareMachine CR creation timestamps
+	var firstCreated, lastCreated time.Time
+	var timestampMutex sync.Mutex
+	var createdCount int
 
 	// Create a WaitGroup to wait for all goroutines to complete
 	var wg sync.WaitGroup
@@ -182,6 +202,17 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 					errChan <- errors.Wrap(err, "Error creating or updating VMwareMachine for VMwareCreds")
 					return
 				}
+
+				// Track creation timestamp
+				creationTime := time.Now()
+				timestampMutex.Lock()
+				if createdCount == 0 {
+					firstCreated = creationTime
+					ctxlog.Info("[METRICS] First VMwareMachine CR created", "vmName", vm.Name, "timestamp", firstCreated.Format(time.RFC3339))
+				}
+				lastCreated = creationTime
+				createdCount++
+				timestampMutex.Unlock()
 			}
 		}(batch)
 	}
@@ -195,6 +226,32 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	vmProcessingEndTime := time.Now()
+	vmProcessingDuration := vmProcessingEndTime.Sub(vmProcessingStartTime)
+
+	// Calculate duration between first and last VMwareMachine creation
+	var creationSpanDuration time.Duration
+	if createdCount > 0 && !firstCreated.IsZero() && !lastCreated.IsZero() {
+		creationSpanDuration = lastCreated.Sub(firstCreated)
+	}
+
+	ctxlog.Info("[METRICS] Completed VMwareMachine CR creation/update",
+		"totalVMs", len(vminfo),
+		"actuallyCreated", createdCount,
+		"startTime", vmProcessingStartTime.Format(time.RFC3339),
+		"endTime", vmProcessingEndTime.Format(time.RFC3339),
+		"totalDurationSeconds", vmProcessingDuration.Seconds(),
+		"totalDurationMs", vmProcessingDuration.Milliseconds())
+
+	if createdCount > 0 {
+		ctxlog.Info("[METRICS] VMwareMachine creation timeline",
+			"firstCreatedAt", firstCreated.Format(time.RFC3339),
+			"lastCreatedAt", lastCreated.Format(time.RFC3339),
+			"creationSpanSeconds", creationSpanDuration.Seconds(),
+			"creationSpanMs", creationSpanDuration.Milliseconds(),
+			"totalCreated", createdCount)
 	}
 
 	// Process stale VMs and clusters after all batches are done

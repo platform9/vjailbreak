@@ -19,6 +19,7 @@ import (
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -248,6 +249,9 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	ctx = ensureLogger(ctx)
 	logger := ctrllog.FromContext(ctx)
 
+	totalStartTime := time.Now()
+	logger.Info("[METRICS] Starting post-validation resource fetch", "startTime", totalStartTime.Format(time.RFC3339), "vmwareCreds", vmwcreds.Name)
+
 	scope, err := scope.NewVMwareCredsScope(scope.VMwareCredsScopeParams{
 		Logger:      logger,
 		Client:      k8sClient,
@@ -258,34 +262,56 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 	}
 
 	log.Printf("Creating VMware Clusters and Hosts")
+	clusterStartTime := time.Now()
 	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create VMware clusters and hosts")
 	}
+	clusterDuration := time.Since(clusterStartTime)
+	logger.Info("[METRICS] Completed cluster and host creation", "durationSeconds", clusterDuration.Seconds(), "durationMs", clusterDuration.Milliseconds())
 
 	log.Printf("Fetching all VMs")
+	// VM fetch timing is handled in utils.GetAndCreateAllVMs
 	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch VMs")
 	}
 
 	log.Printf("Syncing RDM Disks")
+	rdmStartTime := time.Now()
 	err = utils.CreateOrUpdateRDMDisks(ctx, k8sClient, vmwcreds, rdmDiskMap)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create/update RDM disks")
 	}
+	rdmDuration := time.Since(rdmStartTime)
+	logger.Info("[METRICS] Completed RDM disk sync", "durationSeconds", rdmDuration.Seconds(), "durationMs", rdmDuration.Milliseconds())
 
 	log.Printf("Deleting Stale Machines")
+	staleVMStartTime := time.Now()
 	err = utils.DeleteStaleVMwareMachines(ctx, k8sClient, vmwcreds, vminfo)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to delete stale VMware machines")
 	}
+	staleVMDuration := time.Since(staleVMStartTime)
+	logger.Info("[METRICS] Completed stale VM deletion", "durationSeconds", staleVMDuration.Seconds(), "durationMs", staleVMDuration.Milliseconds())
 
 	log.Printf("Deleting Stale Clusters and Hosts")
+	staleClusterStartTime := time.Now()
 	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to delete stale clusters and hosts")
 	}
+	staleClusterDuration := time.Since(staleClusterStartTime)
+	logger.Info("[METRICS] Completed stale cluster deletion", "durationSeconds", staleClusterDuration.Seconds(), "durationMs", staleClusterDuration.Milliseconds())
+
+	totalEndTime := time.Now()
+	totalDuration := totalEndTime.Sub(totalStartTime)
+	logger.Info("[METRICS] Completed post-validation resource fetch",
+		"totalVMs", len(vminfo),
+		"startTime", totalStartTime.Format(time.RFC3339),
+		"endTime", totalEndTime.Format(time.RFC3339),
+		"totalDurationSeconds", totalDuration.Seconds(),
+		"totalDurationMs", totalDuration.Milliseconds())
 
 	return &PostValidationResources{
 		VMInfo:     vminfo,
