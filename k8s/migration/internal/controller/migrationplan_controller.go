@@ -477,6 +477,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				latest := &vjailbreakv1alpha1.MigrationPlan{}
 				if getErr := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, latest); getErr != nil {
+					if apierrors.IsNotFound(getErr) {
+						return nil
+					}
 					return getErr
 				}
 				latest.Status.MigrationStatus = ""
@@ -1463,7 +1466,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	var (
 		fbcm                 *corev1.ConfigMap
 		baseFlavor           *flavors.Flavor
-		hotplugFlavorMissing bool
+		hotplugFlavorMissing = false
 	)
 
 	// For flavorless migrations, check hotplug base flavor availability
@@ -1522,7 +1525,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		if migrationtemplate.Spec.UseFlavorless && hotplugFlavorMissing {
 			ctxlog.Info("Marking migration as Failed due to missing hotplug base flavor", "vm", vm)
-			if err := r.markMigrationFailed(ctx, migrationobj, "failed to discover base flavor for flavorless migration"); err != nil {
+			if err := r.markMigrationFailed(ctx, migrationobj, "Failed to discover base flavor for flavorless migration"); err != nil {
 				ctxlog.Error(err, "Failed to mark migration as Failed", "vm", vm)
 			}
 			continue
