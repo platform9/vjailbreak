@@ -828,6 +828,20 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
+
+		// Set retryable status based on whether VM has RDM disks
+		// VMs with RDM disks cannot be retried through UI because shared RDM disk state
+		// prevents automatic retry (RDMDisk CR may be in Error or Managed state)
+		hasRDMDisks := len(vmMachine.Spec.VMInfo.RDMDisks) > 0
+		retryable := !hasRDMDisks
+
+		migrationobj.Status.Retryable = &retryable
+		if err := r.Status().Update(ctx, migrationobj); err != nil {
+			ctxlog.Error(err, "Failed to set retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
+			// Don't fail migration creation if status update fails, just log the error
+		} else {
+			ctxlog.Info("Set migration retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
+		}
 	}
 	return migrationobj, nil
 }

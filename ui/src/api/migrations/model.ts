@@ -89,6 +89,7 @@ export interface StatusClass {
   agentName?: string
   currentDisk?: string
   totalDisks?: number
+  retryable?: boolean
 }
 
 export interface Condition {
