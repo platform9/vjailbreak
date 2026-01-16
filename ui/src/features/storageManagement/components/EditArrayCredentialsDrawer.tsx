@@ -16,8 +16,6 @@ import {
   Divider
 } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import ErrorIcon from '@mui/icons-material/Error'
 import { useForm, Controller } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
@@ -55,8 +53,6 @@ export default function EditArrayCredentialsDrawer({
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
-  const [validationStatus, setValidationStatus] = useState<ValidationStatus>('idle')
-  const [validationMessage, setValidationMessage] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const isAutoDiscovered = credential.spec?.autoDiscovered
@@ -95,8 +91,6 @@ export default function EditArrayCredentialsDrawer({
   const handleClose = () => {
     if (isValidating) return // Don't allow closing while validating
     setSubmitError(null)
-    setValidationStatus('idle')
-    setValidationMessage('')
     onClose()
   }
 
@@ -138,8 +132,6 @@ export default function EditArrayCredentialsDrawer({
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
-    setValidationStatus('idle')
-    setValidationMessage('')
 
     try {
       const namespace = credential.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE
@@ -175,23 +167,19 @@ export default function EditArrayCredentialsDrawer({
       if (data.managementEndpoint && data.username && data.password) {
         setIsSubmitting(false)
         setIsValidating(true)
-        setValidationStatus('validating')
-        setValidationMessage('Validating credentials with storage array...')
 
         const validationResult = await pollForValidation(data.name)
         setIsValidating(false)
 
         if (!validationResult.success) {
           // Validation failed - show error but keep the resource
-          setValidationStatus('failed')
-          setValidationMessage(validationResult.message || 'Validation failed')
+          const errorMessage = validationResult.message || 'Validation failed'
+          setSubmitError(errorMessage)
           queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
           return // Stay in the form
         }
 
         // Validation succeeded
-        setValidationStatus('success')
-        setValidationMessage('Credentials validated successfully!')
         queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
 
         // Wait a moment to show success message before closing
@@ -200,13 +188,10 @@ export default function EditArrayCredentialsDrawer({
         queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       }
 
-      setValidationStatus('idle')
-      setValidationMessage('')
       onClose()
     } catch (error: any) {
       console.error('Error updating array credentials:', error)
       setIsValidating(false)
-      setValidationStatus('idle')
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to update array credentials'
       setSubmitError(errorMessage)
