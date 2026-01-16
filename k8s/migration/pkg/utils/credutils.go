@@ -3,6 +3,8 @@ package utils
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"math"
 	"net/url"
@@ -13,24 +15,19 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	gophercloud "github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
-	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
+	gophercloud "github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/pkg/errors"
 	netutils "github.com/platform9/vjailbreak/common/utils"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -43,7 +40,12 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -708,7 +710,6 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 // GetAndCreateAllVMs gets all the VMs in a datacenter.
 func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
-	vmErrors := []vmError{}
 
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, scope.Client)
 	if err != nil {
@@ -716,39 +717,25 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	}
 	log.Info("Fetched vjailbreak settings for vcenter scan concurrency limit", "vcenter_scan_concurrency_limit", vjailbreakSettings.VCenterScanConcurrencyLimit, "datacenter", datacenter)
 
-	// Determine which datacenters to scan
-	targetDatacenters := []string{}
-	if datacenter != "" {
-		targetDatacenters = append(targetDatacenters, datacenter)
-	} else {
-		// If no datacenter specified, we need to fetch all datacenters from vCenter
-		c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to validate vmware creds: %w", err)
-		}
-		finder := find.NewFinder(c, false)
-		dcs, err := finder.DatacenterList(ctx, "*")
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to list datacenters: %w", err)
-		}
-		for _, dc := range dcs {
-			targetDatacenters = append(targetDatacenters, dc.Name())
-		}
-		log.Info("No datacenter specified, scanning all found datacenters", "count", len(targetDatacenters), "datacenters", targetDatacenters)
+	// Get VMware client and finder
+	c, finder, err := GetFinderForVMwareCreds(ctx, scope.Client, scope.VMwareCreds, datacenter)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get finder for VMware credentials: %w", err)
 	}
+
+	// Get all VMs
+	vms, err := finder.VirtualMachineList(ctx, "*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list VMs: %w", err)
+	}
+
 	c.Timeout = 5 * time.Minute
 	defer c.CloseIdleConnections()
 	vmData, rdmDiskMap, err := getVMDetails(ctx, scope, vms, c)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fetch vm data: %w", err)
 	}
-	if len(vmErrors) > 0 {
-		log.Error(fmt.Errorf("failed to get (%d) VMs", len(vmErrors)), "failed to get VMs")
-		// Print individual VM errors for better debugging
-		for _, e := range vmErrors {
-			log.Error(e.err, "VM error details", "vmName", e.vmName)
-		}
-	}
+
 	return vmData, rdmDiskMap, nil
 }
 
@@ -1534,7 +1521,8 @@ func getCinderVolumeBackendPools(ctx context.Context, openstackClients *OpenStac
 	return volBackendPools, nil
 }
 
-func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
+// GetFinderForVMwareCreds creates a finder for VMware credentials
+func GetFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds, datacenter string) (*vim25.Client, *find.Finder, error) {
 	c, err := ValidateVMwareCreds(ctx, k3sclient, vmwcreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate vCenter connection: %w", err)
@@ -1562,11 +1550,11 @@ func getFinderForVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcr
 var hostStorageMap *sync.Map = &sync.Map{}
 var rdmDiskMap *sync.Map = &sync.Map{}
 
-func buildVMInfo(moVM mo.VirtualMachine, dsNames []string, diskLabels []string, netNames []string, rdmForVM []string, esxiName string, clusterName string, nicList []vjailbreakv1alpha1.NIC, guestNetworks []vjailbreakv1alpha1.GuestNetwork, osFamily string) vjailbreakv1alpha1.VMInfo {
+func buildVMInfo(moVM mo.VirtualMachine, dsNames []string, disks []vjailbreakv1alpha1.Disk, netNames []string, rdmForVM []string, esxiName string, clusterName string, nicList []vjailbreakv1alpha1.NIC, guestNetworks []vjailbreakv1alpha1.GuestNetwork, osFamily string) vjailbreakv1alpha1.VMInfo {
 	return vjailbreakv1alpha1.VMInfo{
 		Name:              moVM.Config.Name,
 		Datastores:        dsNames,
-		Disks:             diskLabels,
+		Disks:             disks,
 		Networks:          netNames,
 		IPAddress:         moVM.Guest.IpAddress,
 		VMState:           moVM.Guest.GuestState,
@@ -1581,35 +1569,24 @@ func buildVMInfo(moVM mo.VirtualMachine, dsNames []string, diskLabels []string, 
 	}
 }
 
-func processGuestNetworks(ctx context.Context, moVM mo.VirtualMachine, nicList []vjailbreakv1alpha1.NIC, scope *scope.VMwareCredsScope, log logr.Logger) ([]vjailbreakv1alpha1.GuestNetwork, string, []vjailbreakv1alpha1.NIC, error) {
-	// Get the guest network info
+func processGuestNetworks(ctx context.Context, moVM mo.VirtualMachine, nicList []vjailbreakv1alpha1.NIC, vmwareMachineMap map[string]*vjailbreakv1alpha1.VMwareMachine, log logr.Logger) ([]vjailbreakv1alpha1.GuestNetwork, string, []vjailbreakv1alpha1.NIC, error) {
+	// Get the guest network info (already fetched in bulk via Property Collector)
 	guestNetworksFromVmware, err := ExtractGuestNetworkInfo(&moVM)
 	if err != nil {
 		return nil, "", nicList, fmt.Errorf("failed to extract guest network info: %w", err)
 	}
 
-	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetK8sCompatibleVMWareObjectName(moVM.Config.Name, scope.Name())
-	if err != nil {
-		return nil, "", nicList, fmt.Errorf("failed to convert VM name to Kubernetes-safe name: %w", err)
-	}
-
 	var guestNetworks []vjailbreakv1alpha1.GuestNetwork
 	var osFamily string
 
-	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
-	vmwvmKey := k8stypes.NamespacedName{Name: vmName, Namespace: scope.Namespace()}
-	err = scope.Client.Get(ctx, vmwvmKey, vmwvm)
-	switch {
-	case apierrors.IsNotFound(err):
+	// Lookup existing VMwareMachine from bulk-fetched map (no K8s API call)
+	vmwvm, exists := vmwareMachineMap[moVM.Config.Name]
+
+	if !exists {
 		// First time creation – use whatever vCenter gave us (could be nil)
 		guestNetworks = guestNetworksFromVmware
 		osFamily = moVM.Guest.GuestFamily
-
-	case err != nil:
-		return nil, "", nicList, fmt.Errorf("failed to get VMwareMachine: %w", err)
-
-	default:
+	} else {
 		// Object exists
 		if len(guestNetworksFromVmware) > 0 {
 			// Only update if we got fresh data from vCenter
@@ -1809,6 +1786,67 @@ func collectVMReferences(fetchedVMs []mo.VirtualMachine) (map[types.ManagedObjec
 	return dsRefs, netRefs, attributeMap
 }
 
+// bulkFetchVMwareMachines fetches all VMwareMachine objects in one K8s List API call
+// This eliminates N individual K8s Get calls during processGuestNetworks
+func bulkFetchVMwareMachines(ctx context.Context, scope *scope.VMwareCredsScope, fetchedVMs []mo.VirtualMachine, log logr.Logger) map[string]*vjailbreakv1alpha1.VMwareMachine {
+	vmMachineMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine)
+
+	// List all VMwareMachine objects for this credential
+	vmList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := scope.Client.List(ctx, vmList,
+		client.InNamespace(scope.Namespace()),
+		client.MatchingLabels{constants.VMwareCredsLabel: scope.Name()}); err != nil {
+		log.Error(err, "failed to bulk fetch VMwareMachine objects")
+		return vmMachineMap
+	}
+
+	// Build map by VM name for quick lookup
+	for i := range vmList.Items {
+		vmMachineMap[vmList.Items[i].Spec.VMInfo.Name] = &vmList.Items[i]
+	}
+
+	return vmMachineMap
+}
+
+// bulkRetrieveHostInfo fetches all host information (name, parent cluster) in one bulk API call
+// This eliminates N individual API calls and avoids vCenter throttling
+func bulkRetrieveHostInfo(ctx context.Context, collector *property.Collector, hostRefs map[types.ManagedObjectReference]struct{}, client *vim25.Client, log logr.Logger) map[types.ManagedObjectReference]clusterDetails {
+	hostInfoMap := make(map[types.ManagedObjectReference]clusterDetails)
+
+	if len(hostRefs) == 0 {
+		return hostInfoMap
+	}
+
+	// Convert map to slice for bulk retrieval
+	refList := make([]types.ManagedObjectReference, 0, len(hostRefs))
+	for ref := range hostRefs {
+		refList = append(refList, ref)
+	}
+
+	// Bulk retrieve host properties
+	var hosts []mo.HostSystem
+	if err := collector.Retrieve(ctx, refList, []string{"name", "parent"}, &hosts); err != nil {
+		log.Error(err, "failed to bulk retrieve host information")
+		return hostInfoMap
+	}
+
+	// Process each host to get cluster name
+	for _, host := range hosts {
+		clusterName := getClusterNameFromHost(ctx, client, host)
+		hostInfoMap[host.Reference()] = clusterDetails{
+			ESXIName:    host.Name,
+			ClusterName: clusterName,
+		}
+		// Cache in global map for backward compatibility
+		hostSystemMap.Store(host.Reference().Value, clusterDetails{
+			ESXIName:    host.Name,
+			ClusterName: clusterName,
+		})
+	}
+
+	return hostInfoMap
+}
+
 func buildVMPropertyFilter(vms []*object.VirtualMachine) types.PropertyFilterSpec {
 	// Build ObjectSet for VM retrieval
 	objectSet := make([]types.ObjectSpec, 0, len(vms))
@@ -1819,7 +1857,7 @@ func buildVMPropertyFilter(vms []*object.VirtualMachine) types.PropertyFilterSpe
 		})
 	}
 
-	// Retrieve VM core properties
+	// Retrieve VM core properties - expanded for bulk fetching to avoid throttling
 	return types.PropertyFilterSpec{
 		ObjectSet: objectSet,
 		PropSet: []types.PropertySpec{
@@ -1827,9 +1865,9 @@ func buildVMPropertyFilter(vms []*object.VirtualMachine) types.PropertyFilterSpe
 				Type: "VirtualMachine",
 				PathSet: []string{
 					"config.hardware.device", "config.name", "config.uuid", "config.instanceUuid",
-					"guest.ipAddress", "guest.guestState", "guest.guestFamily",
+					"guest.ipAddress", "guest.guestState", "guest.guestFamily", "guest.net",
 					"config.hardware.numCPU", "config.hardware.memoryMB",
-					"datastore", "network", "runtime",
+					"datastore", "network", "runtime", "runtime.host",
 					"summary.config.annotation",
 				},
 			},
@@ -1865,11 +1903,25 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 	// Fetch all annotations and collect references
 	dsRefs, netRefs, attributeMap := collectVMReferences(fetchedVMs)
 
+	// Collect unique host references from all VMs
+	hostRefs := make(map[types.ManagedObjectReference]struct{})
+	for _, moVM := range fetchedVMs {
+		if moVM.Runtime.Host != nil {
+			hostRefs[*moVM.Runtime.Host] = struct{}{}
+		}
+	}
+
 	// Step 2: Bulk retrieve datastore and network names
 	dsMap := retrieveNames[mo.Datastore](ctx, collector, dsRefs, log, "datastore")
 	netMap := retrieveNames[mo.Network](ctx, collector, netRefs, log, "network")
 
-	// Step 4: Build final VMInfo list
+	// Step 3: Bulk retrieve host information (name, parent cluster) to avoid per-VM calls
+	hostInfoMap := bulkRetrieveHostInfo(ctx, collector, hostRefs, client, log)
+
+	// Step 4: Bulk fetch all VMwareMachine objects to avoid N K8s API calls
+	vmwareMachineMap := bulkFetchVMwareMachines(ctx, scope, fetchedVMs, log)
+
+	// Step 5: Build final VMInfo list
 	batchInfos := make([]vjailbreakv1alpha1.VMInfo, 0, len(fetchedVMs))
 	for _, moVM := range fetchedVMs {
 		if moVM.Config == nil || strings.HasPrefix(moVM.Config.Name, "vCLS-") {
@@ -1904,11 +1956,40 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 			}
 		}
 
-		var diskLabels []string
+		// Process disk information
+		disks := make([]vjailbreakv1alpha1.Disk, 0)
 		controllers := make(map[int32]types.BaseVirtualSCSIController)
 		for _, device := range moVM.Config.Hardware.Device {
 			if scsiCtrl, ok := device.(types.BaseVirtualSCSIController); ok {
 				controllers[device.GetVirtualDevice().Key] = scsiCtrl
+			}
+			if disk, ok := device.(*types.VirtualDisk); ok {
+				// Skip RDM disks as they're handled separately
+				if _, isRDM := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); isRDM {
+					continue
+				}
+				diskInfo := vjailbreakv1alpha1.Disk{
+					Name:       disk.DeviceInfo.GetDescription().Label,
+					CapacityGB: int(disk.CapacityInBytes / (1024 * 1024 * 1024)),
+				}
+				// Get datastore information if available
+				switch backing := disk.Backing.(type) {
+				case *types.VirtualDiskFlatVer2BackingInfo:
+					if backing.Datastore != nil {
+						if dsName, ok := dsMap[*backing.Datastore]; ok {
+							diskInfo.Datastore = dsName
+						}
+						diskInfo.DatastoreID = backing.Datastore.Value
+					}
+				case *types.VirtualDiskSparseVer2BackingInfo:
+					if backing.Datastore != nil {
+						if dsName, ok := dsMap[*backing.Datastore]; ok {
+							diskInfo.Datastore = dsName
+						}
+						diskInfo.DatastoreID = backing.Datastore.Value
+					}
+				}
+				disks = append(disks, diskInfo)
 			}
 		}
 		// Get basic RDM disk info from VM properties
@@ -1929,22 +2010,28 @@ func getVMDetails(ctx context.Context, scope *scope.VMwareCredsScope, vms []*obj
 		// Process RDM disks
 		rdmForVM := processRDMDisks(ctx, moVM, hostStorageInfo, attributes, rdmDiskMap, log)
 
-		// Get host and cluster information
-		clusterName, esxiName, err = getHostClusterInfo(ctx, moVM, client, collector)
-		if err != nil {
-			log.Error(err, "failed to get host cluster info", "VM NAME", moVM.Config.Name)
+		// Get host and cluster information from bulk-fetched map (no API call)
+		if moVM.Runtime.Host == nil {
+			log.Error(fmt.Errorf("VM has no host reference"), "failed to get host info", "VM NAME", moVM.Config.Name)
 			continue
 		}
+		hostInfo, ok := hostInfoMap[*moVM.Runtime.Host]
+		if !ok {
+			log.Error(fmt.Errorf("host info not found in map"), "failed to get host cluster info", "VM NAME", moVM.Config.Name)
+			continue
+		}
+		clusterName = hostInfo.ClusterName
+		esxiName = hostInfo.ESXIName
 
-		// Process guest networks and update NICs with IP addresses
-		guestNetworks, osFamily, nicList, err = processGuestNetworks(ctx, moVM, nicList, scope, log)
+		// Process guest networks and update NICs with IP addresses (using bulk-fetched map, no K8s API call)
+		guestNetworks, osFamily, nicList, err = processGuestNetworks(ctx, moVM, nicList, vmwareMachineMap, log)
 		if err != nil {
 			log.Error(err, "failed to process guest networks", "VM NAME", moVM.Config.Name)
 			continue
 		}
 
 		// Build and append VMInfo
-		vmInfo := buildVMInfo(moVM, dsNames, diskLabels, netNames, rdmForVM, esxiName, clusterName, nicList, guestNetworks, osFamily)
+		vmInfo := buildVMInfo(moVM, dsNames, disks, netNames, rdmForVM, esxiName, clusterName, nicList, guestNetworks, osFamily)
 		batchInfos = append(batchInfos, vmInfo)
 	}
 	return batchInfos, rdmDiskMap, nil
