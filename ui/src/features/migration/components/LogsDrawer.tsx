@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import Fuse from 'fuse.js'
 import {
   Box,
   Typography,
@@ -175,8 +176,13 @@ export default function LogsDrawer({
     }
 
     if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase()
-      filtered = filtered.filter((log) => log.toLowerCase().includes(searchLower))
+      const fuse = new Fuse(filtered, {
+        threshold: 0.4,
+        ignoreLocation: true,
+        isCaseSensitive: false
+      })
+      const results = fuse.search(searchTerm)
+      filtered = results.map((result) => result.item)
     }
 
     return filtered
