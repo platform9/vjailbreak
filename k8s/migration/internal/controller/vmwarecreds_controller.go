@@ -178,7 +178,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 					continue
 				}
 				// Process the VM
-				if err := utils.CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &vm); err != nil {
+				if err := utils.CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &vm, scope.VMwareCreds.Spec.DataCenter); err != nil {
 					errChan <- errors.Wrap(err, "Error creating or updating VMwareMachine for VMwareCreds")
 					return
 				}
