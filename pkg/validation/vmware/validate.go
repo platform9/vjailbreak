@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/zapr"
 	"github.com/pkg/errors"
 	commonutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -24,7 +25,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const (
@@ -324,7 +324,8 @@ func ensureLogger(ctx context.Context) context.Context {
 	l := ctrllog.FromContext(ctx)
 	if l.GetSink() == nil {
 		// Inject a dev logger if none exists
-		return ctrllog.IntoContext(ctx, zap.New(zap.UseDevMode(true)))
+		zapLogger, _ := zap.NewDevelopment()
+		return ctrllog.IntoContext(ctx, zapr.NewLogger(zapLogger))
 	}
 	return ctx
 }
