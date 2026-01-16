@@ -16,11 +16,13 @@ import {
   Divider
 } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorIcon from '@mui/icons-material/Error'
 import { useForm, Controller } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
-import { updateArrayCredsWithSecret } from 'src/api/array-creds/arrayCreds'
+import { updateArrayCredsWithSecret, getArrayCredentials } from 'src/api/array-creds/arrayCreds'
 import { createArrayCredsSecret } from 'src/api/secrets/secrets'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
@@ -42,6 +44,8 @@ interface FormData {
   skipSslVerification: boolean
 }
 
+type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
+
 export default function EditArrayCredentialsDrawer({
   open,
   onClose,
@@ -50,6 +54,9 @@ export default function EditArrayCredentialsDrawer({
   const { reportError } = useErrorHandler({ component: 'EditArrayCredentialsDrawer' })
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
+  const [validationStatus, setValidationStatus] = useState<ValidationStatus>('idle')
+  const [validationMessage, setValidationMessage] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const isAutoDiscovered = credential.spec?.autoDiscovered
@@ -86,13 +93,53 @@ export default function EditArrayCredentialsDrawer({
   }, [credential, reset])
 
   const handleClose = () => {
+    if (isValidating) return // Don't allow closing while validating
     setSubmitError(null)
+    setValidationStatus('idle')
+    setValidationMessage('')
     onClose()
+  }
+
+  // Poll for validation status after updating credentials
+  const pollForValidation = async (
+    name: string,
+    maxAttempts = 30,
+    intervalMs = 2000
+  ): Promise<{ success: boolean; message?: string }> => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+
+      try {
+        const updated = await getArrayCredentials(name)
+        const status = updated.status?.arrayValidationStatus
+
+        // Check if validation succeeded
+        if (status === 'Succeeded') {
+          return { success: true }
+        }
+
+        // Check if validation failed
+        if (status && status !== 'AwaitingCredentials' && status !== 'Validating') {
+          return {
+            success: false,
+            message:
+              updated.status?.arrayValidationMessage || `Validation failed with status: ${status}`
+          }
+        }
+      } catch (error) {
+        console.error('Error polling for validation:', error)
+      }
+    }
+
+    // Timeout - validation took too long
+    return { success: false, message: 'Validation timed out after 60 seconds' }
   }
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
+    setValidationStatus('idle')
+    setValidationMessage('')
 
     try {
       const namespace = credential.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE
@@ -124,10 +171,42 @@ export default function EditArrayCredentialsDrawer({
         namespace
       )
 
-      queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
-      handleClose()
+      // Start validation polling if credentials were provided
+      if (data.managementEndpoint && data.username && data.password) {
+        setIsSubmitting(false)
+        setIsValidating(true)
+        setValidationStatus('validating')
+        setValidationMessage('Validating credentials with storage array...')
+
+        const validationResult = await pollForValidation(data.name)
+        setIsValidating(false)
+
+        if (!validationResult.success) {
+          // Validation failed - show error but keep the resource
+          setValidationStatus('failed')
+          setValidationMessage(validationResult.message || 'Validation failed')
+          queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
+          return // Stay in the form
+        }
+
+        // Validation succeeded
+        setValidationStatus('success')
+        setValidationMessage('Credentials validated successfully!')
+        queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
+
+        // Wait a moment to show success message before closing
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      } else {
+        queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
+      }
+
+      setValidationStatus('idle')
+      setValidationMessage('')
+      onClose()
     } catch (error: any) {
       console.error('Error updating array credentials:', error)
+      setIsValidating(false)
+      setValidationStatus('idle')
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to update array credentials'
       setSubmitError(errorMessage)
