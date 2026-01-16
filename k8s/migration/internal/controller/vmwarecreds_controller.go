@@ -274,7 +274,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
 	}
 	// Get vjailbreak settings to get requeue after time
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	vjailbreakSettings, err = k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
