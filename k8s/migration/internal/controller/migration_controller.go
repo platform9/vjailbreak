@@ -202,12 +202,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			migration.Spec.VMName,
 			migration.Namespace,
 			migration.Spec.MigrationPlan,
+			migration.Status.AgentName,
 		)
 	}
 
 	// Update phase metrics on every reconcile for active migrations
 	if migration.Status.Phase != "" {
-		metrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.Phase)
+		metrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
 	}
 
 	// Update duration for active migrations
@@ -225,7 +226,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed
 
 	if isNowTerminal && !wasTerminal {
-		metrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.Phase)
+		metrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
 	}
 
 	if !reflect.DeepEqual(&migration.Status, oldStatus) {
@@ -255,7 +256,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	}
 
 	// Clean up metrics for this migration
-	metrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Spec.MigrationPlan)
+	metrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Spec.MigrationPlan, migration.Status.AgentName)
 
 	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
 	if err != nil {

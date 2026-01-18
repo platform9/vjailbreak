@@ -78,7 +78,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
           "refId": "A"
         }
       ],
@@ -407,7 +407,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0) or vector(0)",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0) or vector(0)",
           "refId": "A"
         }
       ],
@@ -497,7 +497,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) or vector(0)",
           "legendFormat": "Active Migrations",
           "refId": "A"
         }
@@ -761,7 +761,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(vjailbreak_migration_phase{namespace=~\"$namespace\"} == 1) by (phase)",
+          "expr": "sum(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\"} == 1) by (phase)",
           "instant": true,
           "refId": "A"
         }
@@ -913,6 +913,156 @@
       ],
       "title": "Migration Duration Statistics",
       "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) by (agent_name)",
+          "instant": true,
+          "legendFormat": "{{agent_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Migrations by Agent",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Count",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(vjailbreak_migration_phase{namespace=~\"$namespace\", agent_name=~\"$agent\", phase!=\"Succeeded\", phase!=\"Failed\", phase!=\"ValidationFailed\"} == 1) by (agent_name) or vector(0)",
+          "legendFormat": "{{agent_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Migrations by Agent Over Time",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -968,6 +1118,33 @@
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(vjailbreak_migration_phase{namespace=~\"$namespace\"}, agent_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Agent",
+        "multi": true,
+        "name": "agent",
+        "options": [],
+        "query": {
+          "query": "label_values(vjailbreak_migration_phase{namespace=~\"$namespace\"}, agent_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
         "type": "query"
       }
     ]
