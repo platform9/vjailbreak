@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	commonutils "github.com/platform9/vjailbreak/common/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/cli/esx"
 	"github.com/vmware/govmomi/find"
@@ -40,21 +41,10 @@ type VCenterClient struct {
 }
 
 func validateVCenter(ctx context.Context, username, password, host string, disableSSLVerification bool) (*vim25.Client, *cache.Session, error) {
-	// Validate and add protocol to host if not present
-	if len(host) >= 4 && host[:4] != "http" {
-		host = "https://" + host
-	} else if len(host) < 4 {
-		host = "https://" + host
-	}
 
-	// Add SDK endpoint if not present
-	if len(host) >= 4 && host[len(host)-4:] != "/sdk" {
-		host += "/sdk"
-	}
-
-	u, err := url.Parse(host)
+	u, err := commonutils.NormalizeVCenterURL(host)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse URL: %v", err)
+		return nil, nil, err
 	}
 	u.User = url.UserPassword(username, password)
 
@@ -106,6 +96,8 @@ func VCenterClientBuilder(ctx context.Context, username, password, host string, 
 
 func GetThumbprint(host string) (string, error) {
 	// Get the thumbprint of the vCenter server
+	host = strings.TrimRight(host, "/")
+
 	// Establish a TLS connection to the server
 	conn, err := tls.Dial("tcp", host+":443", &tls.Config{
 		InsecureSkipVerify: true, // Skip verification

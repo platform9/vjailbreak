@@ -233,8 +233,8 @@ func SortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
 	})
 }
 
-// CreateVAAICondition creates a VAAI XCOPY condition for a migration based on VAAI-specific events
-func CreateVAAICondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+// CreateStorageAcceleratedCopyCondition creates a StorageAcceleratedCopy condition for a migration based on StorageAcceleratedCopy-specific events
+func CreateStorageAcceleratedCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
 		if eventList.Items[i].Reason != constants.MigrationReason {
@@ -245,7 +245,7 @@ func CreateVAAICondition(migration *vjailbreakv1alpha1.Migration, eventList *cor
 		var conditionMessage string
 		var conditionReason string
 
-		// Check for VAAI XCOPY specific events
+		// Check for StorageAcceleratedCopy specific events
 		switch {
 		case strings.Contains(message, "Connecting to ESXi"):
 			conditionReason = "ConnectingToESXi"
@@ -269,8 +269,8 @@ func CreateVAAICondition(migration *vjailbreakv1alpha1.Migration, eventList *cor
 			continue
 		}
 
-		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeVAAI, conditionReason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeVAAI,
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeStorageAcceleratedCopy, conditionReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeStorageAcceleratedCopy,
 			corev1.ConditionTrue,
 			conditionReason,
 			conditionMessage,

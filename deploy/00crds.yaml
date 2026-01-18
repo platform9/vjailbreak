@@ -231,7 +231,7 @@ spec:
       openAPIV3Schema:
         description: |-
           ArrayCredsMapping is the Schema for the arraycredsmappings API that defines
-          mappings between VMware datastores and ArrayCreds for vendor-based storage migration
+          mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy storage migration
         properties:
           apiVersion:
             description: |-
@@ -253,7 +253,7 @@ spec:
           spec:
             description: |-
               ArrayCredsMappingSpec defines the desired state of ArrayCredsMapping including
-              mappings between VMware datastores and ArrayCreds for vendor-based data copy
+              mappings between VMware datastores and ArrayCreds for StorageAcceleratedCopy data copy
             properties:
               mappings:
                 description: Mappings is a list of datastore to ArrayCreds mappings
@@ -939,6 +939,13 @@ spec:
               migrationPlan:
                 description: MigrationPlan is the name of the migration plan
                 type: string
+              migrationType:
+                description: MigrationType indicates whether this is a hot (live)
+                  or cold migration
+                enum:
+                - hot
+                - cold
+                type: string
               podRef:
                 description: PodRef is the name of the pod
                 type: string
@@ -1005,6 +1012,11 @@ spec:
                   - type
                   type: object
                 type: array
+              currentDisk:
+                description: |-
+                  CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+                  Extracted from migration pod events
+                type: string
               phase:
                 description: Phase is the current phase of the migration
                 enum:
@@ -1028,6 +1040,9 @@ spec:
                 - RescanningStorage
                 - XCOPYInProgress
                 type: string
+              totalDisks:
+                description: TotalDisks is the total number of disks to be migrated
+                type: integer
             required:
             - phase
             type: object
@@ -1086,7 +1101,7 @@ spec:
               arrayCredsMapping:
                 description: |-
                   ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
-                  This is used for vendor-based data copy method
+                  This is used for StorageAcceleratedCopy data copy method
                 type: string
               destination:
                 description: Destination is the destination details for the virtual
@@ -1123,10 +1138,10 @@ spec:
                 default: normal
                 description: |-
                   StorageCopyMethod indicates the method to use for storage migration
-                  Valid values: "normal" (default), "vendor-based"
+                  Valid values: "normal" (default), "StorageAcceleratedCopy"
                 enum:
                 - normal
-                - vendor-based
+                - StorageAcceleratedCopy
                 type: string
               storageMapping:
                 description: |-
@@ -4079,6 +4094,12 @@ kind: Ingress
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
   name: migration-vpwned-ingress

@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,6 +113,15 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	// If migration is already marked as Failed and no pod was created, don't keep requeuing
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+		ctxlog.Info(
+			"Migration is Failed; skipping reconciliation and requeue",
+			"migration", migration.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
 	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
@@ -179,13 +189,29 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	// Create status conditions
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
-	migration.Status.Conditions = utils.CreateVAAICondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateStorageAcceleratedCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
 
 	migration.Status.AgentName = pod.Spec.NodeName
+
+	// Extract current disk being copied from events
+	r.ExtractCurrentDisk(migration, filteredEvents)
+
+	if migration.Status.TotalDisks == 0 {
+		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				migration.Status.TotalDisks = n
+			} else {
+				log.FromContext(ctx).Error(err, "Failed to parse total disks value",
+					"label", constants.NumberOfDisksLabel,
+					"value", v)
+			}
+		}
+	}
+
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
@@ -381,19 +407,19 @@ loop:
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopying]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAIRescanStorage) &&
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyRescanStorage) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAIMappingVolume) &&
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyMappingVolume) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseMappingVolume]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseMappingVolume
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAICinderManage) &&
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCinderManage) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageVAAICreatingVolume) &&
+		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCreatingVolume) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume
 			break loop
@@ -494,4 +520,43 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 		return nil, apierrors.NewNotFound(corev1.Resource("pods"), fmt.Sprintf("migration pod not found for vm %s", migration.Spec.VMName))
 	}
 	return &podList.Items[0], nil
+}
+
+// ExtractCurrentDisk extracts which disk is currently being copied from pod events
+func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	parseCurrentDisk := func(msg string) (string, bool) {
+		if !strings.Contains(msg, "Copying disk") {
+			return "", false
+		}
+		parts := strings.Split(msg, "Copying disk")
+		if len(parts) <= 1 {
+			return "", false
+		}
+		diskPart := strings.TrimSpace(parts[1])
+		if len(diskPart) == 0 {
+			return "", false
+		}
+		diskNum := strings.Split(diskPart, ",")[0]
+		diskNum = strings.Split(diskNum, " ")[0]
+		diskNum = strings.TrimSpace(diskNum)
+		if diskNum == "" {
+			return "", false
+		}
+		return diskNum, true
+	}
+
+	for i := range events.Items {
+		if diskNum, ok := parseCurrentDisk(events.Items[i].Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+
+	for _, condition := range migration.Status.Conditions {
+		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
+			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
 }

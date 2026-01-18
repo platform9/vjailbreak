@@ -28,7 +28,8 @@ const getHeaders = () => {
 }
 
 const axiosInstance = axios.create({
-  headers: getHeaders()
+  headers: getHeaders(),
+  withCredentials: true
 })
 
 const getDefaultBaseUrl = (config?: ExtendedAxiosConfig) => {
