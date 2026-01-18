@@ -14,15 +14,87 @@ import (
 )
 
 const (
-	maxUploadSize = 500 * 1024 * 1024
-	vddkUploadDir = "/home/ubuntu"
+	maxUploadSize    = 500 * 1024 * 1024
+	vddkUploadDir    = "/home/ubuntu"
+	vddkInstallDir   = "/home/ubuntu/vmware-vix-disklib-distrib"
 )
+
+// VDDKStatusResponse represents the response for VDDK status check
+type VDDKStatusResponse struct {
+	Uploaded bool   `json:"uploaded"`
+	Path     string `json:"path,omitempty"`
+	Message  string `json:"message"`
+}
 
 type VDDKUploadResponse struct {
 	Success       bool   `json:"success"`
 	Message       string `json:"message"`
 	FilePath      string `json:"file_path,omitempty"`
 	ExtractedPath string `json:"extracted_path,omitempty"`
+}
+
+// HandleVDDKStatus checks if VDDK has been uploaded and is available
+func HandleVDDKStatus(w http.ResponseWriter, r *http.Request) {
+	const fn = "HandleVDDKStatus"
+	logrus.WithField("func", fn).Info("Checking VDDK status")
+
+	if r.Method != http.MethodGet {
+		logrus.WithField("func", fn).Errorf("Invalid method: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check if VDDK directory exists
+	info, err := os.Stat(vddkInstallDir)
+	if os.IsNotExist(err) {
+		logrus.WithField("func", fn).Info("VDDK directory does not exist")
+		w.WriteHeader(http.StatusOK)
+		response := `{"uploaded": false, "message": "VDDK has not been uploaded"}`
+		w.Write([]byte(response))
+		return
+	}
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to check VDDK directory")
+		http.Error(w, "Failed to check VDDK status", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if it's a directory
+	if !info.IsDir() {
+		logrus.WithField("func", fn).Warn("VDDK path exists but is not a directory")
+		w.WriteHeader(http.StatusOK)
+		response := `{"uploaded": false, "message": "VDDK path exists but is not a directory"}`
+		w.Write([]byte(response))
+		return
+	}
+
+	// Check if directory is not empty
+	files, err := os.ReadDir(vddkInstallDir)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to read VDDK directory")
+		http.Error(w, "Failed to check VDDK status", http.StatusInternalServerError)
+		return
+	}
+
+	if len(files) == 0 {
+		logrus.WithField("func", fn).Info("VDDK directory is empty")
+		w.WriteHeader(http.StatusOK)
+		response := `{"uploaded": false, "message": "VDDK directory is empty"}`
+		w.Write([]byte(response))
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":       fn,
+		"path":       vddkInstallDir,
+		"file_count": len(files),
+	}).Info("VDDK is available")
+
+	w.WriteHeader(http.StatusOK)
+	response := fmt.Sprintf(`{"uploaded": true, "path": "%s", "message": "VDDK is available"}`, vddkInstallDir)
+	w.Write([]byte(response))
 }
 
 func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
