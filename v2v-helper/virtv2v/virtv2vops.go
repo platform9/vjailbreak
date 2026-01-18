@@ -23,6 +23,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/parser"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -286,7 +287,7 @@ func GetOsRelease(path string) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
-func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry, ostype string) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
 	// log the macToIPs
@@ -312,16 +313,23 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	}
 
 	// Construct YAML
-	log.Println("Created macToIP file with entries")
+	log.Println("Created macToIP file for os type: ", ostype)
+	filePath := ""
+	switch ostype {
+	case constants.OSFamilyWindows:
+		filePath = "/Windows"
+	case constants.OSFamilyLinux:
+		filePath = "/etc"
+	}
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	var ans string
 	if useSingleDisk {
-		command := "upload /home/fedora/macToIP /etc/macToIP"
+		command := "upload /home/fedora/macToIP " + filePath + "/macToIP"
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", filePath+"/macToIP")
 	}
 	if err != nil {
 		log.Printf("failed to upload macToIP file: %v: %s", err, strings.TrimSpace(ans))
@@ -828,6 +836,81 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	return strings.TrimSpace(runOutput), nil
 }
+func GetSystemRegistry(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	var err error
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
+	if useSingleDisk {
+		command := "download /Windows/System32/config/SYSTEM /home/fedora/SYSTEM"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+		command = "download /Windows/System32/config/SYSTEM /home/fedora/SYSTEM"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+	} else {
+		command := "download"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/Windows/System32/config/SYSTEM", "/home/fedora/SYSTEM")
+		if err != nil {
+			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+		}
+	}
+	return nil
+
+}
+func GenerateWindowsNetworkPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, ippermac map[string][]vm.IpEntry) error {
+	err := GetSystemRegistry(disks, useSingleDisk, diskPath)
+	if err != nil {
+		return err
+	}
+	// Run Get-Windows-interfaces script in pod not in guest
+	scriptPath := "/home/fedora/get-windows-interfaces.sh"
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		log.Println("Failed to run Get-Windows-interfaces script", err)
+		return err
+	}
+	registryParser := parser.NewRegistryParser()
+	if err := registryParser.ParseServiceFile(constants.ServiceFile); err != nil {
+		log.Println("Failed to parse service file", err)
+		return err
+	}
+	if err := registryParser.ParseNetworkFile(constants.NetworkFile); err != nil {
+		log.Println("Failed to parse network file", err)
+		return err
+	}
+	mappings := registryParser.GenerateMapping()
+	script := ``
+	for _, mapping := range mappings {
+		for key, ipEntry := range ippermac {
+			for _, ip := range ipEntry {
+				if ip.IP == mapping.IP {
+					mac := strings.ReplaceAll(key, ":", "-")
+					command := fmt.Sprintf(constants.WindowsOldInterfaceRenameCommand, mapping.InterfaceName, mapping.InterfaceName, mapping.InterfaceName)
+					script += command + "\n"
+					command = fmt.Sprintf(constants.WindowsInterfaceRenameCommand, mac, mapping.InterfaceName)
+					script += command + "\n"
+				}
+			}
+		}
+	}
+	log.Println(script)
+	// write script to file /home/fedora/persist-network.ps1
+	windowsScriptPath := "/home/fedora/persist-network.ps1"
+	err = os.WriteFile(windowsScriptPath, []byte(script), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create persist-network.ps1: %s", err)
+	}
+	log.Println("Successfully created persist-network.ps1")
+	log.Println(registryParser.PrintMappingTable(mappings))
+	return nil
+}
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
 func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, isNetplan bool) error {
@@ -844,7 +927,6 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	}
 	defer os.RemoveAll(mountPoint)
 
-	// Construct the guestmount command
 	args := []string{"-i", "--rw"}
 
 	if useSingleDisk {
@@ -900,6 +982,38 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 		return fmt.Errorf("network persistence script failed: %w, output: %s", err, string(output))
 	}
 	log.Printf("Network persistence script output: %s", string(output))
+
+	return nil
+}
+
+func InjectFirstBootWindowsScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Source script on host
+	src := "/home/fedora/persist-network.ps1"
+	if _, err := os.Stat(src); err != nil {
+		return fmt.Errorf("persist-network.ps1 not found at %s: %w", src, err)
+	}
+
+	// Destination in guest
+	dst := "/Windows/persist-network.ps1"
+
+	var (
+		ans string
+		err error
+	)
+
+	if useSingleDisk {
+		command := fmt.Sprintf("upload %s %s", src, dst)
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, src, dst)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to upload persist-network.ps1: %v: %s", err, strings.TrimSpace(ans))
+	}
+	log.Printf("Uploaded persist-network.ps1 to guest at %s", dst)
 
 	return nil
 }

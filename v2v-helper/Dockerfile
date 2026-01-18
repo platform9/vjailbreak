@@ -48,7 +48,9 @@ RUN dnf install -y \
     ./virt-v2v-2.7.13-1.fc42.x86_64.rpm \
     ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
     guestfs-tools \
-    netplan && \
+    netplan \
+    chntpw \
+    && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
@@ -72,3 +74,4 @@ COPY --from=builder /workspace/manager /home/fedora/manager
 COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
 COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
+COPY scripts/get-windows-interfaces.sh /home/fedora/get-windows-interfaces.sh
