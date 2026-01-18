@@ -56,16 +56,18 @@ export default function VDDKUploadTab({
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <FieldLabel label="VDDK File" tooltip="Upload a VDDK tar or tar.gz file (max 500MB)" />
-        <FileDropzone
-          accept=".tar,.tgz,application/x-tar,application/gzip,application/x-gzip,application/x-compressed-tar"
-          file={selectedFile}
-          placeholder="Drag and drop VDDK file here"
-          helperText="or click to browse"
-          caption="Supported formats: .tar, .tar.gz (max 500MB)"
-          onFileSelected={onFileSelected}
-          disabled={status === 'uploading'}
-          data-testid="vddk-file-dropzone"
-        />
+        <Box data-tour="vddk-dropzone">
+          <FileDropzone
+            accept=".tar,.tgz,application/x-tar,application/gzip,application/x-gzip,application/x-compressed-tar"
+            file={selectedFile}
+            placeholder="Drag and drop VDDK file here"
+            helperText="or click to browse"
+            caption="Supported formats: .tar, .tar.gz (max 500MB)"
+            onFileSelected={onFileSelected}
+            disabled={status === 'uploading'}
+            data-testid="vddk-file-dropzone"
+          />
+        </Box>
       </Box>
 
       <SurfaceCard
