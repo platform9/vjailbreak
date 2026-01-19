@@ -292,7 +292,19 @@ export const deleteArrayCredsWithSecretFlow = async (
   try {
     const secretName = `${credName}-array-secret`
     await deleteArrayCredentials(credName, namespace)
-    await deleteSecret(secretName, namespace)
+    
+    // Try to delete the secret, but ignore 404 errors since the controller's
+    // finalizer may have already deleted it
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (secretError: any) {
+      // Ignore 404 errors - secret was already deleted by controller
+      if (secretError?.response?.status !== 404) {
+        throw secretError
+      }
+      console.log(`Secret ${secretName} was already deleted (likely by controller finalizer)`)
+    }
+    
     return { success: true }
   } catch (error) {
     console.error(`Error deleting storage array credential ${credName}:`, error)

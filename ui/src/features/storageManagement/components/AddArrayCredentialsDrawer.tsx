@@ -56,6 +56,7 @@ export default function AddArrayCredentialsDrawer({
   const [validationMessage, setValidationMessage] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
 
   const {
     control,
@@ -88,16 +89,32 @@ export default function AddArrayCredentialsDrawer({
       return
     }
     
+    // Cleanup any created credential if user is closing before validation completes
+    if (createdCredentialName && validationStatus !== 'success') {
+      deleteArrayCredsWithSecretFlow(createdCredentialName).catch((err) => {
+        console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
+      })
+    }
+    
     setSubmitError(null)
     setValidationStatus('idle')
     setValidationMessage('')
+    setCreatedCredentialName(null)
     onClose()
   }
 
   const handleDiscardChanges = async () => {
+    // Cleanup any created credential when user discards changes
+    if (createdCredentialName && validationStatus !== 'success') {
+      deleteArrayCredsWithSecretFlow(createdCredentialName).catch((err) => {
+        console.error(`Error deleting discarded credential: ${createdCredentialName}`, err)
+      })
+    }
+    
     setSubmitError(null)
     setValidationStatus('idle')
     setValidationMessage('')
+    setCreatedCredentialName(null)
     onClose()
   }
 
@@ -171,6 +188,9 @@ export default function AddArrayCredentialsDrawer({
           cinderBackendName: data.backendName
         }
       })
+      
+      // Track the created credential name for cleanup if needed
+      setCreatedCredentialName(data.name)
 
       // Start validation polling
       setIsSubmitting(false)
@@ -188,6 +208,7 @@ export default function AddArrayCredentialsDrawer({
 
         try {
           await cleanupFailedCreation(data.name)
+          setCreatedCredentialName(null) // Clear after cleanup
         } catch (cleanupError) {
           console.error('Cleanup failed:', cleanupError)
           setValidationMessage(
@@ -208,6 +229,7 @@ export default function AddArrayCredentialsDrawer({
       reset()
       setValidationStatus('idle')
       setValidationMessage('')
+      setCreatedCredentialName(null)
       onClose()
     } catch (error: any) {
       console.error('Error creating array credentials:', error)

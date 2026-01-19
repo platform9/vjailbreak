@@ -22,8 +22,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
-import { updateArrayCredsWithSecret, getArrayCredentials } from 'src/api/array-creds/arrayCreds'
-import { createArrayCredsSecret } from 'src/api/secrets/secrets'
+import { updateArrayCredsWithSecret, getArrayCredentials, patchArrayCredentials } from 'src/api/array-creds/arrayCreds'
+import { createArrayCredsSecret, deleteSecret } from 'src/api/secrets/secrets'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
@@ -207,9 +207,33 @@ export default function EditArrayCredentialsDrawer({
         setIsValidating(false)
 
         if (!validationResult.success) {
-          // Validation failed - show error but keep the resource
+          // Validation failed - delete the secret and clear secretRef to allow retry with same name
           setValidationStatus('failed')
           setValidationMessage(validationResult.message || 'Validation failed')
+          
+          try {
+            const secretName = `${data.name}-array-secret`
+            await deleteSecret(secretName, namespace)
+            console.log(`Deleted invalid secret: ${secretName}`)
+            
+            // Clear the secretRef from the ArrayCreds spec
+            await patchArrayCredentials(
+              data.name,
+              {
+                spec: {
+                  secretRef: {
+                    name: ''
+                  }
+                }
+              } as any,
+              namespace
+            )
+            console.log(`Cleared secretRef for: ${data.name}`)
+          } catch (deleteErr) {
+            console.error('Failed to delete invalid secret or clear secretRef:', deleteErr)
+            // Continue anyway - user can still see the validation error
+          }
+          
           queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
           return // Stay in the form
         }
