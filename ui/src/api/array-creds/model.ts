@@ -69,7 +69,6 @@ export interface ArrayCredsStatus {
 // Supported vendor types for storage arrays
 export const ARRAY_VENDOR_TYPES = [
   { value: 'pure', label: 'Pure Storage' },
-  { value: 'ontap', label: 'NetApp ONTAP' },
   { value: 'unsupported', label: 'Unsupported' }
 ] as const
 
