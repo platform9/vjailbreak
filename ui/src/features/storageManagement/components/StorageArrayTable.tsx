@@ -1,4 +1,4 @@
-import { GridColDef, GridToolbarContainer } from '@mui/x-data-grid'
+import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip, Chip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
@@ -7,7 +7,7 @@ import AddIcon from '@mui/icons-material/Add'
 import StorageIcon from '@mui/icons-material/Storage'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useArrayCredentialsQuery, ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -156,9 +156,11 @@ const getColumns = (
 interface CustomToolbarProps {
   onRefresh: () => void
   onAddCredential: () => void
+  selectedCount: number
+  onDeleteSelected: () => void
 }
 
-const CustomToolbar = ({ onRefresh, onAddCredential }: CustomToolbarProps) => {
+const CustomToolbar = ({ onRefresh, onAddCredential, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
   return (
     <GridToolbarContainer
       sx={{
@@ -184,6 +186,17 @@ const CustomToolbar = ({ onRefresh, onAddCredential }: CustomToolbarProps) => {
         >
           ADD ARRAY CREDENTIALS
         </Button>
+        {selectedCount > 0 && (
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={onDeleteSelected}
+            sx={{ height: 40 }}
+          >
+            Delete Selected ({selectedCount})
+          </Button>
+        )}
         <CustomSearchToolbar placeholder="Search by Name" onRefresh={onRefresh} />
       </Box>
     </GridToolbarContainer>
@@ -210,6 +223,8 @@ export default function StorageArrayTable() {
   const [addDrawerOpen, setAddDrawerOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
   const [selectedForEdit, setSelectedForEdit] = useState<ArrayCredentialRow | null>(null)
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     refetch()
@@ -276,6 +291,39 @@ export default function StorageArrayTable() {
     }
   }
 
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteDialogOpen(true)
+  }
+
+  const handleBulkDeleteClose = () => {
+    setBulkDeleteDialogOpen(false)
+    setDeleteError(null)
+  }
+
+  const handleConfirmBulkDelete = async () => {
+    setDeleting(true)
+    try {
+      await Promise.all(
+        rowSelectionModel.map((id) => deleteArrayCredsWithSecretFlow(id as string))
+      )
+      queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
+      setRowSelectionModel([])
+      handleBulkDeleteClose()
+    } catch (error) {
+      console.error('Error deleting array credentials:', error)
+      reportError(error as Error, {
+        context: 'array-credentials-bulk-deletion'
+      })
+      setDeleteError(error instanceof Error ? error.message : 'Unknown error occurred')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const selectedItems = useMemo(() => {
+    return rows.filter((row) => rowSelectionModel.includes(row.id))
+  }, [rows, rowSelectionModel])
+
   const handleOpenAddDrawer = () => {
     setAddDrawerOpen(true)
   }
@@ -306,7 +354,10 @@ export default function StorageArrayTable() {
       <CommonDataGrid
         rows={rows}
         columns={tableColumns}
+        checkboxSelection
         disableRowSelectionOnClick
+        rowSelectionModel={rowSelectionModel}
+        onRowSelectionModelChange={setRowSelectionModel}
         initialState={{
           sorting: {
             sortModel: [{ field: 'name', sort: 'asc' }]
@@ -322,6 +373,8 @@ export default function StorageArrayTable() {
             <CustomToolbar
               onRefresh={handleRefresh}
               onAddCredential={handleOpenAddDrawer}
+              selectedCount={rowSelectionModel.length}
+              onDeleteSelected={handleBulkDeleteClick}
             />
           )
         }}
@@ -348,6 +401,22 @@ export default function StorageArrayTable() {
         actionColor="error"
         actionVariant="outlined"
         onConfirm={handleConfirmDelete}
+        customErrorMessage={getCustomErrorMessage}
+        errorMessage={deleteError}
+        onErrorChange={setDeleteError}
+      />
+
+      <ConfirmationDialog
+        open={bulkDeleteDialogOpen}
+        onClose={handleBulkDeleteClose}
+        title="Confirm Delete"
+        icon={<WarningIcon color="warning" />}
+        message={`Are you sure you want to delete ${rowSelectionModel.length} storage array credential${rowSelectionModel.length > 1 ? 's' : ''}?`}
+        items={selectedItems.map((item) => ({ id: item.id, name: item.name }))}
+        actionLabel="Delete"
+        actionColor="error"
+        actionVariant="outlined"
+        onConfirm={handleConfirmBulkDelete}
         customErrorMessage={getCustomErrorMessage}
         errorMessage={deleteError}
         onErrorChange={setDeleteError}
