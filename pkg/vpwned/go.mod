@@ -2,7 +2,7 @@ module github.com/platform9/vjailbreak/pkg/vpwned
 
 go 1.24.10
 
-replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../common/utils
 
 require (
 	github.com/bougou/go-ipmi v0.7.6
@@ -14,9 +14,9 @@ require (
 	github.com/juju/errors v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
-	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/validation v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
@@ -78,7 +78,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
-	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000 // indirect
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000 // indirect
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
@@ -123,8 +123,8 @@ replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
-replace github.com/platform9/vjailbreak/pkg/validation => ../validation
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../common/validation
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration
 
-replace github.com/platform9/vjailbreak/pkg/openstack => ../openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../common/openstack

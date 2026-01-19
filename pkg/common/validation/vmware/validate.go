@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	commonutils "github.com/platform9/vjailbreak/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"

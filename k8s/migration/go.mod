@@ -4,7 +4,7 @@ go 1.24.10
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
-replace github.com/platform9/vjailbreak/common/utils => ../../common/utils
+replace github.com/platform9/vjailbreak/pkg/common/utils => ../../pkg/common/utils
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5
 
@@ -15,9 +15,9 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/common/utils v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/pkg/openstack v0.0.0-00010101000000-000000000000
-	github.com/platform9/vjailbreak/pkg/validation v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260113094714-8b5cc668b1b6
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/vmware/govmomi v0.51.0
@@ -41,7 +41,6 @@ require (
 	github.com/devans10/pugo/flasharray v0.0.0-20241116160615-6bb8c469c9a0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
-	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
@@ -71,7 +70,6 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -115,6 +113,6 @@ require (
 
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
 
-replace github.com/platform9/vjailbreak/pkg/validation => ../../pkg/validation
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../../pkg/common/validation
 
-replace github.com/platform9/vjailbreak/pkg/openstack => ../../pkg/openstack
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../../pkg/common/openstack
