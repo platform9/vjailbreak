@@ -238,9 +238,14 @@ func (migobj *Migrate) logDiskCopyPlan(vminfo vm.VMInfo) {
 }
 
 // validateDiskMapping validates that disk mapping is correct before starting copy
-// Ensures all disks have valid volumes, paths, and snapshot info
+// Cross-checks vminfo data with nbdops to ensure correct source-to-target mapping
 func (migobj *Migrate) validateDiskMapping(vminfo vm.VMInfo) error {
 	migobj.logMessage("Validating disk mapping before copy operation...")
+
+	// Verify number of disks matches number of NBD servers
+	if len(vminfo.VMDisks) != len(migobj.Nbdops) {
+		return fmt.Errorf("disk count mismatch: vminfo has %d disks but %d NBD servers configured", len(vminfo.VMDisks), len(migobj.Nbdops))
+	}
 
 	for idx, vmdisk := range vminfo.VMDisks {
 		// Validate volume exists
@@ -258,14 +263,19 @@ func (migobj *Migrate) validateDiskMapping(vminfo vm.VMInfo) error {
 			return fmt.Errorf("snapshot backing disk is empty for disk %s (DeviceKey=%d)", vmdisk.Name, vmdisk.Disk.Key)
 		}
 
+		// Cross-check: verify NBD server at this index is initialized
+		if migobj.Nbdops[idx] == nil {
+			return fmt.Errorf("NBD server not initialized for disk %d (%s)", idx, vmdisk.Name)
+		}
+
 		// Log validation details for this disk
-		utils.PrintLog(fmt.Sprintf("  [%d] ✓ %s (DeviceKey=%d): SnapFile=%s, Volume=%s, Path=%s",
+		utils.PrintLog(fmt.Sprintf("[%d] Validated %s (DeviceKey=%d): SnapFile=%s, Volume=%s, Path=%s",
 			idx, vmdisk.Name, vmdisk.Disk.Key,
 			extractFileName(vmdisk.SnapBackingDisk),
 			vmdisk.OpenstackVol.ID, vmdisk.Path))
 	}
 
-	migobj.logMessage("✓ Disk mapping validation passed")
+	migobj.logMessage("Disk mapping validation passed")
 	return nil
 }
 
