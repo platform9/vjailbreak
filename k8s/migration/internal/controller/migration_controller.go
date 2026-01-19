@@ -113,6 +113,15 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	// If migration is already marked as Failed and no pod was created, don't keep requeuing
+	if migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+		ctxlog.Info(
+			"Migration is Failed; skipping reconciliation and requeue",
+			"migration", migration.Name,
+		)
+		return ctrl.Result{}, nil
+	}
+
 	oldStatus := migration.Status.DeepCopy()
 
 	migrationScope, err := scope.NewMigrationScope(scope.MigrationScopeParams{
@@ -191,17 +200,17 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
 
-if migration.Status.TotalDisks == 0 {
-	if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
-		if n, err := strconv.Atoi(v); err == nil {
-			migration.Status.TotalDisks = n
-		} else {
-			log.FromContext(ctx).Error(err, "Failed to parse total disks value", 
-				"label", constants.NumberOfDisksLabel, 
-				"value", v)
+	if migration.Status.TotalDisks == 0 {
+		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				migration.Status.TotalDisks = n
+			} else {
+				log.FromContext(ctx).Error(err, "Failed to parse total disks value",
+					"label", constants.NumberOfDisksLabel,
+					"value", v)
+			}
 		}
 	}
-}
 
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
