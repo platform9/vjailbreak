@@ -183,4 +183,63 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// StorageCopyMethod is the default value for storage copy method
 	StorageCopyMethod = "StorageAcceleratedCopy"
+
+	// Windows Script
+	WindowsFirtsBootNetworkPersistence = `@echo off
+set "TargetDir=C:\NIC-Recovery"
+
+:: 1. Initialize Directory
+if not exist "%TargetDir%" mkdir "%TargetDir%"
+cd /d "%TargetDir%"
+
+echo Writing Discovery Script...
+echo # Recover-HiddenNICMapping.ps1 > "Recover-HiddenNICMapping.ps1"
+echo $OutFile = "C:\NIC-Recovery\netconfig.json" >> "Recover-HiddenNICMapping.ps1"
+echo function Convert-SubnetToPrefix { param ([string]$Mask^) ($Mask -split '\.'^) ^| ForEach-Object { [Convert]::ToString([int]$_,2^) } ^| ForEach-Object { $_.ToCharArray(^) } ^| Where-Object { $_ -eq '1' } ^| Measure-Object ^| Select-Object -ExpandProperty Count } >> "Recover-HiddenNICMapping.ps1"
+echo function Get-Network { param ([string]$IP, [int]$Prefix^) $ipBytes = ([System.Net.IPAddress]::Parse($IP^)^).GetAddressBytes(^); $maskBytes = @(0,0,0,0^); for ($i=0; $i -lt 4; $i++^) { $bits = [Math]::Min(8, $Prefix - ($i*8^)^); if ($bits -gt 0^) { $maskBytes[$i] = [byte](255 -shl (8-$bits^)^) } }; for ($i=0; $i -lt 4; $i++^) { $ipBytes[$i] = $ipBytes[$i] -band $maskBytes[$i] }; ([System.Net.IPAddress]$ipBytes^).ToString(^) } >> "Recover-HiddenNICMapping.ps1"
+echo $activeNics = try { Get-NetIPConfiguration -ErrorAction Stop ^| Where-Object { $_.IPv4Address } ^| ForEach-Object { foreach ($ip in $_.IPv4Address^) { [PSCustomObject]@{ InterfaceAlias = $_.InterfaceAlias; MACAddress = $_.NetAdapter.MacAddress; Network = Get-Network $ip.IPAddress $ip.PrefixLength } } } } catch { $null } >> "Recover-HiddenNICMapping.ps1"
+echo $activeAliases = try { Get-NetAdapter -ErrorAction SilentlyContinue ^| Select-Object -ExpandProperty InterfaceAlias } catch { @() } >> "Recover-HiddenNICMapping.ps1"
+echo $hiddenIPs = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" ^| ForEach-Object { $p = Get-ItemProperty $_.PsPath -ErrorAction SilentlyContinue; $ip = ($p.IPAddress ^| Where-Object { $_ -and $_ -ne '0.0.0.0' } ^| Select-Object -First 1^); $mask = ($p.SubnetMask ^| Select-Object -First 1^); if (-not $ip -or -not $mask^) { return }; $prefix = Convert-SubnetToPrefix $mask; $dns = @(($p.NameServer -split ','^), ($p.DhcpNameServer -split ','^)^) ^| Where-Object { $_ -and $_.Trim(^) }; [PSCustomObject]@{ GUID = $_.PSChildName.ToUpper(^); IPAddress = $ip; PrefixLength = $prefix; Network = Get-Network $ip $prefix; Gateway = ($p.DefaultGateway ^| Select-Object -First 1^); DNSServers = $dns } } >> "Recover-HiddenNICMapping.ps1"
+echo $hiddenNames = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}" ^| ForEach-Object { $conn = Join-Path $_.PsPath "Connection"; if (-not (Test-Path $conn^)^) { return }; $p = Get-ItemProperty $conn -ErrorAction SilentlyContinue; if ($p.Name -and $p.Name -notin $activeAliases^) { [PSCustomObject]@{ GUID = $_.PSChildName.ToUpper(^); Name = $p.Name } } } >> "Recover-HiddenNICMapping.ps1"
+echo $result = foreach ($hidden in $hiddenIPs^) { $name = $hiddenNames ^| Where-Object { $_.GUID -eq $hidden.GUID }; if (-not $name^) { continue }; $match = $activeNics ^| Where-Object { $_.Network -eq $hidden.Network } ^| Select-Object -First 1; if (-not $match^) { continue }; [PSCustomObject]@{ InterfaceAlias = $name.Name; MACAddress = $mac = $match.MACAddress; IPAddress = $hidden.IPAddress; PrefixLength = $hidden.PrefixLength; Gateway = if ($hidden.Gateway^) { $hidden.Gateway } else { $null }; DNSServers = @($hidden.DNSServers^) } } >> "Recover-HiddenNICMapping.ps1"
+echo if (-not $result^) { $result = @(^) }; $result ^| ConvertTo-Json -Depth 4 ^| Set-Content -Encoding UTF8 $OutFile >> "Recover-HiddenNICMapping.ps1"
+
+echo Writing Cleanup Script...
+echo Write-Host "=== Removing Ghost Network Adapters ===" -ForegroundColor Cyan > "Cleanup-GhostNICs.ps1"
+echo $ghosts = Get-PnpDevice -Class Net ^| Where-Object Status -eq "Unknown" >> "Cleanup-GhostNICs.ps1"
+echo if ^(-not $ghosts^) { Write-Host "No ghost NICs found."; return } >> "Cleanup-GhostNICs.ps1"
+echo foreach ^($dev in $ghosts^) { $fName = $dev.FriendlyName; $iId = $dev.InstanceId; Write-Host "Removing $fName"; $path = "HKLM:\SYSTEM\CurrentControlSet\Enum\$iId"; if ^(Test-Path $path^) { Get-Item $path ^| Select-Object -ExpandProperty Property ^| ForEach-Object { Remove-ItemProperty -Path $path -Name $_ -Force -ErrorAction SilentlyContinue } } } >> "Cleanup-GhostNICs.ps1"
+
+echo Writing Restore Script...
+echo $ErrorActionPreference = "Stop" > "Restore-Network.ps1"
+echo Start-Sleep -Seconds 15 >> "Restore-Network.ps1"
+echo $configs = Get-Content "C:\NIC-Recovery\netconfig.json" ^| ConvertFrom-Json >> "Restore-Network.ps1"
+echo foreach ^($cfg in $configs^) { $alias = $cfg.InterfaceAlias; $mac = $cfg.MACAddress; Write-Host "Configuring $alias" -ForegroundColor Cyan; $nic = Get-NetAdapter ^| Where-Object { ^($_.MacAddress -replace '[-:]',''^) -eq ^($mac -replace '[-:]',''^) }; if ^(-not $nic^) { continue }; Set-NetIPInterface -InterfaceIndex $nic.ifIndex -Dhcp Disabled -Confirm:$false; Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue ^| Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; if ^($nic.Name -ne $alias^) { Rename-NetAdapter -Name $nic.Name -NewName $alias -Confirm:$false; $nic = Get-NetAdapter -Name $alias }; $params = @{ InterfaceIndex = $nic.ifIndex; IPAddress = $cfg.IPAddress; PrefixLength = $cfg.PrefixLength; AddressFamily = "IPv4" }; if ^($cfg.Gateway^) { $params.DefaultGateway = $cfg.Gateway }; New-NetIPAddress @params; if ^($cfg.DNSServers -and $cfg.DNSServers.Count -gt 0^) { Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $cfg.DNSServers } } >> "Restore-Network.ps1"
+
+echo Writing Orchestrator...
+echo $ScriptRoot = "C:\NIC-Recovery" > "Orchestrate-NICRecovery.ps1"
+echo Start-Service NetSetupSvc -ErrorAction SilentlyContinue >> "Orchestrate-NICRecovery.ps1"
+echo Start-Sleep -Seconds 5 >> "Orchestrate-NICRecovery.ps1"
+echo ^& "$ScriptRoot\Recover-HiddenNICMapping.ps1" >> "Orchestrate-NICRecovery.ps1"
+echo ^& "$ScriptRoot\Cleanup-GhostNICs.ps1" >> "Orchestrate-NICRecovery.ps1"
+echo if ^(Test-Path "$ScriptRoot\netconfig.json"^) { >> "Orchestrate-NICRecovery.ps1"
+echo     # Inject into RunOnce Registry Key instead of Task Scheduler >> "Orchestrate-NICRecovery.ps1"
+echo     $cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\NIC-Recovery\Restore-Network.ps1"' >> "Orchestrate-NICRecovery.ps1"
+echo     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" -Name "RestoreNICs" -Value $cmd >> "Orchestrate-NICRecovery.ps1"
+echo } >> "Orchestrate-NICRecovery.ps1"
+
+echo Writing Admin Launcher...
+echo @echo off > "Run-Orchestrator-Admin.bat"
+echo ^>nul 2^>^&1 "%%SYSTEMROOT%%\system32\cacls.exe" "%%SYSTEMROOT%%\system32\config\system" >> "Run-Orchestrator-Admin.bat"
+echo if '%%errorlevel%%' NEQ '0' ^( >> "Run-Orchestrator-Admin.bat"
+echo    echo Set UAC = CreateObject^^^("Shell.Application"^^^) ^> "%%temp%%\getadmin.vbs" >> "Run-Orchestrator-Admin.bat"
+echo    echo UAC.ShellExecute "cmd.exe", "/c %%~s0", "", "runas", 1 ^>^> "%%temp%%\getadmin.vbs" >> "Run-Orchestrator-Admin.bat"
+echo    "%%temp%%\getadmin.vbs" ^& exit /B >> "Run-Orchestrator-Admin.bat"
+echo ^) >> "Run-Orchestrator-Admin.bat"
+echo powershell -NoProfile -ExecutionPolicy Bypass -File "C:\NIC-Recovery\Orchestrate-NICRecovery.ps1" >> "Run-Orchestrator-Admin.bat"
+
+echo All files created.
+call "Run-Orchestrator-Admin.bat"
+exit
+`
 )

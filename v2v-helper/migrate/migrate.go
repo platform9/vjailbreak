@@ -875,6 +875,14 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
+		if persisNetwork {
+			winFirstbootScriptName := "network-persist"
+			winFirstbootScript := constants.WindowsFirtsBootNetworkPersistence
+			firstbootscripts = append(firstbootscripts, winFirstbootScriptName)
+			if err := virtv2v.AddFirstBootScript(winFirstbootScript, winFirstbootScriptName); err != nil {
+				return errors.Wrap(err, "failed to add first boot script")
+			}
+		}
 	}
 
 	// Add first boot scripts for RHEL family
