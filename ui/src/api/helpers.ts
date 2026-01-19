@@ -258,20 +258,30 @@ export const createArrayCredsWithSecretFlow = async (
 ) => {
   const secretName = `${credName}-array-secret`
 
-  await createArrayCredsSecret(secretName, {
-    ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
-    ARRAY_USERNAME: credentials.ARRAY_USERNAME,
-    ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
-    ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION
-  }, namespace)
+  try {
+    await createArrayCredsSecret(secretName, {
+      ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
+      ARRAY_USERNAME: credentials.ARRAY_USERNAME,
+      ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
+      ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION
+    }, namespace)
 
-  return createArrayCredsWithSecret(
-    credName,
-    secretName,
-    credentials.VENDOR_TYPE,
-    credentials.OPENSTACK_MAPPING,
-    namespace
-  )
+    return await createArrayCredsWithSecret(
+      credName,
+      secretName,
+      credentials.VENDOR_TYPE,
+      credentials.OPENSTACK_MAPPING,
+      namespace
+    )
+  } catch (error) {
+    // If createArrayCredsWithSecret fails, clean up the orphaned secret
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (cleanupError) {
+      console.error(`Failed to clean up orphaned secret ${secretName}:`, cleanupError)
+    }
+    throw error
+  }
 }
 
 // Delete storage array credentials and associated secret

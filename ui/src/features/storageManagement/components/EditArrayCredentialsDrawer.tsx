@@ -207,8 +207,11 @@ export default function EditArrayCredentialsDrawer({
       onClose()
     } catch (error: any) {
       console.error('Error updating array credentials:', error)
+      // Reset validating states first to ensure form doesn't remain in validating state
       setIsValidating(false)
       setValidationStatus('idle')
+      setValidationMessage('')
+      // Then set the error message
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to update array credentials'
       setSubmitError(errorMessage)
