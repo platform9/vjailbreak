@@ -115,7 +115,7 @@ export interface FormValues extends Record<string, unknown> {
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
   arrayCredsMappings?: { source: string; target: string }[]
-  storageCopyMethod?: 'normal' | 'vendor-based'
+  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   pcdCluster?: string // PCD cluster ID
@@ -649,7 +649,7 @@ export default function MigrationFormDrawer({
     }
 
     // Add either arrayCredsMapping or storageMapping based on method
-    if (storageCopyMethod === 'vendor-based' && arrayCredsMapping) {
+    if (storageCopyMethod === 'StorageAcceleratedCopy' && arrayCredsMapping) {
       updatedMigrationTemplateFields.spec.arrayCredsMapping = arrayCredsMapping.metadata.name
     } else if (storageMappings) {
       updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
@@ -834,8 +834,8 @@ export default function MigrationFormDrawer({
     let storageMappings: any = null
     let arrayCredsMapping: any = null
 
-    if (storageCopyMethod === 'vendor-based') {
-      // Create ArrayCredsMapping for vendor-based copy
+    if (storageCopyMethod === 'StorageAcceleratedCopy') {
+      // Create ArrayCredsMapping for StorageAcceleratedCopy
       arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings || [])
       if (!arrayCredsMapping) {
         setSubmitting(false)
@@ -976,7 +976,7 @@ export default function MigrationFormDrawer({
 
   // Storage validation based on copy method
   const storageValidation =
-    storageCopyMethod === 'vendor-based'
+    storageCopyMethod === 'StorageAcceleratedCopy'
       ? !isNilOrEmpty(params.arrayCredsMappings) &&
         !availableVmwareDatastores.some(
           (datastore) => !params.arrayCredsMappings?.some((mapping) => mapping.source === datastore)
@@ -1115,7 +1115,7 @@ export default function MigrationFormDrawer({
 
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
     const storageMapped =
-      currentStorageCopyMethod === 'vendor-based'
+      currentStorageCopyMethod === 'StorageAcceleratedCopy'
         ? availableVmwareDatastores.every((datastore) =>
             (params.arrayCredsMappings || []).some((m) => m.source === datastore)
           )
@@ -1143,7 +1143,7 @@ export default function MigrationFormDrawer({
 
   const unmappedStorageCount = useMemo(() => {
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
-    if (currentStorageCopyMethod === 'vendor-based') {
+    if (currentStorageCopyMethod === 'StorageAcceleratedCopy') {
       return availableVmwareDatastores.filter(
         (ds) => !(params.arrayCredsMappings || []).some((m) => m.source === ds)
       ).length

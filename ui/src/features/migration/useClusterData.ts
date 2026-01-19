@@ -139,7 +139,7 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
         }
 
         return {
-          id: openstackCredName + ' - ' + tenantName + ' - ' + clusterName,
+          id: cluster.metadata.name,
           name: clusterName,
           openstackCredName: openstackCredName,
           tenantName: tenantName

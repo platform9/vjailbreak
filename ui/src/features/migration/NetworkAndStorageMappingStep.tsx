@@ -33,7 +33,7 @@ export interface ResourceMap {
 // Storage copy method options
 export const STORAGE_COPY_METHOD_OPTIONS = [
   { value: 'normal', label: 'Standard Copy (NBD-based)' },
-  { value: 'vendor-based', label: 'Storage Accelerated Copy (Vendor-based)' }
+  { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' }
 ] as const
 
 export type StorageCopyMethod = (typeof STORAGE_COPY_METHOD_OPTIONS)[number]['value']
@@ -72,11 +72,11 @@ export default function NetworkAndStorageMappingStep({
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
-  // Fetch validated array credentials for vendor-based copy
+  // Fetch validated array credentials for StorageAcceleratedCopy
   const { data: arrayCredentials, isLoading: arrayCredsLoading } = useArrayCredentialsQuery(
     undefined,
     {
-      enabled: storageCopyMethod === 'vendor-based'
+      enabled: storageCopyMethod === 'StorageAcceleratedCopy'
     }
   )
 
@@ -140,12 +140,49 @@ export default function NetworkAndStorageMappingStep({
 
   useEffect(() => {
     if (
-      storageCopyMethod === 'vendor-based' &&
+      storageCopyMethod === 'StorageAcceleratedCopy' &&
       filteredArrayCredsMappings.length !== params.arrayCredsMappings?.length
     ) {
       onChange('arrayCredsMappings')(filteredArrayCredsMappings)
     }
   }, [filteredArrayCredsMappings, onChange, params.arrayCredsMappings, storageCopyMethod])
+
+  // Auto-map datastores to ArrayCreds based on dataStore information in ArrayCreds status
+  useEffect(() => {
+    if (storageCopyMethod !== 'StorageAcceleratedCopy' || !validatedArrayCreds.length || !vmWareStorage.length) {
+      return
+    }
+
+    // Create a map of datastore names to ArrayCreds names
+    const datastoreToArrayCredsMap = new Map<string, string>()
+    validatedArrayCreds.forEach((cred) => {
+      const datastores = cred.status?.dataStore || []
+      datastores.forEach((ds) => {
+        // Map datastore name to ArrayCreds name
+        datastoreToArrayCredsMap.set(ds.name, cred.metadata.name)
+      })
+    })
+
+    // Get current mappings
+    const currentMappings = params.arrayCredsMappings || []
+    const currentMappedSources = new Set(currentMappings.map((m) => m.source))
+
+    // Find datastores that can be auto-mapped but aren't already mapped
+    const autoMappings: ResourceMap[] = []
+    vmWareStorage.forEach((datastore) => {
+      if (!currentMappedSources.has(datastore) && datastoreToArrayCredsMap.has(datastore)) {
+        autoMappings.push({
+          source: datastore,
+          target: datastoreToArrayCredsMap.get(datastore)!
+        })
+      }
+    })
+
+    // If we found any auto-mappings, add them to existing mappings
+    if (autoMappings.length > 0) {
+      onChange('arrayCredsMappings')([...currentMappings, ...autoMappings])
+    }
+  }, [storageCopyMethod, validatedArrayCreds, vmWareStorage, params.arrayCredsMappings, onChange])
 
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
@@ -157,7 +194,7 @@ export default function NetworkAndStorageMappingStep({
   )
 
   const unmappedStorage = useMemo(() => {
-    if (storageCopyMethod === 'vendor-based') {
+    if (storageCopyMethod === 'StorageAcceleratedCopy') {
       return vmWareStorage.filter(
         (storage) => !params.arrayCredsMappings?.some((mapping) => mapping.source === storage)
       )
@@ -279,7 +316,7 @@ export default function NetworkAndStorageMappingStep({
               ) : (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Map datastores to storage array credentials for vendor-optimized data copy.
+                    Map datastores to storage array credentials for storage array data copy.
                   </Typography>
 
                   {arrayCredsLoading ? (

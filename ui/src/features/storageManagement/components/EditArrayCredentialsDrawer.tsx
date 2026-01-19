@@ -16,6 +16,8 @@ import {
   Divider
 } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorIcon from '@mui/icons-material/Error'
 import { useForm, Controller } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
@@ -42,6 +44,8 @@ interface FormData {
   skipSslVerification: boolean
 }
 
+type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
+
 
 export default function EditArrayCredentialsDrawer({
   open,
@@ -52,6 +56,8 @@ export default function EditArrayCredentialsDrawer({
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
+  const [validationStatus, setValidationStatus] = useState<ValidationStatus>('idle')
+  const [validationMessage, setValidationMessage] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const isAutoDiscovered = credential.spec?.autoDiscovered
@@ -90,6 +96,8 @@ export default function EditArrayCredentialsDrawer({
   const handleClose = () => {
     if (isValidating) return // Don't allow closing while validating
     setSubmitError(null)
+    setValidationStatus('idle')
+    setValidationMessage('')
     onClose()
   }
 
@@ -131,6 +139,8 @@ export default function EditArrayCredentialsDrawer({
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
+    setValidationStatus('idle')
+    setValidationMessage('')
 
     try {
       const namespace = credential.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE
@@ -166,19 +176,23 @@ export default function EditArrayCredentialsDrawer({
       if (data.managementEndpoint && data.username && data.password) {
         setIsSubmitting(false)
         setIsValidating(true)
+        setValidationStatus('validating')
+        setValidationMessage('Validating credentials with storage array...')
 
         const validationResult = await pollForValidation(data.name)
         setIsValidating(false)
 
         if (!validationResult.success) {
           // Validation failed - show error but keep the resource
-          const errorMessage = validationResult.message || 'Validation failed'
-          setSubmitError(errorMessage)
+          setValidationStatus('failed')
+          setValidationMessage(validationResult.message || 'Validation failed')
           queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
           return // Stay in the form
         }
 
         // Validation succeeded
+        setValidationStatus('success')
+        setValidationMessage('Credentials validated successfully!')
         queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
 
         // Wait a moment to show success message before closing
@@ -187,10 +201,14 @@ export default function EditArrayCredentialsDrawer({
         queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       }
 
+      setValidationStatus('idle')
+      setValidationMessage('')
+
       onClose()
     } catch (error: any) {
       console.error('Error updating array credentials:', error)
       setIsValidating(false)
+      setValidationStatus('idle')
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to update array credentials'
       setSubmitError(errorMessage)
@@ -239,6 +257,24 @@ export default function EditArrayCredentialsDrawer({
         {submitError && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
             {submitError}
+          </Alert>
+        )}
+
+        {validationStatus === 'validating' && (
+          <Alert severity="info" icon={<CircularProgress size={20} />} sx={{ mb: 2 }}>
+            {validationMessage}
+          </Alert>
+        )}
+
+        {validationStatus === 'success' && (
+          <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 2 }}>
+            {validationMessage}
+          </Alert>
+        )}
+
+        {validationStatus === 'failed' && (
+          <Alert severity="error" icon={<ErrorIcon />} sx={{ mb: 2 }}>
+            {validationMessage}
           </Alert>
         )}
 
@@ -408,16 +444,26 @@ export default function EditArrayCredentialsDrawer({
 
         {/* Action Buttons */}
         <Box sx={{ mt: 'auto', display: 'flex', gap: 2, justifyContent: 'flex-end', pt: 3 }}>
-          <Button variant="outlined" onClick={handleClose} disabled={isSubmitting}>
+          <Button
+            variant="outlined"
+            onClick={handleClose}
+            disabled={isSubmitting || isValidating}
+          >
             CANCEL
           </Button>
           <Button
             type="submit"
             variant="contained"
-            disabled={isSubmitting}
-            startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+            disabled={isSubmitting || isValidating || validationStatus === 'success'}
+            startIcon={isSubmitting || isValidating ? <CircularProgress size={20} /> : null}
           >
-            {isSubmitting ? 'UPDATING...' : 'UPDATE'}
+            {isSubmitting
+              ? 'UPDATING...'
+              : isValidating
+                ? 'VALIDATING...'
+                : validationStatus === 'success'
+                  ? 'SUCCESS'
+                  : 'UPDATE'}
           </Button>
         </Box>
       </Box>
