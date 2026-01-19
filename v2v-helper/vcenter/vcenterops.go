@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	commonutils "github.com/platform9/vjailbreak/common/utils"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/cli/esx"
 	"github.com/vmware/govmomi/find"

@@ -10,8 +10,8 @@ import (
 	openstack "github.com/gophercloud/gophercloud/v2/openstack"
 	ports "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	errors "github.com/pkg/errors"
-	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/common/validation/vmware"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
@@ -530,10 +530,10 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}
 
 	// If at least one of http_proxy or https_proxy is present, ensure .svc,.cluster.local,localhost,127.0.0.1,169.254.169.254,10.43.0.0/16 is in no_proxy
-	if (httpProxy != "" || httpsProxy != "") {
+	if httpProxy != "" || httpsProxy != "" {
 		requiredNoProxyValues := []string{".svc", ".cluster.local", "localhost", "127.0.0.1", "169.254.169.254", "10.43.0.0/16"}
 		noProxyList := []string{}
-		
+
 		if noProxy != "" {
 			noProxyList = strings.Split(noProxy, ",")
 			// Trim spaces from each entry
@@ -541,7 +541,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 				noProxyList[i] = strings.TrimSpace(noProxyList[i])
 			}
 		}
-		
+
 		// Check and add missing values
 		for _, required := range requiredNoProxyValues {
 			found := false
@@ -559,7 +559,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 				}).Info("Auto-appending value to no_proxy")
 			}
 		}
-		
+
 		// Reconstruct no_proxy
 		noProxy = strings.Join(noProxyList, ",")
 		logrus.WithFields(logrus.Fields{
@@ -601,12 +601,12 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		if existingCM.Data == nil {
 			existingCM.Data = make(map[string]string)
 		}
-		
+
 		// Update or add non-empty values
 		for key, value := range envData {
 			existingCM.Data[key] = value
 		}
-		
+
 		// Delete keys when empty values are sent
 		if in.GetHttpProxy() == "" {
 			delete(existingCM.Data, "http_proxy")
@@ -625,7 +625,7 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 			delete(existingCM.Data, "no_proxy")
 			logrus.WithField("func", fn).Info("Deleting no_proxy from ConfigMap")
 		}
-		
+
 		if err := k8sClient.Update(ctx, existingCM); err != nil {
 			logrus.WithFields(logrus.Fields{"func": fn, "configmap": configMapName}).WithError(err).Error("Failed to update existing ConfigMap")
 			return &api.InjectEnvVariablesResponse{
