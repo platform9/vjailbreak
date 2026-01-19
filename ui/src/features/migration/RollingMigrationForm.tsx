@@ -28,6 +28,8 @@ import {
 } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
+import { useForm } from 'react-hook-form'
+import { DesignSystemForm } from 'src/shared/components/forms'
 import { CustomSearchToolbar } from 'src/components/grid'
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -336,6 +338,15 @@ export default function RollingMigrationFormDrawer({
   )
   const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
     useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
+
+  // Initialize react-hook-form for MigrationOptionsAlt component
+  const form = useForm({
+    defaultValues: {
+      dataCopyStartTime: params.dataCopyStartTime ?? '',
+      cutoverStartTime: params.cutoverStartTime ?? '',
+      cutoverEndTime: params.cutoverEndTime ?? ''
+    }
+  })
 
   const { sourceData, pcdData, loadingVMware: loading, loadingPCD } = useClusterData()
   const [assigningIPs, setAssigningIPs] = useState(false)
@@ -2415,15 +2426,16 @@ export default function RollingMigrationFormDrawer({
           </DrawerFooter>
         }
       >
-        <Box
-          ref={contentRootRef}
-          data-testid="rolling-migration-form-content"
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
-            gap: 3
-          }}
-        >
+        <DesignSystemForm form={form} onSubmit={async () => {}}>
+          <Box
+            ref={contentRootRef}
+            data-testid="rolling-migration-form-content"
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
+              gap: 3
+            }}
+          >
           {!isSmallNav ? (
             <SectionNav
               data-testid="rolling-migration-form-section-nav"
@@ -2789,6 +2801,7 @@ export default function RollingMigrationFormDrawer({
             </Box>
           </Box>
         </Box>
+        </DesignSystemForm>
       </DrawerShell>
 
       <MaasConfigDialog
