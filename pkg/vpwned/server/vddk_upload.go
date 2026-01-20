@@ -3,6 +3,7 @@ package server
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,43 +47,20 @@ func HandleVDDKStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check if VDDK directory exists
-	info, err := os.Stat(vddkInstallDir)
-	if os.IsNotExist(err) {
-		logrus.WithField("func", fn).Info("VDDK directory does not exist")
-		w.WriteHeader(http.StatusOK)
-		response := `{"uploaded": false, "message": "VDDK has not been uploaded"}`
-		w.Write([]byte(response))
-		return
-	}
-	if err != nil {
-		logrus.WithField("func", fn).WithError(err).Error("Failed to check VDDK directory")
-		http.Error(w, "Failed to check VDDK status", http.StatusInternalServerError)
-		return
-	}
-
-	// Check if it's a directory
-	if !info.IsDir() {
-		logrus.WithField("func", fn).Warn("VDDK path exists but is not a directory")
-		w.WriteHeader(http.StatusOK)
-		response := `{"uploaded": false, "message": "VDDK path exists but is not a directory"}`
-		w.Write([]byte(response))
-		return
-	}
-
-	// Check if directory is not empty
+	// Check if VDDK directory has files
+	// The daemonset ensures the directory exists, so we only need to check if it's empty
 	files, err := os.ReadDir(vddkInstallDir)
-	if err != nil {
-		logrus.WithField("func", fn).WithError(err).Error("Failed to read VDDK directory")
-		http.Error(w, "Failed to check VDDK status", http.StatusInternalServerError)
-		return
-	}
-
-	if len(files) == 0 {
-		logrus.WithField("func", fn).Info("VDDK directory is empty")
+	if err != nil || len(files) == 0 {
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Info("VDDK directory not accessible")
+		} else {
+			logrus.WithField("func", fn).Info("VDDK directory is empty")
+		}
 		w.WriteHeader(http.StatusOK)
-		response := `{"uploaded": false, "message": "VDDK directory is empty"}`
-		w.Write([]byte(response))
+		json.NewEncoder(w).Encode(VDDKStatusResponse{
+			Uploaded: false,
+			Message:  "VDDK has not been uploaded",
+		})
 		return
 	}
 
@@ -93,8 +71,11 @@ func HandleVDDKStatus(w http.ResponseWriter, r *http.Request) {
 	}).Info("VDDK is available")
 
 	w.WriteHeader(http.StatusOK)
-	response := fmt.Sprintf(`{"uploaded": true, "path": "%s", "message": "VDDK is available"}`, vddkInstallDir)
-	w.Write([]byte(response))
+	json.NewEncoder(w).Encode(VDDKStatusResponse{
+		Uploaded: true,
+		Path:     vddkInstallDir,
+		Message:  "VDDK is available",
+	})
 }
 
 func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
