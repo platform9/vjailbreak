@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	commonutils "github.com/platform9/vjailbreak/common/utils"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/targets"
 	"github.com/sirupsen/logrus"
