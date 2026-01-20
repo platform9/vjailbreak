@@ -125,33 +125,33 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OS_AUTH_URL != "" {
+	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OsAuthUrl != "" {
 		ctxlog.Info("Creating Secret from spec credential fields")
 		secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
 
 		secretData := make(map[string][]byte)
-		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OS_AUTH_URL)
+		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthUrl)
 
-		if openstackcreds.Spec.OS_AUTH_TOKEN != "" {
-			secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OS_AUTH_TOKEN)
+		if openstackcreds.Spec.OsAuthToken != "" {
+			secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OsAuthToken)
 		}
-		if openstackcreds.Spec.OS_USERNAME != "" {
-			secretData["OS_USERNAME"] = []byte(openstackcreds.Spec.OS_USERNAME)
+		if openstackcreds.Spec.OsUsername != "" {
+			secretData["OS_USERNAME"] = []byte(openstackcreds.Spec.OsUsername)
 		}
-		if openstackcreds.Spec.OS_PASSWORD != "" {
-			secretData["OS_PASSWORD"] = []byte(openstackcreds.Spec.OS_PASSWORD)
+		if openstackcreds.Spec.OsPassword != "" {
+			secretData["OS_PASSWORD"] = []byte(openstackcreds.Spec.OsPassword)
 		}
-		if openstackcreds.Spec.OS_DOMAIN_NAME != "" {
-			secretData["OS_DOMAIN_NAME"] = []byte(openstackcreds.Spec.OS_DOMAIN_NAME)
+		if openstackcreds.Spec.OsDomainName != "" {
+			secretData["OS_DOMAIN_NAME"] = []byte(openstackcreds.Spec.OsDomainName)
 		}
-		if openstackcreds.Spec.OS_REGION_NAME != "" {
-			secretData["OS_REGION_NAME"] = []byte(openstackcreds.Spec.OS_REGION_NAME)
+		if openstackcreds.Spec.OsRegionName != "" {
+			secretData["OS_REGION_NAME"] = []byte(openstackcreds.Spec.OsRegionName)
 		}
-		if openstackcreds.Spec.OS_TENANT_NAME != "" {
-			secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OS_TENANT_NAME)
+		if openstackcreds.Spec.OsTenantName != "" {
+			secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
 		}
-		if openstackcreds.Spec.OS_INSECURE != nil {
-			if *openstackcreds.Spec.OS_INSECURE {
+		if openstackcreds.Spec.OsInsecure != nil {
+			if *openstackcreds.Spec.OsInsecure {
 				secretData["OS_INSECURE"] = []byte("true")
 			} else {
 				secretData["OS_INSECURE"] = []byte("false")
@@ -180,14 +180,14 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			Namespace: constants.NamespaceMigrationSystem,
 		}
 
-		openstackcreds.Spec.OS_AUTH_URL = ""
-		openstackcreds.Spec.OS_AUTH_TOKEN = ""
-		openstackcreds.Spec.OS_USERNAME = ""
-		openstackcreds.Spec.OS_PASSWORD = ""
-		openstackcreds.Spec.OS_DOMAIN_NAME = ""
-		openstackcreds.Spec.OS_REGION_NAME = ""
-		openstackcreds.Spec.OS_TENANT_NAME = ""
-		openstackcreds.Spec.OS_INSECURE = nil
+		openstackcreds.Spec.OsAuthUrl = ""
+		openstackcreds.Spec.OsAuthToken = ""
+		openstackcreds.Spec.OsUsername = ""
+		openstackcreds.Spec.OsPassword = ""
+		openstackcreds.Spec.OsDomainName = ""
+		openstackcreds.Spec.OsRegionName = ""
+		openstackcreds.Spec.OsTenantName = ""
+		openstackcreds.Spec.OsInsecure = nil
 
 		if err := r.Update(ctx, openstackcreds); err != nil {
 			ctxlog.Error(err, "Failed to update OpenstackCreds with SecretRef")

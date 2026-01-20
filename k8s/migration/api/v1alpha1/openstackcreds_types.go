@@ -85,21 +85,21 @@ type OpenstackCredsSpec struct {
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 
 	// +optional
-	OS_AUTH_URL string `json:"osAuthUrl,omitempty"`
+	OsAuthUrl string `json:"osAuthUrl,omitempty"`
 	// +optional
-	OS_AUTH_TOKEN string `json:"osAuthToken,omitempty"`
+	OsAuthToken string `json:"osAuthToken,omitempty"`
 	// +optional
-	OS_USERNAME string `json:"osUsername,omitempty"`
+	OsUsername string `json:"osUsername,omitempty"`
 	// +optional
-	OS_PASSWORD string `json:"osPassword,omitempty"`
+	OsPassword string `json:"osPassword,omitempty"`
 	// +optional
-	OS_DOMAIN_NAME string `json:"osDomainName,omitempty"`
+	OsDomainName string `json:"osDomainName,omitempty"`
 	// +optional
-	OS_REGION_NAME string `json:"osRegionName,omitempty"`
+	OsRegionName string `json:"osRegionName,omitempty"`
 	// +optional
-	OS_TENANT_NAME string `json:"osTenantName,omitempty"`
+	OsTenantName string `json:"osTenantName,omitempty"`
 	// +optional
-	OS_INSECURE *bool `json:"osInsecure,omitempty"`
+	OsInsecure *bool `json:"osInsecure,omitempty"`
 
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`
