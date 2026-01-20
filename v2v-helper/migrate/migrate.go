@@ -289,6 +289,14 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		} else {
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Disk %d: Blocks have Changed.", idx))
 
+			// Before starting NBD server, update disk info with new snapshot details
+			// We have marked block copy as false, in order to not update changeID.
+			// This should now update the snapname and snapBackingDisk with the new snapshot details and copy correctly.
+			err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], false)
+			if err != nil {
+				return errors.Wrap(err, "failed to update disk info")
+			}
+
 			utils.PrintLog("Restarting NBD server")
 			err = nbdops[idx].StopNBDServer()
 			if err != nil {
