@@ -44,6 +44,7 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
@@ -74,8 +75,7 @@ const migrationFinalizer = "migration.vjailbreak.k8s.pf9.io/finalizer"
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles a Migration object
-//
-//nolint:gocyclo
+// nolint:gocyclo // Reconcile function complexity is inherent to state machine logic
 func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
@@ -217,6 +217,44 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
 
+	// Record migration start if this is a new migration (hasn't been started in metrics yet)
+	// Check if migration was just created (within last minute) and oldStatus phase is empty or Pending
+	isNewMigration := time.Since(migration.CreationTimestamp.Time) < time.Minute &&
+		(oldStatus.Phase == "" || oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhasePending)
+
+	if isNewMigration && oldStatus.Phase == "" {
+		metrics.RecordMigrationStarted(
+			migration.Name,
+			migration.Spec.VMName,
+			migration.Namespace,
+			migration.Spec.MigrationPlan,
+			migration.Status.AgentName,
+		)
+	}
+
+	// Update phase metrics on every reconcile for active migrations
+	if migration.Status.Phase != "" {
+		metrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
+	}
+
+	// Update duration for active migrations
+	if migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseSucceeded &&
+		migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseFailed &&
+		migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseValidationFailed &&
+		migration.Status.Phase != "" {
+		metrics.RecordMigrationProgress(migration.Name, migration.Spec.VMName, migration.Namespace, migration.CreationTimestamp.Time)
+	}
+
+	// Record completion when transitioning to a terminal state from a non-terminal state
+	isNowTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+		migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed
+	wasTerminal := oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+		oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed
+
+	if isNowTerminal && !wasTerminal {
+		metrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
+	}
+
 	if !reflect.DeepEqual(&migration.Status, oldStatus) {
 		if err := r.Status().Update(ctx, migration); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Failed to update status of Migration '%s'", migration.Name))
@@ -242,6 +280,9 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 		ctxlog.Info("VMName is empty in Migration spec, nothing to do.")
 		return nil
 	}
+
+	// Clean up metrics for this migration
+	metrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Spec.MigrationPlan, migration.Status.AgentName)
 
 	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
 	if err != nil {
