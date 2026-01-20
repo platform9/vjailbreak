@@ -85,7 +85,7 @@ type OpenstackCredsSpec struct {
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 
 	// +optional
-	OsAuthUrl string `json:"osAuthUrl,omitempty"`
+	OsAuthURL string `json:"osAuthUrl,omitempty"`
 	// +optional
 	OsAuthToken string `json:"osAuthToken,omitempty"`
 	// +optional

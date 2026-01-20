@@ -125,12 +125,12 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OsAuthUrl != "" {
+	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OsAuthURL != "" {
 		ctxlog.Info("Creating Secret from spec credential fields")
 		secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
 
 		secretData := make(map[string][]byte)
-		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthUrl)
+		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthURL)
 
 		if openstackcreds.Spec.OsAuthToken != "" {
 			secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OsAuthToken)
@@ -180,7 +180,7 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 			Namespace: constants.NamespaceMigrationSystem,
 		}
 
-		openstackcreds.Spec.OsAuthUrl = ""
+		openstackcreds.Spec.OsAuthURL = ""
 		openstackcreds.Spec.OsAuthToken = ""
 		openstackcreds.Spec.OsUsername = ""
 		openstackcreds.Spec.OsPassword = ""
