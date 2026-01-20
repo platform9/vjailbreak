@@ -1,30 +1,17 @@
 import { useState } from 'react'
-import {
-  Drawer,
-  Box,
-  Typography,
-  TextField,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Checkbox,
-  Alert,
-  CircularProgress,
-  Divider
-} from '@mui/material'
+import { Alert, CircularProgress } from '@mui/material'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { createArrayCredsWithSecretFlow, deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { getArrayCredentials } from 'src/api/array-creds/arrayCreds'
-import { ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { ConfirmationDialog } from 'src/components/dialogs'
+import { DesignSystemForm } from 'src/shared/components/forms'
+import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
+import ArrayCredentialsFormFields from './ArrayCredentialsFormFields'
 
 interface AddArrayCredentialsDrawerProps {
   open: boolean
@@ -58,13 +45,7 @@ export default function AddArrayCredentialsDrawer({
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    getValues
-  } = useForm<FormData>({
+  const form = useForm<FormData>({
     defaultValues: {
       name: '',
       vendorType: 'pure',
@@ -77,25 +58,32 @@ export default function AddArrayCredentialsDrawer({
     }
   })
 
+  const {
+    formState: { errors },
+    reset,
+    getValues
+  } = form
+
   const handleClose = () => {
     if (isValidating) return // Don't allow closing while validating
-    
+
     // Check if form has been touched (has any values)
     const formValues = getValues()
-    const hasChanges = formValues.name || formValues.managementEndpoint || formValues.username || formValues.password
-    
+    const hasChanges =
+      formValues.name || formValues.managementEndpoint || formValues.username || formValues.password
+
     if (hasChanges && !isSubmitting) {
       setShowDiscardDialog(true)
       return
     }
-    
+
     // Cleanup any created credential if user is closing before validation completes
     if (createdCredentialName && validationStatus !== 'success') {
       deleteArrayCredsWithSecretFlow(createdCredentialName).catch((err) => {
         console.error(`Error deleting cancelled credential: ${createdCredentialName}`, err)
       })
     }
-    
+
     setSubmitError(null)
     setValidationStatus('idle')
     setValidationMessage('')
@@ -110,7 +98,7 @@ export default function AddArrayCredentialsDrawer({
         console.error(`Error deleting discarded credential: ${createdCredentialName}`, err)
       })
     }
-    
+
     setSubmitError(null)
     setValidationStatus('idle')
     setValidationMessage('')
@@ -188,7 +176,7 @@ export default function AddArrayCredentialsDrawer({
           cinderBackendName: data.backendName
         }
       })
-      
+
       // Track the created credential name for cleanup if needed
       setCreatedCredentialName(data.name)
 
@@ -248,23 +236,55 @@ export default function AddArrayCredentialsDrawer({
   }
 
   return (
-    <Drawer
-      anchor="right"
+    <DrawerShell
       open={open}
       onClose={handleClose}
-      PaperProps={{
-        sx: {
-          width: { xs: '100%', sm: 700 },
-          p: 3,
-          backgroundColor: 'background.paper'
-        }
-      }}
+      requireCloseConfirmation={false}
+      header={
+        <DrawerHeader
+          title="Add Array Credentials"
+          onClose={handleClose}
+          data-testid="add-array-credentials-drawer-header"
+        />
+      }
+      footer={
+        <DrawerFooter>
+          <ActionButton
+            tone="secondary"
+            onClick={handleClose}
+            disabled={isSubmitting || isValidating}
+          >
+            Cancel
+          </ActionButton>
+          <ActionButton
+            type="submit"
+            form="add-array-credentials-form"
+            loading={isSubmitting || isValidating}
+            disabled={validationStatus === 'success'}
+          >
+            {isSubmitting
+              ? 'Creating...'
+              : isValidating
+                ? 'Validating...'
+                : validationStatus === 'success'
+                  ? 'Success'
+                  : 'Save Credentials'}
+          </ActionButton>
+        </DrawerFooter>
+      }
+      data-testid="add-array-credentials-drawer"
     >
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <Typography variant="h5" fontWeight={600} sx={{ mb: 3 }}>
-          Add Array Credentials
-        </Typography>
-
+      <DesignSystemForm
+        id="add-array-credentials-form"
+        form={form}
+        onSubmit={onSubmit}
+        keyboardSubmitProps={{
+          open,
+          onClose: handleClose,
+          isSubmitDisabled: isSubmitting || isValidating || validationStatus === 'success'
+        }}
+        sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      >
         {submitError && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
             {submitError}
@@ -289,253 +309,8 @@ export default function AddArrayCredentialsDrawer({
           </Alert>
         )}
 
-        {/* Basic Information Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Basic Information
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Provide the name and vendor type for the storage array
-          </Typography>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            <Controller
-              name="name"
-              control={control}
-              rules={{
-                required: 'Name is required',
-                pattern: {
-                  value: /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
-                  message: 'Name must be lowercase alphanumeric with hyphens'
-                }
-              }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Name"
-                  required
-                  fullWidth
-                  error={!!errors.name}
-                  helperText={errors.name?.message || 'Unique identifier for this array'}
-                />
-              )}
-            />
-
-            <Controller
-              name="vendorType"
-              control={control}
-              rules={{ required: 'Vendor type is required' }}
-              render={({ field }) => (
-                <FormControl fullWidth>
-                  <InputLabel>Vendor Type *</InputLabel>
-                  <Select {...field} label="Vendor Type *">
-                    {ARRAY_VENDOR_TYPES.map((vendor) => (
-                      <MenuItem key={vendor.value} value={vendor.value}>
-                        {vendor.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* OpenStack Mapping Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            OpenStack Mapping
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Map this array to PCD backend configuration
-          </Typography>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            <Controller
-              name="volumeType"
-              control={control}
-              rules={{ required: 'Volume type is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Volume Type"
-                  required
-                  fullWidth
-                  error={!!errors.volumeType}
-                  helperText={errors.volumeType?.message || 'Cinder volume type name'}
-                />
-              )}
-            />
-
-            <Controller
-              name="backendName"
-              control={control}
-              rules={{ required: 'Backend name is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Backend Name"
-                  required
-                  fullWidth
-                  error={!!errors.backendName}
-                  helperText={errors.backendName?.message || 'Cinder backend name'}
-                />
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* Storage Array Credentials Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Storage Array Credentials
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            These credentials need permission to manage volumes and read array configuration
-          </Typography>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, mb: 2 }}>
-            <Controller
-              name="managementEndpoint"
-              control={control}
-              rules={{ required: 'Management endpoint is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Management Endpoint"
-                  required
-                  fullWidth
-                  error={!!errors.managementEndpoint}
-                  helperText={errors.managementEndpoint?.message || 'Storage array management IP or hostname'}
-                />
-              )}
-            />
-          </Box>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
-            <Controller
-              name="username"
-              control={control}
-              rules={{ required: 'Username is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Username"
-                  required
-                  fullWidth
-                  error={!!errors.username}
-                  helperText={errors.username?.message}
-                />
-              )}
-            />
-
-            <Controller
-              name="password"
-              control={control}
-              rules={{ required: 'Password is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Password"
-                  type="password"
-                  required
-                  fullWidth
-                  error={!!errors.password}
-                  helperText={errors.password?.message}
-                />
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* Connection Options Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Connection Options
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Prefer TLS-secure connections. Only disable SSL verification if your environment requires it.
-          </Typography>
-
-          <Box
-            sx={{
-              p: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-              backgroundColor: 'background.default'
-            }}
-          >
-            <Controller
-              name="skipSslVerification"
-              control={control}
-              render={({ field }) => (
-                <Box>
-                  <FormControlLabel
-                    control={<Checkbox {...field} checked={field.value} />}
-                    label="Allow insecure connection"
-                    sx={{ mb: 0.5 }}
-                  />
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-                    Disabling verification may expose credentials in transit.
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-                    Skip SSL verification for self-signed or lab environments.
-                  </Typography>
-                </Box>
-              )}
-            />
-          </Box>
-        </Box>
-
-        {/* Action Buttons - Sticky Footer */}
-        <Box
-          component="form"
-          onSubmit={handleSubmit(onSubmit)}
-          sx={{
-            mt: 'auto',
-            pt: 3,
-            pb: 2,
-            px: 3,
-            mx: -3,
-            mb: -3,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            backgroundColor: 'background.paper',
-            display: 'flex',
-            gap: 2,
-            justifyContent: 'flex-end'
-          }}
-        >
-          <Button
-            variant="outlined"
-            onClick={handleClose}
-            disabled={isSubmitting || isValidating}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isSubmitting || isValidating || validationStatus === 'success'}
-            startIcon={isSubmitting || isValidating ? <CircularProgress size={20} /> : null}
-          >
-            {isSubmitting
-              ? 'Creating...'
-              : isValidating
-                ? 'Validating...'
-                : validationStatus === 'success'
-                  ? 'Success'
-                  : 'Save Credentials'}
-          </Button>
-        </Box>
-      </Box>
+        <ArrayCredentialsFormFields mode="add" errors={errors} />
+      </DesignSystemForm>
 
       {/* Discard Changes Dialog */}
       <ConfirmationDialog
@@ -548,6 +323,6 @@ export default function AddArrayCredentialsDrawer({
         actionVariant="outlined"
         onConfirm={handleDiscardChanges}
       />
-    </Drawer>
+    </DrawerShell>
   )
 }

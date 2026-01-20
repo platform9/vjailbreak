@@ -1,32 +1,23 @@
 import { useState, useEffect } from 'react'
-import {
-  Drawer,
-  Box,
-  Typography,
-  TextField,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Checkbox,
-  Alert,
-  CircularProgress,
-  Divider
-} from '@mui/material'
-import InfoIcon from '@mui/icons-material/Info'
+import { Alert, CircularProgress } from '@mui/material'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
-import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
-import { updateArrayCredsWithSecret, getArrayCredentials, patchArrayCredentials } from 'src/api/array-creds/arrayCreds'
+import { ArrayCreds } from 'src/api/array-creds/model'
+import {
+  updateArrayCredsWithSecret,
+  getArrayCredentials,
+  patchArrayCredentials
+} from 'src/api/array-creds/arrayCreds'
 import { createArrayCredsSecret, deleteSecret } from 'src/api/secrets/secrets'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { DesignSystemForm } from 'src/shared/components/forms'
+import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
+import ArrayCredentialsFormFields from './ArrayCredentialsFormFields'
 
 interface EditArrayCredentialsDrawerProps {
   open: boolean
@@ -47,7 +38,6 @@ interface FormData {
 
 type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
 
-
 export default function EditArrayCredentialsDrawer({
   open,
   onClose,
@@ -64,13 +54,7 @@ export default function EditArrayCredentialsDrawer({
 
   const isAutoDiscovered = credential.spec?.autoDiscovered
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    getValues
-  } = useForm<FormData>({
+  const form = useForm<FormData>({
     defaultValues: {
       name: credential.metadata.name,
       vendorType: credential.spec?.vendorType || 'pure',
@@ -82,6 +66,12 @@ export default function EditArrayCredentialsDrawer({
       skipSslVerification: false
     }
   })
+
+  const {
+    formState: { errors },
+    reset,
+    getValues
+  } = form
 
   useEffect(() => {
     reset({
@@ -210,12 +200,12 @@ export default function EditArrayCredentialsDrawer({
           // Validation failed - delete the secret and clear secretRef to allow retry with same name
           setValidationStatus('failed')
           setValidationMessage(validationResult.message || 'Validation failed')
-          
+
           try {
             const secretName = `${data.name}-array-secret`
             await deleteSecret(secretName, namespace)
             console.log(`Deleted invalid secret: ${secretName}`)
-            
+
             // Clear the secretRef from the ArrayCreds spec
             await patchArrayCredentials(
               data.name,
@@ -233,7 +223,7 @@ export default function EditArrayCredentialsDrawer({
             console.error('Failed to delete invalid secret or clear secretRef:', deleteErr)
             // Continue anyway - user can still see the validation error
           }
-          
+
           queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
           return // Stay in the form
         }
@@ -273,38 +263,55 @@ export default function EditArrayCredentialsDrawer({
   }
 
   return (
-    <Drawer
-      anchor="right"
+    <DrawerShell
       open={open}
       onClose={handleClose}
-      PaperProps={{
-        sx: {
-          width: { xs: '100%', sm: 700 },
-          p: 3,
-          backgroundColor: 'background.paper'
-        }
-      }}
-    >
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <Typography variant="h5" fontWeight={600} sx={{ mb: 3 }}>
-          Edit Array Credentials
-        </Typography>
-
-        {isAutoDiscovered && (
-          <Alert
-            severity="info"
-            icon={<InfoIcon />}
-            sx={{
-              mb: 3,
-              backgroundColor: 'rgba(33, 150, 243, 0.1)',
-              '& .MuiAlert-message': { fontSize: '0.875rem' }
-            }}
+      requireCloseConfirmation={false}
+      header={
+        <DrawerHeader
+          title="Edit Array Credentials"
+          onClose={handleClose}
+          data-testid="edit-array-credentials-drawer-header"
+        />
+      }
+      footer={
+        <DrawerFooter>
+          <ActionButton
+            tone="secondary"
+            onClick={handleClose}
+            disabled={isSubmitting || isValidating}
           >
-            This array was auto-discovered from PCD. You can update the credentials and
-            vendor type as needed.
-          </Alert>
-        )}
-
+            Cancel
+          </ActionButton>
+          <ActionButton
+            type="submit"
+            form="edit-array-credentials-form"
+            loading={isSubmitting || isValidating}
+            disabled={validationStatus === 'success'}
+          >
+            {isSubmitting
+              ? 'Updating...'
+              : isValidating
+                ? 'Validating...'
+                : validationStatus === 'success'
+                  ? 'Success'
+                  : 'Update'}
+          </ActionButton>
+        </DrawerFooter>
+      }
+      data-testid="edit-array-credentials-drawer"
+    >
+      <DesignSystemForm
+        id="edit-array-credentials-form"
+        form={form}
+        onSubmit={onSubmit}
+        keyboardSubmitProps={{
+          open,
+          onClose: handleClose,
+          isSubmitDisabled: isSubmitting || isValidating || validationStatus === 'success'
+        }}
+        sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      >
         {submitError && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
             {submitError}
@@ -329,253 +336,13 @@ export default function EditArrayCredentialsDrawer({
           </Alert>
         )}
 
-        {/* Basic Information Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Basic Information
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Provide the name and vendor type for the storage array
-          </Typography>
+        <ArrayCredentialsFormFields
+          mode="edit"
+          errors={errors}
+          isAutoDiscovered={isAutoDiscovered}
+        />
+      </DesignSystemForm>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            <Controller
-              name="name"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Name"
-                  disabled
-                  fullWidth
-                  helperText="Name cannot be changed after creation"
-                />
-              )}
-            />
-
-            <Controller
-              name="vendorType"
-              control={control}
-              rules={{ required: 'Vendor type is required' }}
-              render={({ field }) => (
-                <FormControl fullWidth>
-                  <InputLabel>Vendor Type *</InputLabel>
-                  <Select {...field} label="Vendor Type *">
-                    {ARRAY_VENDOR_TYPES.map((vendor) => (
-                      <MenuItem key={vendor.value} value={vendor.value}>
-                        {vendor.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* OpenStack Mapping Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            OpenStack Mapping
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Map this array to PCD backend configuration
-          </Typography>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            <Controller
-              name="volumeType"
-              control={control}
-              rules={{ required: 'Volume type is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Volume Type"
-                  required
-                  fullWidth
-                  error={!!errors.volumeType}
-                  helperText={errors.volumeType?.message || 'Cinder volume type name'}
-                />
-              )}
-            />
-
-            <Controller
-              name="backendName"
-              control={control}
-              rules={{ required: 'Backend name is required' }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Backend Name"
-                  required
-                  fullWidth
-                  error={!!errors.backendName}
-                  helperText={errors.backendName?.message || 'Cinder backend name'}
-                />
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* Storage Array Credentials Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Storage Array Credentials
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            These credentials need permission to manage volumes and read array configuration
-          </Typography>
-
-          <Alert
-            severity="info"
-            icon={<InfoIcon />}
-            sx={{
-              mb: 2,
-              backgroundColor: 'rgba(33, 150, 243, 0.1)',
-              '& .MuiAlert-message': { fontSize: '0.875rem' }
-            }}
-          >
-            Leave fields empty to keep existing credentials.
-          </Alert>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, mb: 2 }}>
-            <Controller
-              name="managementEndpoint"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Management Endpoint"
-                  fullWidth
-                  helperText="Storage array management IP or hostname"
-                />
-              )}
-            />
-          </Box>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
-            <Controller
-              name="username"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Username"
-                  fullWidth
-                  helperText="Storage array username"
-                />
-              )}
-            />
-
-            <Controller
-              name="password"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Password"
-                  type="password"
-                  fullWidth
-                  helperText="Storage array password"
-                />
-              )}
-            />
-          </Box>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* Connection Options Section */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-            Connection Options
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Prefer TLS-secure connections. Only disable SSL verification if your environment requires it.
-          </Typography>
-
-          <Box
-            sx={{
-              p: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-              backgroundColor: 'background.default'
-            }}
-          >
-            <Controller
-              name="skipSslVerification"
-              control={control}
-              render={({ field }) => (
-                <Box>
-                  <FormControlLabel
-                    control={<Checkbox {...field} checked={field.value} />}
-                    label="Allow insecure connection"
-                    sx={{ mb: 0.5 }}
-                  />
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-                    Disabling verification may expose credentials in transit.
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-                    Skip SSL verification for self-signed or lab environments.
-                  </Typography>
-                </Box>
-              )}
-            />
-          </Box>
-        </Box>
-
-        {/* Action Buttons - Sticky Footer */}
-        <Box
-          component="form"
-          onSubmit={handleSubmit(onSubmit)}
-          sx={{
-            mt: 'auto',
-            pt: 3,
-            pb: 2,
-            px: 3,
-            mx: -3,
-            mb: -3,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            backgroundColor: 'background.paper',
-            display: 'flex',
-            gap: 2,
-            justifyContent: 'flex-end'
-          }}
-        >
-          <Box sx={{ mt: 'auto', display: 'flex', gap: 2, justifyContent: 'flex-end', pt: 3 }}>
-            <Button
-              variant="outlined"
-              onClick={handleClose}
-              disabled={isSubmitting || isValidating}
-            >
-              CANCEL
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isSubmitting || isValidating || validationStatus === 'success'}
-              startIcon={isSubmitting || isValidating ? <CircularProgress size={20} /> : null}
-            >
-              {isSubmitting
-                ? 'UPDATING...'
-                : isValidating
-                  ? 'VALIDATING...'
-                  : validationStatus === 'success'
-                    ? 'SUCCESS'
-                    : 'UPDATE'}
-            </Button>
-          </Box>
-        </Box>
-
-      </Box>
-
-      {/* Discard Changes Dialog */}
       <ConfirmationDialog
         open={showDiscardDialog}
         onClose={handleCancelDiscard}
@@ -586,6 +353,6 @@ export default function EditArrayCredentialsDrawer({
         actionVariant="outlined"
         onConfirm={handleDiscardChanges}
       />
-    </Drawer>
+    </DrawerShell>
   )
 }

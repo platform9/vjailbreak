@@ -4,11 +4,14 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import WarningIcon from '@mui/icons-material/Warning'
 import AddIcon from '@mui/icons-material/Add'
-import StorageIcon from '@mui/icons-material/Storage'
+import SdStorageIcon from '@mui/icons-material/SdStorage'
 import { CustomSearchToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useArrayCredentialsQuery, ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
+import {
+  useArrayCredentialsQuery,
+  ARRAY_CREDS_QUERY_KEY
+} from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { useQueryClient } from '@tanstack/react-query'
@@ -160,7 +163,12 @@ interface CustomToolbarProps {
   onDeleteSelected: () => void
 }
 
-const CustomToolbar = ({ onRefresh, onAddCredential, selectedCount, onDeleteSelected }: CustomToolbarProps) => {
+const CustomToolbar = ({
+  onRefresh,
+  onAddCredential,
+  selectedCount,
+  onDeleteSelected
+}: CustomToolbarProps) => {
   return (
     <GridToolbarContainer
       sx={{
@@ -171,14 +179,14 @@ const CustomToolbar = ({ onRefresh, onAddCredential, selectedCount, onDeleteSele
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <StorageIcon />
+        <SdStorageIcon />
         <Typography variant="h6" component="h2">
           Storage Array Credentials
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 2 }}>
         <Button
-          variant="contained"
+          variant="outlined"
           color="primary"
           startIcon={<AddIcon />}
           onClick={onAddCredential}
@@ -303,9 +311,7 @@ export default function StorageArrayTable() {
   const handleConfirmBulkDelete = async () => {
     setDeleting(true)
     try {
-      await Promise.all(
-        rowSelectionModel.map((id) => deleteArrayCredsWithSecretFlow(id as string))
-      )
+      await Promise.all(rowSelectionModel.map((id) => deleteArrayCredsWithSecretFlow(id as string)))
       queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       setRowSelectionModel([])
       handleBulkDeleteClose()

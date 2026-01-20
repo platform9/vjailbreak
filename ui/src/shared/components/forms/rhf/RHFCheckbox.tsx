@@ -43,6 +43,7 @@ export default function RHFCheckbox({
               />
             }
             label={label}
+            {...labelProps}
           />
           {fieldState.error?.message && (
             <Box sx={{ color: 'error.main', fontSize: '0.75rem', mt: 0.5, ml: 0.5 }}>

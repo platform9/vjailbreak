@@ -380,15 +380,6 @@ export default function RollingMigrationFormDrawer({
   const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
     useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
-  // Initialize react-hook-form for MigrationOptionsAlt component
-  const form = useForm({
-    defaultValues: {
-      dataCopyStartTime: params.dataCopyStartTime ?? '',
-      cutoverStartTime: params.cutoverStartTime ?? '',
-      cutoverEndTime: params.cutoverEndTime ?? ''
-    }
-  })
-
   const { sourceData, pcdData, loadingVMware: loading, loadingPCD } = useClusterData()
   const [assigningIPs, setAssigningIPs] = useState(false)
 
