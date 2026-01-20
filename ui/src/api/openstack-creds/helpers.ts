@@ -49,14 +49,14 @@ export const createOpenstackCredsJson = (params: OpenstackCredsParams) => {
       namespace
     },
     spec: {
-      OS_AUTH_URL,
-      OS_DOMAIN_NAME,
-      OS_USERNAME,
-      OS_PASSWORD,
-      OS_AUTH_TOKEN,
-      OS_REGION_NAME,
-      OS_TENANT_NAME,
-      OS_INSECURE: getBooleanValue(OS_INSECURE)
+      osAuthUrl: OS_AUTH_URL,
+      osAuthToken: OS_AUTH_TOKEN,
+      osUsername: OS_USERNAME,
+      osPassword: OS_PASSWORD,
+      osDomainName: OS_DOMAIN_NAME,
+      osRegionName: OS_REGION_NAME,
+      osTenantName: OS_TENANT_NAME,
+      osInsecure: getBooleanValue(OS_INSECURE)
     }
   }
 }
