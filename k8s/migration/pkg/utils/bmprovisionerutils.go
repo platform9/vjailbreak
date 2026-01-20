@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
 	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
-	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -550,6 +550,11 @@ func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsIn
 		// keystone is needed when its a CAPI enabled setup. However at this point there is no way to determine
 		// if controller manager will be used with CAPI or not. Fail to be safe if keystone client cannot be created.
 		return nil, fmt.Errorf("unable to create keystone client with insecure=true: %w", err)
+	}
+
+	if openstackCreds.AuthToken != "" {
+		authenticator := keystone.NewCachedAuthenticator(keystone.NewStaticTokenGenerator(ksClient, openstackCreds.AuthToken))
+		return authenticator, nil
 	}
 
 	creds, err := keystone.ParseCredentialsFromOpenstackCreds(openstackCreds)
