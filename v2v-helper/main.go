@@ -89,6 +89,7 @@ func main() {
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
+		return
 	}
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
 	defer vcclient.VCClient.CloseIdleConnections()
@@ -96,6 +97,7 @@ func main() {
 	openstackclients, err := openstack.NewOpenStackClients(ctx, openstackInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
+		return
 	}
 	openstackclients.K8sClient = client
 	utils.PrintLog("Connected to OpenStack")
@@ -104,6 +106,7 @@ func main() {
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get thumbprint: %s", err))
+		return
 	}
 	utils.PrintLog(fmt.Sprintf("VCenter Thumbprint: %s\n", thumbprint))
 
@@ -111,6 +114,7 @@ func main() {
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName, client)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
+		return
 	}
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
