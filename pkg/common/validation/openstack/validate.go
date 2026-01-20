@@ -73,42 +73,41 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 	}
 	providerClient.HTTPClient = *vjbNet.GetClient()
 
-	// Authenticate
-	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: openstackCredential.AuthURL,
-		TenantName:       openstackCredential.TenantName,
-	}
-
-	// Choose authentication method based on available credentials
+	// Authenticate based on available credentials
 	if openstackCredential.AuthToken != "" {
-		// Token-based authentication
-		authOpts.TokenID = openstackCredential.AuthToken
-		if openstackCredential.DomainName != "" {
-			authOpts.DomainName = openstackCredential.DomainName
-		}
-	} else {
-		// Password-based authentication
-		authOpts.Username = openstackCredential.Username
-		authOpts.Password = openstackCredential.Password
-		authOpts.DomainName = openstackCredential.DomainName
-	}
+		// Token-based authentication: Set the token directly without re-authentication
+		// This avoids trying to exchange an existing token for a new one
+		providerClient.TokenID = openstackCredential.AuthToken
 
-	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
-		var message string
-		switch {
-		case strings.Contains(err.Error(), "401"):
-			message = "Authentication failed: invalid username, password, or project/domain. Please verify your credentials"
-		case strings.Contains(err.Error(), "404"):
-			message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
-		case strings.Contains(err.Error(), "timeout"):
-			message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
-		default:
-			message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
+		// For token-based auth, we still need to set the project scope if available
+		// The token should already be scoped, so we just use it directly
+	} else {
+		// Password-based authentication: Use standard authentication flow
+		authOpts := gophercloud.AuthOptions{
+			IdentityEndpoint: openstackCredential.AuthURL,
+			Username:         openstackCredential.Username,
+			Password:         openstackCredential.Password,
+			DomainName:       openstackCredential.DomainName,
+			TenantName:       openstackCredential.TenantName,
 		}
-		return ValidationResult{
-			Valid:   false,
-			Message: message,
-			Error:   err,
+
+		if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
+			var message string
+			switch {
+			case strings.Contains(err.Error(), "401"):
+				message = "Authentication failed: invalid username, password, or project/domain. Please verify your credentials"
+			case strings.Contains(err.Error(), "404"):
+				message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
+			case strings.Contains(err.Error(), "timeout"):
+				message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
+			default:
+				message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
+			}
+			return ValidationResult{
+				Valid:   false,
+				Message: message,
+				Error:   err,
+			}
 		}
 	}
 

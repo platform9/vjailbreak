@@ -320,30 +320,31 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
 
-	// Authenticate - support both token-based and password-based authentication
-	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: openstackAccessInfo.AuthURL,
-		TenantName:       openstackAccessInfo.TenantName,
-	}
-
-	// Choose authentication method based on available credentials
+	// Authenticate based on available credentials
 	if openstackAccessInfo.AuthToken != "" {
-		// Token-based authentication
-		authOpts.TokenID = openstackAccessInfo.AuthToken
-		if openstackAccessInfo.DomainName != "" {
-			authOpts.DomainName = openstackAccessInfo.DomainName
-		}
-	} else {
-		// Password-based authentication
-		authOpts.Username = openstackAccessInfo.Username
-		authOpts.Password = openstackAccessInfo.Password
-		authOpts.DomainName = openstackAccessInfo.DomainName
-	}
+		// Token-based authentication: Set the token directly without re-authentication
+		// This avoids trying to exchange an existing token for a new one
+		logrus.WithField("func", fn).Info("Using token-based authentication")
+		providerClient.TokenID = openstackAccessInfo.AuthToken
 
-	err = openstack.Authenticate(context.TODO(), providerClient, authOpts)
-	if err != nil {
-		logrus.WithField("func", fn).WithError(err).Error("Failed to authenticate OpenStack provider client")
-		return nil, err
+		// For token-based auth, we still need to set the project scope if available
+		// The token should already be scoped, so we just use it directly
+	} else {
+		// Password-based authentication: Use standard authentication flow
+		logrus.WithField("func", fn).Info("Using password-based authentication")
+		authOpts := gophercloud.AuthOptions{
+			IdentityEndpoint: openstackAccessInfo.AuthURL,
+			Username:         openstackAccessInfo.Username,
+			Password:         openstackAccessInfo.Password,
+			DomainName:       openstackAccessInfo.DomainName,
+			TenantName:       openstackAccessInfo.TenantName,
+		}
+
+		err = openstack.Authenticate(context.TODO(), providerClient, authOpts)
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Error("Failed to authenticate OpenStack provider client")
+			return nil, err
+		}
 	}
 
 	return providerClient, nil
