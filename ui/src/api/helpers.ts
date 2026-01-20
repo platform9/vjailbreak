@@ -98,12 +98,13 @@ export const cleanupAllResources = async () => {
 export const createOpenstackCredsWithSecretFlow = async (
   credName: string,
   credentials: {
-    OS_USERNAME: string
-    OS_PASSWORD: string
+    OS_USERNAME?: string
+    OS_PASSWORD?: string
+    OS_AUTH_TOKEN?: string
     OS_AUTH_URL: string
     OS_PROJECT_NAME?: string
     OS_TENANT_NAME?: string
-    OS_DOMAIN_NAME: string
+    OS_DOMAIN_NAME?: string
     OS_REGION_NAME?: string
     OS_INSECURE?: boolean
   },

@@ -176,6 +176,7 @@ export default function OpenstackCredentialsDrawer({
             OS_DOMAIN_NAME: rcFileValues.OS_DOMAIN_NAME,
             OS_USERNAME: rcFileValues.OS_USERNAME,
             OS_PASSWORD: rcFileValues.OS_PASSWORD,
+            OS_AUTH_TOKEN: rcFileValues.OS_AUTH_TOKEN,
             OS_REGION_NAME: rcFileValues.OS_REGION_NAME,
             OS_TENANT_NAME: projectName,
             OS_INSECURE: values.insecure

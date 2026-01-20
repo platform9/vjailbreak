@@ -322,13 +322,21 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 
 	// Authenticate based on available credentials
 	if openstackAccessInfo.AuthToken != "" {
-		// Token-based authentication: Set the token directly without re-authentication
-		// This avoids trying to exchange an existing token for a new one
 		logrus.WithField("func", fn).Info("Using token-based authentication")
-		providerClient.TokenID = openstackAccessInfo.AuthToken
+		authOpts := gophercloud.AuthOptions{
+			IdentityEndpoint: openstackAccessInfo.AuthURL,
+			TokenID:          openstackAccessInfo.AuthToken,
+			TenantName:       openstackAccessInfo.TenantName,
+		}
+		if openstackAccessInfo.DomainName != "" {
+			authOpts.DomainName = openstackAccessInfo.DomainName
+		}
 
-		// For token-based auth, we still need to set the project scope if available
-		// The token should already be scoped, so we just use it directly
+		err = openstack.Authenticate(context.TODO(), providerClient, authOpts)
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Error("Failed to authenticate OpenStack provider client with token")
+			return nil, err
+		}
 	} else {
 		// Password-based authentication: Use standard authentication flow
 		logrus.WithField("func", fn).Info("Using password-based authentication")

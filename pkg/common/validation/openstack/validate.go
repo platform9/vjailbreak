@@ -75,12 +75,33 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 
 	// Authenticate based on available credentials
 	if openstackCredential.AuthToken != "" {
-		// Token-based authentication: Set the token directly without re-authentication
-		// This avoids trying to exchange an existing token for a new one
-		providerClient.TokenID = openstackCredential.AuthToken
+		authOpts := gophercloud.AuthOptions{
+			IdentityEndpoint: openstackCredential.AuthURL,
+			TokenID:          openstackCredential.AuthToken,
+			TenantName:       openstackCredential.TenantName,
+		}
+		if openstackCredential.DomainName != "" {
+			authOpts.DomainName = openstackCredential.DomainName
+		}
 
-		// For token-based auth, we still need to set the project scope if available
-		// The token should already be scoped, so we just use it directly
+		if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
+			var message string
+			switch {
+			case strings.Contains(err.Error(), "401"):
+				message = "Authentication failed: invalid or expired token. Please generate a fresh token and try again"
+			case strings.Contains(err.Error(), "404"):
+				message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
+			case strings.Contains(err.Error(), "timeout"):
+				message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
+			default:
+				message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
+			}
+			return ValidationResult{
+				Valid:   false,
+				Message: message,
+				Error:   err,
+			}
+		}
 	} else {
 		// Password-based authentication: Use standard authentication flow
 		authOpts := gophercloud.AuthOptions{
@@ -200,7 +221,24 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 }
 
 // verifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
-func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (bool, error) {
+func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (ok bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			err = fmt.Errorf("panic while verifying OpenStack environment: %v", r)
+		}
+	}()
+
+	if providerClient == nil {
+		return false, fmt.Errorf("provider client is nil")
+	}
+	if providerClient.EndpointLocator == nil {
+		return false, fmt.Errorf("OpenStack client is not authenticated (endpoint locator is not initialized)")
+	}
+	if strings.TrimSpace(regionName) == "" {
+		return false, fmt.Errorf("region name is empty")
+	}
+
 	// Get current instance metadata
 	metadata, err := utils.GetCurrentInstanceMetadata()
 	if err != nil {
