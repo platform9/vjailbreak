@@ -12,9 +12,9 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
-	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,11 +76,23 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 	// Authenticate
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
-		Username:         openstackCredential.Username,
-		Password:         openstackCredential.Password,
-		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
 	}
+
+	// Choose authentication method based on available credentials
+	if openstackCredential.AuthToken != "" {
+		// Token-based authentication
+		authOpts.TokenID = openstackCredential.AuthToken
+		if openstackCredential.DomainName != "" {
+			authOpts.DomainName = openstackCredential.DomainName
+		}
+	} else {
+		// Password-based authentication
+		authOpts.Username = openstackCredential.Username
+		authOpts.Password = openstackCredential.Password
+		authOpts.DomainName = openstackCredential.DomainName
+	}
+
 	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
 		var message string
 		switch {
@@ -133,28 +145,55 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 		return openstackCredsInfo, errors.Wrap(err, "failed to get secret")
 	}
 
-	fields := map[string]string{
-		"AuthURL":    string(secret.Data["OS_AUTH_URL"]),
-		"DomainName": string(secret.Data["OS_DOMAIN_NAME"]),
-		"Username":   string(secret.Data["OS_USERNAME"]),
-		"Password":   string(secret.Data["OS_PASSWORD"]),
-		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
-		"RegionName": string(secret.Data["OS_REGION_NAME"]),
+	// Check which authentication method is being used
+	authToken := string(secret.Data["OS_AUTH_TOKEN"])
+	username := string(secret.Data["OS_USERNAME"])
+	password := string(secret.Data["OS_PASSWORD"])
+
+	// Common required fields for both auth methods
+	authURL := string(secret.Data["OS_AUTH_URL"])
+	tenantName := string(secret.Data["OS_TENANT_NAME"])
+	regionName := string(secret.Data["OS_REGION_NAME"])
+
+	// Validate common required fields
+	if authURL == "" {
+		return openstackCredsInfo, fmt.Errorf("field OS_AUTH_URL is empty or missing in secret")
+	}
+	if tenantName == "" {
+		return openstackCredsInfo, fmt.Errorf("field OS_TENANT_NAME is empty or missing in secret")
+	}
+	if regionName == "" {
+		return openstackCredsInfo, fmt.Errorf("field OS_REGION_NAME is empty or missing in secret")
 	}
 
-	for key, value := range fields {
-		if value == "" {
-			return openstackCredsInfo, fmt.Errorf("field %s is empty or missing in secret", key)
+	// Determine authentication method and validate accordingly
+	if authToken != "" {
+		// Token-based authentication
+		openstackCredsInfo.AuthToken = authToken
+		openstackCredsInfo.AuthURL = authURL
+		openstackCredsInfo.TenantName = tenantName
+		openstackCredsInfo.RegionName = regionName
+		// DomainName is optional for token-based auth
+		openstackCredsInfo.DomainName = string(secret.Data["OS_DOMAIN_NAME"])
+	} else if username != "" && password != "" {
+		// Password-based authentication
+		domainName := string(secret.Data["OS_DOMAIN_NAME"])
+		if domainName == "" {
+			return openstackCredsInfo, fmt.Errorf("field OS_DOMAIN_NAME is empty or missing in secret for password-based auth")
 		}
+
+		openstackCredsInfo.AuthURL = authURL
+		openstackCredsInfo.Username = username
+		openstackCredsInfo.Password = password
+		openstackCredsInfo.DomainName = domainName
+		openstackCredsInfo.TenantName = tenantName
+		openstackCredsInfo.RegionName = regionName
+	} else {
+		// Neither authentication method has complete credentials
+		return openstackCredsInfo, fmt.Errorf("missing required fields: either OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD) must be provided")
 	}
 
-	openstackCredsInfo.AuthURL = fields["AuthURL"]
-	openstackCredsInfo.Username = fields["Username"]
-	openstackCredsInfo.Password = fields["Password"]
-	openstackCredsInfo.DomainName = fields["DomainName"]
-	openstackCredsInfo.TenantName = fields["TenantName"]
-	openstackCredsInfo.RegionName = fields["RegionName"]
-
+	// Parse insecure flag
 	insecureStr := string(secret.Data["OS_INSECURE"])
 	openstackCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 

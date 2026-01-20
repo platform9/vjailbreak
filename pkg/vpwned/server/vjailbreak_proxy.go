@@ -152,35 +152,68 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
 	}
 
-	// Extract and validate each field
-	fields := map[string]string{
-		"AuthURL":    string(secret.Data["OS_AUTH_URL"]),
-		"DomainName": string(secret.Data["OS_DOMAIN_NAME"]),
-		"Username":   string(secret.Data["OS_USERNAME"]),
-		"Password":   string(secret.Data["OS_PASSWORD"]),
-		"TenantName": string(secret.Data["OS_TENANT_NAME"]),
-		"RegionName": string(secret.Data["OS_REGION_NAME"]),
+	// Check which authentication method is being used
+	authToken := string(secret.Data["OS_AUTH_TOKEN"])
+	username := string(secret.Data["OS_USERNAME"])
+	password := string(secret.Data["OS_PASSWORD"])
+
+	// Common required fields for both auth methods
+	authURL := string(secret.Data["OS_AUTH_URL"])
+	tenantName := string(secret.Data["OS_TENANT_NAME"])
+	regionName := string(secret.Data["OS_REGION_NAME"])
+
+	// Validate common required fields
+	if authURL == "" {
+		logrus.WithFields(logrus.Fields{"func": fn, "missing_field": "OS_AUTH_URL", "secret": secretName}).Error("Missing field in OpenStack secret")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_AUTH_URL is missing in secret '%s'", secretName)
+	}
+	if tenantName == "" {
+		logrus.WithFields(logrus.Fields{"func": fn, "missing_field": "OS_TENANT_NAME", "secret": secretName}).Error("Missing field in OpenStack secret")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_TENANT_NAME is missing in secret '%s'", secretName)
+	}
+	if regionName == "" {
+		logrus.WithFields(logrus.Fields{"func": fn, "missing_field": "OS_REGION_NAME", "secret": secretName}).Error("Missing field in OpenStack secret")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_REGION_NAME is missing in secret '%s'", secretName)
 	}
 
-	for key, value := range fields {
-		if value == "" {
-			logrus.WithFields(logrus.Fields{"func": fn, "missing_field": key, "secret": secretName}).Error("Missing field in OpenStack secret")
-			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("%s is missing in secret '%s'", key, secretName)
+	var openstackCredsInfo vjailbreakv1alpha1.OpenStackCredsInfo
+
+	// Determine authentication method and validate accordingly
+	if authToken != "" {
+		// Token-based authentication
+		logrus.WithFields(logrus.Fields{"func": fn, "secret": secretName}).Info("Using token-based authentication")
+		openstackCredsInfo.AuthToken = authToken
+		openstackCredsInfo.AuthURL = authURL
+		openstackCredsInfo.TenantName = tenantName
+		openstackCredsInfo.RegionName = regionName
+		// DomainName is optional for token-based auth
+		openstackCredsInfo.DomainName = string(secret.Data["OS_DOMAIN_NAME"])
+	} else if username != "" && password != "" {
+		// Password-based authentication
+		logrus.WithFields(logrus.Fields{"func": fn, "secret": secretName}).Info("Using password-based authentication")
+		domainName := string(secret.Data["OS_DOMAIN_NAME"])
+		if domainName == "" {
+			logrus.WithFields(logrus.Fields{"func": fn, "missing_field": "OS_DOMAIN_NAME", "secret": secretName}).Error("Missing field in OpenStack secret for password-based auth")
+			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_DOMAIN_NAME is missing in secret '%s' for password-based auth", secretName)
 		}
+
+		openstackCredsInfo.AuthURL = authURL
+		openstackCredsInfo.Username = username
+		openstackCredsInfo.Password = password
+		openstackCredsInfo.DomainName = domainName
+		openstackCredsInfo.TenantName = tenantName
+		openstackCredsInfo.RegionName = regionName
+	} else {
+		// Neither authentication method has complete credentials
+		logrus.WithFields(logrus.Fields{"func": fn, "secret": secretName}).Error("Missing authentication credentials")
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("missing required fields in secret '%s': either OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD) must be provided", secretName)
 	}
 
+	// Parse insecure flag
 	insecureStr := string(secret.Data["OS_INSECURE"])
-	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), "true")
+	openstackCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), "true")
 
-	return vjailbreakv1alpha1.OpenStackCredsInfo{
-		AuthURL:    fields["AuthURL"],
-		DomainName: fields["DomainName"],
-		Username:   fields["Username"],
-		Password:   fields["Password"],
-		RegionName: fields["RegionName"],
-		TenantName: fields["TenantName"],
-		Insecure:   insecure,
-	}, nil
+	return openstackCredsInfo, nil
 }
 
 // GetOpenStackClients is a function to create openstack clients
@@ -287,13 +320,27 @@ func ValidateAndGetProviderClient(openstackAccessInfo *vjailbreakv1alpha1.OpenSt
 		return nil, fmt.Errorf("failed to create secure HTTP client")
 	}
 
-	err = openstack.Authenticate(context.TODO(), providerClient, gophercloud.AuthOptions{
+	// Authenticate - support both token-based and password-based authentication
+	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackAccessInfo.AuthURL,
-		Username:         openstackAccessInfo.Username,
-		Password:         openstackAccessInfo.Password,
-		DomainName:       openstackAccessInfo.DomainName,
 		TenantName:       openstackAccessInfo.TenantName,
-	})
+	}
+
+	// Choose authentication method based on available credentials
+	if openstackAccessInfo.AuthToken != "" {
+		// Token-based authentication
+		authOpts.TokenID = openstackAccessInfo.AuthToken
+		if openstackAccessInfo.DomainName != "" {
+			authOpts.DomainName = openstackAccessInfo.DomainName
+		}
+	} else {
+		// Password-based authentication
+		authOpts.Username = openstackAccessInfo.Username
+		authOpts.Password = openstackAccessInfo.Password
+		authOpts.DomainName = openstackAccessInfo.DomainName
+	}
+
+	err = openstack.Authenticate(context.TODO(), providerClient, authOpts)
 	if err != nil {
 		logrus.WithField("func", fn).WithError(err).Error("Failed to authenticate OpenStack provider client")
 		return nil, err

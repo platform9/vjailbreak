@@ -39,10 +39,12 @@ type HostConfig struct {
 type OpenStackCredsInfo struct {
 	// AuthURL is the OpenStack authentication URL
 	AuthURL string
-	// Username is the OpenStack username
+	// Username is the OpenStack username (optional when using token-based auth)
 	Username string
-	// Password is the OpenStack password
+	// Password is the OpenStack password (optional when using token-based auth)
 	Password string
+	// AuthToken is the pre-authenticated OpenStack token (optional, alternative to username/password)
+	AuthToken string
 	// RegionName is the OpenStack region
 	RegionName string
 	// TenantName is the OpenStack tenant
@@ -62,10 +64,10 @@ type SecurityGroupInfo struct {
 
 // ServerGroupInfo holds the server group name, ID, and policy information
 type ServerGroupInfo struct {
-	Name     string `json:"name"`
-	ID       string `json:"id"`
-	Policy   string `json:"policy"`  // affinity, anti-affinity, soft-affinity, soft-anti-affinity
-	Members  int    `json:"members,omitempty"`
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+	Policy  string `json:"policy"` // affinity, anti-affinity, soft-affinity, soft-anti-affinity
+	Members int    `json:"members,omitempty"`
 }
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
