@@ -349,7 +349,7 @@ export default function AddArrayCredentialsDrawer({
             OpenStack Mapping
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Map this array to OpenStack Cinder backend configuration
+            Map this array to PCD backend configuration
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>

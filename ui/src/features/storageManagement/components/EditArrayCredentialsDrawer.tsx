@@ -300,7 +300,7 @@ export default function EditArrayCredentialsDrawer({
               '& .MuiAlert-message': { fontSize: '0.875rem' }
             }}
           >
-            This array was auto-discovered from OpenStack Cinder. You can update the credentials and
+            This array was auto-discovered from PCD. You can update the credentials and
             vendor type as needed.
           </Alert>
         )}
@@ -381,7 +381,7 @@ export default function EditArrayCredentialsDrawer({
             OpenStack Mapping
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Map this array to OpenStack Cinder backend configuration
+            Map this array to PCD backend configuration
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
@@ -548,28 +548,31 @@ export default function EditArrayCredentialsDrawer({
             justifyContent: 'flex-end'
           }}
         >
-          <Button
-            variant="outlined"
-            onClick={handleClose}
-            disabled={isSubmitting || isValidating}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isSubmitting || isValidating || validationStatus === 'success'}
-            startIcon={isSubmitting || isValidating ? <CircularProgress size={20} /> : null}
-          >
-            {isSubmitting
-              ? 'Updating...'
-              : isValidating
-                ? 'Validating...'
-                : validationStatus === 'success'
-                  ? 'Success'
-                  : 'Save Credentials'}
-          </Button>
+          <Box sx={{ mt: 'auto', display: 'flex', gap: 2, justifyContent: 'flex-end', pt: 3 }}>
+            <Button
+              variant="outlined"
+              onClick={handleClose}
+              disabled={isSubmitting || isValidating}
+            >
+              CANCEL
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isSubmitting || isValidating || validationStatus === 'success'}
+              startIcon={isSubmitting || isValidating ? <CircularProgress size={20} /> : null}
+            >
+              {isSubmitting
+                ? 'UPDATING...'
+                : isValidating
+                  ? 'VALIDATING...'
+                  : validationStatus === 'success'
+                    ? 'SUCCESS'
+                    : 'UPDATE'}
+            </Button>
+          </Box>
         </Box>
+
       </Box>
 
       {/* Discard Changes Dialog */}
