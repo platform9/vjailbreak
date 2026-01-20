@@ -503,10 +503,17 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: openstackCredential.AuthURL,
-		Username:         openstackCredential.Username,
-		Password:         openstackCredential.Password,
-		DomainName:       openstackCredential.DomainName,
 		TenantName:       openstackCredential.TenantName,
+	}
+	if openstackCredential.AuthToken != "" {
+		authOpts.TokenID = openstackCredential.AuthToken
+		if openstackCredential.DomainName != "" {
+			authOpts.DomainName = openstackCredential.DomainName
+		}
+	} else {
+		authOpts.Username = openstackCredential.Username
+		authOpts.Password = openstackCredential.Password
+		authOpts.DomainName = openstackCredential.DomainName
 	}
 	if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
 		switch {
