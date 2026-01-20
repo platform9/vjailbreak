@@ -48,7 +48,8 @@ export default function RHFDateTimeField({
       control={control}
       rules={rules}
       render={({ field, fieldState }) => {
-        const value = field.value ? dayjs(String(field.value)) : null
+        const parsed = field.value ? dayjs(String(field.value)) : null
+        const value = parsed && parsed.isValid() ? parsed : null
 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -62,18 +63,25 @@ export default function RHFDateTimeField({
               />
             ) : null}
             <DateTimePicker
-              {...(rest as any)}
+              {...rest}
               ampm={false}
               value={value}
               onChange={(newValue) => {
-                const formatted = newValue?.format() ?? ''
-                field.onChange(formatted)
+                field.onChange(newValue ? newValue.format() : '')
               }}
               onError={(error) => {
                 onPickerError?.(error)
               }}
               slotProps={{
+                popper: {
+                  disablePortal: true,
+                  placement: 'bottom-start'
+                },
                 textField: {
+                  variant: 'outlined',
+                  sx: {
+                    width: '100%'
+                  },
                   size: 'small',
                   required,
                   placeholder,
@@ -83,7 +91,7 @@ export default function RHFDateTimeField({
                 }
               }}
               slots={{
-                textField: (props) => <TextField {...props} />
+                textField: TextField
               }}
             />
           </Box>
