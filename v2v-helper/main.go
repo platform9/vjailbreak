@@ -70,6 +70,10 @@ func main() {
 		vCenterPassword   = strings.TrimSpace(os.Getenv("VCENTER_PASSWORD"))
 		vCenterInsecure   = strings.EqualFold(strings.TrimSpace(os.Getenv("VCENTER_INSECURE")), constants.TrueString)
 		openstackInsecure = strings.EqualFold(strings.TrimSpace(os.Getenv("OS_INSECURE")), constants.TrueString)
+		arrayHost         = strings.TrimSpace(os.Getenv("ARRAY_HOSTNAME"))
+		arrayUser         = strings.TrimSpace(os.Getenv("ARRAY_USERNAME"))
+		arrayPassword     = strings.TrimSpace(os.Getenv("ARRAY_PASSWORD"))
+		arrayInsecure     = strings.EqualFold(strings.TrimSpace(os.Getenv("ARRAY_INSECURE")), constants.TrueString)
 	)
 
 	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -85,6 +89,7 @@ func main() {
 	vcclient, err := vcenter.VCenterClientBuilder(ctx, vCenterUserName, vCenterPassword, vCenterURL, vCenterInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate vCenter connection: %v", err))
+		return
 	}
 	utils.PrintLog(fmt.Sprintf("Connected to vCenter: %s\n", vCenterURL))
 	defer vcclient.VCClient.CloseIdleConnections()
@@ -92,6 +97,7 @@ func main() {
 	openstackclients, err := openstack.NewOpenStackClients(ctx, openstackInsecure)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to validate OpenStack connection: %v", err))
+		return
 	}
 	openstackclients.K8sClient = client
 	utils.PrintLog("Connected to OpenStack")
@@ -100,6 +106,7 @@ func main() {
 	thumbprint, err := vcenter.GetThumbprint(vCenterURL)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get thumbprint: %s", err))
+		return
 	}
 	utils.PrintLog(fmt.Sprintf("VCenter Thumbprint: %s\n", thumbprint))
 
@@ -107,6 +114,7 @@ func main() {
 	vmops, err := vm.VMOpsBuilder(ctx, *vcclient, migrationparams.SourceVMName, client)
 	if err != nil {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
+		return
 	}
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
@@ -147,6 +155,13 @@ func main() {
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
+		StorageCopyMethod:      migrationparams.StorageCopyMethod,
+		ArrayHost:              arrayHost,
+		ArrayUser:              arrayUser,
+		ArrayPassword:          arrayPassword,
+		ArrayInsecure:          arrayInsecure,
+		VendorType:             migrationparams.VendorType,
+		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 	}
 
 	if migrationobj.ServerGroup != "" {
@@ -165,7 +180,7 @@ func main() {
 
 		// Try to power on the VM if migration failed
 		if PreMigrationPowerState == types.VirtualMachinePowerStatePoweredOff {
-		msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
+			msg += fmt.Sprintf("\nDetected Cold Migration. Not powering on VM")
 		} else {
 			powerOnErr := vmops.VMPowerOn()
 			if powerOnErr != nil {

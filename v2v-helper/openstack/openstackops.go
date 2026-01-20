@@ -22,7 +22,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
-	netutils "github.com/platform9/vjailbreak/common/utils"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 )
 
 //go:generate mockgen -source=../openstack/openstackops.go -destination=../openstack/openstackops_mock.go -package=openstack
@@ -50,6 +50,7 @@ type OpenstackOperations interface {
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(ctx context.Context, volumeID string) error
 	FindDevice(volumeID string) (string, error)
+	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
 }
 

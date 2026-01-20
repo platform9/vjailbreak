@@ -27,14 +27,14 @@ import (
 
 var (
 	// MigrationPhaseGauge tracks the current phase of each migration
-	// Labels: migration_name, vm_name, phase, namespace
+	// Labels: migration_name, vm_name, phase, namespace, agent_name
 	// phase values from VMMigrationPhase: Pending, Validating, ValidationFailed, CopyingBlocks, Succeeded, Failed, etc.
 	MigrationPhaseGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "vjailbreak_migration_phase",
 			Help: "Current phase of VM migrations (1=in this phase, 0=not in this phase)",
 		},
-		[]string{"migration_name", "vm_name", "phase", "namespace"},
+		[]string{"migration_name", "vm_name", "phase", "namespace", "agent_name"},
 	)
 
 	// MigrationDurationSeconds tracks how long each migration has been running
@@ -79,7 +79,7 @@ var (
 			Name: "vjailbreak_migration_info",
 			Help: "Information about migrations with labels for metadata (always 1)",
 		},
-		[]string{"migration_name", "vm_name", "namespace", "migration_plan"},
+		[]string{"migration_name", "vm_name", "namespace", "migration_plan", "agent_name"},
 	)
 )
 
@@ -96,14 +96,14 @@ func init() {
 }
 
 // RecordMigrationStarted records when a migration starts
-func RecordMigrationStarted(migrationName, vmName, namespace, migrationPlan string) {
+func RecordMigrationStarted(migrationName, vmName, namespace, migrationPlan, agentName string) {
 	MigrationStartedTotal.WithLabelValues(vmName, namespace).Inc()
-	MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(vjailbreakv1alpha1.VMMigrationPhasePending), namespace).Set(1)
-	MigrationInfo.WithLabelValues(migrationName, vmName, namespace, migrationPlan).Set(1)
+	MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(vjailbreakv1alpha1.VMMigrationPhasePending), namespace, agentName).Set(1)
+	MigrationInfo.WithLabelValues(migrationName, vmName, namespace, migrationPlan, agentName).Set(1)
 }
 
 // UpdateMigrationPhase updates the current phase of a migration
-func UpdateMigrationPhase(migrationName, vmName, namespace string, phase vjailbreakv1alpha1.VMMigrationPhase) {
+func UpdateMigrationPhase(migrationName, vmName, namespace, agentName string, phase vjailbreakv1alpha1.VMMigrationPhase) {
 	// Get all possible phases
 	allPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -122,11 +122,11 @@ func UpdateMigrationPhase(migrationName, vmName, namespace string, phase vjailbr
 
 	// Clear all phases first (set to 0)
 	for _, p := range allPhases {
-		MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(p), namespace).Set(0)
+		MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(p), namespace, agentName).Set(0)
 	}
 
 	// Set current phase to 1
-	MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(phase), namespace).Set(1)
+	MigrationPhaseGauge.WithLabelValues(migrationName, vmName, string(phase), namespace, agentName).Set(1)
 }
 
 // RecordMigrationProgress updates migration duration based on start time
@@ -136,7 +136,7 @@ func RecordMigrationProgress(migrationName, vmName, namespace string, startTime 
 }
 
 // RecordMigrationCompleted records when a migration completes
-func RecordMigrationCompleted(migrationName, vmName, namespace string, phase vjailbreakv1alpha1.VMMigrationPhase) {
+func RecordMigrationCompleted(migrationName, vmName, namespace, agentName string, phase vjailbreakv1alpha1.VMMigrationPhase) {
 	var status string
 	if phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
 		status = "Succeeded"
@@ -145,7 +145,7 @@ func RecordMigrationCompleted(migrationName, vmName, namespace string, phase vja
 	}
 
 	MigrationCompletedTotal.WithLabelValues(vmName, status, namespace).Inc()
-	UpdateMigrationPhase(migrationName, vmName, namespace, phase)
+	UpdateMigrationPhase(migrationName, vmName, namespace, agentName, phase)
 
 	// Clear duration metric for completed migrations
 	MigrationDurationSeconds.DeleteLabelValues(migrationName, vmName, namespace)
@@ -157,7 +157,7 @@ func SetExpectedDuration(namespace string, durationSeconds float64) {
 }
 
 // CleanupMigrationMetrics removes all metrics for a specific migration (when CR is deleted)
-func CleanupMigrationMetrics(migrationName, vmName, namespace, migrationPlan string) {
+func CleanupMigrationMetrics(migrationName, vmName, namespace, migrationPlan, agentName string) {
 	// Clean up all phase metrics
 	allPhases := []vjailbreakv1alpha1.VMMigrationPhase{
 		vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -175,9 +175,9 @@ func CleanupMigrationMetrics(migrationName, vmName, namespace, migrationPlan str
 	}
 
 	for _, phase := range allPhases {
-		MigrationPhaseGauge.DeleteLabelValues(migrationName, vmName, string(phase), namespace)
+		MigrationPhaseGauge.DeleteLabelValues(migrationName, vmName, string(phase), namespace, agentName)
 	}
 
 	MigrationDurationSeconds.DeleteLabelValues(migrationName, vmName, namespace)
-	MigrationInfo.DeleteLabelValues(migrationName, vmName, namespace, migrationPlan)
+	MigrationInfo.DeleteLabelValues(migrationName, vmName, namespace, migrationPlan, agentName)
 }

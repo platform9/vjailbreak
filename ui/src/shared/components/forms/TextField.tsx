@@ -1,10 +1,12 @@
 import { TextField as BaseTextField, TextFieldProps as BaseTextFieldProps } from '@mui/material'
+import { forwardRef } from 'react'
 
 export type TextFieldProps = BaseTextFieldProps
 
-export default function TextField(props: TextFieldProps) {
+const TextField = forwardRef<HTMLDivElement, TextFieldProps>(function TextField(props, ref) {
   return (
     <BaseTextField
+      ref={ref}
       variant="outlined"
       size="small"
       sx={{
@@ -14,4 +16,6 @@ export default function TextField(props: TextFieldProps) {
       {...props}
     />
   )
-}
+})
+
+export default TextField

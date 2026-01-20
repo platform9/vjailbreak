@@ -96,6 +96,17 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
 
+	// StorageAcceleratedCopy specific event messages
+	EventMessageEsxiSSHConnect                       = "Connecting to ESXi"
+	EventMessageEsxiSSHTest                          = "Testing ESXi connection"
+	EventMessageEsxiConnected                        = "Connected to ESXi"
+	EventMessageInitiatorGroup                       = "Creating/updating initiator group"
+	EventMessageStorageAcceleratedCopyCreatingVolume = "Creating target volume"
+	EventMessageStorageAcceleratedCopyCinderManage   = "Cinder managing the volume"
+	EventMessageStorageAcceleratedCopyMappingVolume  = "Mapping target volume"
+	EventMessageStorageAcceleratedCopyRescanStorage  = "Waiting for target volume"
+	EventMessageStorageAcceleratedCopyTargetDevice   = "Target device is visible:"
+
 	OSFamilyWindows = "windowsguest"
 	OSFamilyLinux   = "linuxguest"
 
@@ -157,6 +168,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 
+	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
+	ESXiSSHSecretName = "esxi-ssh-key"
+
 	// AutoFstabUpdate is the default value for automatic fstab update
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
@@ -166,4 +180,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	AutoPXEBootOnConversionDefault = false
 	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
 	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
+
+	// StorageCopyMethod is the default value for storage copy method
+	StorageCopyMethod = "StorageAcceleratedCopy"
 )

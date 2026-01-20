@@ -30,15 +30,15 @@ func (p *PureStorageProvider) Connect(ctx context.Context, accessInfo storage.St
 	p.accessInfo = accessInfo
 	// Create Pure Storage client
 	client, err := flasharray.NewClient(
-		accessInfo.Hostname,            // target
-		accessInfo.Username,            // username
-		accessInfo.Password,            // password
-		"",                             // apiToken
-		"",                             // restVersion
-		true,                           // verifyHTTPS
-		accessInfo.SkipSSLVerification, // sslCert
-		"",                             // userAgent
-		map[string]string{},            // requestKwargs
+		accessInfo.Hostname,             // target
+		accessInfo.Username,             // username
+		accessInfo.Password,             // password
+		"",                              // apiToken
+		"",                              // restVersion
+		!accessInfo.SkipSSLVerification, // verifyHTTPS (opposite of skip)
+		accessInfo.SkipSSLVerification,  // sslCert
+		"",                              // userAgent
+		map[string]string{},             // requestKwargs
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Pure Storage client: %w", err)
@@ -79,6 +79,89 @@ func (p *PureStorageProvider) ValidateCredentials(ctx context.Context) error {
 	return nil
 }
 
+// CreateVolume creates a new volume on the storage array
+func (p *PureStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
+	volume, err := p.client.Volumes.CreateVolume(volumeName, int(size))
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to create volume %s: %w", volumeName, err)
+	}
+	return storage.Volume{
+		Name:         volume.Name,
+		Size:         volume.Size,
+		Id:           "", // Pure sdk doesn't provide volume ID
+		SerialNumber: volume.Serial,
+		NAA:          fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(volume.Serial)),
+	}, nil
+}
+
+// DeleteVolume deletes a volume from the storage array
+func (p *PureStorageProvider) DeleteVolume(volumeName string) error {
+	_, err := p.client.Volumes.DeleteVolume(volumeName)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume %s: %w", volumeName, err)
+	}
+	return nil
+}
+
+// RenameVolume renames a volume on the Pure array to Cinder format
+func (p *PureStorageProvider) RenameVolume(oldName, newName string) error {
+	_, err := p.client.Volumes.RenameVolume(oldName, newName)
+	if err != nil {
+		return fmt.Errorf("failed to rename volume from %s to %s: %w", oldName, newName, err)
+	}
+	klog.Infof("Renamed Pure volume from %s to %s", oldName, newName)
+	return nil
+}
+
+// GetVolumeInfo retrieves information about a volume from the storage array
+func (p *PureStorageProvider) GetVolumeInfo(volumeName string) (storage.VolumeInfo, error) {
+	v, err := p.client.Volumes.GetVolume(volumeName, nil)
+	if err != nil {
+		return storage.VolumeInfo{}, fmt.Errorf("failed to get volume %s: %w", volumeName, err)
+	}
+	return storage.VolumeInfo{
+		Name:    v.Name,
+		Size:    v.Size,
+		Created: v.Created,
+		NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+	}, nil
+}
+
+// ListAllVolumes retrieves all volumes from the Pure Storage array with their NAA identifiers
+func (p *PureStorageProvider) ListAllVolumes() ([]storage.VolumeInfo, error) {
+	volumes, err := p.client.Volumes.ListVolumes(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	var volumeInfos []storage.VolumeInfo
+	for _, v := range volumes {
+		volumeInfos = append(volumeInfos, storage.VolumeInfo{
+			Name:    v.Name,
+			Size:    v.Size,
+			Created: v.Created,
+			NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+		})
+	}
+
+	return volumeInfos, nil
+}
+
+// GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
+func (p *PureStorageProvider) GetAllVolumeNAAs() ([]string, error) {
+	volumes, err := p.ListAllVolumes()
+	if err != nil {
+		return nil, err
+	}
+
+	var naaIdentifiers []string
+	for _, v := range volumes {
+		naaIdentifiers = append(naaIdentifiers, v.NAA)
+	}
+
+	return naaIdentifiers, nil
+}
+
 // CreateOrUpdateInitiatorGroup creates or updates an initiator group with the ESX adapters
 // mapping esxi's hba adapters initiator group to the volume host in pure.
 func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
@@ -98,31 +181,6 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 				klog.Infof("Adding host %s to group (matched IQN: %s)", h.Name, iqn)
 				matchedHosts = append(matchedHosts, h.Name)
 				break
-			}
-		}
-
-		// Check WWNs (Fibre Channel)
-		for _, wwn := range h.Wwn {
-			for _, hostAdapter := range hbaIdentifiers {
-				if !strings.HasPrefix(hostAdapter, "fc.") {
-					continue
-				}
-				adapterWWPN, err := fcUIDToWWPN(hostAdapter)
-				if err != nil {
-					klog.Warningf("Failed to extract WWPN from adapter %s: %s", hostAdapter, err)
-					continue
-				}
-
-				// Format WWNs consistently for comparison
-				formattedHostWwn := strings.ReplaceAll(strings.ToUpper(wwn), ":", "")
-				formattedAdapterWwpn := strings.ReplaceAll(adapterWWPN, ":", "")
-
-				klog.Infof("Comparing ESX adapter WWPN %s with Pure host WWN %s", formattedAdapterWwpn, formattedHostWwn)
-				if formattedAdapterWwpn == formattedHostWwn {
-					klog.Infof("Match found. Adding host %s to mapping context.", h.Name)
-					matchedHosts = append(matchedHosts, h.Name)
-					break
-				}
 			}
 		}
 	}
@@ -193,7 +251,10 @@ func (p *PureStorageProvider) GetMappedGroups(targetVolume storage.Volume, conte
 }
 
 // ResolveCinderVolumeToVolume resolves a Cinder volume name to a storage Volume/LUN
-func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeName string) (storage.Volume, error) {
+func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage.Volume, error) {
+	// Get volume by name
+	// Pure driver adds prefix volume and suffix -cinder to the volume name
+	volumeName := fmt.Sprintf("volume-%s-cinder", volumeID)
 	v, err := p.client.Volumes.GetVolume(volumeName, nil)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("failed to get volume %s: %w", volumeName, err)
@@ -210,31 +271,41 @@ func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeName string) (stora
 	return lun, nil
 }
 
+// GetVolumeFromNAA retrieves a Pure volume by its NAA identifier
+func (p *PureStorageProvider) GetVolumeFromNAA(naaID string) (storage.Volume, error) {
+	// Extract serial number from NAA
+	// NAA format: naa.624a9370<serial_in_lowercase>
+	// Pure provider ID is 624a9370
+	if !strings.HasPrefix(naaID, "naa."+FlashProviderID) {
+		return storage.Volume{}, fmt.Errorf("NAA ID %s is not from Pure FlashArray (expected prefix: naa.%s)", naaID, FlashProviderID)
+	}
+
+	// Extract serial (everything after "naa.624a9370")
+	serial := strings.TrimPrefix(naaID, "naa."+FlashProviderID)
+	serial = strings.ToUpper(serial) // Pure stores serials in uppercase
+
+	// List all volumes and find matching serial
+	volumes, err := p.client.Volumes.ListVolumes(nil)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	for _, v := range volumes {
+		if strings.ToUpper(v.Serial) == serial {
+			klog.Infof("Found Pure volume %s with serial %s matching NAA %s", v.Name, v.Serial, naaID)
+			return storage.Volume{
+				Name:         v.Name,
+				Size:         v.Size,
+				SerialNumber: v.Serial,
+				NAA:          naaID,
+			}, nil
+		}
+	}
+
+	return storage.Volume{}, fmt.Errorf("no Pure volume found with NAA %s (serial: %s)", naaID, serial)
+}
+
 // WhoAmI returns the provider name
 func (p *PureStorageProvider) WhoAmI() string {
 	return "pure"
-}
-
-// fcUIDToWWPN extracts the WWPN (port name) from an ESXi fcUid string.
-// The expected input is of the form: 'fc.WWNN:WWPN' where the WWNN and WWPN
-// are not separated with colons every byte (2 hex chars) like 00:00:00:00:00:00:00:00
-func fcUIDToWWPN(fcUid string) (string, error) {
-	if !strings.HasPrefix(fcUid, "fc.") {
-		return "", fmt.Errorf("fcUid %q doesn't start with 'fc.'", fcUid)
-	}
-	parts := strings.Split(fcUid[3:], ":")
-	if len(parts) != 2 || len(parts[1]) == 0 {
-		return "", fmt.Errorf("fcUid %q is not in the expected fc.WWNN:WWPN format", fcUid)
-	}
-
-	wwpn := strings.ToUpper(parts[1])
-	if len(wwpn)%2 != 0 {
-		return "", fmt.Errorf("WWPN %q length isn't even", wwpn)
-	}
-
-	var formattedParts []string
-	for i := 0; i < len(wwpn); i += 2 {
-		formattedParts = append(formattedParts, wwpn[i:i+2])
-	}
-	return strings.Join(formattedParts, ":"), nil
 }

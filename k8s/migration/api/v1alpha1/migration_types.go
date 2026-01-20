@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -58,6 +58,21 @@ const (
 	VMMigrationPhaseFailed VMMigrationPhase = "Failed"
 	// VMMigrationPhaseUnknown indicates the migration state is unknown
 	VMMigrationPhaseUnknown VMMigrationPhase = "Unknown"
+
+	// VMMigrationPhaseConnectingToESXi indicates SSH connection to ESXi host is being established (StorageAcceleratedCopy specific phase)
+	VMMigrationPhaseConnectingToESXi VMMigrationPhase = "ConnectingToESXi"
+	// VMMigrationPhaseCreatingInitiatorGroup indicates initiator group is being created/updated
+	VMMigrationPhaseCreatingInitiatorGroup VMMigrationPhase = "CreatingInitiatorGroup"
+	// VMMigrationPhaseCreatingVolume indicates volume is being created on storage array
+	VMMigrationPhaseCreatingVolume VMMigrationPhase = "CreatingVolume"
+	// VMMigrationPhaseImportingToCinder indicates volume is being imported to OpenStack Cinder
+	VMMigrationPhaseImportingToCinder VMMigrationPhase = "ImportingToCinder"
+	// VMMigrationPhaseMappingVolume indicates volume is being mapped to ESXi host
+	VMMigrationPhaseMappingVolume VMMigrationPhase = "MappingVolume"
+	// VMMigrationPhaseRescanningStorage indicates ESXi storage adapters are being rescanned
+	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
+	// VMMigrationPhaseStorageAcceleratedCopyInProgress indicates StorageAcceleratedCopy operation is in progress
+	VMMigrationPhaseStorageAcceleratedCopyInProgress VMMigrationPhase = "StorageAcceleratedCopyInProgress"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -82,6 +97,11 @@ type MigrationSpec struct {
 	// AssignedIP is the comma-separated list of user-assigned IPs for cold migration
 	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
 	AssignedIP string `json:"assignedIP,omitempty"`
+
+	// MigrationType indicates whether this is a hot (live) or cold migration
+	// +optional
+	// +kubebuilder:validation:Enum=hot;cold
+	MigrationType string `json:"migrationType,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
@@ -94,6 +114,20 @@ type MigrationStatus struct {
 
 	// AgentName is the name of the agent where migration is running
 	AgentName string `json:"agentName,omitempty"`
+
+	// CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
+	// Extracted from migration pod events
+	// +optional
+	CurrentDisk string `json:"currentDisk,omitempty"`
+
+	// TotalDisks is the total number of disks to be migrated
+	// +optional
+	TotalDisks int `json:"totalDisks,omitempty"`
+	// Retryable indicates whether this migration can be retried when it fails.
+	// Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
+	// as RDM disk migration state prevents automatic retry.
+	// +optional
+	Retryable *bool `json:"retryable,omitempty"`
 }
 
 // +kubebuilder:object:root=true

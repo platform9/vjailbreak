@@ -137,3 +137,18 @@ export const formatDiskSize = (bytes: number): string => {
   const size = bytes / Math.pow(1024, i)
   return `${parseFloat(size.toFixed(1))} ${units[i]}`
 }
+
+export const formatDateTime = (value: unknown) => {
+  if (!value) return '-'
+  const d = value instanceof Date ? value : new Date(String(value))
+  if (Number.isNaN(d.getTime())) return '-'
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}

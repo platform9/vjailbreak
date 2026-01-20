@@ -45,6 +45,11 @@ spec:
             description: MigrationTemplateSpec defines the desired state of MigrationTemplate
               including source/destination environments and mappings
             properties:
+              arrayCredsMapping:
+                description: |-
+                  ArrayCredsMapping is the reference to the ArrayCredsMapping resource that defines datastore to ArrayCreds mappings
+                  This is used for StorageAcceleratedCopy data copy method
+                type: string
               destination:
                 description: Destination is the destination details for the virtual
                   machine
@@ -76,9 +81,19 @@ spec:
                 required:
                 - vmwareRef
                 type: object
+              storageCopyMethod:
+                default: normal
+                description: |-
+                  StorageCopyMethod indicates the method to use for storage migration
+                  Valid values: "normal" (default), "StorageAcceleratedCopy"
+                enum:
+                - normal
+                - StorageAcceleratedCopy
+                type: string
               storageMapping:
-                description: StorageMapping is the reference to the StorageMapping
-                  resource that defines source to destination storage mappings
+                description: |-
+                  StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
+                  This is used for normal data copy method
                 type: string
               targetPCDClusterName:
                 description: TargetPCDClusterName is the name of the PCD cluster where
@@ -100,7 +115,6 @@ spec:
             - destination
             - networkMapping
             - source
-            - storageMapping
             type: object
         type: object
     served: true
