@@ -45,12 +45,13 @@ export const createSecret = async (
 export const createOpenstackCredsSecret = async (
   name: string,
   credentials: {
-    OS_USERNAME: string
-    OS_PASSWORD: string
+    OS_USERNAME?: string
+    OS_PASSWORD?: string
+    OS_AUTH_TOKEN?: string
     OS_AUTH_URL: string
     OS_PROJECT_NAME?: string
     OS_TENANT_NAME?: string
-    OS_DOMAIN_NAME: string
+    OS_DOMAIN_NAME?: string
     OS_REGION_NAME?: string
     OS_INSECURE?: boolean
   },
@@ -58,10 +59,24 @@ export const createOpenstackCredsSecret = async (
 ) => {
   // Prepare data for the secret
   const secretData: SecretData = {
-    OS_USERNAME: credentials.OS_USERNAME,
-    OS_PASSWORD: credentials.OS_PASSWORD,
-    OS_AUTH_URL: credentials.OS_AUTH_URL,
-    OS_DOMAIN_NAME: credentials.OS_DOMAIN_NAME
+    OS_AUTH_URL: credentials.OS_AUTH_URL
+  }
+
+  // Add authentication fields - either token or username/password
+  if (credentials.OS_AUTH_TOKEN) {
+    secretData.OS_AUTH_TOKEN = credentials.OS_AUTH_TOKEN
+  }
+  
+  if (credentials.OS_USERNAME) {
+    secretData.OS_USERNAME = credentials.OS_USERNAME
+  }
+  
+  if (credentials.OS_PASSWORD) {
+    secretData.OS_PASSWORD = credentials.OS_PASSWORD
+  }
+  
+  if (credentials.OS_DOMAIN_NAME) {
+    secretData.OS_DOMAIN_NAME = credentials.OS_DOMAIN_NAME
   }
 
   // Add optional fields if they exist
