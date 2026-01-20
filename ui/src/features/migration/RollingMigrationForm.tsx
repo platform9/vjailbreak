@@ -83,6 +83,7 @@ import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { DrawerShell, DrawerHeader, DrawerFooter, SectionNav, SurfaceCard } from 'src/components'
 import type { SectionNavItem } from 'src/components'
 import { useTheme } from '@mui/material/styles'
+import { FormProvider, useForm, useWatch } from 'react-hook-form'
 
 // Define types for MigrationOptions
 interface FormValues extends Record<string, unknown> {
@@ -95,6 +96,14 @@ interface FormValues extends Record<string, unknown> {
   osFamily?: string
 }
 
+type RollingMigrationRHFValues = {
+  dataCopyStartTime: string
+  cutoverStartTime: string
+  cutoverEndTime: string
+  postMigrationActionSuffix: string
+  postMigrationActionFolderName: string
+}
+
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
@@ -103,17 +112,29 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
+  postMigrationAction?: {
+    suffix?: boolean
+    folderName?: boolean
+    renameVm?: boolean
+    moveToFolder?: boolean
+  }
 }
 
 // Default state for checkboxes
-const defaultMigrationOptions = {
+const defaultMigrationOptions: SelectedMigrationOptionsType = {
   dataCopyMethod: false,
   dataCopyStartTime: false,
   cutoverOption: false,
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  osFamily: false
+  osFamily: false,
+  postMigrationAction: {
+    suffix: false,
+    folderName: false,
+    renameVm: false,
+    moveToFolder: false
+  }
 }
 
 type FieldErrors = { [formId: string]: string }
@@ -336,6 +357,28 @@ export default function RollingMigrationFormDrawer({
     },
     []
   )
+
+  const rhfForm = useForm<RollingMigrationRHFValues, any, RollingMigrationRHFValues>({
+    defaultValues: {
+      dataCopyStartTime: params.dataCopyStartTime ?? '',
+      cutoverStartTime: params.cutoverStartTime ?? '',
+      cutoverEndTime: params.cutoverEndTime ?? '',
+      postMigrationActionSuffix: (params as any)?.postMigrationAction?.suffix ?? '',
+      postMigrationActionFolderName: (params as any)?.postMigrationAction?.folderName ?? ''
+    }
+  })
+
+  const rhfDataCopyStartTime = useWatch({ control: rhfForm.control, name: 'dataCopyStartTime' })
+  const rhfCutoverStartTime = useWatch({ control: rhfForm.control, name: 'cutoverStartTime' })
+  const rhfCutoverEndTime = useWatch({ control: rhfForm.control, name: 'cutoverEndTime' })
+  const rhfPostMigrationActionSuffix = useWatch({
+    control: rhfForm.control,
+    name: 'postMigrationActionSuffix'
+  })
+  const rhfPostMigrationActionFolderName = useWatch({
+    control: rhfForm.control,
+    name: 'postMigrationActionFolderName'
+  })
   const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
     useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
@@ -410,6 +453,107 @@ export default function RollingMigrationFormDrawer({
       fetchMaasConfigs()
     }
   }, [open])
+
+  useEffect(() => {
+    const nextDataCopyStartTime = params.dataCopyStartTime ?? ''
+    const nextCutoverStartTime = params.cutoverStartTime ?? ''
+    const nextCutoverEndTime = params.cutoverEndTime ?? ''
+    const nextPostMigrationActionSuffix = (params as any)?.postMigrationAction?.suffix ?? ''
+    const nextPostMigrationActionFolderName = (params as any)?.postMigrationAction?.folderName ?? ''
+
+    const currentDataCopyStartTime = rhfForm.getValues('dataCopyStartTime') ?? ''
+    const currentCutoverStartTime = rhfForm.getValues('cutoverStartTime') ?? ''
+    const currentCutoverEndTime = rhfForm.getValues('cutoverEndTime') ?? ''
+    const currentPostMigrationActionSuffix = rhfForm.getValues('postMigrationActionSuffix') ?? ''
+    const currentPostMigrationActionFolderName =
+      rhfForm.getValues('postMigrationActionFolderName') ?? ''
+
+    if (currentDataCopyStartTime !== nextDataCopyStartTime) {
+      rhfForm.setValue('dataCopyStartTime', nextDataCopyStartTime)
+    }
+    if (currentCutoverStartTime !== nextCutoverStartTime) {
+      rhfForm.setValue('cutoverStartTime', nextCutoverStartTime)
+    }
+    if (currentCutoverEndTime !== nextCutoverEndTime) {
+      rhfForm.setValue('cutoverEndTime', nextCutoverEndTime)
+    }
+    if (currentPostMigrationActionSuffix !== nextPostMigrationActionSuffix) {
+      rhfForm.setValue('postMigrationActionSuffix', nextPostMigrationActionSuffix)
+    }
+    if (currentPostMigrationActionFolderName !== nextPostMigrationActionFolderName) {
+      rhfForm.setValue('postMigrationActionFolderName', nextPostMigrationActionFolderName)
+    }
+  }, [
+    params.dataCopyStartTime,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    (params as any)?.postMigrationAction?.suffix,
+    (params as any)?.postMigrationAction?.folderName,
+    rhfForm
+  ])
+
+  useEffect(() => {
+    const next = String(rhfDataCopyStartTime ?? '')
+    const normalized = next.trim() ? next.trim() : ''
+    const current = String(params.dataCopyStartTime ?? '')
+    if (normalized !== current) {
+      getParamsUpdater('dataCopyStartTime')(normalized)
+    }
+  }, [getParamsUpdater, params.dataCopyStartTime, rhfDataCopyStartTime])
+
+  useEffect(() => {
+    const next = String(rhfCutoverStartTime ?? '')
+    const normalized = next.trim() ? next.trim() : ''
+    const current = String(params.cutoverStartTime ?? '')
+    if (normalized !== current) {
+      getParamsUpdater('cutoverStartTime')(normalized)
+    }
+  }, [getParamsUpdater, params.cutoverStartTime, rhfCutoverStartTime])
+
+  useEffect(() => {
+    const next = String(rhfCutoverEndTime ?? '')
+    const normalized = next.trim() ? next.trim() : ''
+    const current = String(params.cutoverEndTime ?? '')
+    if (normalized !== current) {
+      getParamsUpdater('cutoverEndTime')(normalized)
+    }
+  }, [getParamsUpdater, params.cutoverEndTime, rhfCutoverEndTime])
+
+  useEffect(() => {
+    const nextSuffix = String(rhfPostMigrationActionSuffix ?? '')
+    const normalized = nextSuffix.trim() ? nextSuffix.trim() : ''
+    const current = (params as any)?.postMigrationAction?.suffix ?? ''
+
+    if (normalized !== current && selectedMigrationOptions?.postMigrationAction?.renameVm) {
+      getParamsUpdater('postMigrationAction')({
+        ...(params as any)?.postMigrationAction,
+        suffix: normalized
+      })
+    }
+  }, [
+    getParamsUpdater,
+    (params as any)?.postMigrationAction,
+    rhfPostMigrationActionSuffix,
+    selectedMigrationOptions?.postMigrationAction?.renameVm
+  ])
+
+  useEffect(() => {
+    const nextFolderName = String(rhfPostMigrationActionFolderName ?? '')
+    const normalized = nextFolderName.trim() ? nextFolderName.trim() : ''
+    const current = (params as any)?.postMigrationAction?.folderName ?? ''
+
+    if (normalized !== current && selectedMigrationOptions?.postMigrationAction?.moveToFolder) {
+      getParamsUpdater('postMigrationAction')({
+        ...(params as any)?.postMigrationAction,
+        folderName: normalized
+      })
+    }
+  }, [
+    getParamsUpdater,
+    (params as any)?.postMigrationAction,
+    rhfPostMigrationActionFolderName,
+    selectedMigrationOptions?.postMigrationAction?.moveToFolder
+  ])
 
   const fetchMaasConfigs = async () => {
     try {
@@ -1255,6 +1399,7 @@ export default function RollingMigrationFormDrawer({
   const section4Ref = React.useRef<HTMLDivElement | null>(null)
   const section5Ref = React.useRef<HTMLDivElement | null>(null)
   const section6Ref = React.useRef<HTMLDivElement | null>(null)
+  const section7Ref = React.useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -1321,15 +1466,29 @@ export default function RollingMigrationFormDrawer({
     }
   }, [open])
 
-  const step1HasErrors = Boolean(!sourceCluster || !destinationPCD)
+  const step1HasErrors = false
 
-  const step2HasErrors = Boolean(!selectedMaasConfig)
+  const step2HasErrors = false
 
-  const step3HasErrors = Boolean(esxHostConfigValidation.hasError)
+  const step3HasErrors = Boolean(touchedSections.hosts && Boolean(esxHostConfigValidationError))
 
-  const step4HasErrors = Boolean(vmIpValidation.hasError || osValidation.hasError)
+  const step4HasErrors = Boolean(
+    touchedSections.vms && Boolean(vmIpValidationError || osValidationError)
+  )
 
-  const step5HasErrors = Boolean(networkMappingError || storageMappingError)
+  const step5HasErrors = Boolean(
+    touchedSections.mapResources && Boolean(networkMappingError || storageMappingError)
+  )
+
+  const step6HasErrors = Boolean(
+    touchedSections.options &&
+      ((selectedMigrationOptions.dataCopyStartTime && fieldErrors['dataCopyStartTime']) ||
+        (selectedMigrationOptions.cutoverOption &&
+          (fieldErrors['cutoverOption'] ||
+            (params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+              (fieldErrors['cutoverStartTime'] || fieldErrors['cutoverEndTime'])))) ||
+        (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript']))
+  )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
@@ -1337,61 +1496,70 @@ export default function RollingMigrationFormDrawer({
         id: 'source-destination',
         title: 'Source And Destination',
         description: 'Pick clusters',
-        status: step1HasErrors
-          ? 'attention'
-          : touchedSections.sourceDestination && sourceCluster && destinationPCD
+        status:
+          touchedSections.sourceDestination && sourceCluster && destinationPCD
             ? 'complete'
-            : 'incomplete'
+            : step1HasErrors
+              ? 'attention'
+              : 'incomplete'
       },
       {
         id: 'baremetal',
         title: 'Bare Metal Config',
         description: 'Verify configuration',
-        status: step2HasErrors
-          ? 'attention'
-          : touchedSections.baremetal && selectedMaasConfig
+        status:
+          touchedSections.baremetal && selectedMaasConfig
             ? 'complete'
-            : 'incomplete'
+            : step2HasErrors
+              ? 'attention'
+              : 'incomplete'
       },
       {
         id: 'hosts',
         title: 'ESXi Hosts',
         description: 'Assign host configs',
-        status: step3HasErrors
-          ? 'attention'
-          : touchedSections.hosts && orderedESXHosts.length > 0
+        status:
+          touchedSections.hosts && orderedESXHosts.length > 0
             ? 'complete'
-            : 'incomplete'
+            : step3HasErrors
+              ? 'attention'
+              : 'incomplete'
       },
       {
         id: 'vms',
         title: 'Select VMs',
         description: 'Choose VMs and required fields',
-        status: step4HasErrors
-          ? 'attention'
-          : touchedSections.vms && selectedVMs.length > 0
+        status:
+          touchedSections.vms && selectedVMs.length > 0
             ? 'complete'
-            : 'incomplete'
+            : step4HasErrors
+              ? 'attention'
+              : 'incomplete'
       },
       {
         id: 'map-resources',
         title: 'Map Networks And Storage',
         description: 'Map VMware resources to PCD',
-        status: step5HasErrors
-          ? 'attention'
-          : touchedSections.mapResources &&
-              sourceCluster &&
-              destinationPCD &&
-              availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
-              availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+        status:
+          touchedSections.mapResources &&
+          sourceCluster &&
+          destinationPCD &&
+          availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
+          availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
             ? 'complete'
-            : 'incomplete'
+            : step5HasErrors
+              ? 'attention'
+              : 'incomplete'
       },
       {
         id: 'options',
         title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: touchedSections.options ? 'complete' : 'incomplete'
+        status: step6HasErrors
+          ? 'attention'
+          : touchedSections.options && !step6HasErrors
+            ? 'complete'
+            : 'incomplete'
       }
     ],
     [
@@ -1409,11 +1577,17 @@ export default function RollingMigrationFormDrawer({
       availableVmwareDatastores,
       networkMappings,
       storageMappings,
+      params.cutoverOption,
+      selectedMigrationOptions.cutoverOption,
+      selectedMigrationOptions.dataCopyStartTime,
+      selectedMigrationOptions.postMigrationScript,
+      fieldErrors,
       step1HasErrors,
       step2HasErrors,
       step3HasErrors,
       step4HasErrors,
       step5HasErrors,
+      step6HasErrors,
       touchedSections
     ]
   )
@@ -1436,18 +1610,16 @@ export default function RollingMigrationFormDrawer({
 
   const onOptionsChange = useCallback(
     (key: string | number) => (value: any) => {
-      markTouched('options')
       return (getParamsUpdater as any)(key)(value)
     },
-    [getParamsUpdater, markTouched]
+    [getParamsUpdater]
   )
 
   const onOptionsSelectionChange = useCallback(
     (key: string | number) => (value: any) => {
-      markTouched('options')
       return (updateSelectedMigrationOptions as any)(key)(value)
     },
-    [markTouched, updateSelectedMigrationOptions]
+    [updateSelectedMigrationOptions]
   )
 
   const uniqueVmwareNetworks = useMemo(() => {
@@ -2387,46 +2559,45 @@ export default function RollingMigrationFormDrawer({
           }
         }}
       />
-      <DrawerShell
-        data-testid="rolling-migration-form-drawer"
-        open={open}
-        onClose={handleClose}
-        width={drawerWidth}
-        ModalProps={{
-          keepMounted: false,
-          style: { zIndex: 1300 }
-        }}
-        header={
-          <DrawerHeader
-            data-testid="rolling-migration-form-header"
-            title="Start Cluster Conversion"
-            subtitle="Select source/destination, configure hosts and VMs, map resources, and start"
-            icon={<ClusterIcon />}
-            onClose={handleClose}
-          />
-        }
-        footer={
-          <DrawerFooter data-testid="rolling-migration-form-footer">
-            <ActionButton
-              tone="secondary"
-              onClick={handleClose}
-              data-testid="rolling-migration-form-cancel"
-            >
-              Cancel
-            </ActionButton>
-            <ActionButton
-              tone="primary"
-              onClick={handleSubmit}
-              disabled={isSubmitDisabled}
-              loading={submitting}
-              data-testid="rolling-migration-form-submit"
-            >
-              Start Conversion
-            </ActionButton>
-          </DrawerFooter>
-        }
-      >
-        <DesignSystemForm form={form} onSubmit={async () => {}}>
+      <FormProvider {...rhfForm}>
+        <DrawerShell
+          data-testid="rolling-migration-form-drawer"
+          open={open}
+          onClose={handleClose}
+          width={drawerWidth}
+          ModalProps={{
+            keepMounted: false,
+            style: { zIndex: 1300 }
+          }}
+          header={
+            <DrawerHeader
+              data-testid="rolling-migration-form-header"
+              icon={<ClusterIcon />}
+              title="Rolling Cluster Conversion"
+            />
+          }
+          footer={
+            <DrawerFooter data-testid="rolling-migration-form-footer">
+              <ActionButton
+                tone="secondary"
+                onClick={handleClose}
+                disabled={submitting}
+                data-testid="rolling-migration-form-cancel"
+              >
+                Cancel
+              </ActionButton>
+              <ActionButton
+                tone="primary"
+                onClick={handleSubmit}
+                disabled={isSubmitDisabled}
+                loading={submitting}
+                data-testid="rolling-migration-form-submit"
+              >
+                Start Conversion
+              </ActionButton>
+            </DrawerFooter>
+          }
+        >
           <Box
             ref={contentRootRef}
             data-testid="rolling-migration-form-content"
@@ -2436,373 +2607,378 @@ export default function RollingMigrationFormDrawer({
               gap: 3
             }}
           >
-          {!isSmallNav ? (
-            <SectionNav
-              data-testid="rolling-migration-form-section-nav"
-              items={sectionNavItems}
-              activeId={activeSectionId}
-              onSelect={scrollToSection}
-              dense
-              showDescriptions={false}
-            />
-          ) : null}
-
-          <Box sx={{ display: 'grid', gap: 3 }}>
-            {isSmallNav ? (
-              <SurfaceCard
-                title="Steps"
-                subtitle="Jump to any section"
-                data-testid="rolling-migration-form-steps-card"
-              >
-                <Select
-                  size="small"
-                  value={activeSectionId}
-                  onChange={(e) => scrollToSection(e.target.value as string)}
-                  fullWidth
-                  data-testid="rolling-migration-form-steps-select"
-                >
-                  {sectionNavItems.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.title}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </SurfaceCard>
+            {!isSmallNav ? (
+              <SectionNav
+                data-testid="rolling-migration-form-section-nav"
+                items={sectionNavItems}
+                activeId={activeSectionId}
+                onSelect={scrollToSection}
+                dense
+                showDescriptions={false}
+              />
             ) : null}
 
-            <Box ref={section1Ref} data-testid="rolling-migration-form-step-source-destination">
-              <SurfaceCard
-                variant="section"
-                title="Source And Destination"
-                subtitle="Choose where you convert from and where you convert to"
-                data-testid="rolling-migration-form-step1-card"
-              >
-                <SourceDestinationClusterSelection
-                  onChange={() => () => {}}
-                  errors={{}}
-                  onVmwareClusterChange={handleSourceClusterChange}
-                  onPcdClusterChange={handleDestinationPCDChange}
-                  vmwareCluster={sourceCluster}
-                  pcdCluster={destinationPCD}
-                  loadingVMware={loading}
-                  loadingPCD={loadingPCD}
-                  showHeader={false}
-                />
-              </SurfaceCard>
-            </Box>
-
-            <Divider />
-
-            <Box ref={section2Ref} data-testid="rolling-migration-form-step-baremetal">
-              <SurfaceCard
-                variant="section"
-                title="Bare Metal Config"
-                subtitle="Verify the selected configuration"
-                data-testid="rolling-migration-form-step2-card"
-              >
-                {loadingMaasConfig ? (
-                  <Typography variant="body2">Loading Bare Metal Config...</Typography>
-                ) : maasConfigs.length === 0 ? (
-                  <Typography variant="body2">No Bare Metal Config available</Typography>
-                ) : (
-                  <Typography
-                    variant="subtitle2"
-                    component="a"
-                    data-testid="rolling-migration-form-baremetal-view-details"
-                    sx={{
-                      color: 'primary.main',
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                    onClick={handleViewMaasConfig}
+            <Box sx={{ display: 'grid', gap: 3 }}>
+              {isSmallNav ? (
+                <SurfaceCard
+                  title="Steps"
+                  subtitle="Jump to any section"
+                  data-testid="rolling-migration-form-steps-card"
+                >
+                  <Select
+                    size="small"
+                    value={activeSectionId}
+                    onChange={(e) => scrollToSection(e.target.value as string)}
+                    fullWidth
+                    data-testid="rolling-migration-form-steps-select"
                   >
-                    View Bare Metal Config Details
-                  </Typography>
-                )}
-              </SurfaceCard>
-            </Box>
+                    {sectionNavItems.map((item) => (
+                      <MenuItem key={item.id} value={item.id}>
+                        {item.title}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </SurfaceCard>
+              ) : null}
 
-            <Divider />
-
-            <Box ref={section3Ref} data-testid="rolling-migration-form-step-hosts">
-              <SurfaceCard
-                variant="section"
-                title="ESXi Hosts"
-                subtitle="Assign PCD host configurations to all ESXi hosts"
-                data-testid="rolling-migration-form-step3-card"
-              >
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 1
-                  }}
+              <Box ref={section1Ref} data-testid="rolling-migration-form-step-source-destination">
+                <SurfaceCard
+                  variant="section"
+                  title="Source And Destination"
+                  subtitle="Choose where you convert from and where you convert to"
+                  data-testid="rolling-migration-form-step1-card"
                 >
-                  <Typography variant="body2" color="text.secondary">
-                    Select ESXi hosts and assign PCD host configurations
-                  </Typography>
-                  {esxHostMappingStatus.fullyMapped && esxHostMappingStatus.total > 0 ? (
-                    <Typography variant="body2" color="success.main">
-                      All hosts mapped ✓
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="warning.main">
-                      {esxHostMappingStatus.mapped} of {esxHostMappingStatus.total} hosts unmapped
-                    </Typography>
-                  )}
-                </Box>
-                <Paper
-                  sx={{ width: '100%', height: 389 }}
-                  data-testid="rolling-migration-form-hosts-grid"
-                >
-                  <DataGrid
-                    rows={orderedESXHosts}
-                    columns={esxColumns}
-                    initialState={{
-                      pagination: { paginationModel },
-                      columns: {
-                        columnVisibilityModel: {}
-                      }
-                    }}
-                    pageSizeOptions={[5, 10, 25]}
-                    rowHeight={45}
-                    slots={{
-                      toolbar: (props) => (
-                        <CustomESXToolbarWithActions
-                          {...props}
-                          onAssignHostConfig={handleOpenPcdHostConfigDialog}
-                        />
-                      )
-                    }}
-                    disableColumnMenu
-                    disableColumnFilter
-                    loading={loadingHosts}
-                  />
-                </Paper>
-                {esxHostConfigValidationError && (
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    {esxHostConfigValidationError}
-                  </Alert>
-                )}
-              </SurfaceCard>
-            </Box>
-
-            <Divider />
-
-            <Box ref={section4Ref} data-testid="rolling-migration-form-step-vms">
-              <SurfaceCard
-                variant="section"
-                title="Select VMs"
-                subtitle="Choose the virtual machines to convert and assign required fields"
-                data-testid="rolling-migration-form-step4-card"
-              >
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1, display: 'block', mb: 1 }}
-                >
-                  Tip: Powered-off VMs require IP Address and OS assignment for proper migration
-                  configuration
-                </Typography>
-                <Paper
-                  sx={{ width: '100%', height: 389 }}
-                  data-testid="rolling-migration-form-vms-grid"
-                >
-                  <DataGrid
-                    rows={vmsWithAssignments}
-                    columns={vmColumns}
-                    initialState={{
-                      pagination: { paginationModel },
-                      columns: {
-                        columnVisibilityModel: {}
-                      }
-                    }}
-                    pageSizeOptions={[5, 10, 25]}
-                    rowHeight={52}
-                    checkboxSelection
-                    onRowSelectionModelChange={(selectedRowIds) => {
-                      markTouched('vms')
-                      setSelectedVMs(selectedRowIds)
-                    }}
-                    rowSelectionModel={selectedVMs.filter((vmId) =>
-                      vmsWithAssignments.some((vm) => vm.id === vmId)
-                    )}
-                    slots={{
-                      toolbar: (props) => (
-                        <CustomToolbarWithActions
-                          {...props}
-                          rowSelectionModel={selectedVMs.filter((vmId) =>
-                            vmsWithAssignments.some((vm) => vm.id === vmId)
-                          )}
-                          onAssignFlavor={handleOpenFlavorDialog}
-                          onAssignIP={handleOpenBulkIPAssignment}
-                          hasPoweredOffVMs={selectedVMs.some((vmId) => {
-                            const vm = vmsWithAssignments.find((v) => v.id === vmId)
-                            return vm && vm.powerState === 'powered-off'
-                          })}
-                        />
-                      ),
-                      noRowsOverlay: () => (
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: '100%',
-                            p: 2
-                          }}
-                        >
-                          <Typography
-                            variant="body1"
-                            color="text.secondary"
-                            align="center"
-                            sx={{ mb: 1 }}
-                          >
-                            {loadingVMs
-                              ? 'Loading VMs...'
-                              : 'No VMs found for the selected cluster.'}
-                          </Typography>
-                        </Box>
-                      )
-                    }}
-                    disableColumnFilter
-                    disableRowSelectionOnClick
-                    loading={loadingVMs}
-                  />
-                </Paper>
-                {vmIpValidationError && (
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    {vmIpValidationError}
-                  </Alert>
-                )}
-                {osValidationError && (
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    {osValidationError}
-                  </Alert>
-                )}
-              </SurfaceCard>
-            </Box>
-
-            <Divider />
-
-            <Box ref={section5Ref} data-testid="rolling-migration-form-step-map-resources">
-              <SurfaceCard
-                variant="section"
-                title="Map Networks And Storage"
-                subtitle="Ensure VMware networks/datastores have PCD targets"
-                data-testid="rolling-migration-form-step5-card"
-              >
-                {sourceCluster && destinationPCD ? (
-                  <NetworkAndStorageMappingStep
-                    vmwareNetworks={availableVmwareNetworks}
-                    vmWareStorage={availableVmwareDatastores}
-                    openstackNetworks={openstackNetworks}
-                    openstackStorage={openstackVolumeTypes}
-                    params={{
-                      networkMappings: networkMappings,
-                      storageMappings: storageMappings
-                    }}
-                    onChange={handleMappingsChange}
-                    networkMappingError={networkMappingError}
-                    storageMappingError={storageMappingError}
-                    loading={loadingOpenstackDetails}
+                  <SourceDestinationClusterSelection
+                    onChange={() => () => {}}
+                    errors={{}}
+                    onVmwareClusterChange={handleSourceClusterChange}
+                    onPcdClusterChange={handleDestinationPCDChange}
+                    vmwareCluster={sourceCluster}
+                    pcdCluster={destinationPCD}
+                    loadingVMware={loading}
+                    loadingPCD={loadingPCD}
                     showHeader={false}
                   />
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    Please select both source cluster and destination PCD to configure mappings.
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box ref={section2Ref} data-testid="rolling-migration-form-step-baremetal">
+                <SurfaceCard
+                  variant="section"
+                  title="Bare Metal Config"
+                  subtitle="Verify the selected configuration"
+                  data-testid="rolling-migration-form-step2-card"
+                >
+                  {loadingMaasConfig ? (
+                    <Typography variant="body2">Loading Bare Metal Config...</Typography>
+                  ) : maasConfigs.length === 0 ? (
+                    <Typography variant="body2">No Bare Metal Config available</Typography>
+                  ) : (
+                    <Typography
+                      variant="subtitle2"
+                      component="a"
+                      data-testid="rolling-migration-form-baremetal-view-details"
+                      sx={{
+                        color: 'primary.main',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                      onClick={handleViewMaasConfig}
+                    >
+                      View Bare Metal Config Details
+                    </Typography>
+                  )}
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box ref={section3Ref} data-testid="rolling-migration-form-step-hosts">
+                <SurfaceCard
+                  variant="section"
+                  title="ESXi Hosts"
+                  subtitle="Assign PCD host configurations to all ESXi hosts"
+                  data-testid="rolling-migration-form-step3-card"
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      mb: 1
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary">
+                      Select ESXi hosts and assign PCD host configurations
+                    </Typography>
+                    {esxHostMappingStatus.fullyMapped && esxHostMappingStatus.total > 0 ? (
+                      <Typography variant="body2" color="success.main">
+                        All hosts mapped ✓
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="warning.main">
+                        {esxHostMappingStatus.mapped} of {esxHostMappingStatus.total} hosts unmapped
+                      </Typography>
+                    )}
+                  </Box>
+                  <Paper
+                    sx={{ width: '100%', height: 389 }}
+                    data-testid="rolling-migration-form-hosts-grid"
+                  >
+                    <DataGrid
+                      rows={orderedESXHosts}
+                      columns={esxColumns}
+                      initialState={{
+                        pagination: { paginationModel },
+                        columns: {
+                          columnVisibilityModel: {}
+                        }
+                      }}
+                      pageSizeOptions={[5, 10, 25]}
+                      rowHeight={45}
+                      slots={{
+                        toolbar: (props) => (
+                          <CustomESXToolbarWithActions
+                            {...props}
+                            onAssignHostConfig={handleOpenPcdHostConfigDialog}
+                          />
+                        )
+                      }}
+                      disableColumnMenu
+                      disableColumnFilter
+                      loading={loadingHosts}
+                    />
+                  </Paper>
+                  {esxHostConfigValidationError && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {esxHostConfigValidationError}
+                    </Alert>
+                  )}
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box ref={section4Ref} data-testid="rolling-migration-form-step-vms">
+                <SurfaceCard
+                  variant="section"
+                  title="Select VMs"
+                  subtitle="Choose the virtual machines to convert and assign required fields"
+                  data-testid="rolling-migration-form-step4-card"
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: 'block', mb: 1 }}
+                  >
+                    Tip: Powered-off VMs require IP Address and OS assignment for proper migration
+                    configuration
                   </Typography>
-                )}
-              </SurfaceCard>
-            </Box>
+                  <Paper
+                    sx={{ width: '100%', height: 389 }}
+                    data-testid="rolling-migration-form-vms-grid"
+                  >
+                    <DataGrid
+                      rows={vmsWithAssignments}
+                      columns={vmColumns}
+                      initialState={{
+                        pagination: { paginationModel },
+                        columns: {
+                          columnVisibilityModel: {}
+                        }
+                      }}
+                      pageSizeOptions={[5, 10, 25]}
+                      rowHeight={52}
+                      checkboxSelection
+                      onRowSelectionModelChange={(selectedRowIds) => {
+                        markTouched('vms')
+                        setSelectedVMs(selectedRowIds)
+                      }}
+                      rowSelectionModel={selectedVMs.filter((vmId) =>
+                        vmsWithAssignments.some((vm) => vm.id === vmId)
+                      )}
+                      slots={{
+                        toolbar: (props) => (
+                          <CustomToolbarWithActions
+                            {...props}
+                            rowSelectionModel={selectedVMs.filter((vmId) =>
+                              vmsWithAssignments.some((vm) => vm.id === vmId)
+                            )}
+                            onAssignFlavor={handleOpenFlavorDialog}
+                            onAssignIP={handleOpenBulkIPAssignment}
+                            hasPoweredOffVMs={selectedVMs.some((vmId) => {
+                              const vm = vmsWithAssignments.find((v) => v.id === vmId)
+                              return vm && vm.powerState === 'powered-off'
+                            })}
+                          />
+                        ),
+                        noRowsOverlay: () => (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              height: '100%',
+                              p: 2
+                            }}
+                          >
+                            <Typography
+                              variant="body1"
+                              color="text.secondary"
+                              align="center"
+                              sx={{ mb: 1 }}
+                            >
+                              {loadingVMs
+                                ? 'Loading VMs...'
+                                : 'No VMs found for the selected cluster.'}
+                            </Typography>
+                          </Box>
+                        )
+                      }}
+                      disableColumnFilter
+                      disableRowSelectionOnClick
+                      loading={loadingVMs}
+                    />
+                  </Paper>
+                  {vmIpValidationError && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {vmIpValidationError}
+                    </Alert>
+                  )}
+                  {osValidationError && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {osValidationError}
+                    </Alert>
+                  )}
+                </SurfaceCard>
+              </Box>
 
-            <Divider />
+              <Divider />
 
-            <Box ref={section6Ref} data-testid="rolling-migration-form-step-options">
-              <SurfaceCard
-                variant="section"
-                title="Migration Options"
-                subtitle="Optional scheduling, cutover behavior, and advanced settings"
-                data-testid="rolling-migration-form-step6-card"
+              <Box ref={section5Ref} data-testid="rolling-migration-form-step-map-resources">
+                <SurfaceCard
+                  variant="section"
+                  title="Map Networks And Storage"
+                  subtitle="Ensure VMware networks/datastores have PCD targets"
+                  data-testid="rolling-migration-form-step5-card"
+                >
+                  {sourceCluster && destinationPCD ? (
+                    <NetworkAndStorageMappingStep
+                      vmwareNetworks={availableVmwareNetworks}
+                      vmWareStorage={availableVmwareDatastores}
+                      openstackNetworks={openstackNetworks}
+                      openstackStorage={openstackVolumeTypes}
+                      params={{
+                        networkMappings: networkMappings,
+                        storageMappings: storageMappings
+                      }}
+                      onChange={handleMappingsChange}
+                      networkMappingError={networkMappingError}
+                      storageMappingError={storageMappingError}
+                      loading={loadingOpenstackDetails}
+                      showHeader={false}
+                    />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Please select both source cluster and destination PCD to configure mappings.
+                    </Typography>
+                  )}
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box
+                ref={section6Ref}
+                data-testid="rolling-migration-form-step-options"
+                onChangeCapture={() => markTouched('options')}
+                onInputCapture={() => markTouched('options')}
               >
-                <MigrationOptions
-                  stepNumber="6"
-                  params={params}
-                  onChange={onOptionsChange}
-                  selectedMigrationOptions={selectedMigrationOptions}
-                  updateSelectedMigrationOptions={onOptionsSelectionChange}
-                  errors={fieldErrors}
-                  getErrorsUpdater={getFieldErrorsUpdater}
-                  showHeader={false}
-                />
-              </SurfaceCard>
-            </Box>
+                <SurfaceCard
+                  variant="section"
+                  title="Migration Options"
+                  subtitle="Optional scheduling, cutover behavior, and advanced settings"
+                  data-testid="rolling-migration-form-step6-card"
+                >
+                  <MigrationOptions
+                    stepNumber="6"
+                    params={params}
+                    onChange={onOptionsChange}
+                    selectedMigrationOptions={selectedMigrationOptions}
+                    updateSelectedMigrationOptions={onOptionsSelectionChange}
+                    errors={fieldErrors}
+                    getErrorsUpdater={getFieldErrorsUpdater}
+                    showHeader={false}
+                  />
+                </SurfaceCard>
+              </Box>
 
-            <Divider />
+              <Divider />
 
-            <Box data-testid="rolling-migration-form-step-preview">
-              <SurfaceCard
-                variant="section"
-                title="Preview"
-                subtitle="Verify your selections before starting the conversion"
-                data-testid="rolling-migration-form-step7-card"
-              >
-                <Box sx={{ display: 'grid', gap: 1.5 }}>
-                  <Typography variant="subtitle2">Summary</Typography>
-                  <Box sx={{ display: 'grid', gap: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Source
-                      </Typography>
-                      <Typography variant="body2">{sourceCluster || '—'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Destination
-                      </Typography>
-                      <Typography variant="body2">{destinationPCD || '—'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        VMs selected
-                      </Typography>
-                      <Typography variant="body2">{selectedVMs.length}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Network mappings
-                      </Typography>
-                      <Typography variant="body2">
-                        {uniqueVmwareNetworks.length === 0
-                          ? '—'
-                          : unmappedNetworksCount === 0
-                            ? 'All mapped'
-                            : `${unmappedNetworksCount} unmapped`}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Storage mappings
-                      </Typography>
-                      <Typography variant="body2">
-                        {availableVmwareDatastores.length === 0
-                          ? '—'
-                          : unmappedStorageCount === 0
-                            ? 'All mapped'
-                            : `${unmappedStorageCount} unmapped`}
-                      </Typography>
+              <Box ref={section7Ref} data-testid="rolling-migration-form-step-preview">
+                <SurfaceCard
+                  variant="section"
+                  title="Preview"
+                  subtitle="Verify your selections before starting the conversion"
+                  data-testid="rolling-migration-form-step7-card"
+                >
+                  <Box sx={{ display: 'grid', gap: 1.5 }}>
+                    <Typography variant="subtitle2">Summary</Typography>
+                    <Box sx={{ display: 'grid', gap: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Source
+                        </Typography>
+                        <Typography variant="body2">{sourceCluster || '—'}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Destination
+                        </Typography>
+                        <Typography variant="body2">{destinationPCD || '—'}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          VMs selected
+                        </Typography>
+                        <Typography variant="body2">{selectedVMs.length}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Network mappings
+                        </Typography>
+                        <Typography variant="body2">
+                          {uniqueVmwareNetworks.length === 0
+                            ? '—'
+                            : unmappedNetworksCount === 0
+                              ? 'All mapped'
+                              : `${unmappedNetworksCount} unmapped`}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Storage mappings
+                        </Typography>
+                        <Typography variant="body2">
+                          {availableVmwareDatastores.length === 0
+                            ? '—'
+                            : unmappedStorageCount === 0
+                              ? 'All mapped'
+                              : `${unmappedStorageCount} unmapped`}
+                        </Typography>
+                      </Box>
                     </Box>
                   </Box>
-                </Box>
-              </SurfaceCard>
+                </SurfaceCard>
+              </Box>
             </Box>
           </Box>
-        </Box>
-        </DesignSystemForm>
-      </DrawerShell>
+        </DrawerShell>
+      </FormProvider>
 
       <MaasConfigDialog
         open={maasConfigDialogOpen}
@@ -2827,38 +3003,38 @@ export default function RollingMigrationFormDrawer({
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, ml: 1 }}>
                   <ConfigField>
                     <FieldLabel>Provider Type:</FieldLabel>
-                    <FieldValue>{selectedMaasConfig.spec.providerType}</FieldValue>
+                    <FieldValue>{selectedMaasConfig!.spec.providerType}</FieldValue>
                   </ConfigField>
                   <ConfigField>
                     <FieldLabel>Bare Metal Provider URL:</FieldLabel>
-                    <FieldValue>{selectedMaasConfig.spec.apiUrl}</FieldValue>
+                    <FieldValue>{selectedMaasConfig!.spec.apiUrl}</FieldValue>
                   </ConfigField>
                   <ConfigField>
                     <FieldLabel>Insecure:</FieldLabel>
-                    <FieldValue>{selectedMaasConfig.spec.insecure ? 'Yes' : 'No'}</FieldValue>
+                    <FieldValue>{selectedMaasConfig!.spec.insecure ? 'Yes' : 'No'}</FieldValue>
                   </ConfigField>
-                  {selectedMaasConfig.spec.os && (
+                  {selectedMaasConfig!.spec.os && (
                     <ConfigField>
                       <FieldLabel>OS:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.spec.os}</FieldValue>
+                      <FieldValue>{selectedMaasConfig!.spec.os}</FieldValue>
                     </ConfigField>
                   )}
                   <ConfigField>
                     <FieldLabel>Status:</FieldLabel>
                     <FieldValue>
-                      {selectedMaasConfig.status?.validationStatus || 'Pending validation'}
+                      {selectedMaasConfig!.status?.validationStatus || 'Pending validation'}
                     </FieldValue>
                   </ConfigField>
-                  {selectedMaasConfig.status?.validationMessage && (
+                  {selectedMaasConfig!.status?.validationMessage && (
                     <ConfigField>
                       <FieldLabel>Validation Message:</FieldLabel>
-                      <FieldValue>{selectedMaasConfig.status.validationMessage}</FieldValue>
+                      <FieldValue>{selectedMaasConfig!.status!.validationMessage}</FieldValue>
                     </ConfigField>
                   )}
                 </Box>
               </ConfigSection>
 
-              {selectedMaasConfig.spec.userDataSecretRef && (
+              {selectedMaasConfig!.spec.userDataSecretRef && (
                 <ConfigSection>
                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
                     Cloud-Init Configuration
@@ -2868,7 +3044,7 @@ export default function RollingMigrationFormDrawer({
                     sx={{ mb: 1, display: 'block', color: 'text.secondary' }}
                   >
                     User data is stored in a secret:{' '}
-                    {selectedMaasConfig.spec.userDataSecretRef.name}
+                    {selectedMaasConfig!.spec.userDataSecretRef.name}
                   </Typography>
                   <CodeEditorContainer>
                     <SyntaxHighlighter
@@ -2882,8 +3058,8 @@ export default function RollingMigrationFormDrawer({
                       }}
                     >
                       {`# Cloud-init configuration is stored in Kubernetes Secret: 
-# ${selectedMaasConfig.spec.userDataSecretRef.name}
-# in namespace: ${selectedMaasConfig.spec.userDataSecretRef.namespace || VJAILBREAK_DEFAULT_NAMESPACE}
+# ${selectedMaasConfig!.spec.userDataSecretRef.name}
+# in namespace: ${selectedMaasConfig!.spec.userDataSecretRef.namespace || VJAILBREAK_DEFAULT_NAMESPACE}
 
 # The cloud-init configuration includes:
 # - package updates and installations

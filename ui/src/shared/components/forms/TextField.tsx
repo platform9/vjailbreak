@@ -3,7 +3,7 @@ import { forwardRef } from 'react'
 
 export type TextFieldProps = BaseTextFieldProps
 
-const TextField = forwardRef<HTMLDivElement, TextFieldProps>((props, ref) => {
+const TextField = forwardRef<HTMLDivElement, TextFieldProps>(function TextField(props, ref) {
   return (
     <BaseTextField
       ref={ref}
@@ -17,7 +17,5 @@ const TextField = forwardRef<HTMLDivElement, TextFieldProps>((props, ref) => {
     />
   )
 })
-
-TextField.displayName = 'TextField'
 
 export default TextField
