@@ -3,6 +3,7 @@ package server
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,15 +15,67 @@ import (
 )
 
 const (
-	maxUploadSize = 500 * 1024 * 1024
-	vddkUploadDir = "/home/ubuntu"
+	maxUploadSize    = 500 * 1024 * 1024
+	vddkUploadDir    = "/home/ubuntu"
+	vddkInstallDir   = "/home/ubuntu/vmware-vix-disklib-distrib"
 )
+
+// VDDKStatusResponse represents the response for VDDK status check
+type VDDKStatusResponse struct {
+	Uploaded bool   `json:"uploaded"`
+	Path     string `json:"path,omitempty"`
+	Message  string `json:"message"`
+}
 
 type VDDKUploadResponse struct {
 	Success       bool   `json:"success"`
 	Message       string `json:"message"`
 	FilePath      string `json:"file_path,omitempty"`
 	ExtractedPath string `json:"extracted_path,omitempty"`
+}
+
+// HandleVDDKStatus checks if VDDK has been uploaded and is available
+func HandleVDDKStatus(w http.ResponseWriter, r *http.Request) {
+	const fn = "HandleVDDKStatus"
+	logrus.WithField("func", fn).Info("Checking VDDK status")
+
+	if r.Method != http.MethodGet {
+		logrus.WithField("func", fn).Errorf("Invalid method: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check if VDDK directory has files
+	// The daemonset ensures the directory exists, so we only need to check if it's empty
+	files, err := os.ReadDir(vddkInstallDir)
+	if err != nil || len(files) == 0 {
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Info("VDDK directory not accessible")
+		} else {
+			logrus.WithField("func", fn).Info("VDDK directory is empty")
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(VDDKStatusResponse{
+			Uploaded: false,
+			Message:  "VDDK has not been uploaded",
+		})
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":       fn,
+		"path":       vddkInstallDir,
+		"file_count": len(files),
+	}).Info("VDDK is available")
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(VDDKStatusResponse{
+		Uploaded: true,
+		Path:     vddkInstallDir,
+		Message:  "VDDK is available",
+	})
 }
 
 func HandleVDDKUpload(w http.ResponseWriter, r *http.Request) {
