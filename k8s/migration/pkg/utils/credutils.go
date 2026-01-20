@@ -186,6 +186,7 @@ func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Cli
 	var openstackCredsInfo vjailbreakv1alpha1.OpenStackCredsInfo
 
 	// Determine authentication method and validate accordingly
+	//nolint:gocritic
 	if authToken != "" {
 		// Token-based authentication
 		openstackCredsInfo.AuthToken = authToken

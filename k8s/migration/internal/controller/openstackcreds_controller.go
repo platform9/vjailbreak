@@ -125,6 +125,79 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OS_AUTH_URL != "" {
+		ctxlog.Info("Creating Secret from spec credential fields")
+		secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
+
+		secretData := make(map[string][]byte)
+		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OS_AUTH_URL)
+
+		if openstackcreds.Spec.OS_AUTH_TOKEN != "" {
+			secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OS_AUTH_TOKEN)
+		}
+		if openstackcreds.Spec.OS_USERNAME != "" {
+			secretData["OS_USERNAME"] = []byte(openstackcreds.Spec.OS_USERNAME)
+		}
+		if openstackcreds.Spec.OS_PASSWORD != "" {
+			secretData["OS_PASSWORD"] = []byte(openstackcreds.Spec.OS_PASSWORD)
+		}
+		if openstackcreds.Spec.OS_DOMAIN_NAME != "" {
+			secretData["OS_DOMAIN_NAME"] = []byte(openstackcreds.Spec.OS_DOMAIN_NAME)
+		}
+		if openstackcreds.Spec.OS_REGION_NAME != "" {
+			secretData["OS_REGION_NAME"] = []byte(openstackcreds.Spec.OS_REGION_NAME)
+		}
+		if openstackcreds.Spec.OS_TENANT_NAME != "" {
+			secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OS_TENANT_NAME)
+		}
+		if openstackcreds.Spec.OS_INSECURE != nil {
+			if *openstackcreds.Spec.OS_INSECURE {
+				secretData["OS_INSECURE"] = []byte("true")
+			} else {
+				secretData["OS_INSECURE"] = []byte("false")
+			}
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: secretData,
+		}
+
+		if err := r.Create(ctx, secret); err != nil {
+			if !apierrors.IsAlreadyExists(err) {
+				ctxlog.Error(err, "Failed to create Secret")
+				return ctrl.Result{}, errors.Wrap(err, "failed to create secret")
+			}
+			ctxlog.Info("Secret already exists", "secretName", secretName)
+		}
+
+		openstackcreds.Spec.SecretRef = corev1.ObjectReference{
+			Name:      secretName,
+			Namespace: constants.NamespaceMigrationSystem,
+		}
+
+		openstackcreds.Spec.OS_AUTH_URL = ""
+		openstackcreds.Spec.OS_AUTH_TOKEN = ""
+		openstackcreds.Spec.OS_USERNAME = ""
+		openstackcreds.Spec.OS_PASSWORD = ""
+		openstackcreds.Spec.OS_DOMAIN_NAME = ""
+		openstackcreds.Spec.OS_REGION_NAME = ""
+		openstackcreds.Spec.OS_TENANT_NAME = ""
+		openstackcreds.Spec.OS_INSECURE = nil
+
+		if err := r.Update(ctx, openstackcreds); err != nil {
+			ctxlog.Error(err, "Failed to update OpenstackCreds with SecretRef")
+			return ctrl.Result{}, errors.Wrap(err, "failed to update OpenstackCreds")
+		}
+
+		ctxlog.Info("Successfully created Secret and updated SecretRef", "secretName", secretName)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
 	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
 

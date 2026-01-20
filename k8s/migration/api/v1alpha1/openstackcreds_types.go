@@ -84,6 +84,23 @@ type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
 
+	// +optional
+	OS_AUTH_URL string `json:"osAuthUrl,omitempty"`
+	// +optional
+	OS_AUTH_TOKEN string `json:"osAuthToken,omitempty"`
+	// +optional
+	OS_USERNAME string `json:"osUsername,omitempty"`
+	// +optional
+	OS_PASSWORD string `json:"osPassword,omitempty"`
+	// +optional
+	OS_DOMAIN_NAME string `json:"osDomainName,omitempty"`
+	// +optional
+	OS_REGION_NAME string `json:"osRegionName,omitempty"`
+	// +optional
+	OS_TENANT_NAME string `json:"osTenantName,omitempty"`
+	// +optional
+	OS_INSECURE *bool `json:"osInsecure,omitempty"`
+
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`
 
