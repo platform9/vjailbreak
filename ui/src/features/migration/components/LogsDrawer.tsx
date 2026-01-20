@@ -176,13 +176,23 @@ export default function LogsDrawer({
     }
 
     if (searchTerm.trim()) {
-      const fuse = new Fuse(filtered, {
-        threshold: 0.4,
-        ignoreLocation: true,
-        isCaseSensitive: false
-      })
-      const results = fuse.search(searchTerm)
-      filtered = results.map((result) => result.item)
+      // Check if wrapped in quotes for exact match
+      const isExactSearch = searchTerm.startsWith('"') && searchTerm.endsWith('"')
+
+      if (isExactSearch) {
+        // Remove quotes and do exact substring match
+        const exactTerm = searchTerm.slice(1, -1).toLowerCase()
+        filtered = filtered.filter((log) => log.toLowerCase().includes(exactTerm))
+      } else {
+        // Fuzzy search
+        const fuse = new Fuse(filtered, {
+          threshold: 0.4,
+          ignoreLocation: true,
+          isCaseSensitive: false
+        })
+        const results = fuse.search(searchTerm)
+        filtered = results.map((result) => result.item)
+      }
     }
 
     return filtered
