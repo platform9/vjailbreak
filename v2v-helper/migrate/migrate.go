@@ -353,9 +353,10 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].ChangeID))
 	}
 
-	// Wait for 30 seconds before starting periodic sync
-	migobj.logMessage("Waiting for 30 seconds before starting periodic sync")
-	time.Sleep(30 * time.Second)
+	// Just check if snapshot exists.
+	migobj.logMessage("Checking if migration snapshot exists")
+	migsnap, errc := vmops.GetSnapshot(vminfo.VMDisks[0].Snapname)
+	migobj.logMessage(fmt.Sprintf("Migration snapshot: %v,err: %v", migsnap, errc))
 
 	var changedAreas types.DiskChangeInfo
 
