@@ -100,6 +100,10 @@ type OpenstackCredsSpec struct {
 	OsTenantName string `json:"osTenantName,omitempty"`
 	// +optional
 	OsInsecure *bool `json:"osInsecure,omitempty"`
+	// +optional
+	OsIdentityAPIVersion string `json:"osIdentityApiVersion,omitempty"`
+	// +optional
+	OsInterface string `json:"osInterface,omitempty"`
 
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`

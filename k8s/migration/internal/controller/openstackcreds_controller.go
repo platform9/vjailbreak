@@ -129,6 +129,15 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		ctxlog.Info("Creating Secret from spec credential fields")
 		secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
 
+		hasToken := openstackcreds.Spec.OsAuthToken != ""
+		hasUserPass := openstackcreds.Spec.OsUsername != "" && openstackcreds.Spec.OsPassword != ""
+		if !hasToken && !hasUserPass {
+			return ctrl.Result{}, fmt.Errorf("missing required OpenStack credentials: provide either osAuthToken or both osUsername and osPassword")
+		}
+		if !hasToken && openstackcreds.Spec.OsDomainName == "" {
+			return ctrl.Result{}, fmt.Errorf("missing required OpenStack domain name: osDomainName is required for username/password authentication")
+		}
+
 		secretData := make(map[string][]byte)
 		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthURL)
 
@@ -149,6 +158,17 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		}
 		if openstackcreds.Spec.OsTenantName != "" {
 			secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
+		}
+		if openstackcreds.Spec.ProjectName != "" {
+			secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.ProjectName)
+		} else if openstackcreds.Spec.OsTenantName != "" {
+			secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
+		}
+		if openstackcreds.Spec.OsIdentityAPIVersion != "" {
+			secretData["OS_IDENTITY_API_VERSION"] = []byte(openstackcreds.Spec.OsIdentityAPIVersion)
+		}
+		if openstackcreds.Spec.OsInterface != "" {
+			secretData["OS_INTERFACE"] = []byte(openstackcreds.Spec.OsInterface)
 		}
 		if openstackcreds.Spec.OsInsecure != nil {
 			if *openstackcreds.Spec.OsInsecure {
@@ -187,6 +207,8 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		openstackcreds.Spec.OsDomainName = ""
 		openstackcreds.Spec.OsRegionName = ""
 		openstackcreds.Spec.OsTenantName = ""
+		openstackcreds.Spec.OsIdentityAPIVersion = ""
+		openstackcreds.Spec.OsInterface = ""
 		openstackcreds.Spec.OsInsecure = nil
 
 		if err := r.Update(ctx, openstackcreds); err != nil {

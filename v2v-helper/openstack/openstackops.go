@@ -65,8 +65,11 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	if tenantName == "" {
 		tenantName = strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
 	}
+	tenantID := strings.TrimSpace(os.Getenv("OS_PROJECT_ID"))
 	if tenantName == "" {
-		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_TENANT_NAME, OS_PROJECT_NAME]")
+		if tenantID == "" {
+			return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_TENANT_NAME, OS_PROJECT_NAME, OS_PROJECT_ID]")
+		}
 	}
 
 	authToken := strings.TrimSpace(os.Getenv("OS_AUTH_TOKEN"))
@@ -79,6 +82,9 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		IdentityEndpoint: authURL,
 		TenantName:       tenantName,
 		DomainName:       domainName,
+	}
+	if tenantID != "" {
+		opts.TenantID = tenantID
 	}
 
 	if authToken != "" {

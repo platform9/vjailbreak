@@ -66,9 +66,14 @@ type StaticTokenAuthenticator struct {
 
 var _ Authenticator = (*StaticTokenAuthenticator)(nil)
 
-// NewStaticTokenGenerator creates a new StaticTokenAuthenticator instance
-func NewStaticTokenGenerator(client Client, token string) *StaticTokenAuthenticator {
+// NewStaticTokenAuthenticator creates a new StaticTokenAuthenticator instance.
+func NewStaticTokenAuthenticator(client Client, token string) *StaticTokenAuthenticator {
 	return &StaticTokenAuthenticator{client: client, token: token}
+}
+
+// NewStaticTokenGenerator creates a new StaticTokenAuthenticator instance.
+func NewStaticTokenGenerator(client Client, token string) *StaticTokenAuthenticator {
+	return NewStaticTokenAuthenticator(client, token)
 }
 
 // Auth validates the static token with Keystone and returns its authentication information.

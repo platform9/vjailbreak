@@ -553,7 +553,7 @@ func getKeystoneAuthenticator(openstackCreds vjailbreakv1alpha1.OpenStackCredsIn
 	}
 
 	if openstackCreds.AuthToken != "" {
-		authenticator := keystone.NewCachedAuthenticator(keystone.NewStaticTokenGenerator(ksClient, openstackCreds.AuthToken))
+		authenticator := keystone.NewCachedAuthenticator(keystone.NewStaticTokenAuthenticator(ksClient, openstackCreds.AuthToken))
 		return authenticator, nil
 	}
 

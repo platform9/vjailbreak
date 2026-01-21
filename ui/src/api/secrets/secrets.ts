@@ -57,6 +57,29 @@ export const createOpenstackCredsSecret = async (
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
+  const hasToken = !!credentials.OS_AUTH_TOKEN && credentials.OS_AUTH_TOKEN.trim() !== ''
+  const hasUser = !!credentials.OS_USERNAME && credentials.OS_USERNAME.trim() !== ''
+  const hasPass = !!credentials.OS_PASSWORD && credentials.OS_PASSWORD.trim() !== ''
+  const hasUserPass = hasUser && hasPass
+
+  const tenantName = credentials.OS_TENANT_NAME || credentials.OS_PROJECT_NAME
+  if (!credentials.OS_AUTH_URL || credentials.OS_AUTH_URL.trim() === '') {
+    throw new Error('Missing required field: OS_AUTH_URL')
+  }
+  if (!credentials.OS_REGION_NAME || credentials.OS_REGION_NAME.trim() === '') {
+    throw new Error('Missing required field: OS_REGION_NAME')
+  }
+  if (!tenantName || tenantName.trim() === '') {
+    throw new Error('Missing required field: OS_TENANT_NAME (or OS_PROJECT_NAME)')
+  }
+
+  if (!hasToken && !hasUserPass) {
+    throw new Error('Missing required credentials: provide either OS_AUTH_TOKEN or both OS_USERNAME and OS_PASSWORD')
+  }
+  if (hasUserPass && (!credentials.OS_DOMAIN_NAME || credentials.OS_DOMAIN_NAME.trim() === '')) {
+    throw new Error('Missing required field for password authentication: OS_DOMAIN_NAME')
+  }
+
   // Prepare data for the secret
   const secretData: SecretData = {
     OS_AUTH_URL: credentials.OS_AUTH_URL
@@ -84,8 +107,11 @@ export const createOpenstackCredsSecret = async (
     secretData.OS_PROJECT_NAME = credentials.OS_PROJECT_NAME
   }
 
-  if (credentials.OS_TENANT_NAME) {
-    secretData.OS_TENANT_NAME = credentials.OS_TENANT_NAME
+  if (tenantName) {
+    secretData.OS_TENANT_NAME = tenantName
+    if (!credentials.OS_PROJECT_NAME) {
+      secretData.OS_PROJECT_NAME = tenantName
+    }
   }
 
   if (credentials.OS_REGION_NAME) {

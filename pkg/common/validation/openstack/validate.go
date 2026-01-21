@@ -33,6 +33,28 @@ type ValidationResult struct {
 	Error   error
 }
 
+func authErrorMessage(err error, isTokenAuth bool) string {
+	if err == nil {
+		return ""
+	}
+	var message string
+	switch {
+	case strings.Contains(err.Error(), "401"):
+		if isTokenAuth {
+			message = "Authentication failed: invalid or expired token. Please generate a fresh token and try again"
+		} else {
+			message = "Authentication failed: invalid username, password, or project/domain. Please verify your credentials"
+		}
+	case strings.Contains(err.Error(), "404"):
+		message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
+	case strings.Contains(err.Error(), "timeout"):
+		message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
+	default:
+		message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
+	}
+	return message
+}
+
 // Validate performs complete OpenStack credential validation
 func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ValidationResult {
 	// Ensure logger exists
@@ -85,17 +107,7 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 
 		if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
-			var message string
-			switch {
-			case strings.Contains(err.Error(), "401"):
-				message = "Authentication failed: invalid or expired token. Please generate a fresh token and try again"
-			case strings.Contains(err.Error(), "404"):
-				message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
-			case strings.Contains(err.Error(), "timeout"):
-				message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
-			default:
-				message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
-			}
+			message := authErrorMessage(err, true)
 			return ValidationResult{
 				Valid:   false,
 				Message: message,
@@ -113,22 +125,19 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 
 		if err := openstack.Authenticate(ctx, providerClient, authOpts); err != nil {
-			var message string
-			switch {
-			case strings.Contains(err.Error(), "401"):
-				message = "Authentication failed: invalid username, password, or project/domain. Please verify your credentials"
-			case strings.Contains(err.Error(), "404"):
-				message = "Authentication failed: the authentication URL or tenant/project name is incorrect"
-			case strings.Contains(err.Error(), "timeout"):
-				message = "Connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and Auth URL"
-			default:
-				message = fmt.Sprintf("Authentication failed: %s. Please verify your OpenStack credentials", err.Error())
-			}
+			message := authErrorMessage(err, false)
 			return ValidationResult{
 				Valid:   false,
 				Message: message,
 				Error:   err,
 			}
+		}
+	}
+	if providerClient.EndpointLocator == nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: "Authentication failed: client endpoint catalog was not initialized. Please verify your OpenStack credentials and try again",
+			Error:   fmt.Errorf("authentication returned no error but ProviderClient.EndpointLocator is nil"),
 		}
 	}
 
@@ -173,6 +182,9 @@ func getCredentialsFromSecret(ctx context.Context, k8sClient client.Client, secr
 	// Common required fields for both auth methods
 	authURL := string(secret.Data["OS_AUTH_URL"])
 	tenantName := string(secret.Data["OS_TENANT_NAME"])
+	if tenantName == "" {
+		tenantName = string(secret.Data["OS_PROJECT_NAME"])
+	}
 	regionName := string(secret.Data["OS_REGION_NAME"])
 
 	// Validate common required fields
