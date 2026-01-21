@@ -58,6 +58,7 @@ func getVDDKVersion() string {
 	for _, match := range matches {
 		info, err := os.Lstat(match)
 		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Debug("Failed to stat library file")
 			continue
 		}
 		// Skip symlinks, we want the actual file
@@ -70,7 +71,10 @@ func getVDDKVersion() string {
 	}
 
 	if libPath == "" {
-		logrus.WithField("func", fn).Debug("Could not find actual libvixDiskLib.so file")
+		logrus.WithFields(logrus.Fields{
+			"func":    fn,
+			"matches": matches,
+		}).Debug("No non-symlink libvixDiskLib.so file found")
 		return ""
 	}
 
