@@ -360,13 +360,6 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	var changedAreas types.DiskChangeInfo
 
 	for idx := range vminfo.VMDisks {
-		// Before starting NBD server, update disk info with new snapshot details
-		// We have marked block copy as false, in order to not update changeID.
-		// This should now update the snapname and snapBackingDisk with the new snapshot details and copy correctly.
-		err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], false)
-		if err != nil {
-			return errors.Wrap(err, "failed to update disk info")
-		}
 
 		changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 		if err != nil {
@@ -663,6 +656,8 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			}
 
 			if adminInitiatedCutover {
+				utils.PrintLog("Clean snapshot before waiting for for cutover")
+				vmops.CleanUpSnapshots(false)
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
