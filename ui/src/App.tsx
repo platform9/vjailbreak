@@ -14,6 +14,7 @@ import ClusterConversionsPage from './features/clusterConversions/pages/ClusterC
 import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
+import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 
@@ -38,25 +39,6 @@ const AppContent = styled('div')(({ theme }) => ({
 }))
 
 const GETTING_STARTED_DISMISSED_KEY = 'getting-started-dismissed'
-const VDDK_UPLOADED_KEY = 'vddk-uploaded'
-
-function useLocalStorageFlag(key: string) {
-  const [value, setValue] = useState(() => localStorage.getItem(key) === 'true')
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== key) return
-      setValue(e.newValue === 'true')
-    }
-
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [key])
-
-  const refresh = () => setValue(localStorage.getItem(key) === 'true')
-
-  return { value, refresh }
-}
 
 function useHasAnyCredentials() {
   const {
@@ -85,15 +67,23 @@ function useHasAnyCredentials() {
 
 function DashboardIndexRedirect() {
   const { hasAnyCredentials, isLoading, isError } = useHasAnyCredentials()
-  const { value: vddkUploaded, refresh: refreshVddkUploaded } =
-    useLocalStorageFlag(VDDK_UPLOADED_KEY)
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const vddkLoading = vddkStatusQuery.isLoading
+  const vddkError = vddkStatusQuery.isError
+  const vddkUploaded = vddkStatusQuery.data?.uploaded === true
 
-  useEffect(() => {
-    refreshVddkUploaded()
-  }, [refreshVddkUploaded])
-
-  if (isLoading) return null
+  if (isLoading || vddkLoading) return null
   if (isError) return <Navigate to="/dashboard/migrations" replace />
+
+  // If the status endpoint fails, don't hard-block navigation.
+  // Fall back to migrations/credentials behavior based on credentials only.
+  if (vddkError) {
+    return hasAnyCredentials ? (
+      <Navigate to="/dashboard/migrations" replace />
+    ) : (
+      <Navigate to="/dashboard/credentials" replace />
+    )
+  }
 
   if (!vddkUploaded) {
     return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
@@ -122,8 +112,10 @@ function App() {
   const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
 
   const { hasAnyCredentials, isLoading: credsLoading } = useHasAnyCredentials()
-  const { value: vddkUploaded, refresh: refreshVddkUploaded } =
-    useLocalStorageFlag(VDDK_UPLOADED_KEY)
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const vddkLoading = vddkStatusQuery.isLoading
+  const vddkError = vddkStatusQuery.isError
+  const vddkUploaded = vddkStatusQuery.data?.uploaded === true
 
   const missingCredentials = !hasAnyCredentials
   const missingVddk = !vddkUploaded
@@ -208,12 +200,17 @@ function App() {
   }, [expectedJoyrideTarget, isOnExpectedPage])
 
   useEffect(() => {
-    if (credsLoading) return
-    refreshVddkUploaded()
+    if (credsLoading || vddkLoading) return
     const dismissed = localStorage.getItem(GETTING_STARTED_DISMISSED_KEY) === 'true'
 
     if (!shouldShowGuide) {
       setJoyrideSnoozed(false)
+      setJoyrideRun(false)
+      return
+    }
+
+    // If we can't determine VDDK status, don't force redirects/popups.
+    if (vddkError) {
       setJoyrideRun(false)
       return
     }
@@ -254,12 +251,13 @@ function App() {
     setJoyrideRun(false)
   }, [
     credsLoading,
+    vddkLoading,
+    vddkError,
     location.pathname,
     joyrideSnoozed,
     missingCredentials,
     missingVddk,
     navigate,
-    refreshVddkUploaded,
     shouldShowGuide
   ])
 
