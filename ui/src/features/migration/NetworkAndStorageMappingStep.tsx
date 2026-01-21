@@ -32,7 +32,7 @@ export interface ResourceMap {
 
 // Storage copy method options
 export const STORAGE_COPY_METHOD_OPTIONS = [
-  { value: 'normal', label: 'Standard Copy (NBD-based)' },
+  { value: 'normal', label: 'Standard Copy' },
   { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' }
 ] as const
 
@@ -83,9 +83,7 @@ export default function NetworkAndStorageMappingStep({
   // Filter to only validated array credentials
   const validatedArrayCreds = useMemo(
     () =>
-      (arrayCredentials || []).filter(
-        (cred) => cred.status?.arrayValidationStatus === 'Succeeded'
-      ),
+      (arrayCredentials || []).filter((cred) => cred.status?.arrayValidationStatus === 'Succeeded'),
     [arrayCredentials]
   )
 
@@ -149,7 +147,11 @@ export default function NetworkAndStorageMappingStep({
 
   // Auto-map datastores to ArrayCreds based on dataStore information in ArrayCreds status
   useEffect(() => {
-    if (storageCopyMethod !== 'StorageAcceleratedCopy' || !validatedArrayCreds.length || !vmWareStorage.length) {
+    if (
+      storageCopyMethod !== 'StorageAcceleratedCopy' ||
+      !validatedArrayCreds.length ||
+      !vmWareStorage.length
+    ) {
       return
     }
 

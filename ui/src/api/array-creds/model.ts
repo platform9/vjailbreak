@@ -69,7 +69,7 @@ export interface ArrayCredsStatus {
 // Supported vendor types for storage arrays
 export const ARRAY_VENDOR_TYPES = [
   { value: 'pure', label: 'Pure Storage' },
-  { value: 'unsupported', label: 'Unsupported' }
+  { value: 'unsupported', label: 'N/A' }
 ] as const
 
 export type ArrayVendorType = (typeof ARRAY_VENDOR_TYPES)[number]['value']
