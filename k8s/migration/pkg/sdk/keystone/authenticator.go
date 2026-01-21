@@ -58,6 +58,7 @@ func (b *BasicAuthenticator) ResetCache() error {
 	return nil
 }
 
+// StaticTokenAuthenticator provides an implementation of the Authenticator interface
 type StaticTokenAuthenticator struct {
 	client Client
 	token  string
@@ -65,10 +66,12 @@ type StaticTokenAuthenticator struct {
 
 var _ Authenticator = (*StaticTokenAuthenticator)(nil)
 
+// NewStaticTokenGenerator creates a new StaticTokenAuthenticator instance
 func NewStaticTokenGenerator(client Client, token string) *StaticTokenAuthenticator {
 	return &StaticTokenAuthenticator{client: client, token: token}
 }
 
+// Auth validates the static token with Keystone and returns its authentication information.
 func (s *StaticTokenAuthenticator) Auth(ctx context.Context, _ ...AuthOptions) (AuthInfo, error) {
 	tokenInfo, err := s.client.GetTokenInfo(ctx, s.token)
 	if err != nil {
@@ -82,6 +85,7 @@ func (s *StaticTokenAuthenticator) Auth(ctx context.Context, _ ...AuthOptions) (
 	}, nil
 }
 
+// ResetCache implements the Authenticator interface's ResetCache method.
 func (s *StaticTokenAuthenticator) ResetCache() error {
 	// no cache
 	return nil
