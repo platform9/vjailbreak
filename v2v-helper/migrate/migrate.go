@@ -352,6 +352,23 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].Snapname))
 		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].ChangeID))
 	}
+	// Check if snapshot with snapname is present.
+	migsnap, errcheck := vmops.GetSnapshot(vminfo.VMDisks[0].Snapname)
+	if errcheck != nil {
+		migobj.logMessage(fmt.Sprintf("Snapshot with snapname is not present %s", errcheck.Error()))
+	}
+	migobj.logMessage(fmt.Sprintf("Migration snapshot: %s", migsnap.Value))
+
+	// Wait for 30 seconds before starting periodic sync
+	migobj.logMessage("Waiting for 30 seconds before starting periodic sync")
+	time.Sleep(30 * time.Second)
+
+	// Check if snapshot with snapname is present.
+	migsnap1, errcheck1 := vmops.GetSnapshot(vminfo.VMDisks[0].Snapname)
+	if errcheck1 != nil {
+		migobj.logMessage(fmt.Sprintf("Snapshot with snapname is not present %s", errcheck.Error()))
+	}
+	migobj.logMessage(fmt.Sprintf("Migration snapshot: %s", migsnap1.Value))
 
 	var changedAreas types.DiskChangeInfo
 

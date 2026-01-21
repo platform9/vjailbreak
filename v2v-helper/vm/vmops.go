@@ -431,10 +431,6 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 
 func (vmops *VMOps) DisplayDisksInfo() error {
 	pc := vmops.vcclient.VCPropertyCollector
-	var snapbackingdisk []string
-	var snapname []string
-	var snapid []string
-	vminfo := VMInfo{}
 	vm := vmops.VMObj
 
 	var o mo.VirtualMachine
@@ -451,6 +447,30 @@ func (vmops *VMOps) DisplayDisksInfo() error {
 		err = vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
 		if err != nil {
 			return fmt.Errorf("failed to get VM properties: %s", err)
+		}
+	}
+
+	// First, populate VM disk information from the VM config
+	vmdisks := []VMDisk{}
+	for _, device := range o.Config.Hardware.Device {
+		if disk, ok := device.(*types.VirtualDisk); ok {
+			if _, ok := disk.Backing.(*types.VirtualDiskRawDiskMappingVer1BackingInfo); ok {
+				continue
+			}
+
+			var vmdkPath string
+			if backing, ok := disk.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
+			} else if backing, ok := disk.Backing.(*types.VirtualDiskSparseVer2BackingInfo); ok {
+				vmdkPath = backing.FileName
+			}
+
+			vmdisks = append(vmdisks, VMDisk{
+				Name: disk.DeviceInfo.GetDescription().Label,
+				Size: disk.CapacityInBytes,
+				Disk: disk,
+				Path: vmdkPath,
+			})
 		}
 	}
 
@@ -490,29 +510,19 @@ func (vmops *VMOps) DisplayDisksInfo() error {
 
 		// Match snapshot disks to VM disks by device key (not by index)
 		// Fixes bug where vCenter returns disks in different order for VM vs snapshot
-		for idx := range vminfo.VMDisks {
-			deviceKey := vminfo.VMDisks[idx].Disk.Key
-
-			// Fallback: if device key is invalid, use index-based matching with warning
-			if deviceKey == 0 {
-				log.Printf("WARNING: Disk %s has invalid device key, using index-based fallback", vminfo.VMDisks[idx].Name)
-				if idx < len(snapbackingdisk) {
-					vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
-					vminfo.VMDisks[idx].Snapname = snapname[idx]
-					vminfo.VMDisks[idx].ChangeID = snapid[idx]
-				}
-				continue
-			}
+		for idx := range vmdisks {
+			deviceKey := vmdisks[idx].Disk.Key
 
 			snapInfo, found := snapshotInfo[deviceKey]
 			if !found {
-				return fmt.Errorf("snapshot not found for disk %s (device key=%d)", vminfo.VMDisks[idx].Name, deviceKey)
+				log.Printf("WARNING: snapshot not found for disk %s (device key=%d)", vmdisks[idx].Name, deviceKey)
+				continue
 			}
 
-			vminfo.VMDisks[idx].SnapBackingDisk = snapInfo.FileName
-			vminfo.VMDisks[idx].Snapname = o.Snapshot.CurrentSnapshot.Value
-			vminfo.VMDisks[idx].ChangeID = snapInfo.ChangeID
-			log.Printf("Disk %s: SnapBackingDisk=%s, Snapname=%s, ChangeID=%s", vminfo.VMDisks[idx].Name, vminfo.VMDisks[idx].SnapBackingDisk, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].ChangeID)
+			log.Printf("Disk %d: %s", idx, vmdisks[idx].Name)
+			log.Printf("Disk %d: %s", idx, snapInfo.FileName)
+			log.Printf("Disk %d: %s", idx, o.Snapshot.CurrentSnapshot.Value)
+			log.Printf("Disk %d: %s", idx, snapInfo.ChangeID)
 		}
 	}
 
