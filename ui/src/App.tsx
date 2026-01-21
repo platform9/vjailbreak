@@ -1,5 +1,5 @@
 import { styled, Snackbar, Alert } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Route, Routes, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import Joyride, { CallBackProps, Step as JoyrideStep } from 'react-joyride'
 import './assets/reset.css'
@@ -40,6 +40,8 @@ const AppContent = styled('div')(({ theme }) => ({
 }))
 
 const GETTING_STARTED_DISMISSED_KEY = 'getting-started-dismissed'
+
+type GuideMode = 'vddk' | 'credentials' | null
 
 function useHasAnyCredentials() {
   const {
@@ -100,6 +102,7 @@ function DashboardIndexRedirect() {
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
+  const appContentRef = useRef<HTMLDivElement | null>(null)
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
   const [joyrideRun, setJoyrideRun] = useState(false)
@@ -122,47 +125,61 @@ function App() {
   const missingVddk = !vddkUploaded
   const shouldShowGuide = missingCredentials || missingVddk
 
-  const expectedJoyrideTarget = useMemo(() => {
-    if (missingVddk) return '[data-tour="vddk-dropzone"]'
-    if (missingCredentials) return '[data-tour="add-vmware-creds"]'
+  const guideMode: GuideMode = useMemo(() => {
+    if (missingVddk) return 'vddk'
+    if (missingCredentials) return 'credentials'
     return null
   }, [missingCredentials, missingVddk])
 
-  const isOnExpectedPage = useMemo(() => {
-    if (missingVddk) return location.pathname === '/dashboard/global-settings'
-    if (missingCredentials) return location.pathname === '/dashboard/credentials'
-    return false
-  }, [location.pathname, missingCredentials, missingVddk])
+  const guideConfig = useMemo(() => {
+    if (guideMode === 'vddk') {
+      return {
+        path: '/dashboard/global-settings',
+        target: '[data-tour="vddk-dropzone"]',
+        placement: 'right' as const,
+        spotlightPadding: 10,
+        content:
+          'Upload the VMware VDDK library from Global Settings (VDDK Upload tab). This is mandatory before adding credentials.',
+        navState: { tab: 'vddk' as const }
+      }
+    }
+
+    if (guideMode === 'credentials') {
+      return {
+        path: '/dashboard/credentials',
+        target: '[data-tour="add-vmware-creds"]',
+        placement: 'bottom' as const,
+        spotlightPadding: 8,
+        content:
+          'Add your PCD and VMware credentials from the Credentials page. Then you can start migrations.',
+        navState: undefined
+      }
+    }
+
+    return {
+      path: null as string | null,
+      target: null as string | null,
+      placement: 'center' as const,
+      spotlightPadding: 0,
+      content: '',
+      navState: undefined as undefined
+    }
+  }, [guideMode])
+
+  const isOnExpectedPage = guideConfig.path ? location.pathname === guideConfig.path : false
 
   const joyrideSteps: JoyrideStep[] = useMemo(() => {
-    if (missingVddk) {
-      return [
-        {
-          target: '[data-tour="vddk-dropzone"]',
-          placement: 'right',
-          spotlightPadding: 10,
-          disableBeacon: true,
-          content:
-            'Upload the VMware VDDK library from Global Settings (VDDK Upload tab). This is mandatory before adding credentials.'
-        }
-      ]
-    }
-
-    if (missingCredentials) {
-      return [
-        {
-          target: '[data-tour="add-vmware-creds"]',
-          placement: 'bottom',
-          spotlightPadding: 8,
-          disableBeacon: true,
-          content:
-            'Add your PCD and VMware credentials from the Credentials page. Then you can start migrations.'
-        }
-      ]
-    }
-
-    return []
-  }, [missingCredentials, missingVddk])
+    if (!guideConfig.target) return []
+    return [
+      {
+        target: guideConfig.target,
+        placement: guideConfig.placement,
+        spotlightPadding: guideConfig.spotlightPadding,
+        disableBeacon: true,
+        content: guideConfig.content
+      }
+    ]
+  }, [guideConfig.content, guideConfig.placement, guideConfig.spotlightPadding, guideConfig.target])
 
   useEffect(() => {
     // If the user navigates away while a step is active, stop Joyride immediately
@@ -175,18 +192,22 @@ function App() {
   useEffect(() => {
     // Mark Joyride as "ready" only when we're on the right page and the target exists.
     // The target can mount after the route change (tabs/content), so we observe DOM changes.
-    if (!expectedJoyrideTarget || !isOnExpectedPage) {
+    if (!guideConfig.target || !isOnExpectedPage) {
       setJoyrideReady(false)
       return
     }
 
-    const check = () => Boolean(document.querySelector(expectedJoyrideTarget))
+    const check = () => Boolean(document.querySelector(guideConfig.target!))
     if (check()) {
       setJoyrideReady(true)
       return
     }
 
     setJoyrideReady(false)
+
+    const observeRoot =
+      appContentRef.current ?? (document.getElementById('root') as HTMLElement | null)
+    if (!observeRoot) return
 
     const observer = new MutationObserver(() => {
       if (!isOnExpectedPage) return
@@ -196,9 +217,9 @@ function App() {
       }
     })
 
-    observer.observe(document.body, { childList: true, subtree: true })
+    observer.observe(observeRoot, { childList: true, subtree: true })
     return () => observer.disconnect()
-  }, [expectedJoyrideTarget, isOnExpectedPage])
+  }, [guideConfig.target, isOnExpectedPage])
 
   useEffect(() => {
     if (credsLoading || vddkLoading) return
@@ -224,27 +245,23 @@ function App() {
     // Redirect + popup logic:
     // 1) VDDK missing: force user to Global Settings -> VDDK tab
     // 2) Else credentials missing: force user to Credentials page
-    if (missingVddk) {
-      if (location.pathname !== '/dashboard/global-settings') {
-        navigate('/dashboard/global-settings', { replace: true, state: { tab: 'vddk' } })
+    if (guideMode === 'vddk' && guideConfig.path === '/dashboard/global-settings') {
+      if (location.pathname !== guideConfig.path) {
+        navigate(guideConfig.path, { replace: true, state: guideConfig.navState })
       } else {
-        // ensure VDDK tab is active even if already on the page
         const currentTab = (location.state as any)?.tab
         if (currentTab !== 'vddk') {
-          navigate(location.pathname, { replace: true, state: { tab: 'vddk' } })
+          navigate(location.pathname, { replace: true, state: guideConfig.navState })
         }
       }
       setJoyrideRun(true)
       return
     }
 
-    if (missingCredentials && location.pathname !== '/dashboard/credentials') {
-      navigate('/dashboard/credentials', { replace: true })
-      setJoyrideRun(true)
-      return
-    }
-
-    if (missingCredentials && location.pathname === '/dashboard/credentials') {
+    if (guideMode === 'credentials' && guideConfig.path === '/dashboard/credentials') {
+      if (location.pathname !== guideConfig.path) {
+        navigate(guideConfig.path, { replace: true })
+      }
       setJoyrideRun(true)
       return
     }
@@ -256,8 +273,9 @@ function App() {
     vddkError,
     location.pathname,
     joyrideSnoozed,
-    missingCredentials,
-    missingVddk,
+    guideMode,
+    guideConfig.navState,
+    guideConfig.path,
     navigate,
     shouldShowGuide
   ])
@@ -349,7 +367,7 @@ function App() {
         }}
       />
       <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
-      <AppContent>
+      <AppContent ref={appContentRef}>
         {openMigrationForm && migrationType === 'standard' && (
           <MigrationFormDrawer
             open
