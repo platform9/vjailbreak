@@ -393,7 +393,9 @@ export default function MigrationsTable({
           const initiateCutover = params.row?.spec?.initiateCutover
           const migrationName = params.row?.metadata?.name
           const namespace = params.row?.metadata?.namespace
+          const retryable = params.row?.status?.retryable
           const showRetryButton = phase === Phase.Failed
+          const isRetryDisabled = retryable === false
 
           const handleRetry = async () => {
             if (!migrationName || !namespace) return
@@ -434,10 +436,34 @@ export default function MigrationsTable({
                 />
               )}
               {showRetryButton && (
-                <Tooltip title="Retry migration">
-                  <IconButton onClick={(e) => { e.stopPropagation(); handleRetry() }} size="small">
-                    <ReplayIcon />
-                  </IconButton>
+                <Tooltip
+                  title={
+                    isRetryDisabled
+                      ? "This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration."
+                      : "Retry migration"
+                  }
+                >
+                  <span>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!isRetryDisabled) {
+                          handleRetry()
+                        }
+                      }}
+                      size="small"
+                      disabled={isRetryDisabled}
+                      sx={{
+                        cursor: isRetryDisabled ? 'not-allowed' : 'pointer',
+                        position: 'relative',
+                        '&.Mui-disabled': {
+                          opacity: 0.4
+                        }
+                      }}
+                    >
+                      <ReplayIcon />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               )}
               <Tooltip title={'Delete migration'}>

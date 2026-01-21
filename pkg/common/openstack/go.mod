@@ -1,4 +1,4 @@
-module github.com/platform9/vjailbreak/pkg/openstack
+module github.com/platform9/vjailbreak/pkg/common/openstack
 
 go 1.24.10
 

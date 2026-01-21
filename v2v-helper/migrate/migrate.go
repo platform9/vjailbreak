@@ -31,7 +31,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	netutils "github.com/platform9/vjailbreak/common/utils"
+	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -210,6 +210,72 @@ func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 		}
 		migobj.logMessage(fmt.Sprintf("Volume %s deleted", vmdisk.Name))
 	}
+	return nil
+}
+
+// extractFileName extracts the file name from a full VMDK path
+func extractFileName(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return path
+}
+
+// logDiskCopyPlan logs the disk copy plan showing source to target mapping
+// Helps with debugging by showing exactly which VMDK goes to which volume
+func (migobj *Migrate) logDiskCopyPlan(vminfo vm.VMInfo) {
+	migobj.logMessage("=== Disk Copy Plan ===")
+	for idx, disk := range vminfo.VMDisks {
+		migobj.logMessage(fmt.Sprintf("[%d] %s (DeviceKey=%d): %s -> Volume %s (%s)",
+			idx,
+			disk.Name,
+			disk.Disk.Key,
+			extractFileName(disk.SnapBackingDisk),
+			disk.OpenstackVol.Name,
+			disk.Path))
+	}
+}
+
+// validateDiskMapping validates that disk mapping is correct before starting copy
+// Cross-checks vminfo data with nbdops to ensure correct source-to-target mapping
+func (migobj *Migrate) validateDiskMapping(vminfo vm.VMInfo) error {
+	migobj.logMessage("Validating disk mapping before copy operation...")
+
+	// Verify number of disks matches number of NBD servers
+	if len(vminfo.VMDisks) != len(migobj.Nbdops) {
+		return fmt.Errorf("disk count mismatch: vminfo has %d disks but %d NBD servers configured", len(vminfo.VMDisks), len(migobj.Nbdops))
+	}
+
+	for idx, vmdisk := range vminfo.VMDisks {
+		// Validate volume exists
+		if vmdisk.OpenstackVol == nil {
+			return fmt.Errorf("OpenStack volume is nil for disk %s (DeviceKey=%d)", vmdisk.Name, vmdisk.Disk.Key)
+		}
+
+		// Validate device path exists
+		if vmdisk.Path == "" {
+			return fmt.Errorf("device path is empty for disk %s (DeviceKey=%d)", vmdisk.Name, vmdisk.Disk.Key)
+		}
+
+		// Validate snapshot backing disk exists
+		if vmdisk.SnapBackingDisk == "" {
+			return fmt.Errorf("snapshot backing disk is empty for disk %s (DeviceKey=%d)", vmdisk.Name, vmdisk.Disk.Key)
+		}
+
+		// Cross-check: verify NBD server at this index is initialized
+		if migobj.Nbdops[idx] == nil {
+			return fmt.Errorf("NBD server not initialized for disk %d (%s)", idx, vmdisk.Name)
+		}
+
+		// Log validation details for this disk
+		utils.PrintLog(fmt.Sprintf("[%d] Validated %s (DeviceKey=%d): SnapFile=%s, Volume=%s, Path=%s",
+			idx, vmdisk.Name, vmdisk.Disk.Key,
+			extractFileName(vmdisk.SnapBackingDisk),
+			vmdisk.OpenstackVol.ID, vmdisk.Path))
+	}
+
+	migobj.logMessage("Disk mapping validation passed")
 	return nil
 }
 
@@ -531,6 +597,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 	}
 
+	// Validate disk mapping before starting copy
+	if err := migobj.validateDiskMapping(vminfo); err != nil {
+		return vminfo, errors.Wrap(err, "disk mapping validation failed")
+	}
+
+	// Log the disk copy plan for debugging
+	migobj.logDiskCopyPlan(vminfo)
+
 	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to get vcenter settings")
@@ -546,17 +620,22 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		if incrementalCopyCount == 0 {
 			for idx := range vminfo.VMDisks {
 				startTime := time.Now()
-				migobj.logMessage(fmt.Sprintf("Starting full disk copy of disk %d ", idx))
+				disk := vminfo.VMDisks[idx]
 
-				err = nbdops[idx].CopyDisk(ctx, vminfo.VMDisks[idx].Path, idx)
+				migobj.logMessage(fmt.Sprintf("Starting full disk copy [%d/%d]: %s (DeviceKey=%d)",
+					idx+1, len(vminfo.VMDisks), disk.Name, disk.Disk.Key))
+				migobj.logMessage(fmt.Sprintf("  Source: %s", extractFileName(disk.SnapBackingDisk)))
+				migobj.logMessage(fmt.Sprintf("  Target: %s (Volume ID: %s)", disk.Path, disk.OpenstackVol.ID))
+
+				err = nbdops[idx].CopyDisk(ctx, disk.Path, idx)
 				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to copy disk")
+					return vminfo, errors.Wrap(err, fmt.Sprintf("failed to copy disk %s (DeviceKey=%d)", disk.Name, disk.Disk.Key))
 				}
 				duration := time.Since(startTime)
 				if migobj.MigrationType == "cold" {
-					migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s", idx, vminfo.VMDisks[idx].Path, duration))
+					migobj.logMessage(fmt.Sprintf("✓ Disk %d (%s) copied successfully in %s", idx, disk.Name, duration))
 				} else {
-					migobj.logMessage(fmt.Sprintf("Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, vminfo.VMDisks[idx].Path, duration))
+					migobj.logMessage(fmt.Sprintf("✓ Disk %d (%s) copied successfully in %s, copying changed blocks now", idx, disk.Name, duration))
 				}
 			}
 

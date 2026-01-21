@@ -4,9 +4,10 @@ import AgentsIcon from '@mui/icons-material/Computer'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
-import MonitoringIcon from '@mui/icons-material/Insights';
+import MonitoringIcon from '@mui/icons-material/Insights'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
+import SdStorageIcon from '@mui/icons-material/SdStorage'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -32,6 +33,12 @@ export const navigationItems: NavigationItem[] = [
     label: 'Agents',
     path: '/dashboard/agents',
     icon: <AgentsIcon />
+  },
+  {
+    id: 'storage-management',
+    label: 'Storage Management',
+    path: '/dashboard/storage-management',
+    icon: <SdStorageIcon />
   },
   {
     id: 'baremetal-config',
