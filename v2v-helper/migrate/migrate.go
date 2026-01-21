@@ -701,7 +701,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %v", err))
 						changedBlockCopySuccess = false
 					}
 
