@@ -49,10 +49,13 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -154,6 +157,7 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
 	log := scope.Logger
+
 	log.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
 
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
@@ -557,7 +561,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
-	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch VMwareCreds CR
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
@@ -637,8 +640,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 
 		if !allFinished {
-			r.ctxlog.Info("Migration(s) still in progress, requeuing plan", "migrationplan", migrationplan.Name)
-			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+			// Don't requeue - rely on event-driven reconciliation when Migrations reach terminal states
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -780,7 +783,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 ) (*vjailbreakv1alpha1.Migration, error) {
 	ctxlog := r.ctxlog.WithValues("vm", vm)
-	ctxlog.Info("Creating Migration for VM")
 
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
@@ -1319,8 +1321,6 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
 ) (openstacknws, openstackvolumetypes []string, err error) {
-	ctxlog := r.ctxlog.WithValues("reconcileMapping", vm)
-	ctxlog.Info("Reconciling mapping for VM")
 	// Get datacenter from VM's cluster annotation
 	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
 	if err != nil {
@@ -1331,8 +1331,6 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
-	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
-	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
 	// Skip storage mapping reconciliation for StorageCopyMethod storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
 	if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
@@ -1580,7 +1578,35 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
-		Owns(&vjailbreakv1alpha1.Migration{}).
+		Owns(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(
+			predicate.Funcs{
+				// Only reconcile on Migration create, delete, or when phase changes to terminal state
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldMigration, oldOk := e.ObjectOld.(*vjailbreakv1alpha1.Migration)
+					newMigration, newOk := e.ObjectNew.(*vjailbreakv1alpha1.Migration)
+
+					if !oldOk || !newOk {
+						return false
+					}
+
+					// Reconcile if phase changed to a terminal state
+					isTerminal := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+
+					phaseChanged := oldMigration.Status.Phase != newMigration.Status.Phase
+
+					// Only reconcile if phase changed AND it's now in a terminal state
+					return phaseChanged && isTerminal
+				},
+				CreateFunc: func(e event.CreateEvent) bool {
+					return true
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return true
+				},
+			},
+		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -1658,9 +1684,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		}
 	}
 
-	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
-	migrationobj.Status.Conditions = cleanedConditions
-
+	// Only update conditions if they changed - don't force phase to Pending
+	// Let the Migration controller manage phase progression naturally
 	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
@@ -1668,7 +1693,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
 
-			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			// Only update conditions, don't modify the phase
 			currentMigration.Status.Conditions = cleanedConditions
 
 			return r.Status().Update(ctx, currentMigration)
