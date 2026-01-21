@@ -183,3 +183,24 @@ export const getSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const response = await axios.get({ endpoint })
   return response
 }
+
+// Function to create storage array credentials secret
+export const createArrayCredsSecret = async (
+  name: string,
+  credentials: {
+    ARRAY_HOSTNAME: string
+    ARRAY_USERNAME: string
+    ARRAY_PASSWORD: string
+    ARRAY_SKIP_SSL_VERIFICATION?: boolean
+  },
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretData: SecretData = {
+    ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
+    ARRAY_USERNAME: credentials.ARRAY_USERNAME,
+    ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
+    ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION ? 'true' : 'false'
+  }
+
+  return createSecret(name, secretData, namespace)
+}

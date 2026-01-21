@@ -128,6 +128,11 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 			scope.ArrayCreds.Status.ArrayValidationMessage = "Array discovered from OpenStack. Awaiting storage array credentials."
 
 			if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+				// If the resource was deleted during reconciliation, ignore the error
+				if apierrors.IsNotFound(err) {
+					ctxlog.Info("ArrayCreds was deleted during reconciliation, skipping status update", "arraycreds", scope.ArrayCreds.Name)
+					return ctrl.Result{}, nil
+				}
 				ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
 				return ctrl.Result{}, err
 			}
@@ -145,6 +150,11 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Failed to get credentials from secret: %v", err)
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+			// If the resource was deleted during reconciliation, ignore the error
+			if apierrors.IsNotFound(err) {
+				ctxlog.Info("ArrayCreds was deleted during reconciliation, skipping status update", "arraycreds", scope.ArrayCreds.Name)
+				return ctrl.Result{}, nil
+			}
 			ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
 			return ctrl.Result{}, err
 		}
@@ -159,6 +169,11 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Validation failed: %v", err)
 		ctxlog.Info("Updating status to failed", "arraycreds", scope.ArrayCreds.Name, "message", err.Error())
 		if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+			// If the resource was deleted during reconciliation, ignore the error
+			if apierrors.IsNotFound(err) {
+				ctxlog.Info("ArrayCreds was deleted during reconciliation, skipping status update", "arraycreds", scope.ArrayCreds.Name)
+				return ctrl.Result{}, nil
+			}
 			ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
 			return ctrl.Result{}, err
 		}
@@ -184,6 +199,11 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
 	ctxlog.Info("Updating status to success", "arraycreds", scope.ArrayCreds.Name)
 	if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
+		// If the resource was deleted during reconciliation, ignore the error
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("ArrayCreds was deleted during reconciliation, skipping status update", "arraycreds", scope.ArrayCreds.Name)
+			return ctrl.Result{}, nil
+		}
 		ctxlog.Error(err, "Error updating status of ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
 		return ctrl.Result{}, err
 	}
