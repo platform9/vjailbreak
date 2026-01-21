@@ -337,6 +337,15 @@ function App() {
         styles={{
           options: {
             zIndex: 20000
+          },
+          buttonNext: {
+            backgroundColor: 'gray'
+          },
+          buttonBack: {
+            color: 'gray'
+          },
+          buttonSkip: {
+            color: 'gray'
           }
         }}
       />

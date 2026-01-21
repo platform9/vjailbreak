@@ -7,6 +7,13 @@ export interface VddkUploadResponse {
   extracted_path?: string
 }
 
+export interface VddkStatusResponse {
+  uploaded: boolean
+  path?: string
+  message?: string
+  version?: string
+}
+
 export type UploadProgressHandler = (progress: number) => void
 
 export const uploadVddkFile = async (
@@ -29,5 +36,11 @@ export const uploadVddkFile = async (
         onProgress?.(progress)
       }
     }
+  })
+}
+
+export const getVddkStatus = async (): Promise<VddkStatusResponse> => {
+  return axios.get<VddkStatusResponse>({
+    endpoint: '/dev-api/sdk/vpw/v1/vddk/status'
   })
 }

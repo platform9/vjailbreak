@@ -41,6 +41,7 @@ import {
 import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
 
@@ -775,6 +776,10 @@ export default function GlobalSettingsPage() {
   const [vddkMessage, setVddkMessage] = useState('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
 
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const existingVddkPath = vddkStatusQuery.data?.uploaded ? vddkStatusQuery.data?.path || '' : ''
+  const existingVddkVersion = vddkStatusQuery.data?.version || ''
+
   const validateVddkFile = useCallback((file: File) => {
     const validExtensions = ['.tar', '.tar.gz', '.tgz']
     const isValid = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
@@ -1261,6 +1266,8 @@ export default function GlobalSettingsPage() {
               progress={vddkProgress}
               message={vddkMessage}
               extractedPath={vddkExtractedPath}
+              existingVddkPath={existingVddkPath}
+              existingVddkVersion={existingVddkVersion}
               onFileSelected={handleVddkFileSelected}
               onClear={handleVddkClear}
             />
