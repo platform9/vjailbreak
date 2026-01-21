@@ -374,6 +374,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
 			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 			if err != nil {
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to copy changed blocks for disk %d: %v", idx, err))
 				select {
 				case <-ctx.Done():
 					err = vmops.CleanUpSnapshots(false)
@@ -700,6 +701,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
 					if err != nil {
+						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
 						changedBlockCopySuccess = false
 					}
 
