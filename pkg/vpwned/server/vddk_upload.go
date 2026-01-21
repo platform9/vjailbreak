@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -36,13 +35,13 @@ type VDDKUploadResponse struct {
 	ExtractedPath string `json:"extracted_path,omitempty"`
 }
 
-// getVDDKVersion extracts the VDDK version from the libvixDiskLib shared library
+// getVDDKVersion extracts the VDDK version from the libvixDiskLib shared library filename
 func getVDDKVersion() string {
 	const fn = "getVDDKVersion"
 
 	// Find the libvixDiskLib.so* file in lib64 directory
 	libDir := filepath.Join(vddkInstallDir, "lib64")
-	pattern := filepath.Join(libDir, "libvixDiskLib.so*")
+	pattern := filepath.Join(libDir, "libvixDiskLib.so.*")
 
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -54,7 +53,7 @@ func getVDDKVersion() string {
 		return ""
 	}
 
-	// Find the actual library file (not a symlink) - it has the full version like libvixDiskLib.so.8.0.0
+	// Find the actual library file (not a symlink) with the full version like libvixDiskLib.so.8.0.0
 	var libPath string
 	for _, match := range matches {
 		info, err := os.Lstat(match)
@@ -62,7 +61,7 @@ func getVDDKVersion() string {
 			continue
 		}
 		// Skip symlinks, we want the actual file
-		if info.Mode()&os.ModeSymlink == 0 && strings.Contains(filepath.Base(match), ".so.") {
+		if info.Mode()&os.ModeSymlink == 0 {
 			// Prefer the one with the longest name (most specific version)
 			if len(match) > len(libPath) {
 				libPath = match
@@ -75,63 +74,17 @@ func getVDDKVersion() string {
 		return ""
 	}
 
-	// Read the first portion of the binary to find version string
-	// Version strings are typically near the beginning of the binary
-	file, err := os.Open(libPath)
-	if err != nil {
-		logrus.WithField("func", fn).WithError(err).Debug("Failed to open library file")
-		return ""
-	}
-	defer file.Close()
+	// Extract version from filename: libvixDiskLib.so.8.0.0 -> 8.0.0
+	basename := filepath.Base(libPath)
+	version := strings.TrimPrefix(basename, "libvixDiskLib.so.")
 
-	// Read first 64KB - version string should be within this range
-	buf := make([]byte, 64*1024)
-	n, err := file.Read(buf)
-	if err != nil && err != io.EOF {
-		logrus.WithField("func", fn).WithError(err).Debug("Failed to read library file")
-		return ""
-	}
-	buf = buf[:n]
+	logrus.WithFields(logrus.Fields{
+		"func":    fn,
+		"version": version,
+		"libPath": libPath,
+	}).Debug("Extracted VDDK version from filename")
 
-	// Find version pattern (e.g., "8.0.0") - look for printable version strings
-	versionRegex := regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-
-	// Extract printable strings (similar to 'strings' command) and find version
-	var current []byte
-	for _, b := range buf {
-		if b >= 32 && b < 127 {
-			current = append(current, b)
-		} else {
-			if len(current) >= 4 {
-				s := string(current)
-				if versionRegex.MatchString(s) {
-					logrus.WithFields(logrus.Fields{
-						"func":    fn,
-						"version": s,
-						"libPath": libPath,
-					}).Debug("Extracted VDDK version")
-					return s
-				}
-			}
-			current = current[:0]
-		}
-	}
-
-	// Check the last accumulated string
-	if len(current) >= 4 {
-		s := string(current)
-		if versionRegex.MatchString(s) {
-			logrus.WithFields(logrus.Fields{
-				"func":    fn,
-				"version": s,
-				"libPath": libPath,
-			}).Debug("Extracted VDDK version")
-			return s
-		}
-	}
-
-	logrus.WithField("func", fn).Debug("Could not find version string in library")
-	return ""
+	return version
 }
 
 // HandleVDDKStatus checks if VDDK has been uploaded and is available
