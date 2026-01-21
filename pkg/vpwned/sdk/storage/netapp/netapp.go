@@ -15,7 +15,6 @@ const NetAppProviderID = "60a98000"
 
 func init() {
 	storage.RegisterStorageProvider("netapp", &NetAppStorageProvider{})
-	storage.RegisterStorageProvider("ontap", &NetAppStorageProvider{})
 }
 
 // NetAppStorageProvider implements StorageProvider for NetApp ONTAP

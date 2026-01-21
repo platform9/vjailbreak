@@ -18,7 +18,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
-	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/pure"
+	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
