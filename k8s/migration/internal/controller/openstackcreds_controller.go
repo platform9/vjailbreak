@@ -115,124 +115,151 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 	scope *scope.OpenstackCredsScope) (ctrl.Result, error) { //nolint:unparam //future use
 	ctxlog := scope.Logger
 	ctxlog.Info("Reconciling OpenstackCreds")
-	openstackcreds := scope.OpenstackCreds
-	if !controllerutil.ContainsFinalizer(openstackcreds, constants.OpenstackCredsFinalizer) {
-		controllerutil.AddFinalizer(openstackcreds, constants.OpenstackCredsFinalizer)
-		if err := r.Update(ctx, openstackcreds); err != nil {
-			ctxlog.Error(err, "failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
+	if res, done, err := r.ensureFinalizer(ctx, scope); done {
+		return res, err
+	}
+	if res, done, err := r.createSecretFromSpecIfNeeded(ctx, scope); done {
+		return res, err
 	}
 
-	if openstackcreds.Spec.SecretRef.Name == "" && openstackcreds.Spec.OsAuthURL != "" {
-		ctxlog.Info("Creating Secret from spec credential fields")
-		secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
+	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
+	if err := r.applyValidationResult(ctx, scope, result); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Get vjailbreak settings to get requeue after time
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 
-		hasToken := openstackcreds.Spec.OsAuthToken != ""
-		hasUserPass := openstackcreds.Spec.OsUsername != "" && openstackcreds.Spec.OsPassword != ""
-		if !hasToken && !hasUserPass {
-			return ctrl.Result{}, fmt.Errorf("missing required OpenStack credentials: provide either osAuthToken or both osUsername and osPassword")
-		}
-		if !hasToken && openstackcreds.Spec.OsDomainName == "" {
-			return ctrl.Result{}, fmt.Errorf("missing required OpenStack domain name: osDomainName is required for username/password authentication")
-		}
+	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
+	return ctrl.Result{Requeue: true, RequeueAfter: time.Duration(vjailbreakSettings.OpenstackCredsRequeueAfterMinutes) * time.Minute}, nil
+}
 
-		secretData := make(map[string][]byte)
-		secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthURL)
+func (r *OpenstackCredsReconciler) ensureFinalizer(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, bool, error) {
+	ctxlog := scope.Logger
+	openstackcreds := scope.OpenstackCreds
+	if controllerutil.ContainsFinalizer(openstackcreds, constants.OpenstackCredsFinalizer) {
+		return ctrl.Result{}, false, nil
+	}
+	controllerutil.AddFinalizer(openstackcreds, constants.OpenstackCredsFinalizer)
+	if err := r.Update(ctx, openstackcreds); err != nil {
+		ctxlog.Error(err, "failed to add finalizer")
+		return ctrl.Result{}, true, err
+	}
+	return ctrl.Result{Requeue: true}, true, nil
+}
 
-		if openstackcreds.Spec.OsAuthToken != "" {
-			secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OsAuthToken)
-		}
-		if openstackcreds.Spec.OsUsername != "" {
-			secretData["OS_USERNAME"] = []byte(openstackcreds.Spec.OsUsername)
-		}
-		if openstackcreds.Spec.OsPassword != "" {
-			secretData["OS_PASSWORD"] = []byte(openstackcreds.Spec.OsPassword)
-		}
-		if openstackcreds.Spec.OsDomainName != "" {
-			secretData["OS_DOMAIN_NAME"] = []byte(openstackcreds.Spec.OsDomainName)
-		}
-		if openstackcreds.Spec.OsRegionName != "" {
-			secretData["OS_REGION_NAME"] = []byte(openstackcreds.Spec.OsRegionName)
-		}
-		if openstackcreds.Spec.OsTenantName != "" {
-			secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
-		}
-		if openstackcreds.Spec.ProjectName != "" {
-			secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.ProjectName)
-		} else if openstackcreds.Spec.OsTenantName != "" {
-			secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
-		}
-		if openstackcreds.Spec.OsIdentityAPIVersion != "" {
-			secretData["OS_IDENTITY_API_VERSION"] = []byte(openstackcreds.Spec.OsIdentityAPIVersion)
-		}
-		if openstackcreds.Spec.OsInterface != "" {
-			secretData["OS_INTERFACE"] = []byte(openstackcreds.Spec.OsInterface)
-		}
-		if openstackcreds.Spec.OsInsecure != nil {
-			if *openstackcreds.Spec.OsInsecure {
-				secretData["OS_INSECURE"] = []byte("true")
-			} else {
-				secretData["OS_INSECURE"] = []byte("false")
-			}
-		}
+func (r *OpenstackCredsReconciler) createSecretFromSpecIfNeeded(ctx context.Context, scope *scope.OpenstackCredsScope) (ctrl.Result, bool, error) {
+	ctxlog := scope.Logger
+	openstackcreds := scope.OpenstackCreds
+	if openstackcreds.Spec.SecretRef.Name != "" || openstackcreds.Spec.OsAuthURL == "" {
+		return ctrl.Result{}, false, nil
+	}
 
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: constants.NamespaceMigrationSystem,
-			},
-			Type: corev1.SecretTypeOpaque,
-			Data: secretData,
-		}
+	ctxlog.Info("Creating Secret from spec credential fields")
+	secretName := fmt.Sprintf("%s-openstack-secret", openstackcreds.Name)
 
-		if err := r.Create(ctx, secret); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				ctxlog.Error(err, "Failed to create Secret")
-				return ctrl.Result{}, errors.Wrap(err, "failed to create secret")
-			}
-			ctxlog.Info("Secret already exists", "secretName", secretName)
-		}
+	hasToken := openstackcreds.Spec.OsAuthToken != ""
+	hasUserPass := openstackcreds.Spec.OsUsername != "" && openstackcreds.Spec.OsPassword != ""
+	if !hasToken && !hasUserPass {
+		return ctrl.Result{}, true, fmt.Errorf("missing required OpenStack credentials: provide either osAuthToken or both osUsername and osPassword")
+	}
+	if !hasToken && openstackcreds.Spec.OsDomainName == "" {
+		return ctrl.Result{}, true, fmt.Errorf("missing required OpenStack domain name: osDomainName is required for username/password authentication")
+	}
 
-		openstackcreds.Spec.SecretRef = corev1.ObjectReference{
+	secretData := make(map[string][]byte)
+	secretData["OS_AUTH_URL"] = []byte(openstackcreds.Spec.OsAuthURL)
+
+	if openstackcreds.Spec.OsAuthToken != "" {
+		secretData["OS_AUTH_TOKEN"] = []byte(openstackcreds.Spec.OsAuthToken)
+	}
+	if openstackcreds.Spec.OsUsername != "" {
+		secretData["OS_USERNAME"] = []byte(openstackcreds.Spec.OsUsername)
+	}
+	if openstackcreds.Spec.OsPassword != "" {
+		secretData["OS_PASSWORD"] = []byte(openstackcreds.Spec.OsPassword)
+	}
+	if openstackcreds.Spec.OsDomainName != "" {
+		secretData["OS_DOMAIN_NAME"] = []byte(openstackcreds.Spec.OsDomainName)
+	}
+	if openstackcreds.Spec.OsRegionName != "" {
+		secretData["OS_REGION_NAME"] = []byte(openstackcreds.Spec.OsRegionName)
+	}
+	if openstackcreds.Spec.OsTenantName != "" {
+		secretData["OS_TENANT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
+	}
+	if openstackcreds.Spec.ProjectName != "" {
+		secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.ProjectName)
+	} else if openstackcreds.Spec.OsTenantName != "" {
+		secretData["OS_PROJECT_NAME"] = []byte(openstackcreds.Spec.OsTenantName)
+	}
+	if openstackcreds.Spec.OsIdentityAPIVersion != "" {
+		secretData["OS_IDENTITY_API_VERSION"] = []byte(openstackcreds.Spec.OsIdentityAPIVersion)
+	}
+	if openstackcreds.Spec.OsInterface != "" {
+		secretData["OS_INTERFACE"] = []byte(openstackcreds.Spec.OsInterface)
+	}
+	if openstackcreds.Spec.OsInsecure != nil {
+		if *openstackcreds.Spec.OsInsecure {
+			secretData["OS_INSECURE"] = []byte("true")
+		} else {
+			secretData["OS_INSECURE"] = []byte("false")
+		}
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: constants.NamespaceMigrationSystem,
-		}
-
-		openstackcreds.Spec.OsAuthURL = ""
-		openstackcreds.Spec.OsAuthToken = ""
-		openstackcreds.Spec.OsUsername = ""
-		openstackcreds.Spec.OsPassword = ""
-		openstackcreds.Spec.OsDomainName = ""
-		openstackcreds.Spec.OsRegionName = ""
-		openstackcreds.Spec.OsTenantName = ""
-		openstackcreds.Spec.OsIdentityAPIVersion = ""
-		openstackcreds.Spec.OsInterface = ""
-		openstackcreds.Spec.OsInsecure = nil
-
-		if err := r.Update(ctx, openstackcreds); err != nil {
-			ctxlog.Error(err, "Failed to update OpenstackCreds with SecretRef")
-			return ctrl.Result{}, errors.Wrap(err, "failed to update OpenstackCreds")
-		}
-
-		ctxlog.Info("Successfully created Secret and updated SecretRef", "secretName", secretName)
-		return ctrl.Result{Requeue: true}, nil
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: secretData,
 	}
 
-	// Check if spec matches with kubectl.kubernetes.io/last-applied-configuration
-	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
+	if err := r.Create(ctx, secret); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			ctxlog.Error(err, "Failed to create Secret")
+			return ctrl.Result{}, true, errors.Wrap(err, "failed to create secret")
+		}
+		ctxlog.Info("Secret already exists", "secretName", secretName)
+	}
 
+	openstackcreds.Spec.SecretRef = corev1.ObjectReference{
+		Name:      secretName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}
+
+	openstackcreds.Spec.OsAuthURL = ""
+	openstackcreds.Spec.OsAuthToken = ""
+	openstackcreds.Spec.OsUsername = ""
+	openstackcreds.Spec.OsPassword = ""
+	openstackcreds.Spec.OsDomainName = ""
+	openstackcreds.Spec.OsRegionName = ""
+	openstackcreds.Spec.OsTenantName = ""
+	openstackcreds.Spec.OsIdentityAPIVersion = ""
+	openstackcreds.Spec.OsInterface = ""
+	openstackcreds.Spec.OsInsecure = nil
+
+	if err := r.Update(ctx, openstackcreds); err != nil {
+		ctxlog.Error(err, "Failed to update OpenstackCreds with SecretRef")
+		return ctrl.Result{}, true, errors.Wrap(err, "failed to update OpenstackCreds")
+	}
+
+	ctxlog.Info("Successfully created Secret and updated SecretRef", "secretName", secretName)
+	return ctrl.Result{Requeue: true}, true, nil
+}
+
+func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, scope *scope.OpenstackCredsScope, result openstackvalidation.ValidationResult) error {
+	ctxlog := scope.Logger
 	if !result.Valid {
-		// Update the status of the OpenstackCreds object
 		errMsg := result.Message
 		if strings.Contains(errMsg, "Creds are valid but for a different OpenStack environment") {
 			if r.Local {
-				// At this point creds are valid but controller is not able to fetch metadata
-				// that is why we are getting this above error
 				err := handleValidatedCreds(ctx, r, scope)
 				if err != nil {
-					return ctrl.Result{}, err
+					return err
 				}
 			}
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
@@ -243,38 +270,30 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
+			return err
 		}
 		ctxlog.Info("Successfully updated status to failed")
-	} else {
-		// Update the status of the OpenstackCreds object
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-		ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
-		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return ctrl.Result{}, err
-		}
-		ctxlog.Info("Successfully updated status to success")
-		err := handleValidatedCreds(ctx, r, scope)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		// Discover storage arrays from Cinder configuration
-		if err := r.discoverStorageArrays(ctx, scope); err != nil {
-			ctxlog.Error(err, "Failed to discover storage arrays")
-			// Don't fail reconciliation, just log error
-		}
+		return nil
 	}
-	// Get vjailbreak settings to get requeue after time
-	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+
+	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
+	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		return err
+	}
+	ctxlog.Info("Successfully updated status to success")
+	err := handleValidatedCreds(ctx, r, scope)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to get vjailbreak settings")
+		return err
 	}
 
-	// Requeue to update the status of the OpenstackCreds object more specifically it will update flavors
-	return ctrl.Result{Requeue: true, RequeueAfter: time.Duration(vjailbreakSettings.OpenstackCredsRequeueAfterMinutes) * time.Minute}, nil
+	if err := r.discoverStorageArrays(ctx, scope); err != nil {
+		ctxlog.Error(err, "Failed to discover storage arrays")
+	}
+
+	return nil
 }
 
 func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *scope.OpenstackCredsScope) error {

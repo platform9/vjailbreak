@@ -20,9 +20,7 @@ const PASSWORD_AUTH_REQUIRED_FIELDS = [
 const TOKEN_AUTH_REQUIRED_FIELD = 'OS_AUTH_TOKEN'
 
 export const REQUIRED_OPENSTACK_FIELDS = [
-  'OS_AUTH_URL',
-  'OS_REGION_NAME',
-  'OS_TENANT_NAME'
+  ...COMMON_REQUIRED_FIELDS
 ] as const
 
 export interface ParseRCFileResult {
@@ -107,7 +105,11 @@ export function validateRCFileFields(fields: Record<string, string>): {
   } else {
     // Neither authentication method has complete credentials
     if (!hasToken) {
-      missingFields.push('OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD)')
+      if (hasUsername || hasPassword) {
+        missingFields.push(hasUsername ? 'OS_PASSWORD' : 'OS_USERNAME')
+      } else {
+        missingFields.push('OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD)')
+      }
     }
   }
 

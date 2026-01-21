@@ -76,7 +76,13 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	username := strings.TrimSpace(os.Getenv("OS_USERNAME"))
 	userID := strings.TrimSpace(os.Getenv("OS_USERID"))
 	password := strings.TrimSpace(os.Getenv("OS_PASSWORD"))
-	domainName := strings.TrimSpace(os.Getenv("OS_DOMAIN_NAME"))
+	domainName := strings.TrimSpace(os.Getenv("OS_USER_DOMAIN_NAME"))
+	if domainName == "" {
+		domainName = strings.TrimSpace(os.Getenv("OS_DOMAIN_NAME"))
+	}
+	if domainName == "" {
+		domainName = strings.TrimSpace(os.Getenv("OS_PROJECT_DOMAIN_NAME"))
+	}
 
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: authURL,

@@ -62,14 +62,14 @@ export const createOpenstackCredsSecret = async (
   const hasPass = !!credentials.OS_PASSWORD && credentials.OS_PASSWORD.trim() !== ''
   const hasUserPass = hasUser && hasPass
 
-  const tenantName = credentials.OS_TENANT_NAME || credentials.OS_PROJECT_NAME
+  const tenantName = (credentials.OS_TENANT_NAME || credentials.OS_PROJECT_NAME || '').trim()
   if (!credentials.OS_AUTH_URL || credentials.OS_AUTH_URL.trim() === '') {
     throw new Error('Missing required field: OS_AUTH_URL')
   }
   if (!credentials.OS_REGION_NAME || credentials.OS_REGION_NAME.trim() === '') {
     throw new Error('Missing required field: OS_REGION_NAME')
   }
-  if (!tenantName || tenantName.trim() === '') {
+  if (!tenantName) {
     throw new Error('Missing required field: OS_TENANT_NAME (or OS_PROJECT_NAME)')
   }
 
