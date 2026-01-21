@@ -341,6 +341,17 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get snapshot")
 	}
+	migobj.logMessage(fmt.Sprintf("Migration snapshot: %s", migration_snapshot.Value))
+	migobj.logMessage("Displaying disk info, directly from vcenter")
+	vmops.DisplayDisksInfo()
+
+	migobj.logMessage("Displaying disk info, from vminfo")
+	for idx := range vminfo.VMDisks {
+		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].Name))
+		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].SnapBackingDisk))
+		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].Snapname))
+		migobj.logMessage(fmt.Sprintf("Disk %d: %s", idx, vminfo.VMDisks[idx].ChangeID))
+	}
 
 	var changedAreas types.DiskChangeInfo
 

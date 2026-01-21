@@ -30,6 +30,7 @@ type VMOperations interface {
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
 	UpdateDisksInfo(*VMInfo) error
+	DisplayDisksInfo() error
 	IsCBTEnabled() (bool, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
@@ -422,6 +423,96 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 			vminfo.VMDisks[idx].SnapBackingDisk = snapInfo.FileName
 			vminfo.VMDisks[idx].Snapname = o.Snapshot.CurrentSnapshot.Value
 			vminfo.VMDisks[idx].ChangeID = snapInfo.ChangeID
+		}
+	}
+
+	return nil
+}
+
+func (vmops *VMOps) DisplayDisksInfo() error {
+	pc := vmops.vcclient.VCPropertyCollector
+	var snapbackingdisk []string
+	var snapname []string
+	var snapid []string
+	vminfo := VMInfo{}
+	vm := vmops.VMObj
+
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+	if err != nil {
+		if !strings.Contains(err.Error(), "NotAuthenticated") {
+			return fmt.Errorf("failed to get VM properties: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		pc = property.DefaultCollector(vmops.vcclient.VCClient)
+		err = vm.Properties(vmops.ctx, vm.Reference(), []string{}, &o)
+		if err != nil {
+			return fmt.Errorf("failed to get VM properties: %s", err)
+		}
+	}
+
+	if o.Snapshot != nil {
+		// get backing disk of snapshot
+		var s mo.VirtualMachineSnapshot
+		err := pc.RetrieveOne(vmops.ctx, o.Snapshot.CurrentSnapshot.Reference(), []string{}, &s)
+		if err != nil {
+			return fmt.Errorf("failed to get snapshot properties: %s", err)
+		}
+
+		// Build map of snapshot info indexed by device key
+		// This ensures correct matching even if disk order differs between VM and snapshot
+		snapshotInfo := make(map[int32]struct {
+			FileName string
+			ChangeID string
+		})
+
+		for _, device := range s.Config.Hardware.Device {
+			switch disk := device.(type) {
+			case *types.VirtualDisk:
+				backing := disk.Backing.(types.BaseVirtualDeviceFileBackingInfo)
+				info := backing.GetVirtualDeviceFileBackingInfo()
+				changeid, err := getChangeID(disk)
+				if err != nil {
+					return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+				}
+				snapshotInfo[disk.Key] = struct {
+					FileName string
+					ChangeID string
+				}{
+					FileName: info.FileName,
+					ChangeID: changeid.Value,
+				}
+			}
+		}
+
+		// Match snapshot disks to VM disks by device key (not by index)
+		// Fixes bug where vCenter returns disks in different order for VM vs snapshot
+		for idx := range vminfo.VMDisks {
+			deviceKey := vminfo.VMDisks[idx].Disk.Key
+
+			// Fallback: if device key is invalid, use index-based matching with warning
+			if deviceKey == 0 {
+				log.Printf("WARNING: Disk %s has invalid device key, using index-based fallback", vminfo.VMDisks[idx].Name)
+				if idx < len(snapbackingdisk) {
+					vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
+					vminfo.VMDisks[idx].Snapname = snapname[idx]
+					vminfo.VMDisks[idx].ChangeID = snapid[idx]
+				}
+				continue
+			}
+
+			snapInfo, found := snapshotInfo[deviceKey]
+			if !found {
+				return fmt.Errorf("snapshot not found for disk %s (device key=%d)", vminfo.VMDisks[idx].Name, deviceKey)
+			}
+
+			vminfo.VMDisks[idx].SnapBackingDisk = snapInfo.FileName
+			vminfo.VMDisks[idx].Snapname = o.Snapshot.CurrentSnapshot.Value
+			vminfo.VMDisks[idx].ChangeID = snapInfo.ChangeID
+			log.Printf("Disk %s: SnapBackingDisk=%s, Snapname=%s, ChangeID=%s", vminfo.VMDisks[idx].Name, vminfo.VMDisks[idx].SnapBackingDisk, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].ChangeID)
 		}
 	}
 
