@@ -20,14 +20,18 @@ func init() {
 
 // PureStorageProvider implements StorageProvider for Pure Storage FlashArray
 type PureStorageProvider struct {
-	client      *flasharray.Client
-	accessInfo  storage.StorageAccessInfo
-	isConnected bool
+	storage.BaseStorageProvider
+	client *flasharray.Client
 }
 
 // Connect establishes connection to Pure Storage array
 func (p *PureStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
-	p.accessInfo = accessInfo
+	p.AccessInfo = accessInfo
+	p.Config = storage.VendorConfig{
+		NAAPrefix: FlashProviderID,
+		Name:      "Pure",
+	}
+
 	// Create Pure Storage client
 	client, err := flasharray.NewClient(
 		accessInfo.Hostname,             // target
@@ -45,7 +49,7 @@ func (p *PureStorageProvider) Connect(ctx context.Context, accessInfo storage.St
 	}
 
 	p.client = client
-	p.isConnected = true
+	p.SetConnected(true)
 
 	// Log array info
 	array, err := p.client.Array.Get(nil)
@@ -58,14 +62,14 @@ func (p *PureStorageProvider) Connect(ctx context.Context, accessInfo storage.St
 
 // Disconnect closes the connection
 func (p *PureStorageProvider) Disconnect() error {
-	p.isConnected = false
+	p.SetConnected(false)
 	return nil
 }
 
 // ValidateCredentials validates the credentials
 func (p *PureStorageProvider) ValidateCredentials(ctx context.Context) error {
-	if !p.isConnected {
-		err := p.Connect(ctx, p.accessInfo)
+	if !p.GetConnected() {
+		err := p.Connect(ctx, p.AccessInfo)
 		if err != nil {
 			return err
 		}
@@ -90,7 +94,7 @@ func (p *PureStorageProvider) CreateVolume(volumeName string, size int64) (stora
 		Size:         volume.Size,
 		Id:           "", // Pure sdk doesn't provide volume ID
 		SerialNumber: volume.Serial,
-		NAA:          fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(volume.Serial)),
+		NAA:          p.BuildNAA(volume.Serial),
 	}, nil
 }
 
@@ -123,7 +127,7 @@ func (p *PureStorageProvider) GetVolumeInfo(volumeName string) (storage.VolumeIn
 		Name:    v.Name,
 		Size:    v.Size,
 		Created: v.Created,
-		NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+		NAA:     p.BuildNAA(v.Serial),
 	}, nil
 }
 
@@ -140,7 +144,7 @@ func (p *PureStorageProvider) ListAllVolumes() ([]storage.VolumeInfo, error) {
 			Name:    v.Name,
 			Size:    v.Size,
 			Created: v.Created,
-			NAA:     fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+			NAA:     p.BuildNAA(v.Serial),
 		})
 	}
 
@@ -149,17 +153,7 @@ func (p *PureStorageProvider) ListAllVolumes() ([]storage.VolumeInfo, error) {
 
 // GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
 func (p *PureStorageProvider) GetAllVolumeNAAs() ([]string, error) {
-	volumes, err := p.ListAllVolumes()
-	if err != nil {
-		return nil, err
-	}
-
-	var naaIdentifiers []string
-	for _, v := range volumes {
-		naaIdentifiers = append(naaIdentifiers, v.NAA)
-	}
-
-	return naaIdentifiers, nil
+	return p.BaseStorageProvider.GetAllVolumeNAAs(p.ListAllVolumes)
 }
 
 // CreateOrUpdateInitiatorGroup creates or updates an initiator group with the ESX adapters
@@ -177,7 +171,7 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 
 		// Check IQNs
 		for _, iqn := range h.Iqn {
-			if slices.Contains(hbaIdentifiers, iqn) {
+			if slices.Contains(hbaIdentifiers, iqn) || storage.ContainsIgnoreCase(hbaIdentifiers, iqn) {
 				klog.Infof("Adding host %s to group (matched IQN: %s)", h.Name, iqn)
 				matchedHosts = append(matchedHosts, h.Name)
 				break
@@ -250,7 +244,7 @@ func (p *PureStorageProvider) GetMappedGroups(targetVolume storage.Volume, conte
 	return nil, nil
 }
 
-// ResolveCinderVolumeToVolume resolves a Cinder volume name to a storage Volume/LUN
+// ResolveCinderVolumeToLUN resolves a Cinder volume name to a storage Volume/LUN
 func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage.Volume, error) {
 	// Get volume by name
 	// Pure driver adds prefix volume and suffix -cinder to the volume name
@@ -265,7 +259,7 @@ func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage
 	lun := storage.Volume{
 		Name:         v.Name,
 		SerialNumber: v.Serial,
-		NAA:          fmt.Sprintf("naa.%s%s", FlashProviderID, strings.ToLower(v.Serial)),
+		NAA:          p.BuildNAA(v.Serial),
 	}
 
 	return lun, nil
@@ -273,16 +267,10 @@ func (p *PureStorageProvider) ResolveCinderVolumeToLUN(volumeID string) (storage
 
 // GetVolumeFromNAA retrieves a Pure volume by its NAA identifier
 func (p *PureStorageProvider) GetVolumeFromNAA(naaID string) (storage.Volume, error) {
-	// Extract serial number from NAA
-	// NAA format: naa.624a9370<serial_in_lowercase>
-	// Pure provider ID is 624a9370
-	if !strings.HasPrefix(naaID, "naa."+FlashProviderID) {
-		return storage.Volume{}, fmt.Errorf("NAA ID %s is not from Pure FlashArray (expected prefix: naa.%s)", naaID, FlashProviderID)
+	serial, err := p.ExtractSerialFromNAA(naaID)
+	if err != nil {
+		return storage.Volume{}, err
 	}
-
-	// Extract serial (everything after "naa.624a9370")
-	serial := strings.TrimPrefix(naaID, "naa."+FlashProviderID)
-	serial = strings.ToUpper(serial) // Pure stores serials in uppercase
 
 	// List all volumes and find matching serial
 	volumes, err := p.client.Volumes.ListVolumes(nil)
