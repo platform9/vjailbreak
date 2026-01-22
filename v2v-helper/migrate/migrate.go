@@ -505,7 +505,6 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting sync cycle (interval: %s)", syncInterval))
 			start := time.Now()
 			if currentState == initial {
-
 				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
 					return vmops.CleanUpSnapshots(false)
 				}, maxRetries, capInterval)
@@ -530,10 +529,10 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			if currentState == TookSnapshot {
 				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
 					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
+					currentState = initial // Reset state on failure so we retry from start next loop
 					continue
-				} else {
-					currentState = initial
 				}
+				currentState = initial // Reset on success as well.
 			}
 			elapsed = time.Since(start)
 		}
