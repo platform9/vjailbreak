@@ -1,5 +1,6 @@
 import React, { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
+import { useLocation } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -40,6 +41,9 @@ import {
 import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
+
+const VDDK_UPLOADED_KEY = 'vddk-uploaded'
 
 const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -308,6 +312,7 @@ type UseGlobalSettingsControllerReturn = {
   loading: boolean
   saving: boolean
   activeTab: TabKey
+  setActiveTab: React.Dispatch<React.SetStateAction<TabKey>>
   notification: NotificationState
   proxyUpdateSuccess: boolean
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -716,6 +721,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     loading,
     saving,
     activeTab,
+    setActiveTab,
     notification,
     proxyUpdateSuccess,
     onText,
@@ -732,6 +738,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
 
 export default function GlobalSettingsPage() {
   const theme = useTheme()
+  const location = useLocation()
   const {
     form,
     errors,
@@ -739,6 +746,7 @@ export default function GlobalSettingsPage() {
     loading,
     saving,
     activeTab,
+    setActiveTab,
     notification,
     proxyUpdateSuccess,
     onText,
@@ -752,6 +760,14 @@ export default function GlobalSettingsPage() {
     handleNotificationClose
   } = useGlobalSettingsController()
 
+  useEffect(() => {
+    const requestedTab = (location.state as any)?.tab as TabKey | undefined
+    if (!requestedTab) return
+    if (!TAB_ORDER.includes(requestedTab)) return
+    if (requestedTab === activeTab) return
+    setActiveTab(requestedTab)
+  }, [activeTab, location.state, setActiveTab])
+
   const [proxyHelpDismissed, setProxyHelpDismissed] = useState(false)
 
   const [vddkFile, setVddkFile] = useState<File | null>(null)
@@ -759,6 +775,10 @@ export default function GlobalSettingsPage() {
   const [vddkProgress, setVddkProgress] = useState(0)
   const [vddkMessage, setVddkMessage] = useState('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
+
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const existingVddkPath = vddkStatusQuery.data?.uploaded ? vddkStatusQuery.data?.path || '' : ''
+  const existingVddkVersion = vddkStatusQuery.data?.version || ''
 
   const validateVddkFile = useCallback((file: File) => {
     const validExtensions = ['.tar', '.tar.gz', '.tgz']
@@ -816,6 +836,8 @@ export default function GlobalSettingsPage() {
           setVddkStatus('success')
           setVddkMessage(response.message || 'VDDK file uploaded and extracted successfully!')
           setVddkExtractedPath(response.extracted_path || '')
+
+          localStorage.setItem(VDDK_UPLOADED_KEY, 'true')
         } catch (err) {
           setVddkStatus('error')
           setVddkMessage(err instanceof Error ? err.message : 'Upload failed')
@@ -887,6 +909,7 @@ export default function GlobalSettingsPage() {
                 key={tab}
                 value={tab}
                 data-testid={`global-settings-tab-${tab}`}
+                data-tour={tab === 'vddk' ? 'settings-tab-vddk' : undefined}
                 label={
                   <TabLabel
                     label={TAB_META[tab].label}
@@ -1243,6 +1266,8 @@ export default function GlobalSettingsPage() {
               progress={vddkProgress}
               message={vddkMessage}
               extractedPath={vddkExtractedPath}
+              existingVddkPath={existingVddkPath}
+              existingVddkVersion={existingVddkVersion}
               onFileSelected={handleVddkFileSelected}
               onClear={handleVddkClear}
             />
@@ -1268,6 +1293,7 @@ export default function GlobalSettingsPage() {
               type="submit"
               color="primary"
               disabled={saving || vddkStatus === 'uploading'}
+              data-tour="global-settings-save"
               startIcon={
                 saving || vddkStatus === 'uploading' ? (
                   <CircularProgress size={20} color="inherit" />

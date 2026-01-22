@@ -269,6 +269,7 @@ function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: Navig
       collapsed={isCollapsed}
       onClick={handleClick}
       disabled={item.disabled}
+      data-tour={`nav-${item.id}`}
     >
       {item.icon && <StyledListItemIcon collapsed={isCollapsed}>{item.icon}</StyledListItemIcon>}
       {!isCollapsed && (
@@ -401,9 +402,10 @@ export default function Sidenav({
     if (onItemClick) {
       onItemClick(item)
     } else if (item.external) {
-      const url = item.externalUrl && item.externalUrl.trim()
-        ? item.externalUrl
-        : `https://${window.location.host}${item.path}`
+      const url =
+        item.externalUrl && item.externalUrl.trim()
+          ? item.externalUrl
+          : `https://${window.location.host}${item.path}`
       window.open(url, '_blank', 'noopener,noreferrer')
     } else {
       navigate(item.path)
