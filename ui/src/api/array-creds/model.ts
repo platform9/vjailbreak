@@ -69,6 +69,7 @@ export interface ArrayCredsStatus {
 // Supported vendor types for storage arrays
 export const ARRAY_VENDOR_TYPES = [
   { value: 'pure', label: 'Pure Storage' },
+  { value: 'netapp', label: 'NetApp Storage' },
   { value: 'unsupported', label: 'N/A' }
 ] as const
 
