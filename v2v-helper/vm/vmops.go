@@ -479,13 +479,14 @@ func (vmops *VMOps) UpdateDiskInfo(vminfo *VMInfo, disk VMDisk, blockCopySuccess
 			if vminfo.VMDisks[idx].Name == disk.Name {
 				if blockCopySuccess {
 					vminfo.VMDisks[idx].ChangeID = snapid[idx]
+					log.Printf("Updating Change ID: %s", snapid[idx])
 				}
 				vminfo.VMDisks[idx].SnapBackingDisk = snapbackingdisk[idx]
 				vminfo.VMDisks[idx].Snapname = snapname[idx]
 				log.Printf("Updated disk info for %s", disk.Name)
 				log.Printf("Snapshot backing disk: %s", snapbackingdisk[idx])
 				log.Printf("Snapshot name: %s", snapname[idx])
-				log.Printf("Change ID: %s", snapid[idx])
+
 				break
 			}
 		}
