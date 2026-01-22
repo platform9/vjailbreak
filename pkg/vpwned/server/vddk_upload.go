@@ -24,6 +24,7 @@ const (
 type VDDKStatusResponse struct {
 	Uploaded bool   `json:"uploaded"`
 	Path     string `json:"path,omitempty"`
+	Version  string `json:"version,omitempty"`
 	Message  string `json:"message"`
 }
 
@@ -32,6 +33,62 @@ type VDDKUploadResponse struct {
 	Message       string `json:"message"`
 	FilePath      string `json:"file_path,omitempty"`
 	ExtractedPath string `json:"extracted_path,omitempty"`
+}
+
+// getVDDKVersion extracts the VDDK version from the libvixDiskLib shared library filename
+func getVDDKVersion() string {
+	const fn = "getVDDKVersion"
+
+	// Find the libvixDiskLib.so* file in lib64 directory
+	libDir := filepath.Join(vddkInstallDir, "lib64")
+	pattern := filepath.Join(libDir, "libvixDiskLib.so.*")
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Debug("Failed to glob for libvixDiskLib.so")
+		return ""
+	}
+	if len(matches) == 0 {
+		logrus.WithField("func", fn).Debug("Could not find libvixDiskLib.so")
+		return ""
+	}
+
+	// Find the actual library file (not a symlink) with the full version like libvixDiskLib.so.8.0.0
+	var libPath string
+	for _, match := range matches {
+		info, err := os.Lstat(match)
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Debug("Failed to stat library file")
+			continue
+		}
+		// Skip symlinks, we want the actual file
+		if info.Mode()&os.ModeSymlink == 0 {
+			// Prefer the one with the longest name (most specific version)
+			if len(match) > len(libPath) {
+				libPath = match
+			}
+		}
+	}
+
+	if libPath == "" {
+		logrus.WithFields(logrus.Fields{
+			"func":    fn,
+			"matches": matches,
+		}).Debug("No non-symlink libvixDiskLib.so file found")
+		return ""
+	}
+
+	// Extract version from filename: libvixDiskLib.so.8.0.0 -> 8.0.0
+	basename := filepath.Base(libPath)
+	version := strings.TrimPrefix(basename, "libvixDiskLib.so.")
+
+	logrus.WithFields(logrus.Fields{
+		"func":    fn,
+		"version": version,
+		"libPath": libPath,
+	}).Debug("Extracted VDDK version from filename")
+
+	return version
 }
 
 // HandleVDDKStatus checks if VDDK has been uploaded and is available
@@ -64,16 +121,20 @@ func HandleVDDKStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	version := getVDDKVersion()
+
 	logrus.WithFields(logrus.Fields{
 		"func":       fn,
 		"path":       vddkInstallDir,
 		"file_count": len(files),
+		"version":    version,
 	}).Info("VDDK is available")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(VDDKStatusResponse{
 		Uploaded: true,
 		Path:     vddkInstallDir,
+		Version:  version,
 		Message:  "VDDK is available",
 	})
 }
