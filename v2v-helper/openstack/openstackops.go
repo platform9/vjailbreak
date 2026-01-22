@@ -6,6 +6,7 @@ import (
 	context "context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -54,12 +55,69 @@ type OpenstackOperations interface {
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
 }
 
+func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
+	authURL := strings.TrimSpace(os.Getenv("OS_AUTH_URL"))
+	if authURL == "" {
+		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_AUTH_URL")
+	}
+
+	tenantName := strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
+	if tenantName == "" {
+		tenantName = strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
+	}
+	tenantID := strings.TrimSpace(os.Getenv("OS_PROJECT_ID"))
+	if tenantName == "" {
+		if tenantID == "" {
+			return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_TENANT_NAME, OS_PROJECT_NAME, OS_PROJECT_ID]")
+		}
+	}
+
+	authToken := strings.TrimSpace(os.Getenv("OS_AUTH_TOKEN"))
+	username := strings.TrimSpace(os.Getenv("OS_USERNAME"))
+	userID := strings.TrimSpace(os.Getenv("OS_USERID"))
+	password := strings.TrimSpace(os.Getenv("OS_PASSWORD"))
+	domainName := strings.TrimSpace(os.Getenv("OS_USER_DOMAIN_NAME"))
+	if domainName == "" {
+		domainName = strings.TrimSpace(os.Getenv("OS_DOMAIN_NAME"))
+	}
+	if domainName == "" {
+		domainName = strings.TrimSpace(os.Getenv("OS_PROJECT_DOMAIN_NAME"))
+	}
+
+	opts := gophercloud.AuthOptions{
+		IdentityEndpoint: authURL,
+		TenantName:       tenantName,
+		DomainName:       domainName,
+	}
+	if tenantID != "" {
+		opts.TenantID = tenantID
+	}
+
+	if authToken != "" {
+		opts.TokenID = authToken
+		opts.AllowReauth = false
+		return opts, nil
+	}
+
+	if username == "" && userID == "" {
+		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_USERID, OS_USERNAME]")
+	}
+	if password == "" {
+		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_PASSWORD")
+	}
+	opts.Username = username
+	opts.UserID = userID
+	opts.Password = password
+	opts.AllowReauth = true
+
+	return opts, nil
+}
+
 func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {
-	opts, err := openstack.AuthOptionsFromEnv()
+	opts, err := authOptionsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
 	}
-	opts.AllowReauth = true
 	providerClient, err := openstack.NewClient(opts.IdentityEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider client: %s", err)

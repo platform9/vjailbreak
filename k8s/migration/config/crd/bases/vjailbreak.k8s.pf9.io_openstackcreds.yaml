@@ -109,6 +109,22 @@ spec:
                   - vcpus
                   type: object
                 type: array
+              osAuthToken:
+                type: string
+              osAuthUrl:
+                type: string
+              osDomainName:
+                type: string
+              osInsecure:
+                type: boolean
+              osPassword:
+                type: string
+              osRegionName:
+                type: string
+              osTenantName:
+                type: string
+              osUsername:
+                type: string
               pcdHostConfig:
                 description: PCDHostConfig is the list of available clusters in openstack
                 items:

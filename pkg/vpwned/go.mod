@@ -4,6 +4,10 @@ go 1.24.10
 
 replace github.com/platform9/vjailbreak/pkg/common/utils => ../common/utils
 
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../common/validation
+
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../common/openstack
+
 require (
 	github.com/bougou/go-ipmi v0.7.6
 	github.com/canonical/gomaasclient v0.12.0

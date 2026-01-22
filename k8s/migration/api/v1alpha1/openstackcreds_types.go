@@ -39,10 +39,12 @@ type HostConfig struct {
 type OpenStackCredsInfo struct {
 	// AuthURL is the OpenStack authentication URL
 	AuthURL string
-	// Username is the OpenStack username
+	// Username is the OpenStack username (optional when using token-based auth)
 	Username string
-	// Password is the OpenStack password
+	// Password is the OpenStack password (optional when using token-based auth)
 	Password string
+	// AuthToken is the pre-authenticated OpenStack token (optional, alternative to username/password)
+	AuthToken string
 	// RegionName is the OpenStack region
 	RegionName string
 	// TenantName is the OpenStack tenant
@@ -62,10 +64,10 @@ type SecurityGroupInfo struct {
 
 // ServerGroupInfo holds the server group name, ID, and policy information
 type ServerGroupInfo struct {
-	Name     string `json:"name"`
-	ID       string `json:"id"`
-	Policy   string `json:"policy"`  // affinity, anti-affinity, soft-affinity, soft-anti-affinity
-	Members  int    `json:"members,omitempty"`
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+	Policy  string `json:"policy"` // affinity, anti-affinity, soft-affinity, soft-anti-affinity
+	Members int    `json:"members,omitempty"`
 }
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
@@ -81,6 +83,27 @@ type OpenstackInfo struct {
 type OpenstackCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding OpenStack credentials
 	SecretRef corev1.ObjectReference `json:"secretRef,omitempty"`
+
+	// +optional
+	OsAuthURL string `json:"osAuthUrl,omitempty"`
+	// +optional
+	OsAuthToken string `json:"osAuthToken,omitempty"`
+	// +optional
+	OsUsername string `json:"osUsername,omitempty"`
+	// +optional
+	OsPassword string `json:"osPassword,omitempty"`
+	// +optional
+	OsDomainName string `json:"osDomainName,omitempty"`
+	// +optional
+	OsRegionName string `json:"osRegionName,omitempty"`
+	// +optional
+	OsTenantName string `json:"osTenantName,omitempty"`
+	// +optional
+	OsInsecure *bool `json:"osInsecure,omitempty"`
+	// +optional
+	OsIdentityAPIVersion string `json:"osIdentityApiVersion,omitempty"`
+	// +optional
+	OsInterface string `json:"osInterface,omitempty"`
 
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`

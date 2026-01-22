@@ -426,6 +426,9 @@ func (c *HTTPClient) GetTokenInfo(ctx context.Context, token string) (AuthRespon
 	if err != nil {
 		return AuthResponse{}, err
 	}
+	if resp.StatusCode >= 400 {
+		return AuthResponse{}, fmt.Errorf("failed to get token info: received a %d from keystone: %s", resp.StatusCode, string(respBody))
+	}
 
 	tokenResp := &AuthResponse{}
 	err = json.Unmarshal(respBody, tokenResp)

@@ -13,6 +13,7 @@ interface OpenstackCredsParams {
   OS_DOMAIN_NAME?: string
   OS_USERNAME?: string
   OS_PASSWORD?: string
+  OS_AUTH_TOKEN?: string
   OS_REGION_NAME?: string
   OS_TENANT_NAME?: string
   OS_INSECURE?: string
@@ -27,6 +28,7 @@ export const createOpenstackCredsJson = (params: OpenstackCredsParams) => {
     OS_DOMAIN_NAME,
     OS_USERNAME,
     OS_PASSWORD,
+    OS_AUTH_TOKEN,
     OS_REGION_NAME,
     OS_TENANT_NAME,
     OS_INSECURE,
@@ -47,13 +49,14 @@ export const createOpenstackCredsJson = (params: OpenstackCredsParams) => {
       namespace
     },
     spec: {
-      OS_AUTH_URL,
-      OS_DOMAIN_NAME,
-      OS_USERNAME,
-      OS_PASSWORD,
-      OS_REGION_NAME,
-      OS_TENANT_NAME,
-      OS_INSECURE: getBooleanValue(OS_INSECURE)
+      osAuthUrl: OS_AUTH_URL,
+      osAuthToken: OS_AUTH_TOKEN,
+      osUsername: OS_USERNAME,
+      osPassword: OS_PASSWORD,
+      osDomainName: OS_DOMAIN_NAME,
+      osRegionName: OS_REGION_NAME,
+      osTenantName: OS_TENANT_NAME,
+      osInsecure: getBooleanValue(OS_INSECURE)
     }
   }
 }

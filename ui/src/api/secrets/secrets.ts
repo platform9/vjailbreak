@@ -45,23 +45,61 @@ export const createSecret = async (
 export const createOpenstackCredsSecret = async (
   name: string,
   credentials: {
-    OS_USERNAME: string
-    OS_PASSWORD: string
+    OS_USERNAME?: string
+    OS_PASSWORD?: string
+    OS_AUTH_TOKEN?: string
     OS_AUTH_URL: string
     OS_PROJECT_NAME?: string
     OS_TENANT_NAME?: string
-    OS_DOMAIN_NAME: string
+    OS_DOMAIN_NAME?: string
     OS_REGION_NAME?: string
     OS_INSECURE?: boolean
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
+  const hasToken = !!credentials.OS_AUTH_TOKEN && credentials.OS_AUTH_TOKEN.trim() !== ''
+  const hasUser = !!credentials.OS_USERNAME && credentials.OS_USERNAME.trim() !== ''
+  const hasPass = !!credentials.OS_PASSWORD && credentials.OS_PASSWORD.trim() !== ''
+  const hasUserPass = hasUser && hasPass
+
+  const tenantName = (credentials.OS_TENANT_NAME || credentials.OS_PROJECT_NAME || '').trim()
+  if (!credentials.OS_AUTH_URL || credentials.OS_AUTH_URL.trim() === '') {
+    throw new Error('Missing required field: OS_AUTH_URL')
+  }
+  if (!credentials.OS_REGION_NAME || credentials.OS_REGION_NAME.trim() === '') {
+    throw new Error('Missing required field: OS_REGION_NAME')
+  }
+  if (!tenantName) {
+    throw new Error('Missing required field: OS_TENANT_NAME (or OS_PROJECT_NAME)')
+  }
+
+  if (!hasToken && !hasUserPass) {
+    throw new Error('Missing required credentials: provide either OS_AUTH_TOKEN or both OS_USERNAME and OS_PASSWORD')
+  }
+  if (hasUserPass && (!credentials.OS_DOMAIN_NAME || credentials.OS_DOMAIN_NAME.trim() === '')) {
+    throw new Error('Missing required field for password authentication: OS_DOMAIN_NAME')
+  }
+
   // Prepare data for the secret
   const secretData: SecretData = {
-    OS_USERNAME: credentials.OS_USERNAME,
-    OS_PASSWORD: credentials.OS_PASSWORD,
-    OS_AUTH_URL: credentials.OS_AUTH_URL,
-    OS_DOMAIN_NAME: credentials.OS_DOMAIN_NAME
+    OS_AUTH_URL: credentials.OS_AUTH_URL
+  }
+
+  // Add authentication fields - either token or username/password
+  if (credentials.OS_AUTH_TOKEN) {
+    secretData.OS_AUTH_TOKEN = credentials.OS_AUTH_TOKEN
+  }
+  
+  if (credentials.OS_USERNAME) {
+    secretData.OS_USERNAME = credentials.OS_USERNAME
+  }
+  
+  if (credentials.OS_PASSWORD) {
+    secretData.OS_PASSWORD = credentials.OS_PASSWORD
+  }
+  
+  if (credentials.OS_DOMAIN_NAME) {
+    secretData.OS_DOMAIN_NAME = credentials.OS_DOMAIN_NAME
   }
 
   // Add optional fields if they exist
@@ -69,8 +107,11 @@ export const createOpenstackCredsSecret = async (
     secretData.OS_PROJECT_NAME = credentials.OS_PROJECT_NAME
   }
 
-  if (credentials.OS_TENANT_NAME) {
-    secretData.OS_TENANT_NAME = credentials.OS_TENANT_NAME
+  if (tenantName) {
+    secretData.OS_TENANT_NAME = tenantName
+    if (!credentials.OS_PROJECT_NAME) {
+      secretData.OS_PROJECT_NAME = tenantName
+    }
   }
 
   if (credentials.OS_REGION_NAME) {

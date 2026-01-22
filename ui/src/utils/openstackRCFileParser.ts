@@ -2,13 +2,25 @@
  * Utility functions for parsing and validating OpenStack RC files
  */
 
-export const REQUIRED_OPENSTACK_FIELDS = [
+// Common required fields for both authentication methods
+const COMMON_REQUIRED_FIELDS = [
   'OS_AUTH_URL',
-  'OS_DOMAIN_NAME',
-  'OS_USERNAME',
-  'OS_PASSWORD',
   'OS_REGION_NAME',
   'OS_TENANT_NAME'
+] as const
+
+// Required fields for password-based authentication
+const PASSWORD_AUTH_REQUIRED_FIELDS = [
+  'OS_USERNAME',
+  'OS_PASSWORD',
+  'OS_DOMAIN_NAME'
+] as const
+
+// Required fields for token-based authentication
+const TOKEN_AUTH_REQUIRED_FIELD = 'OS_AUTH_TOKEN'
+
+export const REQUIRED_OPENSTACK_FIELDS = [
+  ...COMMON_REQUIRED_FIELDS
 ] as const
 
 export interface ParseRCFileResult {
@@ -59,15 +71,47 @@ export function parseRCFileContent(content: string): Record<string, string> {
 }
 
 /**
- * Validates that all required fields are present in the parsed fields
+ * Validates that all required fields are present based on authentication method
+ * Supports both token-based (OS_AUTH_TOKEN) and password-based (OS_USERNAME + OS_PASSWORD) auth
  */
 export function validateRCFileFields(fields: Record<string, string>): {
   valid: boolean
   missingFields: string[]
 } {
-  const missingFields = REQUIRED_OPENSTACK_FIELDS.filter(
-    (field) => !fields[field] || fields[field].trim() === ''
-  )
+  const missingFields: string[] = []
+
+  // Check common required fields
+  for (const field of COMMON_REQUIRED_FIELDS) {
+    if (!fields[field] || fields[field].trim() === '') {
+      missingFields.push(field)
+    }
+  }
+
+  // Check authentication method
+  const hasToken = fields[TOKEN_AUTH_REQUIRED_FIELD] && fields[TOKEN_AUTH_REQUIRED_FIELD].trim() !== ''
+  const hasUsername = fields['OS_USERNAME'] && fields['OS_USERNAME'].trim() !== ''
+  const hasPassword = fields['OS_PASSWORD'] && fields['OS_PASSWORD'].trim() !== ''
+
+  if (hasToken) {
+    // Token-based authentication - OS_DOMAIN_NAME is optional
+    // No additional required fields
+  } else if (hasUsername && hasPassword) {
+    // Password-based authentication - OS_DOMAIN_NAME is required
+    for (const field of PASSWORD_AUTH_REQUIRED_FIELDS) {
+      if (!fields[field] || fields[field].trim() === '') {
+        missingFields.push(field)
+      }
+    }
+  } else {
+    // Neither authentication method has complete credentials
+    if (!hasToken) {
+      if (hasUsername || hasPassword) {
+        missingFields.push(hasUsername ? 'OS_PASSWORD' : 'OS_USERNAME')
+      } else {
+        missingFields.push('OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD)')
+      }
+    }
+  }
 
   return {
     valid: missingFields.length === 0,
