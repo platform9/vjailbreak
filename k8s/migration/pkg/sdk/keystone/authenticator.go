@@ -71,11 +71,6 @@ func NewStaticTokenAuthenticator(client Client, token string) *StaticTokenAuthen
 	return &StaticTokenAuthenticator{client: client, token: token}
 }
 
-// NewStaticTokenGenerator creates a new StaticTokenAuthenticator instance.
-func NewStaticTokenGenerator(client Client, token string) *StaticTokenAuthenticator {
-	return NewStaticTokenAuthenticator(client, token)
-}
-
 // Auth validates the static token with Keystone and returns its authentication information.
 func (s *StaticTokenAuthenticator) Auth(ctx context.Context, _ ...AuthOptions) (AuthInfo, error) {
 	tokenInfo, err := s.client.GetTokenInfo(ctx, s.token)
