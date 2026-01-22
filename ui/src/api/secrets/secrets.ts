@@ -240,7 +240,7 @@ export const createArrayCredsSecret = async (
     ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
     ARRAY_USERNAME: credentials.ARRAY_USERNAME,
     ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
-    ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION ? 'true' : 'false'
+    ARRAY_INSECURE: credentials.ARRAY_SKIP_SSL_VERIFICATION ? 'true' : 'false'
   }
 
   return createSecret(name, secretData, namespace)
