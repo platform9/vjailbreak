@@ -672,6 +672,11 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			done := true
 
 			for idx := range vminfo.VMDisks {
+				err := vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], false)
+				if err != nil {
+					return vminfo, errors.Wrap(err, "failed to update disk info")
+				}
+
 				changedAreas, err = vmops.CustomQueryChangedDiskAreas(vminfo.VMDisks[idx].ChangeID, migration_snapshot, vminfo.VMDisks[idx].Disk, 0)
 				if err != nil {
 					return vminfo, errors.Wrap(err, "failed to get changed disk areas")
