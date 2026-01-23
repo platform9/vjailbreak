@@ -183,4 +183,10 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// StorageCopyMethod is the default value for storage copy method
 	StorageCopyMethod = "StorageAcceleratedCopy"
+
+	// MaxPowerOffRetryLimit is the max number of retries for power off status check
+	MaxPowerOffRetryLimit = 3
+
+	// PowerOffRetryCap is the max retry interval for power off status check
+	PowerOffRetryCap = 5 * time.Minute
 )

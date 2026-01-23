@@ -568,9 +568,17 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			return vminfo, errors.Wrap(err, "failed to power off VM")
 		}
 		// Verify VM is actually powered off
-		currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-		if stateErr == nil && currState != types.VirtualMachinePowerStatePoweredOff {
-			return vminfo, fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+		if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+			currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+			if stateErr != nil {
+				return stateErr
+			}
+			if currState != types.VirtualMachinePowerStatePoweredOff {
+				return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+			}
+			return nil
+		}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+			return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 		}
 	}
 
@@ -663,9 +671,17 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
 				// Verify VM is actually powered off
-				currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-				if stateErr == nil && currState != types.VirtualMachinePowerStatePoweredOff {
-					return vminfo, fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+					if stateErr != nil {
+						return stateErr
+					}
+					if currState != types.VirtualMachinePowerStatePoweredOff {
+						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					}
+					return nil
+				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 			}
 			if err := migobj.WaitforCutover(); err != nil {
@@ -752,9 +768,17 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					return vminfo, errors.Wrap(err, "failed to power off VM")
 				}
 				// Verify VM is actually powered off
-				currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-				if stateErr == nil && currState != types.VirtualMachinePowerStatePoweredOff {
-					return vminfo, fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+					if stateErr != nil {
+						return stateErr
+					}
+					if currState != types.VirtualMachinePowerStatePoweredOff {
+						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					}
+					return nil
+				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 				final = true
 			}
