@@ -307,12 +307,18 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 	for _, igroupName := range igroups {
 		klog.Infof("Mapping LUN %s to igroup %s", targetVolume.Name, igroupName)
 
+		// Get igroup UUID - ONTAP API requires UUID for lun-maps
+		igroup, err := n.getIgroupByName(ctx, igroupName)
+		if err != nil {
+			return storage.Volume{}, fmt.Errorf("failed to get igroup %s: %w", igroupName, err)
+		}
+
 		reqBody := map[string]interface{}{
 			"lun": map[string]interface{}{
 				"uuid": lun.UUID,
 			},
 			"igroup": map[string]interface{}{
-				"name": igroupName,
+				"uuid": igroup.UUID,
 			},
 		}
 
@@ -521,7 +527,7 @@ func (n *NetAppStorageProvider) listLUNs(ctx context.Context, filter string) ([]
 
 func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup, error) {
 	var response OntapIgroupResponse
-	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=initiators", nil, &response)
+	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=uuid,name,initiators", nil, &response)
 	if err != nil {
 		return nil, err
 	}
