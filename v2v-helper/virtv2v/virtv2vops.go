@@ -910,11 +910,11 @@ func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath str
 	var ans string
 	var err error
 	if useSingleDisk {
-		command := `copy-in /home/fedora/NIC-Recovery /NIC-Recovery`
+		command := `copy-in /home/fedora/NIC-Recovery /`
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "copy-in"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/NIC-Recovery")
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
 	}
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
