@@ -153,19 +153,21 @@ func (n *NetAppStorageProvider) CreateVolume(volumeName string, size int64) (sto
 		return storage.Volume{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	var response OntapLUN
+	// Use return_records=true to get the created LUN in the response
+	type CreateResponse struct {
+		Records []OntapLUN `json:"records"`
+	}
+	var response CreateResponse
 	err = n.DoRequestJSON(ctx, "POST", "/storage/luns?return_records=true", bytes.NewReader(jsonBody), &response)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("failed to create LUN %s: %w", volumeName, err)
 	}
 
-	// Fetch the created LUN to get serial number
-	luns, err := n.listLUNs(ctx, fmt.Sprintf("name=%s", lunPath))
-	if err != nil || len(luns) == 0 {
-		return storage.Volume{}, fmt.Errorf("failed to get created LUN %s: %w", lunPath, err)
+	if len(response.Records) == 0 {
+		return storage.Volume{}, fmt.Errorf("LUN creation succeeded but no records returned for %s", volumeName)
 	}
 
-	lun := luns[0]
+	lun := response.Records[0]
 	klog.Infof("Created NetApp LUN: %s, Serial: %s", lun.Name, lun.SerialNumber)
 
 	return storage.Volume{

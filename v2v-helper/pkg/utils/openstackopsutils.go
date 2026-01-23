@@ -23,6 +23,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	openstackinterface "github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -940,6 +941,44 @@ func (osclient *OpenStackClients) GetServerGroups(ctx context.Context, projectNa
 			Policy:  strings.Join(group.Policies, ","),
 			Members: len(group.Members),
 		})
+	}
+
+	return result, nil
+}
+
+// GetCinderVolumeServices returns the list of Cinder volume services
+func (osclient *OpenStackClients) GetCinderVolumeServices(ctx context.Context) ([]openstackinterface.CinderVolumeService, error) {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Fetching Cinder volume services, authurl %s, tenant %s", osclient.AuthURL, osclient.Tenant))
+
+	// Query Cinder volume services using raw API call
+	endpoint := osclient.BlockStorageClient.ServiceURL("os-services")
+
+	type Service struct {
+		Binary string `json:"binary"`
+		Host   string `json:"host"`
+		Status string `json:"status"`
+		State  string `json:"state"`
+	}
+
+	type ServicesResponse struct {
+		Services []Service `json:"services"`
+	}
+
+	var response ServicesResponse
+	_, err := osclient.BlockStorageClient.Get(ctx, endpoint, &response, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query Cinder volume services: %w", err)
+	}
+
+	var result []openstackinterface.CinderVolumeService
+	for _, svc := range response.Services {
+		if svc.Binary == "cinder-volume" {
+			result = append(result, openstackinterface.CinderVolumeService{
+				Host:   svc.Host,
+				Status: svc.Status,
+				State:  svc.State,
+			})
+		}
 	}
 
 	return result, nil

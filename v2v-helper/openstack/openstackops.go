@@ -53,6 +53,14 @@ type OpenstackOperations interface {
 	FindDevice(volumeID string) (string, error)
 	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	GetCinderVolumeServices(ctx context.Context) ([]CinderVolumeService, error)
+}
+
+// CinderVolumeService represents a Cinder volume service
+type CinderVolumeService struct {
+	Host   string
+	Status string
+	State  string
 }
 
 func authOptionsFromEnv() (gophercloud.AuthOptions, error) {

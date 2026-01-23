@@ -240,6 +240,7 @@ export const createArrayCredsSecret = async (
     ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
     ARRAY_USERNAME: credentials.ARRAY_USERNAME,
     ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
+    // Backend expects ARRAY_INSECURE, but UI uses ARRAY_SKIP_SSL_VERIFICATION for clarity
     ARRAY_INSECURE: credentials.ARRAY_SKIP_SSL_VERIFICATION ? 'true' : 'false'
   }
 
