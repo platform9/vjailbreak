@@ -335,6 +335,23 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 	utils.PrintLog(fmt.Sprintf("Source base name: %s", sourceBaseName))
 	utils.PrintLog(fmt.Sprintf("RDM descriptor path (on datastore): %s", rdmDescriptor))
 
+	// Check if RDM descriptor already exists and delete it (from previous failed attempts)
+	utils.PrintLog("Checking if RDM descriptor already exists...")
+	checkRdmCmd := fmt.Sprintf("ls -l '%s' 2>&1", rdmDescriptor)
+	checkRdmOutput, _ := c.ExecuteCommand(checkRdmCmd)
+	if !strings.Contains(checkRdmOutput, "No such file") {
+		utils.PrintLog(fmt.Sprintf("RDM descriptor already exists, deleting: %s", rdmDescriptor))
+		deleteCmd := fmt.Sprintf("rm -f '%s'", rdmDescriptor)
+		_, err := c.ExecuteCommand(deleteCmd)
+		if err != nil {
+			utils.PrintLog(fmt.Sprintf("WARNING: Failed to delete existing RDM descriptor: %v", err))
+		} else {
+			utils.PrintLog("Successfully deleted existing RDM descriptor")
+		}
+	} else {
+		utils.PrintLog("RDM descriptor does not exist, proceeding with clone")
+	}
+
 	// Create a log file for vmkfstools output
 	logFile := fmt.Sprintf("/tmp/vmkfstools_rdm_clone_%d.log", time.Now().Unix())
 	utils.PrintLog(fmt.Sprintf("Log file: %s", logFile))

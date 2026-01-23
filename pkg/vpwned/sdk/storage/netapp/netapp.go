@@ -90,10 +90,12 @@ func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.
 
 	// Validate connection by getting cluster info
 	cluster, err := n.getClusterInfo(ctx)
-	if err == nil {
-		klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s", cluster.Name, cluster.Version.Full)
+	if err != nil {
+		n.SetConnected(false)
+		return fmt.Errorf("failed to connect to NetApp ONTAP cluster: %w", err)
 	}
 
+	klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s", cluster.Name, cluster.Version.Full)
 	return nil
 }
 
@@ -459,7 +461,7 @@ func (n *NetAppStorageProvider) GetVolumeFromNAA(naaID string) (storage.Volume, 
 	}
 
 	for _, lun := range luns {
-		if strings.ToUpper(lun.SerialNumber) == serial {
+		if strings.ToUpper(lun.SerialNumber) == strings.ToUpper(serial) {
 			klog.Infof("Found NetApp LUN %s with serial %s matching NAA %s", lun.Name, lun.SerialNumber, naaID)
 			return storage.Volume{
 				Name:         lun.Name,
