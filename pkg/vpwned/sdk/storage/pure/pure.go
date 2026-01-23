@@ -169,9 +169,9 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 	for _, h := range hosts {
 		klog.Infof("Checking host %s, iqns: %v, wwns: %v", h.Name, h.Iqn, h.Wwn)
 
-		// Check IQNs
+		// Check IQNs (case-insensitive since IQNs can be presented with different casing)
 		for _, iqn := range h.Iqn {
-			if slices.Contains(hbaIdentifiers, iqn) || storage.ContainsIgnoreCase(hbaIdentifiers, iqn) {
+			if storage.ContainsIgnoreCase(hbaIdentifiers, iqn) {
 				klog.Infof("Adding host %s to group (matched IQN: %s)", h.Name, iqn)
 				matchedHosts = append(matchedHosts, h.Name)
 				break

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	cindervolumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
@@ -207,10 +206,10 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 
 	// After Cinder manage, the volume name changes based on the backend driver:
 	// - Pure: volume-<cinder-id>-cinder
-	// - NetApp: volume-<cinder-id> or /vol/<volume>/volume-<cinder-id>
-	// Use the cinder volume ID for lookup (works with wildcard search)
+	// - NetApp: /vol/<volume_path>/volume-<cinder-id> (includes the full LUN path)
+	// We use wildcard search with volume-<cinder-id> prefix which matches both patterns
 	cinderVolumeName := fmt.Sprintf("volume-%s", cinderVolumeId)
-	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to pattern: %s*", cinderVolumeName))
+	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to pattern: *%s*", cinderVolumeName))
 
 	// Step 6: Map target volume to ESXi host using the NEW Cinder volume name
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
@@ -465,19 +464,10 @@ func (migobj *Migrate) getCinderBackendForDatastore(datastoreName string) string
 func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName string) (string, error) {
 	migobj.logMessage(fmt.Sprintf("Autodiscovering Cinder host for backend: %s", backendName))
 
-	// List all Cinder volume services
-	listOpts := services.ListOpts{
-		Binary: "cinder-volume",
-	}
-
-	allPages, err := services.List(migobj.Openstackclients.BlockStorageClient, listOpts).AllPages(ctx)
+	// Get Cinder volume services via the interface method
+	serviceList, err := migobj.Openstackclients.GetCinderVolumeServices(ctx)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to list Cinder volume services")
-	}
-
-	serviceList, err := services.ExtractServices(allPages)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to extract Cinder services")
+		return "", errors.Wrap(err, "failed to get Cinder volume services")
 	}
 
 	migobj.logMessage(fmt.Sprintf("Found %d Cinder volume services", len(serviceList)))
