@@ -10,6 +10,7 @@ import (
 	"time"
 
 	cindervolumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
@@ -396,15 +397,31 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 		return "", errors.Wrap(err, "failed to get array creds")
 	}
 
-	// Build the Cinder host string
+	// Build the Cinder host string - prefer autodiscovery
+	backendName := arrayCreds.Spec.OpenStackMapping.CinderBackendName
 	cinderHost := arrayCreds.Spec.OpenStackMapping.CinderHost
+
+	// If CinderHost is not explicitly set, use autodiscovery to find the full host string
 	if cinderHost == "" {
-		cinderHost = arrayCreds.Spec.OpenStackMapping.CinderBackendName
+		if backendName == "" {
+			return "", fmt.Errorf("neither CinderHost nor CinderBackendName specified in ArrayCreds")
+		}
+
+		// Autodiscover the full host string (uuid@backend) from Cinder services API
+		migobj.logMessage(fmt.Sprintf("CinderHost not set, autodiscovering from backend name: %s", backendName))
+		discoveredHost, err := migobj.autodiscoverCinderHost(ctx, backendName)
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to autodiscover Cinder host for backend %s", backendName)
+		}
+		cinderHost = discoveredHost
+		migobj.logMessage(fmt.Sprintf("Autodiscovered Cinder host: %s", cinderHost))
+	} else {
+		migobj.logMessage(fmt.Sprintf("Using configured Cinder host: %s", cinderHost))
 	}
 
 	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
 
-	// Volume reference for Pure Storage - use source-name
+	// Volume reference for storage array - use source-name
 	volumeRef := map[string]interface{}{
 		"source-name": volumeName,
 	}
@@ -441,4 +458,45 @@ func (migobj *Migrate) getCinderBackendForDatastore(datastoreName string) string
 	// Placeholder - this needs to be implemented to read from ArrayCredsMapping
 	// The actual value should come from ArrayCreds.Spec.OpenStackMapping.CinderBackendPool
 	return fmt.Sprintf("hostname@%s#pool", migobj.VendorType)
+}
+
+// autodiscoverCinderHost queries the Cinder services API to find the actual host string for a backend
+// Returns the full host format: "uuid@backend" or "hostname@backend"
+func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName string) (string, error) {
+	migobj.logMessage(fmt.Sprintf("Autodiscovering Cinder host for backend: %s", backendName))
+
+	// List all Cinder volume services
+	listOpts := services.ListOpts{
+		Binary: "cinder-volume",
+	}
+
+	allPages, err := services.List(migobj.Openstackclients.BlockStorageClient, listOpts).AllPages(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to list Cinder volume services")
+	}
+
+	serviceList, err := services.ExtractServices(allPages)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to extract Cinder services")
+	}
+
+	migobj.logMessage(fmt.Sprintf("Found %d Cinder volume services", len(serviceList)))
+
+	// Find the cinder-volume service for our backend
+	for _, svc := range serviceList {
+		// Only consider enabled and up services
+		if svc.Status != "enabled" || svc.State != "up" {
+			migobj.logMessage(fmt.Sprintf("Skipping service: host=%s, status=%s, state=%s", svc.Host, svc.Status, svc.State))
+			continue
+		}
+
+		// Extract backend name from host (e.g., "55f61998-7b56-4f64-8527-2fdfaba63dcd@netapp" -> "netapp")
+		parts := strings.Split(svc.Host, "@")
+		if len(parts) == 2 && parts[1] == backendName {
+			migobj.logMessage(fmt.Sprintf("Found Cinder host for backend %s: %s", backendName, svc.Host))
+			return svc.Host, nil
+		}
+	}
+
+	return "", fmt.Errorf("no active Cinder volume service found for backend: %s", backendName)
 }
