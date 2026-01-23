@@ -143,7 +143,11 @@ func (b *BaseStorageProvider) GetVolumeFromNAACommon(naaID string, listFn func()
 
 	for _, v := range volumes {
 		// Extract serial from the volume's NAA and compare
-		volSerial, _ := b.ExtractSerialFromNAA(v.NAA)
+		volSerial, err := b.ExtractSerialFromNAA(v.NAA)
+		if err != nil {
+			klog.Warningf("Invalid NAA format for volume %s: %v", v.Name, err)
+			continue
+		}
 		if volSerial == serial {
 			klog.Infof("Found %s volume %s matching NAA %s", b.Config.Name, v.Name, naaID)
 			vol, err := getVolumeFn(v.Name)
