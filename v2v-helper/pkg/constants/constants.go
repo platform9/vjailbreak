@@ -189,4 +189,34 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 
 	// PowerOffRetryCap is the max retry interval for power off status check
 	PowerOffRetryCap = 5 * time.Minute
+
+	// V2VHelperPodCPURequest is the default CPU request for v2v-helper pod
+	V2VHelperPodCPURequest = "1000m"
+	// V2VHelperPodCPURequestKey is the key for v2v-helper pod CPU request
+	V2VHelperPodCPURequestKey = "V2V_HELPER_POD_CPU_REQUEST"
+
+	// V2VHelperPodMemoryRequest is the default memory request for v2v-helper pod
+	V2VHelperPodMemoryRequest = "1Gi"
+	// V2VHelperPodMemoryRequestKey is the key for v2v-helper pod memory request
+	V2VHelperPodMemoryRequestKey = "V2V_HELPER_POD_MEMORY_REQUEST"
+
+	// V2VHelperPodCPULimit is the default CPU limit for v2v-helper pod
+	V2VHelperPodCPULimit = "2000m"
+	// V2VHelperPodCPULimitKey is the key for v2v-helper pod CPU limit
+	V2VHelperPodCPULimitKey = "V2V_HELPER_POD_CPU_LIMIT"
+
+	// V2VHelperPodMemoryLimit is the default memory limit for v2v-helper pod
+	V2VHelperPodMemoryLimit = "3Gi"
+	// V2VHelperPodMemoryLimitKey is the key for v2v-helper pod memory limit
+	V2VHelperPodMemoryLimitKey = "V2V_HELPER_POD_MEMORY_LIMIT"
+
+	// V2VHelperPodEphemeralStorageRequest is the default ephemeral storage request for v2v-helper pod
+	V2VHelperPodEphemeralStorageRequest = "3Gi"
+	// V2VHelperPodEphemeralStorageRequestKey is the key for v2v-helper pod ephemeral storage request
+	V2VHelperPodEphemeralStorageRequestKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST"
+
+	// V2VHelperPodEphemeralStorageLimit is the default ephemeral storage limit for v2v-helper pod
+	V2VHelperPodEphemeralStorageLimit = "3Gi"
+	// V2VHelperPodEphemeralStorageLimitKey is the key for v2v-helper pod ephemeral storage limit
+	V2VHelperPodEphemeralStorageLimitKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
 )
