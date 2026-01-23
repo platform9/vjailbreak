@@ -204,9 +204,12 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 		Size: int(targetVolume.Size / (1024 * 1024 * 1024)), // Convert bytes to GB
 	}
 
-	// After Cinder manage, the volume name on Pure changes to volume-<cinder-id>-cinder
-	cinderVolumeName := fmt.Sprintf("volume-%s-cinder", cinderVolumeId)
-	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to: %s", cinderVolumeName))
+	// After Cinder manage, the volume name changes based on the backend driver:
+	// - Pure: volume-<cinder-id>-cinder
+	// - NetApp: volume-<cinder-id> or /vol/<volume>/volume-<cinder-id>
+	// Use the cinder volume ID for lookup (works with wildcard search)
+	cinderVolumeName := fmt.Sprintf("volume-%s", cinderVolumeId)
+	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to pattern: %s*", cinderVolumeName))
 
 	// Step 6: Map target volume to ESXi host using the NEW Cinder volume name
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
