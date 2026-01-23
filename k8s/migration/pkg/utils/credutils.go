@@ -15,6 +15,7 @@ import (
 	gophercloud "github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
@@ -2003,6 +2004,13 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	ctxlog.Info("Discovered backend pools", "count", len(backendPools))
 	ctxlog.Info("Backend pools", "pools", backendPools)
 
+	// Get actual Cinder volume service hosts (with UUID prefix if applicable)
+	volumeServiceHosts, err := getCinderVolumeServiceHosts(ctx, cinderClient)
+	if err != nil {
+		ctxlog.Error(err, "Failed to get Cinder volume service hosts, falling back to pool name parsing")
+		volumeServiceHosts = make(map[string]string)
+	}
+
 	// Map backend name -> vendor/type info for quick lookup
 	backendMap := make(map[string]map[string]string)
 	for _, pool := range backendPools {
@@ -2010,9 +2018,16 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		driver := pool.Capabilities.DriverVersion
 		volumeType, backendName := parsePoolName(pool.Name)
 
-		// Extract hostname@backend from pool.Name for Cinder manage API
-		// pool.Name format: "hostname@backend#pool" or "hostname@backend"
-		cinderHost := extractCinderHost(pool.Name)
+		// Get Cinder host from volume services API (preferred) or fall back to pool name parsing
+		var cinderHost string
+		if host, ok := volumeServiceHosts[backendName]; ok {
+			cinderHost = host
+			ctxlog.Info("Using Cinder host from volume services", "backend", backendName, "host", cinderHost)
+		} else {
+			// Fall back to extracting from pool name
+			cinderHost = extractCinderHost(pool.Name)
+			ctxlog.Info("Using Cinder host from pool name", "backend", backendName, "host", cinderHost)
+		}
 
 		backendMap[backendName] = map[string]string{
 			"vendor":     vendor,
@@ -2054,6 +2069,50 @@ func extractCinderHost(fullPoolName string) string {
 	// Remove the pool part (#pool) if it exists
 	parts := strings.Split(fullPoolName, "#")
 	return parts[0]
+}
+
+// getCinderVolumeServiceHosts queries the Cinder volume services API and returns
+// a map of backend name to full host string (e.g., "netapp" -> "55f61998-7b56-4f64-8527-2fdfaba63dcd@netapp")
+func getCinderVolumeServiceHosts(ctx context.Context, cinderClient *gophercloud.ServiceClient) (map[string]string, error) {
+	ctxlog := log.FromContext(ctx)
+
+	// List all Cinder volume services
+	listOpts := services.ListOpts{
+		Binary: "cinder-volume",
+	}
+
+	allPages, err := services.List(cinderClient, listOpts).AllPages(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list Cinder volume services")
+	}
+
+	serviceList, err := services.ExtractServices(allPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract Cinder services")
+	}
+
+	ctxlog.Info("Found Cinder volume services", "count", len(serviceList))
+
+	// Build map of backend name to full host
+	// Host format: "uuid@backend" or "hostname@backend"
+	hostMap := make(map[string]string)
+	for _, svc := range serviceList {
+		// Only consider enabled and up services
+		if svc.Status != "enabled" || svc.State != "up" {
+			ctxlog.Info("Skipping service", "host", svc.Host, "status", svc.Status, "state", svc.State)
+			continue
+		}
+
+		// Extract backend name from host (e.g., "55f61998-7b56-4f64-8527-2fdfaba63dcd@netapp" -> "netapp")
+		parts := strings.Split(svc.Host, "@")
+		if len(parts) == 2 {
+			backendName := parts[1]
+			hostMap[backendName] = svc.Host
+			ctxlog.Info("Found Cinder volume service", "backend", backendName, "host", svc.Host)
+		}
+	}
+
+	return hostMap, nil
 }
 
 // GetArrayVendor normalizes and returns the storage array vendor name from a vendor string
