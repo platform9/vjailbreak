@@ -122,6 +122,12 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
 			AutoFstabUpdate:                     constants.AutoFstabUpdate,
 			AutoPXEBootOnConversion:             constants.AutoPXEBootOnConversionDefault,
+			V2VHelperPodCPURequest:              constants.V2VHelperPodCPURequest,
+			V2VHelperPodMemoryRequest:           constants.V2VHelperPodMemoryRequest,
+			V2VHelperPodCPULimit:                constants.V2VHelperPodCPULimit,
+			V2VHelperPodMemoryLimit:             constants.V2VHelperPodMemoryLimit,
+			V2VHelperPodEphemeralStorageRequest: constants.V2VHelperPodEphemeralStorageRequest,
+			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
 		}, nil
 	}
 
@@ -196,6 +202,30 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey] = strconv.FormatBool(constants.AutoPXEBootOnConversionDefault)
 	}
 
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodCPURequestKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodCPURequestKey] = constants.V2VHelperPodCPURequest
+	}
+
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryRequestKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryRequestKey] = constants.V2VHelperPodMemoryRequest
+	}
+
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodCPULimitKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodCPULimitKey] = constants.V2VHelperPodCPULimit
+	}
+
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey] = constants.V2VHelperPodMemoryLimit
+	}
+
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey] = constants.V2VHelperPodEphemeralStorageRequest
+	}
+
+	if vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey] == "" {
+		vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey] = constants.V2VHelperPodEphemeralStorageLimit
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -216,6 +246,12 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
 		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
 		AutoPXEBootOnConversion:             strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey])) == "true",
+		V2VHelperPodCPURequest:              vjailbreakSettingsCM.Data[constants.V2VHelperPodCPURequestKey],
+		V2VHelperPodMemoryRequest:           vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryRequestKey],
+		V2VHelperPodCPULimit:                vjailbreakSettingsCM.Data[constants.V2VHelperPodCPULimitKey],
+		V2VHelperPodMemoryLimit:             vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey],
+		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
+		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
 	}, nil
 }
 

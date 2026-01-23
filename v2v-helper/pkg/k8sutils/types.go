@@ -20,4 +20,11 @@ type VjailbreakSettings struct {
 	PeriodicSyncRetryCap                string
 	AutoFstabUpdate                     bool
 	AutoPXEBootOnConversion             bool
+	// V2VHelperPod resource configuration
+	V2VHelperPodCPURequest              string
+	V2VHelperPodMemoryRequest           string
+	V2VHelperPodCPULimit                string
+	V2VHelperPodMemoryLimit             string
+	V2VHelperPodEphemeralStorageRequest string
+	V2VHelperPodEphemeralStorageLimit   string
 }
