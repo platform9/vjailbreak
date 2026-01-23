@@ -904,6 +904,12 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 		})
 	}
 
+	// Get vjailbreak settings for pod resource configuration
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings for pod resources")
+	}
+
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -1008,14 +1014,14 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:              resource.MustParse("1000m"),
-										corev1.ResourceMemory:           resource.MustParse("1Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
+										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPURequest),
+										corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryRequest),
+										corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageRequest),
 									},
 									Limits: corev1.ResourceList{
-										corev1.ResourceCPU:              resource.MustParse("2000m"),
-										corev1.ResourceMemory:           resource.MustParse("3Gi"),
-										corev1.ResourceEphemeralStorage: resource.MustParse("3Gi"),
+										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPULimit),
+										corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryLimit),
+										corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageLimit),
 									},
 								},
 							},
