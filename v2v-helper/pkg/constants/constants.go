@@ -219,4 +219,36 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	V2VHelperPodEphemeralStorageLimit = "3Gi"
 	// V2VHelperPodEphemeralStorageLimitKey is the key for v2v-helper pod ephemeral storage limit
 	V2VHelperPodEphemeralStorageLimitKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
+
+	// NICRecoveryFirstBootScript is the first boot script for NIC recovery
+	WindowsPersistFirstBootScript = `$ErrorActionPreference = "Stop"
+$logFile = "C:/NIC-Recovery/Persist-Network.log"
+$scriptPath = "C:/NIC-Recovery/Orchestrate-NICRecovery.ps1"
+
+function Write-Log {
+    param ([string]$message)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$timestamp - $message" | Out-File -FilePath $logFile -Append -Encoding utf8
+}
+
+try {
+    Write-Log "Starting NIC recovery persistence script..."
+    
+    if (-not (Test-Path $scriptPath)) {
+        throw "NIC Recovery script not found at $scriptPath"
+    }
+    
+    Write-Log "Executing NIC recovery script: $scriptPath"
+    & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File $scriptPath *>&1 | Out-File -FilePath $logFile -Append -Encoding utf8
+    
+    if ($LASTEXITCODE -ne 0) {
+        throw "NIC recovery script failed with exit code $LASTEXITCODE"
+    }
+    
+    Write-Log "NIC recovery script completed successfully"
+} catch {
+    $errorMessage = $_.Exception.Message
+    Write-Log "ERROR: $errorMessage"
+    exit 1
+}`
 )
