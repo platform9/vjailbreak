@@ -14,6 +14,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -465,9 +466,15 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 	migobj.logMessage(fmt.Sprintf("Autodiscovering Cinder host for backend: %s", backendName))
 
 	// Get Cinder volume services via the interface method
-	serviceList, err := migobj.Openstackclients.GetCinderVolumeServices(ctx)
+	servicesInterface, err := migobj.Openstackclients.GetCinderVolumeServices(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get Cinder volume services")
+	}
+
+	// Type assert to the concrete struct slice from utils package
+	serviceList, ok := servicesInterface.([]utils.CinderVolumeService)
+	if !ok {
+		return "", fmt.Errorf("unexpected type from GetCinderVolumeServices: %T", servicesInterface)
 	}
 
 	migobj.logMessage(fmt.Sprintf("Found %d Cinder volume services", len(serviceList)))
