@@ -3,6 +3,7 @@ package netapp
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -468,6 +469,30 @@ func (n *NetAppStorageProvider) WhoAmI() string {
 	return "netapp"
 }
 
+// BuildNAA constructs a NAA identifier from a NetApp serial number
+// NetApp serial numbers are ASCII and need to be hex-encoded for NAA
+func (n *NetAppStorageProvider) BuildNAA(serialNumber string) string {
+	hexSerial := hex.EncodeToString([]byte(serialNumber))
+	return fmt.Sprintf("naa.%s%s", n.Config.NAAPrefix, strings.ToLower(hexSerial))
+}
+
+// ExtractSerialFromNAA extracts the serial number from a NAA identifier
+// Decodes the hex-encoded serial back to ASCII
+func (n *NetAppStorageProvider) ExtractSerialFromNAA(naaID string) (string, error) {
+	prefix := "naa." + n.Config.NAAPrefix
+	if !strings.HasPrefix(strings.ToLower(naaID), strings.ToLower(prefix)) {
+		return "", fmt.Errorf("NAA ID %s is not from NetApp (expected prefix: %s)", naaID, prefix)
+	}
+
+	hexSerial := strings.TrimPrefix(strings.ToLower(naaID), strings.ToLower(prefix))
+	serialBytes, err := hex.DecodeString(hexSerial)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode NAA serial: %w", err)
+	}
+
+	return string(serialBytes), nil
+}
+
 // Helper methods
 
 func (n *NetAppStorageProvider) getClusterInfo(ctx context.Context) (*OntapClusterInfo, error) {
@@ -506,16 +531,20 @@ func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup,
 
 // getLUNByName retrieves a LUN by its name
 func (n *NetAppStorageProvider) getLUNByName(ctx context.Context, name string) (*OntapLUN, error) {
-	luns, err := n.listLUNs(ctx, fmt.Sprintf("name=%s", name))
+	var luns []OntapLUN
+	var err error
+
+	// If name is a full path (starts with /), use exact match
+	// Otherwise, use wildcard search since NetApp requires path format
+	if strings.HasPrefix(name, "/") {
+		luns, err = n.listLUNs(ctx, fmt.Sprintf("name=%s", name))
+	} else {
+		// Use wildcard search for non-path names (e.g., "volume-xxx-cinder")
+		luns, err = n.listLUNs(ctx, fmt.Sprintf("name=*%s*", name))
+	}
+
 	if err != nil {
 		return nil, err
-	}
-	if len(luns) == 0 {
-		// Try wildcard search
-		luns, err = n.listLUNs(ctx, fmt.Sprintf("name=*%s*", name))
-		if err != nil {
-			return nil, err
-		}
 	}
 	if len(luns) == 0 {
 		return nil, fmt.Errorf("LUN %s not found", name)
