@@ -40,6 +40,10 @@ type OntapLUN struct {
 	Space        struct {
 		Size int64 `json:"size"`
 	} `json:"space"`
+	SVM struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+	} `json:"svm"`
 	Location struct {
 		Volume struct {
 			Name string `json:"name"`
@@ -119,19 +123,22 @@ func (n *NetAppStorageProvider) ValidateCredentials(ctx context.Context) error {
 func (n *NetAppStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
 	ctx := context.Background()
 
-	// Get the volume path from existing LUNs to determine where to create the new LUN
-	volumePath, err := n.getDefaultVolumePath(ctx)
+	// Get the volume path and SVM from existing LUNs
+	volumePath, svmName, err := n.getDefaultVolumePathAndSVM(ctx)
 	if err != nil {
 		return storage.Volume{}, fmt.Errorf("failed to determine volume path: %w", err)
 	}
 
 	// Build full LUN path: /vol/<volume_name>/<lun_name>
 	lunPath := fmt.Sprintf("%s/%s", volumePath, volumeName)
-	klog.Infof("Creating NetApp LUN at path: %s with size: %d", lunPath, size)
+	klog.Infof("Creating NetApp LUN at path: %s with size: %d on SVM: %s", lunPath, size, svmName)
 
 	// Create LUN via ONTAP REST API
 	reqBody := map[string]interface{}{
 		"name": lunPath,
+		"svm": map[string]interface{}{
+			"name": svmName,
+		},
 		"space": map[string]interface{}{
 			"size": size,
 		},
@@ -277,8 +284,10 @@ func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName 
 }
 
 // MapVolumeToGroup maps a LUN to igroups
-func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targetVolume storage.Volume, context storage.MappingContext) (storage.Volume, error) {
-	igroupsVal, ok := context["igroups"]
+func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targetVolume storage.Volume, mappingCtx storage.MappingContext) (storage.Volume, error) {
+	ctx := context.Background()
+
+	igroupsVal, ok := mappingCtx["igroups"]
 	if !ok {
 		return storage.Volume{}, errors.New("igroups not found in mapping context")
 	}
@@ -288,19 +297,49 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 		return storage.Volume{}, errors.New("invalid or empty igroups list in mapping context")
 	}
 
-	// TODO: Implement LUN mapping via ONTAP REST API
-	// POST /api/protocols/san/lun-maps
-	for _, igroup := range igroups {
-		klog.Infof("Mapping LUN %s to igroup %s", targetVolume.Name, igroup)
-		// API call to map LUN to igroup
+	// Get LUN details to find UUID
+	lun, err := n.getLUNByName(ctx, targetVolume.Name)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to get LUN %s: %w", targetVolume.Name, err)
+	}
+
+	for _, igroupName := range igroups {
+		klog.Infof("Mapping LUN %s to igroup %s", targetVolume.Name, igroupName)
+
+		reqBody := map[string]interface{}{
+			"lun": map[string]interface{}{
+				"uuid": lun.UUID,
+			},
+			"igroup": map[string]interface{}{
+				"name": igroupName,
+			},
+		}
+
+		jsonBody, err := json.Marshal(reqBody)
+		if err != nil {
+			return storage.Volume{}, fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		err = n.DoRequestJSON(ctx, "POST", "/protocols/san/lun-maps", bytes.NewReader(jsonBody), nil)
+		if err != nil {
+			// Check if already mapped
+			if strings.Contains(err.Error(), "already mapped") {
+				klog.Infof("LUN %s already mapped to igroup %s", targetVolume.Name, igroupName)
+				continue
+			}
+			return storage.Volume{}, fmt.Errorf("failed to map LUN %s to igroup %s: %w", targetVolume.Name, igroupName, err)
+		}
+		klog.Infof("Successfully mapped LUN %s to igroup %s", targetVolume.Name, igroupName)
 	}
 
 	return targetVolume, nil
 }
 
 // UnmapVolumeFromGroup unmaps a LUN from igroups
-func (n *NetAppStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, targetVolume storage.Volume, context storage.MappingContext) error {
-	igroupsVal, ok := context["igroups"]
+func (n *NetAppStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, targetVolume storage.Volume, mappingCtx storage.MappingContext) error {
+	ctx := context.Background()
+
+	igroupsVal, ok := mappingCtx["igroups"]
 	if !ok {
 		return nil // No igroups to unmap
 	}
@@ -310,20 +349,64 @@ func (n *NetAppStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, 
 		return nil
 	}
 
-	// TODO: Implement LUN unmapping via ONTAP REST API
-	// DELETE /api/protocols/san/lun-maps/{lun.uuid}/{igroup.uuid}
-	for _, igroup := range igroups {
-		klog.Infof("Unmapping LUN %s from igroup %s", targetVolume.Name, igroup)
+	// Get LUN details to find UUID
+	lun, err := n.getLUNByName(ctx, targetVolume.Name)
+	if err != nil {
+		klog.Warningf("Failed to get LUN %s for unmapping: %v", targetVolume.Name, err)
+		return nil // LUN might already be deleted
+	}
+
+	for _, igroupName := range igroups {
+		klog.Infof("Unmapping LUN %s from igroup %s", targetVolume.Name, igroupName)
+
+		// Get igroup UUID
+		igroup, err := n.getIgroupByName(ctx, igroupName)
+		if err != nil {
+			klog.Warningf("Failed to get igroup %s: %v", igroupName, err)
+			continue
+		}
+
+		endpoint := fmt.Sprintf("/protocols/san/lun-maps/%s/%s", lun.UUID, igroup.UUID)
+		err = n.DoRequestJSON(ctx, "DELETE", endpoint, nil, nil)
+		if err != nil {
+			klog.Warningf("Failed to unmap LUN %s from igroup %s: %v", targetVolume.Name, igroupName, err)
+			continue
+		}
+		klog.Infof("Successfully unmapped LUN %s from igroup %s", targetVolume.Name, igroupName)
 	}
 
 	return nil
 }
 
 // GetMappedGroups returns the igroups the LUN is mapped to
-func (n *NetAppStorageProvider) GetMappedGroups(targetVolume storage.Volume, context storage.MappingContext) ([]string, error) {
-	// TODO: Implement via ONTAP REST API
-	// GET /api/protocols/san/lun-maps?lun.name={name}
-	return nil, nil
+func (n *NetAppStorageProvider) GetMappedGroups(targetVolume storage.Volume, mappingCtx storage.MappingContext) ([]string, error) {
+	ctx := context.Background()
+
+	lun, err := n.getLUNByName(ctx, targetVolume.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LUN %s: %w", targetVolume.Name, err)
+	}
+
+	var response struct {
+		Records []struct {
+			Igroup struct {
+				Name string `json:"name"`
+			} `json:"igroup"`
+		} `json:"records"`
+	}
+
+	endpoint := fmt.Sprintf("/protocols/san/lun-maps?lun.uuid=%s", lun.UUID)
+	err = n.DoRequestJSON(ctx, "GET", endpoint, nil, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LUN mappings: %w", err)
+	}
+
+	var groups []string
+	for _, record := range response.Records {
+		groups = append(groups, record.Igroup.Name)
+	}
+
+	return groups, nil
 }
 
 // ResolveCinderVolumeToLUN resolves a Cinder volume name to a storage LUN
@@ -397,7 +480,7 @@ func (n *NetAppStorageProvider) getClusterInfo(ctx context.Context) (*OntapClust
 }
 
 func (n *NetAppStorageProvider) listLUNs(ctx context.Context, filter string) ([]OntapLUN, error) {
-	endpoint := "/storage/luns?fields=serial_number,space,location,create_time"
+	endpoint := "/storage/luns?fields=serial_number,space,location,create_time,svm"
 	if filter != "" {
 		endpoint = fmt.Sprintf("%s&%s", endpoint, filter)
 	}
@@ -421,28 +504,68 @@ func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup,
 	return response.Records, nil
 }
 
-// getDefaultVolumePath discovers the volume path from existing LUNs
-// LUN paths are like /vol/cinder_vol/lun_name, we extract /vol/cinder_vol
-func (n *NetAppStorageProvider) getDefaultVolumePath(ctx context.Context) (string, error) {
+// getLUNByName retrieves a LUN by its name
+func (n *NetAppStorageProvider) getLUNByName(ctx context.Context, name string) (*OntapLUN, error) {
+	luns, err := n.listLUNs(ctx, fmt.Sprintf("name=%s", name))
+	if err != nil {
+		return nil, err
+	}
+	if len(luns) == 0 {
+		// Try wildcard search
+		luns, err = n.listLUNs(ctx, fmt.Sprintf("name=*%s*", name))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(luns) == 0 {
+		return nil, fmt.Errorf("LUN %s not found", name)
+	}
+	return &luns[0], nil
+}
+
+// getIgroupByName retrieves an igroup by its name
+func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name string) (*OntapIgroup, error) {
+	igroups, err := n.listIgroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, ig := range igroups {
+		if ig.Name == name {
+			return &ig, nil
+		}
+	}
+	return nil, fmt.Errorf("igroup %s not found", name)
+}
+
+// getDefaultVolumePathAndSVM discovers the volume path and SVM from existing LUNs
+// LUN paths are like /vol/cinder_vol/lun_name, we extract /vol/cinder_vol and SVM name
+func (n *NetAppStorageProvider) getDefaultVolumePathAndSVM(ctx context.Context) (string, string, error) {
 	luns, err := n.listLUNs(ctx, "")
 	if err != nil {
-		return "", fmt.Errorf("failed to list LUNs: %w", err)
+		return "", "", fmt.Errorf("failed to list LUNs: %w", err)
 	}
 
 	if len(luns) == 0 {
-		return "", fmt.Errorf("no existing LUNs found to determine volume path")
+		return "", "", fmt.Errorf("no existing LUNs found to determine volume path and SVM")
 	}
+
+	lun := luns[0]
 
 	// LUN name format: /vol/<volume_name>/<lun_name>
 	// Extract /vol/<volume_name>
-	lunName := luns[0].Name
-	parts := strings.Split(lunName, "/")
+	parts := strings.Split(lun.Name, "/")
 	if len(parts) < 4 || parts[1] != "vol" {
-		return "", fmt.Errorf("unexpected LUN path format: %s", lunName)
+		return "", "", fmt.Errorf("unexpected LUN path format: %s", lun.Name)
 	}
 
 	volumePath := fmt.Sprintf("/vol/%s", parts[2])
-	klog.Infof("Discovered NetApp volume path: %s from LUN: %s", volumePath, lunName)
+	svmName := lun.SVM.Name
 
-	return volumePath, nil
+	if svmName == "" {
+		return "", "", fmt.Errorf("SVM name not found for LUN: %s", lun.Name)
+	}
+
+	klog.Infof("Discovered NetApp volume path: %s, SVM: %s from LUN: %s", volumePath, svmName, lun.Name)
+
+	return volumePath, svmName, nil
 }
