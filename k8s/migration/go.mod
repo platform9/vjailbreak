@@ -20,6 +20,7 @@ require (
 	github.com/platform9/vjailbreak/pkg/common/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260113094714-8b5cc668b1b6
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
+	github.com/prometheus/client_golang v1.22.0
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -75,7 +76,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/olekukonko/tablewriter v1.0.5 // indirect
-	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
