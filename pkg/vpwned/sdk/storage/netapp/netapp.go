@@ -1,7 +1,9 @@
 package netapp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -66,6 +68,7 @@ type OntapIgroupResponse struct {
 	NumRecords int           `json:"num_records"`
 }
 
+
 // Connect establishes connection to NetApp ONTAP array
 func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
 	n.AccessInfo = accessInfo
@@ -114,16 +117,81 @@ func (n *NetAppStorageProvider) ValidateCredentials(ctx context.Context) error {
 
 // CreateVolume creates a new LUN on the NetApp array
 func (n *NetAppStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
-	// TODO: Implement LUN creation via ONTAP REST API
-	// POST /api/storage/luns
-	return storage.Volume{}, errors.New("CreateVolume not implemented for NetApp")
+	ctx := context.Background()
+
+	// Get the volume path from existing LUNs to determine where to create the new LUN
+	volumePath, err := n.getDefaultVolumePath(ctx)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to determine volume path: %w", err)
+	}
+
+	// Build full LUN path: /vol/<volume_name>/<lun_name>
+	lunPath := fmt.Sprintf("%s/%s", volumePath, volumeName)
+	klog.Infof("Creating NetApp LUN at path: %s with size: %d", lunPath, size)
+
+	// Create LUN via ONTAP REST API
+	reqBody := map[string]interface{}{
+		"name": lunPath,
+		"space": map[string]interface{}{
+			"size": size,
+		},
+		"os_type": "vmware",
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	var response OntapLUN
+	err = n.DoRequestJSON(ctx, "POST", "/storage/luns?return_records=true", bytes.NewReader(jsonBody), &response)
+	if err != nil {
+		return storage.Volume{}, fmt.Errorf("failed to create LUN %s: %w", volumeName, err)
+	}
+
+	// Fetch the created LUN to get serial number
+	luns, err := n.listLUNs(ctx, fmt.Sprintf("name=%s", lunPath))
+	if err != nil || len(luns) == 0 {
+		return storage.Volume{}, fmt.Errorf("failed to get created LUN %s: %w", lunPath, err)
+	}
+
+	lun := luns[0]
+	klog.Infof("Created NetApp LUN: %s, Serial: %s", lun.Name, lun.SerialNumber)
+
+	return storage.Volume{
+		Name:         lun.Name,
+		Size:         lun.Space.Size,
+		Id:           lun.UUID,
+		SerialNumber: lun.SerialNumber,
+		NAA:          n.BuildNAA(lun.SerialNumber),
+	}, nil
 }
 
 // DeleteVolume deletes a LUN from the NetApp array
 func (n *NetAppStorageProvider) DeleteVolume(volumeName string) error {
-	// TODO: Implement LUN deletion via ONTAP REST API
-	// DELETE /api/storage/luns/{uuid}
-	return errors.New("DeleteVolume not implemented for NetApp")
+	ctx := context.Background()
+
+	// Find the LUN by name
+	luns, err := n.listLUNs(ctx, fmt.Sprintf("name=*%s*", volumeName))
+	if err != nil {
+		return fmt.Errorf("failed to find LUN %s: %w", volumeName, err)
+	}
+
+	if len(luns) == 0 {
+		return fmt.Errorf("LUN %s not found", volumeName)
+	}
+
+	lun := luns[0]
+	klog.Infof("Deleting NetApp LUN: %s (UUID: %s)", lun.Name, lun.UUID)
+
+	// Delete LUN via ONTAP REST API
+	err = n.DoRequestJSON(ctx, "DELETE", fmt.Sprintf("/storage/luns/%s", lun.UUID), nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete LUN %s: %w", volumeName, err)
+	}
+
+	klog.Infof("Deleted NetApp LUN: %s", volumeName)
+	return nil
 }
 
 // GetVolumeInfo retrieves information about a LUN from the NetApp array
@@ -351,4 +419,30 @@ func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup,
 	}
 
 	return response.Records, nil
+}
+
+// getDefaultVolumePath discovers the volume path from existing LUNs
+// LUN paths are like /vol/cinder_vol/lun_name, we extract /vol/cinder_vol
+func (n *NetAppStorageProvider) getDefaultVolumePath(ctx context.Context) (string, error) {
+	luns, err := n.listLUNs(ctx, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to list LUNs: %w", err)
+	}
+
+	if len(luns) == 0 {
+		return "", fmt.Errorf("no existing LUNs found to determine volume path")
+	}
+
+	// LUN name format: /vol/<volume_name>/<lun_name>
+	// Extract /vol/<volume_name>
+	lunName := luns[0].Name
+	parts := strings.Split(lunName, "/")
+	if len(parts) < 4 || parts[1] != "vol" {
+		return "", fmt.Errorf("unexpected LUN path format: %s", lunName)
+	}
+
+	volumePath := fmt.Sprintf("/vol/%s", parts[2])
+	klog.Infof("Discovered NetApp volume path: %s from LUN: %s", volumePath, lunName)
+
+	return volumePath, nil
 }
