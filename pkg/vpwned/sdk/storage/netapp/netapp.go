@@ -14,7 +14,7 @@ import (
 )
 
 // NetApp ONTAP NAA prefix (OUI for NetApp)
-const NetAppProviderID = "60a98000"
+const NetAppProviderID = "600a0980"
 
 func init() {
 	storage.RegisterStorageProvider("netapp", &NetAppStorageProvider{})
@@ -314,6 +314,9 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 		}
 
 		reqBody := map[string]interface{}{
+			"svm": map[string]interface{}{
+				"name": lun.SVM.Name,
+			},
 			"lun": map[string]interface{}{
 				"uuid": lun.UUID,
 			},
