@@ -6,6 +6,47 @@ import { FieldLabel, FieldLabelProps } from 'src/components'
 
 import TextField from '../TextField'
 
+const MINUTE_STEP = 5
+
+const getEffectiveMinTime = (minDateTime?: Dayjs, disablePast?: boolean): Dayjs => {
+  if (disablePast) {
+    const now = dayjs()
+    return minDateTime && minDateTime.isAfter(now) ? minDateTime : now
+  }
+  return minDateTime || dayjs(0)
+}
+
+const shouldDisableTimeForMinDateTime = (
+  value: Dayjs,
+  view: 'hours' | 'minutes' | 'seconds',
+  minDateTime?: Dayjs,
+  disablePast?: boolean
+): boolean => {
+  if (!minDateTime && !disablePast) return false
+
+  const effectiveMin = getEffectiveMinTime(minDateTime, disablePast)
+
+  if (view === 'hours') {
+    const hourEnd = value.endOf('hour')
+    if (hourEnd.isBefore(effectiveMin)) {
+      return true
+    }
+    
+    if (value.isSame(effectiveMin, 'hour')) {
+      const nextValidMinute = Math.ceil(effectiveMin.minute() / MINUTE_STEP) * MINUTE_STEP
+      return nextValidMinute >= 60
+    }
+    
+    return false
+  }
+
+  if (view === 'minutes') {
+    return value.isBefore(effectiveMin)
+  }
+
+  return false
+}
+
 type ControllerRules = ControllerProps<FieldValues>['rules']
 
 type FieldLabelCustomProps = Omit<FieldLabelProps, 'label' | 'helperText'>
@@ -38,9 +79,19 @@ export default function RHFDateTimeField({
   labelHelperText,
   placeholder,
   onPickerError,
+  minDateTime,
+  disablePast,
+  shouldDisableTime: customShouldDisableTime,
   ...rest
 }: RHFDateTimeFieldProps) {
   const { control } = useFormContext()
+
+  const combinedShouldDisableTime = (value: Dayjs, view: 'hours' | 'minutes' | 'seconds') => {
+    const isDisabledByMinDateTime = shouldDisableTimeForMinDateTime(value, view, minDateTime, disablePast)
+    if (isDisabledByMinDateTime) return true
+    
+    return customShouldDisableTime ? customShouldDisableTime(value, view) : false
+  }
 
   return (
     <Controller
@@ -66,6 +117,9 @@ export default function RHFDateTimeField({
               {...rest}
               ampm={false}
               value={value}
+              minDateTime={minDateTime}
+              disablePast={disablePast}
+              shouldDisableTime={combinedShouldDisableTime}
               onChange={(newValue) => {
                 field.onChange(newValue ? newValue.format() : '')
               }}
