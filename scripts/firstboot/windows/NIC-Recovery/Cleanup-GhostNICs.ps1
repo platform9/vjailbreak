@@ -1,107 +1,123 @@
-# Cleanup-GhostNICs.ps1
+# Enhanced-Cleanup-v2.ps1
+# Aim: Really remove ghost NICs + free up old connection names so Rename-NetAdapter works later
+
 param(
     [switch]$WhatIf,
-    [string]$LogFile = "C:\NIC-Recovery\Cleanup-GhostNICs.log"
+    [string]$LogFile = "C:\NIC-Recovery\Enhanced-Cleanup-v2.log"
 )
 
 function Write-Log {
     param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     try {
-        # Ensure the log directory exists
         $logDir = Split-Path -Path $LogFile -Parent
-        if (-not (Test-Path $logDir)) {
-            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-        }
+        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
         "$timestamp - $Message" | Out-File -FilePath $LogFile -Append -Encoding utf8
     } catch {
-        Write-Host "Failed to write to log file: $_"
+        Write-Host "Failed to write log: $_"
     }
     Write-Host "$timestamp - $Message"
 }
 
-# Check for admin rights
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    $errorMsg = "This script requires Administrator privileges. Please run as Administrator."
-    Write-Log $errorMsg
-    throw $errorMsg
+# Must be admin
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "Script requires Administrator rights."
 }
 
-Write-Log "=== Starting Ghost Network Adapters Cleanup ==="
+Write-Log "=== Starting Enhanced Network Cleanup v2 ==="
 
 try {
-    $ghosts = Get-PnpDevice -Class Net -ErrorAction Stop | Where-Object { $_.Status -eq "Unknown" -and $_.InstanceId }
-    
-    if (-not $ghosts) { 
-        Write-Log "No ghost NICs found."
-        return 
+    # ────────────────────────────────────────────────
+    # 1. Rename conflicting visible adapters (your original logic - good)
+    # ────────────────────────────────────────────────
+    Write-Log "Renaming any existing conflicting interface names (vjb* or similar)..."
+    $interfaces = Get-NetAdapter -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match '^vjb|Ethernet|Local Area Connection|Wi-Fi' }
+
+    foreach ($nic in $interfaces) {
+        $newName = "tmp_" + [guid]::NewGuid().ToString().Substring(0,8)
+        Write-Log "Renaming $($nic.Name) → $newName to avoid name conflicts"
+        if (-not $WhatIf) {
+            try {
+                Rename-NetAdapter -Name $nic.Name -NewName $newName -ErrorAction Stop
+                Write-Log "  → Success"
+            } catch {
+                Write-Log "  → Failed: $_"
+            }
+        }
     }
 
-    foreach ($dev in $ghosts) {
-        $fName = if ($dev.FriendlyName) { $dev.FriendlyName } else { "Unknown" }
-        $iId = $dev.InstanceId
-        
-        if (-not $iId) {
-            Write-Log "Skipping device with empty InstanceID"
-            continue
-        }
+    # ────────────────────────────────────────────────
+    # 2. Remove ghost / non-present devices using pnputil (most effective method)
+    # ────────────────────────────────────────────────
+    Write-Log "Removing ghost/non-present network devices via pnputil..."
+    $ghosts = Get-PnpDevice -Class Net -ErrorAction SilentlyContinue |
+              Where-Object { $_.Status -eq "Unknown" -or $_.Status -eq "Error" }
 
-        Write-Log "Processing ghost NIC: $fName (InstanceID: $iId)"
-        
-        # Clean up device registry entries
-        $path = "HKLM:\SYSTEM\CurrentControlSet\Enum\$iId"
-        if (Test-Path $path) {
-            try {
-                if ($WhatIf) {
-                    Write-Log "[WhatIf] Would remove registry key: $path"
-                } else {
-                    # First try to remove properties
-                    $props = Get-ItemProperty -Path $path -ErrorAction Stop | 
-                            Select-Object -ExpandProperty Property -ErrorAction SilentlyContinue
-                    
-                    if ($props) {
-                        foreach ($prop in $props) {
-                            try {
-                                Remove-ItemProperty -Path $path -Name $prop -Force -ErrorAction Stop
-                                Write-Log "Removed property: $prop"
-                            } catch {
-                                Write-Log "Warning: Failed to remove property $prop - $_"
-                            }
-                        }
+    if (-not $ghosts) {
+        Write-Log "No ghost NICs found via Get-PnpDevice."
+    } else {
+        foreach ($dev in $ghosts) {
+            $fname = if ($dev.FriendlyName) { $dev.FriendlyName } else { "Unknown" }
+            $iid   = $dev.InstanceId
+            Write-Log "Found ghost: $fname ($iid)"
+
+            if (-not $WhatIf) {
+                try {
+                    $output = & pnputil.exe /remove-device "$iid" 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "  → Removed successfully via pnputil"
+                    } else {
+                        Write-Log "  → pnputil failed: $output"
                     }
-                    
-                    # Then remove the key
-                    Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
-                    Write-Log "Removed registry key: $path"
+                } catch {
+                    Write-Log "  → Exception during pnputil: $_"
                 }
-            } catch {
-                Write-Log "Warning: Error processing $path - $_"
+            } else {
+                Write-Log "  [WhatIf] Would remove device $iid"
             }
-        } else {
-            Write-Log "Registry path not found: $path"
-        }
-        
-        # Additional cleanup for network configurations
-        $netConfigPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}\$iId"
-        if (Test-Path $netConfigPath) {
-            try {
-                if ($WhatIf) {
-                    Write-Log "[WhatIf] Would remove network configuration: $netConfigPath"
-                } else {
-                    Remove-Item -Path $netConfigPath -Recurse -Force -ErrorAction Stop
-                    Write-Log "Removed network configuration: $netConfigPath"
-                }
-            } catch {
-                Write-Log "Warning: Failed to remove network configuration $netConfigPath - $_"
-            }
-        } else {
-            Write-Log "Network configuration path not found: $netConfigPath"
         }
     }
-    
-    Write-Log "Ghost NIC cleanup completed successfully."
-} catch {
-    $errorMsg = "Error during ghost NIC cleanup: $_"
-    Write-Log $errorMsg
-    throw $errorMsg
+
+    # ────────────────────────────────────────────────
+    # 3. Clean stale network connection profiles / names
+    #    (this is usually WHY rename fails even after ghosts are gone)
+    # ────────────────────────────────────────────────
+    Write-Log "Cleaning stale network profile names..."
+    $oldProfiles = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles" -ErrorAction SilentlyContinue |
+                   Where-Object {
+                       $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+                       $p.ProfileName -match "vjb|Ethernet|Local Area|Wi-Fi" -or
+                       $p.Description -match "vjb|Ethernet|Local Area|Wi-Fi"
+                   }
+
+    foreach ($prof in $oldProfiles) {
+        $name = (Get-ItemProperty $prof.PSPath).ProfileName
+        Write-Log "Found stale profile: $name ($($prof.PSChildName))"
+
+        if (-not $WhatIf) {
+            try {
+                Remove-Item $prof.PSPath -Recurse -Force -ErrorAction Stop
+                Write-Log "  → Deleted profile key"
+            } catch {
+                Write-Log "  → Failed to delete profile: $_"
+            }
+        } else {
+            Write-Log "  [WhatIf] Would delete profile $($prof.PSChildName)"
+        }
+    }
+
+    # Optional: trigger hardware rescan (helps Windows forget ghosts faster)
+    Write-Log "Triggering hardware rescan..."
+    if (-not $WhatIf) {
+        & pnputil.exe /scan-devices | Out-Null
+    }
+
+    Write-Log "=== Cleanup finished ==="
+    if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes made" }
+}
+catch {
+    Write-Log "Critical error: $_"
+    Write-Log $_.ScriptStackTrace
+    throw
 }
