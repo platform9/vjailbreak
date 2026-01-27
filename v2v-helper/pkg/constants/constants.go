@@ -221,34 +221,104 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	V2VHelperPodEphemeralStorageLimitKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
 
 	// NICRecoveryFirstBootScript is the first boot script for NIC recovery
-	WindowsPersistFirstBootScript = `$ErrorActionPreference = "Stop"
-$logFile = "C:/NIC-Recovery/Persist-Network.log"
-$scriptPath = "C:/NIC-Recovery/Orchestrate-NICRecovery.ps1"
+	WindowsPersistFirstBootScript = `
+	@echo off
+setlocal EnableDelayedExpansion
 
-function Write-Log {
-    param ([string]$message)
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    "$timestamp - $message" | Out-File -FilePath $logFile -Append -Encoding utf8
-}
+:: ────────────────────────────────────────────────
+::  Configuration
+:: ────────────────────────────────────────────────
+set "PS_SCRIPT=C:\NIC-Recovery\Orchestrate-NICRecovery.ps1"
+set "LOGDIR=C:\NIC-Recovery"
+set "LOGFILE=%LOGDIR%\NIC-Recovery-Orchestrate_%DATE:~-4%%DATE:~3,2%%DATE:~0,2%_%TIME:~0,2%%TIME:~3,2%.log"
 
-try {
-    Write-Log "Starting NIC recovery persistence script..."
-    
-    if (-not (Test-Path $scriptPath)) {
-        throw "NIC Recovery script not found at $scriptPath"
-    }
-    
-    Write-Log "Executing NIC recovery script: $scriptPath"
-    & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File $scriptPath *>&1 | Out-File -FilePath $logFile -Append -Encoding utf8
-    
-    if ($LASTEXITCODE -ne 0) {
-        throw "NIC recovery script failed with exit code $LASTEXITCODE"
-    }
-    
-    Write-Log "NIC recovery script completed successfully"
-} catch {
-    $errorMessage = $_.Exception.Message
-    Write-Log "ERROR: $errorMessage"
-    exit 1
-}`
+:: Replace space in time with zero if hour < 10
+set "LOGFILE=%LOGFILE: =0%"
+
+:: ────────────────────────────────────────────────
+::  Create log directory if missing
+:: ────────────────────────────────────────────────
+if not exist "%LOGDIR%\" (
+    mkdir "%LOGDIR%" 2>nul
+    if errorlevel 1 (
+        echo ERROR: Cannot create log directory %LOGDIR%
+        pause
+        exit /b 1
+    )
+)
+
+:: ────────────────────────────────────────────────
+::  Header in log
+:: ────────────────────────────────────────────────
+echo [%DATE% %TIME%] ============================================== >> "%LOGFILE%"
+echo [%DATE% %TIME%] Starting NIC Recovery Orchestration           >> "%LOGFILE%"
+echo [%DATE% %TIME%] Script: %PS_SCRIPT%                           >> "%LOGFILE%"
+echo [%DATE% %TIME%] Computer: %COMPUTERNAME%                      >> "%LOGFILE%"
+echo [%DATE% %TIME%] User:     %USERNAME%                          >> "%LOGFILE%"
+echo [%DATE% %TIME%] ============================================== >> "%LOGFILE%"
+
+:: ────────────────────────────────────────────────
+::  Check if PowerShell script exists
+:: ────────────────────────────────────────────────
+if not exist "%PS_SCRIPT%" (
+    echo [%DATE% %TIME%] ERROR: PowerShell script not found at:     >> "%LOGFILE%"
+    echo [%DATE% %TIME%]        %PS_SCRIPT%                         >> "%LOGFILE%"
+    echo.
+    echo ERROR: Script not found: %PS_SCRIPT%
+    echo        Check path and try again.
+    echo.
+    pause
+    exit /b 1
+)
+
+:: ────────────────────────────────────────────────
+::  Self-elevate to Administrator if not already
+:: ────────────────────────────────────────────────
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [%DATE% %TIME%] Requesting administrator rights...         >> "%LOGFILE%"
+    echo.
+    echo Requesting admin rights ─ please accept the UAC prompt...
+    echo.
+
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs" 2>nul
+
+    exit /b
+)
+
+:: ────────────────────────────────────────────────
+::  Now we are elevated ─ run the real PowerShell script
+:: ────────────────────────────────────────────────
+echo [%DATE% %TIME%] Running PowerShell script as Administrator...  >> "%LOGFILE%"
+echo.                                                            >> "%LOGFILE%"
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass ^
+    -Command "& '%PS_SCRIPT%' *>> '%LOGFILE%' 2>&1"
+
+set PS_EXITCODE=%errorlevel%
+
+echo.                                                            >> "%LOGFILE%"
+echo [%DATE% %TIME%] PowerShell script finished.                  >> "%LOGFILE%"
+echo [%DATE% %TIME%] Exit code: !PS_EXITCODE!                     >> "%LOGFILE%"
+
+if !PS_EXITCODE! equ 0 (
+    echo [%DATE% %TIME%] Result: SUCCESS                              >> "%LOGFILE%"
+    echo.
+    echo NIC Recovery orchestration completed.
+    echo Log saved to:
+    echo   %LOGFILE%
+) else (
+    echo [%DATE% %TIME%] Result: FAILED (exit code !PS_EXITCODE!)     >> "%LOGFILE%"
+    echo.
+    echo NIC Recovery script FAILED (exit code !PS_EXITCODE!).
+    echo Check the log for details:
+    echo   %LOGFILE%
+)
+
+echo.
+echo [%DATE% %TIME%] Finished. Press any key to exit...           >> "%LOGFILE%"
+pause >nul
+exit /b !PS_EXITCODE!
+	`
 )
