@@ -110,7 +110,7 @@ try {
     # Optional: trigger hardware rescan (helps Windows forget ghosts faster)
     Write-Log "Triggering hardware rescan..."
     if (-not $WhatIf) {
-        & pnputil.exe /scan-devices | Out-Null
+        & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
     }
 
     Write-Log "=== Cleanup finished ==="
