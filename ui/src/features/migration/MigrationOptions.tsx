@@ -292,6 +292,7 @@ const TimePicker = ({
 
   return (
     <DateTimePicker
+      {...restProps}
       ampm={false}
       value={value}
       onChange={(newValue: dayjs.Dayjs | null) => handleTimeChange(newValue, identifier)}
@@ -309,7 +310,6 @@ const TimePicker = ({
           />
         )
       }}
-      {...restProps}
     />
   )
 }
