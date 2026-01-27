@@ -452,7 +452,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		hasExistingFailures := false
 		for _, m := range migrationList.Items {
 			existingMigrationMap[m.Spec.VMName] = true
-			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed {
+			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed || m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
 				hasExistingFailures = true
 			}
 		}
@@ -727,6 +727,26 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 	}
 	// Handle any other RDM disk migration errors
 	r.ctxlog.Info("RDM disk migration failed, failing MigrationPlan.", "error", err.Error())
+
+	migrationList := &vjailbreakv1alpha1.MigrationList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(migrationplan.Namespace),
+		client.MatchingLabels{"migrationplan": migrationplan.Name},
+	}
+	if listErr := r.List(ctx, migrationList, listOpts...); listErr != nil {
+		r.ctxlog.Error(listErr, "Failed to list migrations for RDM disk failure handling", "migrationplan", migrationplan.Name)
+	} else {
+		message := fmt.Sprintf("RDM disk migration failed: %s", err)
+		for i := range migrationList.Items {
+			m := migrationList.Items[i]
+			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				continue
+			}
+			r.markMigrationValidationFailed(ctx, &m, m.Spec.VMName, message)
+		}
+	}
 
 	// Refetch the migration plan to get the latest version before updating
 	if refetchErr := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, migrationplan); refetchErr != nil {
@@ -1841,6 +1861,16 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 		}, reFetchedRDMDiskCR)
 		if err != nil {
 			return err
+		}
+		if reFetchedRDMDiskCR.Status.Phase == RDMPhaseError {
+			msg := "RDM disk is in Error phase"
+			if len(reFetchedRDMDiskCR.Status.Conditions) > 0 {
+				lastCond := reFetchedRDMDiskCR.Status.Conditions[len(reFetchedRDMDiskCR.Status.Conditions)-1]
+				if lastCond.Message != "" {
+					msg = lastCond.Message
+				}
+			}
+			return fmt.Errorf("RDM disk %s failed to import to Cinder: %s", reFetchedRDMDiskCR.Name, msg)
 		}
 		if reFetchedRDMDiskCR.Status.Phase != RDMPhaseManaged || reFetchedRDMDiskCR.Status.CinderVolumeID == "" {
 			// Log which disk is not ready
