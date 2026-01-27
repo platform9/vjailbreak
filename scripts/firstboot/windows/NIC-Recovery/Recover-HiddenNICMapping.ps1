@@ -101,3 +101,4 @@ $result = foreach ($hidden in $hiddenIPs) {
 
 if (-not $result) { $result = @() }
 $result | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 $OutFile
+exit 0
