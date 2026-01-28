@@ -106,7 +106,7 @@ export default function VDDKUploadTab({
             </Box>
           }
           actions={
-            selectedFile ? (
+            selectedFile && status !== 'success' ? (
               <IconButton
                 size="small"
                 onClick={onClear}
