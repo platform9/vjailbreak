@@ -184,7 +184,24 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	if diskSizeBytes%512 != 0 {
 		diskSizeBytes = ((diskSizeBytes / 512) + 1) * 512
 	}
-	sanitizedName := sanitizeVolumeName(vminfo.Name + "-" + vmDisk.Name)
+	// Add timestamp suffix to avoid conflicts on retry attempts (issue #1423)
+	// If a previous migration failed after volume creation, this ensures we don't hit
+	// "file already exists" error on retry
+	timestamp := time.Now().Unix()
+	baseVolumeName := sanitizeVolumeName(vminfo.Name + "-" + vmDisk.Name)
+	sanitizedName := fmt.Sprintf("%s-%d", baseVolumeName, timestamp)
+
+	// Ensure the final name doesn't exceed 63 characters
+	if len(sanitizedName) > 63 {
+		// Truncate the base name to fit timestamp suffix
+		maxBaseLen := 63 - len(fmt.Sprintf("-%d", timestamp))
+		if maxBaseLen > 0 {
+			sanitizedName = fmt.Sprintf("%s-%d", baseVolumeName[:maxBaseLen], timestamp)
+		} else {
+			sanitizedName = fmt.Sprintf("disk-%d", timestamp)
+		}
+	}
+
 	migobj.logMessage(fmt.Sprintf("Creating target volume %s (sanitized from: %s) with size %d bytes (%d GB)",
 		sanitizedName, vmDisk.Name, diskSizeBytes, diskSizeBytes/(1024*1024*1024)))
 	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, diskSizeBytes)
