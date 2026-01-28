@@ -1990,6 +1990,13 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		return nil, errors.Wrap(err, "failed to create Cinder client")
 	}
 
+	// Get the authoritative mapping of backend names to volume types from Cinder volume types API
+	backendToVolumeType, err := buildBackendToVolumeTypeMap(ctx, cinderClient)
+	if err != nil {
+		ctxlog.Error(err, "Failed to build backend to volume type map, will use pool name parsing as fallback")
+		backendToVolumeType = make(map[string]string)
+	}
+
 	// Get pool backend info
 	poolPages, err := schedulerstats.List(cinderClient, schedulerstats.ListOpts{Detail: true}).AllPages(context.Background())
 	if err != nil {
@@ -2016,7 +2023,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	for _, pool := range backendPools {
 		vendor := pool.Capabilities.VendorName
 		driver := pool.Capabilities.DriverVersion
-		volumeType, backendName := parsePoolName(pool.Name)
+		poolVolumeType, backendName := parsePoolName(pool.Name)
 
 		// Get Cinder host from volume services API (preferred) or fall back to pool name parsing
 		var cinderHost string
@@ -2027,6 +2034,16 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 			// Fall back to extracting from pool name
 			cinderHost = extractCinderHost(pool.Name)
 			ctxlog.Info("Using Cinder host from pool name", "backend", backendName, "host", cinderHost)
+		}
+
+		// Use the authoritative volume type from Cinder volume types API
+		// Fall back to pool name parsing if not found
+		volumeType := poolVolumeType
+		if vtName, ok := backendToVolumeType[backendName]; ok {
+			volumeType = vtName
+			ctxlog.Info("Using volume type from Cinder volume types API", "backend", backendName, "volumeType", volumeType)
+		} else {
+			ctxlog.Info("Volume type not found in Cinder API, using pool name parsing", "backend", backendName, "volumeType", volumeType)
 		}
 
 		backendMap[backendName] = map[string]string{
@@ -2069,6 +2086,41 @@ func extractCinderHost(fullPoolName string) string {
 	// Remove the pool part (#pool) if it exists
 	parts := strings.Split(fullPoolName, "#")
 	return parts[0]
+}
+
+// buildBackendToVolumeTypeMap queries Cinder volume types and builds a map of backend names to volume type names
+// using the volume_backend_name from each volume type's extra specs.
+// This is the authoritative mapping from Cinder's perspective.
+// Example: {"netapp" -> "netapp", "pure-iscsi-1" -> "vt-pure-iscsi"}
+func buildBackendToVolumeTypeMap(ctx context.Context, cinderClient *gophercloud.ServiceClient) (map[string]string, error) {
+	ctxlog := log.FromContext(ctx)
+
+	// Query all volume types
+	allPages, err := volumetypes.List(cinderClient, nil).AllPages(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list volume types")
+	}
+
+	allVolumeTypes, err := volumetypes.ExtractVolumeTypes(allPages)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract volume types")
+	}
+
+	ctxlog.Info("Discovered volume types", "count", len(allVolumeTypes))
+
+	// Build map of backend name -> volume type name
+	backendToVolumeType := make(map[string]string)
+	for _, vt := range allVolumeTypes {
+		// Check if volume_backend_name exists in extra specs
+		if backendName, ok := vt.ExtraSpecs["volume_backend_name"]; ok {
+			backendToVolumeType[backendName] = vt.Name
+			ctxlog.Info("Mapped backend to volume type", "backend", backendName, "volumeType", vt.Name)
+		} else {
+			ctxlog.V(1).Info("Volume type has no volume_backend_name in extra specs", "volumeType", vt.Name)
+		}
+	}
+
+	return backendToVolumeType, nil
 }
 
 // getCinderVolumeServiceHosts queries the Cinder volume services API and returns
