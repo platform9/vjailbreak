@@ -27,6 +27,7 @@ controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+virtiowinserver12="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso"
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
 
@@ -89,3 +90,7 @@ echo "[✔] All images downloaded and exported as tar files."
 # Download virtio-win.iso
 echo "[*] Downloading virtio-win.iso"
 wget -O image_builder/images/virtio-win.iso "$virtiowin"
+
+# Download virtio-win-server12.iso
+echo "[*] Downloading virtio-win-server12.iso"
+wget -O image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
