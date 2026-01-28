@@ -700,6 +700,49 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	return "", err
 }
 
+// GetWindowsVersion detects the Windows version using guestfish inspect commands
+func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var osPath string
+	var err error
+
+	if useSingleDisk {
+		osPath, err = RunCommandInGuest(diskPath, "inspect-os", false)
+	} else {
+		osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect OS: %v", err)
+	}
+
+	osPath = strings.TrimSpace(osPath)
+	if osPath == "" {
+		return "", fmt.Errorf("empty OS path from inspect-os")
+	}
+
+	var productName string
+	if useSingleDisk {
+		productName, err = RunCommandInGuest(diskPath, fmt.Sprintf("inspect-get-product-name %s", osPath), false)
+	} else {
+		productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
+	}
+
+	if err != nil {
+		log.Printf("Failed to get Windows product name: %v", err)
+		return "Windows (version unknown)", nil
+	}
+
+	productName = strings.TrimSpace(productName)
+	if productName == "" {
+		return "Windows (version unknown)", nil
+	}
+
+	log.Printf("Detected Windows version: %s", productName)
+	return strings.ToLower(productName), nil
+}
+
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
 // during guest inspection phase for Linux migrations
 func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {

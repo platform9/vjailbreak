@@ -1002,19 +1002,31 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 }
 
 // handleWindowsBootDetection handles boot volume detection for Windows systems
-func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, error) {
+func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, string, error) {
 	utils.PrintLog("operating system compatibility check passed")
+
+	var finalBootIndex int
+	var err error
 
 	if !useSingleDisk {
 		utils.PrintLog("checking for bootable volume in case of LDM")
-		finalBootIndex, err := virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+		finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
 		if err != nil {
-			return -1, errors.Wrap(err, "Failed to get bootable volume index")
+			return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
 		}
-		return finalBootIndex, nil
+	} else {
+		finalBootIndex = bootVolumeIndex
 	}
 
-	return bootVolumeIndex, nil
+	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to detect Windows version: %v", err))
+		osRelease = "Windows (version unknown)"
+	}
+
+	utils.PrintLog(fmt.Sprintf("Windows OS detected: %s", osRelease))
+
+	return finalBootIndex, osRelease, nil
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
@@ -1219,7 +1231,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 
 	case constants.OSFamilyWindows:
-		bootVolumeIndex, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
+		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
 		if err != nil {
 			return err
 		}
