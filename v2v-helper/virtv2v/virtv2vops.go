@@ -33,7 +33,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -192,10 +192,16 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
+
+		// Use Windows Server 2012-specific ISO if detected
+		if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+			filePath = "/home/fedora/virtio-win/virtio-win-server12.iso"
+			log.Printf("Detected Windows Server 2012, using virtio-win-server12.iso")
+		}
 
 		found, err := CheckForVirtioDrivers()
 		if err != nil {
