@@ -226,98 +226,99 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 setlocal EnableDelayedExpansion
 
 :: ────────────────────────────────────────────────
-:: Configuration
+::  Configuration
 :: ────────────────────────────────────────────────
 set "PS_SCRIPT=C:\NIC-Recovery\Orchestrate-NICRecovery.ps1"
 set "LOGDIR=C:\NIC-Recovery"
-set "TASK_NAME=NIC-Recovery-Orchestrate"
-set "DELAY_MINUTES=10"
+set "LOGFILE=%LOGDIR%\NIC-Recovery-Orchestrate_%DATE:~-4%%DATE:~3,2%%DATE:~0,2%_%TIME:~0,2%%TIME:~3,2%.log"
 
-:: Log file for THIS batch run (setup only)
-set "SETUP_LOG=%LOGDIR%\NIC-Recovery-Setup_%DATE:~-4%%DATE:~3,2%%DATE:~0,2%_%TIME:~0,2%%TIME:~3,2%.log"
-set "SETUP_LOG=%SETUP_LOG: =0%"
+:: Replace space in time with zero if hour < 10
+set "LOGFILE=%LOGFILE: =0%"
 
 :: ────────────────────────────────────────────────
-:: Create log directory if missing
+::  Create log directory if missing
 :: ────────────────────────────────────────────────
 if not exist "%LOGDIR%\" (
     mkdir "%LOGDIR%" 2>nul
     if errorlevel 1 (
-        echo ERROR: Cannot create directory %LOGDIR%
+        echo ERROR: Cannot create log directory %LOGDIR%
         pause
         exit /b 1
     )
 )
 
 :: ────────────────────────────────────────────────
-:: Header
+::  Header in log
 :: ────────────────────────────────────────────────
-echo [%DATE% %TIME%] ============================================== >> "%SETUP_LOG%"
-echo [%DATE% %TIME%] Scheduling NIC Recovery Orchestration         >> "%SETUP_LOG%"
-echo [%DATE% %TIME%] Target script: %PS_SCRIPT%                    >> "%SETUP_LOG%"
-echo [%DATE% %TIME%] Task name    : %TASK_NAME%                    >> "%SETUP_LOG%"
-echo [%DATE% %TIME%] Delay        : %DELAY_MINUTES% minutes after startup >> "%SETUP_LOG%"
-echo [%DATE% %TIME%] ============================================== >> "%SETUP_LOG%"
+echo [%DATE% %TIME%] ============================================== >> "%LOGFILE%"
+echo [%DATE% %TIME%] Starting NIC Recovery Orchestration           >> "%LOGFILE%"
+echo [%DATE% %TIME%] Script: %PS_SCRIPT%                           >> "%LOGFILE%"
+echo [%DATE% %TIME%] Computer: %COMPUTERNAME%                      >> "%LOGFILE%"
+echo [%DATE% %TIME%] User:     %USERNAME%                          >> "%LOGFILE%"
+echo [%DATE% %TIME%] ============================================== >> "%LOGFILE%"
 
 :: ────────────────────────────────────────────────
-:: Check if PowerShell script exists
+::  Check if PowerShell script exists
 :: ────────────────────────────────────────────────
 if not exist "%PS_SCRIPT%" (
-    echo [%DATE% %TIME%] ERROR: PowerShell script not found: %PS_SCRIPT% >> "%SETUP_LOG%"
+    echo [%DATE% %TIME%] ERROR: PowerShell script not found at:     >> "%LOGFILE%"
+    echo [%DATE% %TIME%]        %PS_SCRIPT%                         >> "%LOGFILE%"
     echo.
     echo ERROR: Script not found: %PS_SCRIPT%
-    echo Check path and try again.
+    echo        Check path and try again.
+    echo.
     pause
     exit /b 1
 )
 
 :: ────────────────────────────────────────────────
-:: Self-elevate to Administrator
+::  Self-elevate to Administrator if not already
 :: ────────────────────────────────────────────────
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [%DATE% %TIME%] Requesting administrator rights... >> "%SETUP_LOG%"
+    echo [%DATE% %TIME%] Requesting administrator rights...         >> "%LOGFILE%"
     echo.
-    echo Requesting admin rights ─ please accept UAC prompt...
+    echo Requesting admin rights ─ please accept the UAC prompt...
+    echo.
+
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
         "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs" 2>nul
+
     exit /b
 )
 
 :: ────────────────────────────────────────────────
-:: Now elevated ─ create the scheduled task
+::  Now we are elevated ─ run the real PowerShell script
 :: ────────────────────────────────────────────────
-echo [%DATE% %TIME%] Creating scheduled task... >> "%SETUP_LOG%"
+echo [%DATE% %TIME%] Running PowerShell script as Administrator...  >> "%LOGFILE%"
+echo.                                                            >> "%LOGFILE%"
 
-schtasks /create /tn "%TASK_NAME%" ^
-         /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ""& '%PS_SCRIPT%' *>> '%LOGDIR%\NIC-Recovery-Orchestrate_%%DATE:~-4%%%%DATE:~3,2%%%%DATE:~0,2%%_%%TIME:~0,2%%%%TIME:~3,2%%.log' 2>&1""" ^
-         /sc onstart /delay 0000:%DELAY_MINUTES% ^
-         /ru SYSTEM ^
-         /rl HIGHEST ^
-         /f ^
-         /tr "cmd /c echo Task completed at %%DATE%% %%TIME%% >> '%LOGDIR%\NIC-Recovery-Orchestrate-last-run.log' & schtasks /delete /tn ""%TASK_NAME%"" /f" >> "%SETUP_LOG%" 2>&1
+powershell.exe -NoProfile -ExecutionPolicy Bypass ^
+    -Command "& '%PS_SCRIPT%' *>> '%LOGFILE%' 2>&1"
 
-set SCHTASKS_EXIT=%errorlevel%
+set PS_EXITCODE=%errorlevel%
 
-if %SCHTASKS_EXIT% equ 0 (
-    echo [%DATE% %TIME%] SUCCESS: Scheduled task '%TASK_NAME%' created. >> "%SETUP_LOG%"
-    echo It will run %DELAY_MINUTES% minutes after next system startup. >> "%SETUP_LOG%"
-    echo Output will go to timestamped logs in %LOGDIR% >> "%SETUP_LOG%"
+echo.                                                            >> "%LOGFILE%"
+echo [%DATE% %TIME%] PowerShell script finished.                  >> "%LOGFILE%"
+echo [%DATE% %TIME%] Exit code: !PS_EXITCODE!                     >> "%LOGFILE%"
+
+if !PS_EXITCODE! equ 0 (
+    echo [%DATE% %TIME%] Result: SUCCESS                              >> "%LOGFILE%"
     echo.
-    echo Task scheduled successfully.
-    echo Next run: ~%DELAY_MINUTES% min after boot
-    echo Log of this setup: %SETUP_LOG%
+    echo NIC Recovery orchestration completed.
+    echo Log saved to:
+    echo   %LOGFILE%
 ) else (
-    echo [%DATE% %TIME%] FAILED: schtasks returned errorlevel %SCHTASKS_EXIT% >> "%SETUP_LOG%"
-    echo Check Task Scheduler or run 'schtasks /query /tn "%TASK_NAME%"' for details.
+    echo [%DATE% %TIME%] Result: FAILED (exit code !PS_EXITCODE!)     >> "%LOGFILE%"
     echo.
-    echo Scheduling FAILED.
-    echo See %SETUP_LOG% for output.
+    echo NIC Recovery script FAILED (exit code !PS_EXITCODE!).
+    echo Check the log for details:
+    echo   %LOGFILE%
 )
 
 echo.
-echo [%DATE% %TIME%] Finished. Press any key to exit... >> "%SETUP_LOG%"
+echo [%DATE% %TIME%] Finished. Press any key to exit...           >> "%LOGFILE%"
 pause >nul
-exit /b %SCHTASKS_EXIT%
+exit /b !PS_EXITCODE!
 	`
 )

@@ -25,7 +25,7 @@ function Write-Log {
 
 try {
     Write-Log "=== Starting NIC Recovery Orchestration ==="
-    
+    shutdown -a 
     # Start Network Setup Service
     try {
         Write-Log "Starting Network Setup Service..."
@@ -81,3 +81,4 @@ try {
     Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "ERROR"
     exit 1
 }
+shutdown -r -t 0
