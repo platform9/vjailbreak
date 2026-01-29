@@ -2168,12 +2168,16 @@ func getCinderVolumeServiceHosts(ctx context.Context, cinderClient *gophercloud.
 }
 
 // GetArrayVendor normalizes and returns the storage array vendor name from a vendor string
+// Supports Pure Storage and NetApp arrays (issue #1421)
 func GetArrayVendor(vendor string) string {
 	// Convert vendor to lowercase
 	vendor = strings.ToLower(vendor)
 
 	if strings.Contains(vendor, "pure") {
 		return "pure"
+	}
+	if strings.Contains(vendor, "netapp") {
+		return "netapp"
 	}
 	return "unsupported"
 }
