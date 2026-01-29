@@ -67,7 +67,7 @@ function Schedule-MyTask {
         -Description $description `
         -Force
 
-    Write-Host "Task '$taskName' created → will run your script once after next reboot."
+    Write-Log"Task '$taskName' created → will run your script once after next reboot."
 }
 
 
@@ -80,9 +80,9 @@ function Remove-MyTask{
     
     try {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-        Write-Host "Task '$taskName' removed successfully."
+        Write-Log "Task '$taskName' removed successfully."
     } catch {
-        Write-Host "Failed to remove task '$taskName': $_"
+        Write-Log "Failed to remove task '$taskName': $_" -Level "ERROR"
     }
 }
 
