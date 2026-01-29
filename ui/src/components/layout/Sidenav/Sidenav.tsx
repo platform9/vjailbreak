@@ -399,6 +399,13 @@ export default function Sidenav({
   }
 
   const handleItemClick = (item: NavigationItem) => {
+    if ((window as any).__VDDK_UPLOAD_IN_PROGRESS__) {
+      const confirmed = window.confirm(
+        'File upload is in progress. If you leave this page, the upload may be interrupted. Do you want to continue?'
+      )
+      if (!confirmed) return
+    }
+
     if (onItemClick) {
       onItemClick(item)
     } else if (item.external) {

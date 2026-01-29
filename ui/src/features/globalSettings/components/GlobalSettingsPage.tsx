@@ -1,4 +1,4 @@
-import React, { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { useLocation } from 'react-router-dom'
 import {
@@ -772,6 +772,9 @@ export default function GlobalSettingsPage() {
 
   const [vddkFile, setVddkFile] = useState<File | null>(null)
   const [vddkStatus, setVddkStatus] = useState<VddkUploadStatus>('idle')
+  const vddkStatusRef = useRef(vddkStatus)
+  vddkStatusRef.current = vddkStatus
+
   const [vddkProgress, setVddkProgress] = useState(0)
   const [vddkMessage, setVddkMessage] = useState('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
@@ -833,21 +836,36 @@ export default function GlobalSettingsPage() {
             onProgress: (next) => setVddkProgress(next)
           })
 
-          setVddkStatus('success')
-          setVddkMessage(response.message || 'VDDK file uploaded and extracted successfully!')
           setVddkExtractedPath(response.extracted_path || '')
-
           localStorage.setItem(VDDK_UPLOADED_KEY, 'true')
+
+          // Refetch VDDK status to check if the uploaded file is a valid VDDK
+          const statusResult = await vddkStatusQuery.refetch()
+          const version = statusResult.data?.version
+
+          if (!version) {
+            setVddkStatus('error')
+            setVddkMessage(
+              'Warning: The uploaded file may not be a valid VDDK. Could not detect VDDK version. Please ensure you uploaded the correct VMware VDDK tar file.'
+            )
+          } else {
+            setVddkStatus('success')
+            setVddkMessage(
+              response.message || `VDDK file uploaded and extracted successfully! Detected version: ${version}`
+            )
+          }
         } catch (err) {
           setVddkStatus('error')
           setVddkMessage(err instanceof Error ? err.message : 'Upload failed')
           return
         }
+      } else if (activeTab === 'vddk') {
+        return
       }
 
       await onSave(e)
     },
-    [onSave, validateVddkFile, vddkFile, vddkStatus]
+    [activeTab, onSave, validateVddkFile, vddkFile, vddkStatus]
   )
 
   useEffect(() => {
@@ -861,6 +879,26 @@ export default function GlobalSettingsPage() {
       setProxyHelpDismissed(false)
     }
   }, [proxyUpdateSuccess])
+
+  useEffect(() => {
+    if (vddkStatus !== 'uploading') return
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = 'File upload is in progress. Are you sure you want to leave?'
+      return e.returnValue
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [vddkStatus])
+
+  useEffect(() => {
+    ;(window as any).__VDDK_UPLOAD_IN_PROGRESS__ = vddkStatus === 'uploading'
+    return () => {
+      ;(window as any).__VDDK_UPLOAD_IN_PROGRESS__ = false
+    }
+  }, [vddkStatus])
 
   const tabProps = (value: TabKey) => ({
     id: `settings-tab-${value}`,
@@ -1292,7 +1330,7 @@ export default function GlobalSettingsPage() {
               variant="contained"
               type="submit"
               color="primary"
-              disabled={saving || vddkStatus === 'uploading'}
+              disabled={saving || vddkStatus === 'uploading' || (activeTab === 'vddk' && !vddkFile && !existingVddkPath)}
               data-tour="global-settings-save"
               startIcon={
                 saving || vddkStatus === 'uploading' ? (
@@ -1338,6 +1376,7 @@ export default function GlobalSettingsPage() {
           {notification.message}
         </Alert>
       </Snackbar>
+
     </StyledPaper>
   )
 }
