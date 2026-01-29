@@ -67,7 +67,7 @@ function Schedule-MyTask {
         -Description $description `
         -Force
 
-    Write-Log"Task '$taskName' created → will run your script once after next reboot."
+    Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
 
 
