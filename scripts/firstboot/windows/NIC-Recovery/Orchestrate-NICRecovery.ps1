@@ -89,6 +89,7 @@ function Remove-MyTask{
 try {
     Write-Log "=== Starting NIC Recovery Orchestration ==="
     # Start Network Setup Service
+    Start-Sleep 300
     try {
         Write-Log "Starting Network Setup Service..."
         Start-Service NetSetupSvc -ErrorAction Stop
