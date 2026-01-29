@@ -82,6 +82,12 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
+  V2V_HELPER_POD_CPU_REQUEST: '1000m',
+  V2V_HELPER_POD_MEMORY_REQUEST: '2Gi',
+  V2V_HELPER_POD_CPU_LIMIT: '2000m',
+  V2V_HELPER_POD_MEMORY_LIMIT: '5Gi',
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: '3Gi',
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: '3Gi',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -123,7 +129,13 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
-    'AUTO_FSTAB_UPDATE'
+    'AUTO_FSTAB_UPDATE',
+    'V2V_HELPER_POD_CPU_REQUEST',
+    'V2V_HELPER_POD_MEMORY_REQUEST',
+    'V2V_HELPER_POD_CPU_LIMIT',
+    'V2V_HELPER_POD_MEMORY_LIMIT',
+    'V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST',
+    'V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT'
   ],
   vddk: []
 }
@@ -149,7 +161,7 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
   },
   advanced: {
     label: 'Advanced',
-    helper: 'Tune integration defaults and automation flags for PCD and VMware flows.',
+    helper: 'Tune integration defaults, automation flags, and v2v-helper pod resource settings.',
     icon: <TuneOutlinedIcon fontSize="small" />
   },
   vddk: {
@@ -243,7 +255,19 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
-    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).',
+  V2V_HELPER_POD_CPU_REQUEST:
+    'CPU request for v2v-helper pods (e.g. 1000m, 2). Applied to new migrations only.',
+  V2V_HELPER_POD_MEMORY_REQUEST:
+    'Memory request for v2v-helper pods (e.g. 2Gi, 4Gi). Applied to new migrations only.',
+  V2V_HELPER_POD_CPU_LIMIT:
+    'CPU limit for v2v-helper pods (e.g. 2000m, 4). Applied to new migrations only.',
+  V2V_HELPER_POD_MEMORY_LIMIT:
+    'Memory limit for v2v-helper pods (e.g. 5Gi, 8Gi). Applied to new migrations only.',
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST:
+    'Ephemeral storage request for v2v-helper pods (e.g. 3Gi). Applied to new migrations only.',
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT:
+    'Ephemeral storage limit for v2v-helper pods (e.g. 3Gi). Applied to new migrations only.'
 }
 
 type ToggleKey = Extract<
@@ -521,6 +545,31 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       validateHostPort('PROXY_HTTP_HOST', 'PROXY_HTTP_PORT', httpHost, httpPort, httpScheme)
       validateHostPort('PROXY_HTTPS_HOST', 'PROXY_HTTPS_PORT', httpsHost, httpsPort, httpsScheme)
     }
+
+    // Validate v2v-helper pod resource fields
+    const cpuRegex = /^(\d+m?|\d+\.\d+)$/
+    const memoryRegex = /^\d+(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$/
+
+    const validateResource = (
+      key: keyof SettingsForm,
+      value: string,
+      regex: RegExp,
+      example: string
+    ) => {
+      const trimmed = (value ?? '').trim()
+      if (!trimmed) {
+        e[String(key)] = 'Required.'
+      } else if (!regex.test(trimmed)) {
+        e[String(key)] = `Invalid format. Example: ${example}`
+      }
+    }
+
+    validateResource('V2V_HELPER_POD_CPU_REQUEST', state.V2V_HELPER_POD_CPU_REQUEST, cpuRegex, '1000m or 2')
+    validateResource('V2V_HELPER_POD_CPU_LIMIT', state.V2V_HELPER_POD_CPU_LIMIT, cpuRegex, '2000m or 4')
+    validateResource('V2V_HELPER_POD_MEMORY_REQUEST', state.V2V_HELPER_POD_MEMORY_REQUEST, memoryRegex, '2Gi')
+    validateResource('V2V_HELPER_POD_MEMORY_LIMIT', state.V2V_HELPER_POD_MEMORY_LIMIT, memoryRegex, '5Gi')
+    validateResource('V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST', state.V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST, memoryRegex, '3Gi')
+    validateResource('V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT', state.V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT, memoryRegex, '3Gi')
 
     return e
   }, [])
@@ -1294,6 +1343,97 @@ export default function GlobalSettingsPage() {
                   data-testid={`global-settings-toggle-${String(key)}`}
                 />
               ))}
+            </FormGrid>
+
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              v2v-helper Pod Resources
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Configure resource requests and limits for v2v-helper pods. Changes apply to new migrations only.
+            </Typography>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={600} component="span">
+                Request
+              </Typography>
+              <Typography variant="caption" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                (minimum resources guaranteed to the pod)
+              </Typography>
+            </Box>
+            <Box
+              display="grid"
+              sx={{
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 2,
+                mb: 2
+              }}
+            >
+              <RHFTextField
+                name="V2V_HELPER_POD_CPU_REQUEST"
+                label="CPU"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_CPU_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_CPU_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_CPU_REQUEST}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_REQUEST"
+                label="Memory"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_REQUEST}
+              />
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={600} component="span">
+                Limit
+              </Typography>
+              <Typography variant="caption" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                (maximum resources the pod can use)
+              </Typography>
+            </Box>
+            <Box
+              display="grid"
+              sx={{
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 2,
+                mb: 2
+              }}
+            >
+              <RHFTextField
+                name="V2V_HELPER_POD_CPU_LIMIT"
+                label="CPU"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_CPU_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_CPU_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_CPU_LIMIT}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_LIMIT"
+                label="Memory"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_LIMIT}
+              />
+            </Box>
+
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+              Ephemeral Storage
+            </Typography>
+            <FormGrid minWidth={320} gap={2}>
+              <RHFTextField
+                name="V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST"
+                label="Request"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
+                label="Limit"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT}
+              />
             </FormGrid>
           </TabPanel>
 
