@@ -326,31 +326,20 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 	utils.PrintLog("Target device exists")
 
 	// Derive RDM descriptor path on the same datastore as source VMDK
-	// e.g., /vmfs/volumes/pure-ds/pure-clone1/pure-clone1.vmdk -> /vmfs/volumes/pure-ds/pure-clone1/pure-clone1-rdm.vmdk
+	// Add timestamp to avoid conflicts on retry attempts (issue #1423)
+	// e.g., /vmfs/volumes/pure-ds/pure-clone1/pure-clone1.vmdk -> /vmfs/volumes/pure-ds/pure-clone1/pure-clone1-rdm-1738082400.vmdk
 	sourceDir := sourceVMDKConverted[:strings.LastIndex(sourceVMDKConverted, "/")]
 	sourceBaseName := sourceVMDKConverted[strings.LastIndex(sourceVMDKConverted, "/")+1:]
 	sourceNameWithoutExt := strings.TrimSuffix(sourceBaseName, ".vmdk")
-	rdmDescriptor := fmt.Sprintf("%s/%s-rdm.vmdk", sourceDir, sourceNameWithoutExt)
+	timestamp := time.Now().Unix()
+	rdmDescriptor := fmt.Sprintf("%s/%s-rdm-%d.vmdk", sourceDir, sourceNameWithoutExt, timestamp)
 	utils.PrintLog(fmt.Sprintf("Source directory: %s", sourceDir))
 	utils.PrintLog(fmt.Sprintf("Source base name: %s", sourceBaseName))
 	utils.PrintLog(fmt.Sprintf("RDM descriptor path (on datastore): %s", rdmDescriptor))
 
-	// Check if RDM descriptor already exists and delete it (from previous failed attempts)
-	utils.PrintLog("Checking if RDM descriptor already exists...")
-	checkRdmCmd := fmt.Sprintf("ls -l '%s' 2>&1", rdmDescriptor)
-	checkRdmOutput, _ := c.ExecuteCommand(checkRdmCmd)
-	if !strings.Contains(checkRdmOutput, "No such file") {
-		utils.PrintLog(fmt.Sprintf("RDM descriptor already exists, deleting: %s", rdmDescriptor))
-		deleteCmd := fmt.Sprintf("rm -f '%s'", rdmDescriptor)
-		_, err := c.ExecuteCommand(deleteCmd)
-		if err != nil {
-			utils.PrintLog(fmt.Sprintf("WARNING: Failed to delete existing RDM descriptor: %v", err))
-		} else {
-			utils.PrintLog("Successfully deleted existing RDM descriptor")
-		}
-	} else {
-		utils.PrintLog("RDM descriptor does not exist, proceeding with clone")
-	}
+	// With timestamp-based naming, each retry uses a unique RDM descriptor filename
+	// This prevents "file already exists" errors on migration retries (issue #1423)
+	utils.PrintLog(fmt.Sprintf("Using unique RDM descriptor path with timestamp: %s", rdmDescriptor))
 
 	// Create a log file for vmkfstools output
 	logFile := fmt.Sprintf("/tmp/vmkfstools_rdm_clone_%d.log", time.Now().Unix())
