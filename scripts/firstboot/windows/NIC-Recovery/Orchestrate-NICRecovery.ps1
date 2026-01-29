@@ -117,7 +117,7 @@ try {
     }
     
     # Check if pnputil.exe is recognized
-    if (Get-Command pnputil.exe -ErrorAction SilentlyContinue) {
+    if ((Get-Command pnputil.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Windows\System32\pnputil.exe")) {
         Write-Log "pnputil.exe is recognized"
         # Run Cleanup-GhostNICs.ps1
         try {
