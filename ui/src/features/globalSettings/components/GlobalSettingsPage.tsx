@@ -193,13 +193,14 @@ const TabPanel = ({
   activeTab: TabKey
   value: TabKey
 }) => {
-  if (activeTab !== value) return null
+  const isActive = activeTab === value
   return (
     <Box
       role="tabpanel"
       id={`settings-tabpanel-${value}`}
       aria-labelledby={`settings-tab-${value}`}
-      sx={{ pt: 3 }}
+      hidden={!isActive}
+      sx={{ pt: isActive ? 3 : 0, display: isActive ? 'block' : 'none' }}
     >
       {children}
     </Box>
@@ -760,13 +761,24 @@ export default function GlobalSettingsPage() {
     handleNotificationClose
   } = useGlobalSettingsController()
 
+  const activeTabRef = useRef(activeTab)
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  const appliedLocationTabRef = useRef<TabKey | null>(null)
   useEffect(() => {
     const requestedTab = (location.state as any)?.tab as TabKey | undefined
-    if (!requestedTab) return
+    if (!requestedTab) {
+      appliedLocationTabRef.current = null
+      return
+    }
     if (!TAB_ORDER.includes(requestedTab)) return
-    if (requestedTab === activeTab) return
+    if (appliedLocationTabRef.current === requestedTab) return
+    appliedLocationTabRef.current = requestedTab
+    if (requestedTab === activeTabRef.current) return
     setActiveTab(requestedTab)
-  }, [activeTab, location.state, setActiveTab])
+  }, [location.state, setActiveTab])
 
   const [proxyHelpDismissed, setProxyHelpDismissed] = useState(false)
 
@@ -776,7 +788,9 @@ export default function GlobalSettingsPage() {
   vddkStatusRef.current = vddkStatus
 
   const [vddkProgress, setVddkProgress] = useState(0)
+  const vddkProgressRef = useRef(0)
   const [vddkMessage, setVddkMessage] = useState('')
+  const vddkMessageRef = useRef('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
 
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
@@ -801,7 +815,9 @@ export default function GlobalSettingsPage() {
     setVddkFile(file)
     setVddkStatus('idle')
     setVddkProgress(0)
+    vddkProgressRef.current = 0
     setVddkMessage('')
+    vddkMessageRef.current = ''
     setVddkExtractedPath('')
   }, [])
 
@@ -809,7 +825,9 @@ export default function GlobalSettingsPage() {
     setVddkFile(null)
     setVddkStatus('idle')
     setVddkProgress(0)
+    vddkProgressRef.current = 0
     setVddkMessage('')
+    vddkMessageRef.current = ''
     setVddkExtractedPath('')
   }, [])
 
@@ -830,10 +848,17 @@ export default function GlobalSettingsPage() {
         try {
           setVddkStatus('uploading')
           setVddkProgress(0)
+          vddkProgressRef.current = 0
           setVddkMessage('Uploading VDDK file...')
+          vddkMessageRef.current = 'Uploading VDDK file...'
 
           const response = await uploadVddkFile(vddkFile, {
-            onProgress: (next) => setVddkProgress(next)
+            onProgress: (next) => {
+              vddkProgressRef.current = next
+              if (activeTabRef.current === 'vddk') {
+                setVddkProgress(next)
+              }
+            }
           })
 
           setVddkExtractedPath(response.extracted_path || '')
@@ -845,18 +870,24 @@ export default function GlobalSettingsPage() {
 
           if (!version) {
             setVddkStatus('error')
-            setVddkMessage(
+            const nextMessage =
               'Warning: The uploaded file may not be a valid VDDK. Could not detect VDDK version. Please ensure you uploaded the correct VMware VDDK tar file.'
-            )
+            setVddkMessage(nextMessage)
+            vddkMessageRef.current = nextMessage
           } else {
             setVddkStatus('success')
-            setVddkMessage(
-              response.message || `VDDK file uploaded and extracted successfully! Detected version: ${version}`
-            )
+            const nextMessage =
+              response.message ||
+              `VDDK file uploaded and extracted successfully! Detected version: ${version}`
+            setVddkMessage(nextMessage)
+            setVddkFile(null)
+            vddkMessageRef.current = nextMessage
           }
         } catch (err) {
           setVddkStatus('error')
-          setVddkMessage(err instanceof Error ? err.message : 'Upload failed')
+          const nextMessage = err instanceof Error ? err.message : 'Upload failed'
+          setVddkMessage(nextMessage)
+          vddkMessageRef.current = nextMessage
           return
         }
       } else if (activeTab === 'vddk') {
@@ -865,8 +896,14 @@ export default function GlobalSettingsPage() {
 
       await onSave(e)
     },
-    [activeTab, onSave, validateVddkFile, vddkFile, vddkStatus]
+    [onSave, validateVddkFile, vddkFile, vddkStatus]
   )
+
+  useEffect(() => {
+    if (activeTab !== 'vddk') return
+    setVddkProgress(vddkProgressRef.current)
+    setVddkMessage(vddkMessageRef.current)
+  }, [activeTab])
 
   useEffect(() => {
     if (!form.PROXY_ENABLED) {
@@ -1330,7 +1367,11 @@ export default function GlobalSettingsPage() {
               variant="contained"
               type="submit"
               color="primary"
-              disabled={saving || vddkStatus === 'uploading' || (activeTab === 'vddk' && !vddkFile && !existingVddkPath)}
+              disabled={
+                saving ||
+                vddkStatus === 'uploading' ||
+                (activeTab === 'vddk' && !vddkFile && !existingVddkPath)
+              }
               data-tour="global-settings-save"
               startIcon={
                 saving || vddkStatus === 'uploading' ? (
@@ -1376,7 +1417,6 @@ export default function GlobalSettingsPage() {
           {notification.message}
         </Alert>
       </Snackbar>
-
     </StyledPaper>
   )
 }

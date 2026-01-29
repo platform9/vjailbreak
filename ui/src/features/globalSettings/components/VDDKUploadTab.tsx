@@ -185,7 +185,7 @@ export default function VDDKUploadTab({
             sx={{ mt: 2, gridColumn: { xs: '1', md: '1 / -1' } }}
             action={
               <Button color="inherit" size="small" onClick={onClear}>
-                Upload Another
+                Replace
               </Button>
             }
           >
