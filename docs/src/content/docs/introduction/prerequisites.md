@@ -114,6 +114,40 @@ Please refer to the following table for the required privileges:
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
+### Understanding VMware NFC Performance Limitations
+
+vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC (Network File Copy) protocol over port 902. It's important to understand the inherent performance characteristics and limitations of VMware's NFC protocol:
+
+#### NFC Protocol Characteristics
+
+- **Per-VMDK throughput limit**: NFC is limited to approximately **1 Gbps per VMDK** due to VMware's internal implementation
+- **Single-threaded**: NFC operations are single-threaded, limiting performance to what a single thread can achieve
+- **Encrypted by default**: NFC traffic is SSL-encrypted, which adds overhead (disabling SSL can improve speed by up to 20% but reduces security)
+- **Synchronous operations**: NFC must complete READ/WRITE/CHECK operations sequentially before proceeding
+- **Latency-aware throttling**: NFC will automatically throttle when network latency increases
+
+#### Impact on vJailbreak Migrations
+
+- **Per-disk transfer speed**: Each VMDK transfers at approximately 1 Gbps (125 MB/s), regardless of available network bandwidth
+- **Network saturation**: Multiple parallel VM migrations can saturate network links (e.g., a 10 Gbps link can theoretically support ~10 concurrent VM migrations)
+- **Migration time estimation**: Expect transfer times of approximately 8-9 minutes per 100 GB per VMDK
+
+#### Recommendations
+
+- Plan migration schedules accounting for the ~1 Gbps per-VMDK limitation
+- For VMs with large single disks, migration time will be constrained by NFC throughput rather than network capacity
+- Use parallel migrations across multiple VMs to better utilize available network bandwidth
+- Monitor network utilization to optimize the number of concurrent migrations
+- Consider scheduling large VM migrations during maintenance windows
+
+#### Alternative Protocols
+
+VMware vSphere 8.0 and later supports **UDT (Unified Data Transport)** protocol, which offers significantly better performance than NFC. However, vJailbreak currently uses NFC via nbdkit for compatibility with a wider range of vSphere versions.
+
+**References:**
+- [Veeam Forum: 1Gbit/s per VMDK Limit](https://forums.veeam.com/vmware-vsphere-f24/1gbit-s-per-vmdk-limit-t66468.html)
+- [Broadcom KB: NFC Performance](https://knowledge.broadcom.com/external/article/307001/nfc-performance-is-slow.html)
+
 ### What ports do I need to open for vJailbreak to work?
 Please refer the following table for the required ports:
 
@@ -121,7 +155,7 @@ Please refer the following table for the required ports:
 | --- | --- | --- | --- | --- |
 | 443 | TCP | PCD nodes | VMware vCenter API endpiont | VMware provider inventory<br><br>Disk transfer authentication |
 | 443 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer authentication |
-| 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy |
+| 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy via NFC protocol (see NFC limitations above) |
 | 5480 | TCP | PCD nodes | VMware vCenter API endpoint | VMware Site Recovery Manager Appliance Management Interface |
 
 
