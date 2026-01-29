@@ -987,7 +987,7 @@ export default function GlobalSettingsPage() {
             value={activeTab}
             onChange={handleTabChange}
             variant="scrollable"
-            allowScrollButtonsMobile
+            scrollButtons={false}
             data-testid="global-settings-tabs"
             sx={{ borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
           >
