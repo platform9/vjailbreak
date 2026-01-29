@@ -140,9 +140,6 @@ vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC 
 - Monitor network utilization to optimize the number of concurrent migrations
 - Consider scheduling large VM migrations during maintenance windows
 
-#### Alternative Protocols
-
-VMware vSphere 8.0 and later supports **UDT (Unified Data Transport)** protocol, which offers significantly better performance than NFC. However, vJailbreak currently uses NFC via nbdkit for compatibility with a wider range of vSphere versions.
 
 **References:**
 - [Veeam Forum: 1Gbit/s per VMDK Limit](https://forums.veeam.com/vmware-vsphere-f24/1gbit-s-per-vmdk-limit-t66468.html)
