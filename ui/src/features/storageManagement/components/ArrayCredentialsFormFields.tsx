@@ -2,7 +2,7 @@ import { Box, Typography, Alert } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
 import { FieldErrors } from 'react-hook-form'
 import { ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
-import { RHFCheckbox, RHFSelect, RHFTextField } from 'src/shared/components/forms'
+import { RHFSelect, RHFToggleField, RHFTextField } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components/design-system'
 
 export type ArrayCredentialsFormData = {
@@ -200,30 +200,13 @@ export default function ArrayCredentialsFormFields({
           it.
         </Typography>
 
-        <Box
-          sx={{
-            p: 2,
-            mb: 5,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            backgroundColor: 'background.default'
-          }}
-        >
-          <Box sx={{ mb: 1 }}>
-            <RHFCheckbox
-              name="skipSslVerification"
-              label="Allow insecure connection"
-              labelProps={{ sx: { mb: 0.5 } }}
-            />
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-              Disabling verification may expose credentials in transit.
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-              Skip SSL verification for self-signed or lab environments.
-            </Typography>
-          </Box>
-        </Box>
+        <RHFToggleField
+          name="skipSslVerification"
+          label="Allow insecure connection"
+          helperText="Disabling verification may expose credentials in transit."
+          description="Skip SSL verification for self-signed or lab environments."
+          containerProps={{ sx: { mb: 5 } }}
+        />
       </Box>
     </>
   )
