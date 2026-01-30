@@ -644,11 +644,21 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
 
       setSaving(true)
       try {
+        const existingCm = await getSettingsConfigMap()
+        const updatedData = toConfigMapData(form)
+
         await updateSettingsConfigMap({
-          apiVersion: 'v1',
-          kind: 'ConfigMap',
-          metadata: { name: VERSION_CONFIG_MAP_NAME, namespace: VERSION_NAMESPACE },
-          data: toConfigMapData(form)
+          apiVersion: existingCm?.apiVersion || 'v1',
+          kind: existingCm?.kind || 'ConfigMap',
+          metadata: {
+            ...(existingCm?.metadata as any),
+            name: VERSION_CONFIG_MAP_NAME,
+            namespace: VERSION_NAMESPACE
+          },
+          data: {
+            ...(existingCm?.data as any),
+            ...updatedData
+          }
         } as any)
 
         let envInjectionFailed = false
