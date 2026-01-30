@@ -80,7 +80,7 @@ function Ensure-64BitPowerShell {
         return
     }
 
-    Write-Host "Detected 32-bit PowerShell on 64-bit OS → Relaunching in 64-bit PowerShell..." -ForegroundColor Yellow
+    Write-Log "Detected 32-bit PowerShell on 64-bit OS → Relaunching in 64-bit PowerShell..." -ForegroundColor Yellow
 
     $ps64Path = "$env:windir\sysnative\WindowsPowerShell\v1.0\powershell.exe"
 
@@ -107,11 +107,11 @@ function Ensure-64BitPowerShell {
                       -Wait `
                       -NoNewWindow
 
-        Write-Host "64-bit execution completed. Exiting 32-bit instance." -ForegroundColor Green
+        Write-Log "64-bit execution completed. Exiting 32-bit instance."
         exit 0
     }
     catch {
-        Write-Error "Failed to relaunch in 64-bit PowerShell: $_"
+        Write-Log "Failed to relaunch in 64-bit PowerShell: $_" -Level "ERROR"
     }
 }
 
@@ -193,12 +193,6 @@ try {
     } else {
         Write-Log "Pnputil not found rescheduling NIC recovery post reboot" -Level "WARNING"
         Schedule-MyTask -TaskName $TaskName -ScriptPath "$ScriptRoot\Orchestrate-NICRecovery.ps1" -Description "Runs once after next reboot then deletes itself"
-        try {
-            shutdown /r /t 120
-        }
-        catch {
-            Write-Log "Error scheduling reboot - $_" -Level "ERROR"
-        }
         exit 0
     }
 
