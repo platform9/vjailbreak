@@ -7,7 +7,8 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Alert
+  Alert,
+  Chip
 } from '@mui/material'
 import { useEffect, useMemo } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
@@ -292,7 +293,32 @@ export default function NetworkAndStorageMappingStep({
                       key={option.value}
                       value={option.value}
                       control={<Radio />}
-                      label={option.label}
+                      label={
+                        option.value === 'StorageAcceleratedCopy' ? (
+                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                            <Box component="span">{option.label}</Box>
+                            <Chip
+                              label="Beta"
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              sx={{
+                                transform: 'translateY(-6px)',
+                                height: 16,
+                                '& .MuiChip-label': {
+                                  px: 0.75,
+                                  fontSize: '0.65rem',
+                                  lineHeight: '16px',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }
+                              }}
+                            />
+                          </Box>
+                        ) : (
+                          option.label
+                        )
+                      }
                     />
                   ))}
                 </RadioGroup>

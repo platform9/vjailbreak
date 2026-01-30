@@ -7,19 +7,15 @@ export interface SecretData {
   [key: string]: string
 }
 
-// Function to create a Kubernetes secret
-export const createSecret = async (
-  name: string,
-  data: SecretData,
-  namespace = VJAILBREAK_DEFAULT_NAMESPACE
-) => {
-  // Convert data values to base64
-  const base64Data = Object.entries(data).reduce((acc, [key, value]) => {
+const toBase64SecretData = (data: SecretData): SecretData => {
+  return Object.entries(data).reduce((acc, [key, value]) => {
     acc[key] = btoa(value)
     return acc
   }, {} as SecretData)
+}
 
-  const secretBody = {
+const buildSecretBody = (name: string, data: SecretData, namespace: string) => {
+  return {
     apiVersion: 'v1',
     kind: 'Secret',
     metadata: {
@@ -27,8 +23,17 @@ export const createSecret = async (
       namespace
     },
     type: 'Opaque',
-    data: base64Data
+    data: toBase64SecretData(data)
   }
+}
+
+// Function to create a Kubernetes secret
+export const createSecret = async (
+  name: string,
+  data: SecretData,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretBody = buildSecretBody(name, data, namespace)
 
   // Use the Kubernetes API endpoint for secrets
   const endpoint = `/api/v1/namespaces/${namespace}/secrets`
@@ -39,6 +44,37 @@ export const createSecret = async (
   })
 
   return response
+}
+
+export const replaceSecret = async (
+  name: string,
+  data: SecretData,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const secretBody = buildSecretBody(name, data, namespace)
+
+  const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+  const response = await axios.put({
+    endpoint,
+    data: secretBody
+  })
+
+  return response
+}
+
+export const upsertSecret = async (
+  name: string,
+  data: SecretData,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  try {
+    return await createSecret(name, data, namespace)
+  } catch (error: any) {
+    if (error?.response?.status === 409) {
+      return await replaceSecret(name, data, namespace)
+    }
+    throw error
+  }
 }
 
 // Function to create OpenStack credentials secret
@@ -74,7 +110,9 @@ export const createOpenstackCredsSecret = async (
   }
 
   if (!hasToken && !hasUserPass) {
-    throw new Error('Missing required credentials: provide either OS_AUTH_TOKEN or both OS_USERNAME and OS_PASSWORD')
+    throw new Error(
+      'Missing required credentials: provide either OS_AUTH_TOKEN or both OS_USERNAME and OS_PASSWORD'
+    )
   }
   if (hasUserPass && (!credentials.OS_DOMAIN_NAME || credentials.OS_DOMAIN_NAME.trim() === '')) {
     throw new Error('Missing required field for password authentication: OS_DOMAIN_NAME')
@@ -89,15 +127,15 @@ export const createOpenstackCredsSecret = async (
   if (credentials.OS_AUTH_TOKEN) {
     secretData.OS_AUTH_TOKEN = credentials.OS_AUTH_TOKEN
   }
-  
+
   if (credentials.OS_USERNAME) {
     secretData.OS_USERNAME = credentials.OS_USERNAME
   }
-  
+
   if (credentials.OS_PASSWORD) {
     secretData.OS_PASSWORD = credentials.OS_PASSWORD
   }
-  
+
   if (credentials.OS_DOMAIN_NAME) {
     secretData.OS_DOMAIN_NAME = credentials.OS_DOMAIN_NAME
   }

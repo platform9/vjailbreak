@@ -213,7 +213,12 @@ const NavigationBadge = styled(Chip)(({ theme }) => ({
   fontSize: '0.6rem',
   height: '16px',
   fontWeight: 600,
-  marginLeft: theme.spacing(1)
+  marginLeft: theme.spacing(1),
+  transform: 'translateY(-6px)',
+  px: 0.75,
+  lineHeight: '16px',
+  display: 'flex',
+  alignItems: 'center'
 }))
 
 const CornerToggleButton = styled(IconButton)(({ theme }) => ({

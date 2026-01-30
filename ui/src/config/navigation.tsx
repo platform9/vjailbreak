@@ -38,7 +38,12 @@ export const navigationItems: NavigationItem[] = [
     id: 'storage-management',
     label: 'Storage Management',
     path: '/dashboard/storage-management',
-    icon: <SdStorageIcon />
+    icon: <SdStorageIcon />,
+    badge: {
+      label: 'Beta',
+      color: 'warning',
+      variant: 'outlined'
+    }
   },
   {
     id: 'baremetal-config',
