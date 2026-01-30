@@ -98,7 +98,6 @@ try {
         Write-Log "Warning: Failed to start Network Setup Service - $_" -Level "WARNING"
     }
     
-    Start-Sleep -Seconds 5
 
     # Run Recover-HiddenNICMapping.ps1
     if (Test-Path "$ScriptRoot\netconfig.json") {
@@ -150,6 +149,12 @@ try {
     } else {
         Write-Log "Pnputil not found rescheduling NIC recovery post reboot" -Level "WARNING"
         Schedule-MyTask -TaskName $TaskName -ScriptPath "$ScriptRoot\Orchestrate-NICRecovery.ps1" -Description "Runs once after next reboot then deletes itself"
+        try {
+            shutdown /r /t 120
+        }
+        catch {
+            Write-Log "Error scheduling reboot - $_" -Level "ERROR"
+        }
         exit 0
     }
 
