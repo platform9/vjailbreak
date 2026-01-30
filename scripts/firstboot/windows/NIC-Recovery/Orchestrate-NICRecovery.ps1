@@ -69,7 +69,51 @@ function Schedule-MyTask {
 
     Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
+function Ensure-64BitPowerShell {
+    if (-not [Environment]::Is64BitOperatingSystem) {
+        Write-Verbose "This is a 32-bit operating system → no 64-bit PowerShell available. Continuing as-is."
+        return
+    }
 
+    if ([Environment]::Is64BitProcess) {
+        Write-Verbose "Already running in 64-bit PowerShell process."
+        return
+    }
+
+    Write-Host "Detected 32-bit PowerShell on 64-bit OS → Relaunching in 64-bit PowerShell..." -ForegroundColor Yellow
+
+    $ps64Path = "$env:windir\sysnative\WindowsPowerShell\v1.0\powershell.exe"
+
+    if (-not (Test-Path $ps64Path)) {
+        Write-Warning "64-bit PowerShell not found at $ps64Path. Continuing in 32-bit (may cause issues)."
+        return
+    }
+
+    $argList = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass'
+    )
+
+    if ($args.Count -gt 0) {
+        $argList += $args
+    }
+
+    $argList += '-File'
+    $argList += $PSCommandPath   # or $MyInvocation.MyCommand.Definition
+
+    try {
+        Start-Process -FilePath $ps64Path `
+                      -ArgumentList $argList `
+                      -Wait `
+                      -NoNewWindow
+
+        Write-Host "64-bit execution completed. Exiting 32-bit instance." -ForegroundColor Green
+        exit 0
+    }
+    catch {
+        Write-Error "Failed to relaunch in 64-bit PowerShell: $_"
+    }
+}
 
 function Remove-MyTask{
     param(
@@ -89,7 +133,7 @@ function Remove-MyTask{
 try {
     Write-Log "=== Starting NIC Recovery Orchestration ==="
     # Start Network Setup Service
-    Start-Sleep 300
+    Ensure-64BitPowerShell
     try {
         Write-Log "Starting Network Setup Service..."
         Start-Service NetSetupSvc -ErrorAction Stop
