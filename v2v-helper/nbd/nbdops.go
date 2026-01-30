@@ -416,6 +416,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 16)
+	throttle_semaphore := make(chan struct{}, 3000)
 	incrementalcopyprogress := make(chan int64)
 
 	maxRetries, capInterval := utils.GetRetryLimits()
@@ -449,10 +450,12 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 	for _, extent := range changedAreas.ChangedArea {
 		wg.Add(1)
+		throttle_semaphore <- struct{}{}
 		go func(extent types.DiskChangeExtent) {
 			blocks := getBlockStatus(handle, extent)
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+			defer func() { <-throttle_semaphore }()
 			retries := uint64(0)
 			waitTime := 1 * time.Minute
 			var err error
