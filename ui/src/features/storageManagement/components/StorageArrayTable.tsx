@@ -352,6 +352,11 @@ export default function StorageArrayTable() {
 
   const handleEsxiKeyFileChange = async (file: File | null) => {
     if (!file) return
+    const MAX_KEY_FILE_SIZE = 1024 * 1024 // 1 MB limit for SSH key files
+    if (file.size > MAX_KEY_FILE_SIZE) {
+      setEsxiKeyError('File is too large. SSH private key files should be less than 1 MB.')
+      return
+    }
     try {
       const text = await file.text()
       setEsxiKeyValue('sshPrivateKey', text, { shouldDirty: true })

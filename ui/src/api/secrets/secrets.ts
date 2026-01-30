@@ -51,15 +51,20 @@ export const replaceSecret = async (
   data: SecretData,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
-  const secretBody = buildSecretBody(name, data, namespace)
+  try {
+    const secretBody = buildSecretBody(name, data, namespace)
 
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
-  const response = await axios.put({
-    endpoint,
-    data: secretBody
-  })
+    const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+    const response = await axios.put({
+      endpoint,
+      data: secretBody
+    })
 
-  return response
+    return response
+  } catch (error) {
+    console.error(`Error replacing secret ${name}:`, error)
+    throw error
+  }
 }
 
 export const upsertSecret = async (
