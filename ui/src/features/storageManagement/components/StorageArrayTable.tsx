@@ -1,5 +1,5 @@
 import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Chip, Alert } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Chip, Alert, Snackbar } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -222,6 +222,9 @@ export default function StorageArrayTable() {
 
   const [esxiKeyDrawerOpen, setEsxiKeyDrawerOpen] = useState(false)
   const [esxiKeyError, setEsxiKeyError] = useState<string | null>(null)
+  const [esxiKeyToastOpen, setEsxiKeyToastOpen] = useState(false)
+  const [esxiKeyToastMessage, setEsxiKeyToastMessage] = useState<string>('')
+  const [esxiKeyToastSeverity, setEsxiKeyToastSeverity] = useState<'success' | 'error'>('success')
 
   type EsxiKeyFormData = {
     sshPrivateKey: string
@@ -350,6 +353,10 @@ export default function StorageArrayTable() {
     setEsxiKeyError(null)
   }
 
+  const handleCloseEsxiKeyToast = () => {
+    setEsxiKeyToastOpen(false)
+  }
+
   const handleEsxiKeyFileChange = async (file: File | null) => {
     if (!file) return
     const MAX_KEY_FILE_SIZE = 1024 * 1024 // 1 MB limit for SSH key files
@@ -376,11 +383,17 @@ export default function StorageArrayTable() {
     try {
       setEsxiKeyError(null)
       await saveEsxiKey(data.sshPrivateKey.trim())
+      setEsxiKeyToastSeverity('success')
+      setEsxiKeyToastMessage('ESXi SSH key saved successfully.')
+      setEsxiKeyToastOpen(true)
       setEsxiKeyDrawerOpen(false)
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to save ESXi SSH key'
       setEsxiKeyError(errorMessage)
+      setEsxiKeyToastSeverity('error')
+      setEsxiKeyToastMessage(errorMessage)
+      setEsxiKeyToastOpen(true)
       reportError(error, { context: 'save-esxi-ssh-key' })
     }
   }
@@ -710,6 +723,22 @@ export default function StorageArrayTable() {
           />
         </DesignSystemForm>
       </DrawerShell>
+
+      <Snackbar
+        open={esxiKeyToastOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseEsxiKeyToast}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleCloseEsxiKeyToast}
+          severity={esxiKeyToastSeverity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {esxiKeyToastMessage}
+        </Alert>
+      </Snackbar>
     </div>
   )
 }
