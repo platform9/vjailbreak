@@ -229,7 +229,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot"}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -237,6 +237,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "-i", "disk", diskPath)
 	} else {
 		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	}
+
+	// Use Windows Server 2012-specific ISO if detected
+	if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+		args = append(args, "--firstboot", "/home/fedora/scripts/force-install-virtio-win12.sh")
 	}
 
 	start := time.Now()
