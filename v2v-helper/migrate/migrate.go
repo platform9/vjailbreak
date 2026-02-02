@@ -580,10 +580,16 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
-
+	var currentCutoverOption string
 	if migobj.MigrationType == "cold" {
 		if cutoverLabelValue != "" {
-			migobj.logMessage("Cold Migration with cutover options selected, proceeding with cold migration")
+			if cutoverLabelValue == "yes" {
+
+				currentCutoverOption = "Immediately After Data Copy"
+			} else if cutoverLabelValue == "no" {
+				currentCutoverOption = "Admin Initiated Cutover"
+			}
+			migobj.logMessage(fmt.Sprintf("Migration Type : %s | Cutover Option %s", migobj.MigrationType, currentCutoverOption))
 		}
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
