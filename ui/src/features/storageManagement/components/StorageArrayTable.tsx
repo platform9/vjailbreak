@@ -700,7 +700,6 @@ export default function StorageArrayTable() {
               <input
                 type="file"
                 hidden
-                accept=".pem,.key,.txt"
                 onChange={(e) => handleEsxiKeyFileChange(e.target.files?.[0] ?? null)}
               />
             </ActionButton>
