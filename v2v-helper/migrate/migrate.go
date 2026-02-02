@@ -563,7 +563,7 @@ func (migobj *Migrate) CheckCutoverOptions() (bool, string) {
 		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
 		return false, ""
 	}
-	// If label is set to no, return true. because that time the admin has initiated cutover
+	// If label is set to no or yes, return true. because that time the admin has initiated cutover
 	if value != "" {
 		return true, value
 	}
