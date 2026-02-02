@@ -415,7 +415,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	}
 
 	var wg sync.WaitGroup
-	throttle_semaphore := make(chan struct{}, 3000)
+	throttle_semaphore := make(chan struct{}, 100)
 	incrementalcopyprogress := make(chan int64)
 
 	maxRetries, capInterval := utils.GetRetryLimits()
