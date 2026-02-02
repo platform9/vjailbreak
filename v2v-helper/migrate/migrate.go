@@ -578,7 +578,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	_, cutoverLabelValue := migobj.CheckCutoverOptions()
+	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
 
 	if migobj.MigrationType == "cold" {
@@ -654,8 +654,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
 	// Check if migration has admin cutover if so don't copy any more changed blocks
-	adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
-
+	adminInitiatedCutover := cutoverLabelPresent && (cutoverLabelValue == "no")
 	incrementalCopyCount := 0
 	for {
 		// If its the first copy, copy the entire disk
