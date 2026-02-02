@@ -16,18 +16,29 @@ if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
     "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe"
 )
 
-timeout /t 20 /nobreak >nul
+echo Waiting for system initialization...
+timeout /t 30 /nobreak >nul
 
 if not exist "%DRIVER_PATH%" (
     echo ERROR: Driver path not found at %DRIVER_PATH%
     exit /b 1
 )
 
+echo Waiting for pnputil to become available...
+set WAIT_COUNT=0
+:WAIT_PNPUTIL
 if not exist "%PNPUTIL%" (
-    echo ERROR: pnputil.exe not found
-    exit /b 1
+    set /a WAIT_COUNT+=1
+    if %WAIT_COUNT% lss 30 (
+        timeout /t 2 /nobreak >nul
+        goto WAIT_PNPUTIL
+    ) else (
+        echo ERROR: pnputil.exe not found after 60 seconds
+        exit /b 1
+    )
 )
 
+echo pnputil.exe is now available
 echo Installing VirtIO drivers...
 
 if exist "%DRIVER_PATH%\balloon.inf" (
