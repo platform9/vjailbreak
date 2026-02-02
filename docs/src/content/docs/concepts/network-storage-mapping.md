@@ -43,6 +43,17 @@ For OpenStack/PCD environment, the volumes are created using 'Cinder' and can be
 
 Since the migration involves copying the data from VMware to OpenStack/PCD, the storage types can be of different types, for example `NFS` datastore volume can be copied to `iSCSI` volume in OpenStack/PCD.
 
+## Storage-Accelerated Copy
+
+For environments where both VMware and OpenStack share the same storage array (Pure Storage or NetApp), vJailbreak supports **Storage-Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
+
+Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage-Accelerated Copy performs the copy directly on the storage array at array speeds, which can be 10-100x faster.
+
+:::tip
+Storage-Accelerated Copy is ideal for large VMs with hundreds of GB or TB of disk data. For a 1 TB disk, normal copy takes ~2.5 hours while Storage-Accelerated Copy can complete in 5-30 minutes.
+:::
+
+See [Storage-Accelerated Copy](../storage-accelerated-copy/) for detailed configuration and usage instructions.
 
 :::note
 Migration involves copying of the data from VMware to PCD, depending on the bandwidth and the network congestion, the migration can take a long time and needs more resources on the vJailbreak VM. See [scaling guide](../../guides/how-to/scaling/) for parallel migrations.
