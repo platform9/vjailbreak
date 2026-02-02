@@ -1,93 +1,52 @@
-@echo off
-setlocal enabledelayedexpansion
+powershell -NoProfile -ExecutionPolicy Bypass -Command "
+$DriverPath = 'C:\Windows\Drivers\VirtIO'
+$LogFile = 'C:\ProgramData\virtio-install.log'
 
-set DRIVER_PATH=C:\Windows\Drivers\VirtIO
-set PNPUTIL=C:\Windows\System32\PnPutil.exe
-set LOG_FILE=C:\ProgramData\virtio-install.log
+$log = @()
+$log += '======================================'
+$log += 'VirtIO Driver Installation'
+$log += "Date: $(Get-Date)"
+$log += '======================================'
 
-(
-echo.
-echo ======================================
-echo VirtIO Driver Installation
-echo Date: %DATE% %TIME%
-echo ======================================
+if (Test-Path "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe") {
+    $log += 'Running pnp_wait.exe...'
+    & "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe"
+}
 
-if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
-    "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe"
-)
+$log += 'Waiting for system initialization...'
+Start-Sleep -Seconds 30
 
-echo Waiting for system initialization...
-timeout /t 30 /nobreak >nul
+if (-not (Test-Path $DriverPath)) {
+    $log += 'ERROR: Driver path not found'
+    $log | Add-Content $LogFile
+    exit 1
+}
 
-if not exist "%DRIVER_PATH%" (
-    echo ERROR: Driver path not found at %DRIVER_PATH%
-    exit /b 1
-)
+$log += 'Installing VirtIO drivers...'
 
-echo Waiting for pnputil to become available...
-set WAIT_COUNT=0
-:WAIT_PNPUTIL
-if not exist "%PNPUTIL%" (
-    set /a WAIT_COUNT=WAIT_COUNT+1
-    if !WAIT_COUNT! lss 30 (
-        timeout /t 2 /nobreak >nul
-        goto WAIT_PNPUTIL
-    ) else (
-        echo ERROR: pnputil.exe not found after 60 seconds
-        exit /b 1
-    )
-)
+@('balloon.inf', 'vioser.inf', 'viorng.inf', 'vioinput.inf', 'pvpanic.inf', 'netkvm.inf', 'vioscsi.inf', 'viostor.inf') | ForEach-Object {
+    $inf = \"$DriverPath\\$_\"
+    if (Test-Path $inf) {
+        $log += \"Installing $_ ...\"
+        try {
+            & pnputil.exe -i -a \"$inf\" 2>&1 | ForEach-Object { $log += $_ }
+        } catch {
+            $log += \"Error installing $_: $_\"
+        }
+    }
+}
 
-echo pnputil.exe is now available
-echo Installing VirtIO drivers...
+$log += 'Rescanning hardware...'
+try {
+    & pnputil.exe /scan-devices 2>&1 | ForEach-Object { $log += $_ }
+} catch {
+    $log += \"Error rescanning: $_\"
+}
 
-if exist "%DRIVER_PATH%\balloon.inf" (
-    echo Installing Balloon driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\balloon.inf"
-)
+$log += ''
+$log += '======================================'
+$log += 'VirtIO Driver Installation Complete'
+$log += '======================================'
 
-if exist "%DRIVER_PATH%\vioser.inf" (
-    echo Installing VirtIO Serial driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioser.inf"
-)
-
-if exist "%DRIVER_PATH%\viorng.inf" (
-    echo Installing VirtIO RNG driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viorng.inf"
-)
-
-if exist "%DRIVER_PATH%\vioinput.inf" (
-    echo Installing VirtIO Input driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioinput.inf"
-)
-
-if exist "%DRIVER_PATH%\pvpanic.inf" (
-    echo Installing PVPanic driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\pvpanic.inf"
-)
-
-if exist "%DRIVER_PATH%\netkvm.inf" (
-    echo Installing Network driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\netkvm.inf"
-)
-
-if exist "%DRIVER_PATH%\vioscsi.inf" (
-    echo Installing SCSI driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioscsi.inf"
-)
-
-if exist "%DRIVER_PATH%\viostor.inf" (
-    echo Installing Storage driver...
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viostor.inf"
-)
-
-echo Rescanning hardware...
-"%PNPUTIL%" /scan-devices
-
-echo.
-echo ======================================
-echo VirtIO Driver Installation Complete
-echo ======================================
-) >> "%LOG_FILE%" 2>&1
-
-exit /b 0
+$log | Add-Content $LogFile
+"
