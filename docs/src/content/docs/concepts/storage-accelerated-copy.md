@@ -156,31 +156,16 @@ ssh -i ~/.ssh/esxi_migration_key root@<esxi-host-ip>
 If successful, you should be able to login to esxi.
 #### Step 5: Configure SSH Key in vJailbreak
 
-**Option A: Using the UI (Recommended)**
-
 1. Navigate to **Storage Management** page
 2. At the top, find the **ESXi SSH Key** section
-![SSH Key configuration](../../assets/sshkey.png)
 3. Click **Configure**
-4. Paste the contents of your private key:
+4. Get your private key contents:
    ```bash
    cat ~/.ssh/esxi_migration_key
    ```
 5. Copy the entire output (including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`)
 6. Paste into the UI textarea
 7. Click **Save**
-
-**Option B: Using kubectl**
-
-```bash
-# Create the secret with the private key
-kubectl create secret generic esxi-ssh-key \
-  --from-file=ssh-privatekey=~/.ssh/esxi_migration_key \
-  -n migration-system
-
-# Verify the secret was created
-kubectl get secret esxi-ssh-key -n migration-system
-```
 
 #### Step 6: Repeat for All ESXi Hosts
 
@@ -263,13 +248,13 @@ The Storage Management page displays all auto-discovered storage backends:
 | **Credentials** | "Pending" until user provides array credentials |
 | **Actions** | Edit (to add credentials) and Delete |
 
-![Storage Management Page](../../assets/storagemanagementpage.png)
+![Storage Management Page](../../../assets/storagemanagementpage.png)
 
 #### Example: PCD with Multiple Storage Backends
 
 In PCD, storage backends are configured in the **Cluster Blueprint** under **Persistent Storage Connectivity**. Each volume backend can have multiple configurations, and each configuration represents a connection to a storage array.
 
-![PCD Cluster Blueprint - Storage Configuration](../../assets/clusterblueprint.png)
+![PCD Cluster Blueprint - Storage Configuration](../../../assets/clusterblueprint.png)
 
 In the example above, PCD has three volume backends configured:
 1. **nfs** - NFS backend with driver "NFS"
@@ -309,192 +294,71 @@ After adding PCD credentials to vJailbreak, the system automatically creates Arr
 - `vt-pure-iscsi-pure-iscsi-2` (Vendor: Pure Storage, Credentials: Pending)
 
 :::tip
-Only storage backends with supported vendors (Pure Storage, NetApp) can be used for Storage Accelerated Copy. NFS and other backends will be auto-discovered but cannot be configured for array-level XCOPY operations.
+Only storage backends with supported vendors (Pure Storage, NetApp) For now we support only pure storage and netapp, ( As and when requirement arises we will keep adding support for other storage vendors ) nfs and other backends will be auto-discovered but cannot be configured for array-level XCOPY operations.
 :::
-
-### Step 1: Create ArrayCreds
-
-ArrayCreds stores the storage array credentials and PCD mapping information.
-
-#### Option A: Update Auto-Discovered ArrayCreds (Recommended)
-
-If you've already added PCD credentials, ArrayCreds entries are automatically created. Simply update them with storage array credentials:
-
-1. Navigate to **Storage Management** page
-2. Find the auto-discovered entry for your storage array (status shows "Pending")
-3. Click the **Edit** icon
-4. Fill in the storage array credentials:
-   - **Hostname/IP**: Storage array management IP
-   - **Username**: Array admin username
-   - **Password**: Array admin password
-   - **Skip SSL Verification**: Enable for testing (disable in production)
-5. Click **Save**
-6. The system will validate credentials and discover VMware datastores
-
-#### Option B: Manually Create ArrayCreds
-
-If you need to manually create ArrayCreds (e.g., for testing or custom configurations):
-
-```yaml
-apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: ArrayCreds
-metadata:
-  name: pure-array-01
-  namespace: vjailbreak
-spec:
-  vendorType: pure  # or "netapp"
-  secretRef:
-    name: pure-array-secret
-    namespace: vjailbreak
-  PCDMapping:
-    volumeType: "pure-iscsi"
-    cinderBackendName: "pure-iscsi-backend"
-    # cinderHost is auto-discovered if not specified
-```
-
-Create the corresponding secret:
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: pure-array-secret
-  namespace: vjailbreak
-type: Opaque
-stringData:
-  hostname: "192.168.1.100"
-  username: "pureuser"
-  password: "your-password"
-  skipSSLVerification: "true"  # Set to "false" in production
-```
-
-#### ArrayCreds Fields
-
-| Field | Description | Required |
-|-------|-------------|----------|
-| `vendorType` | Storage array vendor: `pure` or `netapp` | Yes |
-| `secretRef` | Reference to Kubernetes secret with array credentials | Yes |
-| `PCDMapping.volumeType` | Cinder volume type for this array | Yes |
-| `PCDMapping.cinderBackendName` | Cinder backend name (from cinder.conf) | Yes |
-| `PCDMapping.cinderHost` | Full Cinder host string (auto-discovered if empty) | No |
-
-### Step 2: Create ArrayCredsMapping
-
-ArrayCredsMapping maps VMware datastores to their corresponding ArrayCreds resources.
-
-```yaml
-apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: ArrayCredsMapping
-metadata:
-  name: datacenter-mapping
-  namespace: vjailbreak
-spec:
-  mappings:
-    - source: "datastore-pure-01"  # VMware datastore name
-      target: "pure-array-01"       # ArrayCreds name
-    - source: "datastore-pure-02"
-      target: "pure-array-01"
-```
-
-:::tip
-After creating ArrayCreds, the controller automatically discovers which VMware datastores are backed by the storage array. Check the ArrayCreds status to see discovered datastores.
-:::
-
-### Step 3: Configure MigrationTemplate
-
-Update your MigrationTemplate to use Storage-Accelerated Copy:
-
-```yaml
-apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: MigrationTemplate
-metadata:
-  name: migration-template-xcopy
-  namespace: vjailbreak
-spec:
-  source:
-    vmwareRef: vmware-creds
-  destination:
-    PCDRef: PCD-creds
-  networkMapping: network-mapping
-  storageCopyMethod: StorageAcceleratedCopy  # Enable Storage-Accelerated Copy
-  arrayCredsMapping: datacenter-mapping       # Reference to ArrayCredsMapping
-  # storageMapping is not needed when using StorageAcceleratedCopy
-```
 
 ## Using the UI
 
-Storage-Accelerated Copy can be configured through the vJailbreak UI with automatic backend discovery:
+Storage-Accelerated Copy can be configured entirely through the vJailbreak UI with automatic backend discovery:
 
-### Initial Setup
+### Step 1: Add PCD Credentials
 
-1. **Add PCD Credentials** (if not already done):
-   - Navigate to **Credentials** → **PCD/OpenStack**
-   - Add your PCD credentials
-   - vJailbreak will automatically discover all storage volume backends configured in PCD
+If not already done:
+1. Navigate to **Credentials** → **PCD/OpenStack**
+2. Add your PCD credentials
+3. vJailbreak will automatically discover all storage volume backends configured in PCD
 
-2. **Configure Storage Array Credentials**:
-   - Navigate to **Storage Management** (Beta feature)
-   - You'll see auto-discovered entries for each PCD storage backend:
-     - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
-     - **Vendor**: Auto-identified from driver type
-     - **Volume Type**: Pre-populated from PCD configuration
-     - **Backend Name**: Pre-populated from PCD configuration
-     - **Source**: "Auto-discovered"
-     - **Credentials**: "Pending" (requires your input)
-   
-3. **Update Array Credentials**:
-   - Click the **Edit** icon for a storage array entry
-   - Fill in the storage array credentials:
-     - **Hostname/IP**: Storage array management IP address
-     - **Username**: Array administrator username
-     - **Password**: Array administrator password
-     - **Skip SSL Verification**: Enable for testing environments (disable in production)
-   - Click **Save**
-   - The system will:
-     - Validate the credentials
-     - Connect to the storage array
-     - Auto-discover VMware datastores backed by this array
-     - Update the status to show validation results
+### Step 2: Configure Storage Array Credentials
 
-4. **Configure ESXi SSH Key**:
-   - At the top of the Storage Management page, you'll see "ESXi SSH Key" section
-   - Click **Configure** if not already configured
-   - Paste your ESXi SSH private key or upload the key file
-   - Click **Save**
+1. Navigate to **Storage Management** (Beta feature)
+2. You'll see auto-discovered entries for each PCD storage backend:
+   - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
+   - **Vendor**: Auto-identified from driver type
+   - **Volume Type**: Pre-populated from PCD configuration
+   - **Backend Name**: Pre-populated from PCD configuration
+   - **Source**: "Auto-discovered"
+   - **Credentials**: "Pending" (requires your input)
 
-5. **Create Array Credentials Mapping**:
-   - Navigate to **Mappings** → **Array Credentials Mapping**
-   - Click **Add Mapping**
-   - Map VMware datastores to the configured ArrayCreds
-   - The system will show you which datastores were auto-discovered for each array
+3. Click the **Edit** icon for a storage array entry
 
-6. **Create Migration with Storage-Accelerated Copy**:
-   - When creating a migration plan, select **Storage-Accelerated Copy** as the storage copy method
-   - Select the ArrayCredsMapping you created
-   - The migration will use array-level XCOPY for data transfer
+![Storage Array Credentials Edit](../../../assets/credsedit.png)
+
+4. Fill in the storage array credentials:
+   - **Hostname/IP**: Storage array management IP address
+   - **Username**: Array administrator username
+   - **Password**: Array administrator password
+   - **Skip SSL Verification**: Enable for testing environments (disable in production)
+5. Click **Save**
+6. The system will:
+   - Validate the credentials
+   - Connect to the storage array
+   - Auto-discover VMware datastores backed by this array
+   - Update the status to show validation results
+
+### Step 3: Configure ESXi SSH Key
+
+1. At the top of the Storage Management page, find the **ESXi SSH Key** section
+2. Click **Configure** if not already configured
+3. Paste your ESXi SSH private key (see [ESXi SSH Access](#2-esxi-ssh-access) section for key generation steps)
+4. Click **Save**
+
+### Step 4: Create Migration with Storage-Accelerated Copy
+
+1. When creating a migration plan, select **Storage-Accelerated Copy** as the storage copy method
+
+![Storage Accelerated Copy](../../../assets/trigger-mig.png)
+
+2. The UI will automatically map datastores to ArrayCreds if everything is configured correctly
+3. Start the migration - it will use array-level XCOPY for data transfer
 
 :::note
 **Auto-Discovery Benefits:**
 - No manual typing of volume types, backend names, or Cinder host strings
 - Automatic vendor identification from driver type
 - Pre-populated PCD mapping configuration
+- Automatic datastore-to-array mapping
 - Reduced configuration errors
 :::
-
-### Manual Configuration (Alternative)
-
-If you prefer to manually add storage arrays without auto-discovery:
-
-1. Navigate to **Storage Management**
-2. Click **Add Array Credentials**
-3. Manually enter all details:
-   - Array hostname/IP
-   - Username and password
-   - Vendor type (Pure Storage or NetApp)
-   - PCD volume type mapping
-   - Backend name
-   - Cinder host (optional)
-4. The system will validate credentials and auto-discover datastores
 
 ## Migration Workflow
 
@@ -568,63 +432,161 @@ Error: failed to connect to ESXi via SSH
 - Check that the SSH private key is correctly stored in the `esxi-ssh-key` secret
 - Ensure network connectivity between vJailbreak and ESXi host on port 22
 
-#### Storage Array Credential Validation Failed
+#### Storage Array Connection Failed
 
+**Symptoms:**
 ```
-Error: storage array credential validation failed
-```
-
-**Resolution**:
-- Verify array hostname/IP is correct and reachable
-- Check username and password
-- Ensure the user has sufficient permissions on the storage array
-
-#### Target Device Not Visible
-
-```
-Error: device naa.xxx not visible after timeout
+Error: failed to connect to storage array: authentication failed
 ```
 
-**Resolution**:
-- Verify iSCSI connectivity between ESXi and storage array
-- Check that the initiator group is correctly configured
-- Manually trigger a storage rescan on the ESXi host
+**Solutions:**
+1. Verify credentials in the Storage Management UI:
+   - Navigate to **Storage Management**
+   - Check the array credentials are correct
+   - Re-enter credentials if needed
 
-#### XCOPY Clone Failed
+2. Test connectivity from vJailbreak to storage array:
+   - Ensure network connectivity on port 443 (HTTPS)
+   - Check firewall rules between vJailbreak and storage array
+   - Verify API access is enabled on the array
 
+3. Check array-specific requirements:
+   - **Pure Storage**: Ensure API token or username/password has sufficient permissions
+   - **NetApp**: Verify ONTAP management interface is accessible
+
+#### ESXi Device Not Found
+
+**Symptoms:**
 ```
-Error: vmkfstools failed: ...
+Error: timeout waiting for device naa.624a9370... to appear on ESXi host
 ```
 
-**Resolution**:
-- Ensure the source VM is powered off
-- Check that the source VMDK is not locked by another process
-- Verify sufficient space on the target volume
+**Solutions:**
+1. Verify iSCSI initiator is configured on ESXi:
+   - Log into ESXi via SSH
+   - Run: `esxcli iscsi adapter list`
+   - Ensure iSCSI software adapter is enabled
+
+2. Check network connectivity from ESXi to storage array:
+   - Verify ESXi can reach storage array management IP
+   - Check iSCSI network configuration
+   - Verify VLAN/network segmentation allows iSCSI traffic
+
+3. Manually rescan storage:
+   ```bash
+   esxcli storage core adapter rescan --all
+   esxcli storage core device list | grep naa.624a9370
+   ```
+
+4. Verify LUN masking/mapping on the storage array:
+   - Check initiator group includes ESXi IQN
+   - Verify volume is mapped to the correct initiator group
+   - Check for iSCSI authentication issues (CHAP)
+
+#### Cinder Manage Volume Failed
+
+**Symptoms:**
+```
+Error: failed to manage existing volume: volume not found on backend
+```
+
+**Solutions:**
+1. Verify volume exists on the storage array:
+   - Check storage array management interface
+   - Confirm volume was created successfully
+
+2. Check Cinder backend configuration:
+   - Verify Cinder services are running in PCD
+   - Ensure volume backend name matches ArrayCreds configuration
+   - Check that the Cinder host string is correct
+
+3. Ensure volume naming matches backend expectations:
+   - **Pure Storage**: Volume name must match exactly
+   - **NetApp**: Full LUN path must be provided
+
+4. Review Cinder logs for detailed errors:
+   - Check PCD Cinder volume service logs
+   - Look for backend connection issues
+   - Verify the `cinderHost` field in ArrayCreds matches a running Cinder service
+
+#### vmkfstools Clone Failed
+
+**Symptoms:**
+```
+Error: vmkfstools clone failed: Unable to create raw disk
+```
+
+**Solutions:**
+1. Check ESXi SSH connectivity and authentication:
+   - Verify SSH key is configured correctly in vJailbreak
+   - Test SSH connection manually
+   - Check ESXi SSH service is running
+
+2. Verify vmkfstools is available:
+   ```bash
+   vmkfstools --version
+   ```
+
+3. Check source VMDK accessibility:
+   ```bash
+   ls -lh /vmfs/volumes/<datastore>/<vm-name>/<disk>.vmdk
+   ```
+
+4. Verify target device is visible:
+   ```bash
+   ls -lh /vmfs/devices/disks/naa.*
+   ```
+
+5. Check ESXi host logs:
+   ```bash
+   tail -f /var/log/vmkernel.log
+   ```
+
+6. Ensure sufficient free space on ESXi:
+   - RDM descriptor files require space on the datastore
+   - Check datastore free space
+
+#### Clone Progress Stalled
+
+**Symptoms:**
+```
+Error: clone progress stalled - no update for 5 minutes
+```
+
+**Solutions:**
+1. Check storage array performance and load:
+   - Review array management interface for performance metrics
+   - Check for high I/O load or resource contention
+   - Verify no array-level issues or alerts
+
+2. Verify ESXi storage adapter health:
+   ```bash
+   esxcli storage core adapter list
+   ```
+
+3. Review vmkfstools process on ESXi:
+   ```bash
+   ps -c | grep vmkfstools
+   ```
+   - Check if process is still running
+   - Look for any error indicators
+
+4. Check for network issues:
+   - Verify stable connectivity between ESXi and storage array
+   - Check for packet loss or latency issues
+
+5. Consider increasing timeout settings:
+   - For very large disks, the operation may take longer than expected
+   - Monitor array performance to ensure copy is progressing
 
 ### Checking ArrayCreds Status
 
-```bash
-kubectl get arraycreds -n vjailbreak -o wide
-```
+You can check the status of your storage array credentials in the UI:
 
-The status will show:
-- `arrayValidationStatus`: Whether credentials are valid
-- `dataStore`: List of discovered datastores backed by this array
-
-## Performance Comparison
-
-| Metric | Normal Copy (NFC) | Storage-Accelerated Copy |
-|--------|-------------------|--------------------------|
-| Transfer speed per disk | ~1 Gbps (125 MB/s) | Array-dependent (typically 5-50 Gbps) |
-| Network utilization | High | Minimal |
-| ESXi CPU usage | Moderate | Low |
-| Best for | Small VMs, mixed storage | Large VMs, shared storage |
-
-:::tip
-For a 1 TB disk:
-- **Normal copy**: ~2.5 hours
-- **Storage-Accelerated Copy**: ~5-30 minutes (depending on array performance)
-:::
+1. Navigate to **Storage Management**
+2. Check the **Credentials** column - it should show "Valid" after successful configuration
+3. The system will display discovered datastores for each array
+4. Any validation errors will be shown in the status column
 
 ## Best Practices
 
