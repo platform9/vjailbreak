@@ -1,0 +1,73 @@
+@echo off
+setlocal enabledelayedexpansion
+
+set DRIVER_PATH=C:\Windows\Drivers\VirtIO
+set PNPUTIL=C:\Windows\System32\PnPutil.exe
+set LOG_FILE=%DRIVER_PATH%\install.log
+
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation >> "%LOG_FILE%"
+echo Date: %DATE% %TIME% >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+
+if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
+    "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe"
+)
+
+timeout /t 20 /nobreak >nul
+
+if not exist "%DRIVER_PATH%" (
+    echo ERROR: Driver path not found >> "%LOG_FILE%"
+    exit /b 1
+)
+
+if exist "%DRIVER_PATH%\viohidkmdf.sys" (
+    if not exist "%DRIVER_PATH%\vioinput\2k12R2\amd64\viohidkmdf.sys" (
+        copy "%DRIVER_PATH%\viohidkmdf.sys" "%DRIVER_PATH%\vioinput\2k12R2\amd64\" /Y >nul 2>&1
+    )
+)
+
+if exist "%DRIVER_PATH%\netkvmco.dll" (
+    if not exist "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvmco.dll" (
+        copy "%DRIVER_PATH%\netkvmco.dll" "%DRIVER_PATH%\netkvm\2k12R2\amd64\" /Y >nul 2>&1
+    )
+)
+
+if not exist "%PNPUTIL%" (
+    echo ERROR: pnputil.exe not found >> "%LOG_FILE%"
+    exit /b 1
+)
+
+if exist "%DRIVER_PATH%\Balloon\2k12R2\amd64\balloon.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\Balloon\2k12R2\amd64\balloon.inf" >> "%LOG_FILE%" 2>&1
+)
+
+if exist "%DRIVER_PATH%\vioserial\2k12R2\amd64\vioser.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioserial\2k12R2\amd64\vioser.inf" >> "%LOG_FILE%" 2>&1
+)
+
+if exist "%DRIVER_PATH%\viorng\2k12R2\amd64\viorng.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viorng\2k12R2\amd64\viorng.inf" >> "%LOG_FILE%" 2>&1
+)
+
+if exist "%DRIVER_PATH%\vioinput\2k12R2\amd64\vioinput.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioinput\2k12R2\amd64\vioinput.inf" >> "%LOG_FILE%" 2>&1
+)
+
+if exist "%DRIVER_PATH%\pvpanic\2k12R2\amd64\pvpanic.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\pvpanic\2k12R2\amd64\pvpanic.inf" >> "%LOG_FILE%" 2>&1
+)
+
+if exist "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvm.inf" (
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvm.inf" >> "%LOG_FILE%" 2>&1
+)
+
+"%PNPUTIL%" /scan-devices >> "%LOG_FILE%" 2>&1
+
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation Complete >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+
+exit /b 0
