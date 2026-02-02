@@ -110,6 +110,30 @@ export default function MigrationOptionsAlt({
     refetchConfigMap()
   }, [refetchConfigMap, globalConfigMap])
 
+  const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
+
+  useEffect(() => {
+    if (!isPowerOffThenCopy) return
+
+    if (selectedMigrationOptions.cutoverOption) {
+      updateSelectedMigrationOptions('cutoverOption')(false)
+    }
+
+    if (selectedMigrationOptions.periodicSyncEnabled) {
+      updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+    }
+
+    onChange('periodicSyncInterval')('')
+    onChange('cutoverStartTime')('')
+    onChange('cutoverEndTime')('')
+  }, [
+    isPowerOffThenCopy,
+    selectedMigrationOptions.cutoverOption,
+    selectedMigrationOptions.periodicSyncEnabled,
+    onChange,
+    updateSelectedMigrationOptions
+  ])
+
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
     if (selectedMigrationOptions.dataCopyStartTime) {
@@ -223,6 +247,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.cutoverOption}
+                    disabled={isPowerOffThenCopy}
                     onChange={(e) => {
                       updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
                       updateSelectedMigrationOptions('periodicSyncEnabled')(false)
@@ -238,7 +263,7 @@ export default function MigrationOptionsAlt({
             <Box sx={{ display: 'grid', gap: 1 }}>
               <Select
                 size="small"
-                disabled={!selectedMigrationOptions?.cutoverOption}
+                disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}
                 value={params?.cutoverOption || '0'}
                 onChange={(e) => {
                   onChange('cutoverOption')(e.target.value)
@@ -252,7 +277,8 @@ export default function MigrationOptionsAlt({
               </Select>
 
               {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-                selectedMigrationOptions.cutoverOption && (
+                selectedMigrationOptions.cutoverOption &&
+                !isPowerOffThenCopy && (
                   <Box
                     sx={{
                       display: 'grid',
@@ -282,7 +308,8 @@ export default function MigrationOptionsAlt({
                 )}
 
               {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
-                selectedMigrationOptions.cutoverOption && (
+                selectedMigrationOptions.cutoverOption &&
+                !isPowerOffThenCopy && (
                   <Box sx={{ display: 'grid', gap: 1 }}>
                     <FormControlLabel
                       control={

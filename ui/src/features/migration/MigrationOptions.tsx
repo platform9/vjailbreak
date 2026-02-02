@@ -68,6 +68,24 @@ export default function MigrationOptions({
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
   }, [])
 
+  const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
+
+  useEffect(() => {
+    if (!isPowerOffThenCopy) return
+
+    if (selectedMigrationOptions.cutoverOption) {
+      updateSelectedMigrationOptions('cutoverOption')(false)
+    }
+
+    onChange('cutoverStartTime')('')
+    onChange('cutoverEndTime')('')
+  }, [
+    isPowerOffThenCopy,
+    selectedMigrationOptions.cutoverOption,
+    onChange,
+    updateSelectedMigrationOptions
+  ])
+
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
     if (selectedMigrationOptions.dataCopyStartTime) {
@@ -172,6 +190,7 @@ export default function MigrationOptions({
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.cutoverOption}
+                    disabled={isPowerOffThenCopy}
                     onChange={(e) => {
                       updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
                     }}
@@ -180,7 +199,7 @@ export default function MigrationOptions({
               />
               <Select
                 size="small"
-                disabled={!selectedMigrationOptions?.cutoverOption}
+                disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}
                 value={params?.cutoverOption || CUTOVER_TYPES.IMMEDIATE}
                 onChange={(e) => {
                   onChange('cutoverOption')(e.target.value)
@@ -195,7 +214,8 @@ export default function MigrationOptions({
             </Fields>
 
             {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-              selectedMigrationOptions.cutoverOption && (
+              selectedMigrationOptions.cutoverOption &&
+              !isPowerOffThenCopy && (
                 <Fields sx={{ mt: '20px', gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <TimePicker
                     label="Cutover Start Time"
