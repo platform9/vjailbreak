@@ -28,8 +28,8 @@ echo Waiting for pnputil to become available...
 set WAIT_COUNT=0
 :WAIT_PNPUTIL
 if not exist "%PNPUTIL%" (
-    set /a WAIT_COUNT+=1
-    if %WAIT_COUNT% lss 30 (
+    set /a WAIT_COUNT=WAIT_COUNT+1
+    if !WAIT_COUNT! lss 30 (
         timeout /t 2 /nobreak >nul
         goto WAIT_PNPUTIL
     ) else (
