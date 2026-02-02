@@ -235,11 +235,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
 	}
 
-	// Use Windows Server 2012-specific ISO if detected
-	if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
-		args = append(args, "--firstboot", "/home/fedora/scripts/force-install-virtio-win12.sh")
-	}
-
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
 
