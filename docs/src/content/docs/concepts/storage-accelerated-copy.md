@@ -193,7 +193,7 @@ done
 **Troubleshooting SSH Issues:**
 
 If SSH connection fails:
-1. Verify SSH service is running: `ssh root@<esxi-host> "/etc/init.d/SSH status"`
+1. Verify SSH service is running: `ssh root@<esxi-host> "/etc/init.d/ssh status"`
 2. Check firewall rules: ESXi firewall must allow SSH (port 22)
 3. Verify authorized_keys permissions: Should be `600` or `400`
 4. Check ESXi logs: `/var/log/auth.log` for authentication errors
@@ -565,7 +565,7 @@ Error: clone progress stalled - no update for 5 minutes
    ```
 
 3. Review vmkfstools process on ESXi:
-   ```bash
+   ps | grep vmkfstools
    ps -c | grep vmkfstools
    ```
    - Check if process is still running
