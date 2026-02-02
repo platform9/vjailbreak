@@ -554,6 +554,21 @@ func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
 	}
 	return false
 }
+func (migobj *Migrate) CheckCutoverOptions() (bool, string) {
+	if migobj.Reporter == nil {
+		return false, ""
+	}
+	value, err := migobj.Reporter.GetCutoverLabel()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
+		return false, ""
+	}
+	// If label is set to no or yes, return true. because that time the admin has initiated cutover
+	if value != "" {
+		return true, value
+	}
+	return false, ""
+}
 
 func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
 	vmops := migobj.VMops
@@ -563,7 +578,19 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	if migobj.MigrationType == "cold" && !migobj.CheckIfAdminCutoverSelected() {
+	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
+	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
+	var currentCutoverOption string
+	if migobj.MigrationType == "cold" {
+		if cutoverLabelValue != "" {
+			if cutoverLabelValue == "yes" {
+
+				currentCutoverOption = "Immediately After Data Copy"
+			} else if cutoverLabelValue == "no" {
+				currentCutoverOption = "Admin Initiated Cutover"
+			}
+			migobj.logMessage(fmt.Sprintf("Migration Type : %s | Cutover Option %s", migobj.MigrationType, currentCutoverOption))
+		}
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
 		}
@@ -633,8 +660,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for Changed Blocks Copy Iteration Threshold: %d", vcenterSettings.ChangedBlocksCopyIterationThreshold))
 
 	// Check if migration has admin cutover if so don't copy any more changed blocks
-	adminInitiatedCutover := migobj.CheckIfAdminCutoverSelected()
-
+	adminInitiatedCutover := cutoverLabelPresent && (cutoverLabelValue == "no")
 	incrementalCopyCount := 0
 	for {
 		// If its the first copy, copy the entire disk
