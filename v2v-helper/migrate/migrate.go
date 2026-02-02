@@ -1078,6 +1078,13 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
+	// Upload VirtIO scripts for Windows Server 2012
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+		if err := virtv2v.UploadVirtIOScripts(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: failed to upload VirtIO scripts: %v", err))
+		}
+	}
+
 	// Set volume as bootable
 	if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
 		return errors.Wrap(err, "failed to set volume as bootable")

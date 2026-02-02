@@ -71,6 +71,33 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 	return nil
 }
 
+// UploadVirtIOScripts uploads the VirtIO installation scripts into the guest
+func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	log.Println("Uploading VirtIO installation scripts to guest")
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var (
+		ans string
+		err error
+	)
+
+	// Upload PowerShell script
+	if useSingleDisk {
+		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Drivers\VirtIO\install-virtio-win12.ps1`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Drivers\\VirtIO\\install-virtio-win12.ps1")
+	}
+	if err != nil {
+		log.Printf("failed to upload PowerShell script: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload PowerShell script: %w: %s", err, strings.TrimSpace(ans))
+	}
+
+	log.Println("Successfully uploaded VirtIO installation scripts")
+	return nil
+}
+
 func RetainAlphanumeric(input string) string {
 	var builder strings.Builder
 	for _, char := range input {

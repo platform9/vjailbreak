@@ -1,52 +1,30 @@
-powershell -NoProfile -ExecutionPolicy Bypass -Command "
-$DriverPath = 'C:\Windows\Drivers\VirtIO'
-$LogFile = 'C:\ProgramData\virtio-install.log'
+@echo off
+setlocal enabledelayedexpansion
 
-$log = @()
-$log += '======================================'
-$log += 'VirtIO Driver Installation'
-$log += "Date: $(Get-Date)"
-$log += '======================================'
+set DRIVER_PATH=C:\Windows\Drivers\VirtIO
+set PS_SCRIPT=%DRIVER_PATH%\install-virtio-win12.ps1
+set LOG_FILE=C:\ProgramData\virtio-install.log
 
-if (Test-Path "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe") {
-    $log += 'Running pnp_wait.exe...'
-    & "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe"
-}
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation Starting >> "%LOG_FILE%"
+echo Date: %DATE% %TIME% >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
 
-$log += 'Waiting for system initialization...'
-Start-Sleep -Seconds 30
+if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
+    echo Running pnp_wait.exe... >> "%LOG_FILE%"
+    "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" >> "%LOG_FILE%" 2>&1
+)
 
-if (-not (Test-Path $DriverPath)) {
-    $log += 'ERROR: Driver path not found'
-    $log | Add-Content $LogFile
-    exit 1
-}
+echo Waiting for system initialization... >> "%LOG_FILE%"
+timeout /t 30 /nobreak >nul
 
-$log += 'Installing VirtIO drivers...'
+echo Executing PowerShell script... >> "%LOG_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" >> "%LOG_FILE%" 2>&1
 
-@('balloon.inf', 'vioser.inf', 'viorng.inf', 'vioinput.inf', 'pvpanic.inf', 'netkvm.inf', 'vioscsi.inf', 'viostor.inf') | ForEach-Object {
-    $inf = \"$DriverPath\\$_\"
-    if (Test-Path $inf) {
-        $log += \"Installing $_ ...\"
-        try {
-            & pnputil.exe -i -a \"$inf\" 2>&1 | ForEach-Object { $log += $_ }
-        } catch {
-            $log += \"Error installing $_: $_\"
-        }
-    }
-}
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation Completed >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
 
-$log += 'Rescanning hardware...'
-try {
-    & pnputil.exe /scan-devices 2>&1 | ForEach-Object { $log += $_ }
-} catch {
-    $log += \"Error rescanning: $_\"
-}
-
-$log += ''
-$log += '======================================'
-$log += 'VirtIO Driver Installation Complete'
-$log += '======================================'
-
-$log | Add-Content $LogFile
-"
+exit /b 0
