@@ -549,10 +549,25 @@ func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
 		return false
 	}
 	// If label is set to no, return true. because that time the admin has initiated cutover
-	if value == "no" || value == "yes" {
+	if value == "no" {
 		return true
 	}
 	return false
+}
+func (migobj *Migrate) CheckCutoverOptions() (bool, string) {
+	if migobj.Reporter == nil {
+		return false, ""
+	}
+	value, err := migobj.Reporter.GetCutoverLabel()
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to get pod labels: %v", err))
+		return false, ""
+	}
+	// If label is set to no, return true. because that time the admin has initiated cutover
+	if value != "" {
+		return true, value
+	}
+	return false, ""
 }
 
 func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo) (vm.VMInfo, error) {
@@ -563,7 +578,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	if migobj.MigrationType == "cold" && !migobj.CheckIfAdminCutoverSelected() {
+	isCutover, cutoverOption := migobj.CheckCutoverOptions()
+	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
+	isCutover = isCutover && (cutoverOption == "no")
+
+	if migobj.MigrationType == "cold" && !isCutover {
+		if cutoverOption == "yes" {
+			migobj.logMessage("Cold Migration with cutover immediately selected, proceeding with cold migration")
+		}
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
 		}
@@ -580,6 +602,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
 			return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 		}
+	} else if migobj.MigrationType == "cold" && isCutover {
+		migobj.logMessage("Cold Migration with Admin or scheduled cutover selected, proceeding with hot migration")
+		migobj.MigrationType = "hot"
 	}
 
 	// clean up snapshots
