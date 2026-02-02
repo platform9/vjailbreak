@@ -1,4 +1,4 @@
-import { Checkbox, FormControlLabel, MenuItem, Select, styled } from '@mui/material'
+import { Alert, Checkbox, FormControlLabel, MenuItem, Select, styled } from '@mui/material'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
@@ -67,6 +67,24 @@ export default function MigrationOptions({
     onChange('dataCopyMethod')('cold')
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
   }, [])
+
+  const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
+
+  useEffect(() => {
+    if (!isPowerOffThenCopy) return
+
+    if (selectedMigrationOptions.cutoverOption) {
+      updateSelectedMigrationOptions('cutoverOption')(false)
+    }
+
+    onChange('cutoverStartTime')('')
+    onChange('cutoverEndTime')('')
+  }, [
+    isPowerOffThenCopy,
+    selectedMigrationOptions.cutoverOption,
+    onChange,
+    updateSelectedMigrationOptions
+  ])
 
   const getMinEndTime = useCallback(() => {
     let minDate = params.cutoverStartTime
@@ -172,6 +190,7 @@ export default function MigrationOptions({
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.cutoverOption}
+                    disabled={isPowerOffThenCopy}
                     onChange={(e) => {
                       updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
                     }}
@@ -180,7 +199,7 @@ export default function MigrationOptions({
               />
               <Select
                 size="small"
-                disabled={!selectedMigrationOptions?.cutoverOption}
+                disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}
                 value={params?.cutoverOption || CUTOVER_TYPES.IMMEDIATE}
                 onChange={(e) => {
                   onChange('cutoverOption')(e.target.value)
@@ -194,8 +213,17 @@ export default function MigrationOptions({
               </Select>
             </Fields>
 
+            {isPowerOffThenCopy ? (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Cutover options are disabled for cold migration (Power off then copy) because the VM
+                is powered off before copying. Cutover happens automatically after data copy
+                completes.
+              </Alert>
+            ) : null}
+
             {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-              selectedMigrationOptions.cutoverOption && (
+              selectedMigrationOptions.cutoverOption &&
+              !isPowerOffThenCopy && (
                 <Fields sx={{ mt: '20px', gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <TimePicker
                     label="Cutover Start Time"
