@@ -3,13 +3,14 @@ setlocal enabledelayedexpansion
 
 set DRIVER_PATH=C:\Windows\Drivers\VirtIO
 set PNPUTIL=C:\Windows\System32\PnPutil.exe
-set LOG_FILE=%DRIVER_PATH%\install.log
+set LOG_FILE=C:\ProgramData\virtio-install.log
 
-echo. >> "%LOG_FILE%"
-echo ====================================== >> "%LOG_FILE%"
-echo VirtIO Driver Installation >> "%LOG_FILE%"
-echo Date: %DATE% %TIME% >> "%LOG_FILE%"
-echo ====================================== >> "%LOG_FILE%"
+(
+echo.
+echo ======================================
+echo VirtIO Driver Installation
+echo Date: %DATE% %TIME%
+echo ======================================
 
 if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
     "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe"
@@ -18,56 +19,64 @@ if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
 timeout /t 20 /nobreak >nul
 
 if not exist "%DRIVER_PATH%" (
-    echo ERROR: Driver path not found >> "%LOG_FILE%"
+    echo ERROR: Driver path not found at %DRIVER_PATH%
     exit /b 1
-)
-
-if exist "%DRIVER_PATH%\viohidkmdf.sys" (
-    if not exist "%DRIVER_PATH%\vioinput\2k12R2\amd64\viohidkmdf.sys" (
-        copy "%DRIVER_PATH%\viohidkmdf.sys" "%DRIVER_PATH%\vioinput\2k12R2\amd64\" /Y >nul 2>&1
-    )
-)
-
-if exist "%DRIVER_PATH%\netkvmco.dll" (
-    if not exist "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvmco.dll" (
-        copy "%DRIVER_PATH%\netkvmco.dll" "%DRIVER_PATH%\netkvm\2k12R2\amd64\" /Y >nul 2>&1
-    )
 )
 
 if not exist "%PNPUTIL%" (
-    echo ERROR: pnputil.exe not found >> "%LOG_FILE%"
+    echo ERROR: pnputil.exe not found
     exit /b 1
 )
 
-if exist "%DRIVER_PATH%\Balloon\2k12R2\amd64\balloon.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\Balloon\2k12R2\amd64\balloon.inf" >> "%LOG_FILE%" 2>&1
+echo Installing VirtIO drivers...
+
+if exist "%DRIVER_PATH%\balloon.inf" (
+    echo Installing Balloon driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\balloon.inf"
 )
 
-if exist "%DRIVER_PATH%\vioserial\2k12R2\amd64\vioser.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioserial\2k12R2\amd64\vioser.inf" >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\vioser.inf" (
+    echo Installing VirtIO Serial driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioser.inf"
 )
 
-if exist "%DRIVER_PATH%\viorng\2k12R2\amd64\viorng.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viorng\2k12R2\amd64\viorng.inf" >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\viorng.inf" (
+    echo Installing VirtIO RNG driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viorng.inf"
 )
 
-if exist "%DRIVER_PATH%\vioinput\2k12R2\amd64\vioinput.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioinput\2k12R2\amd64\vioinput.inf" >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\vioinput.inf" (
+    echo Installing VirtIO Input driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioinput.inf"
 )
 
-if exist "%DRIVER_PATH%\pvpanic\2k12R2\amd64\pvpanic.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\pvpanic\2k12R2\amd64\pvpanic.inf" >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\pvpanic.inf" (
+    echo Installing PVPanic driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\pvpanic.inf"
 )
 
-if exist "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvm.inf" (
-    "%PNPUTIL%" -i -a "%DRIVER_PATH%\netkvm\2k12R2\amd64\netkvm.inf" >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\netkvm.inf" (
+    echo Installing Network driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\netkvm.inf"
 )
 
-"%PNPUTIL%" /scan-devices >> "%LOG_FILE%" 2>&1
+if exist "%DRIVER_PATH%\vioscsi.inf" (
+    echo Installing SCSI driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\vioscsi.inf"
+)
 
-echo. >> "%LOG_FILE%"
-echo ====================================== >> "%LOG_FILE%"
-echo VirtIO Driver Installation Complete >> "%LOG_FILE%"
-echo ====================================== >> "%LOG_FILE%"
+if exist "%DRIVER_PATH%\viostor.inf" (
+    echo Installing Storage driver...
+    "%PNPUTIL%" -i -a "%DRIVER_PATH%\viostor.inf"
+)
+
+echo Rescanning hardware...
+"%PNPUTIL%" /scan-devices
+
+echo.
+echo ======================================
+echo VirtIO Driver Installation Complete
+echo ======================================
+) >> "%LOG_FILE%" 2>&1
 
 exit /b 0
