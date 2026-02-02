@@ -1,4 +1,4 @@
-import { Checkbox, FormControlLabel, MenuItem, Select, styled } from '@mui/material'
+import { Alert, Checkbox, FormControlLabel, MenuItem, Select, styled } from '@mui/material'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
@@ -212,6 +212,14 @@ export default function MigrationOptions({
                 ))}
               </Select>
             </Fields>
+
+            {isPowerOffThenCopy ? (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Cutover options are disabled for cold migration (Power off then copy) because the VM
+                is powered off before copying. Cutover happens automatically after data copy
+                completes.
+              </Alert>
+            ) : null}
 
             {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
               selectedMigrationOptions.cutoverOption &&

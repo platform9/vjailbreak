@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Checkbox,
   Divider,
@@ -238,6 +239,14 @@ export default function MigrationOptionsAlt({
             </Typography>
           </SectionHeaderRow>
           <Divider />
+
+          {isPowerOffThenCopy ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Cutover options are disabled for cold migration (Power off then copy) because the VM
+              is powered off before copying. Cutover happens automatically after data copy
+              completes.
+            </Alert>
+          ) : null}
 
           <OptionRow>
             <OptionLeft>
