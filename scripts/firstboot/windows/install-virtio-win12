@@ -1,0 +1,30 @@
+@echo off
+setlocal enabledelayedexpansion
+
+set DRIVER_PATH=C:\Windows\Drivers\VirtIO
+set PS_SCRIPT=C:\Windows\Temp\install-virtio-win12.ps1
+set LOG_FILE=C:\Windows\Temp\virtio-install.log
+
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation Starting >> "%LOG_FILE%"
+echo Date: %DATE% %TIME% >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+
+if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
+    echo Running pnp_wait.exe... >> "%LOG_FILE%"
+    "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" >> "%LOG_FILE%" 2>&1
+)
+
+echo Waiting for system initialization... >> "%LOG_FILE%"
+timeout /t 30 /nobreak >nul
+
+echo Executing PowerShell script... >> "%LOG_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" >> "%LOG_FILE%" 2>&1
+
+echo. >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+echo VirtIO Driver Installation Completed >> "%LOG_FILE%"
+echo ====================================== >> "%LOG_FILE%"
+
+exit /b 0
