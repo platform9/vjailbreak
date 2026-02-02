@@ -578,13 +578,12 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
-	isCutover, cutoverOption := migobj.CheckCutoverOptions()
+	_, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
-	isCutover = isCutover && (cutoverOption == "no")
 
-	if migobj.MigrationType == "cold" && !isCutover {
-		if cutoverOption == "yes" {
-			migobj.logMessage("Cold Migration with cutover immediately selected, proceeding with cold migration")
+	if migobj.MigrationType == "cold" {
+		if cutoverLabelValue != "" {
+			migobj.logMessage("Cold Migration with cutover options selected, proceeding with cold migration")
 		}
 		if err := vmops.VMPowerOff(); err != nil {
 			return vminfo, errors.Wrap(err, "failed to power off VM")
@@ -602,9 +601,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
 			return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 		}
-	} else if migobj.MigrationType == "cold" && isCutover {
-		migobj.logMessage("Cold Migration with Admin or scheduled cutover selected, proceeding with hot migration")
-		migobj.MigrationType = "hot"
 	}
 
 	// clean up snapshots
