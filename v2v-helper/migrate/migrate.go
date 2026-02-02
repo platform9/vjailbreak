@@ -549,7 +549,7 @@ func (migobj *Migrate) CheckIfAdminCutoverSelected() bool {
 		return false
 	}
 	// If label is set to no, return true. because that time the admin has initiated cutover
-	if value == "no" {
+	if value == "no" || value == "yes" {
 		return true
 	}
 	return false
