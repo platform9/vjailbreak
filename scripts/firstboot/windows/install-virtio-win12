@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 
 set DRIVER_PATH=C:\Windows\Drivers\VirtIO
-set PS_SCRIPT=%DRIVER_PATH%\install-virtio-win12.ps1
-set LOG_FILE=C:\ProgramData\virtio-install.log
+set PS_SCRIPT=C:\Windows\Temp\install-virtio-win12.ps1
+set LOG_FILE=C:\Windows\Temp\virtio-install.log
 
 echo. >> "%LOG_FILE%"
 echo ====================================== >> "%LOG_FILE%"

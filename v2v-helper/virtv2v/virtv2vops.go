@@ -81,13 +81,13 @@ func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string)
 		err error
 	)
 
-	// Upload PowerShell script
+	// Upload PowerShell script to Windows\Temp which always exists
 	if useSingleDisk {
-		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Drivers\VirtIO\install-virtio-win12.ps1`
+		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Temp\install-virtio-win12.ps1`
 		ans, err = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Drivers\\VirtIO\\install-virtio-win12.ps1")
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
 	}
 	if err != nil {
 		log.Printf("failed to upload PowerShell script: %v: %s", err, strings.TrimSpace(ans))
