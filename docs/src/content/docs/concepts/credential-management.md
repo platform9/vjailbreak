@@ -51,6 +51,15 @@ vJailbreak requires the following environment variables to be present in your ad
 |----------|-------------|---------|
 | `OS_INSECURE` | Skip SSL certificate verification | `true` or `false` |
 
+#### User Permissions
+
+The user specified in `OS_USERNAME` must have administrative privileges in OpenStack to:
+- Create and manage virtual machines
+- Access network and storage resources  
+- Create and manage volumes
+- Access compute, network, and storage services
+
+The project specified in `OS_PROJECT_NAME` must exist and have sufficient quotas for the VMs being migrated.
 
 #### Example Admin RC File (Password-Based)
 
@@ -117,13 +126,3 @@ export OS_AUTH_TYPE=token
 * The `OS_AUTH_TOKEN` must be generated in your OpenStack environment and must be valid at the time of migration.
 * Token expiration is controlled by Keystone. If the token expires, the migration will fail and a new token must be provided.
 * The `openstack.rc` must contain both the `Domain` and the `Project`/`Tenant` information. When using the OpenStack credentials, the `Domain` and `Project`/`Tenant` information is used as the destination `domain` and `project`/`tenant` for the OpenStack/PCD environment.
-
-#### User Permissions
-
-The user specified in `OS_USERNAME` must have administrative privileges in OpenStack to:
-- Create and manage virtual machines
-- Access network and storage resources  
-- Create and manage volumes
-- Access compute, network, and storage services
-
-The project specified in `OS_PROJECT_NAME` must exist and have sufficient quotas for the VMs being migrated.
