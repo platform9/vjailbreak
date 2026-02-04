@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/errors"
@@ -47,6 +48,7 @@ type UpgradeProgress struct {
 const progressConfigMapName = "vjailbreak-upgrade-progress"
 
 var (
+	progressMu      sync.RWMutex
 	upgradeProgress *UpgradeProgress
 
 	deploymentConfigs = []DeploymentConfig{
@@ -99,10 +101,16 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 }
 
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
+	upgradeCtx := context.Background()
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
+
+	config.QPS = 100
+	config.Burst = 200
+
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
@@ -162,7 +170,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		backupID := time.Now().UTC().Format("20060102T150405Z")
 		upgradeProgress.CurrentStep = "Backing up resources"
 		saveProgress(ctx, kubeClient)
-		if err := upgrade.BackupResourcesWithID(ctx, kubeClient, config, backupID); err != nil {
+		if err := upgrade.BackupResourcesWithID(upgradeCtx, kubeClient, config, backupID); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("Backup failed: %v", err)
 			return fmt.Errorf("backup failed: %w", err)
@@ -171,12 +179,13 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 
 		upgradeProgress.CurrentStep = "Updating Custom Resource Definitions"
 		saveProgress(ctx, kubeClient)
-		if err := upgrade.ApplyAllCRDs(ctx, kubeClient, in.TargetVersion); err != nil {
+		if err := upgrade.ApplyAllCRDs(upgradeCtx, kubeClient, in.TargetVersion); err != nil {
 			upgradeProgress.Status = "failed"
 			upgradeProgress.Error = fmt.Sprintf("CRD update failed: %v", err)
 			return fmt.Errorf("CRD update failed: %w", err)
 		}
 		upgradeProgress.CompletedSteps++
+		saveProgress(ctx, kubeClient)
 
 		upgradeProgress.CurrentStep = "Updating version configuration"
 		saveProgress(ctx, kubeClient)
@@ -374,7 +383,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				upgradeProgress.Error = err.Error()
 				upgradeProgress.CurrentStep = "Deployment failed, rolling back..."
 				saveProgress(ctx, kubeClient)
-				if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
+				if err := upgrade.RestoreResources(upgradeCtx, kubeClient); err != nil {
 					log.Printf("CRITICAL: Rollback failed: %v", err)
 					upgradeProgress.Status = "rollback_failed"
 					upgradeProgress.Error = "Deployment failed and rollback also failed."
@@ -397,7 +406,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		upgradeProgress.Error = err.Error()
 		upgradeProgress.CurrentStep = "Upgrade failed, rolling back..."
 		saveProgress(ctx, kubeClient)
-		if err := upgrade.RestoreResources(ctx, kubeClient); err != nil {
+		if err := upgrade.RestoreResources(upgradeCtx, kubeClient); err != nil {
 			log.Printf("CRITICAL: Rollback failed: %v", err)
 		} else {
 			log.Printf("Rollback completed successfully.")
@@ -817,10 +826,13 @@ func waitForDeploymentScaledDown(ctx context.Context, kubeClient client.Client, 
 }
 
 func saveProgress(ctx context.Context, kubeClient client.Client) {
+	progressMu.RLock()
 	if upgradeProgress == nil {
+		progressMu.RUnlock()
 		return
 	}
 	progressJSON, err := json.Marshal(upgradeProgress)
+	progressMu.RUnlock()
 	if err != nil {
 		log.Printf("Error marshaling progress: %v", err)
 		return

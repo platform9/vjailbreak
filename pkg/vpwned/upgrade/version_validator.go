@@ -707,14 +707,30 @@ func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) err
 		err := kubeClient.Get(ctx, key, existing)
 
 		if kerrors.IsNotFound(err) {
-			if err := kubeClient.Create(ctx, u); err != nil {
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				func(err error) bool {
+					return kerrors.IsTooManyRequests(err)
+				},
+				func() error {
+					return kubeClient.Create(ctx, u)
+				},
+			); err != nil {
 				log.Printf("Failed to create %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
 				return err
 			}
 			log.Printf("Created %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
 		} else if err == nil {
 			u.SetResourceVersion(existing.GetResourceVersion())
-			if err := kubeClient.Update(ctx, u); err != nil {
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				func(err error) bool {
+					return kerrors.IsTooManyRequests(err)
+				},
+				func() error {
+					return kubeClient.Update(ctx, u)
+				},
+			); err != nil {
 				log.Printf("Failed to update %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
 				return err
 			}
