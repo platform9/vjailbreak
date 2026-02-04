@@ -25,6 +25,10 @@ There are 2 options available
 
 * **Cutover immediately after data copy** - This option is simpler and follows the copy operation immediately after the copy is complete. This option is recommended for applications that have flexible uptime requirements and can be powered off anytime during the migration.
 
+* **Admin initiated cutover** - This option allows the user to manually trigger the cutover operation after the data copy is complete.
+
+
+**Important:** The cutover options are not applicable when "Power off VMs, then copy" is selected as the data copy method.
 
 ## Post migration options
 
