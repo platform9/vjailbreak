@@ -24,7 +24,7 @@ import (
 // MigrationPlanStrategy defines the strategy for executing a migration plan including
 // scheduling options and migration type (hot or cold)
 type MigrationPlanStrategy struct {
-	// +kubebuilder:validation:Enum=hot;cold
+	// +kubebuilder:validation:Enum=hot;cold;mock
 	Type string `json:"type"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format:=date-time

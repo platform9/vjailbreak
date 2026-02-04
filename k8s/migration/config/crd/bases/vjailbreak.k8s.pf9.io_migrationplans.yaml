@@ -120,6 +120,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time

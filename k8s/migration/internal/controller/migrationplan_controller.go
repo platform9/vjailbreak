@@ -1524,7 +1524,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	counter := len(nodeList.Items)
 	for _, vmMachineObj := range parallelvms {
 		if vmMachineObj == nil {
-			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vmMachineObj.Name)
+			return errors.Wrapf(err, "VM not found in VMwareMachine")
 		}
 		vm := vmMachineObj.Spec.VMInfo.Name
 
