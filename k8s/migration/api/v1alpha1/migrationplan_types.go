@@ -72,6 +72,14 @@ type PostMigrationAction struct {
 	FolderName   string `json:"folderName,omitempty"`
 }
 
+// NICConfig defines the IP and network configuration for a single network interface
+type NICConfig struct {
+	// IP is the static IP address to assign to this NIC (optional, empty means use DHCP)
+	IP string `json:"ip,omitempty"`
+	// Network is the target OpenStack network name for this NIC
+	Network string `json:"network"`
+}
+
 // MigrationPlanSpec defines the desired state of MigrationPlan including
 // the migration template, strategy, and the list of virtual machines to migrate
 type MigrationPlanSpec struct {
@@ -82,9 +90,11 @@ type MigrationPlanSpec struct {
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
 	ServerGroup     string     `json:"serverGroup,omitempty"`
 	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
-	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
-	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
+	// VMNICConfigs is a map of VM names to per-NIC configurations for migration
+	// Format: {"vm-name": [{"ip": "10.0.0.1", "network": "provider-net"}, {"ip": "10.1.0.1", "network": "virtual-net"}]}
+	// Each NICConfig in the array corresponds to a NIC by index
+	// If not specified for a VM, the global network mapping from MigrationTemplate is used
+	VMNICConfigs map[string][]NICConfig `json:"vmNICConfigs,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan

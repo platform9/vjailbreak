@@ -115,8 +115,12 @@ spec:
                 type: string
               osDomainName:
                 type: string
+              osIdentityApiVersion:
+                type: string
               osInsecure:
                 type: boolean
+              osInterface:
+                type: string
               osPassword:
                 type: string
               osRegionName:

@@ -815,11 +815,15 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Get assigned IPs for this VM from the migration plan
+		// Get assigned IPs for this VM from the migration plan (from VMNICConfigs)
 		assignedIP := ""
-		if migrationplan.Spec.AssignedIPsPerVM != nil {
-			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
-				assignedIP = ips
+		if migrationplan.Spec.VMNICConfigs != nil {
+			if nicConfigs, ok := migrationplan.Spec.VMNICConfigs[vm]; ok {
+				ips := make([]string, len(nicConfigs))
+				for i, nic := range nicConfigs {
+					ips[i] = nic.IP
+				}
+				assignedIP = strings.Join(ips, ",")
 			}
 		}
 
@@ -1167,26 +1171,39 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	}
 
 	openstackports := []string{}
-	// If advanced options are set, replace the networks and/or volume types with the ones in the advanced options
-	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
-		if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
-			if err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
-				return nil, errors.Wrap(err, "failed to verify networks in advanced mapping")
-			}
-			openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
+
+	// Check if per-VM NIC configs are specified (takes highest priority for Assign IP flow)
+	if nicConfigs, ok := migrationplan.Spec.VMNICConfigs[vm]; ok && len(nicConfigs) > 0 {
+		// Extract networks from NIC configs (IPs are handled via Migration object)
+		networksForVM := make([]string, len(nicConfigs))
+		for i, nic := range nicConfigs {
+			networksForVM[i] = nic.Network
 		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
-			if err = utils.VerifyStorage(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
-				return nil, errors.Wrap(err, "failed to verify volume types in advanced mapping")
-			}
-			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
+		if err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, networksForVM); err != nil {
+			return nil, errors.Wrap(err, "failed to verify per-VM networks")
 		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
-			if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
-				return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
-			}
-			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
+		openstacknws = networksForVM
+		r.ctxlog.Info(fmt.Sprintf("Using per-VM NIC configs for VM '%s': networks=%v", vm, networksForVM))
+	} else if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
+		// If GranularNetworks is set in advanced options, use it for networks
+		if err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
+			return nil, errors.Wrap(err, "failed to verify networks in advanced mapping")
 		}
+		openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
+	}
+
+	// Handle GranularVolumeTypes and GranularPorts independently (not mutually exclusive with per-VM networks)
+	if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
+		if err = utils.VerifyStorage(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
+			return nil, errors.Wrap(err, "failed to verify volume types in advanced mapping")
+		}
+		openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
+	}
+	if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
+		if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
+			return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
+		}
+		openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
 	}
 	// Create MigrationConfigMap
 	configMap := &corev1.ConfigMap{}

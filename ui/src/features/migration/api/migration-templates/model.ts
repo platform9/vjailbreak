@@ -84,6 +84,8 @@ export interface VmNetworkInterface {
   mac: string
   network: string
   ipAddress: string
+  // Target OpenStack network for this NIC (used in Assign IP flow)
+  targetNetwork?: string
 }
 
 export interface GetMigrationTemplatesMetadata {

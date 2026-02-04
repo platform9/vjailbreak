@@ -164,6 +164,10 @@ interface VmsSelectionStepProps {
   vmwareCluster?: string
   useGPU?: boolean
   showHeader?: boolean
+  // OpenStack networks for per-NIC network selection in Assign IP flow
+  openstackNetworks?: string[]
+  // Network mappings from the migration form (VMware network -> OpenStack network)
+  networkMappings?: Array<{ source: string; target: string }>
 }
 
 function VmsSelectionStep({
@@ -179,7 +183,9 @@ function VmsSelectionStep({
   openstackCredentials,
   vmwareCluster,
   useGPU = false,
-  showHeader = true
+  showHeader = true,
+  openstackNetworks = [],
+  networkMappings = []
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
@@ -298,6 +304,10 @@ function VmsSelectionStep({
   // Bulk IP editing state (kept for potential future use but not accessible via UI)
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
   const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
+  // Per-NIC network assignments: { vmName: { nicIndex: targetNetworkName } }
+  const [bulkEditNetworks, setBulkEditNetworks] = useState<Record<string, Record<number, string>>>(
+    {}
+  )
   const [bulkValidationStatus, setBulkValidationStatus] = useState<
     Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
   >({})
@@ -876,8 +886,22 @@ function VmsSelectionStep({
   const handleCloseBulkEditDialog = () => {
     setBulkEditDialogOpen(false)
     setBulkEditIPs({})
+    setBulkEditNetworks({})
     setBulkValidationStatus({})
     setBulkValidationMessages({})
+  }
+
+  const handleBulkNetworkChange = (vmName: string, interfaceIndex: number, value: string) => {
+    setBulkEditNetworks((prev) => ({
+      ...prev,
+      [vmName]: { ...prev[vmName], [interfaceIndex]: value }
+    }))
+  }
+
+  // Helper to get default network for a NIC based on network mappings
+  const getDefaultNetworkForNic = (vmwareNetwork: string): string => {
+    const mapping = networkMappings.find((m) => m.source === vmwareNetwork)
+    return mapping?.target || (openstackNetworks.length > 0 ? openstackNetworks[0] : '')
   }
 
   const handleBulkIpChange = (vmName: string, interfaceIndex: number, value: string) => {
@@ -1115,29 +1139,49 @@ function VmsSelectionStep({
           }
         })
 
-        // Update vmsWithFlavor to include assigned IPs for display purposes only
+        // Build per-NIC network assignments
+        const networksPerVM: Record<string, string[]> = {}
+        Object.entries(bulkEditNetworks).forEach(([vmName, interfaces]) => {
+          const vm = vmsWithFlavor.find((v) => v.name === vmName)
+          if (!vm) return
+
+          const nicCount = vm.networkInterfaces?.length || 1
+          networksPerVM[vmName] = []
+
+          for (let i = 0; i < nicCount; i++) {
+            const network =
+              interfaces[i] ||
+              getDefaultNetworkForNic(vm.networkInterfaces?.[i]?.network || vm.networks?.[0] || '')
+            networksPerVM[vmName].push(network)
+          }
+        })
+
+        // Update vmsWithFlavor to include assigned IPs and target networks
         const updatedVms = vmsWithFlavor.map((vm) => {
           const assignedIPs = assignedIPsPerVM[vm.name]
-          if (!assignedIPs) return vm
+          const assignedNetworks = networksPerVM[vm.name]
+          if (!assignedIPs && !assignedNetworks) return vm
 
-          // Update networkInterfaces with assigned IPs
+          // Update networkInterfaces with assigned IPs and target networks
           let updatedNetworkInterfaces = vm.networkInterfaces
           if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
             updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-              const assignedIP = assignedIPs[index]
-              if (assignedIP && assignedIP.trim() !== '') {
-                return { ...nic, ipAddress: assignedIP }
+              const assignedIP = assignedIPs?.[index]
+              const targetNetwork = assignedNetworks?.[index]
+              return {
+                ...nic,
+                ...(assignedIP && assignedIP.trim() !== '' && { ipAddress: assignedIP }),
+                ...(targetNetwork && { targetNetwork })
               }
-              return nic
             })
           }
 
-          const validIPs = assignedIPs.filter((ip) => ip && ip.trim() !== '')
+          const validIPs = assignedIPs?.filter((ip) => ip && ip.trim() !== '') || []
           const ipDisplay = validIPs.join(', ')
 
           return {
             ...vm,
-            assignedIPs: assignedIPs.join(','),
+            assignedIPs: assignedIPs?.join(',') || vm.assignedIPs,
             ipAddress: ipDisplay || vm.ipAddress,
             networkInterfaces: updatedNetworkInterfaces
           }
@@ -1188,8 +1232,9 @@ function VmsSelectionStep({
   const handleOpenBulkIPAssignment = () => {
     if (selectedVMs.size === 0) return
 
-    // Initialize bulk edit IPs for selected VMs
+    // Initialize bulk edit IPs and networks for selected VMs
     const initialBulkEditIPs: Record<string, Record<number, string>> = {}
+    const initialBulkEditNetworks: Record<string, Record<number, string>> = {}
     const initialValidationStatus: Record<
       string,
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
@@ -1202,23 +1247,31 @@ function VmsSelectionStep({
       }
 
       initialBulkEditIPs[vmName] = {}
+      initialBulkEditNetworks[vmName] = {}
       initialValidationStatus[vmName] = {}
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         // Multiple network interfaces
         vm.networkInterfaces.forEach((nic, index) => {
           initialBulkEditIPs[vmName][index] = nic.ipAddress || ''
+          // Use existing targetNetwork or get default from network mappings
+          initialBulkEditNetworks[vmName][index] =
+            nic.targetNetwork || getDefaultNetworkForNic(nic.network)
           initialValidationStatus[vmName][index] = nic.ipAddress ? 'valid' : 'empty'
         })
       } else {
         // Single interface (treat as interface 0)
         initialBulkEditIPs[vmName][0] = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        // Get default network from first network in VM's networks array
+        const vmwareNetwork = vm.networks?.[0] || ''
+        initialBulkEditNetworks[vmName][0] = getDefaultNetworkForNic(vmwareNetwork)
         initialValidationStatus[vmName][0] =
           vm.ipAddress && vm.ipAddress !== '—' ? 'valid' : 'empty'
       }
     })
 
     setBulkEditIPs(initialBulkEditIPs)
+    setBulkEditNetworks(initialBulkEditNetworks)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
     setBulkEditDialogOpen(true)
@@ -1723,12 +1776,15 @@ function VmsSelectionStep({
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
                       const status = bulkValidationStatus[vmName]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmName]?.[interfaceIndex]
+                      const selectedNetwork =
+                        bulkEditNetworks[vmName]?.[interfaceIndex] ||
+                        getDefaultNetworkForNic(networkInterface?.network || '')
                       return (
                         <Box
                           key={interfaceIndex}
                           sx={{
                             display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' },
+                            gridTemplateColumns: { xs: '1fr', sm: '180px 1fr 1fr' },
                             columnGap: { xs: 1.5, sm: 2 },
                             rowGap: 1,
                             alignItems: 'flex-start'
@@ -1757,6 +1813,33 @@ function VmsSelectionStep({
                             FormHelperTextProps={{ sx: { ml: 0 } }}
                             InputProps={{ endAdornment: renderValidationAdornment(status) }}
                           />
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={selectedNetwork}
+                              onChange={(e) =>
+                                handleBulkNetworkChange(
+                                  vmName,
+                                  interfaceIndex,
+                                  e.target.value as string
+                                )
+                              }
+                              displayEmpty
+                              sx={{ fontSize: '0.875rem' }}
+                            >
+                              {openstackNetworks.length === 0 ? (
+                                <MenuItem value="" disabled>
+                                  No networks available
+                                </MenuItem>
+                              ) : (
+                                openstackNetworks.map((network) => (
+                                  <MenuItem key={network} value={network}>
+                                    {network}
+                                  </MenuItem>
+                                ))
+                              )}
+                            </Select>
+                            <FormHelperText sx={{ ml: 0 }}>Target Network</FormHelperText>
+                          </FormControl>
                         </Box>
                       )
                     })}

@@ -82,13 +82,6 @@ spec:
                       migration plan should be synced
                     type: string
                 type: object
-              assignedIPsPerVM:
-                additionalProperties:
-                  type: string
-                description: |-
-                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
-                type: object
               fallbackToDHCP:
                 type: boolean
               firstBootScript:
@@ -160,6 +153,30 @@ spec:
                     type: string
                   type: array
                 type: array
+              vmNICConfigs:
+                additionalProperties:
+                  items:
+                    description: NICConfig defines the IP and network configuration
+                      for a single network interface
+                    properties:
+                      ip:
+                        description: IP is the static IP address to assign to this
+                          NIC (optional, empty means use DHCP)
+                        type: string
+                      network:
+                        description: Network is the target OpenStack network name
+                          for this NIC
+                        type: string
+                    required:
+                    - network
+                    type: object
+                  type: array
+                description: |-
+                  VMNICConfigs is a map of VM names to per-NIC configurations for migration
+                  Format: {"vm-name": [{"ip": "10.0.0.1", "network": "provider-net"}, {"ip": "10.1.0.1", "network": "virtual-net"}]}
+                  Each NICConfig in the array corresponds to a NIC by index
+                  If not specified for a VM, the global network mapping from MigrationTemplate is used
+                type: object
             required:
             - migrationStrategy
             - migrationTemplate

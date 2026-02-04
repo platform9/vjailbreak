@@ -682,12 +682,23 @@ export default function MigrationFormDrawer({
 
     const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
 
-    // Build AssignedIPsPerVM map for cold migration
-    const assignedIPsPerVM: Record<string, string> = {}
+    // Build VMNICConfigs map for per-NIC IP and network assignments
+    // Format: { "vm-name": [{ ip: "10.0.0.1", network: "provider-net" }, ...] }
+    const vmNICConfigs: Record<string, Array<{ ip: string; network: string }>> = {}
+
     if (params.vms) {
       params.vms.forEach((vm) => {
-        if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
-          assignedIPsPerVM[vm.name] = vm.assignedIPs
+        // Check if VM has custom NIC configurations (either IP or network assignments)
+        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+          const hasCustomConfig = vm.networkInterfaces.some(
+            (nic) => nic.targetNetwork || (nic.ipAddress && nic.ipAddress.trim() !== '')
+          )
+          if (hasCustomConfig) {
+            vmNICConfigs[vm.name] = vm.networkInterfaces.map((nic) => ({
+              ip: nic.ipAddress || '',
+              network: nic.targetNetwork || ''
+            }))
+          }
         }
       })
     }
@@ -696,7 +707,7 @@ export default function MigrationFormDrawer({
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
-      ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
+      ...(Object.keys(vmNICConfigs).length > 0 && { vmNICConfigs }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime
@@ -1447,6 +1458,8 @@ export default function MigrationFormDrawer({
                   vmwareCluster={params.vmwareCluster}
                   useGPU={params.useGPU}
                   showHeader={false}
+                  openstackNetworks={sortedOpenstackNetworks}
+                  networkMappings={params.networkMappings}
                 />
                 {vmValidation.hasError && (
                   <Alert severity="warning">{vmValidation.errorMessage}</Alert>
