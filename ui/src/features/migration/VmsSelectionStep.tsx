@@ -1809,8 +1809,18 @@ function VmsSelectionStep({
                             size="small"
                             fullWidth
                             error={status === 'invalid'}
-                            helperText={message || ' '}
-                            FormHelperTextProps={{ sx: { ml: 0 } }}
+                            helperText={
+                              message ||
+                              (!ip.trim()
+                                ? 'A port without IP will be created if left empty'
+                                : ' ')
+                            }
+                            FormHelperTextProps={{
+                              sx: {
+                                ml: 0,
+                                color: !ip.trim() && !message ? 'warning.main' : undefined
+                              }
+                            }}
                             InputProps={{ endAdornment: renderValidationAdornment(status) }}
                           />
                           <FormControl size="small" fullWidth>
