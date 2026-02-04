@@ -903,3 +903,22 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 
 	return nil
 }
+
+func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var ans string
+	var err error
+	if useSingleDisk {
+		command := `copy-in /home/fedora/NIC-Recovery /`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "copy-in"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
+	}
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
+		return err
+	}
+	return nil
+}

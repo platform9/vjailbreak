@@ -1041,6 +1041,17 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
+
+		if persisNetwork {
+			firstbootscriptname := "windows-persist-network"
+			firstbootscript := constants.WindowsPersistFirstBootScript
+			firstbootscripts = append(firstbootscripts, firstbootscriptname)
+
+			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
+				return errors.Wrap(err, "failed to add first boot script")
+			}
+			utils.PrintLog("First boot script added successfully")
+		}
 	}
 
 	// Add first boot scripts for RHEL family
@@ -1079,6 +1090,16 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to set volume as bootable")
 	}
 
+	return nil
+}
+func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+	persistNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
+	if persistNetwork {
+		if err := virtv2v.InjectRestorationScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+			return errors.Wrap(err, "failed to inject restoration script")
+		}
+		utils.PrintLog("Restoration script injected successfully")
+	}
 	return nil
 }
 
@@ -1253,6 +1274,10 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	// Step 9: Configure network for Linux systems
 	if osType == constants.OSFamilyLinux {
 		if err := migobj.configureLinuxNetwork(ctx, vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
+			return err
+		}
+	} else if osType == constants.OSFamilyWindows {
+		if err := migobj.configureWindowsNetwork(ctx, vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
 			return err
 		}
 	}
