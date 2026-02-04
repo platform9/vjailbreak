@@ -1,6 +1,6 @@
 # Stage 1: Build environment
 # Using Fedora 43 which includes required dependencies for virt-v2v 2.10.0
-# (libguestfs 1.58.0, nbdkit 1.46.1, libnbd 1.23.10)
+# (libguestfs 1.58.0, nbdkit 1.46.1, libnbd 1.24.0)
 FROM fedora:43 AS builder
 
 # Build arguments for multi-platform support and versioning
