@@ -156,6 +156,7 @@ export interface SelectedMigrationOptionsType {
     renameVm?: boolean
     moveToFolder?: boolean
   }
+  acknowledgeNetworkConflictRisk?: boolean
   [key: string]: unknown
 }
 

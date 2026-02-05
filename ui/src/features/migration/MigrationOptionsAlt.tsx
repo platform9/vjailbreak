@@ -7,7 +7,8 @@ import {
   MenuItem,
   Select,
   styled,
-  Typography
+  Typography,
+  AlertTitle
 } from '@mui/material'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -185,21 +186,54 @@ export default function MigrationOptionsAlt({
               />
               <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
             </OptionLeft>
-            <Select
-              size="small"
-              disabled={!selectedMigrationOptions.dataCopyMethod}
-              labelId="source-item-label"
-              value={params?.dataCopyMethod || 'cold'}
-              onChange={(e) => {
-                onChange('dataCopyMethod')(e.target.value)
-              }}
-            >
-              {DATA_COPY_OPTIONS.map((item) => (
-                <MenuItem key={item.value} value={item.value}>
-                  {item.label}
-                </MenuItem>
-              ))}
-            </Select>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.dataCopyMethod}
+                labelId="source-item-label"
+                value={params?.dataCopyMethod || 'cold'}
+                onChange={(e) => {
+                  onChange('dataCopyMethod')(e.target.value)
+                }}
+                fullWidth
+              >
+                {DATA_COPY_OPTIONS.map((item) => (
+                  <MenuItem key={item.value} value={item.value}>
+                    {item.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              {params?.dataCopyMethod === 'mock' && (
+                <Alert 
+                  severity="warning" 
+                  sx={{ mt: 1 }}
+                  action={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={selectedMigrationOptions.acknowledgeNetworkConflictRisk || false}
+                            onChange={(e) => {
+                              updateSelectedMigrationOptions('acknowledgeNetworkConflictRisk')(e.target.checked)
+                            }}
+                            color="warning"
+                            size="small"
+                          />
+                        }
+                        label="I understand the risks"
+                        sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.8rem' } }}
+                      />
+                    </Box>
+                  }
+                >
+                  <AlertTitle>Warning</AlertTitle>
+                  Live migration without shutting down the source VM may cause network conflicts due to duplicate IP/MAC addresses on the same subnet.
+                  <Box component="div" sx={{ mt: 1, fontSize: '0.8rem' }}>
+                    <strong>Why this happens:</strong> When both VMs (source and target) are running on the same network with the same IP/MAC addresses, it can cause network conflicts.
+                  </Box>
+                </Alert>
+              )}
+            </Box>
           </OptionRow>
 
           <OptionRow>
