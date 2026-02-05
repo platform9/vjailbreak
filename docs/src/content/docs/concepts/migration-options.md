@@ -19,7 +19,7 @@ Determines how the data copy is done
 As the name implies, determines when the copy operation should start, typically used to start the migration during off-peak hours.
 
 ## Cutover options
-There are 2 options available
+There are 3 options available
 
 * **Cutover during time window** - This option allows the user to specify a time window during which the VM would be powered off and the corresponding OpenStack/PCD VM would be configured and powered on. This window also involves copy of any remaining changed blocks to the OpenStack/PCD volumes since the last time the block were copied.
 
@@ -27,8 +27,31 @@ There are 2 options available
 
 * **Admin initiated cutover** - This option allows the user to manually trigger the cutover operation after the data copy is complete.
 
+## Data Copy Method Workflows
 
-**Important:** The cutover options are not applicable when "Power off VMs, then copy" is selected as the data copy method.
+### 1. Power off Live VM, then Copy
+
+#### Immediately Cutover
+The VM is powered off on the source before the initial copy begins. Once the initial copy completes, the migration immediately performs the final sync and powers on the VM at the destination.
+
+#### Cutover During Time Window
+The VM is powered off on the source before the initial copy begins. After the initial copy completes, the migration waits for the specified time window. When the time window arrives, it performs the final sync and powers on the VM at the destination.
+
+#### Admin Initiated Cutover
+The VM is powered off on the source before the initial copy begins. After the initial copy completes, the migration waits for manual intervention. When the admin initiates cutover, the migration performs the final sync and powers on the VM at the destination.
+
+> **Note:** When "Power off VMs then copy" is selected, cutover timing options (immediate, time window, or admin-initiated) are disabled in the UI. 
+
+### 2. Copy Live VM, then Power off
+
+#### Immediately Cutover
+The initial copy is performed while the VM remains running on the source. Once the initial copy completes, the VM is powered off on the source, and the migration immediately performs the final sync and powers on the VM at the destination.
+
+#### Cutover During Time Window
+The initial copy is performed while the VM remains running on the source. After the initial copy completes, the migration waits for the specified time window. When the time window arrives, the VM is powered off on the source, the final sync is performed, and the VM is powered on at the destination.
+
+#### Admin Initiated Cutover
+The initial copy is performed while the VM remains running on the source. After the initial copy completes, the migration waits for manual intervention. When the admin initiates cutover, the VM is powered off on the source, the final sync is performed, and the VM is powered on at the destination.
 
 ## Post migration options
 
