@@ -82,7 +82,7 @@ RUN dnf install -y --nodocs --setopt=install_weak_deps=False 'python3-dnf-plugin
     'nbdkit-selinux-1.46.1-1.fc43' \
     'libnbd-1.24.0-1.fc43' \
     'virt-v2v-2.10.0-1.fc43' \
-    'libguestfs-appliance-1.58.0-1.fc43' \
+    'libguestfs-appliance-1.58.1-1.fc43' \
     'libguestfs-1.58.1-1.fc43' \
     'guestfs-tools-1.55.3-1.fc43' \
     'netplan-1.1.2-4.fc43' \
