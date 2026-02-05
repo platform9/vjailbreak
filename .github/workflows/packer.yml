@@ -578,6 +578,7 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
 
       - name: Determine S3 path and upload artifacts
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           set -e
           TAG=${{ needs.determine-release.outputs.tag }}
