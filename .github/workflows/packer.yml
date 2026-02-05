@@ -579,9 +579,9 @@ jobs:
         run: |
           set -e
           S3_BUCKET_PROD=vjailbreak
-          S3_BUCKET_DEV=vjailbreak
+          S3_BUCKET_DEV=vjailbreak-dev
           TAG=${{ needs.determine-release.outputs.tag }}
-          DATE_FOLDER=$(date -u +"%d-%m-%Y")
+          DATE_FOLDER=$(date -u +"%Y-%m-%d")
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_BUCKET=${S3_BUCKET_PROD}
