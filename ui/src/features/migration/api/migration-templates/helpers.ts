@@ -4,7 +4,7 @@ export const createMigrationTemplateJson = (params) => {
   const {
     name,
     networkMapping = '',
-    storageMapping = '',
+    storageMapping,
     virtioWinDriver,
     osFamily,
     datacenter,
@@ -22,7 +22,7 @@ export const createMigrationTemplateJson = (params) => {
     },
     spec: {
       networkMapping: networkMapping,
-      storageMapping: storageMapping,
+      ...(storageMapping && { storageMapping: storageMapping }),
       virtioWinDriver: virtioWinDriver,
       osFamily: osFamily,
       source: {
