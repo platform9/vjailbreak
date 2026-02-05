@@ -45,6 +45,8 @@ env:
   NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
   AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
+  S3_BUCKET_PROD: vjailbreak
+  S3_BUCKET_DEV: vjailbreak-dev
 
 
 jobs:
@@ -461,7 +463,7 @@ jobs:
       - name: Download ubuntu base image from S3
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+          S3_BUCKET: ${{ env.S3_BUCKET_PROD }}
           BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
         run: |
           if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
@@ -558,7 +560,7 @@ jobs:
       - name: Set AWS credentials based on build type
         id: set-creds
         run: |
-          if [[ "${{ github.event_name }}" == "release" || "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "release" ]]; then
             echo "Using production AWS keys."
             echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_OUTPUT
             echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_OUTPUT
@@ -577,48 +579,45 @@ jobs:
 
       - name: Determine S3 path and upload artifacts
         if: env.release_found == 'true' || env.is_nightly == 'true'
-        env:
-          S3_BUCKET_PROD: ${{ secrets.S3_BUCKET_NAME }}
-          S3_BUCKET_DEV: ${{ secrets.S3_BUCKET_NAME_DEV }}
-          TAG: ${{ needs.determine-release.outputs.tag }}
         run: |
           set -e
-          DATE_FOLDER=$(date -u +"%d-%m-%Y")
+          TAG=${{ needs.determine-release.outputs.tag }}
+          DATE_FOLDER=$(date -u +"%Y-%m-%d")
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_BUCKET=${S3_BUCKET_PROD}
-            S3_PATH_PREFIX="releases/${DATE_FOLDER}"
-            S3_LATEST_PATH_PREFIX="releases/latest"
+            S3_PATH_PREFIX="releases/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="releases/latest/${TAG}"
             QCOW2_FILENAME="vjailbreak.qcow2"
-            CREATE_TAG_FILE=true
+            DO_LATEST=true
 
           elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
-            S3_BUCKET=${S3_BUCKET_PROD}
-            S3_PATH_PREFIX="nightly_builds/${DATE_FOLDER}"
-            S3_LATEST_PATH_PREFIX="nightly_builds/latest"
+            S3_BUCKET=${S3_BUCKET_DEV}
+            S3_PATH_PREFIX="nightly/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="nightly/latest/${TAG}"
             QCOW2_FILENAME="vjailbreak.qcow2"
-            CREATE_TAG_FILE=true
+            DO_LATEST=true
 
           else
             S3_BUCKET=${S3_BUCKET_DEV}
-            S3_PATH_PREFIX="dev/${DATE_FOLDER}"
-            QCOW2_FILENAME="${TAG}-vjailbreak.qcow2"
-            CREATE_TAG_FILE=false
+            S3_PATH_PREFIX="dev/${DATE_FOLDER}/${TAG}"
+            QCOW2_FILENAME="vjailbreak.qcow2"
+            DO_LATEST=false
           fi
 
-          echo "Uploading artifacts to s3://${S3_BUCKET}/${S3_PATH_PREFIX}/"
           aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+          echo "QCOW2 uploaded: s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}" | tee s3-urls.txt
 
-          if [[ "$CREATE_TAG_FILE" == "true" ]]; then
-            TAG_FILENAME="${TAG}.tag"
-            echo "${TAG}" > ${TAG_FILENAME}
-            echo "Uploading tag file: ${TAG_FILENAME}"
-            aws s3 cp ${TAG_FILENAME} "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${TAG_FILENAME}"
-
-            echo "Updating 'latest' folder..."
+          if [[ "$DO_LATEST" == "true" ]]; then
             aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
-            aws s3 cp ${TAG_FILENAME} "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${TAG_FILENAME}"
+            echo "Latest QCOW2 uploaded: s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}" | tee -a s3-urls.txt
           fi
+
+      - name: Upload S3 URLs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3-urls
+          path: s3-urls.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

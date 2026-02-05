@@ -1861,7 +1861,6 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			}
 		}
 	} else {
-		log.Info("No guest network info available from VMware for vm", "VM NAME", vm.Name())
 		// Check if network Interfaces have IP addresses from previous runs, if yes, retain them
 		for _, nic := range vmwvm.Spec.VMInfo.NetworkInterfaces {
 			for i, existingNic := range nicList {
