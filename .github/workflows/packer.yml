@@ -449,11 +449,11 @@ jobs:
         uses: oras-project/setup-oras@v1.2.1
 
       - name: Download ubuntu base image
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
 
       - name: Configure AWS credentials for S3 download
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -461,7 +461,7 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
 
       - name: Download ubuntu base image from S3
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         env:
           S3_BUCKET: ${{ env.S3_BUCKET_PROD }}
           BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
@@ -485,7 +485,7 @@ jobs:
           fi
       
       - name: Download images and export as tar
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: |
           sudo apt-get update && sudo apt-get install -y containerd.
           sudo mkdir -p ./image_builder/images
@@ -493,7 +493,7 @@ jobs:
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
 
       - name: Generate Controller Manifests
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: |
           make -C ./k8s/migration/ build-installer
           cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
@@ -503,55 +503,55 @@ jobs:
           cp k8s/cert-manager/00-selfsigned-issuer.yaml image_builder/deploy/cert-manager/
           
       - name: Copy opensource.txt to image_builder
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: cp ./opensource.txt ./image_builder/opensource.txt
 
       - name: Enable KVM group perms
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
       - name: Set up QEMU
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: sudo apt-get install qemu-system qemu-utils -y
 
       - name: Setup packer
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         uses: hashicorp/setup-packer@main
         id: setup
         with:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Run packer init
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         id: init
         run: "packer init ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: Run packer validate
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         id: validate
         run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: setup-oras
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         uses: oras-project/setup-oras@v1.2.1
 
       - name: Run packer build for normal image
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         id: build-1
         run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
 
       - name: Upload vjailbreak qcow2 to quay
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: |
           oras push ${{ env.QCOW2_IMG }} \
           --artifact-type="application/qcow2" \
           ./vjailbreak_qcow2/vjailbreak-image.qcow2
 
       - name: Upload QCOW2 image artifact
-        if: env.release_found == 'true' || env.is_nightly == 'true'
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: vjailbreak-qcow2
@@ -578,6 +578,7 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
 
       - name: Determine S3 path and upload artifacts
+        if: env.release_found == 'true' || env.is_nightly == 'true' || github.event_name == 'push'
         run: |
           set -e
           TAG=${{ needs.determine-release.outputs.tag }}
