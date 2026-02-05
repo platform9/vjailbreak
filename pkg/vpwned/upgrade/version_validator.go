@@ -20,16 +20,16 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/types"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ValidationResult struct {
@@ -437,7 +437,7 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
-	// retry.DefaultRetry will retry the update function up to 5 times between each attempt. 
+	// retry.DefaultRetry will retry the update function up to 5 times between each attempt.
 	// This automatically handle locking conflicts which can happen if the resource is modified between the Get and Update calls.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		dep := &appsv1.Deployment{}
@@ -707,14 +707,30 @@ func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) err
 		err := kubeClient.Get(ctx, key, existing)
 
 		if kerrors.IsNotFound(err) {
-			if err := kubeClient.Create(ctx, u); err != nil {
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				func(err error) bool {
+					return kerrors.IsTooManyRequests(err)
+				},
+				func() error {
+					return kubeClient.Create(ctx, u)
+				},
+			); err != nil {
 				log.Printf("Failed to create %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
 				return err
 			}
 			log.Printf("Created %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
 		} else if err == nil {
 			u.SetResourceVersion(existing.GetResourceVersion())
-			if err := kubeClient.Update(ctx, u); err != nil {
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				func(err error) bool {
+					return kerrors.IsTooManyRequests(err)
+				},
+				func() error {
+					return kubeClient.Update(ctx, u)
+				},
+			); err != nil {
 				log.Printf("Failed to update %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
 				return err
 			}
