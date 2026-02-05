@@ -1001,6 +1001,8 @@ export default function MigrationFormDrawer({
     // Check if all datastores are mapped (based on storage copy method)
     !storageValidation ||
     !migrationOptionValidated ||
+    // For live migration without shutting down source VM, require explicit user acknowledgement
+    (params.dataCopyMethod === 'mock' && !Boolean(params['acknowledgeNetworkConflictRisk'])) ||
     // VM validation - ensure powered-off VMs have IP and OS assigned
     vmValidation.hasError ||
     // RDM validation - ensure RDM disks are properly configured

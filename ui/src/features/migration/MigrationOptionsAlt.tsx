@@ -7,8 +7,7 @@ import {
   MenuItem,
   Select,
   styled,
-  Typography,
-  AlertTitle
+  Typography
 } from '@mui/material'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -194,6 +193,9 @@ export default function MigrationOptionsAlt({
                 value={params?.dataCopyMethod || 'cold'}
                 onChange={(e) => {
                   onChange('dataCopyMethod')(e.target.value)
+                  if (e.target.value !== 'mock') {
+                    onChange('acknowledgeNetworkConflictRisk')(false)
+                  }
                 }}
                 fullWidth
               >
@@ -203,38 +205,40 @@ export default function MigrationOptionsAlt({
                   </MenuItem>
                 ))}
               </Select>
-              {params?.dataCopyMethod === 'mock' && (
-                <Alert 
-                  severity="warning" 
-                  sx={{ mt: 1 }}
-                  action={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={selectedMigrationOptions.acknowledgeNetworkConflictRisk || false}
-                            onChange={(e) => {
-                              updateSelectedMigrationOptions('acknowledgeNetworkConflictRisk')(e.target.checked)
-                            }}
-                            color="warning"
-                            size="small"
-                          />
-                        }
-                        label="I understand the risks"
-                        sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.8rem' } }}
-                      />
-                    </Box>
-                  }
-                >
-                  <AlertTitle>Warning</AlertTitle>
-                  Live migration without shutting down the source VM may cause network conflicts due to duplicate IP/MAC addresses on the same subnet.
-                  <Box component="div" sx={{ mt: 1, fontSize: '0.8rem' }}>
-                    <strong>Why this happens:</strong> When both VMs (source and target) are running on the same network with the same IP/MAC addresses, it can cause network conflicts.
-                  </Box>
-                </Alert>
-              )}
             </Box>
           </OptionRow>
+
+          {params?.dataCopyMethod === 'mock' && (
+            <Alert severity="warning" sx={{ width: '100%' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Warning
+              </Typography>
+              <Typography variant="body2">
+                Migration without shutting down the source VM may cause network conflicts due
+                to duplicate IP/MAC addresses on the same subnet.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={Boolean(params?.acknowledgeNetworkConflictRisk)}
+                    onChange={(e) => {
+                      onChange('acknowledgeNetworkConflictRisk')(e.target.checked)
+                    }}
+                    color="warning"
+                    size="small"
+                  />
+                }
+                label="I understand the risks"
+                sx={{
+                  mt: 1,
+                  ml: 0,
+                  alignItems: 'center',
+                  '& .MuiFormControlLabel-label': { typography: 'body2' },
+                  '& .MuiCheckbox-root': { padding: '4px' }
+                }}
+              />
+            </Alert>
+          )}
 
           <OptionRow>
             <OptionLeft>
