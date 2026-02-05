@@ -385,6 +385,9 @@ func CreateInClusterClient() (client.Client, error) {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
 
+	config.QPS = 100
+	config.Burst = 200
+
 	clientset, err := client.New(config, client.Options{
 		Scheme: scheme,
 	})
