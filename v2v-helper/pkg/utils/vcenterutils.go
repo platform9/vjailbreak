@@ -43,6 +43,7 @@ type MigrationParams struct {
 	PeriodicSyncInterval    string
 	PeriodicSyncEnabled     bool
 	NetworkPersistance      bool
+	AcknowledgeNetworkConflictRisk bool
 
 	StorageCopyMethod string
 	VendorType        string
@@ -94,5 +95,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		StorageCopyMethod:       string(configMap.Data["STORAGE_COPY_METHOD"]),
 		VendorType:              string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:       string(configMap.Data["ARRAY_CREDS_MAPPING"]),
+	AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 	}, nil
 }

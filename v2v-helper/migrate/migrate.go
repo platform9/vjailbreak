@@ -578,6 +578,21 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
+	// Get migration parameters to check if user acknowledged network conflict risk
+	migrationParams, err := utils.GetMigrationParams(ctx, migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get migration params: %v, continuing with migration", err))
+	} else {
+		if migobj.MigrationType == "mock"{
+
+		if migrationParams.AcknowledgeNetworkConflictRisk {
+			migobj.logMessage("User acknowledged the risk involved")
+		}else{
+			migobj.logMessage("User did not acknowledge the risk involved")
+		}
+	}
+	}
+
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
 	var currentCutoverOption string

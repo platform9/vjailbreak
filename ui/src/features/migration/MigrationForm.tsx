@@ -734,7 +734,8 @@ export default function MigrationFormDrawer({
         networkPersistence: params.networkPersistence
       }),
       periodicSyncInterval: params.periodicSyncInterval,
-      periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled
+      periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
+      acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk
     }
 
     const body = createMigrationPlanJson(migrationFields)
