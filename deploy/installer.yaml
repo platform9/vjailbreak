@@ -1389,8 +1389,12 @@ spec:
                 type: string
               osDomainName:
                 type: string
+              osIdentityApiVersion:
+                type: string
               osInsecure:
                 type: boolean
+              osInterface:
+                type: string
               osPassword:
                 type: string
               osRegionName:
@@ -4153,7 +4157,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.3.8
+        image: quay.io/platform9/vjailbreak-controller:v0.4.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4236,7 +4240,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.3.8
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4294,3 +4298,36 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ui
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ui
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ui
+    spec:
+      serviceAccountName: migration-controller-manager
+      containers:
+        - name: vjailbreak-ui-container
+          image: quay.io/platform9/vjailbreak-ui:v0.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: nginx-shadow-htpasswd
+            mountPath: /etc/nginx/shadow 
+      volumes:
+      - name: nginx-shadow-htpasswd
+        hostPath:
+          path: /etc/htpasswd
+          type: FileOrCreate
+---
