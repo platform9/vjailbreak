@@ -1,5 +1,6 @@
 // Constants
 
+
 export enum CUTOVER_TYPES {
   'IMMEDIATE' = '0',
   'ADMIN_INITIATED' = '1',
@@ -14,7 +15,8 @@ export enum OS_TYPES {
 
 export const DATA_COPY_OPTIONS = [
   { value: 'cold', label: 'Power off live VMs, then copy' },
-  { value: 'hot', label: 'Copy live VMs, then power off' }
+  { value: 'hot', label: 'Copy live VMs, then power off' },
+  { value: 'mock', label: 'Do not Turn off the source VM'}
 ]
 
 export const OS_TYPES_OPTIONS = [
