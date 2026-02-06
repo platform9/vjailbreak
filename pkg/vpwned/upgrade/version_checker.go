@@ -20,18 +20,8 @@ type ReleaseInfo struct {
 	DownloadURL  string
 }
 
-func getCurrentVersionFromConfigMap() (string, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return "", fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(context.Background(), "version-config", metav1.GetOptions{})
+func GetCurrentVersion(ctx context.Context, clientset *kubernetes.Clientset) (string, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(ctx, "version-config", metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get version-config ConfigMap: %w", err)
 	}
@@ -46,7 +36,20 @@ func getCurrentVersionFromConfigMap() (string, error) {
 
 func GetAllTags(ctx context.Context) ([]string, error) {
 	owner, repo := loadGitHubConfig(ctx)
-	currentVersion, err := getCurrentVersionFromConfigMap()
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		fmt.Printf("Warning: Could not get in-cluster config: %v. Showing all tags.\n", err)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		fmt.Printf("Warning: Could not create kubernetes client: %v. Showing all tags.\n", err)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+
+	currentVersion, err := GetCurrentVersion(ctx, clientset)
 	if err != nil {
 		fmt.Printf("Warning: Could not get current version from configmap: %v. Showing all tags.\n", err)
 		return getAllTagsFromGitHub(ctx, owner, repo)

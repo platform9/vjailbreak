@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -20,16 +19,16 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/types"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ValidationResult struct {
@@ -437,7 +436,7 @@ func parseReplicasFromDeploymentYAML(data []byte) int32 {
 }
 
 func scaleDeploymentTo(ctx context.Context, kubeClient client.Client, name, namespace string, target int32) error {
-	// retry.DefaultRetry will retry the update function up to 5 times between each attempt. 
+	// retry.DefaultRetry will retry the update function up to 5 times between each attempt.
 	// This automatically handle locking conflicts which can happen if the resource is modified between the Get and Update calls.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		dep := &appsv1.Deployment{}
@@ -754,7 +753,111 @@ func fetchVersionConfigFromGitHub(tag string) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("failed to fetch version-config: %s", resp.Status)
 	}
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
+}
+
+func fetchVjailbreakSettingsFromGitHub(tag string) ([]byte, error) {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/image_builder/configs/vjailbreak-settings.yaml", tag)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch vjailbreak-settings: %s", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func ApplyManifestFromGitHub(ctx context.Context, kubeClient client.Client, tag, manifestPath string) error {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/platform9/vjailbreak/%s/%s", tag, manifestPath)
+	log.Printf("Fetching deployment manifest from: %s", url)
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to fetch manifest from %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status: %s", resp.Status)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read manifest body: %w", err)
+	}
+
+	decoder := utilyaml.NewYAMLOrJSONDecoder(strings.NewReader(string(bodyBytes)), 4096)
+
+	for {
+		u := &unstructured.Unstructured{}
+		if err := decoder.Decode(u); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to decode manifest: %w", err)
+		}
+
+		if u.GetKind() == "" {
+			continue
+		}
+
+		if u.GetName() == "" {
+			return fmt.Errorf("manifest %s contains %s with empty metadata.name",
+				manifestPath, u.GetKind())
+		}
+
+		if u.GetNamespace() == "" && u.GetKind() != "CustomResourceDefinition" {
+			u.SetNamespace("migration-system")
+		}
+
+		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}
+
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(u.GroupVersionKind())
+		err := kubeClient.Get(ctx, key, existing)
+
+		retryFn := func(err error) bool {
+			return kerrors.IsTooManyRequests(err) || kerrors.IsConflict(err)
+		}
+
+		if kerrors.IsNotFound(err) {
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				retryFn,
+				func() error {
+					return kubeClient.Create(ctx, u)
+				},
+			); err != nil {
+				return fmt.Errorf("failed to create %s %s/%s: %w",
+					u.GetKind(), u.GetNamespace(), u.GetName(), err)
+			}
+			log.Printf("Created %s %s/%s from GitHub manifest",
+				u.GetKind(), u.GetNamespace(), u.GetName())
+		} else if err == nil {
+			patch := client.MergeFrom(existing.DeepCopy())
+			if err := retry.OnError(
+				retry.DefaultRetry,
+				retryFn,
+				func() error {
+					return kubeClient.Patch(ctx, u, patch)
+				},
+			); err != nil {
+				return fmt.Errorf("failed to patch %s %s/%s: %w",
+					u.GetKind(), u.GetNamespace(), u.GetName(), err)
+			}
+			log.Printf("Patched %s %s/%s from GitHub manifest",
+				u.GetKind(), u.GetNamespace(), u.GetName())
+		} else {
+			return fmt.Errorf("failed to get existing resource %s/%s: %w",
+				u.GetNamespace(), u.GetName(), err)
+		}
+	}
+
+	log.Printf("Successfully applied manifest %s from tag %s", manifestPath, tag)
+	return nil
 }
 
 func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Client, tag string) error {
@@ -776,6 +879,28 @@ func UpdateVersionConfigMapFromGitHub(ctx context.Context, kubeClient client.Cli
 		return err
 	}
 	log.Printf("Successfully updated version-config ConfigMap to version %s.", tag)
+	return nil
+}
+
+func UpdateVjailbreakSettingsFromGitHub(ctx context.Context, kubeClient client.Client, tag string) error {
+	data, err := fetchVjailbreakSettingsFromGitHub(tag)
+	if err != nil {
+		return err
+	}
+	rendered := strings.ReplaceAll(string(data), "${TAG}", tag)
+	cm := &corev1.ConfigMap{}
+	if err := yaml.Unmarshal([]byte(rendered), cm); err != nil {
+		return err
+	}
+	cm.Namespace = "migration-system"
+	cm.Name = "vjailbreak-settings"
+	if err := kubeClient.Update(ctx, cm); err != nil {
+		if kerrors.IsNotFound(err) {
+			return kubeClient.Create(ctx, cm)
+		}
+		return err
+	}
+	log.Printf("Successfully updated vjailbreak-settings ConfigMap to version %s.", tag)
 	return nil
 }
 
