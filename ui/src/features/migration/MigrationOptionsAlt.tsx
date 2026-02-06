@@ -214,8 +214,7 @@ export default function MigrationOptionsAlt({
                 Warning
               </Typography>
               <Typography variant="body2">
-                Migration without shutting down the source VM may cause network conflicts due
-                to duplicate IP/MAC addresses on the same subnet.
+                Migration without shutting down the source VM may cause network conflicts. Please acknowledge the risks involved in migrating the VM to same subnet without source poweroff.
               </Typography>
               <FormControlLabel
                 control={
