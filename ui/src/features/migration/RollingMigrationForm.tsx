@@ -985,20 +985,40 @@ export default function RollingMigrationFormDrawer({
 
   const handleMappingsChange = (key: string) => (value: unknown) => {
     markTouched('mapResources')
-    if (key === 'networkMappings') {
-      setNetworkMappings(value as ResourceMap[])
-      getParamsUpdater('networkMappings')(value)
-      setNetworkMappingError('')
-    } else if (key === 'storageMappings') {
-      setStorageMappings(value as ResourceMap[])
-      getParamsUpdater('storageMappings')(value)
-      setStorageMappingError('')
-    } else if (key === 'arrayCredsMappings') {
-      setArrayCredsMappings(value as ResourceMap[])
-      getParamsUpdater('arrayCredsMappings')(value)
-      setStorageMappingError('')
-    } else if (key === 'storageCopyMethod') {
-      getParamsUpdater('storageCopyMethod')(value)
+
+    if (!Array.isArray(value) && key !== 'storageCopyMethod') {
+      return
+    }
+
+    switch (key) {
+      case 'networkMappings': {
+        const typed = value as ResourceMap[]
+        setNetworkMappings(typed)
+        getParamsUpdater('networkMappings')(typed)
+        setNetworkMappingError('')
+        break
+      }
+      case 'storageMappings': {
+        const typed = value as ResourceMap[]
+        setStorageMappings(typed)
+        getParamsUpdater('storageMappings')(typed)
+        setStorageMappingError('')
+        break
+      }
+      case 'arrayCredsMappings': {
+        const typed = value as ResourceMap[]
+        setArrayCredsMappings(typed)
+        getParamsUpdater('arrayCredsMappings')(typed)
+        setStorageMappingError('')
+        break
+      }
+      case 'storageCopyMethod':
+        if (typeof value === 'string') {
+          getParamsUpdater('storageCopyMethod')(value)
+        }
+        break
+      default:
+        break
     }
   }
 
