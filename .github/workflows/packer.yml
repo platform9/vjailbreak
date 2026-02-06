@@ -47,6 +47,7 @@ env:
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
   S3_BUCKET_PROD: vjailbreak
   S3_BUCKET_DEV: vjailbreak-dev
+  S3_REGION: us-west-2
 
 
 jobs:
@@ -458,7 +459,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+          aws-region: ${{ env.S3_REGION }}
 
       - name: Download ubuntu base image from S3
         if: env.release_found == 'true' || env.is_nightly == 'true'
@@ -575,7 +576,7 @@ jobs:
         with:
           aws-access-key-id: ${{ steps.set-creds.outputs.aws_access_key_id }}
           aws-secret-access-key: ${{ steps.set-creds.outputs.aws_secret_access_key }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+          aws-region: ${{ env.S3_REGION }}
 
       - name: Determine S3 path and upload artifacts
         if: env.release_found == 'true' || env.is_nightly == 'true'
@@ -583,6 +584,7 @@ jobs:
           set -e
           TAG=${{ needs.determine-release.outputs.tag }}
           DATE_FOLDER=$(date -u +"%Y-%m-%d")
+          REGION="${S3_REGION}"
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_BUCKET=${S3_BUCKET_PROD}
@@ -605,13 +607,20 @@ jobs:
             DO_LATEST=false
           fi
 
+          QCOW2_HTTP_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+
           aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
-          echo "QCOW2 uploaded: s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}" | tee s3-urls.txt
+          echo "QCOW2 uploaded: ${QCOW2_HTTP_URL}" | tee s3-urls.txt
 
           if [[ "$DO_LATEST" == "true" ]]; then
+            QCOW2_HTTP_LATEST_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
             aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
-            echo "Latest QCOW2 uploaded: s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}" | tee -a s3-urls.txt
+            echo "Latest QCOW2 uploaded: ${QCOW2_HTTP_LATEST_URL}" | tee -a s3-urls.txt
           fi
+
+      - name: S3 URL
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: cat s3-urls.txt
 
       - name: Upload S3 URLs artifact
         uses: actions/upload-artifact@v4
