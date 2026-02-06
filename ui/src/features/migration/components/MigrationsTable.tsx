@@ -314,7 +314,7 @@ export default function MigrationsTable({
                 </Tooltip>
               )}
               {isMockMigration && (
-                <Tooltip title="Mock Migration">
+                <Tooltip title="Migration without poweroff">
                   <FiberManualRecordIcon 
                     sx={{ 
                       fontSize: 12, color: '#9e1111ff',
