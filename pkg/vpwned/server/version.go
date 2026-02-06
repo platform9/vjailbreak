@@ -126,7 +126,7 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
 	upgradeCtx := context.WithoutCancel(ctx)
 	upgradeCtx, cancel := context.WithTimeout(upgradeCtx, 30*time.Minute)
-	defer cancel()
+	var preUpgradeChecks *upgrade.ValidationResult
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -213,6 +213,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		if !checks.PassedAll {
 			return errors.New("pre-upgrade checks did not pass, halting upgrade")
 		}
+		preUpgradeChecks = checks
 
 		updateProgress(func(p *UpgradeProgress) {
 			p.CurrentStep = "Verifying release images"
@@ -315,6 +316,11 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				}); err != nil {
 					return fmt.Errorf("failed to scale down controller: %w", err)
 				}
+
+				updateProgress(func(p *UpgradeProgress) {
+					p.CurrentStep = "Waiting for controller to scale down"
+				})
+				saveProgress(upgradeCtx, kubeClient)
 				if err := waitForDeploymentScaledDown(upgradeCtx, kubeClient, controllerConfig); err != nil {
 					return err
 				}
@@ -394,6 +400,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 				log.Printf("All deployments are ready. Signaling server restart to UI.")
 
 				go func(localBackupID string) {
+					defer cancel()
 					time.Sleep(30 * time.Second)
 
 					ok := true
@@ -463,6 +470,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 					})
 				}
 				saveProgress(upgradeCtx, kubeClient)
+				cancel()
 				return
 			}
 			log.Printf("Upgrade process handed off to UI for finalization.")
@@ -486,18 +494,21 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		} else {
 			log.Printf("Rollback completed successfully.")
 		}
+		cancel()
 		return nil, err
 	}
 
-	checks, _ := upgrade.RunPreUpgradeChecks(upgradeCtx, kubeClient, config, in.TargetVersion)
-	protoChecks := &api.ValidationResult{
-		NoMigrationPlans:        checks.NoMigrationPlans,
-		NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
-		VmwareCredsDeleted:      checks.VMwareCredsDeleted,
-		OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
-		AgentsScaledDown:        checks.AgentsScaledDown,
-		NoCustomResources:       checks.NoCustomResources,
-		PassedAll:               checks.PassedAll,
+	protoChecks := &api.ValidationResult{}
+	if preUpgradeChecks != nil {
+		protoChecks = &api.ValidationResult{
+			NoMigrationPlans:        preUpgradeChecks.NoMigrationPlans,
+			NoRollingMigrationPlans: preUpgradeChecks.NoRollingMigrationPlans,
+			VmwareCredsDeleted:      preUpgradeChecks.VMwareCredsDeleted,
+			OpenstackCredsDeleted:   preUpgradeChecks.OpenStackCredsDeleted,
+			AgentsScaledDown:        preUpgradeChecks.AgentsScaledDown,
+			NoCustomResources:       preUpgradeChecks.NoCustomResources,
+			PassedAll:               preUpgradeChecks.PassedAll,
+		}
 	}
 
 	return &api.UpgradeResponse{
@@ -1115,6 +1126,8 @@ func waitForDeploymentScaledDown(ctx context.Context, kubeClient client.Client, 
 			return err
 		}
 
+		log.Printf("Waiting for deployment %s to scale down: replicas=%d ready=%d updated=%d", depConfig.Name, dep.Status.Replicas, dep.Status.ReadyReplicas, dep.Status.UpdatedReplicas)
+
 		if dep.Status.Replicas == 0 {
 			log.Printf("Deployment %s successfully scaled down.", depConfig.Name)
 			return nil
@@ -1123,6 +1136,10 @@ func waitForDeploymentScaledDown(ctx context.Context, kubeClient client.Client, 
 		time.Sleep(interval)
 	}
 
+	dep := &appsv1.Deployment{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err == nil {
+		return fmt.Errorf("deployment %s not scaled down within timeout (replicas=%d ready=%d updated=%d)", depConfig.Name, dep.Status.Replicas, dep.Status.ReadyReplicas, dep.Status.UpdatedReplicas)
+	}
 	return fmt.Errorf("deployment %s not scaled down within timeout", depConfig.Name)
 }
 
