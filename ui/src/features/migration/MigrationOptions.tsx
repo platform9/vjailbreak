@@ -312,8 +312,8 @@ const TimePicker = ({
     (newValue: dayjs.Dayjs | null, identifier) => {
       // Use format() with timezone offset instead of toISOString() which converts to UTC
       // This preserves the user's local timezone (e.g., "2025-11-20T12:40:00+05:30" for IST)
-      const formattedTime = newValue?.format()
-      onChange(identifier)(String(formattedTime))
+      const formattedTime = newValue?.format() ?? ''
+      onChange(identifier)(formattedTime)
     },
     [onChange]
   )
