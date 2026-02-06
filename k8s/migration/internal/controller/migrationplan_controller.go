@@ -1219,6 +1219,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 				"PERIODIC_SYNC_ENABLED":      strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
 				"NETWORK_PERSISTENCE":        strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
+				"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 			},
 		}
 		if utils.IsOpenstackPCD(*openstackcreds) {
@@ -1524,7 +1525,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	counter := len(nodeList.Items)
 	for _, vmMachineObj := range parallelvms {
 		if vmMachineObj == nil {
-			return errors.Wrapf(err, "VM '%s' not found in VMwareMachine", vmMachineObj.Name)
+			return errors.Wrapf(err, "VM not found in VMwareMachine")
 		}
 		vm := vmMachineObj.Spec.VMInfo.Name
 
