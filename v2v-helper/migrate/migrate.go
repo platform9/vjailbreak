@@ -578,6 +578,21 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
+	// Get migration parameters to check if user acknowledged network conflict risk
+	migrationParams, err := utils.GetMigrationParams(ctx, migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get migration params: %v, continuing with migration", err))
+	} else {
+		if migobj.MigrationType == "mock"{
+
+		if migrationParams.AcknowledgeNetworkConflictRisk {
+			migobj.logMessage("User acknowledged the risk involved")
+		}else{
+			migobj.logMessage("User did not acknowledge the risk involved")
+		}
+	}
+	}
+
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
 	var currentCutoverOption string
@@ -691,23 +706,27 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
-				utils.PrintLog("Shutting down source VM and performing final copy")
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				// Verify VM is actually powered off
-				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-					if stateErr != nil {
-						return stateErr
+				if migobj.MigrationType == "mock" {
+					utils.PrintLog("Mock migration detected, skipping VM power off")
+				} else {
+					utils.PrintLog("Shutting down source VM and performing final copy")
+					err = vmops.VMPowerOff()
+					if err != nil {
+						return vminfo, errors.Wrap(err, "failed to power off VM")
 					}
-					if currState != types.VirtualMachinePowerStatePoweredOff {
-						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					// Verify VM is actually powered off
+					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						if stateErr != nil {
+							return stateErr
+						}
+						if currState != types.VirtualMachinePowerStatePoweredOff {
+							return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+						}
+						return nil
+					}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+						return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 					}
-					return nil
-				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
-					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 			}
 			if err := migobj.WaitforCutover(); err != nil {
@@ -788,23 +807,27 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				utils.PrintLog("Shutting down source VM and performing final copy")
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				// Verify VM is actually powered off
-				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-					if stateErr != nil {
-						return stateErr
+				if migobj.MigrationType == "mock" {
+					utils.PrintLog("Mock migration detected, skipping VM power off")
+				} else {
+					utils.PrintLog("Shutting down source VM and performing final copy")
+					err = vmops.VMPowerOff()
+					if err != nil {
+						return vminfo, errors.Wrap(err, "failed to power off VM")
 					}
-					if currState != types.VirtualMachinePowerStatePoweredOff {
-						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					// Verify VM is actually powered off
+					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						if stateErr != nil {
+							return stateErr
+						}
+						if currState != types.VirtualMachinePowerStatePoweredOff {
+							return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+						}
+						return nil
+					}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+						return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 					}
-					return nil
-				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
-					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 				final = true
 			}

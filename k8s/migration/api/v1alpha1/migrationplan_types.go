@@ -24,7 +24,7 @@ import (
 // MigrationPlanStrategy defines the strategy for executing a migration plan including
 // scheduling options and migration type (hot or cold)
 type MigrationPlanStrategy struct {
-	// +kubebuilder:validation:Enum=hot;cold
+	// +kubebuilder:validation:Enum=hot;cold;mock
 	Type string `json:"type"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format:=date-time
@@ -62,6 +62,8 @@ type AdvancedOptions struct {
 	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 	// NetworkPersistence instructs the migration helper to persist the source networking configuration
 	NetworkPersistence bool `json:"networkPersistence,omitempty"`
+	// AcknowledgeNetworkConflictRisk indicates that the user acknowledges the risk of network conflicts when doing live migration
+	AcknowledgeNetworkConflictRisk bool `json:"acknowledgeNetworkConflictRisk,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine

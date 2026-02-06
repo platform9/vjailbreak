@@ -185,22 +185,59 @@ export default function MigrationOptionsAlt({
               />
               <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
             </OptionLeft>
-            <Select
-              size="small"
-              disabled={!selectedMigrationOptions.dataCopyMethod}
-              labelId="source-item-label"
-              value={params?.dataCopyMethod || 'cold'}
-              onChange={(e) => {
-                onChange('dataCopyMethod')(e.target.value)
-              }}
-            >
-              {DATA_COPY_OPTIONS.map((item) => (
-                <MenuItem key={item.value} value={item.value}>
-                  {item.label}
-                </MenuItem>
-              ))}
-            </Select>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
+              <Select
+                size="small"
+                disabled={!selectedMigrationOptions.dataCopyMethod}
+                labelId="source-item-label"
+                value={params?.dataCopyMethod || 'cold'}
+                onChange={(e) => {
+                  onChange('dataCopyMethod')(e.target.value)
+                  if (e.target.value !== 'mock') {
+                    onChange('acknowledgeNetworkConflictRisk')(false)
+                  }
+                }}
+                fullWidth
+              >
+                {DATA_COPY_OPTIONS.map((item) => (
+                  <MenuItem key={item.value} value={item.value}>
+                    {item.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
           </OptionRow>
+
+          {params?.dataCopyMethod === 'mock' && (
+            <Alert severity="warning" sx={{ width: '100%' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Warning
+              </Typography>
+              <Typography variant="body2">
+                Migration without shutting down the source VM may cause network conflicts. Please acknowledge the risks involved in migrating the VM to same subnet without source poweroff.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={Boolean(params?.acknowledgeNetworkConflictRisk)}
+                    onChange={(e) => {
+                      onChange('acknowledgeNetworkConflictRisk')(e.target.checked)
+                    }}
+                    color="warning"
+                    size="small"
+                  />
+                }
+                label="I understand the risks"
+                sx={{
+                  mt: 1,
+                  ml: 0,
+                  alignItems: 'center',
+                  '& .MuiFormControlLabel-label': { typography: 'body2' },
+                  '& .MuiCheckbox-root': { padding: '4px' }
+                }}
+              />
+            </Alert>
+          )}
 
           <OptionRow>
             <OptionLeft>
