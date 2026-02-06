@@ -618,7 +618,7 @@ jobs:
             echo "Latest QCOW2 uploaded: ${QCOW2_HTTP_LATEST_URL}" | tee -a s3-urls.txt
           fi
 
-      - name: S3 image URL
+      - name: S3 URL
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: cat s3-urls.txt
 
