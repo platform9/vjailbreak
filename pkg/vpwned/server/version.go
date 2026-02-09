@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/upgrade"
 	version "github.com/platform9/vjailbreak/pkg/vpwned/version"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,71 +29,117 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type DeploymentConfig struct {
-	Namespace     string
-	Name          string
-	ContainerName string
-	ImagePrefix   string
-}
+// UpgradeProgress is an alias to the shared type in upgrade package
+type UpgradeProgress = upgrade.UpgradeProgress
 
-type UpgradeProgress struct {
-	CurrentStep     string
-	TotalSteps      int
-	CompletedSteps  int
-	Status          string
-	Error           string
-	StartTime       time.Time
-	EndTime         *time.Time
-	PreviousVersion string
-	TargetVersion   string
-}
-
-const progressConfigMapName = "vjailbreak-upgrade-progress"
-
-var (
-	progressMu      sync.RWMutex
-	upgradeProgress *UpgradeProgress
-
-	deploymentConfigs = []DeploymentConfig{
-		{
-			Namespace:     "migration-system",
-			Name:          "migration-controller-manager",
-			ContainerName: "manager",
-			ImagePrefix:   "quay.io/platform9/vjailbreak-controller",
-		},
-		{
-			Namespace:     "migration-system",
-			Name:          "migration-vpwned-sdk",
-			ContainerName: "vpwned",
-			ImagePrefix:   "quay.io/platform9/vjailbreak-vpwned",
-		},
-		{
-			Namespace:     "migration-system",
-			Name:          "vjailbreak-ui",
-			ContainerName: "vjailbreak-ui-container",
-			ImagePrefix:   "quay.io/platform9/vjailbreak-ui",
-		},
-	}
+const (
+	progressConfigMapName    = "vjailbreak-upgrade-progress"
+	upgradeJobName           = "vjailbreak-upgrade-job"
+	rollbackJobName          = "vjailbreak-rollback-job"
+	namespace                = "migration-system"
+	upgradeJobServiceAccount = "migration-controller-manager"
 )
 
-// updateProgress safely updates upgradeProgress with proper locking
-func updateProgress(fn func(p *UpgradeProgress)) {
-	progressMu.Lock()
-	defer progressMu.Unlock()
-	if upgradeProgress == nil {
-		return
-	}
-	fn(upgradeProgress)
+// DeploymentConfig holds deployment information for upgrade helpers
+type DeploymentConfig struct {
+	Namespace string
+	Name      string
 }
 
-// readProgress safely reads from upgradeProgress with proper locking
-func readProgress(fn func(p *UpgradeProgress)) {
-	progressMu.RLock()
-	defer progressMu.RUnlock()
-	if upgradeProgress == nil {
-		return
+// saveProgressToConfigMap saves progress directly to ConfigMap (stateless) with retry on conflict
+func saveProgressToConfigMap(ctx context.Context, kubeClient client.Client, progress *UpgradeProgress) error {
+	progressJSON, err := json.Marshal(progress)
+	if err != nil {
+		return fmt.Errorf("failed to marshal progress: %w", err)
 	}
-	fn(upgradeProgress)
+
+	key := client.ObjectKey{Name: progressConfigMapName, Namespace: namespace}
+
+	// Use retry to handle conflicts
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing := &corev1.ConfigMap{}
+		if err := kubeClient.Get(ctx, key, existing); err == nil {
+			// Update existing ConfigMap - preserve other keys
+			if existing.Data == nil {
+				existing.Data = map[string]string{}
+			}
+			existing.Data["progress"] = string(progressJSON)
+			return kubeClient.Update(ctx, existing)
+		} else if kerrors.IsNotFound(err) {
+			// Create new ConfigMap with labels
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      progressConfigMapName,
+					Namespace: namespace,
+					Labels: map[string]string{
+						"app": "vjailbreak-upgrade",
+					},
+				},
+				Data: map[string]string{"progress": string(progressJSON)},
+			}
+			return kubeClient.Create(ctx, cm)
+		} else {
+			return err
+		}
+	})
+}
+
+// updateProgressStatusOnly updates only status, error, and endTime fields without overwriting job-written fields
+func updateProgressStatusOnly(ctx context.Context, kubeClient client.Client, status, errMsg string, endTime *time.Time) error {
+	key := client.ObjectKey{Name: progressConfigMapName, Namespace: namespace}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		cm := &corev1.ConfigMap{}
+		if err := kubeClient.Get(ctx, key, cm); err != nil {
+			return err
+		}
+
+		progressJSON, ok := cm.Data["progress"]
+		if !ok {
+			return fmt.Errorf("progress key not found in ConfigMap")
+		}
+
+		var progress UpgradeProgress
+		if err := json.Unmarshal([]byte(progressJSON), &progress); err != nil {
+			return err
+		}
+
+		// Only update status fields, preserve job-written fields like PhaseTimings, OriginalReplicas, BackupID
+		progress.Status = status
+		if errMsg != "" {
+			progress.Error = errMsg
+		}
+		if endTime != nil {
+			progress.EndTime = endTime
+		}
+
+		updatedJSON, err := json.Marshal(progress)
+		if err != nil {
+			return err
+		}
+		cm.Data["progress"] = string(updatedJSON)
+		return kubeClient.Update(ctx, cm)
+	})
+}
+
+// loadProgressFromConfigMap loads progress directly from ConfigMap (stateless)
+func loadProgressFromConfigMap(ctx context.Context, kubeClient client.Client) (*UpgradeProgress, error) {
+	cm := &corev1.ConfigMap{}
+	err := kubeClient.Get(ctx, client.ObjectKey{Name: progressConfigMapName, Namespace: namespace}, cm)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if progressJSON, ok := cm.Data["progress"]; ok {
+		var progress UpgradeProgress
+		if err := json.Unmarshal([]byte(progressJSON), &progress); err != nil {
+			return nil, err
+		}
+		return &progress, nil
+	}
+	return nil, nil
 }
 
 type VpwnedVersion struct {
@@ -124,21 +170,15 @@ func (s *VpwnedVersion) GetAvailableTags(ctx context.Context, in *api.VersionReq
 }
 
 func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequest) (*api.UpgradeResponse, error) {
-	upgradeCtx := context.WithoutCancel(ctx)
-	upgradeCtx, cancel := context.WithTimeout(upgradeCtx, 30*time.Minute)
-	var preUpgradeChecks *upgrade.ValidationResult
-
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
-	config.QPS = 100
-	config.Burst = 200
-
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(batchv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
@@ -149,353 +189,118 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	currentVersion, err := upgrade.GetCurrentVersion(upgradeCtx, clientset)
+	// Check if an upgrade job is already running
+	existingJob := &batchv1.Job{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: upgradeJobName, Namespace: namespace}, existingJob); err == nil {
+		if existingJob.Status.Active > 0 {
+			return nil, fmt.Errorf("upgrade job already running")
+		}
+		// Delete completed/failed job - poll until deleted
+		if err := kubeClient.Delete(ctx, existingJob); err != nil && !kerrors.IsNotFound(err) {
+			log.Printf("Warning: Failed to delete old upgrade job: %v", err)
+		}
+		// Poll until job is deleted (max 30 seconds) with proper error handling
+		jobDeleted := false
+		for i := 0; i < 30; i++ {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+			err := kubeClient.Get(ctx, client.ObjectKey{Name: upgradeJobName, Namespace: namespace}, existingJob)
+			if kerrors.IsNotFound(err) {
+				jobDeleted = true
+				break
+			}
+			if err != nil {
+				log.Printf("Warning: Error checking job deletion: %v", err)
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if !jobDeleted {
+			return nil, fmt.Errorf("old upgrade job still exists after 30s - cannot start new upgrade")
+		}
+	}
+
+	currentVersion, err := upgrade.GetCurrentVersion(ctx, clientset)
 	if err != nil {
 		log.Printf("Warning: Could not get current version: %v", err)
 		currentVersion = "unknown"
 	}
 
-	progressMu.Lock()
-	upgradeProgress = &UpgradeProgress{
-		CurrentStep:     "Starting upgrade",
-		TotalSteps:      5,
+	// Create dynamic client for pre-upgrade checks
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	// Run pre-upgrade checks synchronously
+	var preUpgradeChecks *upgrade.ValidationResult
+	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, dynamicClient, in.TargetVersion)
+	if err != nil {
+		return nil, fmt.Errorf("pre-upgrade checks failed: %w", err)
+	}
+
+	if !checks.PassedAll && in.AutoCleanup {
+		if err := upgrade.CleanupResources(ctx, kubeClient, config); err != nil {
+			return nil, fmt.Errorf("automatic cleanup failed: %w", err)
+		}
+		checks, err = upgrade.RunPreUpgradeChecks(ctx, kubeClient, dynamicClient, in.TargetVersion)
+		if err != nil || !checks.PassedAll {
+			return nil, fmt.Errorf("checks failed even after cleanup")
+		}
+	}
+
+	if !checks.PassedAll {
+		return &api.UpgradeResponse{
+			Checks: &api.ValidationResult{
+				NoMigrationPlans:        checks.NoMigrationPlans,
+				NoRollingMigrationPlans: checks.NoRollingMigrationPlans,
+				VmwareCredsDeleted:      checks.VMwareCredsDeleted,
+				OpenstackCredsDeleted:   checks.OpenStackCredsDeleted,
+				AgentsScaledDown:        checks.AgentsScaledDown,
+				NoCustomResources:       checks.NoCustomResources,
+				PassedAll:               false,
+			},
+			UpgradeStarted:  false,
+			CleanupRequired: true,
+		}, nil
+	}
+	preUpgradeChecks = checks
+
+	// Verify images exist
+	ok, imageErr := upgrade.CheckImagesExist(ctx, in.TargetVersion)
+	if imageErr != nil {
+		return nil, fmt.Errorf("image validation failed: %w", imageErr)
+	}
+	if !ok {
+		return nil, fmt.Errorf("image validation failed: images not found for version %s", in.TargetVersion)
+	}
+
+	// Initialize progress in ConfigMap before creating job
+	progress := &UpgradeProgress{
+		CurrentStep:     "Creating upgrade job",
+		TotalSteps:      upgrade.TotalUpgradeSteps,
 		CompletedSteps:  0,
-		Status:          "in_progress",
+		Status:          upgrade.StatusInProgress,
 		StartTime:       time.Now(),
 		PreviousVersion: currentVersion,
 		TargetVersion:   in.TargetVersion,
 	}
-	progressMu.Unlock()
+	if err := saveProgressToConfigMap(ctx, kubeClient, progress); err != nil {
+		log.Printf("Warning: failed to save initial progress: %v", err)
+	}
 
-	log.Printf("Starting upgrade from %s to %s", currentVersion, in.TargetVersion)
-	saveProgress(upgradeCtx, kubeClient)
+	log.Printf("Starting upgrade from %s to %s via Job", currentVersion, in.TargetVersion)
 
-	err = func() error {
-
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Running pre-upgrade checks"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		checks, err := upgrade.RunPreUpgradeChecks(upgradeCtx, kubeClient, config, in.TargetVersion)
-		if err != nil {
-			updateProgress(func(p *UpgradeProgress) {
-				p.Status = "failed"
-				p.Error = fmt.Sprintf("Pre-upgrade checks failed: %v", err)
-			})
-			return fmt.Errorf("pre-upgrade checks failed: %w", err)
-		}
-		updateProgress(func(p *UpgradeProgress) {
-			p.CompletedSteps++
-		})
-
-		if !checks.PassedAll && in.AutoCleanup {
-			updateProgress(func(p *UpgradeProgress) {
-				p.CurrentStep = "Performing automatic cleanup"
-			})
-			saveProgress(upgradeCtx, kubeClient)
-			if err := upgrade.CleanupResources(upgradeCtx, kubeClient, config); err != nil {
-				updateProgress(func(p *UpgradeProgress) {
-					p.Status = "failed"
-					p.Error = fmt.Sprintf("Automatic cleanup failed: %v", err)
-				})
-				return fmt.Errorf("automatic cleanup failed: %w", err)
-			}
-			checks, err = upgrade.RunPreUpgradeChecks(upgradeCtx, kubeClient, config, in.TargetVersion)
-			if err != nil || !checks.PassedAll {
-				updateProgress(func(p *UpgradeProgress) {
-					p.Status = "failed"
-					p.Error = "Checks failed even after cleanup"
-				})
-				return fmt.Errorf("checks failed even after cleanup")
-			}
-		}
-
-		if !checks.PassedAll {
-			return errors.New("pre-upgrade checks did not pass, halting upgrade")
-		}
-		preUpgradeChecks = checks
-
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Verifying release images"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if ok, err := upgrade.CheckImagesExist(upgradeCtx, in.TargetVersion); !ok {
-			return fmt.Errorf("image validation failed: %w", err)
-		}
-
-		backupID := time.Now().UTC().Format("20060102T150405Z")
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Backing up resources"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if err := upgrade.BackupResourcesWithID(upgradeCtx, kubeClient, config, backupID); err != nil {
-			updateProgress(func(p *UpgradeProgress) {
-				p.Status = "failed"
-				p.Error = fmt.Sprintf("Backup failed: %v", err)
-			})
-			return fmt.Errorf("backup failed: %w", err)
-		}
-		updateProgress(func(p *UpgradeProgress) {
-			p.CompletedSteps++
-			p.CurrentStep = "Updating Custom Resource Definitions"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if err := upgrade.ApplyAllCRDs(upgradeCtx, kubeClient, in.TargetVersion); err != nil {
-			updateProgress(func(p *UpgradeProgress) {
-				p.Status = "failed"
-				p.Error = fmt.Sprintf("CRD update failed: %v", err)
-			})
-			return fmt.Errorf("CRD update failed: %w", err)
-		}
-		updateProgress(func(p *UpgradeProgress) {
-			p.CompletedSteps++
-		})
-		saveProgress(upgradeCtx, kubeClient)
-
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Updating version configuration"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if err := upgrade.UpdateVersionConfigMapFromGitHub(upgradeCtx, kubeClient, in.TargetVersion); err != nil {
-			log.Printf("Warning: Failed to update version-config ConfigMap from GitHub: %v", err)
-		}
-
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Updating vjailbreak settings"
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if err := upgrade.UpdateVjailbreakSettingsFromGitHub(upgradeCtx, kubeClient, in.TargetVersion); err != nil {
-			log.Printf("Warning: Failed to update vjailbreak-settings ConfigMap from GitHub: %v", err)
-		}
-
-		updateProgress(func(p *UpgradeProgress) {
-			p.CompletedSteps++
-		})
-
-		go func() {
-			// Use upgradeCtx directly (already detached from client cancellation and has bounded timeout)
-			err := func() error {
-				time.Sleep(2 * time.Second)
-
-				updateProgress(func(p *UpgradeProgress) {
-					p.Status = "deploying"
-					p.CurrentStep = "Upgrading"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-
-				var controllerConfig DeploymentConfig
-				for _, cfg := range deploymentConfigs {
-					if cfg.Name == "migration-controller-manager" {
-						controllerConfig = cfg
-						break
-					}
-				}
-				if controllerConfig.Name == "" {
-					return fmt.Errorf("controller deployment config not found")
-				}
-
-				var originalReplicas int32
-
-				// Scale down controller
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Scaling down controller"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					dep := &appsv1.Deployment{}
-					if getErr := kubeClient.Get(upgradeCtx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil {
-						return getErr
-					}
-					if dep.Spec.Replicas != nil {
-						originalReplicas = *dep.Spec.Replicas
-					} else {
-						originalReplicas = 1
-					}
-					dep.Spec.Replicas = &[]int32{0}[0]
-					return kubeClient.Update(upgradeCtx, dep)
-				}); err != nil {
-					return fmt.Errorf("failed to scale down controller: %w", err)
-				}
-
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Waiting for controller to scale down"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := waitForDeploymentScaledDown(upgradeCtx, kubeClient, controllerConfig); err != nil {
-					return err
-				}
-
-				// Apply controller deployment
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Applying controller deployment from GitHub"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := upgrade.ApplyManifestFromGitHub(upgradeCtx, kubeClient, in.TargetVersion, "deploy/05controller-deployment.yaml"); err != nil {
-					return fmt.Errorf("failed to apply controller deployment from GitHub: %w", err)
-				}
-
-				// Scale up controller
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Scaling up controller"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					dep := &appsv1.Deployment{}
-					if getErr := kubeClient.Get(upgradeCtx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil {
-						return getErr
-					}
-					dep.Spec.Replicas = &originalReplicas
-					return kubeClient.Update(upgradeCtx, dep)
-				}); err != nil {
-					return fmt.Errorf("failed to scale up controller: %w", err)
-				}
-
-				// Wait for controller ready
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Waiting for controller to be ready"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := waitForDeploymentReady(upgradeCtx, kubeClient, controllerConfig); err != nil {
-					return fmt.Errorf("controller deployment failed readiness check: %w", err)
-				}
-
-				// Apply vpwned deployment
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Applying vpwned deployment from GitHub"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := upgrade.ApplyManifestFromGitHub(upgradeCtx, kubeClient, in.TargetVersion, "deploy/06vpwned-deployment.yaml"); err != nil {
-					return fmt.Errorf("failed to apply vpwned deployment: %w", err)
-				}
-
-				// Apply UI deployment
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Applying UI deployment from GitHub"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := upgrade.ApplyManifestFromGitHub(upgradeCtx, kubeClient, in.TargetVersion, "deploy/07ui-deployment.yaml"); err != nil {
-					return fmt.Errorf("failed to apply UI deployment: %w", err)
-				}
-
-				// Wait for all deployments ready
-				updateProgress(func(p *UpgradeProgress) {
-					p.CurrentStep = "Waiting for all deployments to be ready"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				for _, cfg := range []DeploymentConfig{
-					controllerConfig,
-					{Name: "migration-vpwned-sdk", Namespace: "migration-system"},
-					{Name: "vjailbreak-ui", Namespace: "migration-system"},
-				} {
-					if err := waitForDeploymentReady(upgradeCtx, kubeClient, cfg); err != nil {
-						return fmt.Errorf("deployment %s not ready: %w", cfg.Name, err)
-					}
-				}
-
-				updateProgress(func(p *UpgradeProgress) {
-					p.Status = "server_restarting"
-					p.CurrentStep = "Server restarting"
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				log.Printf("All deployments are ready. Signaling server restart to UI.")
-
-				go func(localBackupID string) {
-					defer cancel()
-					time.Sleep(30 * time.Second)
-
-					ok := true
-					for _, cfg := range deploymentConfigs {
-						dep := &appsv1.Deployment{}
-						if err := kubeClient.Get(upgradeCtx,
-							client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, dep); err != nil {
-							ok = false
-							break
-						}
-						if dep.Status.ReadyReplicas != *dep.Spec.Replicas {
-							ok = false
-							break
-						}
-					}
-
-					if ok {
-						log.Println("Upgrade looks stable. Cleaning up backup ConfigMaps...")
-						if err := upgrade.CleanupBackupConfigMaps(upgradeCtx, kubeClient, localBackupID); err != nil {
-							log.Printf("Warning: Failed to cleanup backup ConfigMaps: %v", err)
-						} else {
-							log.Println("Backup ConfigMaps cleaned up.")
-						}
-						updateProgress(func(p *UpgradeProgress) {
-							p.CompletedSteps++
-							p.Status = "completed"
-							p.CurrentStep = "Upgrade completed and backups cleaned"
-							now := time.Now()
-							p.EndTime = &now
-						})
-						saveProgress(upgradeCtx, kubeClient)
-					} else {
-						log.Println("Post-upgrade stability checks failed; keeping backups for investigation.")
-						updateProgress(func(p *UpgradeProgress) {
-							p.Status = "deployments_ready_but_unstable"
-							p.CurrentStep = "Deployments reported not stable; backups retained"
-						})
-						saveProgress(upgradeCtx, kubeClient)
-					}
-				}(backupID)
-
-				return nil
-			}()
-
-			if err != nil {
-				log.Printf("Upgrade failed during deployment phase: %v. Rolling back.", err)
-				updateProgress(func(p *UpgradeProgress) {
-					p.Status = "failed"
-					p.Error = err.Error()
-					p.CurrentStep = "Deployment failed, rolling back..."
-				})
-				saveProgress(upgradeCtx, kubeClient)
-				if err := upgrade.RestoreResources(upgradeCtx, kubeClient); err != nil {
-					log.Printf("CRITICAL: Rollback failed: %v", err)
-					updateProgress(func(p *UpgradeProgress) {
-						p.Status = "rollback_failed"
-						p.Error = "Deployment failed and rollback also failed."
-						now := time.Now()
-						p.EndTime = &now
-					})
-				} else {
-					log.Printf("Rollback completed successfully.")
-					updateProgress(func(p *UpgradeProgress) {
-						p.Status = "rolled_back"
-						now := time.Now()
-						p.EndTime = &now
-					})
-				}
-				saveProgress(upgradeCtx, kubeClient)
-				cancel()
-				return
-			}
-			log.Printf("Upgrade process handed off to UI for finalization.")
-		}()
-		return nil
-
-	}()
-
-	if err != nil {
-		log.Printf("Upgrade failed before deployment phase: %v. Rolling back.", err)
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "failed"
-			p.Error = err.Error()
-			p.CurrentStep = "Upgrade failed, rolling back..."
-			now := time.Now()
-			p.EndTime = &now
-		})
-		saveProgress(upgradeCtx, kubeClient)
-		if err := upgrade.RestoreResources(upgradeCtx, kubeClient); err != nil {
-			log.Printf("CRITICAL: Rollback failed: %v", err)
-		} else {
-			log.Printf("Rollback completed successfully.")
-		}
-		cancel()
-		return nil, err
+	// Create the upgrade job
+	if err := createUpgradeJob(ctx, kubeClient, in.TargetVersion, currentVersion, in.AutoCleanup); err != nil {
+		now := time.Now()
+		progress.Status = "failed"
+		progress.Error = fmt.Sprintf("Failed to create upgrade job: %v", err)
+		progress.EndTime = &now
+		_ = saveProgressToConfigMap(ctx, kubeClient, progress)
+		return nil, fmt.Errorf("failed to create upgrade job: %w", err)
 	}
 
 	protoChecks := &api.ValidationResult{}
@@ -517,6 +322,199 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	}, nil
 }
 
+// createUpgradeJob creates a Kubernetes Job to run the upgrade
+func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersion, currentVersion string, autoCleanup bool) error {
+	// Get the CURRENT vpwned image (not target) to ensure deterministic upgrade logic
+	vpwnedImage, err := getCurrentVpwnedImage(ctx, kubeClient)
+	if err != nil {
+		return fmt.Errorf("failed to get current vpwned image: %w", err)
+	}
+
+	backoffLimit := int32(1)             // Allow 1 retry for transient failures
+	ttlSeconds := int32(86400)           // 24 hours
+	activeDeadlineSeconds := int64(3600) // 1 hour max runtime to prevent zombie upgrades
+
+	autoCleanupStr := "false"
+	if autoCleanup {
+		autoCleanupStr = "true"
+	}
+
+	// Note: Not setting OwnerReference to avoid unexpected garbage collection
+	// if vpwned deployment is replaced during upgrade. TTL handles cleanup.
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      upgradeJobName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app":                          "vjailbreak-upgrade",
+				"vjailbreak.k8s.pf9.io/job":    "upgrade",
+				"vjailbreak.k8s.pf9.io/target": targetVersion,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttlSeconds,
+			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":                       "vjailbreak-upgrade",
+						"vjailbreak.k8s.pf9.io/job": "upgrade",
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:      corev1.RestartPolicyNever,
+					ServiceAccountName: upgradeJobServiceAccount,
+					Containers: []corev1.Container{
+						{
+							Name:            "upgrade",
+							Image:           vpwnedImage,
+							ImagePullPolicy: corev1.PullAlways,
+							Command:         []string{"./vpwctl", "upgrade-job"},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "UPGRADE_TARGET_VERSION",
+									Value: targetVersion,
+								},
+								{
+									Name:  "UPGRADE_PREVIOUS_VERSION",
+									Value: currentVersion,
+								},
+								{
+									Name:  "UPGRADE_AUTO_CLEANUP",
+									Value: autoCleanupStr,
+								},
+								{
+									Name:  "UPGRADE_MODE",
+									Value: "upgrade",
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("256Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("500m"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := kubeClient.Create(ctx, job); err != nil {
+		return fmt.Errorf("failed to create upgrade job: %w", err)
+	}
+
+	log.Printf("Created upgrade job %s for version %s", upgradeJobName, targetVersion)
+	return nil
+}
+
+// getCurrentVpwnedImage returns the CURRENT vpwned image (not target) for running upgrade job
+// This ensures upgrade logic is deterministic and uses stable, tested code
+func getCurrentVpwnedImage(ctx context.Context, kubeClient client.Client) (string, error) {
+	// Get image from current vpwned deployment - fail explicitly if not found
+	// Do NOT guess or construct image URLs to avoid silent failures
+	dep := &appsv1.Deployment{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: "migration-vpwned-sdk", Namespace: namespace}, dep); err != nil {
+		return "", fmt.Errorf("cannot get vpwned deployment: %w", err)
+	}
+
+	// Try to find vpwned container by name, fall back to first container
+	for _, container := range dep.Spec.Template.Spec.Containers {
+		if container.Name == "vpwned" {
+			return container.Image, nil
+		}
+	}
+
+	// Fallback: use first container if vpwned container not found by name
+	if len(dep.Spec.Template.Spec.Containers) > 0 {
+		log.Printf("Warning: container 'vpwned' not found, using first container image")
+		return dep.Spec.Template.Spec.Containers[0].Image, nil
+	}
+
+	return "", fmt.Errorf("vpwned deployment has no containers")
+}
+
+// createRollbackJob creates a Kubernetes Job to run the rollback
+func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVersion, targetVersion string) error {
+	// Get the CURRENT vpwned image (not target) to ensure deterministic rollback logic
+	vpwnedImage, err := getCurrentVpwnedImage(ctx, kubeClient)
+	if err != nil {
+		return fmt.Errorf("failed to get current vpwned image: %w", err)
+	}
+
+	backoffLimit := int32(1)             // Allow 1 retry for transient failures
+	ttlSeconds := int32(86400)           // 24 hours
+	activeDeadlineSeconds := int64(3600) // 1 hour max runtime to prevent zombie rollbacks
+
+	// Note: Not setting OwnerReference to avoid unexpected garbage collection
+	// if vpwned deployment is replaced during rollback. TTL handles cleanup.
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      rollbackJobName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app":                          "vjailbreak-rollback",
+				"vjailbreak.k8s.pf9.io/job":    "rollback",
+				"vjailbreak.k8s.pf9.io/target": previousVersion,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttlSeconds,
+			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":                       "vjailbreak-rollback",
+						"vjailbreak.k8s.pf9.io/job": "rollback",
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:      corev1.RestartPolicyNever,
+					ServiceAccountName: upgradeJobServiceAccount,
+					Containers: []corev1.Container{
+						{
+							Name:            "rollback",
+							Image:           vpwnedImage,
+							ImagePullPolicy: corev1.PullAlways,
+							Command:         []string{"./vpwctl", "upgrade-job"},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "UPGRADE_TARGET_VERSION",
+									Value: targetVersion,
+								},
+								{
+									Name:  "UPGRADE_PREVIOUS_VERSION",
+									Value: previousVersion,
+								},
+								{
+									Name:  "UPGRADE_MODE",
+									Value: "rollback",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := kubeClient.Create(ctx, job); err != nil {
+		return fmt.Errorf("failed to create rollback job: %w", err)
+	}
+
+	log.Printf("Created rollback job %s for version %s", rollbackJobName, previousVersion)
+	return nil
+}
+
 func (s *VpwnedVersion) RollbackUpgrade(ctx context.Context, in *api.VersionRequest) (*api.UpgradeProgressResponse, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -525,256 +523,97 @@ func (s *VpwnedVersion) RollbackUpgrade(ctx context.Context, in *api.VersionRequ
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(batchv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
-	rollbackCtx := context.WithoutCancel(ctx)
-	rollbackCtx, cancel := context.WithTimeout(rollbackCtx, 20*time.Minute)
-	defer cancel()
+	// Load progress from ConfigMap to get version info
+	progress, err := loadProgressFromConfigMap(ctx, kubeClient)
+	if err != nil {
+		log.Printf("Warning: failed to load progress: %v", err)
+	}
 
 	var previousVersion, targetVersion string
-	readProgress(func(p *UpgradeProgress) {
-		previousVersion = p.PreviousVersion
-		targetVersion = p.TargetVersion
-	})
+	if progress != nil {
+		previousVersion = progress.PreviousVersion
+		targetVersion = progress.TargetVersion
+	}
 
 	if previousVersion == "" || previousVersion == "unknown" {
-		log.Printf("WARNING: Previous version unknown, falling back to snapshot-based rollback")
-		updateProgress(func(p *UpgradeProgress) {
-			p.CurrentStep = "Restoring resources from backup (fallback)"
-		})
-		saveProgress(rollbackCtx, kubeClient)
-		err = upgrade.RestoreResources(rollbackCtx, kubeClient)
-		if err != nil {
-			updateProgress(func(p *UpgradeProgress) {
-				p.Status = "rollback_failed"
-				p.Error = fmt.Sprintf("Rollback failed: %v", err)
-				now := time.Now()
-				p.EndTime = &now
-			})
-			return &api.UpgradeProgressResponse{
-				Status:      "rollback_failed",
-				Error:       upgradeProgress.Error,
-				CurrentStep: upgradeProgress.CurrentStep,
-			}, err
-		}
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rolled_back"
-			p.Error = "Rollback completed successfully (snapshot-based)"
-			p.CurrentStep = "Rollback completed successfully"
-			now := time.Now()
-			p.EndTime = &now
-		})
-		saveProgress(rollbackCtx, kubeClient)
-		return &api.UpgradeProgressResponse{
-			Status:      "rolled_back",
-			Error:       "",
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, nil
+		return nil, fmt.Errorf("cannot rollback: previous version unknown - manifest-driven rollback requires known previous version")
 	}
 
-	log.Printf("Starting manifest-driven rollback from %s to %s", targetVersion, previousVersion)
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Rolling back using GitHub manifests"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-
-	// Scale down controller
-	var controllerConfig DeploymentConfig
-	for _, cfg := range deploymentConfigs {
-		if cfg.Name == "migration-controller-manager" {
-			controllerConfig = cfg
-			break
-		}
-	}
-	if controllerConfig.Name == "" {
-		return nil, fmt.Errorf("controller deployment config not found")
-	}
-
-	var originalReplicas int32
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Scaling down controller for rollback"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		dep := &appsv1.Deployment{}
-		if getErr := kubeClient.Get(rollbackCtx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil {
-			return getErr
-		}
-		if dep.Spec.Replicas != nil {
-			originalReplicas = *dep.Spec.Replicas
-		} else {
-			originalReplicas = 1
-		}
-		dep.Spec.Replicas = &[]int32{0}[0]
-		return kubeClient.Update(rollbackCtx, dep)
-	}); err != nil {
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rollback_failed"
-			p.Error = fmt.Sprintf("Failed to scale down controller: %v", err)
-			now := time.Now()
-			p.EndTime = &now
-		})
-		return &api.UpgradeProgressResponse{
-			Status:      "rollback_failed",
-			Error:       upgradeProgress.Error,
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, err
-	}
-	if err := waitForDeploymentScaledDown(rollbackCtx, kubeClient, controllerConfig); err != nil {
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rollback_failed"
-			p.Error = fmt.Sprintf("Failed waiting for controller scale down: %v", err)
-			now := time.Now()
-			p.EndTime = &now
-		})
-		return &api.UpgradeProgressResponse{
-			Status:      "rollback_failed",
-			Error:       upgradeProgress.Error,
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, err
-	}
-
-	// Apply CRDs from previous version
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring CRDs from previous version"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.ApplyAllCRDs(rollbackCtx, kubeClient, previousVersion); err != nil {
-		log.Printf("Warning: Failed to restore CRDs: %v", err)
-	}
-
-	// Apply controller deployment from previous version
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring controller deployment from GitHub"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.ApplyManifestFromGitHub(rollbackCtx, kubeClient, previousVersion, "deploy/05controller-deployment.yaml"); err != nil {
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rollback_failed"
-			p.Error = fmt.Sprintf("Failed to restore controller: %v", err)
-			now := time.Now()
-			p.EndTime = &now
-		})
-		return &api.UpgradeProgressResponse{
-			Status:      "rollback_failed",
-			Error:       upgradeProgress.Error,
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, err
-	}
-
-	// Scale up controller
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Scaling up controller"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		dep := &appsv1.Deployment{}
-		if getErr := kubeClient.Get(rollbackCtx, client.ObjectKey{Name: controllerConfig.Name, Namespace: controllerConfig.Namespace}, dep); getErr != nil {
-			return getErr
-		}
-		dep.Spec.Replicas = &originalReplicas
-		return kubeClient.Update(rollbackCtx, dep)
-	}); err != nil {
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rollback_failed"
-			p.Error = fmt.Sprintf("Failed to scale up controller: %v", err)
-			now := time.Now()
-			p.EndTime = &now
-		})
-		return &api.UpgradeProgressResponse{
-			Status:      "rollback_failed",
-			Error:       upgradeProgress.Error,
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, err
-	}
-
-	// Wait for controller ready
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Waiting for controller to be ready"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := waitForDeploymentReady(rollbackCtx, kubeClient, controllerConfig); err != nil {
-		updateProgress(func(p *UpgradeProgress) {
-			p.Status = "rollback_failed"
-			p.Error = fmt.Sprintf("Controller not ready: %v", err)
-			now := time.Now()
-			p.EndTime = &now
-		})
-		return &api.UpgradeProgressResponse{
-			Status:      "rollback_failed",
-			Error:       upgradeProgress.Error,
-			CurrentStep: upgradeProgress.CurrentStep,
-		}, err
-	}
-
-	// Apply vpwned deployment
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring vpwned deployment from GitHub"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.ApplyManifestFromGitHub(rollbackCtx, kubeClient, previousVersion, "deploy/06vpwned-deployment.yaml"); err != nil {
-		log.Printf("Warning: Failed to restore vpwned deployment: %v", err)
-	}
-
-	// Apply UI deployment
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring UI deployment from GitHub"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.ApplyManifestFromGitHub(rollbackCtx, kubeClient, previousVersion, "deploy/07ui-deployment.yaml"); err != nil {
-		log.Printf("Warning: Failed to restore UI deployment: %v", err)
-	}
-
-	// Wait for all deployments ready
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Waiting for all deployments to be ready"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	for _, cfg := range []DeploymentConfig{
-		controllerConfig,
-		{Name: "migration-vpwned-sdk", Namespace: "migration-system"},
-		{Name: "vjailbreak-ui", Namespace: "migration-system"},
-	} {
-		if err := waitForDeploymentReady(rollbackCtx, kubeClient, cfg); err != nil {
-			log.Printf("Warning: Deployment %s not ready: %v", cfg.Name, err)
+	// Concurrency guard: Block rollback if upgrade job is still active
+	upgradeJob := &batchv1.Job{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: upgradeJobName, Namespace: namespace}, upgradeJob); err == nil {
+		if upgradeJob.Status.Active > 0 {
+			return nil, fmt.Errorf("cannot rollback: upgrade job is still running - wait for it to complete or delete it first")
 		}
 	}
 
-	// Restore version-config ConfigMap
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring version configuration"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.UpdateVersionConfigMapFromGitHub(rollbackCtx, kubeClient, previousVersion); err != nil {
-		log.Printf("Warning: Failed to restore version-config: %v", err)
+	// Check if a rollback job is already running
+	existingJob := &batchv1.Job{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: rollbackJobName, Namespace: namespace}, existingJob); err == nil {
+		if existingJob.Status.Active > 0 {
+			return nil, fmt.Errorf("rollback job already running")
+		}
+		// Delete completed/failed job - poll until deleted
+		if err := kubeClient.Delete(ctx, existingJob); err != nil && !kerrors.IsNotFound(err) {
+			log.Printf("Warning: Failed to delete old rollback job: %v", err)
+		}
+		// Poll until job is deleted (max 30 seconds) with proper error handling
+		jobDeleted := false
+		for i := 0; i < 30; i++ {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+			err := kubeClient.Get(ctx, client.ObjectKey{Name: rollbackJobName, Namespace: namespace}, existingJob)
+			if kerrors.IsNotFound(err) {
+				jobDeleted = true
+				break
+			}
+			if err != nil {
+				log.Printf("Warning: Error checking rollback job deletion: %v", err)
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if !jobDeleted {
+			return nil, fmt.Errorf("old rollback job still exists after 30s - cannot start new rollback")
+		}
 	}
 
-	updateProgress(func(p *UpgradeProgress) {
-		p.CurrentStep = "Restoring vjailbreak settings"
-	})
-	saveProgress(rollbackCtx, kubeClient)
-	if err := upgrade.UpdateVjailbreakSettingsFromGitHub(rollbackCtx, kubeClient, previousVersion); err != nil {
-		log.Printf("Warning: Failed to restore vjailbreak-settings: %v", err)
-	}
+	log.Printf("Starting manifest-driven rollback from %s to %s via Job", targetVersion, previousVersion)
 
-	updateProgress(func(p *UpgradeProgress) {
-		p.Status = "rolled_back"
-		p.Error = ""
-		p.CurrentStep = "Rollback completed successfully"
+	// Update progress before creating job
+	if progress == nil {
+		progress = &UpgradeProgress{StartTime: time.Now()}
+	}
+	progress.CurrentStep = "Creating rollback job"
+	progress.Status = "rolling_back"
+	_ = saveProgressToConfigMap(ctx, kubeClient, progress)
+
+	// Create the rollback job
+	if err := createRollbackJob(ctx, kubeClient, previousVersion, targetVersion); err != nil {
 		now := time.Now()
-		p.EndTime = &now
-	})
-	saveProgress(rollbackCtx, kubeClient)
-
-	log.Printf("Manifest-driven rollback completed: %s -> %s", targetVersion, previousVersion)
+		progress.Status = "rollback_failed"
+		progress.Error = fmt.Sprintf("Failed to create rollback job: %v", err)
+		progress.EndTime = &now
+		_ = saveProgressToConfigMap(ctx, kubeClient, progress)
+		return &api.UpgradeProgressResponse{
+			Status:      "rollback_failed",
+			Error:       fmt.Sprintf("Failed to create rollback job: %v", err),
+			CurrentStep: "Creating rollback job",
+		}, err
+	}
 
 	return &api.UpgradeProgressResponse{
-		Status:      "rolled_back",
+		Status:      "rolling_back",
 		Error:       "",
-		CurrentStep: upgradeProgress.CurrentStep,
+		CurrentStep: "Rollback job created",
 	}, nil
 }
 
@@ -791,12 +630,21 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 		return nil, fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
-	if err := upgrade.CleanupAllOldBackups(ctx, kubeClient); err != nil {
+	if err := upgrade.CleanupAllOldBackups(ctx, kubeClient, ""); err != nil {
 		log.Printf("Warning: failed to cleanup old backups: %v", err)
 	}
 
-	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, config, in.TargetVersion)
-	if err != nil || !checks.PassedAll {
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	checks, err := upgrade.RunPreUpgradeChecks(ctx, kubeClient, dynamicClient, in.TargetVersion)
+	if err != nil {
+		return nil, fmt.Errorf("pre-upgrade checks failed: %w", err)
+	}
+
+	if !checks.PassedAll {
 		return &api.UpgradeResponse{
 			Checks: &api.ValidationResult{
 				NoMigrationPlans:        checks.NoMigrationPlans,
@@ -818,44 +666,121 @@ func (s *VpwnedVersion) ConfirmCleanupAndUpgrade(ctx context.Context, in *api.Up
 func (s *VpwnedVersion) GetUpgradeProgress(ctx context.Context, in *api.VersionRequest) (*api.UpgradeProgressResponse, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Printf("Error getting in-cluster config: %v", err)
+		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(batchv1.AddToScheme(scheme))
 	kubeClient, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
-		log.Printf("Error creating kubeClient: %v", err)
+		return nil, fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
-	if kubeClient != nil {
-		loadProgress(ctx, kubeClient)
+	// Load progress from ConfigMap (stateless)
+	progress, err := loadProgressFromConfigMap(ctx, kubeClient)
+	if err != nil {
+		log.Printf("Warning: failed to load progress: %v", err)
 	}
 
-	if upgradeProgress == nil {
+	if progress == nil {
 		return &api.UpgradeProgressResponse{
 			Status: "no_upgrade_in_progress",
 		}, nil
 	}
 
-	var progress float32
-	if upgradeProgress.TotalSteps > 0 {
-		progress = float32(upgradeProgress.CompletedSteps) / float32(upgradeProgress.TotalSteps) * 100
+	// Check Job status for authoritative progress (upgrade or rollback)
+	jobName := upgradeJobName
+	if progress.Status == "rolling_back" {
+		jobName = rollbackJobName
 	}
 
-	if upgradeProgress.Status == "completed" || upgradeProgress.Status == "deployments_ready" {
-		progress = 100
+	job := &batchv1.Job{}
+	jobErr := kubeClient.Get(ctx, client.ObjectKey{Name: jobName, Namespace: namespace}, job)
+	if jobErr == nil {
+		// Job exists - check its status using conditions for more precision
+		jobFailed := false
+		jobComplete := false
+		var failureReason string
+
+		for _, cond := range job.Status.Conditions {
+			if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
+				jobFailed = true
+				failureReason = cond.Reason
+				if cond.Message != "" {
+					failureReason = cond.Message
+				}
+			}
+			if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
+				jobComplete = true
+			}
+		}
+
+		// Fallback to status counts if conditions not set
+		if !jobFailed && job.Status.Failed > 0 {
+			jobFailed = true
+			failureReason = "Job pod failed"
+		}
+		if !jobComplete && job.Status.Succeeded > 0 {
+			jobComplete = true
+		}
+
+		if jobFailed && progress.Status != "failed" && progress.Status != "rollback_failed" {
+			// Job failed but ConfigMap not updated - update only status fields to preserve job-written data
+			errMsg := failureReason
+			if errMsg == "" {
+				errMsg = "Upgrade job failed"
+			}
+			now := time.Now()
+			_ = updateProgressStatusOnly(ctx, kubeClient, "failed", errMsg, &now)
+			progress.Status = "failed"
+			progress.Error = errMsg
+			progress.EndTime = &now
+		} else if jobComplete && progress.Status != "completed" && progress.Status != "rolled_back" {
+			// Job succeeded but ConfigMap not updated - update only status fields to preserve job-written data
+			newStatus := "completed"
+			if progress.Status == "rolling_back" {
+				newStatus = "rolled_back"
+			}
+			now := time.Now()
+			_ = updateProgressStatusOnly(ctx, kubeClient, newStatus, "", &now)
+			progress.Status = newStatus
+			progress.EndTime = &now
+		}
+	} else if kerrors.IsNotFound(jobErr) {
+		// Job not found - handle stale progress
+		if progress.Status == "in_progress" || progress.Status == "deploying" || progress.Status == "rolling_back" {
+			// Progress says in_progress but job is gone - check if stale (>30 min since start)
+			if time.Since(progress.StartTime) > 30*time.Minute {
+				log.Printf("Warning: Job not found and progress stale for >30min, marking as unknown")
+				now := time.Now()
+				errMsg := "Upgrade job not found - may have been deleted or TTL expired"
+				_ = updateProgressStatusOnly(ctx, kubeClient, "unknown", errMsg, &now)
+				progress.Status = "unknown"
+				progress.Error = errMsg
+				progress.EndTime = &now
+			}
+		}
+	}
+
+	var progressPercent float32
+	if progress.TotalSteps > 0 {
+		progressPercent = float32(progress.CompletedSteps) / float32(progress.TotalSteps) * 100
+	}
+
+	if progress.Status == "completed" || progress.Status == "deployments_ready" || progress.Status == "rolled_back" {
+		progressPercent = 100
 	}
 
 	return &api.UpgradeProgressResponse{
-		CurrentStep: upgradeProgress.CurrentStep,
-		Progress:    progress,
-		Status:      upgradeProgress.Status,
-		Error:       upgradeProgress.Error,
-		StartTime:   upgradeProgress.StartTime.Format(time.RFC3339),
+		CurrentStep: progress.CurrentStep,
+		Progress:    progressPercent,
+		Status:      progress.Status,
+		Error:       progress.Error,
+		StartTime:   progress.StartTime.Format(time.RFC3339),
 		EndTime: func() string {
-			if upgradeProgress.EndTime != nil {
-				return upgradeProgress.EndTime.Format(time.RFC3339)
+			if progress.EndTime != nil {
+				return progress.EndTime.Format(time.RFC3339)
 			}
 			return ""
 		}(),
@@ -1050,6 +975,13 @@ func checkAndDeleteAllCustomResources(ctx context.Context, kubeClient client.Cli
 	if err != nil {
 		return false, "Failed to discover current CRs: " + err.Error()
 	}
+
+	// Create dynamic client once, outside loop
+	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return false, "Failed to create dynamic client: " + err.Error()
+	}
+
 	allDeleted := true
 	var failed []string
 	for _, crInfo := range currentCRs {
@@ -1057,12 +989,6 @@ func checkAndDeleteAllCustomResources(ctx context.Context, kubeClient client.Cli
 			Group:    crInfo.Group,
 			Version:  crInfo.Version,
 			Resource: crInfo.Plural,
-		}
-		dynamicClient, err := dynamic.NewForConfig(restConfig)
-		if err != nil {
-			failed = append(failed, crInfo.Kind+": dynamic client error")
-			allDeleted = false
-			continue
 		}
 		list, err := dynamicClient.Resource(gvr).Namespace("migration-system").List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -1095,15 +1021,28 @@ func waitForDeploymentReady(ctx context.Context, kubeClient client.Client, depCo
 	interval := 10 * time.Second
 
 	for start := time.Now(); time.Since(start) < timeout; {
-		dep := &appsv1.Deployment{}
-		if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err != nil {
-			if errors.IsNotFound(err) {
-				return fmt.Errorf("deployment %s not found", depConfig.Name)
-			}
-			return err
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 
-		if dep.Status.ReadyReplicas == *dep.Spec.Replicas && dep.Status.UpdatedReplicas == *dep.Spec.Replicas {
+		dep := &appsv1.Deployment{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err != nil {
+			if kerrors.IsNotFound(err) {
+				return fmt.Errorf("deployment %s not found", depConfig.Name)
+			}
+			return fmt.Errorf("failed to get deployment %s: %w", depConfig.Name, err)
+		}
+
+		// Safe dereference of Spec.Replicas (nil means 1 in K8s)
+		desiredReplicas := int32(1)
+		if dep.Spec.Replicas != nil {
+			desiredReplicas = *dep.Spec.Replicas
+		}
+
+		if dep.Status.ReadyReplicas == desiredReplicas && dep.Status.UpdatedReplicas == desiredReplicas {
 			return nil
 		}
 
@@ -1118,12 +1057,19 @@ func waitForDeploymentScaledDown(ctx context.Context, kubeClient client.Client, 
 	interval := 10 * time.Second
 
 	for start := time.Now(); time.Since(start) < timeout; {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		dep := &appsv1.Deployment{}
 		if err := kubeClient.Get(ctx, client.ObjectKey{Name: depConfig.Name, Namespace: depConfig.Namespace}, dep); err != nil {
 			if kerrors.IsNotFound(err) {
 				return nil
 			}
-			return err
+			return fmt.Errorf("failed to get deployment %s: %w", depConfig.Name, err)
 		}
 
 		log.Printf("Waiting for deployment %s to scale down: replicas=%d ready=%d updated=%d", depConfig.Name, dep.Status.Replicas, dep.Status.ReadyReplicas, dep.Status.UpdatedReplicas)
@@ -1141,60 +1087,4 @@ func waitForDeploymentScaledDown(ctx context.Context, kubeClient client.Client, 
 		return fmt.Errorf("deployment %s not scaled down within timeout (replicas=%d ready=%d updated=%d)", depConfig.Name, dep.Status.Replicas, dep.Status.ReadyReplicas, dep.Status.UpdatedReplicas)
 	}
 	return fmt.Errorf("deployment %s not scaled down within timeout", depConfig.Name)
-}
-
-func saveProgress(ctx context.Context, kubeClient client.Client) {
-	progressMu.RLock()
-	if upgradeProgress == nil {
-		progressMu.RUnlock()
-		return
-	}
-	progressJSON, err := json.Marshal(upgradeProgress)
-	progressMu.RUnlock()
-	if err != nil {
-		log.Printf("Error marshaling progress: %v", err)
-		return
-	}
-
-	key := client.ObjectKey{Name: progressConfigMapName, Namespace: "migration-system"}
-	existing := &corev1.ConfigMap{}
-
-	if err := kubeClient.Get(ctx, key, existing); err == nil {
-		// ConfigMap exists, use Patch to avoid resourceVersion conflicts
-		patch := client.MergeFrom(existing.DeepCopy())
-		existing.Data = map[string]string{"progress": string(progressJSON)}
-		if err := kubeClient.Patch(ctx, existing, patch); err != nil {
-			log.Printf("Error patching upgrade progress ConfigMap: %v", err)
-		}
-	} else if kerrors.IsNotFound(err) {
-		// ConfigMap doesn't exist, create it
-		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      progressConfigMapName,
-				Namespace: "migration-system",
-			},
-			Data: map[string]string{"progress": string(progressJSON)},
-		}
-		if err := kubeClient.Create(ctx, cm); err != nil {
-			log.Printf("Error creating upgrade progress ConfigMap: %v", err)
-		}
-	} else {
-		log.Printf("Error getting upgrade progress ConfigMap: %v", err)
-	}
-}
-
-func loadProgress(ctx context.Context, kubeClient client.Client) {
-	cm := &corev1.ConfigMap{}
-	err := kubeClient.Get(ctx, client.ObjectKey{Name: progressConfigMapName, Namespace: "migration-system"}, cm)
-	if err != nil {
-		return
-	}
-	if progressJSON, ok := cm.Data["progress"]; ok {
-		var loadedProgress UpgradeProgress
-		if err := json.Unmarshal([]byte(progressJSON), &loadedProgress); err == nil {
-			progressMu.Lock()
-			upgradeProgress = &loadedProgress
-			progressMu.Unlock()
-		}
-	}
 }
