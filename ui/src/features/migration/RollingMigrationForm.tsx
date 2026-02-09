@@ -57,8 +57,13 @@ import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
+import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
+import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
-import { postMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
+import {
+  patchMigrationTemplate,
+  postMigrationTemplate
+} from 'src/features/migration/api/migration-templates/migrationTemplates'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from './MigrationOptionsAlt'
 import { CUTOVER_TYPES } from './constants'
@@ -92,6 +97,7 @@ interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   osFamily?: string
+  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
 }
 
 type RollingMigrationRHFValues = {
@@ -333,6 +339,7 @@ export default function RollingMigrationFormDrawer({
 
   const [networkMappings, setNetworkMappings] = useState<ResourceMap[]>([])
   const [storageMappings, setStorageMappings] = useState<ResourceMap[]>([])
+  const [arrayCredsMappings, setArrayCredsMappings] = useState<ResourceMap[]>([])
   const [networkMappingError, setNetworkMappingError] = useState<string>('')
   const [storageMappingError, setStorageMappingError] = useState<string>('')
 
@@ -976,14 +983,42 @@ export default function RollingMigrationFormDrawer({
     }
   }, [openstackFlavors, vmsWithAssignments])
 
-  const handleMappingsChange = (key: string) => (value: ResourceMap[]) => {
+  const handleMappingsChange = (key: string) => (value: unknown) => {
     markTouched('mapResources')
-    if (key === 'networkMappings') {
-      setNetworkMappings(value)
-      setNetworkMappingError('')
-    } else if (key === 'storageMappings') {
-      setStorageMappings(value)
-      setStorageMappingError('')
+
+    if (!Array.isArray(value) && key !== 'storageCopyMethod') {
+      return
+    }
+
+    switch (key) {
+      case 'networkMappings': {
+        const typed = value as ResourceMap[]
+        setNetworkMappings(typed)
+        getParamsUpdater('networkMappings')(typed)
+        setNetworkMappingError('')
+        break
+      }
+      case 'storageMappings': {
+        const typed = value as ResourceMap[]
+        setStorageMappings(typed)
+        getParamsUpdater('storageMappings')(typed)
+        setStorageMappingError('')
+        break
+      }
+      case 'arrayCredsMappings': {
+        const typed = value as ResourceMap[]
+        setArrayCredsMappings(typed)
+        getParamsUpdater('arrayCredsMappings')(typed)
+        setStorageMappingError('')
+        break
+      }
+      case 'storageCopyMethod':
+        if (typeof value === 'string') {
+          getParamsUpdater('storageCopyMethod')(value)
+        }
+        break
+      default:
+        break
     }
   }
 
@@ -1053,6 +1088,10 @@ export default function RollingMigrationFormDrawer({
   const handleSubmit = async () => {
     setSubmitting(true)
 
+    const storageCopyMethod = (params.storageCopyMethod || 'normal') as
+      | 'normal'
+      | 'StorageAcceleratedCopy'
+
     if (selectedVMs.length > 0) {
       if (
         availableVmwareNetworks.some(
@@ -1064,14 +1103,26 @@ export default function RollingMigrationFormDrawer({
         return
       }
 
-      if (
-        availableVmwareDatastores.some(
-          (datastore) => !storageMappings.some((mapping) => mapping.source === datastore)
-        )
-      ) {
-        setStorageMappingError('All datastores from selected VMs must be mapped')
-        setSubmitting(false)
-        return
+      if (storageCopyMethod === 'StorageAcceleratedCopy') {
+        if (
+          availableVmwareDatastores.some(
+            (datastore) => !arrayCredsMappings.some((mapping) => mapping.source === datastore)
+          )
+        ) {
+          setStorageMappingError('All datastores from selected VMs must be mapped')
+          setSubmitting(false)
+          return
+        }
+      } else {
+        if (
+          availableVmwareDatastores.some(
+            (datastore) => !storageMappings.some((mapping) => mapping.source === datastore)
+          )
+        ) {
+          setStorageMappingError('All datastores from selected VMs must be mapped')
+          setSubmitting(false)
+          return
+        }
       }
     } else if (sourceCluster && destinationPCD) {
       alert('Please select at least one VM to migrate')
@@ -1146,23 +1197,56 @@ export default function RollingMigrationFormDrawer({
       const networkMappingResponse = await postNetworkMapping(networkMappingJson)
 
       // 2. Create storage mapping
-      const storageMappingJson = createStorageMappingJson({
-        storageMappings: storageMappings.map((mapping) => ({
-          source: mapping.source,
-          target: mapping.target
-        }))
-      })
-      const storageMappingResponse = await postStorageMapping(storageMappingJson)
+      let storageMappingResponse: any = null
+      let arrayCredsMappingResponse: any = null
+
+      if (storageCopyMethod === 'StorageAcceleratedCopy') {
+        const arrayCredsMappingJson = createArrayCredsMappingJson({
+          mappings: arrayCredsMappings.map((mapping) => ({
+            source: mapping.source,
+            target: mapping.target
+          }))
+        })
+        arrayCredsMappingResponse = await postArrayCredsMapping(arrayCredsMappingJson)
+      } else {
+        const storageMappingJson = createStorageMappingJson({
+          storageMappings: storageMappings.map((mapping) => ({
+            source: mapping.source,
+            target: mapping.target
+          }))
+        })
+        storageMappingResponse = await postStorageMapping(storageMappingJson)
+      }
 
       // 3. Create migration template
       const migrationTemplateJson = createMigrationTemplateJson({
         vmwareRef: selectedVMwareCredName,
         openstackRef: selectedPcdCredName,
         networkMapping: networkMappingResponse.metadata.name,
-        storageMapping: storageMappingResponse.metadata.name,
+        ...(storageMappingResponse?.metadata?.name && {
+          storageMapping: storageMappingResponse.metadata.name
+        }),
         targetPCDClusterName: targetPCDClusterName
       })
       const migrationTemplateResponse = await postMigrationTemplate(migrationTemplateJson)
+
+      // Update template to include storageCopyMethod and mapping selection
+      if (migrationTemplateResponse?.metadata?.name) {
+        await patchMigrationTemplate(migrationTemplateResponse.metadata.name, {
+          spec: {
+            networkMapping: networkMappingResponse.metadata.name,
+            storageCopyMethod,
+            ...(storageCopyMethod === 'StorageAcceleratedCopy' &&
+              arrayCredsMappingResponse?.metadata?.name && {
+                arrayCredsMapping: arrayCredsMappingResponse.metadata.name
+              }),
+            ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
+              storageMappingResponse?.metadata?.name && {
+                storageMapping: storageMappingResponse.metadata.name
+              })
+          }
+        })
+      }
 
       // 4. Create rolling migration plan with the template
       const migrationPlanJson = createRollingMigrationPlanJson({
@@ -1215,7 +1299,10 @@ export default function RollingMigrationFormDrawer({
         virtualMachineCount: selectedVMsData?.length || 0,
         esxHostCount: orderedESXHosts?.length || 0,
         networkMappingCount: networkMappings?.length || 0,
-        storageMappingCount: storageMappings?.length || 0,
+        storageMappingCount:
+          storageCopyMethod === 'StorageAcceleratedCopy'
+            ? arrayCredsMappings?.length || 0
+            : storageMappings?.length || 0,
         migrationType: params.dataCopyMethod || 'cold',
         hasAdminInitiatedCutover:
           selectedMigrationOptions.cutoverOption &&
@@ -1279,13 +1366,15 @@ export default function RollingMigrationFormDrawer({
     const basicRequirementsMissing =
       !sourceCluster || !destinationPCD || !selectedMaasConfig || !selectedVMs.length || submitting
 
+    const storageMappingComplete =
+      params.storageCopyMethod === 'StorageAcceleratedCopy'
+        ? availableVmwareDatastores.every((d) => arrayCredsMappings.some((m) => m.source === d))
+        : availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+
     const mappingsValid = !(
       availableVmwareNetworks.some(
         (network) => !networkMappings.some((mapping) => mapping.source === network)
-      ) ||
-      availableVmwareDatastores.some(
-        (datastore) => !storageMappings.some((mapping) => mapping.source === datastore)
-      )
+      ) || !storageMappingComplete
     )
 
     // Migration options validation
@@ -1333,6 +1422,7 @@ export default function RollingMigrationFormDrawer({
     networkMappings,
     availableVmwareDatastores,
     storageMappings,
+    arrayCredsMappings,
     selectedMigrationOptions,
     params,
     fieldErrors,
@@ -1614,10 +1704,10 @@ export default function RollingMigrationFormDrawer({
         description: 'Map VMware resources to PCD',
         status:
           touchedSections.mapResources &&
-          sourceCluster &&
-          destinationPCD &&
           availableVmwareNetworks.every((n) => networkMappings.some((m) => m.source === n)) &&
-          availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+          (params.storageCopyMethod === 'StorageAcceleratedCopy'
+            ? availableVmwareDatastores.every((d) => arrayCredsMappings.some((m) => m.source === d))
+            : availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d)))
             ? 'complete'
             : step5HasErrors
               ? 'attention'
@@ -2948,7 +3038,9 @@ export default function RollingMigrationFormDrawer({
                       openstackStorage={openstackVolumeTypes}
                       params={{
                         networkMappings: networkMappings,
-                        storageMappings: storageMappings
+                        storageMappings: storageMappings,
+                        arrayCredsMappings: arrayCredsMappings,
+                        storageCopyMethod: params.storageCopyMethod as any
                       }}
                       onChange={handleMappingsChange}
                       networkMappingError={networkMappingError}
