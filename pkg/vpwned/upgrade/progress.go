@@ -22,18 +22,19 @@ type UpgradeProgress struct {
 	Result           string            `json:"result,omitempty"`  // "success" or "failure" for simpler server logic
 }
 
-// Progress status constants
+// Progress status constants - simplified for UI consumption
+// UI should only show these major states to users
 const (
-	StatusInProgress               = "in_progress"
-	StatusDeploying                = "deploying"
-	StatusCompleted                = "completed"
-	StatusFailed                   = "failed"
-	StatusRollingBack              = "rolling_back"
-	StatusRolledBack               = "rolled_back"
-	StatusRollbackFailed           = "rollback_failed"
-	StatusDeploymentsReadyUnstable = "deployments_ready_but_unstable"
-	StatusUnknown                  = "unknown"
-	StatusVerifyingStability       = "verifying_stability"
+	StatusPending            = "pending"             // Server created job, waiting for pod to start
+	StatusInProgress         = "in_progress"         // Job is actively running upgrade
+	StatusDeploying          = "deploying"           // Applying manifests and updating deployments
+	StatusVerifyingStability = "verifying_stability" // Waiting for deployments to be ready
+	StatusCompleted          = "completed"           // Upgrade finished successfully
+	StatusFailed             = "failed"              // Upgrade failed (may need rollback)
+	StatusRollingBack        = "rolling_back"        // Rollback in progress
+	StatusRolledBack         = "rolled_back"         // Rollback completed
+	StatusRollbackFailed     = "rollback_failed"     // Rollback failed
+	StatusUnknown            = "unknown"             // State cannot be determined
 )
 
 // TotalUpgradeSteps is the accurate count of upgrade phases:

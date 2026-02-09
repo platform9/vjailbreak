@@ -278,11 +278,12 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	}
 
 	// Initialize progress in ConfigMap before creating job
+	// Use status=pending so job's idempotency check doesn't abort
 	progress := &UpgradeProgress{
 		CurrentStep:     "Creating upgrade job",
 		TotalSteps:      upgrade.TotalUpgradeSteps,
 		CompletedSteps:  0,
-		Status:          upgrade.StatusInProgress,
+		Status:          "pending",
 		StartTime:       time.Now(),
 		PreviousVersion: currentVersion,
 		TargetVersion:   in.TargetVersion,
@@ -330,7 +331,7 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 		return fmt.Errorf("failed to get current vpwned image: %w", err)
 	}
 
-	backoffLimit := int32(1)             // Allow 1 retry for transient failures
+	backoffLimit := int32(0)             // No retries - prevents duplicate pod execution
 	ttlSeconds := int32(86400)           // 24 hours
 	activeDeadlineSeconds := int64(3600) // 1 hour max runtime to prevent zombie upgrades
 
@@ -449,7 +450,7 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 		return fmt.Errorf("failed to get current vpwned image: %w", err)
 	}
 
-	backoffLimit := int32(1)             // Allow 1 retry for transient failures
+	backoffLimit := int32(0)             // No retries - prevents duplicate pod execution
 	ttlSeconds := int32(86400)           // 24 hours
 	activeDeadlineSeconds := int64(3600) // 1 hour max runtime to prevent zombie rollbacks
 

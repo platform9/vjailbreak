@@ -26,6 +26,30 @@ import {
   initiateUpgrade
 } from 'src/api/version'
 
+const getUIStatusMessage = (status: string | undefined): string => {
+  switch (status) {
+    case 'pending':
+      return 'Pending'
+    case 'in_progress':
+    case 'deploying':
+      return 'Upgrading'
+    case 'verifying_stability':
+      return 'Waiting for services to be ready'
+    case 'rolling_back':
+      return 'Rolling back'
+    case 'completed':
+      return 'Upgrade completed'
+    case 'rolled_back':
+      return 'Rolled back'
+    case 'failed':
+      return 'Upgrade failed'
+    case 'rollback_failed':
+      return 'Rollback failed'
+    default:
+      return 'Processing...'
+  }
+}
+
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('')
   const [checkResults, setCheckResults] = useState<ValidationResult | null>(null)
@@ -235,9 +259,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
               <CircularProgress size={32} />
               <Typography variant="body2" mt={2}>
-                {progressData?.currentStep.startsWith('Waiting')
-                  ? 'Waiting for deployments to be ready'
-                  : progressData?.currentStep || 'Upgrading'}
+                {getUIStatusMessage(progressData?.status)}
               </Typography>
             </Box>
           )}

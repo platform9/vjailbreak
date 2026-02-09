@@ -122,15 +122,21 @@ func (e *UpgradeExecutor) Execute(ctx context.Context, targetVersion string, aut
 	log.Printf("Upgrade job started for target version: %s", targetVersion)
 
 	// Check for existing progress (idempotency - handle job restart/crash)
+	// Note: status=pending is set by server before job starts - that's fine
+	// Only abort if we see an ACTIVE upgrade state (in_progress, deploying, etc.)
 	existingProgress, err := e.loadProgress(ctx)
 	if err == nil && existingProgress != nil {
-		if existingProgress.Status == StatusInProgress || existingProgress.Status == StatusDeploying || existingProgress.Status == StatusVerifyingStability {
+		switch existingProgress.Status {
+		case StatusInProgress, StatusDeploying, StatusVerifyingStability, StatusRollingBack:
 			log.Printf("WARNING: Found existing upgrade in progress (status=%s, step=%s, target=%s)",
 				existingProgress.Status, existingProgress.CurrentStep, existingProgress.TargetVersion)
 			log.Printf("Job restart detected - aborting to prevent duplicate upgrade. Manual cleanup may be required.")
 			return fmt.Errorf("existing upgrade in progress detected - cannot start new upgrade (use rollback or manual cleanup)")
+		case StatusPending:
+			log.Printf("Found pending upgrade progress from server - proceeding with upgrade")
+		default:
+			log.Printf("Found previous upgrade progress (status=%s) - proceeding with new upgrade", existingProgress.Status)
 		}
-		log.Printf("Found completed/failed previous upgrade progress (status=%s) - proceeding with new upgrade", existingProgress.Status)
 	}
 
 	currentVersion, err := GetCurrentVersion(ctx, e.clientset)
@@ -399,7 +405,8 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 	log.Println("Post-upgrade stability checks failed; keeping backups for investigation.")
 	e.recordPhaseTiming("deployment_phase", time.Since(phaseStart))
 	e.setEndTime(time.Now())
-	e.updateProgress("Deployments reported not stable; backups retained", StatusDeploymentsReadyUnstable, "")
+	e.setResult("failure")
+	e.updateProgress("Deployments not stable after upgrade", StatusFailed, "Deployments are unstable; backups retained for investigation")
 	e.saveProgress(ctx)
 	return fmt.Errorf("upgrade completed but deployments are unstable")
 }
