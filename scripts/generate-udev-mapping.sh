@@ -487,7 +487,7 @@ process_ifquery_infrastructure() {
             echo ""
             echo "auto vjb$ID_INDEX"
             echo "allow-hotplug vjb$ID_INDEX"
-            echo "iface vjb$ID_INDEX inet manual"
+            echo "iface vjb$ID_INDEX inet dhcp"
             echo ""
             } >> "$DEBIAN_IF_DIR"
             ID_INDEX=$((ID_INDEX + 1))
