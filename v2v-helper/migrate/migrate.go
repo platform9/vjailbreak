@@ -583,14 +583,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get migration params: %v, continuing with migration", err))
 	} else {
-		if migobj.MigrationType == "mock"{
+		if migobj.MigrationType == "mock" {
 
-		if migrationParams.AcknowledgeNetworkConflictRisk {
-			migobj.logMessage("User acknowledged the risk involved")
-		}else{
-			migobj.logMessage("User did not acknowledge the risk involved")
+			if migrationParams.AcknowledgeNetworkConflictRisk {
+				migobj.logMessage("User acknowledged the risk involved")
+			} else {
+				migobj.logMessage("User did not acknowledge the risk involved")
+			}
 		}
-	}
 	}
 
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
@@ -1899,7 +1899,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			for _, fixedIP := range port.FixedIPs {
 				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
 			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			for _, fixedIP := range port.FixedIPs {
