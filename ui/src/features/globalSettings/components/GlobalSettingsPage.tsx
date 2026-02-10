@@ -269,8 +269,8 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
   },
   {
     key: 'POPULATE_VMWARE_MACHINE_FLAVORS',
-    label: 'Populate VMware Machine Flavors',
-    description: 'Sync VMware flavor data to pre-fill CPU, memory, and disk sizing hints.'
+    label: 'Pre-calculate Target VM Flavors',
+    description: 'Pre-calculate Target VM Flavor instead of runtime (resource intensive operation).'
   },
   {
     key: 'VALIDATE_RDM_OWNER_VMS',
