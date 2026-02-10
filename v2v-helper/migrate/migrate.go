@@ -1102,7 +1102,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
-	if migobj.Ostype == constants.OSFamilyWindows {
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
 		}

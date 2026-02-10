@@ -933,9 +933,9 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 	var scriptDir string = "/home/fedora/firstboot"
 	if _, err := os.Stat(scriptDir); os.IsNotExist(err) {
 		log.Printf("Creating directory %s", scriptDir)
-		command := "mkdir"
-		_, err = RunCommandInGuestAllVolumes(disks, command, true, scriptDir)
-		if err != nil {
+
+		cpCmd := exec.Command("mkdir", scriptDir)
+		if err := cpCmd.Run(); err != nil {
 			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
 		}
 	}

@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 :: ────────────────────────────────────────────────
 ::  Configuration
 :: ────────────────────────────────────────────────
-set "PS_SCRIPT=C:\firstboot\Firstboot-Scheduler.ps1"
+set "PS_SCRIPT=C:\firstboot\0-Firstboot-Scheduler.ps1"
 set "LOGDIR=C:\firstboot"
 set "LOGFILE=%LOGDIR%\Firstboot-Scheduler_%DATE:~-4%%DATE:~3,2%%DATE:~0,2%_%TIME:~0,2%%TIME:~3,2%.log"
 
