@@ -42,6 +42,9 @@ type VirtV2VOperations interface {
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
 }
+type FirstBootWindows struct {
+	Script string
+}
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
 func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
@@ -915,6 +918,47 @@ func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath str
 	} else {
 		command := "copy-in"
 		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
+	}
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
+		return err
+	}
+	return nil
+}
+
+func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, diskPath string, firstbootwinscripts []FirstBootWindows) error {
+	log.Println("Collecting Firstboot Scripts to Inject")
+	var ans string
+	var err error
+	var scriptDir string = "/home/fedora/firstboot"
+	if _, err := os.Stat(scriptDir); os.IsNotExist(err) {
+		log.Printf("Creating directory %s", scriptDir)
+		command := "mkdir"
+		_, err = RunCommandInGuestAllVolumes(disks, command, true, scriptDir)
+		if err != nil {
+			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
+		}
+	}
+	for idx, script := range firstbootwinscripts {
+		log.Printf("Injecting Firstboot Script: %s", script.Script)
+
+		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
+		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
+
+		cpCmd := exec.Command("cp", srcPath, dstPath)
+		if err := cpCmd.Run(); err != nil {
+			return fmt.Errorf("failed to copy firstboot script %s: %v", script.Script, err)
+		}
+	}
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	if useSingleDisk {
+		command := `copy-in /home/fedora/firstboot /`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "copy-in"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/firstboot", "/")
 	}
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
