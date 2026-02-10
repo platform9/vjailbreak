@@ -142,6 +142,7 @@ process_ifcfg_infrastructure() {
             continue
         fi
 
+        display_msg "[process_ifcfg_infrastructure] Generating udev rule: MAC=$FOUND_MAC -> Interface=$IF_NAME"
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
     done
 }
@@ -179,6 +180,7 @@ process_network_manager_files() {
             continue
         fi
 
+        display_msg "[process_network_manager_files] Generating udev rule: MAC=$FOUND_MAC -> Interface=$IF_NAME"
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
     done
 }
@@ -253,6 +255,7 @@ process_nm_leases() {
             continue
         fi
 
+        display_msg "[process_nm_leases] Generating udev rule: MAC=$FOUND_MAC -> Interface=$IF_NAME"
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
     done < "$NET_MAPPING_DATA"
 }
@@ -323,6 +326,7 @@ process_dhclient_history() {
             continue
         fi
 
+        display_msg "[process_dhclient_history] Generating udev rule: MAC=$FOUND_MAC -> Interface=$FINAL_IF"
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$FINAL_IF")\""
     done < "$NET_MAPPING_DATA"
 }
@@ -409,6 +413,7 @@ process_netplan_logic() {
             continue
         fi
 
+        display_msg "[process_netplan_logic] Generating udev rule: MAC=$FOUND_MAC -> Interface=$IF_NAME"
         echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
     done < "$NET_MAPPING_DATA"
 
@@ -482,6 +487,7 @@ process_ifquery_infrastructure() {
         fi
         
         if [[ -z "$FOUND_IP" ]]; then
+            display_msg "[process_ifquery_infrastructure] Generating udev rule: MAC=$FOUND_MAC -> Interface=vjb$ID_INDEX (no IP found)"
             echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "vjb$ID_INDEX")\""
             {
             echo ""
@@ -497,6 +503,7 @@ process_ifquery_infrastructure() {
         local IF_NAME=$(find_if_matching_ip "$FOUND_IP")
 
         if [[ -n "$IF_NAME" ]]; then
+             display_msg "[process_ifquery_infrastructure] Generating udev rule: MAC=$FOUND_MAC -> Interface=$IF_NAME"
              echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
         fi
     done
