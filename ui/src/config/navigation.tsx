@@ -2,31 +2,52 @@ import { NavigationItem } from '../types/navigation'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import AgentsIcon from '@mui/icons-material/Computer'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
-import ClusterIcon from '@mui/icons-material/Hub'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Insights'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
-import SdStorageIcon from '@mui/icons-material/SdStorage'
 
 export const navigationItems: NavigationItem[] = [
   {
-    id: 'migrations',
-    label: 'Migrations',
+    id: 'migration',
+    label: 'Migration',
     path: '/dashboard/migrations',
-    icon: <MigrationIcon />
+    icon: <MigrationIcon />,
+    children: [
+      {
+        id: 'migrations',
+        label: 'Migration',
+        path: '/dashboard/migrations'
+      },
+      {
+        id: 'cluster-conversions',
+        label: 'Cluster Conversion',
+        path: '/dashboard/cluster-conversions'
+      }
+    ]
   },
   {
-    id: 'cluster-conversions',
-    label: 'Cluster Conversions',
-    path: '/dashboard/cluster-conversions',
-    icon: <ClusterIcon />
-  },
-  {
-    id: 'credentials',
+    id: 'credentials-group',
     label: 'Credentials',
     path: '/dashboard/credentials',
-    icon: <CredentialsIcon />
+    icon: <CredentialsIcon />,
+    children: [
+      {
+        id: 'vm-credentials',
+        label: 'VM Credentials',
+        path: '/dashboard/credentials?type=vmware'
+      },
+      {
+        id: 'pcd-credentials',
+        label: 'PCD Credentials',
+        path: '/dashboard/credentials?type=pcd'
+      },
+      {
+        id: 'array-credentials',
+        label: 'Array Credentials',
+        path: '/dashboard/storage-management'
+      }
+    ]
   },
   {
     id: 'agents',
@@ -35,27 +56,23 @@ export const navigationItems: NavigationItem[] = [
     icon: <AgentsIcon />
   },
   {
-    id: 'storage-management',
-    label: 'Storage Management',
-    path: '/dashboard/storage-management',
-    icon: <SdStorageIcon />,
-    badge: {
-      label: 'Beta',
-      color: 'warning',
-      variant: 'outlined'
-    }
-  },
-  {
-    id: 'baremetal-config',
-    label: 'Bare Metal Config',
-    path: '/dashboard/baremetal-config',
-    icon: <Storage />
-  },
-  {
-    id: 'global-settings',
-    label: 'Global Settings',
+    id: 'settings',
+    label: 'Settings',
     path: '/dashboard/global-settings',
-    icon: <ConfigIcon />
+    icon: <ConfigIcon />,
+    children: [
+      {
+        id: 'baremetal-config',
+        label: 'Bare Metal Config',
+        path: '/dashboard/baremetal-config',
+        icon: <Storage />
+      },
+      {
+        id: 'global-settings',
+        label: 'Global Settings',
+        path: '/dashboard/global-settings'
+      }
+    ]
   },
   {
     id: 'monitoring',
@@ -74,10 +91,24 @@ export const navigationItems: NavigationItem[] = [
   }
 ]
 
+const findNavigationItem = (
+  items: NavigationItem[],
+  predicate: (item: NavigationItem) => boolean
+): NavigationItem | undefined => {
+  for (const item of items) {
+    if (predicate(item)) return item
+    if (item.children?.length) {
+      const found = findNavigationItem(item.children, predicate)
+      if (found) return found
+    }
+  }
+  return undefined
+}
+
 export const getNavigationItemById = (id: string): NavigationItem | undefined => {
-  return navigationItems.find((item) => item.id === id)
+  return findNavigationItem(navigationItems, (item) => item.id === id)
 }
 
 export const getNavigationItemByPath = (path: string): NavigationItem | undefined => {
-  return navigationItems.find((item) => item.path === path)
+  return findNavigationItem(navigationItems, (item) => item.path === path)
 }
