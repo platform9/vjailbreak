@@ -13,8 +13,8 @@ ENV RELEASE_VERSION=$RELEASE_VERSION
 # - golang: Required for building the application (Go 1.25.6 from Fedora 43)
 # - libnbd-devel: Development files for NBD (Network Block Device) support
 RUN dnf install -y \
-    'golang-1.25.6-1.fc43' \
-    'libnbd-devel-1.24.0-1.fc43'
+    golang \
+    libnbd-devel
 
 # Set up build workspace
 WORKDIR /workspace
