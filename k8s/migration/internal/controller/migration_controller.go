@@ -166,6 +166,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.Update(ctx, migration); err != nil {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	oldCutoverLabel := pod.Labels["startCutover"]
