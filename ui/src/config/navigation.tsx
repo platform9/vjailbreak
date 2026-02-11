@@ -34,13 +34,13 @@ export const navigationItems: NavigationItem[] = [
     children: [
       {
         id: 'vm-credentials',
-        label: 'VM Credentials',
-        path: '/dashboard/credentials?type=vmware'
+        label: 'VMware Credentials',
+        path: '/dashboard/credentials/vm'
       },
       {
         id: 'pcd-credentials',
         label: 'PCD Credentials',
-        path: '/dashboard/credentials?type=pcd'
+        path: '/dashboard/credentials/pcd'
       },
       {
         id: 'array-credentials',

@@ -102,7 +102,7 @@ const BrandContainer = styled(Box, {
   alignItems: 'center',
   justifyContent: collapsed ? 'center' : 'flex-start',
   width: '100%',
-  paddingLeft: collapsed ? 0 : theme.spacing(2),
+  paddingLeft: collapsed ? 0 : theme.spacing(1),
   transition: theme.transitions.create(['justify-content', 'padding-left'], {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.enteringScreen

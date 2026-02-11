@@ -10,7 +10,7 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material'
-import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -18,7 +18,7 @@ import ClusterIcon from '@mui/icons-material/Hub'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { QueryObserverResult } from '@tanstack/react-query'
 import { RefetchOptions } from '@tanstack/react-query'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { ReactElement } from 'react'
 import WarningIcon from '@mui/icons-material/Warning'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -35,6 +35,7 @@ import { RollingMigrationPlan } from 'src/api/rolling-migration-plans/model'
 import { getESXHosts } from 'src/api/esximigrations/helper'
 import MigrationsTable from 'src/features/migration/components/MigrationsTable'
 import { calculateTimeElapsed } from 'src/utils'
+import { useMigrationFormActions } from 'src/features/migration/context/MigrationFormContext'
 
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
 
@@ -329,53 +330,61 @@ interface CustomToolbarProps {
   ) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>
   selectedCount: number
   onDeleteSelected: () => void
+  onStartConversion: () => void
 }
 
 const CustomToolbar = ({
   refetchClusterMigrations,
   selectedCount,
-  onDeleteSelected
+  onDeleteSelected,
+  onStartConversion
 }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {selectedCount > 0 && (
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={onDeleteSelected}
+          size="small"
+        >
+          Delete Selected
+        </Button>
+      )}
+      <CustomSearchToolbar
+        placeholder="Search by Cluster Name, Status, or ESXi Host"
+        onRefresh={refetchClusterMigrations}
+      />
+    </Box>
+  )
+
+  const actions = (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<ClusterIcon />}
+      onClick={onStartConversion}
+      sx={{ height: 40 }}
     >
-      <div>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ClusterIcon />
-          <Typography variant="h6" component="h2">
-            Cluster Conversions
-          </Typography>
-        </Box>
-        {selectedCount > 0 && (
-          <Typography variant="body2" color="text.secondary">
+      Start Cluster Conversion
+    </Button>
+  )
+
+  return (
+    <ListingToolbar
+      title="Cluster Conversions"
+      icon={<ClusterIcon />}
+      subtitle={
+        selectedCount > 0 ? (
+          <span>
             {selectedCount} {selectedCount === 1 ? 'row' : 'rows'} selected
-          </Typography>
-        )}
-      </div>
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        {selectedCount > 0 && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            size="small"
-          >
-            Delete Selected
-          </Button>
-        )}
-        <CustomSearchToolbar
-          placeholder="Search by Cluster Name, Status, or ESXi Host"
-          onRefresh={refetchClusterMigrations}
-        />
-      </Box>
-    </GridToolbarContainer>
+          </span>
+        ) : null
+      }
+      search={search}
+      actions={actions}
+    />
   )
 }
 
@@ -400,6 +409,7 @@ export default function RollingMigrationsTable({
   refetchESXIMigrations,
   refetchMigrations
 }: RollingMigrationsTableProps) {
+  const { openMigrationForm } = useMigrationFormActions()
   const queryClient = useQueryClient()
   const [selectedPlan, setSelectedPlan] = useState<RollingMigrationPlan | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -670,6 +680,7 @@ export default function RollingMigrationsTable({
               refetchClusterMigrations={refetchRollingMigrationPlans}
               selectedCount={selectedRows.length}
               onDeleteSelected={handleDeleteSelected}
+              onStartConversion={() => openMigrationForm('rolling')}
             />
           )
         }}
