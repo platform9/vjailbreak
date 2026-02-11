@@ -32,7 +32,7 @@ func init() {
 	rootCmd.AddCommand(upgradeJobCmd)
 
 	upgradeJobCmd.Flags().StringVar(&targetVersion, "target-version", "", "Target version to upgrade to")
-	upgradeJobCmd.Flags().BoolVar(&autoCleanup, "auto-cleanup", false, "Automatically cleanup resources if pre-checks fail")
+	upgradeJobCmd.Flags().BoolVar(&autoCleanup, "auto-cleanup", true, "Automatically cleanup resources if pre-checks fail")
 	upgradeJobCmd.Flags().StringVar(&jobMode, "mode", "upgrade", "Job mode: 'upgrade' or 'rollback'")
 	upgradeJobCmd.Flags().StringVar(&prevVersion, "previous-version", "", "Previous version for rollback (required for rollback mode)")
 }
@@ -47,6 +47,8 @@ func runUpgradeJob() {
 	}
 	if os.Getenv("UPGRADE_AUTO_CLEANUP") == "true" {
 		autoCleanup = true
+	} else if os.Getenv("UPGRADE_AUTO_CLEANUP") == "false" {
+		autoCleanup = false
 	}
 	if os.Getenv("UPGRADE_MODE") != "" {
 		jobMode = os.Getenv("UPGRADE_MODE")

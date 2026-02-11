@@ -99,13 +99,27 @@ func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, er
 	}
 	var tagNames []string
 	for _, tag := range tags {
-		tagName := normalizeSemver(tag.GetName())
-		if semver.IsValid(tagName) {
-			tagNames = append(tagNames, tagName)
-		}
+		tagName := tag.GetName()
+		tagNames = append(tagNames, tagName)
 	}
+	// Sort: semver tags first (sorted by semver), then non-semver tags (sorted alphabetically)
 	sort.Slice(tagNames, func(i, j int) bool {
-		return semver.Compare(tagNames[i], tagNames[j]) < 0
+		normalizedI := normalizeSemver(tagNames[i])
+		normalizedJ := normalizeSemver(tagNames[j])
+		isSemverI := semver.IsValid(normalizedI)
+		isSemverJ := semver.IsValid(normalizedJ)
+
+		if isSemverI && isSemverJ {
+			return semver.Compare(normalizedI, normalizedJ) < 0
+		}
+		if isSemverI && !isSemverJ {
+			return true // semver tags come first
+		}
+		if !isSemverI && isSemverJ {
+			return false
+		}
+		// Both non-semver: alphabetical
+		return tagNames[i] < tagNames[j]
 	})
 	return tagNames, nil
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 
-import { UpgradeResponse, ValidationResult, UpgradeProgressResponse } from 'src/api/version/model'
+import { UpgradeResponse, UpgradeProgressResponse } from 'src/api/version/model'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import Tooltip from '@mui/material/Tooltip'
@@ -14,47 +14,50 @@ import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import CancelIcon from '@mui/icons-material/Cancel'
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import { useTheme } from '@mui/material/styles'
 import React from 'react'
 import { ActionButton } from 'src/components'
 import {
-  cleanupStepApiCall,
+  cleanupApiCall,
   getAvailableTags,
   getUpgradeProgress,
   initiateUpgrade
 } from 'src/api/version'
 
+// Map backend status to clean UI messages
+const getUIStatusMessage = (status: string | undefined): string => {
+  switch (status) {
+    case 'pending':
+      return 'Pending'
+    case 'in_progress':
+    case 'deploying':
+      return 'Upgrading'
+    case 'verifying_stability':
+      return 'Waiting for services to be ready'
+    case 'rolling_back':
+      return 'Rolling back'
+    case 'completed':
+      return 'Upgrade completed'
+    case 'rolled_back':
+      return 'Rolled back'
+    case 'failed':
+      return 'Upgrade failed'
+    case 'rollback_failed':
+      return 'Rollback failed'
+    default:
+      return 'Processing...'
+  }
+}
+
 export const UpgradeModal = ({ show, onClose }) => {
   const [selectedVersion, setSelectedVersion] = useState('')
-  const [checkResults, setCheckResults] = useState<ValidationResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [upgradeInProgress, setUpgradeInProgress] = useState(false)
-  const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null)
   const [cleanUpInProgress, setCleanUpInProgress] = useState(false)
+  const [cleanupCompleted, setCleanupCompleted] = useState(false)
+  const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null)
   const theme = useTheme()
-
-  const stepKeys = [
-    'no_migrationplans',
-    'no_rollingmigrationplans',
-    'agent_scaled_down',
-    'vmware_creds_deleted',
-    'openstack_creds_deleted',
-    'no_custom_resources'
-  ]
-  const stepLabels = [
-    'Delete MigrationPlans',
-    'Delete RollingMigrationPlans',
-    'Scale down Agents',
-    'Delete VMware credentials',
-    'Delete PCD credentials',
-    'Delete Custom Resources'
-  ]
-  const [stepStates, setStepStates] = useState(
-    stepLabels.map((label) => ({ label, state: 'pending' }))
-  )
 
   const { data: updates, isLoading: areVersionsLoading } = useQuery({
     queryKey: ['availableTags'],
@@ -62,17 +65,43 @@ export const UpgradeModal = ({ show, onClose }) => {
     enabled: show
   })
 
+  // Dedicated cleanup API call - POST /cleanup
+  const cleanupMutation = useMutation({
+    mutationFn: cleanupApiCall,
+    onSuccess: (data) => {
+      setCleanUpInProgress(false)
+      if (data.success) {
+        setCleanupCompleted(true)
+        setSuccessMsg('Cleanup completed successfully')
+        setErrorMsg('')
+      } else {
+        setErrorMsg(data.message || 'Cleanup failed')
+        setSuccessMsg('')
+      }
+    },
+    onError: (error: Error) => {
+      setCleanUpInProgress(false)
+      setErrorMsg(`Cleanup failed: ${error.message}`)
+      setSuccessMsg('')
+    }
+  })
+
+  const handleCleanup = () => {
+    setCleanUpInProgress(true)
+    setErrorMsg('')
+    setSuccessMsg('')
+    cleanupMutation.mutate()
+  }
+
+  // Upgrade with autoCleanup=true - job handles cleanup if not already done
   const upgradeMutation = useMutation<UpgradeResponse, Error, void>({
-    mutationFn: () => initiateUpgrade(selectedVersion, false),
+    mutationFn: () => initiateUpgrade(selectedVersion, true),
     onSuccess: (data) => {
       if (data.upgradeStarted) {
         setUpgradeInProgress(true)
         setErrorMsg('')
-        setCheckResults(null)
       } else {
-        setCheckResults(data.checks)
-        setErrorMsg('Pre-upgrade checks failed. Please resolve the issues below.')
-        setSuccessMsg('')
+        setErrorMsg('Failed to start upgrade. Please try again.')
       }
     },
     onError: (error) => {
@@ -81,6 +110,7 @@ export const UpgradeModal = ({ show, onClose }) => {
     }
   })
 
+  // Poll upgrade progress
   useEffect(() => {
     if (!upgradeInProgress) return
 
@@ -89,10 +119,12 @@ export const UpgradeModal = ({ show, onClose }) => {
         const progress = await getUpgradeProgress()
         setProgressData(progress)
 
-        if (progress.status === 'deploying') {
+        // Clear messages during active upgrade
+        if (progress.status === 'deploying' || progress.status === 'in_progress' || progress.status === 'verifying_stability') {
           setSuccessMsg('')
           setErrorMsg('')
-        } else if (progress.status === 'server_restarting') {
+        } else if (progress.status === 'completed') {
+          // Upgrade completed successfully
           setUpgradeInProgress(false)
           setSuccessMsg('Upgrade completed successfully')
           clearInterval(interval)
@@ -102,14 +134,14 @@ export const UpgradeModal = ({ show, onClose }) => {
             sessionStorage.setItem('upgradedVersion', selectedVersion)
             onClose()
             window.location.href = '/dashboard/migrations'
-          }, 5000)
+          }, 3000)
         } else if (
           progress.status === 'failed' ||
           progress.status === 'rolled_back' ||
           progress.status === 'rollback_failed'
         ) {
           setUpgradeInProgress(false)
-          setErrorMsg('Upgrade failed: Rolling back')
+          setErrorMsg(progress.status === 'rolled_back' ? 'Upgrade failed: Rolled back to previous version' : 'Upgrade failed')
           clearInterval(interval)
 
           setTimeout(() => {
@@ -126,48 +158,11 @@ export const UpgradeModal = ({ show, onClose }) => {
     return () => clearInterval(interval)
   }, [upgradeInProgress, onClose, selectedVersion])
 
-  const runStepwiseCleanup = async () => {
-    setCleanUpInProgress(true)
-    setErrorMsg('')
-    let newStates = stepLabels.map((label) => ({ label, state: 'pending' }))
-    setStepStates(newStates)
-
-    for (let i = 0; i < stepKeys.length; i++) {
-      newStates[i].state = 'in_progress'
-      setStepStates([...newStates])
-
-      try {
-        const res = await cleanupStepApiCall(stepKeys[i])
-        newStates[i].state = res.success ? 'success' : 'error'
-      } catch (e) {
-        newStates[i].state = 'error'
-      }
-      setStepStates([...newStates])
-      if (newStates[i].state === 'error') break
-    }
-    setCleanUpInProgress(false)
-  }
-
-  const allChecksPassed = checkResults
-    ? Object.values(checkResults).every(Boolean)
-    : stepStates.every((step) => step.state === 'success')
-
   if (!show) return null
-
-  const checkList = checkResults
-    ? [
-        { label: 'No MigrationPlans', value: checkResults.noMigrationPlans },
-        { label: 'No RollingMigrationPlans', value: checkResults.noRollingMigrationPlans },
-        { label: 'VMware credentials deleted', value: checkResults.vmwareCredsDeleted },
-        { label: 'PCD credentials deleted', value: checkResults.openstackCredsDeleted },
-        { label: 'Agent scaled down', value: checkResults.agentsScaledDown },
-        { label: 'No Custom Resources (CRs) deleted', value: checkResults.noCustomResources }
-      ]
-    : []
 
   return (
     <React.Fragment>
-      <Dialog open={show} onClose={upgradeInProgress ? undefined : onClose} maxWidth="xs" fullWidth>
+      <Dialog open={show} onClose={upgradeInProgress || cleanUpInProgress ? undefined : onClose} maxWidth="xs" fullWidth>
         <DialogTitle>Upgrade vJailbreak</DialogTitle>
         <DialogContent>
           <Box mb={2}>
@@ -175,7 +170,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               fullWidth
               value={selectedVersion}
               onChange={(e) => setSelectedVersion(e.target.value)}
-              disabled={areVersionsLoading || upgradeMutation.isPending}
+              disabled={areVersionsLoading || upgradeMutation.isPending || upgradeInProgress || cleanUpInProgress}
               displayEmpty
               size="small"
             >
@@ -190,6 +185,8 @@ export const UpgradeModal = ({ show, onClose }) => {
                 ))}
             </Select>
           </Box>
+
+          {/* Pre-upgrade checklist info */}
           <Box
             mb={2}
             p={2}
@@ -204,40 +201,40 @@ export const UpgradeModal = ({ show, onClose }) => {
               Pre-Upgrade Checklist
             </Typography>
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
-              The following needs to be cleaned up before upgrading:
+              The following will be cleaned up before upgrading:
             </Typography>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: 20,
-                color: theme.palette.text.primary,
-                fontWeight: 500,
-                fontSize: '1rem'
-              }}
-            >
-              {stepStates.map((item) => (
-                <li
-                  key={item.label}
-                  style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}
-                >
-                  {item.state === 'in_progress' && <CircularProgress size={16} sx={{ mr: 1 }} />}
-                  {item.state === 'success' && <CheckCircleIcon color="success" sx={{ mr: 1 }} />}
-                  {item.state === 'error' && <CancelIcon color="error" sx={{ mr: 1 }} />}
-                  {item.state === 'pending' && (
-                    <RadioButtonUncheckedIcon color="disabled" sx={{ mr: 1 }} />
-                  )}
-                  {item.label}
-                </li>
-              ))}
+            <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+              <li>Delete MigrationPlans</li>
+              <li>Delete RollingMigrationPlans</li>
+              <li>Scale down Agents</li>
+              <li>Delete VMware credentials</li>
+              <li>Delete PCD credentials</li>
+              <li>Delete Custom Resources</li>
             </ul>
+            {cleanupCompleted && (
+              <Box display="flex" alignItems="center" mt={1}>
+                <CheckCircleIcon color="success" sx={{ mr: 1, fontSize: 18 }} />
+                <Typography variant="body2" color="success.main">Cleanup completed</Typography>
+              </Box>
+            )}
           </Box>
+
+          {/* Cleanup in progress */}
+          {cleanUpInProgress && (
+            <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
+              <CircularProgress size={32} />
+              <Typography variant="body2" mt={2}>
+                Cleaning up resources...
+              </Typography>
+            </Box>
+          )}
+
+          {/* Upgrade progress */}
           {upgradeInProgress && (
             <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
               <CircularProgress size={32} />
               <Typography variant="body2" mt={2}>
-                {progressData?.currentStep.startsWith('Waiting')
-                  ? 'Waiting for deployments to be ready'
-                  : progressData?.currentStep || 'Upgrading'}
+                {getUIStatusMessage(progressData?.status)}
               </Typography>
             </Box>
           )}
@@ -279,37 +276,6 @@ export const UpgradeModal = ({ show, onClose }) => {
               <CircularProgress size={24} />
             </Box>
           )}
-          {checkResults && (
-            <Box
-              mb={2}
-              p={2}
-              sx={{ background: theme.palette.background.default, borderRadius: 1 }}
-            >
-              <Typography variant="subtitle2" color="primary" fontWeight={600} gutterBottom>
-                Pre-flight Check Results
-              </Typography>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {checkList.map((item) => (
-                  <li
-                    key={item.label}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: item.value ? theme.palette.success.main : theme.palette.error.main,
-                      marginBottom: 2
-                    }}
-                  >
-                    {item.value ? (
-                      <CheckCircleIcon fontSize="small" color="success" sx={{ mr: 1 }} />
-                    ) : (
-                      <CancelIcon fontSize="small" color="error" sx={{ mr: 1 }} />
-                    )}{' '}
-                    {item.label}
-                  </li>
-                ))}
-              </ul>
-            </Box>
-          )}
         </DialogContent>
         <DialogActions sx={{ gap: 1, p: 2 }}>
           <ActionButton
@@ -319,8 +285,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               upgradeInProgress ||
               cleanUpInProgress ||
               areVersionsLoading ||
-              upgradeMutation.isPending ||
-              !allChecksPassed
+              upgradeMutation.isPending
             }
             tone="primary"
             fullWidth
@@ -330,14 +295,14 @@ export const UpgradeModal = ({ show, onClose }) => {
           <Tooltip
             title={
               <Typography sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                This will clean up the items listed above
+                This will clean up all resources listed above
               </Typography>
             }
             arrow
           >
             <span style={{ width: '100%' }}>
               <ActionButton
-                onClick={runStepwiseCleanup}
+                onClick={handleCleanup}
                 tone="primary"
                 fullWidth
                 disabled={upgradeInProgress || cleanUpInProgress}
