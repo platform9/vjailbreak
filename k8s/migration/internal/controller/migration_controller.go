@@ -44,7 +44,7 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
+	migrationmetrics "github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 )
@@ -223,7 +223,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		(oldStatus.Phase == "" || oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhasePending)
 
 	if isNewMigration && oldStatus.Phase == "" {
-		metrics.RecordMigrationStarted(
+		migrationmetrics.RecordMigrationStarted(
 			migration.Name,
 			migration.Spec.VMName,
 			migration.Namespace,
@@ -234,7 +234,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Update phase metrics on every reconcile for active migrations
 	if migration.Status.Phase != "" {
-		metrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
+		migrationmetrics.UpdateMigrationPhase(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
 	}
 
 	// Update duration for active migrations
@@ -242,7 +242,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseFailed &&
 		migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseValidationFailed &&
 		migration.Status.Phase != "" {
-		metrics.RecordMigrationProgress(migration.Name, migration.Spec.VMName, migration.Namespace, migration.CreationTimestamp.Time)
+		migrationmetrics.RecordMigrationProgress(migration.Name, migration.Spec.VMName, migration.Namespace, migration.CreationTimestamp.Time)
 	}
 
 	// Record completion when transitioning to a terminal state from a non-terminal state
@@ -252,7 +252,7 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		oldStatus.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed
 
 	if isNowTerminal && !wasTerminal {
-		metrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
+		migrationmetrics.RecordMigrationCompleted(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Status.AgentName, migration.Status.Phase)
 	}
 
 	if !reflect.DeepEqual(&migration.Status, oldStatus) {
@@ -282,7 +282,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	}
 
 	// Clean up metrics for this migration
-	metrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Spec.MigrationPlan, migration.Status.AgentName)
+	migrationmetrics.CleanupMigrationMetrics(migration.Name, migration.Spec.VMName, migration.Namespace, migration.Spec.MigrationPlan, migration.Status.AgentName)
 
 	vmwareCredsName, err := utils.GetVMwareCredsNameFromMigration(ctx, r.Client, migration)
 	if err != nil {
