@@ -110,6 +110,10 @@ export const fetchPodDebugLogs = async (
           result += content
           result += '\n'
           return result
+        } else {
+          console.warn(
+            `Failed to fetch ${displayName}: HTTP ${response.status}: ${response.statusText} (${path})`
+          )
         }
       } catch (error) {
         console.warn(`Failed to fetch ${displayName}:`, error)
@@ -135,18 +139,32 @@ export const fetchPodDebugLogs = async (
 
     // Process each item in the root directory
     for (const item of rootList) {
-      const itemName = item.name
+      if (!item || typeof item !== 'object') {
+        console.warn('Skipping unexpected debug-logs root item (not an object):', item)
+        continue
+      }
+
+      const maybeName = (item as { name?: unknown }).name
+      const maybeType = (item as { type?: unknown }).type
+
+      if (typeof maybeName !== 'string' || typeof maybeType !== 'string') {
+        console.warn('Skipping unexpected debug-logs root item (missing name/type):', item)
+        continue
+      }
+
+      const itemName = maybeName
+      const itemType = maybeType
       
       // Skip if migration name filter is set and doesn't match
       if (migrationName && !itemName.includes(migrationName)) {
         continue
       }
 
-      if (item.type === 'file' && itemName.endsWith('.log')) {
+      if (itemType === 'file' && itemName.endsWith('.log')) {
         // Fetch root-level log file (e.g., migration-{name}.log)
         const content = await fetchFile(`/debug-logs/${itemName}`, itemName)
         combinedLogs += content
-      } else if (item.type === 'directory' && itemName.startsWith('migration-')) {
+      } else if (itemType === 'directory' && itemName.startsWith('migration-')) {
         // Fetch logs from subdirectory (e.g., migration-{name}/migration.{timestamp}.log)
         try {
           const subDirUrl = `/debug-logs/${itemName}/`
@@ -157,15 +175,38 @@ export const fetchPodDebugLogs = async (
             
             if (Array.isArray(subDirList)) {
               for (const subItem of subDirList) {
-                if (subItem.type === 'file' && subItem.name.endsWith('.log')) {
+                if (!subItem || typeof subItem !== 'object') {
+                  console.warn(
+                    `Skipping unexpected debug-logs subdir item in ${itemName} (not an object):`,
+                    subItem
+                  )
+                  continue
+                }
+
+                const subMaybeName = (subItem as { name?: unknown }).name
+                const subMaybeType = (subItem as { type?: unknown }).type
+
+                if (typeof subMaybeName !== 'string' || typeof subMaybeType !== 'string') {
+                  console.warn(
+                    `Skipping unexpected debug-logs subdir item in ${itemName} (missing name/type):`,
+                    subItem
+                  )
+                  continue
+                }
+
+                if (subMaybeType === 'file' && subMaybeName.endsWith('.log')) {
                   const content = await fetchFile(
-                    `/debug-logs/${itemName}/${subItem.name}`,
-                    `${itemName}/${subItem.name}`
+                    `/debug-logs/${itemName}/${subMaybeName}`,
+                    `${itemName}/${subMaybeName}`
                   )
                   combinedLogs += content
                 }
               }
             }
+          } else {
+            console.warn(
+              `Failed to list debug logs in ${itemName}: HTTP ${subDirResponse.status}: ${subDirResponse.statusText}`
+            )
           }
         } catch (error) {
           console.warn(`Failed to fetch logs from subdirectory ${itemName}:`, error)
