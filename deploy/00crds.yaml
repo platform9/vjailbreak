@@ -732,6 +732,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -799,6 +804,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -945,6 +951,7 @@ spec:
                 enum:
                 - hot
                 - cold
+                - mock
                 type: string
               podRef:
                 description: PodRef is the name of the pod
@@ -1389,8 +1396,12 @@ spec:
                 type: string
               osDomainName:
                 type: string
+              osIdentityApiVersion:
+                type: string
               osInsecure:
                 type: boolean
+              osInterface:
+                type: string
               osPassword:
                 type: string
               osRegionName:
@@ -1935,6 +1946,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -2088,6 +2104,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
