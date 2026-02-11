@@ -118,7 +118,7 @@ func NewUpgradeExecutor() (*UpgradeExecutor, error) {
 }
 
 // Execute runs the upgrade process
-func (e *UpgradeExecutor) Execute(ctx context.Context, targetVersion string) error {
+func (e *UpgradeExecutor) Execute(ctx context.Context, targetVersion string, autoCleanup bool) error {
 	log.Printf("Upgrade job started for target version: %s", targetVersion)
 
 	// Check for existing progress (idempotency - handle job restart/crash)
@@ -160,8 +160,8 @@ func (e *UpgradeExecutor) Execute(ctx context.Context, targetVersion string) err
 
 	log.Printf("Starting upgrade from %s to %s", currentVersion, targetVersion)
 
-	// Phase 1: Pre-upgrade checks (cleanup must be done before initiating upgrade)
-	if err := e.runPreUpgradePhase(ctx, targetVersion); err != nil {
+	// Phase 1: Pre-upgrade checks (with optional auto-cleanup if pre-checks fail)
+	if err := e.runPreUpgradePhase(ctx, targetVersion, autoCleanup); err != nil {
 		return e.handleFailure(ctx, err, "Pre-upgrade phase failed")
 	}
 
@@ -185,29 +185,51 @@ func (e *UpgradeExecutor) Execute(ctx context.Context, targetVersion string) err
 	return nil
 }
 
-func (e *UpgradeExecutor) runPreUpgradePhase(ctx context.Context, targetVersion string) error {
+func (e *UpgradeExecutor) runPreUpgradePhase(ctx context.Context, targetVersion string, autoCleanup bool) error {
 	// Defensive validation - never trust external callers completely
 	if targetVersion == "" {
 		return fmt.Errorf("targetVersion cannot be empty")
 	}
 
-	// Run pre-upgrade checks - cleanup must be done separately before initiating upgrade
+	// Run pre-upgrade checks
 	e.updateProgress("Running pre-upgrade checks", StatusInProgress, "")
 	result, err := RunPreUpgradeChecks(ctx, e.kubeClient, e.dynamicClient, targetVersion)
 	if err != nil {
 		return fmt.Errorf("pre-upgrade checks failed: %w", err)
 	}
 
-	// Check if all preconditions are met (cleanup should have been done via separate API)
+	// Check if all preconditions are met
 	allPassed := result.NoMigrationPlans && result.NoRollingMigrationPlans &&
 		result.VMwareCredsDeleted && result.OpenStackCredsDeleted &&
 		result.AgentsScaledDown && result.NoCustomResources
 
 	if !allPassed {
-		return fmt.Errorf("pre-upgrade checks failed - cleanup required before upgrade: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
-			result.NoMigrationPlans, result.NoRollingMigrationPlans,
-			result.VMwareCredsDeleted, result.OpenStackCredsDeleted,
-			result.AgentsScaledDown, result.NoCustomResources)
+		if autoCleanup {
+			log.Println("Pre-upgrade checks failed, attempting automatic cleanup...")
+			e.updateProgress("Cleaning up resources", StatusInProgress, "")
+			if err := CleanupResources(ctx, e.kubeClient, e.config); err != nil {
+				return fmt.Errorf("auto-cleanup failed: %w", err)
+			}
+			// Re-run checks after cleanup
+			result, err = RunPreUpgradeChecks(ctx, e.kubeClient, e.dynamicClient, targetVersion)
+			if err != nil {
+				return fmt.Errorf("pre-upgrade checks failed after cleanup: %w", err)
+			}
+			allPassed = result.NoMigrationPlans && result.NoRollingMigrationPlans &&
+				result.VMwareCredsDeleted && result.OpenStackCredsDeleted &&
+				result.AgentsScaledDown && result.NoCustomResources
+			if !allPassed {
+				return fmt.Errorf("pre-upgrade checks still failing after cleanup: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
+					result.NoMigrationPlans, result.NoRollingMigrationPlans,
+					result.VMwareCredsDeleted, result.OpenStackCredsDeleted,
+					result.AgentsScaledDown, result.NoCustomResources)
+			}
+		} else {
+			return fmt.Errorf("pre-upgrade checks failed: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
+				result.NoMigrationPlans, result.NoRollingMigrationPlans,
+				result.VMwareCredsDeleted, result.OpenStackCredsDeleted,
+				result.AgentsScaledDown, result.NoCustomResources)
+		}
 	}
 
 	log.Println("Pre-upgrade checks passed")

@@ -81,16 +81,9 @@ service Version {
         };
     }
 
-    rpc ConfirmCleanupAndUpgrade(UpgradeRequest) returns (UpgradeResponse) {
-     option (google.api.http) = {
-       post: "/vpw/v1/upgrade/confirm_cleanup"
-       body: "*"
-     };
-   }
-
-    rpc CleanupStep(CleanupStepRequest) returns (CleanupStepResponse) {
+    rpc Cleanup(CleanupRequest) returns (CleanupResponse) {
         option (google.api.http) = {
-            post: "/vpw/v1/upgrade/cleanup_step"
+            post: "/vpw/v1/cleanup"
             body: "*"
         };
     }
@@ -548,12 +541,10 @@ service VailbreakProxy {
     }
 }
 
-message CleanupStepRequest {
-    string step = 1;
+message CleanupRequest {
 }
 
-message CleanupStepResponse {
-    string step = 1;
-    bool success = 2;
-    string message = 3;
+message CleanupResponse {
+    bool success = 1;
+    string message = 2;
 }

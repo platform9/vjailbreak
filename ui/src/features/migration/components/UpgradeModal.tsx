@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { UpgradeResponse, UpgradeProgressResponse } from 'src/api/version/model'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
+import Tooltip from '@mui/material/Tooltip'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Box from '@mui/material/Box'
@@ -12,10 +13,12 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { useTheme } from '@mui/material/styles'
 import React from 'react'
 import { ActionButton } from 'src/components'
 import {
+  cleanupApiCall,
   getAvailableTags,
   getUpgradeProgress,
   initiateUpgrade
@@ -51,6 +54,8 @@ export const UpgradeModal = ({ show, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [upgradeInProgress, setUpgradeInProgress] = useState(false)
+  const [cleanUpInProgress, setCleanUpInProgress] = useState(false)
+  const [cleanupCompleted, setCleanupCompleted] = useState(false)
   const [progressData, setProgressData] = useState<UpgradeProgressResponse | null>(null)
   const theme = useTheme()
 
@@ -60,7 +65,35 @@ export const UpgradeModal = ({ show, onClose }) => {
     enabled: show
   })
 
-  // Upgrade with autoCleanup=true - job handles all cleanup, validation, backup internally
+  // Dedicated cleanup API call - POST /cleanup
+  const cleanupMutation = useMutation({
+    mutationFn: cleanupApiCall,
+    onSuccess: (data) => {
+      setCleanUpInProgress(false)
+      if (data.success) {
+        setCleanupCompleted(true)
+        setSuccessMsg('Cleanup completed successfully')
+        setErrorMsg('')
+      } else {
+        setErrorMsg(data.message || 'Cleanup failed')
+        setSuccessMsg('')
+      }
+    },
+    onError: (error: Error) => {
+      setCleanUpInProgress(false)
+      setErrorMsg(`Cleanup failed: ${error.message}`)
+      setSuccessMsg('')
+    }
+  })
+
+  const handleCleanup = () => {
+    setCleanUpInProgress(true)
+    setErrorMsg('')
+    setSuccessMsg('')
+    cleanupMutation.mutate()
+  }
+
+  // Upgrade with autoCleanup=true - job handles cleanup if not already done
   const upgradeMutation = useMutation<UpgradeResponse, Error, void>({
     mutationFn: () => initiateUpgrade(selectedVersion, true),
     onSuccess: (data) => {
@@ -68,7 +101,6 @@ export const UpgradeModal = ({ show, onClose }) => {
         setUpgradeInProgress(true)
         setErrorMsg('')
       } else {
-        // Job will handle cleanup automatically, but show error if immediate failure
         setErrorMsg('Failed to start upgrade. Please try again.')
       }
     },
@@ -130,7 +162,7 @@ export const UpgradeModal = ({ show, onClose }) => {
 
   return (
     <React.Fragment>
-      <Dialog open={show} onClose={upgradeInProgress ? undefined : onClose} maxWidth="xs" fullWidth>
+      <Dialog open={show} onClose={upgradeInProgress || cleanUpInProgress ? undefined : onClose} maxWidth="xs" fullWidth>
         <DialogTitle>Upgrade vJailbreak</DialogTitle>
         <DialogContent>
           <Box mb={2}>
@@ -138,7 +170,7 @@ export const UpgradeModal = ({ show, onClose }) => {
               fullWidth
               value={selectedVersion}
               onChange={(e) => setSelectedVersion(e.target.value)}
-              disabled={areVersionsLoading || upgradeMutation.isPending || upgradeInProgress}
+              disabled={areVersionsLoading || upgradeMutation.isPending || upgradeInProgress || cleanUpInProgress}
               displayEmpty
               size="small"
             >
@@ -154,7 +186,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Select>
           </Box>
 
-          {/* Info box about what upgrade does */}
+          {/* Pre-upgrade checklist info */}
           <Box
             mb={2}
             p={2}
@@ -166,18 +198,36 @@ export const UpgradeModal = ({ show, onClose }) => {
             }}
           >
             <Typography variant="subtitle1" color="primary.main" fontWeight={600} gutterBottom>
-              Upgrade Process
+              Pre-Upgrade Checklist
             </Typography>
-            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-              The upgrade will automatically:
+            <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
+              The following will be cleaned up before upgrading:
             </Typography>
-            <ul style={{ margin: '8px 0 0 0', paddingLeft: 20, color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-              <li>Clean up existing resources</li>
-              <li>Backup current state</li>
-              <li>Apply new version</li>
-              <li>Verify services are ready</li>
+            <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+              <li>Delete MigrationPlans</li>
+              <li>Delete RollingMigrationPlans</li>
+              <li>Scale down Agents</li>
+              <li>Delete VMware credentials</li>
+              <li>Delete PCD credentials</li>
+              <li>Delete Custom Resources</li>
             </ul>
+            {cleanupCompleted && (
+              <Box display="flex" alignItems="center" mt={1}>
+                <CheckCircleIcon color="success" sx={{ mr: 1, fontSize: 18 }} />
+                <Typography variant="body2" color="success.main">Cleanup completed</Typography>
+              </Box>
+            )}
           </Box>
+
+          {/* Cleanup in progress */}
+          {cleanUpInProgress && (
+            <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
+              <CircularProgress size={32} />
+              <Typography variant="body2" mt={2}>
+                Cleaning up resources...
+              </Typography>
+            </Box>
+          )}
 
           {/* Upgrade progress */}
           {upgradeInProgress && (
@@ -189,7 +239,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
 
-          {upgradeInProgress && (
+          {(upgradeInProgress || cleanUpInProgress) && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               Processing. Please do not close or refresh this page.
             </Alert>
@@ -233,6 +283,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             disabled={
               !selectedVersion ||
               upgradeInProgress ||
+              cleanUpInProgress ||
               areVersionsLoading ||
               upgradeMutation.isPending
             }
@@ -241,11 +292,30 @@ export const UpgradeModal = ({ show, onClose }) => {
           >
             Upgrade
           </ActionButton>
+          <Tooltip
+            title={
+              <Typography sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                This will clean up all resources listed above
+              </Typography>
+            }
+            arrow
+          >
+            <span style={{ width: '100%' }}>
+              <ActionButton
+                onClick={handleCleanup}
+                tone="primary"
+                fullWidth
+                disabled={upgradeInProgress || cleanUpInProgress}
+              >
+                Cleanup
+              </ActionButton>
+            </span>
+          </Tooltip>
           <ActionButton
             onClick={onClose}
             tone="secondary"
             fullWidth
-            disabled={upgradeInProgress}
+            disabled={upgradeInProgress || cleanUpInProgress}
           >
             Cancel
           </ActionButton>
