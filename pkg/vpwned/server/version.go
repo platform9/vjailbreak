@@ -295,7 +295,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 	log.Printf("Starting upgrade from %s to %s via Job", currentVersion, in.TargetVersion)
 
 	// Create the upgrade job
-	if err := createUpgradeJob(ctx, kubeClient, in.TargetVersion, currentVersion, in.AutoCleanup); err != nil {
+	if err := createUpgradeJob(ctx, kubeClient, in.TargetVersion, currentVersion); err != nil {
 		now := time.Now()
 		progress.Status = "failed"
 		progress.Error = fmt.Sprintf("Failed to create upgrade job: %v", err)
@@ -324,7 +324,7 @@ func (s *VpwnedVersion) InitiateUpgrade(ctx context.Context, in *api.UpgradeRequ
 }
 
 // createUpgradeJob creates a Kubernetes Job to run the upgrade
-func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersion, currentVersion string, autoCleanup bool) error {
+func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersion, currentVersion string) error {
 	// Get the CURRENT vpwned image (not target) to ensure deterministic upgrade logic
 	vpwnedImage, err := getCurrentVpwnedImage(ctx, kubeClient)
 	if err != nil {
@@ -334,11 +334,6 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 	backoffLimit := int32(0)             // No retries - prevents duplicate pod execution
 	ttlSeconds := int32(86400)           // 24 hours
 	activeDeadlineSeconds := int64(3600) // 1 hour max runtime to prevent zombie upgrades
-
-	autoCleanupStr := "false"
-	if autoCleanup {
-		autoCleanupStr = "true"
-	}
 
 	// Note: Not setting OwnerReference to avoid unexpected garbage collection
 	// if vpwned deployment is replaced during upgrade. TTL handles cleanup.
@@ -381,10 +376,6 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 								{
 									Name:  "UPGRADE_PREVIOUS_VERSION",
 									Value: currentVersion,
-								},
-								{
-									Name:  "UPGRADE_AUTO_CLEANUP",
-									Value: autoCleanupStr,
 								},
 								{
 									Name:  "UPGRADE_MODE",
