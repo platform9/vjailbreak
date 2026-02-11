@@ -225,16 +225,25 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
+	ctxlog.Info("Starting post-migration reconciliation for VM", "vm", vm, "migrationplan", migrationplan.Name)
+
 	if migrationplan.Spec.PostMigrationAction == nil {
-		ctxlog.Info("No post-migration actions configured")
+		ctxlog.Info("No post-migration actions configured for VM", "vm", vm)
 		return nil
 	}
 
 	if migrationplan.Spec.PostMigrationAction.RenameVM == nil &&
 		migrationplan.Spec.PostMigrationAction.MoveToFolder == nil {
-		ctxlog.Info("No post-migration actions enabled")
+		ctxlog.Info("No post-migration actions enabled for VM", "vm", vm)
 		return nil
 	}
+
+	ctxlog.Info("Post-migration actions configured for VM",
+		"vm", vm,
+		"renameVM", migrationplan.Spec.PostMigrationAction.RenameVM,
+		"moveToFolder", migrationplan.Spec.PostMigrationAction.MoveToFolder,
+		"suffix", migrationplan.Spec.PostMigrationAction.Suffix,
+		"folderName", migrationplan.Spec.PostMigrationAction.FolderName)
 
 	// Get required resources
 	_, vmwcreds, secret, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
@@ -292,8 +301,14 @@ func (*MigrationPlanReconciler) renameVM(
 		ctxlog.Info("Using default suffix", "suffix", suffix)
 	}
 	newVMName := vm + suffix
-	ctxlog.Info("Renaming VM", "oldName", vm, "newName", newVMName)
-	return vcClient.RenameVM(ctx, vm, newVMName)
+	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+	err := vcClient.RenameVM(ctx, vm, newVMName)
+	if err != nil {
+		ctxlog.Error(err, "Failed to rename VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+		return err
+	}
+	ctxlog.Info("Successfully renamed VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+	return nil
 }
 
 func (*MigrationPlanReconciler) moveVMToFolder(
@@ -310,17 +325,19 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 		ctxlog.Info("Using default folder name", "folderName", folderName)
 	}
 
+	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
 	if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
-		ctxlog.Error(err, "Folder creation/verification failed")
+		ctxlog.Error(err, "Folder creation/verification failed", "folder", folderName, "vm", vm, "migrationplan", migrationplan.Name)
 		return errors.Wrapf(err, "failed to ensure folder '%s' exists", folderName)
 	}
 
-	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName)
+	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
-		ctxlog.Error(err, "VM move failed")
+		ctxlog.Error(err, "VM move failed", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 		return errors.Wrapf(err, "failed to move VM '%s' to folder '%s'", vm, folderName)
 	}
+	ctxlog.Info("Successfully moved VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	return nil
 }
 
@@ -634,7 +651,18 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
 
-		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
+		// Fetch all migrations for this plan to catch already-completed migrations from previous reconciliations
+		allMigrations := &vjailbreakv1alpha1.MigrationList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(migrationplan.Namespace),
+			client.MatchingLabels{"migrationplan": migrationplan.Name},
+		}
+		if err := r.List(ctx, allMigrations, listOpts...); err != nil {
+			r.ctxlog.Error(err, "Failed to list all migrations for post-migration processing", "migrationplan", migrationplan.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for post-migration processing")
+		}
+
+		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, allMigrations, parallelvms)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -679,6 +707,8 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 ) (bool, error) {
 	allFinished := true
 
+	r.ctxlog.Info("Processing migration phases", "migrationplan", migrationplan.Name, "totalMigrations", len(migrationobjs.Items), "currentBatch", parallelvms)
+
 	for i := 0; i < len(migrationobjs.Items); i++ {
 		migration := migrationobjs.Items[i]
 
@@ -690,11 +720,13 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			return false, err
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			r.ctxlog.Info("Migration succeeded for VM, applying post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
 			if err != nil {
 				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
 				return false, errors.Wrap(err, "failed post-migration")
 			}
+			r.ctxlog.Info("Post-migration actions completed for VM", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			continue
 
 		default:
