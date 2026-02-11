@@ -1,0 +1,66 @@
+name: Pre-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.4.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-crds:
+    name: Generate CRDs and Installer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: k8s/migration/go.mod
+
+      - name: Install controller-gen
+        run: |
+          go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.1
+
+      - name: Install kustomize
+        run: |
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Run build-installer
+        run: |
+          cd k8s/migration
+          make build-installer TAG=${{ github.event.inputs.tag }}
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: pre-release/${{ github.event.inputs.tag }}
+          base: main
+          commit-message: "chore: generate CRDs and installer for ${{ github.event.inputs.tag }}"
+          title: "chore: Pre-release CRD generation for ${{ github.event.inputs.tag }}"
+          body: |
+            Auto-generated CRDs and installer manifests for `${{ github.event.inputs.tag }}`.
+
+            Please review and merge before creating the release.
