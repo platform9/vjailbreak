@@ -211,7 +211,12 @@ export default function MigrationOptionsAlt({
                       <Checkbox
                         checked={selectedMigrationOptions.dataCopyMethod}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyMethod')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyMethod')('cold')
+                            onChange('acknowledgeNetworkConflictRisk')(false)
+                          }
                         }}
                       />
                     }
@@ -282,7 +287,12 @@ export default function MigrationOptionsAlt({
                       <Checkbox
                         checked={selectedMigrationOptions?.dataCopyStartTime}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyStartTime')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyStartTime')('')
+                            setValue('dataCopyStartTime', '')
+                          }
                         }}
                       />
                     }
@@ -330,9 +340,18 @@ export default function MigrationOptionsAlt({
                         checked={selectedMigrationOptions.cutoverOption}
                         disabled={isPowerOffThenCopy}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
-                          updateSelectedMigrationOptions('periodicSyncEnabled')(false)
-                          onChange('periodicSyncInterval')('')
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('cutoverOption')(isChecked)
+                          if (!isChecked) {
+                            onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
+                            onChange('cutoverStartTime')('')
+                            onChange('cutoverEndTime')('')
+                            setValue('cutoverStartTime', '')
+                            setValue('cutoverEndTime', '')
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+                            onChange('periodicSyncInterval')('')
+                            setValue('periodicSyncInterval', '')
+                          }
                         }}
                       />
                     }
@@ -397,12 +416,16 @@ export default function MigrationOptionsAlt({
                             <Checkbox
                               checked={selectedMigrationOptions.periodicSyncEnabled}
                               onChange={(e) => {
-                                onChange('periodicSyncInterval')(
-                                  globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
-                                )
-                                updateSelectedMigrationOptions('periodicSyncEnabled')(
-                                  e.target.checked
-                                )
+                                const isChecked = e.target.checked
+                                updateSelectedMigrationOptions('periodicSyncEnabled')(isChecked)
+                                if (isChecked) {
+                                  onChange('periodicSyncInterval')(
+                                    globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
+                                  )
+                                } else {
+                                  onChange('periodicSyncInterval')('')
+                                  setValue('periodicSyncInterval', '')
+                                }
                               }}
                             />
                           }
@@ -674,7 +697,11 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationScript')(isChecked)
+                      if (!isChecked) {
+                        onChange('postMigrationScript')('')
+                      }
                     }}
                   />
                 }
