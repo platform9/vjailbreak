@@ -438,7 +438,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 			prog := fmt.Sprintf("Progress: %d%%", currentPct)
 
-			if currentPct == 0 || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
+			if (currentPct == 0 && lastLoggedPct != 0) || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
 				utils.PrintLog(prog)
 				lastLoggedPct = currentPct
 			}
