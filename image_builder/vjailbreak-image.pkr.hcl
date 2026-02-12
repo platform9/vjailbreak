@@ -7,12 +7,27 @@ packer {
   }
 }
 
+variable "ubuntu_minimal_url" {
+  type    = string
+  default = "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
+}
+
+variable "ubuntu_minimal_checksum" {
+  type    = string
+  default = "file:https://cloud-images.ubuntu.com/minimal/releases/noble/release/SHA256SUMS"
+}
+
+variable "k3s_version" {
+  type    = string
+  default = "v1.31.4+k3s1"
+}
+
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = "vjailbreak-image.qcow2"
-  iso_checksum         = "sha256:e0514d0ee287ca7fec7670e41ba67304f57eded5f4151f87734d7d3cc0a0d60a"
-  iso_target_extension = "qcow2"
+  iso_url              = var.ubuntu_minimal_url
+  iso_checksum         = var.ubuntu_minimal_checksum
+  iso_target_extension = "img"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
   disk_size            = "50G"
@@ -46,6 +61,10 @@ build {
   provisioner "file" {
     source      = "${path.root}/scripts/install.sh"
     destination = "/tmp/install.sh"
+  }
+  provisioner "file" {
+    source      = "${path.root}/scripts/setup-k3s.sh"
+    destination = "/tmp/setup-k3s.sh"
   }
   provisioner "file" {
     source      = "${path.root}/scripts/pf9-htpasswd.sh"
@@ -100,12 +119,18 @@ build {
     destination = "/tmp/opensource.txt"
   }
   provisioner "shell" {
+    environment_vars = [
+      "K3S_VERSION=${var.k3s_version}"
+    ]
     inline = [
+    "sudo mkdir -p /etc/pf9",
+    "chmod +x /tmp/setup-k3s.sh",
+    "sudo /tmp/setup-k3s.sh",
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/log_collector.sh /etc/pf9/log_collector.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-    "sudo mkdir -p image_builder/images",
+    "sudo mkdir -p /etc/pf9/images",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
     "sudo mkdir -p /home/ubuntu/virtio-win",
     "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
@@ -127,7 +152,10 @@ build {
     "sudo df -h",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
     "sudo bash /tmp/user_setup_daemon.sh",
-    "sudo apt update",
+    "sudo apt-get update",
+    "sudo apt-get install -y --no-install-recommends curl ca-certificates helm",
+    "sudo apt-get clean",
+    "sudo rm -rf /var/lib/apt/lists/*",
     "sudo apt install python3-openstackclient -y",
     ]
   }
