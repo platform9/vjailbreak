@@ -27,10 +27,10 @@ source "qemu" "vjailbreak-image" {
   skip_compaction      = true
   iso_url              = var.ubuntu_minimal_url
   iso_checksum         = var.ubuntu_minimal_checksum
-  iso_target_extension = "img"
+  iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
-  disk_size            = "50G"
+  disk_size            = "2G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
