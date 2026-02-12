@@ -510,7 +510,7 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 				}, maxRetries, capInterval)
 				if err != nil {
 					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to clean up snapshots after %d retries: %v", maxRetries, err))
-					continue
+					return errors.Wrap(err, "failed to clean up snapshots")
 				} else {
 					currentState = cleanedSnapshot
 				}
@@ -521,18 +521,21 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 				}, maxRetries, capInterval)
 				if err != nil {
 					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to take snapshot '%s' after %d retries: %v", constants.MigrationSnapshotName, maxRetries, err))
-					continue
+					return errors.Wrap(err, "failed to take snapshot")
 				} else {
 					currentState = TookSnapshot
 				}
 			}
 			if currentState == TookSnapshot {
-				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
+				// Try to sync CBT multiple times
+				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+					return migobj.SyncCBT(ctx, vminfo)
+				}, maxRetries, capInterval); err != nil {
+					// If syncCBT fails even after retry then return error and fail.
 					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
-					currentState = initial // Reset state on failure so we retry from start next loop
-					continue
+					return errors.Errorf("failed to sync CBT: %v", err)
 				}
-				currentState = initial // Reset on success as well.
+				currentState = initial
 			}
 			elapsed = time.Since(start)
 		}
