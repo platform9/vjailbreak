@@ -446,45 +446,6 @@ jobs:
         with:
           go-version: ">=1.22.5"
 
-      - name: setup-oras
-        uses: oras-project/setup-oras@v1.2.1
-
-      - name: Download ubuntu base image
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
-
-      - name: Configure AWS credentials for S3 download
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.S3_REGION }}
-
-      - name: Download ubuntu base image from S3
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        env:
-          S3_BUCKET: ${{ env.S3_BUCKET_PROD }}
-          BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
-        run: |
-          if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
-            echo "Base image found in S3. Proceeding to download."
-          else
-            echo "Base image not found in S3. Pulling from Quay and uploading..."
-            oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
-            aws s3 cp vjailbreak-image.qcow2 "s3://$S3_BUCKET/$BASE_IMAGE_PATH"
-            echo "Base image successfully uploaded to S3."
-          fi
-
-          echo "Downloading base image for build..."
-          mkdir -p ./image_builder/images
-          aws s3 cp "s3://$S3_BUCKET/$BASE_IMAGE_PATH" ./image_builder/images/ubuntu-base-prebaked.qcow2
-          
-          if [ ! -f "./image_builder/images/ubuntu-base-prebaked.qcow2" ]; then
-            echo "Error: Failed to download base image from S3"
-            exit 1
-          fi
-      
       - name: Download images and export as tar
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
