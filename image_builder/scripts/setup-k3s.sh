@@ -18,7 +18,7 @@ sudo mkdir -p /etc/pf9/k3s-setup
 
 # Download K3s binary
 log "Downloading K3s binary..."
-curl -sfL "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION_URL}/k3s" -o /tmp/k3s
+curl -sfL "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION_URL}/k3s" -o /tmp/k3s || { log "Failed to download K3s binary"; exit 1; }
 sudo mv /tmp/k3s /etc/pf9/k3s-setup/k3s
 sudo chmod +x /etc/pf9/k3s-setup/k3s
 
@@ -29,7 +29,9 @@ sudo mv /tmp/k3s-install.sh /etc/pf9/k3s-setup/k3s-install.sh
 sudo chmod +x /etc/pf9/k3s-setup/k3s-install.sh
 
 # Create symlinks for k3s binaries (needed for INSTALL_K3S_SKIP_DOWNLOAD=true)
-sudo ln -sf /etc/pf9/k3s-setup/k3s /usr/local/bin/k3s
+if [[ ! -L /usr/local/bin/k3s ]]; then
+  sudo ln -sf /etc/pf9/k3s-setup/k3s /usr/local/bin/k3s
+fi
 
 # Download K3s airgap images
 log "Downloading K3s airgap images..."
