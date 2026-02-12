@@ -153,10 +153,13 @@ build {
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
     "sudo bash /tmp/user_setup_daemon.sh",
     "sudo apt-get update",
-    "sudo apt-get install -y --no-install-recommends curl ca-certificates helm",
+    "sudo apt-get install -y --no-install-recommends curl ca-certificates apt-transport-https gnupg",
+    "curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null",
+    "echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main' | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list",
+    "sudo apt-get update",
+    "sudo apt-get install -y helm python3-openstackclient",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
-    "sudo apt install python3-openstackclient -y",
     ]
   }
 }
