@@ -230,7 +230,8 @@ function VmsSelectionStep({
     selectedVMs: Array.from(selectedVMs)
       .map((vmName) => vmsWithFlavor.find((vm) => vm.name === vmName))
       .filter(Boolean) as VmData[],
-    rdmDisks: rdmDisks
+    rdmDisks: rdmDisks,
+    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
   })
 
   // RDM configuration state
@@ -1514,6 +1515,12 @@ function VmsSelectionStep({
         {rdmValidation.hasPowerStateError && (
           <Alert severity="error" sx={{ mt: 2 }}>
             {rdmValidation.powerStateErrorMessage}
+          </Alert>
+        )}
+
+        {rdmValidation.hasVolumeTypeError && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            {rdmValidation.volumeTypeErrorMessage}
           </Alert>
         )}
 
