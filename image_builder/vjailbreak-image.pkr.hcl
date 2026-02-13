@@ -159,9 +159,9 @@ build {
     "chmod 700 /tmp/get_helm.sh",
     "/tmp/get_helm.sh",
     "rm /tmp/get_helm.sh",
-    "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
-    "helm repo update",
-    "helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
+    "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
+    "sudo helm repo update",
+    "sudo helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
     ]
