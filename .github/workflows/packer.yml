@@ -45,9 +45,10 @@ env:
   NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
   AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
-  S3_BUCKET_PROD: vjailbreak
-  S3_BUCKET_DEV: vjailbreak-dev
-  S3_REGION: us-west-2
+  S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
+
 
 
 jobs:
