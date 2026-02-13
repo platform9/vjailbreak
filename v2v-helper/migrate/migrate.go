@@ -1907,7 +1907,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			for _, fixedIP := range port.FixedIPs {
 				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
 			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			for _, fixedIP := range port.FixedIPs {
