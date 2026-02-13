@@ -1050,18 +1050,20 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	firstbootscripts := []string{}
-
+	firstbootwinscripts := []virtv2v.FirstBootWindows{}
 	// Fix NTFS for Windows
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
-
+		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "Firstboot-Scheduler.ps1",
+		})
 		if persisNetwork {
 			firstbootscriptname := "windows-persist-network"
 			firstbootscript := constants.WindowsPersistFirstBootScript
 			firstbootscripts = append(firstbootscripts, firstbootscriptname)
-
 			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
 				return errors.Wrap(err, "failed to add first boot script")
 			}
@@ -1098,6 +1100,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
+	}
+
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
+			return errors.Wrap(err, "failed to inject first boot scripts")
+		}
 	}
 
 	// Set volume as bootable
