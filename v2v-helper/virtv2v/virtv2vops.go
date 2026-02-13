@@ -465,7 +465,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"-i")
 	cmd.Stdin = strings.NewReader(command)
 	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
