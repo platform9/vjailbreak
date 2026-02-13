@@ -22,6 +22,11 @@ variable "k3s_version" {
   default = "v1.31.4+k3s1"
 }
 
+variable "helm_version" {
+  type    = string
+  default = "v3.16.3"
+}
+
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
@@ -120,12 +125,13 @@ build {
   }
   provisioner "shell" {
     environment_vars = [
-      "K3S_VERSION=${var.k3s_version}"
+      "K3S_VERSION=${var.k3s_version}",
+      "HELM_VERSION=${var.helm_version}"
     ]
     inline = [
     "sudo mkdir -p /etc/pf9",
     "chmod +x /tmp/setup-k3s.sh",
-    "sudo /tmp/setup-k3s.sh",
+    "sudo -E /tmp/setup-k3s.sh",
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/log_collector.sh /etc/pf9/log_collector.sh",
@@ -157,7 +163,7 @@ build {
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
     "curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
     "chmod 700 /tmp/get_helm.sh",
-    "/tmp/get_helm.sh",
+    "DESIRED_VERSION=${var.helm_version} /tmp/get_helm.sh",
     "rm /tmp/get_helm.sh",
     "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
     "sudo helm repo update",
