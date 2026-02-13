@@ -125,8 +125,7 @@ build {
   }
   provisioner "shell" {
     environment_vars = [
-      "K3S_VERSION=${var.k3s_version}",
-      "HELM_VERSION=${var.helm_version}"
+      "K3S_VERSION=${var.k3s_version}"
     ]
     inline = [
     "sudo mkdir -p /etc/pf9",
