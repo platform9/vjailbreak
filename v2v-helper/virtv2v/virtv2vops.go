@@ -946,7 +946,9 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 
 		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
 		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
-		scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
+		if idx > 0 {
+			scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
+		}
 		cpCmd := exec.Command("cp", srcPath, dstPath)
 		if err := cpCmd.Run(); err != nil {
 			return fmt.Errorf("failed to copy firstboot script %s: %v", script.Script, err)

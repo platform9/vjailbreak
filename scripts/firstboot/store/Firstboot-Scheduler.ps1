@@ -2,6 +2,8 @@
 $ScriptRoot = "C:\firstboot"
 $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
+$StateFilePath = Join-Path $ScriptRoot "Firstboot-Scheduler.state"
+$SchedulerScriptPath = Join-Path $ScriptRoot "Firstboot-Scheduler.ps1"
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -69,6 +71,7 @@ function Schedule-MyTask {
 
     Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
+
 function Ensure-64BitPowerShell {
     if (-not [Environment]::Is64BitOperatingSystem) {
         Write-Verbose "This is a 32-bit operating system → no 64-bit PowerShell available. Continuing as-is."
@@ -130,6 +133,164 @@ function Remove-MyTask{
     }
 }
 
+function Script-Runner {
+    param(
+        [string]$ScriptPath,
+        [int]$MaxRetries = 3
+    )
+    $retryCount = 0
+    $WaitTime = 60
+    $retryCap = 300
+    $result = @{
+        ExitCode = 0
+        Output = ""
+        Success = $false
+        Error = $null
+    }
+    
+    try {
+        Write-Log "Executing script: $ScriptPath"
+        
+        if (-not (Test-Path $ScriptPath)) {
+            $result.ExitCode = 1
+            $result.Error = "Script file not found: $ScriptPath"
+            Write-Log $result.Error -Level "ERROR"
+            return $result
+        }
+        while ($retryCount -lt $MaxRetries) {
+        # Capture all output including errors
+        $output = & $ScriptPath 2>&1
+        $result.ExitCode = $LASTEXITCODE
+        $result.Output = $output | Out-String
+        
+        if ($result.ExitCode -ne 0) {
+            $result.Error = "attempt ($($retryCount+1)): Script failed with exit code $($result.ExitCode)"
+            Write-Log $result.Error -Level "ERROR"
+            Write-Log "Output: $($result.Output)" -Level "ERROR"
+            Start-Sleep -Seconds $WaitTime
+            $WaitTime *= 2
+            if ($WaitTime -gt $retryCap) { $WaitTime = $retryCap }
+            $retryCount++
+        } else {
+            $result.Success = $true
+            Write-Log "Script executed successfully"
+            Write-Log "Output: $($result.Output)"
+            break
+        }
+        
+        }    
+    } catch {
+        $result.ExitCode = 1
+        $result.Error = "Exception occurred: $_"
+        $result.Output = $_.Exception.Message
+        Write-Log $result.Error -Level "ERROR"
+    }
+    
+    return $result
+}
+
+function Push-Script {
+    param(
+        [string]$ScriptName
+    )
+    # Check if file exists if it does then check if the scriptName is already there or not the format in the file is Scriptname|Number get these two values 
+    try {
+        [int]$scriptRunTimes = -2
+        if (Test-Path $StateFilePath) {
+            $existingScripts = Get-Content -Path $StateFilePath 
+            foreach ($existingScript in $existingScripts) {
+                $scriptName, [int]$scriptNumber = $existingScript -split '\|'
+                if ($scriptName -eq $ScriptName) {
+                    Write-Log "Script '$ScriptName' already exists in the state file with number '$scriptNumber'."
+                    if ($scriptNumber -lt 3){
+                        $scriptRunTimes = $scriptNumber
+                    }else{
+                        Write-Log "Script '$ScriptName' has reached its maximum run times (3)."
+                        throw "Script '$ScriptName' has reached its maximum run times (3)."
+                    }
+                    break
+                }
+            }
+            if($scriptRunTimes -eq -2){
+                throw "Script '$ScriptName' does not exist in the state file."
+            }else{
+                $scriptRunTimes = $scriptRunTimes + 1
+                $updated = $existingScripts -replace "$ScriptName\|$scriptNumber", "$ScriptName|$scriptRunTimes"
+                Set-Content -Path $StateFilePath -Value $updated
+            }
+        }else{
+            throw "State file does not exist."
+        }
+    }catch{
+        Write-Log "Failed to push script: $_" -Level "ERROR"
+        throw $_
+    }
+}
+function Pop-Script{
+    param(
+        [string]$ScriptName
+    )
+    try {
+        if (Test-Path $StateFilePath) {
+            (Get-Content $StateFilePath) -notmatch "^\s*$([regex]::Escape($ScriptName))\s*\|" | Set-Content $StateFilePath
+        } else {
+            throw "State file does not exist."
+        }
+    } catch {
+        Write-Log "Failed to pop script: $_" -Level "ERROR"
+        throw $_
+    }
+}
+function Init-Table{
+    $scriptsJsonPath = Join-Path $ScriptRoot "scripts.json"
+    if (Test-Path $scriptsJsonPath) {
+        Write-Log "Found scripts.json at: $scriptsJsonPath"
+        New-Item -Path $StateFilePath -ItemType File -Force | Out-Null
+        try {
+            $scriptsContent = Get-Content -Path $scriptsJsonPath -Raw -ErrorAction Stop
+            $scriptsArray = $scriptsContent | ConvertFrom-Json -ErrorAction Stop
+            
+            Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
+            
+            foreach ($script in $scriptsArray) {
+                Add-Content -Path $StateFilePath -Value "$script|-1"
+            }
+        } catch {
+            Write-Log "Failed to parse scripts.json: $_" -Level "ERROR"
+        }
+    }
+}
+function Get-Script{
+    try {
+    if (Test-Path $StateFilePath){
+        $scripts = Get-Content -Path $StateFilePath
+        #validate
+        foreach ($script in $scripts){
+            $scriptName, [int]$scriptNumber = $script -split '\|'
+            if ($scriptName -ne "" -and $scriptNumber -ge -1 -and $scriptNumber -lt 3){
+                Write-Log "Script Name: $scriptName, Run Times: $scriptNumber"
+            } else {
+                throw "Invalid script entry: $script"
+            }
+        }
+        foreach ($script in $scripts) {
+            $scriptName, [int]$scriptNumber = $script -split '\|'
+            if ($scriptNumber -eq -1){
+                return $scriptName
+            } 
+            if ($scriptNumber -ge 0 -and $scriptNumber -lt 3){
+                return $scriptName
+            }
+        }
+    return ""
+    }else{
+        throw "State file does not exist."
+    }
+    }catch{
+        Write-Log "Failed to get script: $_" -Level "ERROR"
+        throw $_
+    }
+}
 try {
     Write-Log "=== Starting Firstboot Scheduler ==="
     Write-Log "Script Root: $ScriptRoot"
@@ -147,18 +308,31 @@ try {
     
     if (Test-Path $scriptsJsonPath) {
         Write-Log "Found scripts.json at: $scriptsJsonPath"
-        
+        Schedule-MyTask -TaskName $TaskName -ScriptPath $SchedulerScriptPath -Description "Firstboot Scheduler" 
         try {
-            $scriptsContent = Get-Content -Path $scriptsJsonPath -Raw -ErrorAction Stop
-            $scriptsArray = $scriptsContent | ConvertFrom-Json -ErrorAction Stop
-            
-            Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
-            
-            # Loop over the array and log each script content
-            foreach ($script in $scriptsArray) {
-                Write-Log "Script content: $script"
+            Init-Table
+            while ($true) {
+                $script = Get-Script
+                Write-Log "Selected script: $script"
+                if ($script -ne "" -and $script -ne "False"){
+                    Push-Script -ScriptName $script
+                    $result = Script-Runner -ScriptPath (Join-Path $ScriptRoot $script)
+                    if ($result.ExitCode -ne 0) {
+                        Write-Log "Script '$script' failed with exit code $($result.ExitCode)" -Level "ERROR"
+                        Write-Log "Output: $($result.Output)" -Level "ERROR"
+                        break
+                    } else {
+                        Write-Log "Script '$script' executed successfully"
+                        Write-Log "Output: $($result.Output)"
+                        Pop-Script -ScriptName $script
+                    }
+                }else{
+                    Write-Log "No scripts to run, exiting..."
+                    Remove-MyTask -TaskName $TaskName
+                    break
+                }
             }
-            
+
         } catch {
             Write-Log "Failed to parse scripts.json: $_" -Level "ERROR"
         }
