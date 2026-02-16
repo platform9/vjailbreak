@@ -52,14 +52,6 @@ VJailbreak MigrationTrigger Controller
 
 ### Linux LDM Support Limitations
 
-**Available Tools:**
-
-- `ldmtool`: Can read LDM metadata and create device mappers (`/dev/mapper/ldm_vol_*`)
-- Kernel `ldm` module: Provides read-only LDM support
-- **Limitation**: Cannot modify LDM metadata, read-only operations only
-
-**Problems:**
-
 1. LDM volumes may not be properly assembled by libguestfs
 2. Registry hives may be fragmented across LDM volumes
 3. Hivex expects complete, contiguous registry files
@@ -69,7 +61,7 @@ VJailbreak MigrationTrigger Controller
 
 ## Recommended Solutions
 
-### Solution 1: Pre-Migration Disk Conversion (RECOMMENDED) ✅
+### Solution 1: Pre-Migration Disk Conversion (RECOMMENDED)
 
 **Steps:**
 
