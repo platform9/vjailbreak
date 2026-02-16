@@ -3225,6 +3225,7 @@ rules:
   - bmconfigs
   - clustermigrations
   - esximigrations
+  - esxisshcreds
   - migrationplans
   - migrations
   - migrationtemplates
@@ -3255,6 +3256,7 @@ rules:
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
+  - esxisshcreds/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -3275,6 +3277,7 @@ rules:
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
+  - esxisshcreds/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status

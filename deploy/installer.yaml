@@ -3225,6 +3225,7 @@ rules:
   - bmconfigs
   - clustermigrations
   - esximigrations
+  - esxisshcreds
   - migrationplans
   - migrations
   - migrationtemplates
@@ -3255,6 +3256,7 @@ rules:
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
+  - esxisshcreds/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -3275,6 +3277,7 @@ rules:
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
+  - esxisshcreds/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
@@ -4170,7 +4173,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:main-a1f3b47c
+        image: quay.io/platform9/vjailbreak-controller:-6628fd88
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4253,7 +4256,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:main-a1f3b47c
+        image: quay.io/platform9/vjailbreak-vpwned:-6628fd88
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

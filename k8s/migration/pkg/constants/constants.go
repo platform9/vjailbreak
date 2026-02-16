@@ -36,6 +36,9 @@ const (
 	// ArrayCredsControllerName is the name of the storage array credentials controller
 	ArrayCredsControllerName = "arraycreds-controller" //nolint:gosec // not a password string
 
+	// ESXiSSHCredsControllerName is the name of the ESXi SSH credentials controller
+	ESXiSSHCredsControllerName = "esxisshcreds-controller" //nolint:gosec // not a password string
+
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
@@ -125,6 +128,22 @@ const (
 
 	// ArrayCredsFinalizer is the finalizer for storage array credentials
 	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ESXiSSHCredsFinalizer is the finalizer for ESXi SSH credentials
+	ESXiSSHCredsFinalizer = "esxisshcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ESXiSSHCreds validation statuses
+	ESXiSSHCredsStatusPending            = "Pending"
+	ESXiSSHCredsStatusValidating         = "Validating"
+	ESXiSSHCredsStatusSucceeded          = "Succeeded"
+	ESXiSSHCredsStatusPartiallySucceeded = "PartiallySucceeded"
+	ESXiSSHCredsStatusFailed             = "Failed"
+
+	// ESXiSSHCredsLabel is the label for ESXi SSH credentials
+	ESXiSSHCredsLabel = "vjailbreak.k8s.pf9.io/esxisshcreds" //nolint:gosec // not a password string
+
+	// ESXiSSHValidationConcurrency is the number of concurrent ESXi SSH validations
+	ESXiSSHValidationConcurrency = 10
 
 	// ArrayCreds phases
 	ArrayCredsPhaseDiscovered = "Discovered"
