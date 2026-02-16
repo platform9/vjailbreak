@@ -1798,7 +1798,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		if err != nil {
 			// Network is orphaned/deleted - log error but continue VM discovery
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
-			networks = append(networks, nic.Network)
+			networks = append(networks, "Orphaned Network")
 			continue
 		}
 		networks = append(networks, netObj.Name)
