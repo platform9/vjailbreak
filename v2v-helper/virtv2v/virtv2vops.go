@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -939,18 +940,28 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
 		}
 	}
+	scriptsMetadata := []string{}
 	for idx, script := range firstbootwinscripts {
 		log.Printf("Injecting Firstboot Script: %s", script.Script)
 
 		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
 		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
-
+		scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
 		cpCmd := exec.Command("cp", srcPath, dstPath)
 		if err := cpCmd.Run(); err != nil {
 			return fmt.Errorf("failed to copy firstboot script %s: %v", script.Script, err)
 		}
 	}
-
+	// Write scripts metadata to JSON file
+	metadataPath := "/home/fedora/firstboot/scripts.json"
+	metadataJSON, err := json.Marshal(scriptsMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal scripts metadata: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, metadataJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write scripts metadata to %s: %v", metadataPath, err)
+	}
+	log.Printf("Wrote scripts metadata to %s", metadataPath)
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	if useSingleDisk {

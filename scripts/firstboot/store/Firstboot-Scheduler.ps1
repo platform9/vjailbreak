@@ -142,7 +142,29 @@ try {
     # Ensure 64-bit PowerShell
     Ensure-64BitPowerShell
     
-    Write-Log "Testing directory structure..."
+    # Read and parse scripts.json as PowerShell object
+    $scriptsJsonPath = Join-Path $ScriptRoot "scripts.json"
+    
+    if (Test-Path $scriptsJsonPath) {
+        Write-Log "Found scripts.json at: $scriptsJsonPath"
+        
+        try {
+            $scriptsContent = Get-Content -Path $scriptsJsonPath -Raw -ErrorAction Stop
+            $scriptsArray = $scriptsContent | ConvertFrom-Json -ErrorAction Stop
+            
+            Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
+            
+            # Loop over the array and log each script content
+            foreach ($script in $scriptsArray) {
+                Write-Log "Script content: $script"
+            }
+            
+        } catch {
+            Write-Log "Failed to parse scripts.json: $_" -Level "ERROR"
+        }
+    } else {
+        Write-Log "scripts.json not found at: $scriptsJsonPath" -Level "WARNING"
+    }
     
     
     Write-Log "=== Firstboot Scheduler completed successfully ==="
