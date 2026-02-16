@@ -155,23 +155,28 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			ctxlog.Info("Migration pod not found yet, requeuing", "migration", migration.Name)
-			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
 
-	ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", migration.Spec.PodRef)
 	if migration.Spec.PodRef != pod.Name {
+		ctxlog.Info("Updating migration spec podref", "migration", migration.Name, "podRef", pod.Name)
 		migration.Spec.PodRef = pod.Name
 		if err := r.Update(ctx, migration); err != nil {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
-	pod.Labels["startCutover"] = utils.SetCutoverLabel(migration.Spec.InitiateCutover, pod.Labels["startCutover"])
-	if err = r.Update(ctx, pod); err != nil {
-		ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
-		return ctrl.Result{}, err
+	oldCutoverLabel := pod.Labels["startCutover"]
+	newCutoverLabel := utils.SetCutoverLabel(migration.Spec.InitiateCutover, oldCutoverLabel)
+	if newCutoverLabel != oldCutoverLabel {
+		pod.Labels["startCutover"] = newCutoverLabel
+		if err = r.Update(ctx, pod); err != nil {
+			ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
+			return ctrl.Result{}, err
+		}
 	}
 
 	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
