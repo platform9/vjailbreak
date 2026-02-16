@@ -9,12 +9,12 @@ packer {
 
 variable "ubuntu_minimal_url" {
   type    = string
-  default = "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
+  default = "https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"
 }
 
 variable "ubuntu_minimal_checksum" {
   type    = string
-  default = "file:https://cloud-images.ubuntu.com/minimal/releases/noble/release/SHA256SUMS"
+  default = "file:https://cloud-images.ubuntu.com/minimal/releases/jammy/release/SHA256SUMS"
 }
 
 variable "k3s_version" {
