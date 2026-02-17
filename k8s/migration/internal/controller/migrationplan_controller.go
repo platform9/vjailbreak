@@ -257,8 +257,8 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		return errors.Wrap(err, "invalid vCenter credentials")
 	}
 
-	// Create vCenter client and get datacenter
-	vcClient, dc, err := createVCenterClientAndDC(ctx, host, username, password, vmwcreds.Spec.DataCenter)
+	// Create vCenter client (datacenter is auto-detected from VM during move operation)
+	vcClient, _, err := createVCenterClientAndDC(ctx, host, username, password, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return errors.Wrap(err, "failed to create vCenter client")
 	}
@@ -280,7 +280,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		if err := r.moveVMToFolder(ctx, vcClient, dc, migrationplan, vm); err != nil {
+		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vm); err != nil {
 			return errors.Wrap(err, "failed to move VM to folder")
 		}
 	}
@@ -314,7 +314,6 @@ func (*MigrationPlanReconciler) renameVM(
 func (*MigrationPlanReconciler) moveVMToFolder(
 	ctx context.Context,
 	vcClient *vcenter.VCenterClient,
-	dc *object.Datacenter,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string,
 ) error {
@@ -326,6 +325,16 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 	}
 
 	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
+
+	// Auto-detect datacenter from the VM itself
+	ctxlog.Info("Auto-detecting datacenter from VM...", "vm", vm)
+	_, dc, err := vcClient.GetVMWithDatacenter(ctx, vm)
+	if err != nil {
+		ctxlog.Error(err, "Failed to find VM and its datacenter", "vm", vm)
+		return errors.Wrapf(err, "failed to find VM '%s' and its datacenter", vm)
+	}
+	ctxlog.Info("Auto-detected datacenter for VM", "vm", vm, "datacenter", dc.Name())
+
 	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
 	if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
 		ctxlog.Error(err, "Folder creation/verification failed", "folder", folderName, "vm", vm, "migrationplan", migrationplan.Name)
