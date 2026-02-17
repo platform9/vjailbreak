@@ -17,7 +17,7 @@ import {
   styled,
   alpha
 } from '@mui/material'
-import { ChevronLeft, ChevronRight, OpenInNew, ExpandLess, ExpandMore } from '@mui/icons-material'
+import { ChevronLeft, ChevronRight, OpenInNew } from '@mui/icons-material'
 import { useState, useEffect, useMemo, useId, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from 'src/types/navigation'
@@ -31,17 +31,66 @@ import { useTheme } from '@mui/material/styles'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
 import { Phase } from 'src/api/migrations/model'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
+import { PRIMARY_MAIN } from 'src/theme/theme'
 
 const DRAWER_WIDTH = 280
 const DRAWER_WIDTH_COLLAPSED = 72
 
 const SUBMENU_CONNECTOR_GREY = '#e6e6ea'
-const SUBMENU_CONNECTOR_BLUE = '#0089c7'
+const SUBMENU_CONNECTOR_BLUE = PRIMARY_MAIN
 const SUBMENU_ROW_HEIGHT_PX = 32
 const FIRST_LEVEL_ROW_HEIGHT_PX = 44
 const SUBMENU_SPINE_X_PX = 22
 const SUBMENU_CONNECTOR_SVG_LEFT_PX = SUBMENU_SPINE_X_PX - 4
 const SUBMENU_TEXT_INDENT_PX = 36
+
+const ExpandToggleIconRoot = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'expanded'
+})<{ expanded: boolean }>(({ theme, expanded }) => ({
+  width: 16,
+  height: 16,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'relative',
+  transition: theme.transitions.create(['transform'], {
+    duration: theme.transitions.duration.shorter,
+    easing: theme.transitions.easing.easeInOut
+  }),
+  transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)'
+}))
+
+const ExpandToggleBar = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'vertical' && prop !== 'expanded'
+})<{ vertical?: boolean; expanded?: boolean }>(({ theme, vertical, expanded }) => ({
+  position: 'absolute',
+  backgroundColor: expanded ? theme.palette.text.secondary : theme.palette.text.primary,
+  borderRadius: 2,
+  ...(vertical
+    ? {
+        width: 2,
+        height: 10,
+        transition: theme.transitions.create(['transform', 'opacity'], {
+          duration: theme.transitions.duration.shorter,
+          easing: theme.transitions.easing.easeInOut
+        }),
+        transform: expanded ? 'scaleY(0)' : 'scaleY(1)',
+        opacity: expanded ? 0 : 1
+      }
+    : {
+        height: 2,
+        width: 10
+      })
+}))
+
+function ExpandToggleIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <ExpandToggleIconRoot expanded={expanded} aria-hidden>
+      <ExpandToggleBar expanded={expanded} />
+      <ExpandToggleBar vertical expanded={expanded} />
+    </ExpandToggleIconRoot>
+  )
+}
 
 function SubmenuConnectorIcon({ color }: { color: string }) {
   const maskId = useId()
@@ -196,7 +245,7 @@ const StyledListItemButton = styled(ListItemButton, {
     minHeight: depth > 0 ? SUBMENU_ROW_HEIGHT_PX : FIRST_LEVEL_ROW_HEIGHT_PX,
     height: depth > 0 ? SUBMENU_ROW_HEIGHT_PX : FIRST_LEVEL_ROW_HEIGHT_PX,
     maxHeight: depth > 0 ? SUBMENU_ROW_HEIGHT_PX : FIRST_LEVEL_ROW_HEIGHT_PX,
-    margin: collapsed ? theme.spacing(0.5, 1) : theme.spacing(0.5, 1),
+    margin: theme.spacing(0.5, 1),
     borderRadius: theme.spacing(1),
     paddingLeft: collapsed ? 'auto' : theme.spacing(2),
     paddingRight: collapsed ? 'auto' : theme.spacing(2),
@@ -207,13 +256,26 @@ const StyledListItemButton = styled(ListItemButton, {
     transition: theme.transitions.create(['background-color', 'box-shadow'], {
       duration: theme.transitions.duration.shorter
     }),
+    color:
+      depth > 0
+        ? alpha(theme.palette.text.secondary, 0.75)
+        : alpha(theme.palette.text.secondary, 0.8),
+    '& .MuiTypography-root': {
+      fontSize: depth > 0 ? '0.875rem' : '0.95rem',
+      fontWeight: depth > 0 ? 400 : 400,
+      letterSpacing: '0.01em',
+      lineHeight: 1.25
+    },
+    '& .MuiListItemText-root': {
+      margin: 0
+    },
     ...(active
       ? depth > 0
         ? {
             backgroundColor: 'transparent',
             color: theme.palette.text.primary,
             '& .MuiTypography-root': {
-              fontWeight: 600
+              fontWeight: 400
             },
             '&::before': {
               content: '""',
@@ -276,19 +338,8 @@ const StyledListItemButton = styled(ListItemButton, {
           }
         }
       : null),
-    '&:hover':
-      depth > 0
-        ? {
-            backgroundColor: 'transparent',
-            '& .MuiTypography-root': {
-              color: theme.palette.text.primary
-            }
-          }
-        : {
-            backgroundColor: alpha(theme.palette.primary.main, 0.05)
-          },
     '&.Mui-focusVisible': {
-      boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.25)}`
+      boxShadow: 'none'
     }
   })
 )
@@ -307,7 +358,7 @@ const StyledListItemIcon = styled(ListItemIcon, {
   shouldForwardProp: (prop) => prop !== 'collapsed'
 })<{ collapsed?: boolean }>(({ collapsed }) => ({
   minWidth: collapsed ? 44 : 36,
-  marginRight: collapsed ? 6 : 12,
+  marginRight: collapsed ? 6 : 10,
   justifyContent: 'center',
   '& svg': {
     fontSize: 20
@@ -409,6 +460,8 @@ function NavigationItemComponent({
       groupActive={isGroupActive}
       onClick={handleClick}
       disabled={item.disabled}
+      disableRipple
+      disableTouchRipple
       data-tour={`nav-${item.id}`}
       sx={
         !isCollapsed
@@ -420,12 +473,6 @@ function NavigationItemComponent({
               ...(depth > 0 ? { margin: '0 8px' } : null),
               marginRight: depth > 0 ? 0 : undefined,
               borderRadius: depth > 0 ? 1 : undefined,
-              '& .MuiTypography-root': {
-                fontSize: depth > 0 ? '0.875rem' : '0.95rem',
-                fontWeight:
-                  depth === 0 ? (isActive || isGroupActive ? 600 : 500) : isActive ? 600 : 500,
-                color: depth > 0 ? (isActive ? 'text.primary' : 'text.secondary') : undefined
-              },
               ...(depth === 0 && isGroupActive && !isActive ? { color: 'text.primary' } : null)
             }
           : undefined
@@ -458,9 +505,16 @@ function NavigationItemComponent({
                     aria-label={
                       isExpanded ? 'collapse navigation group' : 'expand navigation group'
                     }
-                    sx={{ color: 'inherit' }}
+                    disableRipple
+                    disableTouchRipple
+                    sx={{
+                      color: 'inherit',
+                      p: 0.5,
+                      '&:hover': { backgroundColor: 'transparent' },
+                      '&:active': { backgroundColor: 'transparent' }
+                    }}
                   >
-                    {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                    <ExpandToggleIcon expanded={Boolean(isExpanded)} />
                   </IconButton>
                 ) : null}
                 {item.external && <OpenInNew sx={{ fontSize: '0.875rem', opacity: 0.7 }} />}
@@ -703,6 +757,7 @@ export default function Sidenav({
             const isChildActive = !!item.children?.some((c) => currentActiveItem === c.path)
             const isItemVisuallyActive = isCollapsed ? isItemActive || isChildActive : isItemActive
             const isExpanded = expandedItem === item.id
+            const visibleChildren = item.children?.filter((child) => !child.hidden) ?? []
             const activeChildIndex =
               item.children?.findIndex((c) => currentActiveItem === c.path) ?? -1
 
@@ -721,7 +776,7 @@ export default function Sidenav({
                   depth={0}
                 />
 
-                {!isCollapsed && item.children?.length ? (
+                {!isCollapsed && visibleChildren.length ? (
                   <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                     <ChildGroupContainer
                       sx={{
@@ -731,7 +786,7 @@ export default function Sidenav({
                           position: 'absolute',
                           left: `${SUBMENU_SPINE_X_PX}px`,
                           top: '-8px',
-                          bottom: 0,
+                          height: `${Math.max(visibleChildren.length * SUBMENU_ROW_HEIGHT_PX - SUBMENU_ROW_HEIGHT_PX / 2, 0)}px`,
                           width: '1px',
                           backgroundColor: SUBMENU_CONNECTOR_GREY,
                           borderRadius: 1
@@ -752,38 +807,36 @@ export default function Sidenav({
                       }}
                     >
                       <List disablePadding>
-                        {item.children
-                          .filter((child) => !child.hidden)
-                          .map((child, idx) => {
-                            const isSelected = currentActiveItem === child.path
-                            const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
-                            const lineColor = isActiveBranch
-                              ? SUBMENU_CONNECTOR_BLUE
-                              : SUBMENU_CONNECTOR_GREY
+                        {visibleChildren.map((child, idx) => {
+                          const isSelected = currentActiveItem === child.path
+                          const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
+                          const lineColor = isActiveBranch
+                            ? SUBMENU_CONNECTOR_BLUE
+                            : SUBMENU_CONNECTOR_GREY
 
-                            return (
-                              <ChildNavItemWrapper key={child.id}>
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
-                                    top: '50%',
-                                    transform: 'translateY(-65%)',
-                                    visibility: isSelected ? 'visible' : 'hidden'
-                                  }}
-                                >
-                                  <SubmenuConnectorIcon color={lineColor} />
-                                </Box>
-                                <NavigationItemComponent
-                                  item={child}
-                                  isActive={isSelected}
-                                  isCollapsed={isCollapsed}
-                                  onClick={handleItemClick}
-                                  depth={1}
-                                />
-                              </ChildNavItemWrapper>
-                            )
-                          })}
+                          return (
+                            <ChildNavItemWrapper key={child.id}>
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
+                                  top: '50%',
+                                  transform: 'translateY(-65%)',
+                                  visibility: isSelected ? 'visible' : 'hidden'
+                                }}
+                              >
+                                <SubmenuConnectorIcon color={lineColor} />
+                              </Box>
+                              <NavigationItemComponent
+                                item={child}
+                                isActive={isSelected}
+                                isCollapsed={isCollapsed}
+                                onClick={handleItemClick}
+                                depth={1}
+                              />
+                            </ChildNavItemWrapper>
+                          )
+                        })}
                       </List>
                     </ChildGroupContainer>
                   </Collapse>
@@ -821,6 +874,8 @@ export default function Sidenav({
               const flyoutItem = items.find((it) => it.id === flyoutItemId)
               if (!flyoutItem?.children?.length) return null
 
+              const visibleFlyoutChildren =
+                flyoutItem.children?.filter((child) => !child.hidden) ?? []
               const activeChildIndex =
                 flyoutItem.children?.findIndex((c) => currentActiveItem === c.path) ?? -1
 
@@ -846,7 +901,7 @@ export default function Sidenav({
                         position: 'absolute',
                         left: `${SUBMENU_SPINE_X_PX}px`,
                         top: '-8px',
-                        bottom: 0,
+                        height: `${Math.max(visibleFlyoutChildren.length * SUBMENU_ROW_HEIGHT_PX - SUBMENU_ROW_HEIGHT_PX / 2, 0)}px`,
                         width: '1px',
                         backgroundColor: SUBMENU_CONNECTOR_GREY,
                         borderRadius: 1
@@ -867,38 +922,36 @@ export default function Sidenav({
                     }}
                   >
                     <List disablePadding>
-                      {flyoutItem.children
-                        .filter((child) => !child.hidden)
-                        .map((child, idx) => {
-                          const isSelected = currentActiveItem === child.path
-                          const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
-                          const lineColor = isActiveBranch
-                            ? SUBMENU_CONNECTOR_BLUE
-                            : SUBMENU_CONNECTOR_GREY
+                      {visibleFlyoutChildren.map((child, idx) => {
+                        const isSelected = currentActiveItem === child.path
+                        const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
+                        const lineColor = isActiveBranch
+                          ? SUBMENU_CONNECTOR_BLUE
+                          : SUBMENU_CONNECTOR_GREY
 
-                          return (
-                            <ChildNavItemWrapper key={child.id}>
-                              <Box
-                                sx={{
-                                  position: 'absolute',
-                                  left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
-                                  top: '50%',
-                                  transform: 'translateY(-65%)',
-                                  visibility: isSelected ? 'visible' : 'hidden'
-                                }}
-                              >
-                                <SubmenuConnectorIcon color={lineColor} />
-                              </Box>
-                              <NavigationItemComponent
-                                item={child}
-                                isActive={isSelected}
-                                isCollapsed={false}
-                                onClick={handleItemClick}
-                                depth={1}
-                              />
-                            </ChildNavItemWrapper>
-                          )
-                        })}
+                        return (
+                          <ChildNavItemWrapper key={child.id}>
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
+                                top: '50%',
+                                transform: 'translateY(-65%)',
+                                visibility: isSelected ? 'visible' : 'hidden'
+                              }}
+                            >
+                              <SubmenuConnectorIcon color={lineColor} />
+                            </Box>
+                            <NavigationItemComponent
+                              item={child}
+                              isActive={isSelected}
+                              isCollapsed={false}
+                              onClick={handleItemClick}
+                              depth={1}
+                            />
+                          </ChildNavItemWrapper>
+                        )
+                      })}
                     </List>
                   </Box>
                 </Box>

@@ -1,6 +1,5 @@
 import { NavigationItem } from '../types/navigation'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
-import AgentsIcon from '@mui/icons-material/Computer'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Insights'
@@ -9,13 +8,13 @@ import { Storage } from '@mui/icons-material'
 
 export const navigationItems: NavigationItem[] = [
   {
-    id: 'migration',
-    label: 'Migration',
-    path: '/dashboard/migrations',
+    id: 'migrations',
+    label: 'Migrations',
+    path: '/dashboard/',
     icon: <MigrationIcon />,
     children: [
       {
-        id: 'migrations',
+        id: 'migration',
         label: 'Migration',
         path: '/dashboard/migrations'
       },
@@ -23,6 +22,11 @@ export const navigationItems: NavigationItem[] = [
         id: 'cluster-conversions',
         label: 'Cluster Conversion',
         path: '/dashboard/cluster-conversions'
+      },
+      {
+        id: 'agents',
+        label: 'Agents',
+        path: '/dashboard/agents'
       }
     ]
   },
@@ -34,31 +38,25 @@ export const navigationItems: NavigationItem[] = [
     children: [
       {
         id: 'vm-credentials',
-        label: 'VMware Credentials',
+        label: 'VMware',
         path: '/dashboard/credentials/vm'
       },
       {
         id: 'pcd-credentials',
-        label: 'PCD Credentials',
+        label: 'PCD',
         path: '/dashboard/credentials/pcd'
       },
       {
         id: 'array-credentials',
-        label: 'Array Credentials',
+        label: 'Storage Array',
         path: '/dashboard/storage-management'
       }
     ]
   },
   {
-    id: 'agents',
-    label: 'Agents',
-    path: '/dashboard/agents',
-    icon: <AgentsIcon />
-  },
-  {
     id: 'settings',
     label: 'Settings',
-    path: '/dashboard/global-settings',
+    path: '/dashboard/settings',
     icon: <ConfigIcon />,
     children: [
       {
