@@ -1,4 +1,9 @@
 # Firstboot-Scheduler.ps1
+# The scheduler maintains a state table for each script and starts executing each script serially, 
+# if the scheduler is interrupted by a reboot(during the installation of virtio drivers) the scheduler schedules itself on the next boot and continues from where it left off. 
+# If a script fails after multiple reboots the scheduler stops. The script run by scheduler is wrapped in an exponential backoff mechanism, 
+# which retries the script before failing completely and rescheduling the scheduler at next boot
+
 $ScriptRoot = "C:\firstboot"
 $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
