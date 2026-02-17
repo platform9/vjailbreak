@@ -387,10 +387,12 @@ export default function MigrationsTable({
           const conditions = params.row?.status?.conditions
           const currentDisk = params.row?.status?.currentDisk
           const totalDisks = params.row?.status?.totalDisks
+          const syncWarning = params.row?.status?.syncWarning
           return conditions ? (
             <MigrationProgress
               phase={phase}
               progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+              syncWarning={syncWarning}
             />
           ) : null
         }

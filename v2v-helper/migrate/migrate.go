@@ -93,11 +93,39 @@ type MigrationTimes struct {
 type PeriodicSyncStates int
 
 const (
-	initial PeriodicSyncStates = iota
-	cleanedSnapshot
-	TookSnapshot
-	SyncCompleted
+	// StateIdle is the initial state, ready to start a new sync cycle
+	StateIdle PeriodicSyncStates = iota
+	// StateCleaningSnapshots indicates we are cleaning up old snapshots
+	StateCleaningSnapshots
+	// StateTakingSnapshot indicates we are taking a new migration snapshot
+	StateTakingSnapshot
+	// StateSyncingCBT indicates we are syncing changed blocks
+	StateSyncingCBT
 )
+
+// String returns a human-readable name for the state
+func (s PeriodicSyncStates) String() string {
+	switch s {
+	case StateIdle:
+		return "Idle"
+	case StateCleaningSnapshots:
+		return "CleaningSnapshots"
+	case StateTakingSnapshot:
+		return "TakingSnapshot"
+	case StateSyncingCBT:
+		return "SyncingCBT"
+	default:
+		return "Unknown"
+	}
+}
+
+// PeriodicSyncContext holds the state machine context for periodic sync operations
+type PeriodicSyncContext struct {
+	CurrentState   PeriodicSyncStates
+	LastError      error
+	SyncWarning    bool   // Indicates if sync is in warning state (failed but will retry)
+	WarningMessage string // Actionable message when in warning state
+}
 
 // disconnects the source VM's network interfaces
 func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
@@ -461,79 +489,122 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 }
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
-	var syncInterval time.Duration
-	var maxRetries uint64
-	var capInterval time.Duration
-	currentState := initial
 	vmops := migobj.VMops
-	maxRetries, capInterval = utils.GetRetryLimits()
+	maxRetries, capInterval := utils.GetRetryLimits()
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
+
+	// Initialize state machine context
+	syncCtx := &PeriodicSyncContext{
+		CurrentState: StateIdle,
+	}
+
 	elapsed := time.Duration(0)
+
 	for {
 		syncEnabled := migobj.getSyncEnabled()
+		var syncInterval time.Duration
 		if syncEnabled {
 			syncInterval = migobj.getSyncDuration()
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case label := <-migobj.PodLabelWatcher:
-			if label == "yes" && currentState == initial {
+			if label == "yes" && syncCtx.CurrentState == StateIdle {
 				migobj.logMessage("Admin cutover triggered")
 				return nil
 			}
 		default:
 			if !syncEnabled {
+				// Small sleep to prevent busy-waiting when sync is disabled
+				time.Sleep(1 * time.Second)
 				continue
 			}
+
+			// Calculate wait time based on elapsed time
 			if elapsed >= syncInterval {
 				migobj.logMessage("Periodic Sync: Previous sync took longer than interval, starting next cycle immediately")
 				elapsed = syncInterval
 			}
-			// Otherwise wait remaining time
+
 			waitTime := syncInterval - elapsed
-			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle", waitTime))
+			stateInfo := syncCtx.CurrentState.String()
+			if syncCtx.SyncWarning {
+				stateInfo = fmt.Sprintf("%s (WARNING: %s)", stateInfo, syncCtx.WarningMessage)
+			}
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle (state: %s)", waitTime, stateInfo))
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-migobj.PodLabelWatcher:
-				return nil // admin triggered cutover during wait
+			case label := <-migobj.PodLabelWatcher:
+				if label == "yes" {
+					migobj.logMessage("Admin cutover triggered during wait")
+					return nil
+				}
 			case <-time.After(waitTime):
-				// wait completed → loop and sync again
+				// wait completed → proceed to sync
 			}
-			// Perform sync
+
+			// Execute state machine - always start fresh from Idle each cycle
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting sync cycle (interval: %s)", syncInterval))
 			start := time.Now()
-			if currentState == initial {
-				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					return vmops.CleanUpSnapshots(false)
-				}, maxRetries, capInterval)
-				if err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to clean up snapshots after %d retries: %v", maxRetries, err))
-					continue
-				} else {
-					currentState = cleanedSnapshot
-				}
+
+			// Reset state to start fresh each cycle
+			syncCtx.CurrentState = StateCleaningSnapshots
+
+			// State: CleaningSnapshots
+			err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return vmops.CleanUpSnapshots(false)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.SyncWarning = true
+				syncCtx.WarningMessage = fmt.Sprintf("Snapshot cleanup failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
-			if currentState == cleanedSnapshot {
-				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					return vmops.TakeSnapshot(constants.MigrationSnapshotName)
-				}, maxRetries, capInterval)
-				if err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to take snapshot '%s' after %d retries: %v", constants.MigrationSnapshotName, maxRetries, err))
-					continue
-				} else {
-					currentState = TookSnapshot
-				}
+
+			// State: TakingSnapshot
+			syncCtx.CurrentState = StateTakingSnapshot
+			err = utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return vmops.TakeSnapshot(constants.MigrationSnapshotName)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.SyncWarning = true
+				syncCtx.WarningMessage = fmt.Sprintf("Snapshot creation '%s' failed after %d retries: %v. Will retry on next sync interval.", constants.MigrationSnapshotName, maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
-			if currentState == TookSnapshot {
-				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
-					currentState = initial // Reset state on failure so we retry from start next loop
-					continue
-				}
-				currentState = initial // Reset on success as well.
+
+			// State: SyncingCBT
+			syncCtx.CurrentState = StateSyncingCBT
+			err = utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return migobj.SyncCBT(ctx, vminfo)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.SyncWarning = true
+				syncCtx.WarningMessage = fmt.Sprintf("CBT sync failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
+
+			// Sync completed successfully - clear warning state
+			syncCtx.CurrentState = StateIdle
+			syncCtx.SyncWarning = false
+			syncCtx.WarningMessage = ""
+			syncCtx.LastError = nil
+			migobj.logMessage("Periodic Sync: Sync cycle completed successfully")
+
 			elapsed = time.Since(start)
 		}
 	}

@@ -128,6 +128,14 @@ type MigrationStatus struct {
 	// as RDM disk migration state prevents automatic retry.
 	// +optional
 	Retryable *bool `json:"retryable,omitempty"`
+
+	// SyncWarning indicates if the periodic sync is in a warning state requiring manual intervention
+	// +optional
+	SyncWarning bool `json:"syncWarning,omitempty"`
+
+	// SyncWarningMessage contains the actionable error message when SyncWarning is true
+	// +optional
+	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

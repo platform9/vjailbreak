@@ -3,6 +3,7 @@ package migrate
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -24,6 +25,59 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestPeriodicSyncStatesString(t *testing.T) {
+	tests := []struct {
+		state    PeriodicSyncStates
+		expected string
+	}{
+		{StateIdle, "Idle"},
+		{StateCleaningSnapshots, "CleaningSnapshots"},
+		{StateTakingSnapshot, "TakingSnapshot"},
+		{StateSyncingCBT, "SyncingCBT"},
+		{PeriodicSyncStates(99), "Unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.state.String())
+		})
+	}
+}
+
+func TestPeriodicSyncContext(t *testing.T) {
+	ctx := &PeriodicSyncContext{
+		CurrentState:   StateIdle,
+		LastError:      nil,
+		SyncWarning:    false,
+		WarningMessage: "",
+	}
+
+	// Test initial state
+	assert.Equal(t, StateIdle, ctx.CurrentState)
+	assert.False(t, ctx.SyncWarning)
+	assert.Nil(t, ctx.LastError)
+	assert.Empty(t, ctx.WarningMessage)
+
+	// Test transition to warning state (sync failed but will auto-retry)
+	testErr := errors.New("test error")
+	ctx.SyncWarning = true
+	ctx.LastError = testErr
+	ctx.WarningMessage = "Snapshot cleanup failed. Will retry on next sync interval."
+
+	assert.True(t, ctx.SyncWarning)
+	assert.Equal(t, testErr, ctx.LastError)
+	assert.Equal(t, "Snapshot cleanup failed. Will retry on next sync interval.", ctx.WarningMessage)
+
+	// Test recovery from warning state (sync succeeded)
+	ctx.SyncWarning = false
+	ctx.LastError = nil
+	ctx.WarningMessage = ""
+
+	assert.False(t, ctx.SyncWarning)
+	assert.Nil(t, ctx.LastError)
+	assert.Empty(t, ctx.WarningMessage)
+}
 
 func TestCreateVolumes(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -372,7 +426,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		EventReporter:    dummychan,
 		PodLabelWatcher:  dummychan2,
 		MigrationType:    "hot",
-		K8sClient: fakeCtrlClient,
+		K8sClient:        fakeCtrlClient,
 		// Reporter is nil by default, which is safe now with the nil check in CheckIfAdminCutoverSelected
 	}
 	go func() {

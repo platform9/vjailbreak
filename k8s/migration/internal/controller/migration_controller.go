@@ -205,6 +205,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
 
+	// Extract sync warning state from events
+	r.ExtractSyncWarning(migration, filteredEvents)
+
 	if migration.Status.TotalDisks == 0 {
 		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
 			if n, err := strconv.Atoi(v); err == nil {
@@ -561,6 +564,36 @@ func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.M
 	for _, condition := range migration.Status.Conditions {
 		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
 			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+}
+
+// ExtractSyncWarning extracts the periodic sync warning state from pod events
+// It looks for "WARNING" messages which indicate the sync failed but will auto-retry
+func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	// Look for the most recent warning or resolution
+
+	for i := range events.Items {
+		msg := events.Items[i].Message
+
+		// Check if sync completed successfully (warning resolved)
+		if strings.Contains(msg, "Sync cycle completed successfully") {
+			migration.Status.SyncWarning = false
+			migration.Status.SyncWarningMessage = ""
+			return
+		}
+
+		// Check if sync warning is active (WARNING message from periodic sync)
+		if strings.Contains(msg, "Periodic Sync: WARNING -") {
+			migration.Status.SyncWarning = true
+			// Extract the warning message after "WARNING - "
+			if idx := strings.Index(msg, "WARNING - "); idx != -1 {
+				migration.Status.SyncWarningMessage = strings.TrimSpace(msg[idx+len("WARNING - "):])
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
 			return
 		}
 	}

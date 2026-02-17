@@ -1053,6 +1053,14 @@ spec:
                   Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
                   as RDM disk migration state prevents automatic retry.
                 type: boolean
+              syncWarning:
+                description: SyncWarning indicates if the periodic sync is in a warning
+                  state requiring manual intervention
+                type: boolean
+              syncWarningMessage:
+                description: SyncWarningMessage contains the actionable error message
+                  when SyncWarning is true
+                type: string
               totalDisks:
                 description: TotalDisks is the total number of disks to be migrated
                 type: integer
