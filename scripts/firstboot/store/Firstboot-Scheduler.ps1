@@ -199,11 +199,11 @@ function Push-Script {
         if (Test-Path $StateFilePath) {
             $existingScripts = Get-Content -Path $StateFilePath 
             foreach ($existingScript in $existingScripts) {
-                $scriptName, [int]$scriptNumber = $existingScript -split '\|'
-                if ($scriptName -eq $ScriptName) {
-                    Write-Log "Script '$ScriptName' already exists in the state file with number '$scriptNumber'."
-                    if ($scriptNumber -lt 3){
-                        $scriptRunTimes = $scriptNumber
+                $entryName, [int]$entryNumber = $existingScript -split '\|'
+                if ($entryName -eq $ScriptName) {
+                    Write-Log "Script '$ScriptName' already exists in the state file with number '$entryNumber'."
+                    if ($entryNumber -lt 3){
+                        $scriptRunTimes = $entryNumber
                     }else{
                         Write-Log "Script '$ScriptName' has reached its maximum run times (3)."
                         throw "Script '$ScriptName' has reached its maximum run times (3)."
@@ -214,8 +214,9 @@ function Push-Script {
             if($scriptRunTimes -eq -2){
                 throw "Script '$ScriptName' does not exist in the state file."
             }else{
+                $originalRunTimes = $scriptRunTimes
                 $scriptRunTimes = $scriptRunTimes + 1
-                $updated = $existingScripts -replace "$ScriptName\|$scriptNumber", "$ScriptName|$scriptRunTimes"
+                $updated = $existingScripts -replace "$ScriptName\|$originalRunTimes", "$ScriptName|$scriptRunTimes"
                 Set-Content -Path $StateFilePath -Value $updated
             }
         }else{
@@ -263,23 +264,23 @@ function Init-Table{
 function Get-Script{
     try {
     if (Test-Path $StateFilePath){
-        $scripts = Get-Content -Path $StateFilePath
+        $stateEntries = Get-Content -Path $StateFilePath
         #validate
-        foreach ($script in $scripts){
-            $scriptName, [int]$scriptNumber = $script -split '\|'
-            if ($scriptName -ne "" -and $scriptNumber -ge -1 -and $scriptNumber -lt 3){
-                Write-Log "Script Name: $scriptName, Run Times: $scriptNumber"
+        foreach ($entry in $stateEntries){
+            $entryName, [int]$entryNumber = $entry -split '\|'
+            if ($entryName -ne "" -and $entryNumber -ge -1 -and $entryNumber -lt 3){
+                Write-Log "Script Name: $entryName, Run Times: $entryNumber"
             } else {
-                throw "Invalid script entry: $script"
+                throw "Invalid script entry: $entry"
             }
         }
-        foreach ($script in $scripts) {
-            $scriptName, [int]$scriptNumber = $script -split '\|'
-            if ($scriptNumber -eq -1){
-                return $scriptName
+        foreach ($entry in $stateEntries) {
+            $entryName, [int]$entryNumber = $entry -split '\|'
+            if ($entryNumber -eq -1){
+                return $entryName
             } 
-            if ($scriptNumber -ge 0 -and $scriptNumber -lt 3){
-                return $scriptName
+            if ($entryNumber -ge 0 -and $entryNumber -lt 3){
+                return $entryName
             }
         }
     return ""
