@@ -28,8 +28,17 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+REPO_ROOT := $(shell git rev-parse --show-toplevel)
+
+.PHONY: setup-hooks
+setup-hooks: ## Configure git to use repo-tracked hooks
+	@if [ "$$(git -C $(REPO_ROOT) config core.hooksPath)" != ".githooks" ]; then \
+		git -C $(REPO_ROOT) config core.hooksPath .githooks; \
+		echo "[setup-hooks] core.hooksPath set to .githooks"; \
+	fi
+
 .PHONY: all
-all: build
+all: setup-hooks build
 
 ##@ General
 
@@ -67,7 +76,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
+test: setup-hooks manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
@@ -76,28 +85,28 @@ test-e2e:
 	go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: setup-hooks golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
-lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+lint-fix: setup-hooks golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 ##@ Build
 
 .PHONY: build
-build: manifests generate # fmt vet ## Build manager binary.
+build: setup-hooks manifests generate # fmt vet ## Build manager binary.
 	CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "-X github.com/platform9/vjailbreak/k8s/migration/internal/controller.v2vimage=${V2V_IMG}" -o manager cmd/main.go
 
 .PHONY: run
-run: manifests generate  # fmt vet ## Run a controller from your host.
+run: setup-hooks manifests generate  # fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go --kubeconfig ${KUBECONFIG} --local
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: build ## Build docker image with the manager.
+docker-build: setup-hooks build ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build --build-arg V2V_IMG=$(V2V_IMG) --platform linux/amd64 -t ${CONTROLLER_IMG} .
 
 .PHONY: docker-push
@@ -122,7 +131,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	rm Dockerfile.cross
 
 .PHONY: build-installer
-build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: setup-hooks manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
 	cd config/addons && $(KUSTOMIZE) edit set image vpwned=${VPWNED_IMG}

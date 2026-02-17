@@ -30,29 +30,36 @@ export KUBECONFIG ?= ~/.kube/config
 export CONTAINER_TOOL ?= docker
 
 
+.PHONY: setup-hooks
+setup-hooks: ## Configure git to use repo-tracked hooks
+	@if [ "$$(git config core.hooksPath)" != ".githooks" ]; then \
+		git config core.hooksPath .githooks; \
+		echo "[setup-hooks] core.hooksPath set to .githooks"; \
+	fi
+
 .PHONY: ui
-ui:
+ui: setup-hooks
 	docker build --platform linux/amd64 -t $(UI_IMG) ui/
 
 .PHONY: v2v-helper
-v2v-helper:
+v2v-helper: setup-hooks
 	make -C v2v-helper build
 	docker build --platform linux/amd64 --build-arg RELEASE_VERSION=$(VERSION) -t $(V2V_IMG) -f v2v-helper/Dockerfile .
 
 .PHONY: test-v2v-helper
-test-v2v-helper:
+test-v2v-helper: setup-hooks
 	cd v2v-helper && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v
 
 .PHONY: vjail-controller
-vjail-controller: v2v-helper
+vjail-controller: setup-hooks v2v-helper
 	make -C k8s/migration/ docker-build
 
 .PHONY: vjail-controller-only
-vjail-controller-only:
+vjail-controller-only: setup-hooks
 	make -C k8s/migration/ docker-build
 
 .PHONY: generate-manifests
-generate-manifests: vjail-controller ui
+generate-manifests: setup-hooks vjail-controller ui
 	rm -rf image_builder/deploy && mkdir -p image_builder/deploy && chmod 755 image_builder/deploy
 	envsubst < ui/deploy/ui.yaml > image_builder/deploy/01ui.yaml
 	envsubst < image_builder/configs/version-config.yaml > image_builder/deploy/version-config.yaml
@@ -61,10 +68,10 @@ generate-manifests: vjail-controller ui
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 	
 .PHONY: build-vpwned
-build-vpwned:
+build-vpwned: setup-hooks
 	make -C pkg/vpwned docker-build
 
-build-installer:
+build-installer: setup-hooks
 	make -C k8s/migration/ build-installer 
 
 .PHONY: docker-build-image
@@ -74,7 +81,7 @@ docker-build-image: generate-manifests
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
 .PHONY: lint
-lint:
+lint: setup-hooks
 	make -C k8s/migration/ lint
 
 .PHONY: build-image
@@ -82,5 +89,5 @@ build-image: generate-manifests
 	rm -rf artifacts/ && mkdir artifacts/
 	docker build --platform linux/amd64 --output=artifacts/ -t vjailbreak-image:local image_builder/ 
 
-run-local:
+run-local: setup-hooks
 	cd k8s/migration/cmd/ && go run main.go --kubeconfig ${KUBECONFIG} --local true
