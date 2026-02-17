@@ -17,7 +17,9 @@ import {
   Typography,
   Snackbar,
   Alert,
+  Checkbox,
   CircularProgress,
+  FormControlLabel,
   GlobalStyles,
   InputAdornment
 } from '@mui/material'
@@ -305,6 +307,9 @@ function VmsSelectionStep({
     Record<string, Record<number, string>>
   >({})
   const [assigningIPs, setAssigningIPs] = useState(false)
+  const [bulkEditOverrides, setBulkEditOverrides] = useState<
+    Record<string, Record<number, { preserveIP: boolean; preserveMAC: boolean }>>
+  >({})
   const hasBulkIpValidationErrors = React.useMemo(() => {
     return Object.values(bulkValidationStatus).some((interfaces) =>
       Object.values(interfaces || {}).some((status) => status === 'invalid')
@@ -1218,7 +1223,29 @@ function VmsSelectionStep({
       }
     })
 
+    // Initialize preserve overrides from existing state
+    const initialOverrides: Record<
+      string,
+      Record<number, { preserveIP: boolean; preserveMAC: boolean }>
+    > = {}
+    Array.from(selectedVMs).forEach((vmName) => {
+      const vm = vmsWithFlavor.find((v) => v.name === vmName)
+      if (!vm) return
+      initialOverrides[vmName] = {}
+      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+        vm.networkInterfaces.forEach((nic, index) => {
+          initialOverrides[vmName][index] = {
+            preserveIP: nic.preserveIP !== false,
+            preserveMAC: nic.preserveMAC !== false
+          }
+        })
+      } else {
+        initialOverrides[vmName] = { 0: { preserveIP: true, preserveMAC: true } }
+      }
+    })
+
     setBulkEditIPs(initialBulkEditIPs)
+    setBulkEditOverrides(initialOverrides)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
     setBulkEditDialogOpen(true)
@@ -1679,6 +1706,16 @@ function VmsSelectionStep({
         </DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Warning banner when any NIC has preserve toggled off */}
+            {Object.values(bulkEditOverrides).some((interfaces) =>
+              Object.values(interfaces).some((o) => !o.preserveIP || !o.preserveMAC)
+            ) && (
+              <Alert severity="warning">
+                One or more NICs are configured to receive new IP/MAC addresses. The VM will not
+                retain its original network identity for those interfaces.
+              </Alert>
+            )}
+
             {/* Quick Actions */}
             <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
               <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
@@ -1723,6 +1760,10 @@ function VmsSelectionStep({
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
                       const status = bulkValidationStatus[vmName]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmName]?.[interfaceIndex]
+                      const overrides = bulkEditOverrides[vmName]?.[interfaceIndex] ?? {
+                        preserveIP: true,
+                        preserveMAC: true
+                      }
                       return (
                         <Box
                           key={interfaceIndex}
@@ -1744,19 +1785,76 @@ function VmsSelectionStep({
                               Current: {networkInterface?.ipAddress || vm.ipAddress || '—'}
                             </Typography>
                           </Box>
-                          <SharedTextField
-                            value={ip}
-                            onChange={(e) =>
-                              handleBulkIpChange(vmName, interfaceIndex, e.target.value)
-                            }
-                            placeholder="Enter IP address"
-                            size="small"
-                            fullWidth
-                            error={status === 'invalid'}
-                            helperText={message || ' '}
-                            FormHelperTextProps={{ sx: { ml: 0 } }}
-                            InputProps={{ endAdornment: renderValidationAdornment(status) }}
-                          />
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  size="small"
+                                  checked={overrides.preserveIP}
+                                  onChange={(e) =>
+                                    setBulkEditOverrides((prev) => ({
+                                      ...prev,
+                                      [vmName]: {
+                                        ...prev[vmName],
+                                        [interfaceIndex]: {
+                                          ...prev[vmName]?.[interfaceIndex],
+                                          preserveIP: e.target.checked
+                                        }
+                                      }
+                                    }))
+                                  }
+                                />
+                              }
+                              label="Preserve IP"
+                            />
+                            {overrides.preserveIP ? (
+                              <SharedTextField
+                                value={ip}
+                                onChange={(e) =>
+                                  handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                                }
+                                placeholder="Enter IP address"
+                                size="small"
+                                fullWidth
+                                error={status === 'invalid'}
+                                helperText={message || ' '}
+                                FormHelperTextProps={{ sx: { ml: 0 } }}
+                                InputProps={{
+                                  endAdornment: renderValidationAdornment(status)
+                                }}
+                              />
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                New IP will be assigned from destination subnet
+                              </Typography>
+                            )}
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  size="small"
+                                  checked={overrides.preserveMAC}
+                                  onChange={(e) =>
+                                    setBulkEditOverrides((prev) => ({
+                                      ...prev,
+                                      [vmName]: {
+                                        ...prev[vmName],
+                                        [interfaceIndex]: {
+                                          ...prev[vmName]?.[interfaceIndex],
+                                          preserveMAC: e.target.checked
+                                        }
+                                      }
+                                    }))
+                                  }
+                                />
+                              }
+                              label="Preserve MAC"
+                            />
+                            {!overrides.preserveMAC && (
+                              <Typography variant="caption" color="text.secondary">
+                                A new MAC address will be assigned in the destination
+                              </Typography>
+                            )}
+                          </Box>
                         </Box>
                       )
                     })}
