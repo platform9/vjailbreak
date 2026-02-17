@@ -606,7 +606,9 @@ export default function MigrationFormDrawer({
     }
   }
 
-  const createArrayCredsMapping = async (arrayCredsMappingsParams: { source: string; target: string }[]) => {
+  const createArrayCredsMapping = async (
+    arrayCredsMappingsParams: { source: string; target: string }[]
+  ) => {
     const body = createArrayCredsMappingJson({
       mappings: arrayCredsMappingsParams
     })
@@ -1155,7 +1157,12 @@ export default function MigrationFormDrawer({
     return availableVmwareDatastores.filter(
       (ds) => !(params.storageMappings || []).some((m) => m.source === ds)
     ).length
-  }, [availableVmwareDatastores, params.storageMappings, params.arrayCredsMappings, params.storageCopyMethod])
+  }, [
+    availableVmwareDatastores,
+    params.storageMappings,
+    params.arrayCredsMappings,
+    params.storageCopyMethod
+  ])
 
   const step1HasErrors = Boolean(
     fieldErrors['vmwareCluster'] ||
@@ -1186,7 +1193,109 @@ export default function MigrationFormDrawer({
       (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript'])
   )
 
-  const step5Complete = Boolean(touchedSections.options && !step5HasErrors)
+  const hasAnyMigrationOptionSelected = useMemo(() => {
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    return (
+      Boolean(selectedMigrationOptions.dataCopyMethod) ||
+      Boolean(selectedMigrationOptions.dataCopyStartTime) ||
+      Boolean(selectedMigrationOptions.cutoverOption) ||
+      Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
+      postMigrationActionSelected
+    )
+  }, [selectedMigrationOptions])
+
+  const areSelectedMigrationOptionsConfigured = useMemo(() => {
+    if (!hasAnyMigrationOptionSelected) return false
+
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
+    const periodicSyncIntervalValue = String(params.periodicSyncInterval ?? '').trim()
+
+    const dataCopyStartTimeOk =
+      !selectedMigrationOptions.dataCopyStartTime ||
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
+
+    const cutoverOk = !selectedMigrationOptions.cutoverOption
+      ? true
+      : Boolean(
+          params.cutoverOption &&
+            !fieldErrors['cutoverOption'] &&
+            (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
+              (params.cutoverStartTime &&
+                params.cutoverEndTime &&
+                !fieldErrors['cutoverStartTime'] &&
+                !fieldErrors['cutoverEndTime'])) &&
+            (params.cutoverOption !== CUTOVER_TYPES.ADMIN_INITIATED ||
+              !selectedMigrationOptions.periodicSyncEnabled ||
+              (Boolean(periodicSyncIntervalValue) &&
+                periodicSyncIntervalValue !== 'undefined' &&
+                periodicSyncIntervalValue !== 'null' &&
+                !fieldErrors['periodicSyncInterval']))
+        )
+
+    const periodicSyncOk =
+      !selectedMigrationOptions.periodicSyncEnabled ||
+      (Boolean(periodicSyncIntervalValue) &&
+        periodicSyncIntervalValue !== 'undefined' &&
+        periodicSyncIntervalValue !== 'null' &&
+        !fieldErrors['periodicSyncInterval'])
+
+    const postMigrationScriptOk =
+      !selectedMigrationOptions.postMigrationScript ||
+      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
+
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    const postMigrationActionOk = !postMigrationActionSelected
+      ? true
+      : Boolean(
+          postMigrationAction &&
+            typeof postMigrationAction === 'object' &&
+            (Boolean(postMigrationAction.renameVm) ||
+              Boolean(postMigrationAction.moveToFolder) ||
+              !postMigrationAction.suffix ||
+              Boolean(params.postMigrationAction?.suffix) ||
+              !postMigrationAction.folderName ||
+              Boolean(params.postMigrationAction?.folderName))
+        )
+
+    return (
+      dataCopyStartTimeOk &&
+      cutoverOk &&
+      periodicSyncOk &&
+      postMigrationScriptOk &&
+      postMigrationActionOk
+    )
+  }, [
+    hasAnyMigrationOptionSelected,
+    selectedMigrationOptions,
+    params.dataCopyStartTime,
+    params.cutoverOption,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    params.periodicSyncInterval,
+    params.postMigrationScript,
+    params.postMigrationAction,
+    fieldErrors
+  ])
+
+  const step5Complete = Boolean(
+    touchedSections.options && areSelectedMigrationOptionsConfigured && !step5HasErrors
+  )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
