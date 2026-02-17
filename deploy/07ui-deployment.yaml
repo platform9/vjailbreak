@@ -16,16 +16,23 @@ spec:
       serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.0
+          image: quay.io/platform9/vjailbreak-ui:update-manifests-46a902f8
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
           volumeMounts:
           - name: nginx-shadow-htpasswd
-            mountPath: /etc/nginx/shadow 
+            mountPath: /etc/nginx/shadow
+          - name: pf9-logs
+            mountPath: /var/log/pf9
+            readOnly: true
       volumes:
       - name: nginx-shadow-htpasswd
         hostPath:
           path: /etc/htpasswd
           type: FileOrCreate
+      - name: pf9-logs
+        hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
 ---
