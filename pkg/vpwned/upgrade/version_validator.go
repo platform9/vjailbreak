@@ -710,29 +710,31 @@ func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) err
 			continue
 		}
 
-		// Only apply CRDs in this function - skip all non-CRD resources
-		if u.GetKind() != "CustomResourceDefinition" {
-			log.Printf("Skipping non-CRD resource: %s %s", u.GetKind(), u.GetName())
+		// Skip Namespace resources to avoid conflicts
+		if u.GetKind() == "Namespace" {
+			log.Printf("Skipping Namespace resource: %s", u.GetName())
 			continue
 		}
 
-		// Only apply vjailbreak CRDs - filter by spec.group field
-		spec, found, _ := unstructured.NestedMap(u.Object, "spec")
-		if !found {
-			log.Printf("Skipping CRD without spec: %s", u.GetName())
-			continue
-		}
+		// For CRDs, only apply vjailbreak CRDs - filter by spec.group field
+		if u.GetKind() == "CustomResourceDefinition" {
+			spec, found, _ := unstructured.NestedMap(u.Object, "spec")
+			if !found {
+				log.Printf("Skipping CRD without spec: %s", u.GetName())
+				continue
+			}
 
-		group, ok := spec["group"].(string)
-		if !ok {
-			log.Printf("Skipping CRD without group in spec: %s", u.GetName())
-			continue
-		}
+			group, ok := spec["group"].(string)
+			if !ok {
+				log.Printf("Skipping CRD without group in spec: %s", u.GetName())
+				continue
+			}
 
-		// Only accept vjailbreak CRDs - strict filtering to prevent applying unrelated pf9 CRDs
-		if !strings.Contains(group, "vjailbreak") {
-			log.Printf("Skipping non-vjailbreak CRD: %s (group: %s)", u.GetName(), group)
-			continue
+			// Only accept vjailbreak CRDs - strict filtering to prevent applying unrelated pf9 CRDs
+			if !strings.Contains(group, "vjailbreak") {
+				log.Printf("Skipping non-vjailbreak CRD: %s (group: %s)", u.GetName(), group)
+				continue
+			}
 		}
 
 		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}

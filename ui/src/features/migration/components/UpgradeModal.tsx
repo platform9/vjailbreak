@@ -203,14 +203,23 @@ export const UpgradeModal = ({ show, onClose }) => {
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
               The following will be cleaned up before upgrading:
             </Typography>
-            <ul style={{ margin: 0, paddingLeft: 20, color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-              <li>Delete MigrationPlans</li>
-              <li>Delete RollingMigrationPlans</li>
-              <li>Scale down Agents</li>
-              <li>Delete VMware credentials</li>
-              <li>Delete PCD credentials</li>
-              <li>Delete Custom Resources</li>
-            </ul>
+            <Box component="ul" sx={{ margin: 0, paddingLeft: 0, listStyle: 'none', color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+              {[
+                'Delete MigrationPlans',
+                'Delete RollingMigrationPlans',
+                'Scale down Agents',
+                'Delete VMware credentials',
+                'Delete PCD credentials',
+                'Delete Custom Resources'
+              ].map((item) => (
+                <Box component="li" key={item} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                  {cleanupCompleted && (
+                    <CheckCircleIcon color="success" sx={{ mr: 1, fontSize: 18 }} />
+                  )}
+                  <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>{item}</Typography>
+                </Box>
+              ))}
+            </Box>
             {cleanupCompleted && (
               <Box display="flex" alignItems="center" mt={1}>
                 <CheckCircleIcon color="success" sx={{ mr: 1, fontSize: 18 }} />
@@ -239,7 +248,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             </Box>
           )}
 
-          {(upgradeInProgress || cleanUpInProgress) && (
+          {(upgradeInProgress || cleanUpInProgress || upgradeMutation.isPending || cleanupMutation.isPending) && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               Processing. Please do not close or refresh this page.
             </Alert>
@@ -279,7 +288,10 @@ export const UpgradeModal = ({ show, onClose }) => {
         </DialogContent>
         <DialogActions sx={{ gap: 1, p: 2 }}>
           <ActionButton
-            onClick={() => upgradeMutation.mutate()}
+            onClick={() => {
+              setSuccessMsg('')
+              upgradeMutation.mutate()
+            }}
             disabled={
               !selectedVersion ||
               upgradeInProgress ||
