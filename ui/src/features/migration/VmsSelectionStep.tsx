@@ -990,7 +990,12 @@ function VmsSelectionStep({
       })
     })
 
-    if (ipsToApply.length === 0) return
+    // Check if there are any override changes (preserve toggles)
+    const hasOverrideChanges = Object.values(bulkEditOverrides).some((interfaces) =>
+      Object.values(interfaces).some((o) => !o.preserveIP || !o.preserveMAC)
+    )
+
+    if (ipsToApply.length === 0 && !hasOverrideChanges) return
     if (hasBulkIpValidationErrors) {
       showToast('Resolve invalid IP addresses before applying changes.', 'error')
       return
@@ -1018,6 +1023,26 @@ function VmsSelectionStep({
     setAssigningIPs(true)
 
     try {
+      // If only override changes (no IPs to validate), apply directly
+      if (ipsToApply.length === 0 && hasOverrideChanges) {
+        const updatedVms = vmsWithFlavor.map((vm) => {
+          const vmOverrides = bulkEditOverrides[vm.name]
+          if (!vmOverrides) return vm
+          const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
+            const overrides = vmOverrides[index]
+            return overrides
+              ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
+              : nic
+          })
+          return { ...vm, networkInterfaces: updatedNetworkInterfaces }
+        })
+        setVmsWithFlavor(updatedVms)
+        showToast('Network override settings applied', 'success')
+        handleCloseBulkEditDialog()
+        setAssigningIPs(false)
+        return
+      }
+
       // Batch validation before applying any changes
       if (openstackCredentials) {
         const ipList = ipsToApply.map((item) => item.ip)
@@ -1120,30 +1145,39 @@ function VmsSelectionStep({
           }
         })
 
-        // Update vmsWithFlavor to include assigned IPs for display purposes only
+        // Update vmsWithFlavor to include assigned IPs and preserve overrides
         const updatedVms = vmsWithFlavor.map((vm) => {
           const assignedIPs = assignedIPsPerVM[vm.name]
-          if (!assignedIPs) return vm
+          const vmOverrides = bulkEditOverrides[vm.name]
 
-          // Update networkInterfaces with assigned IPs
+          // Update networkInterfaces with assigned IPs and preserve overrides
           let updatedNetworkInterfaces = vm.networkInterfaces
           if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
             updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-              const assignedIP = assignedIPs[index]
-              if (assignedIP && assignedIP.trim() !== '') {
-                return { ...nic, ipAddress: assignedIP }
+              const assignedIP = assignedIPs?.[index]
+              const overrides = vmOverrides?.[index]
+              return {
+                ...nic,
+                ...(assignedIP && assignedIP.trim() !== '' ? { ipAddress: assignedIP } : {}),
+                ...(overrides
+                  ? {
+                      preserveIP: overrides.preserveIP,
+                      preserveMAC: overrides.preserveMAC
+                    }
+                  : {})
               }
-              return nic
             })
           }
 
-          const validIPs = assignedIPs.filter((ip) => ip && ip.trim() !== '')
+          if (!assignedIPs && !vmOverrides) return vm
+
+          const validIPs = assignedIPs?.filter((ip) => ip && ip.trim() !== '') ?? []
           const ipDisplay = validIPs.join(', ')
 
           return {
             ...vm,
-            assignedIPs: assignedIPs.join(','),
-            ipAddress: ipDisplay || vm.ipAddress,
+            ...(assignedIPs ? { assignedIPs: assignedIPs.join(',') } : {}),
+            ...(ipDisplay ? { ipAddress: ipDisplay } : {}),
             networkInterfaces: updatedNetworkInterfaces
           }
         })

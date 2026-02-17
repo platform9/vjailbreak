@@ -695,11 +695,32 @@ export default function MigrationFormDrawer({
       })
     }
 
+    // Build NetworkOverridesPerVM for per-NIC IP/MAC preservation
+    const networkOverridesPerVM: Record<
+      string,
+      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+    > = {}
+    if (params.vms) {
+      params.vms.forEach((vm) => {
+        const overrides = vm.networkInterfaces
+          ?.map((nic, idx) => ({
+            interfaceIndex: idx,
+            preserveIP: nic.preserveIP !== false,
+            preserveMAC: nic.preserveMAC !== false
+          }))
+          .filter((o) => !o.preserveIP || !o.preserveMAC)
+        if (overrides && overrides.length > 0) {
+          networkOverridesPerVM[vm.name] = overrides
+        }
+      })
+    }
+
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
       ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
+      ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime
