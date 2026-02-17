@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: vpwned
   newName: quay.io/platform9/vjailbreak-vpwned
-  newTag: origin/1410-vmware-tool-removal-script-winserver-12-16-19-32383c2c
+  newTag: update-manifests-46a902f8
