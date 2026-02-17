@@ -20,7 +20,8 @@ export const createMigrationPlanJson = (params) => {
     periodicSyncInterval,
     periodicSyncEnabled,
     assignedIPsPerVM,
-    networkPersistence
+    networkPersistence,
+    acknowledgeNetworkConflictRisk
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -47,6 +48,9 @@ export const createMigrationPlanJson = (params) => {
   }
   if (typeof networkPersistence === 'boolean') {
     advancedOptions.networkPersistence = networkPersistence
+  }
+  if (typeof acknowledgeNetworkConflictRisk === 'boolean') {
+    advancedOptions.acknowledgeNetworkConflictRisk = acknowledgeNetworkConflictRisk
   }
   if (Object.keys(advancedOptions).length > 0) {
     spec.advancedOptions = advancedOptions

@@ -45,8 +45,10 @@ env:
   NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
   AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
-  S3_BUCKET_PROD: vjailbreak
-  S3_BUCKET_DEV: vjailbreak-dev
+  S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
+
 
 
 jobs:
@@ -445,45 +447,6 @@ jobs:
         with:
           go-version: ">=1.22.5"
 
-      - name: setup-oras
-        uses: oras-project/setup-oras@v1.2.1
-
-      - name: Download ubuntu base image
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        run: oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
-
-      - name: Configure AWS credentials for S3 download
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
-
-      - name: Download ubuntu base image from S3
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        env:
-          S3_BUCKET: ${{ env.S3_BUCKET_PROD }}
-          BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
-        run: |
-          if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
-            echo "Base image found in S3. Proceeding to download."
-          else
-            echo "Base image not found in S3. Pulling from Quay and uploading..."
-            oras pull quay.io/platform9/vjailbreak:ubuntu-base-prebaked
-            aws s3 cp vjailbreak-image.qcow2 "s3://$S3_BUCKET/$BASE_IMAGE_PATH"
-            echo "Base image successfully uploaded to S3."
-          fi
-
-          echo "Downloading base image for build..."
-          mkdir -p ./image_builder/images
-          aws s3 cp "s3://$S3_BUCKET/$BASE_IMAGE_PATH" ./image_builder/images/ubuntu-base-prebaked.qcow2
-          
-          if [ ! -f "./image_builder/images/ubuntu-base-prebaked.qcow2" ]; then
-            echo "Error: Failed to download base image from S3"
-            exit 1
-          fi
-      
       - name: Download images and export as tar
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
@@ -575,7 +538,7 @@ jobs:
         with:
           aws-access-key-id: ${{ steps.set-creds.outputs.aws_access_key_id }}
           aws-secret-access-key: ${{ steps.set-creds.outputs.aws_secret_access_key }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+          aws-region: ${{ env.S3_REGION }}
 
       - name: Determine S3 path and upload artifacts
         if: env.release_found == 'true' || env.is_nightly == 'true'
@@ -583,6 +546,7 @@ jobs:
           set -e
           TAG=${{ needs.determine-release.outputs.tag }}
           DATE_FOLDER=$(date -u +"%Y-%m-%d")
+          REGION="${S3_REGION}"
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_BUCKET=${S3_BUCKET_PROD}
@@ -605,13 +569,20 @@ jobs:
             DO_LATEST=false
           fi
 
+          QCOW2_HTTP_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+
           aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
-          echo "QCOW2 uploaded: s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}" | tee s3-urls.txt
+          echo "QCOW2 uploaded: ${QCOW2_HTTP_URL}" | tee s3-urls.txt
 
           if [[ "$DO_LATEST" == "true" ]]; then
+            QCOW2_HTTP_LATEST_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
             aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
-            echo "Latest QCOW2 uploaded: s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}" | tee -a s3-urls.txt
+            echo "Latest QCOW2 uploaded: ${QCOW2_HTTP_LATEST_URL}" | tee -a s3-urls.txt
           fi
+
+      - name: S3 URL
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: cat s3-urls.txt
 
       - name: Upload S3 URLs artifact
         uses: actions/upload-artifact@v4

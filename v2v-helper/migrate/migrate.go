@@ -578,6 +578,21 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	envPassword := migobj.Password
 	thumbprint := migobj.Thumbprint
 
+	// Get migration parameters to check if user acknowledged network conflict risk
+	migrationParams, err := utils.GetMigrationParams(ctx, migobj.K8sClient)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get migration params: %v, continuing with migration", err))
+	} else {
+		if migobj.MigrationType == "mock" {
+
+			if migrationParams.AcknowledgeNetworkConflictRisk {
+				migobj.logMessage("User acknowledged the risk involved")
+			} else {
+				migobj.logMessage("User did not acknowledge the risk involved")
+			}
+		}
+	}
+
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
 	// if the cutover immediately is selected with cold migration type then the migration will happen like cold migration
 	var currentCutoverOption string
@@ -611,7 +626,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 	// clean up snapshots
 	utils.PrintLog("Cleaning up snapshots before copy")
-	err := vmops.CleanUpSnapshots(false)
+	err = vmops.CleanUpSnapshots(false)
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to clean up snapshots: %s, please delete manually before starting again")
 	}
@@ -691,23 +706,27 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
 				}
-				utils.PrintLog("Shutting down source VM and performing final copy")
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				// Verify VM is actually powered off
-				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-					if stateErr != nil {
-						return stateErr
+				if migobj.MigrationType == "mock" {
+					utils.PrintLog("Mock migration detected, skipping VM power off")
+				} else {
+					utils.PrintLog("Shutting down source VM and performing final copy")
+					err = vmops.VMPowerOff()
+					if err != nil {
+						return vminfo, errors.Wrap(err, "failed to power off VM")
 					}
-					if currState != types.VirtualMachinePowerStatePoweredOff {
-						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					// Verify VM is actually powered off
+					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						if stateErr != nil {
+							return stateErr
+						}
+						if currState != types.VirtualMachinePowerStatePoweredOff {
+							return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+						}
+						return nil
+					}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+						return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 					}
-					return nil
-				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
-					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 			}
 			if err := migobj.WaitforCutover(); err != nil {
@@ -788,23 +807,27 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				break
 			}
 			if done || incrementalCopyCount > vcenterSettings.ChangedBlocksCopyIterationThreshold {
-				utils.PrintLog("Shutting down source VM and performing final copy")
-				err = vmops.VMPowerOff()
-				if err != nil {
-					return vminfo, errors.Wrap(err, "failed to power off VM")
-				}
-				// Verify VM is actually powered off
-				if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					currState, stateErr := vmops.GetVMObj().PowerState(ctx)
-					if stateErr != nil {
-						return stateErr
+				if migobj.MigrationType == "mock" {
+					utils.PrintLog("Mock migration detected, skipping VM power off")
+				} else {
+					utils.PrintLog("Shutting down source VM and performing final copy")
+					err = vmops.VMPowerOff()
+					if err != nil {
+						return vminfo, errors.Wrap(err, "failed to power off VM")
 					}
-					if currState != types.VirtualMachinePowerStatePoweredOff {
-						return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+					// Verify VM is actually powered off
+					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						if stateErr != nil {
+							return stateErr
+						}
+						if currState != types.VirtualMachinePowerStatePoweredOff {
+							return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+						}
+						return nil
+					}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+						return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 					}
-					return nil
-				}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
-					return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
 				}
 				final = true
 			}
@@ -1027,18 +1050,20 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	firstbootscripts := []string{}
-
+	firstbootwinscripts := []virtv2v.FirstBootWindows{}
 	// Fix NTFS for Windows
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
-
+		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "Firstboot-Scheduler.ps1",
+		})
 		if persisNetwork {
 			firstbootscriptname := "windows-persist-network"
 			firstbootscript := constants.WindowsPersistFirstBootScript
 			firstbootscripts = append(firstbootscripts, firstbootscriptname)
-
 			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
 				return errors.Wrap(err, "failed to add first boot script")
 			}
@@ -1075,6 +1100,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
+	}
+
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
+			return errors.Wrap(err, "failed to inject first boot scripts")
+		}
 	}
 
 	// Set volume as bootable
@@ -1876,7 +1907,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			for _, fixedIP := range port.FixedIPs {
 				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
 			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			for _, fixedIP := range port.FixedIPs {

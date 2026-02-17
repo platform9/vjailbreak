@@ -53,6 +53,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -120,6 +125,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time

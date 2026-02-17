@@ -101,15 +101,46 @@ export default function MigrationOptionsAlt({
   showHeader = true
 }: MigrationOptionsPropsInterface) {
   const { setValue } = useFormContext()
-  const { data: globalConfigMap, refetch: refetchConfigMap } = useSettingsConfigMapQuery()
+  const { data: globalConfigMap } = useSettingsConfigMapQuery()
+
+  const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
 
   // Iniitialize fields
   useEffect(() => {
     const defaultMethod = globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD || 'cold'
     onChange('dataCopyMethod')(defaultMethod)
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
-    refetchConfigMap()
-  }, [refetchConfigMap, globalConfigMap])
+  }, [globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD, onChange])
+
+  useEffect(() => {
+    if (!isStorageAcceleratedCopy) return
+
+    if (selectedMigrationOptions.dataCopyMethod) {
+      updateSelectedMigrationOptions('dataCopyMethod')(false)
+    }
+    if (selectedMigrationOptions.dataCopyStartTime) {
+      updateSelectedMigrationOptions('dataCopyStartTime')(false)
+    }
+    if (selectedMigrationOptions.cutoverOption) {
+      updateSelectedMigrationOptions('cutoverOption')(false)
+    }
+    if (selectedMigrationOptions.periodicSyncEnabled) {
+      updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+    }
+
+    onChange('dataCopyStartTime')('')
+    onChange('cutoverStartTime')('')
+    onChange('cutoverEndTime')('')
+    onChange('periodicSyncInterval')('')
+  }, [
+    isStorageAcceleratedCopy,
+    onChange,
+    selectedMigrationOptions.cutoverOption,
+    selectedMigrationOptions.dataCopyMethod,
+    selectedMigrationOptions.dataCopyStartTime,
+    selectedMigrationOptions.periodicSyncEnabled,
+    updateSelectedMigrationOptions
+  ])
 
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
 
@@ -160,200 +191,269 @@ export default function MigrationOptionsAlt({
           <Step stepNumber={stepNumber} label="Migration Options (Optional)" sx={{ mb: 0 }} />
         ) : null}
 
-        <SectionBlock>
-          <SectionHeaderRow>
-            <Typography variant="subtitle2">Data copy</Typography>
-            <Typography variant="caption" color="text.secondary">
-              How data is transferred before cutover
-            </Typography>
-          </SectionHeaderRow>
-          <Divider />
+        {!isStorageAcceleratedCopy ? (
+          <>
+            <SectionBlock>
+              <SectionHeaderRow>
+                <Typography variant="subtitle2">Data copy</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  How data is transferred before cutover
+                </Typography>
+              </SectionHeaderRow>
+              <Divider />
 
-          <OptionRow>
-            <OptionLeft>
-              <FormControlLabel
-                id="data-copy-method"
-                label="Data copy method"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.dataCopyMethod}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
-                    }}
+              <OptionRow>
+                <OptionLeft>
+                  <FormControlLabel
+                    id="data-copy-method"
+                    label="Data copy method"
+                    control={
+                      <Checkbox
+                        checked={selectedMigrationOptions.dataCopyMethod}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyMethod')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyMethod')('cold')
+                            onChange('acknowledgeNetworkConflictRisk')(false)
+                          }
+                        }}
+                      />
+                    }
                   />
-                }
-              />
-              <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
-            </OptionLeft>
-            <Select
-              size="small"
-              disabled={!selectedMigrationOptions.dataCopyMethod}
-              labelId="source-item-label"
-              value={params?.dataCopyMethod || 'cold'}
-              onChange={(e) => {
-                onChange('dataCopyMethod')(e.target.value)
-              }}
-            >
-              {DATA_COPY_OPTIONS.map((item) => (
-                <MenuItem key={item.value} value={item.value}>
-                  {item.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </OptionRow>
-
-          <OptionRow>
-            <OptionLeft>
-              <FormControlLabel
-                label="Schedule data copy"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions?.dataCopyStartTime}
+                  <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
+                </OptionLeft>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
+                  <Select
+                    size="small"
+                    disabled={!selectedMigrationOptions.dataCopyMethod}
+                    labelId="source-item-label"
+                    value={params?.dataCopyMethod || 'cold'}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
+                      onChange('dataCopyMethod')(e.target.value)
+                      if (e.target.value !== 'mock') {
+                        onChange('acknowledgeNetworkConflictRisk')(false)
+                      }
                     }}
-                  />
-                }
-              />
-              <OptionHelp variant="caption">
-                Optionally start data copy at a specific time.
-              </OptionHelp>
-            </OptionLeft>
-            <TimePicker
-              label="Data Copy Start Time"
-              identifier="dataCopyStartTime"
-              errors={errors}
-              getErrorsUpdater={getErrorsUpdater}
-              disabled={!selectedMigrationOptions.dataCopyStartTime}
-              required={!!selectedMigrationOptions.dataCopyStartTime}
-              disablePast
-            />
-          </OptionRow>
-        </SectionBlock>
+                    fullWidth
+                  >
+                    {DATA_COPY_OPTIONS.map((item) => (
+                      <MenuItem key={item.value} value={item.value}>
+                        {item.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Box>
+              </OptionRow>
 
-        <SectionBlock>
-          <SectionHeaderRow>
-            <Typography variant="subtitle2">Cutover</Typography>
-            <Typography variant="caption" color="text.secondary">
-              When and how to switch traffic to the migrated VM
-            </Typography>
-          </SectionHeaderRow>
-          <Divider />
-
-          {isPowerOffThenCopy ? (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              Cutover options are disabled for cold migration (Power off then copy) because the VM
-              is powered off before copying. Cutover happens automatically after data copy
-              completes.
-            </Alert>
-          ) : null}
-
-          <OptionRow>
-            <OptionLeft>
-              <FormControlLabel
-                id="data-copy-method"
-                label="Cutover option"
-                control={
-                  <Checkbox
-                    checked={selectedMigrationOptions.cutoverOption}
-                    disabled={isPowerOffThenCopy}
-                    onChange={(e) => {
-                      updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
-                      updateSelectedMigrationOptions('periodicSyncEnabled')(false)
-                      onChange('periodicSyncInterval')('')
-                    }}
-                  />
-                }
-              />
-              <OptionHelp variant="caption">
-                Choose immediate, windowed, or admin-initiated cutover.
-              </OptionHelp>
-            </OptionLeft>
-            <Box sx={{ display: 'grid', gap: 1 }}>
-              <Select
-                size="small"
-                disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}
-                value={params?.cutoverOption || '0'}
-                onChange={(e) => {
-                  onChange('cutoverOption')(e.target.value)
-                }}
-              >
-                {VM_CUTOVER_OPTIONS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Select>
-
-              {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-                selectedMigrationOptions.cutoverOption &&
-                !isPowerOffThenCopy && (
-                  <Box
+              {params?.dataCopyMethod === 'mock' && (
+                <Alert severity="warning" sx={{ width: '100%' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                    Warning
+                  </Typography>
+                  <Typography variant="body2">
+                    Migration without shutting down the source VM may cause network conflicts.
+                    Please acknowledge the risks involved in migrating the VM to same subnet without
+                    source poweroff.
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={Boolean(params?.acknowledgeNetworkConflictRisk)}
+                        onChange={(e) => {
+                          onChange('acknowledgeNetworkConflictRisk')(e.target.checked)
+                        }}
+                        color="warning"
+                        size="small"
+                      />
+                    }
+                    label="I understand the risks"
                     sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      gap: 1
+                      mt: 1,
+                      ml: 0,
+                      alignItems: 'center',
+                      '& .MuiFormControlLabel-label': { typography: 'body2' },
+                      '& .MuiCheckbox-root': { padding: '4px' }
+                    }}
+                  />
+                </Alert>
+              )}
+
+              <OptionRow>
+                <OptionLeft>
+                  <FormControlLabel
+                    label="Schedule data copy"
+                    control={
+                      <Checkbox
+                        checked={selectedMigrationOptions?.dataCopyStartTime}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyStartTime')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyStartTime')('')
+                            setValue('dataCopyStartTime', '')
+                          }
+                        }}
+                      />
+                    }
+                  />
+                  <OptionHelp variant="caption">
+                    Optionally start data copy at a specific time.
+                  </OptionHelp>
+                </OptionLeft>
+                <TimePicker
+                  label="Data Copy Start Time"
+                  identifier="dataCopyStartTime"
+                  errors={errors}
+                  getErrorsUpdater={getErrorsUpdater}
+                  disabled={!selectedMigrationOptions.dataCopyStartTime}
+                  required={!!selectedMigrationOptions.dataCopyStartTime}
+                  disablePast
+                />
+              </OptionRow>
+            </SectionBlock>
+
+            <SectionBlock>
+              <SectionHeaderRow>
+                <Typography variant="subtitle2">Cutover</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  When and how to switch traffic to the migrated VM
+                </Typography>
+              </SectionHeaderRow>
+              <Divider />
+
+              {isPowerOffThenCopy ? (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Cutover options are disabled for cold migration (Power off then copy) because the
+                  VM is powered off before copying. Cutover happens automatically after data copy
+                  completes.
+                </Alert>
+              ) : null}
+
+              <OptionRow>
+                <OptionLeft>
+                  <FormControlLabel
+                    id="data-copy-method"
+                    label="Cutover option"
+                    control={
+                      <Checkbox
+                        checked={selectedMigrationOptions.cutoverOption}
+                        disabled={isPowerOffThenCopy}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('cutoverOption')(isChecked)
+                          if (!isChecked) {
+                            onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
+                            onChange('cutoverStartTime')('')
+                            onChange('cutoverEndTime')('')
+                            setValue('cutoverStartTime', '')
+                            setValue('cutoverEndTime', '')
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+                            onChange('periodicSyncInterval')('')
+                            setValue('periodicSyncInterval', '')
+                          }
+                        }}
+                      />
+                    }
+                  />
+                  <OptionHelp variant="caption">
+                    Choose immediate, windowed, or admin-initiated cutover.
+                  </OptionHelp>
+                </OptionLeft>
+                <Box sx={{ display: 'grid', gap: 1 }}>
+                  <Select
+                    size="small"
+                    disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}
+                    value={params?.cutoverOption || '0'}
+                    onChange={(e) => {
+                      onChange('cutoverOption')(e.target.value)
                     }}
                   >
-                    <TimePicker
-                      label="Cutover Start Time"
-                      identifier="cutoverStartTime"
-                      errors={errors}
-                      getErrorsUpdater={getErrorsUpdater}
-                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
-                      disablePast
-                    />
-                    <TimePicker
-                      label="Cutover End Time"
-                      identifier="cutoverEndTime"
-                      errors={errors}
-                      getErrorsUpdater={getErrorsUpdater}
-                      required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
-                      minDateTime={getMinEndTime()}
-                      disablePast
-                      helperText="Should be greater than data copy/cutover start time"
-                    />
-                  </Box>
-                )}
+                    {VM_CUTOVER_OPTIONS.map((item) => (
+                      <MenuItem key={item.value} value={item.value}>
+                        {item.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
 
-              {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
-                selectedMigrationOptions.cutoverOption &&
-                !isPowerOffThenCopy && (
-                  <Box sx={{ display: 'grid', gap: 1 }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={selectedMigrationOptions.periodicSyncEnabled}
-                          onChange={(e) => {
-                            onChange('periodicSyncInterval')(
-                              globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
-                            )
-                            updateSelectedMigrationOptions('periodicSyncEnabled')(e.target.checked)
-                          }}
+                  {params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+                    selectedMigrationOptions.cutoverOption &&
+                    !isPowerOffThenCopy && (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                          gap: 1
+                        }}
+                      >
+                        <TimePicker
+                          label="Cutover Start Time"
+                          identifier="cutoverStartTime"
+                          errors={errors}
+                          getErrorsUpdater={getErrorsUpdater}
+                          required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
+                          disablePast
                         />
-                      }
-                      label="Periodic sync"
-                    />
-                    <IntervalField
-                      label="Periodic Sync"
-                      name="periodicSyncInterval"
-                      value={String(
-                        params.periodicSyncInterval && selectedMigrationOptions.periodicSyncEnabled
-                          ? params.periodicSyncInterval
-                          : ''
-                      )}
-                      onChange={(e) => {
-                        onChange('periodicSyncInterval')(e.target.value?.trim() || '')
-                      }}
-                      error={errors.periodicSyncInterval}
-                      getErrorsUpdater={getErrorsUpdater}
-                      disabled={!selectedMigrationOptions.periodicSyncEnabled}
-                    />
-                  </Box>
-                )}
-            </Box>
-          </OptionRow>
-        </SectionBlock>
+                        <TimePicker
+                          label="Cutover End Time"
+                          identifier="cutoverEndTime"
+                          errors={errors}
+                          getErrorsUpdater={getErrorsUpdater}
+                          required={params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW}
+                          minDateTime={getMinEndTime()}
+                          disablePast
+                          helperText="Should be greater than data copy/cutover start time"
+                        />
+                      </Box>
+                    )}
+
+                  {params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED &&
+                    selectedMigrationOptions.cutoverOption &&
+                    !isPowerOffThenCopy && (
+                      <Box sx={{ display: 'grid', gap: 1 }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={selectedMigrationOptions.periodicSyncEnabled}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked
+                                updateSelectedMigrationOptions('periodicSyncEnabled')(isChecked)
+                                if (isChecked) {
+                                  onChange('periodicSyncInterval')(
+                                    globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
+                                  )
+                                } else {
+                                  onChange('periodicSyncInterval')('')
+                                  setValue('periodicSyncInterval', '')
+                                }
+                              }}
+                            />
+                          }
+                          label="Periodic sync"
+                        />
+                        <IntervalField
+                          label="Periodic Sync"
+                          name="periodicSyncInterval"
+                          value={String(
+                            params.periodicSyncInterval &&
+                              selectedMigrationOptions.periodicSyncEnabled
+                              ? params.periodicSyncInterval
+                              : ''
+                          )}
+                          onChange={(e) => {
+                            onChange('periodicSyncInterval')(e.target.value?.trim() || '')
+                          }}
+                          error={errors.periodicSyncInterval}
+                          getErrorsUpdater={getErrorsUpdater}
+                          disabled={!selectedMigrationOptions.periodicSyncEnabled}
+                        />
+                      </Box>
+                    )}
+                </Box>
+              </OptionRow>
+            </SectionBlock>
+          </>
+        ) : null}
 
         <SectionBlock>
           <SectionHeaderRow>
@@ -597,7 +697,11 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationScript')(isChecked)
+                      if (!isChecked) {
+                        onChange('postMigrationScript')('')
+                      }
                     }}
                   />
                 }

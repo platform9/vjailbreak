@@ -100,7 +100,7 @@ type MigrationSpec struct {
 
 	// MigrationType indicates whether this is a hot (live) or cold migration
 	// +optional
-	// +kubebuilder:validation:Enum=hot;cold
+	// +kubebuilder:validation:Enum=hot;cold;mock
 	MigrationType string `json:"migrationType,omitempty"`
 }
 

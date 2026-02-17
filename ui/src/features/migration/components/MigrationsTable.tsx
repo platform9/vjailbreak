@@ -268,6 +268,7 @@ export default function MigrationsTable({
           const phase = params.row?.status?.phase
           const isHotMigration = migrationType?.toLowerCase() === 'hot'
           const isColdMigration = migrationType?.toLowerCase() === 'cold'
+          const isMockMigration = migrationType?.toLowerCase() === 'mock'
           
           const namespace = params.row.metadata?.namespace
           const planName = params.row.spec?.migrationPlan || params.row.metadata?.labels?.migrationplan
@@ -307,6 +308,16 @@ export default function MigrationsTable({
                   <FiberManualRecordIcon 
                     sx={{ 
                       fontSize: 12, color: '#4293FF',
+                      ...(isInProgress && { animation: syncedPulse })
+                    }} 
+                  />
+                </Tooltip>
+              )}
+              {isMockMigration && (
+                <Tooltip title="Migration without poweroff">
+                  <FiberManualRecordIcon 
+                    sx={{ 
+                      fontSize: 12, color: '#9e1111ff',
                       ...(isInProgress && { animation: syncedPulse })
                     }} 
                   />
