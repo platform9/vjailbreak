@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/platform9/vjailbreak-controller
-  newTag: main-35814200
+  newTag: main-71d6b44f

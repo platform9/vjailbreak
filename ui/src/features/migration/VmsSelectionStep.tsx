@@ -1458,7 +1458,7 @@ function VmsSelectionStep({
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               rowSelectionModel={rowSelectionModelArray}
-              getRowId={(row) => row.name}
+              getRowId={(row) => row.id}
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
               slots={{
