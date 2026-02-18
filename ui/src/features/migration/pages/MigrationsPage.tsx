@@ -19,7 +19,11 @@ export default function MigrationsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [openSnackbar, setOpenSnackbar] = useState(false)
 
-  const { data: migrations, refetch: refetchMigrations } = useMigrationsQuery(undefined, {
+  const {
+    data: migrations,
+    refetch: refetchMigrations,
+    isLoading: isMigrationsLoading
+  } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
       const migrations = query?.state?.data || []
       const hasPendingMigration = !!migrations.find((m) => m.status === undefined)
@@ -121,6 +125,7 @@ export default function MigrationsPage() {
         migrations={migrations || []}
         onDeleteMigration={handleDeleteClick}
         onDeleteSelected={handleDeleteSelected}
+        loading={isMigrationsLoading}
       />
 
       <ConfirmationDialog
