@@ -631,6 +631,7 @@ export default function MigrationsTable({
         }}
         pageSizeOptions={[10, 25, 50, 100]}
         checkboxSelection={hasSelectionActions}
+        disableRowSelectionOnClick
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
         slots={{
