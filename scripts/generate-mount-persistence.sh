@@ -190,7 +190,91 @@ if $APPLY; then
     cat "$FSTAB_LINES_FILE" >> /etc/fstab
   fi
 
-  echo " -> Done. Backups created in /etc/udev/rules.d and /etc/fstab.bak.*"
+  echo " -> fstab and udev rules updated."
+
+  # --- Regenerate initramfs ---
+  echo "Regenerating initramfs..."
+  if command -v dracut >/dev/null 2>&1; then
+    # RHEL/CentOS/Fedora/Rocky - use dracut
+    KERNEL_VERSION=$(uname -r)
+    if dracut -f "/boot/initramfs-${KERNEL_VERSION}.img" "$KERNEL_VERSION" 2>&1; then
+      echo " -> initramfs regenerated successfully for kernel $KERNEL_VERSION"
+    else
+      echo " -> Warning: dracut failed, boot may not work correctly"
+    fi
+  elif command -v mkinitramfs >/dev/null 2>&1; then
+    # Debian/Ubuntu - use mkinitramfs
+    KERNEL_VERSION=$(uname -r)
+    if mkinitramfs -o "/boot/initrd.img-${KERNEL_VERSION}" "$KERNEL_VERSION" 2>&1; then
+      echo " -> initramfs regenerated successfully for kernel $KERNEL_VERSION"
+    else
+      echo " -> Warning: mkinitramfs failed, boot may not work correctly"
+    fi
+  elif command -v mkinitrd >/dev/null 2>&1; then
+    # Older RHEL/SUSE - use mkinitrd
+    KERNEL_VERSION=$(uname -r)
+    if mkinitrd "/boot/initrd-${KERNEL_VERSION}" "$KERNEL_VERSION" 2>&1; then
+      echo " -> initramfs regenerated successfully for kernel $KERNEL_VERSION"
+    else
+      echo " -> Warning: mkinitrd failed, boot may not work correctly"
+    fi
+  else
+    echo " -> Warning: No initramfs tool found (dracut/mkinitramfs/mkinitrd), skipping initramfs regeneration"
+  fi
+
+  # --- Update GRUB configuration ---
+  echo "Updating GRUB configuration..."
+  GRUB_UPDATED=false
+
+  # Try grub2-mkconfig first (RHEL/CentOS/Fedora)
+  if command -v grub2-mkconfig >/dev/null 2>&1; then
+    # Detect BIOS vs UEFI
+    if [ -d /sys/firmware/efi ]; then
+      # UEFI system - try common UEFI paths
+      for GRUB_CFG in /boot/efi/EFI/centos/grub.cfg /boot/efi/EFI/redhat/grub.cfg /boot/efi/EFI/rocky/grub.cfg /boot/efi/EFI/fedora/grub.cfg; do
+        if [ -f "$GRUB_CFG" ] || [ -d "$(dirname "$GRUB_CFG")" ]; then
+          if grub2-mkconfig -o "$GRUB_CFG" 2>&1; then
+            echo " -> GRUB configuration updated: $GRUB_CFG"
+            GRUB_UPDATED=true
+            break
+          fi
+        fi
+      done
+    else
+      # BIOS system
+      if grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1; then
+        echo " -> GRUB configuration updated: /boot/grub2/grub.cfg"
+        GRUB_UPDATED=true
+      fi
+    fi
+  fi
+
+  # Try grub-mkconfig (Debian/Ubuntu)
+  if ! $GRUB_UPDATED && command -v grub-mkconfig >/dev/null 2>&1; then
+    if grub-mkconfig -o /boot/grub/grub.cfg 2>&1; then
+      echo " -> GRUB configuration updated: /boot/grub/grub.cfg"
+      GRUB_UPDATED=true
+    fi
+  fi
+
+  # Try update-grub (Debian/Ubuntu shortcut)
+  if ! $GRUB_UPDATED && command -v update-grub >/dev/null 2>&1; then
+    if update-grub 2>&1; then
+      echo " -> GRUB configuration updated via update-grub"
+      GRUB_UPDATED=true
+    fi
+  fi
+
+  if ! $GRUB_UPDATED; then
+    echo " -> Warning: Could not update GRUB configuration automatically"
+    echo "    You may need to manually run grub2-mkconfig or update-grub"
+  fi
+
+  echo ""
+  echo "=== Summary ==="
+  echo " -> Backups created: /etc/fstab.bak.* and /etc/udev/rules.d/99-by-mountpoint.rules.bak.*"
+  echo " -> Updated: /etc/fstab, udev rules, initramfs, and GRUB configuration"
+  echo " -> Reboot recommended to apply all changes"
 else
   echo "# === UDEV RULES (save to /etc/udev/rules.d/99-by-mountpoint.rules) ==="
   cat "$UDEV_RULES_FILE"
