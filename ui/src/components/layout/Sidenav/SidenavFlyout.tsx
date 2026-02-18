@@ -43,8 +43,8 @@ export function SidenavFlyout({
   }, [flyoutItem])
 
   const activeChildIndex = useMemo(() => {
-    return flyoutItem?.children?.findIndex((c) => currentActiveItem === c.path) ?? -1
-  }, [currentActiveItem, flyoutItem])
+    return visibleFlyoutChildren.findIndex((c) => currentActiveItem === c.path)
+  }, [currentActiveItem, visibleFlyoutChildren])
 
   return (
     <Popper

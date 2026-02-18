@@ -207,86 +207,88 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
           },
           MuiCssBaseline: {
             styleOverrides: {
-              '@font-face': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-Light'),
-                  url('${eina04Light}') format('opentype')
-                `,
-                fontWeight: 300,
-                fontStyle: 'normal',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-LightItalic': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-LightItalic'),
-                  url('${eina04LightItalic}') format('opentype')
-                `,
-                fontWeight: 300,
-                fontStyle: 'italic',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-Regular': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-Regular'),
-                  url('${eina04Regular}') format('opentype')
-                `,
-                fontWeight: 400,
-                fontStyle: 'normal',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-RegularItalic': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-RegularItalic'),
-                  url('${eina04RegularItalic}') format('opentype')
-                `,
-                fontWeight: 400,
-                fontStyle: 'italic',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-SemiBold': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-SemiBold'),
-                  url('${eina04SemiBold}') format('opentype')
-                `,
-                fontWeight: 600,
-                fontStyle: 'normal',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-SemiBoldItalic': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-SemiBoldItalic'),
-                  url('${eina04SemiBoldItalic}') format('opentype')
-                `,
-                fontWeight: 600,
-                fontStyle: 'italic',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-Bold': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-Bold'),
-                  url('${eina04Bold}') format('opentype')
-                `,
-                fontWeight: 700,
-                fontStyle: 'normal',
-                fontStretch: 'normal'
-              },
-              '@font-face Eina04-BoldItalic': {
-                fontFamily: 'Eina04',
-                src: `
-                  local('Eina04-BoldItalic'),
-                  url('${eina04BoldItalic}') format('opentype')
-                `,
-                fontWeight: 700,
-                fontStyle: 'italic',
-                fontStretch: 'normal'
-              },
+              '@font-face': [
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Light'),
+                    url('${eina04Light}') format('opentype')
+                  `,
+                  fontWeight: 300,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-LightItalic'),
+                    url('${eina04LightItalic}') format('opentype')
+                  `,
+                  fontWeight: 300,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Regular'),
+                    url('${eina04Regular}') format('opentype')
+                  `,
+                  fontWeight: 400,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-RegularItalic'),
+                    url('${eina04RegularItalic}') format('opentype')
+                  `,
+                  fontWeight: 400,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-SemiBold'),
+                    url('${eina04SemiBold}') format('opentype')
+                  `,
+                  fontWeight: 600,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-SemiBoldItalic'),
+                    url('${eina04SemiBoldItalic}') format('opentype')
+                  `,
+                  fontWeight: 600,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Bold'),
+                    url('${eina04Bold}') format('opentype')
+                  `,
+                  fontWeight: 700,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-BoldItalic'),
+                    url('${eina04BoldItalic}') format('opentype')
+                  `,
+                  fontWeight: 700,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                }
+              ],
               body: {
                 scrollbarColor:
                   mode === 'dark'

@@ -1,24 +1,12 @@
-import {
-  ListItem,
-  ListItemText,
-  IconButton,
-  Box
-} from '@mui/material'
+import { ListItem, ListItemText, IconButton, Box } from '@mui/material'
 import { OpenInNew } from '@mui/icons-material'
 import { memo, type MouseEvent as ReactMouseEvent } from 'react'
 
 import { NavigationItem as NavigationItemType } from 'src/types/navigation'
 
-import {
-  StyledListItemButton,
-  StyledListItemIcon,
-  NavigationBadge
-} from './Sidenav.styles'
+import { StyledListItemButton, StyledListItemIcon, NavigationBadge } from './Sidenav.styles'
 import { ExpandToggleIcon } from './ExpandToggleIcon'
-import {
-  SUBMENU_ROW_HEIGHT_PX,
-  FIRST_LEVEL_ROW_HEIGHT_PX
-} from './Sidenav.constants'
+import { SUBMENU_ROW_HEIGHT_PX, FIRST_LEVEL_ROW_HEIGHT_PX } from './Sidenav.constants'
 
 export interface NavigationItemProps {
   item: NavigationItemType
@@ -43,15 +31,12 @@ export const NavigationItemComponent = memo(function NavigationItemComponent({
   onToggleExpand,
   depth = 0
 }: NavigationItemProps) {
-  const handleClick = (e: any) => {
+  const handleClick = (e: ReactMouseEvent<HTMLElement>) => {
     if (item.disabled) return
 
     if (isCollapsed && item.children?.length && !item.external) {
-      const anchorEl = e?.currentTarget as HTMLElement | undefined
-      if (anchorEl) {
-        onOpenFlyout?.(item, anchorEl)
-        return
-      }
+      onOpenFlyout?.(item, e.currentTarget)
+      return
     }
 
     onClick(item)
@@ -112,7 +97,9 @@ export const NavigationItemComponent = memo(function NavigationItemComponent({
                     size="small"
                     onClick={handleToggleExpand}
                     disabled={item.disabled}
-                    aria-label={isExpanded ? 'collapse navigation group' : 'expand navigation group'}
+                    aria-label={
+                      isExpanded ? 'collapse navigation group' : 'expand navigation group'
+                    }
                     disableRipple
                     disableTouchRipple
                     sx={{
@@ -139,14 +126,6 @@ export const NavigationItemComponent = memo(function NavigationItemComponent({
       )}
     </StyledListItemButton>
   )
-
-  if (isCollapsed && (item.label || item.badge)) {
-    return (
-      <ListItem disablePadding sx={{ display: 'block' }}>
-        {listItemContent}
-      </ListItem>
-    )
-  }
 
   return (
     <ListItem disablePadding sx={{ display: 'block' }}>

@@ -126,16 +126,16 @@ export default function Sidenav({
 
   const handleItemClick = useCallback(
     (item: NavigationItem) => {
+      if (item.children?.length && !isCollapsed && !item.external) {
+        setExpandedItem((prev) => (prev === item.id ? null : item.id))
+        return
+      }
+
       if ((window as any).__VDDK_UPLOAD_IN_PROGRESS__) {
         const confirmed = window.confirm(
           'File upload is in progress. If you leave this page, the upload may be interrupted. Do you want to continue?'
         )
         if (!confirmed) return
-      }
-
-      if (item.children?.length && !isCollapsed && !item.external) {
-        setExpandedItem((prev) => (prev === item.id ? null : item.id))
-        return
       }
 
       if (isCollapsed && flyoutItemId) {
@@ -180,10 +180,6 @@ export default function Sidenav({
     return match?.path || activeItem
   }, [activeItem, flattenItems])
 
-  useEffect(() => {
-    // Intentionally do not auto-expand on route change so the user can collapse all groups.
-  }, [activeItem, items])
-
   const handleToggleExpand = useCallback((itemId: string) => {
     setExpandedItem((prev) => (prev === itemId ? null : itemId))
   }, [])
@@ -226,8 +222,7 @@ export default function Sidenav({
           const isItemVisuallyActive = isCollapsed ? isItemActive || isChildActive : isItemActive
           const isExpanded = expandedItem === item.id
           const visibleChildren = item.children?.filter((child) => !child.hidden) ?? []
-          const activeChildIndex =
-            item.children?.findIndex((c) => currentActiveItem === c.path) ?? -1
+          const activeChildIndex = visibleChildren.findIndex((c) => currentActiveItem === c.path)
 
           return (
             <Box key={item.id}>
