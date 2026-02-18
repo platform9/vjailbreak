@@ -189,6 +189,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwarehosts/status
   - vmwaremachines/status
   verbs:
   - get

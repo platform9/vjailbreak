@@ -2702,6 +2702,24 @@ spec:
             type: object
           status:
             description: VMwareHostStatus defines the observed state of VMwareHost
+            properties:
+              esxiVersion:
+                description: ESXiVersion is the ESXi version retrieved via SSH if
+                  connection succeeded
+                type: string
+              sshLastChecked:
+                description: SSHLastChecked is the timestamp of the last SSH validation
+                  attempt
+                format: date-time
+                type: string
+              sshMessage:
+                description: SSHMessage contains details about the SSH validation
+                  result or error
+                type: string
+              sshStatus:
+                description: SSHStatus is the SSH validation status for this host
+                  (Succeeded, Failed, Pending)
+                type: string
             type: object
         type: object
     served: true
@@ -3290,6 +3308,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwarehosts/status
   - vmwaremachines/status
   verbs:
   - get

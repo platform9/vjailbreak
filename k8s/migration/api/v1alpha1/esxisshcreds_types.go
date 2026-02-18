@@ -29,20 +29,6 @@ type ESXiSSHCredsInfo struct {
 	PrivateKey []byte
 }
 
-// ESXiHostValidationResult holds the validation result for a single ESXi host
-type ESXiHostValidationResult struct {
-	// Hostname is the ESXi host IP or hostname
-	Hostname string `json:"hostname"`
-	// Status is the validation status for this host (Succeeded, Failed)
-	Status string `json:"status"`
-	// Message contains details about the validation result or error
-	Message string `json:"message,omitempty"`
-	// LastChecked is the timestamp of the last validation attempt
-	LastChecked metav1.Time `json:"lastChecked,omitempty"`
-	// ESXiVersion is the ESXi version if connection succeeded
-	ESXiVersion string `json:"esxiVersion,omitempty"`
-}
-
 // ESXiSSHCredsSpec defines the desired state of ESXiSSHCreds
 type ESXiSSHCredsSpec struct {
 	// SecretRef is the reference to the Kubernetes secret holding the SSH private key
@@ -54,13 +40,8 @@ type ESXiSSHCredsSpec struct {
 	// +optional
 	Username string `json:"username,omitempty"`
 
-	// VMwareCredsRef is the reference to the VMwareCreds object to discover ESXi hosts from
-	// If specified, the controller will automatically discover all ESXi hosts from vCenter
-	// +optional
-	VMwareCredsRef *corev1.ObjectReference `json:"vmwareCredsRef,omitempty"`
-
 	// Hosts is an optional explicit list of ESXi host IPs or hostnames to validate
-	// If both VMwareCredsRef and Hosts are specified, Hosts takes precedence
+	// If not specified, the controller will automatically discover all ESXi hosts from all VMwareCreds in the system
 	// +optional
 	Hosts []string `json:"hosts,omitempty"`
 }
@@ -82,9 +63,6 @@ type ESXiSSHCredsStatus struct {
 
 	// FailedHosts is the number of ESXi hosts that failed validation
 	FailedHosts int `json:"failedHosts,omitempty"`
-
-	// HostResults contains the validation result for each ESXi host
-	HostResults []ESXiHostValidationResult `json:"hostResults,omitempty"`
 
 	// LastValidationTime is the timestamp of the last validation run
 	LastValidationTime metav1.Time `json:"lastValidationTime,omitempty"`

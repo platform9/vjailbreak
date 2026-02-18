@@ -49,6 +49,7 @@ type ESXiSSHCredsReconciler struct {
 
 // hostValidationResult is used internally to collect validation results
 type hostValidationResult struct {
+	vmwareHost  *vjailbreakv1alpha1.VMwareHost
 	hostname    string
 	status      string
 	message     string
@@ -58,7 +59,8 @@ type hostValidationResult struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=esxisshcreds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=esxisshcreds/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=esxisshcreds/finalizers,verbs=update
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarehosts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarehosts,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vmwarehosts/status,verbs=get;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *ESXiSSHCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -123,12 +125,12 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
-	// Get list of ESXi hosts to validate
-	hosts, err := r.getESXiHosts(ctx, esxiSSHCreds)
+	// Get list of VMwareHosts to validate
+	vmwareHosts, err := r.getVMwareHosts(ctx, esxiSSHCreds)
 	if err != nil {
-		ctxlog.Error(err, "Failed to get ESXi hosts")
+		ctxlog.Error(err, "Failed to get VMwareHosts")
 		esxiSSHCreds.Status.ValidationStatus = constants.ESXiSSHCredsStatusFailed
-		esxiSSHCreds.Status.ValidationMessage = fmt.Sprintf("Failed to get ESXi hosts: %v", err)
+		esxiSSHCreds.Status.ValidationMessage = fmt.Sprintf("Failed to get VMwareHosts: %v", err)
 		if updateErr := r.Status().Update(ctx, esxiSSHCreds); updateErr != nil {
 			if !apierrors.IsNotFound(updateErr) {
 				ctxlog.Error(updateErr, "Failed to update status")
@@ -137,14 +139,13 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
-	if len(hosts) == 0 {
-		ctxlog.Info("No ESXi hosts found to validate")
-		esxiSSHCreds.Status.ValidationStatus = constants.ESXiSSHCredsStatusFailed
-		esxiSSHCreds.Status.ValidationMessage = "No ESXi hosts found to validate. Specify hosts in spec.hosts or reference VMwareCreds."
+	if len(vmwareHosts) == 0 {
+		ctxlog.Info("No VMwareHosts found to validate, will retry")
+		esxiSSHCreds.Status.ValidationStatus = constants.ESXiSSHCredsStatusPending
+		esxiSSHCreds.Status.ValidationMessage = "No VMwareHosts found. Waiting for VMwareCreds to discover hosts."
 		esxiSSHCreds.Status.TotalHosts = 0
 		esxiSSHCreds.Status.SuccessfulHosts = 0
 		esxiSSHCreds.Status.FailedHosts = 0
-		esxiSSHCreds.Status.HostResults = []vjailbreakv1alpha1.ESXiHostValidationResult{}
 		if updateErr := r.Status().Update(ctx, esxiSSHCreds); updateErr != nil {
 			if !apierrors.IsNotFound(updateErr) {
 				ctxlog.Error(updateErr, "Failed to update status")
@@ -153,25 +154,29 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
-	ctxlog.Info("Validating ESXi hosts", "count", len(hosts))
+	ctxlog.Info("Validating ESXi hosts", "count", len(vmwareHosts))
 
 	// Validate SSH connectivity to all hosts in parallel with throttling
-	results := r.validateHostsParallel(ctx, hosts, sshCreds)
+	results := r.validateHostsParallel(ctx, vmwareHosts, sshCreds)
 
-	// Process results
-	hostResults := make([]vjailbreakv1alpha1.ESXiHostValidationResult, 0, len(results))
+	// Process results and update VMwareHost statuses
 	successCount := 0
 	failCount := 0
 
 	for _, result := range results {
-		hostResult := vjailbreakv1alpha1.ESXiHostValidationResult{
-			Hostname:    result.hostname,
-			Status:      result.status,
-			Message:     result.message,
-			LastChecked: metav1.Now(),
-			ESXiVersion: result.esxiVersion,
+		// Update VMwareHost status
+		if result.vmwareHost != nil {
+			result.vmwareHost.Status.SSHStatus = result.status
+			result.vmwareHost.Status.SSHMessage = result.message
+			result.vmwareHost.Status.SSHLastChecked = metav1.Now()
+			result.vmwareHost.Status.ESXiVersion = result.esxiVersion
+
+			if err := r.Status().Update(ctx, result.vmwareHost); err != nil {
+				if !apierrors.IsNotFound(err) {
+					ctxlog.Error(err, "Failed to update VMwareHost status", "vmwareHost", result.vmwareHost.Name)
+				}
+			}
 		}
-		hostResults = append(hostResults, hostResult)
 
 		if result.status == constants.ESXiSSHCredsStatusSucceeded {
 			successCount++
@@ -185,22 +190,21 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 	switch {
 	case failCount == 0:
 		overallStatus = constants.ESXiSSHCredsStatusSucceeded
-		overallMessage = fmt.Sprintf("Successfully validated SSH connectivity to all %d ESXi hosts", len(hosts))
+		overallMessage = fmt.Sprintf("Successfully validated SSH connectivity to all %d ESXi hosts", len(vmwareHosts))
 	case successCount == 0:
 		overallStatus = constants.ESXiSSHCredsStatusFailed
-		overallMessage = fmt.Sprintf("Failed to validate SSH connectivity to all %d ESXi hosts", len(hosts))
+		overallMessage = fmt.Sprintf("Failed to validate SSH connectivity to all %d ESXi hosts", len(vmwareHosts))
 	default:
 		overallStatus = constants.ESXiSSHCredsStatusPartiallySucceeded
-		overallMessage = fmt.Sprintf("SSH validation partially succeeded: %d/%d hosts passed, %d failed", successCount, len(hosts), failCount)
+		overallMessage = fmt.Sprintf("SSH validation partially succeeded: %d/%d hosts passed, %d failed", successCount, len(vmwareHosts), failCount)
 	}
 
-	// Update status
+	// Update ESXiSSHCreds status (summary only)
 	esxiSSHCreds.Status.ValidationStatus = overallStatus
 	esxiSSHCreds.Status.ValidationMessage = overallMessage
-	esxiSSHCreds.Status.TotalHosts = len(hosts)
+	esxiSSHCreds.Status.TotalHosts = len(vmwareHosts)
 	esxiSSHCreds.Status.SuccessfulHosts = successCount
 	esxiSSHCreds.Status.FailedHosts = failCount
-	esxiSSHCreds.Status.HostResults = hostResults
 	esxiSSHCreds.Status.LastValidationTime = metav1.Now()
 
 	if err := r.Status().Update(ctx, esxiSSHCreds); err != nil {
@@ -213,7 +217,7 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 
 	ctxlog.Info("ESXi SSH validation completed",
 		"status", overallStatus,
-		"total", len(hosts),
+		"total", len(vmwareHosts),
 		"successful", successCount,
 		"failed", failCount)
 
@@ -275,83 +279,64 @@ func (r *ESXiSSHCredsReconciler) getSSHCredentialsFromSecret(ctx context.Context
 	}, nil
 }
 
-// getESXiHosts returns the list of ESXi hosts to validate
-func (r *ESXiSSHCredsReconciler) getESXiHosts(ctx context.Context, esxiSSHCreds *vjailbreakv1alpha1.ESXiSSHCreds) ([]string, error) {
-	// If explicit hosts are specified, use them
-	if len(esxiSSHCreds.Spec.Hosts) > 0 {
-		return esxiSSHCreds.Spec.Hosts, nil
-	}
-
-	// If VMwareCredsRef is specified, discover hosts from VMwareHosts CRs
-	if esxiSSHCreds.Spec.VMwareCredsRef != nil {
-		return r.discoverHostsFromVMwareCreds(ctx, esxiSSHCreds.Spec.VMwareCredsRef)
-	}
-
-	return nil, nil
-}
-
-// discoverHostsFromVMwareCreds discovers ESXi hosts from VMwareHosts CRs associated with VMwareCreds
-func (r *ESXiSSHCredsReconciler) discoverHostsFromVMwareCreds(ctx context.Context, vmwareCredsRef *corev1.ObjectReference) ([]string, error) {
+// getVMwareHosts returns the list of VMwareHost objects to validate
+func (r *ESXiSSHCredsReconciler) getVMwareHosts(ctx context.Context, esxiSSHCreds *vjailbreakv1alpha1.ESXiSSHCreds) ([]*vjailbreakv1alpha1.VMwareHost, error) {
 	ctxlog := log.FromContext(ctx)
 
-	// First verify the VMwareCreds exists
-	vmwareCreds := &vjailbreakv1alpha1.VMwareCreds{}
-	vmwareCredsNamespace := vmwareCredsRef.Namespace
-	if vmwareCredsNamespace == "" {
-		vmwareCredsNamespace = constants.NamespaceMigrationSystem
-	}
-	if err := r.Get(ctx, client.ObjectKey{Name: vmwareCredsRef.Name, Namespace: vmwareCredsNamespace}, vmwareCreds); err != nil {
-		return nil, errors.Wrapf(err, "failed to get VMwareCreds %s/%s", vmwareCredsNamespace, vmwareCredsRef.Name)
+	// If explicit hosts are specified in spec, we can't update VMwareHost status for them
+	// So we skip explicit hosts mode and only work with discovered VMwareHosts
+	if len(esxiSSHCreds.Spec.Hosts) > 0 {
+		ctxlog.Info("Explicit hosts specified in spec - these will be validated but VMwareHost status won't be updated")
+		// For explicit hosts, we create temporary VMwareHost-like structures
+		// but we won't update their status since they may not exist as CRs
 	}
 
-	// List VMwareHosts with the VMwareCreds label
+	// List all VMwareHosts in the system
 	vmwareHostList := &vjailbreakv1alpha1.VMwareHostList{}
-	listOpts := []client.ListOption{
-		client.MatchingLabels{constants.VMwareCredsLabel: vmwareCredsRef.Name},
-	}
-	if err := r.List(ctx, vmwareHostList, listOpts...); err != nil {
+	if err := r.List(ctx, vmwareHostList); err != nil {
 		return nil, errors.Wrap(err, "failed to list VMwareHosts")
 	}
 
-	hosts := make([]string, 0, len(vmwareHostList.Items))
-	for _, vmwareHost := range vmwareHostList.Items {
-		// Get the host name/IP from the VMwareHost spec
+	hosts := make([]*vjailbreakv1alpha1.VMwareHost, 0, len(vmwareHostList.Items))
+	for i := range vmwareHostList.Items {
+		vmwareHost := &vmwareHostList.Items[i]
 		// VMwareHost.Spec.Name contains the ESXi hostname (IP or FQDN)
-		hostName := vmwareHost.Spec.Name
-		if hostName != "" {
-			hosts = append(hosts, hostName)
+		if vmwareHost.Spec.Name != "" {
+			hosts = append(hosts, vmwareHost)
 		} else {
 			ctxlog.Info("VMwareHost has no hostname, skipping", "vmwareHost", vmwareHost.Name)
 		}
 	}
 
-	ctxlog.Info("Discovered ESXi hosts from VMwareCreds", "vmwareCreds", vmwareCredsRef.Name, "hostCount", len(hosts))
+	ctxlog.Info("Discovered VMwareHosts", "hostCount", len(hosts))
 	return hosts, nil
 }
 
 // validateHostsParallel validates SSH connectivity to multiple hosts in parallel with throttling
-func (r *ESXiSSHCredsReconciler) validateHostsParallel(ctx context.Context, hosts []string, sshCreds *vjailbreakv1alpha1.ESXiSSHCredsInfo) []hostValidationResult {
+func (r *ESXiSSHCredsReconciler) validateHostsParallel(ctx context.Context, vmwareHosts []*vjailbreakv1alpha1.VMwareHost, sshCreds *vjailbreakv1alpha1.ESXiSSHCredsInfo) []hostValidationResult {
 	ctxlog := log.FromContext(ctx)
 
-	results := make([]hostValidationResult, len(hosts))
+	results := make([]hostValidationResult, len(vmwareHosts))
 	resultsChan := make(chan struct {
 		index  int
 		result hostValidationResult
-	}, len(hosts))
+	}, len(vmwareHosts))
 
 	// Create a semaphore to limit concurrent validations
 	semaphore := make(chan struct{}, constants.ESXiSSHValidationConcurrency)
 
 	var wg sync.WaitGroup
 
-	for i, host := range hosts {
+	for i, vmwareHost := range vmwareHosts {
 		wg.Add(1)
-		go func(index int, hostname string) {
+		go func(index int, host *vjailbreakv1alpha1.VMwareHost) {
 			defer wg.Done()
 
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+
+			hostname := host.Spec.Name
 
 			// Check if context is cancelled
 			select {
@@ -362,9 +347,10 @@ func (r *ESXiSSHCredsReconciler) validateHostsParallel(ctx context.Context, host
 				}{
 					index: index,
 					result: hostValidationResult{
-						hostname: hostname,
-						status:   constants.ESXiSSHCredsStatusFailed,
-						message:  "Validation cancelled",
+						vmwareHost: host,
+						hostname:   hostname,
+						status:     constants.ESXiSSHCredsStatusFailed,
+						message:    "Validation cancelled",
 					},
 				}
 				return
@@ -373,6 +359,7 @@ func (r *ESXiSSHCredsReconciler) validateHostsParallel(ctx context.Context, host
 
 			// Validate this host
 			result := r.validateSingleHost(ctx, hostname, sshCreds)
+			result.vmwareHost = host
 			resultsChan <- struct {
 				index  int
 				result hostValidationResult
@@ -380,7 +367,7 @@ func (r *ESXiSSHCredsReconciler) validateHostsParallel(ctx context.Context, host
 				index:  index,
 				result: result,
 			}
-		}(i, host)
+		}(i, vmwareHost)
 	}
 
 	// Wait for all validations to complete
