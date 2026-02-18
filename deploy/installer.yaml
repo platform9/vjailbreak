@@ -4201,7 +4201,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:-30c8f8d1
+        image: quay.io/platform9/vjailbreak-controller:-9cee342b
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4284,7 +4284,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:-30c8f8d1
+        image: quay.io/platform9/vjailbreak-vpwned:-9cee342b
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4362,7 +4362,7 @@ spec:
       serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:-30c8f8d1
+          image: quay.io/platform9/vjailbreak-ui:-9cee342b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
