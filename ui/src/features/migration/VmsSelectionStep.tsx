@@ -352,9 +352,8 @@ function VmsSelectionStep({
 
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
-                <CdsIconWrapper>
+            <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
+              <CdsIconWrapper>
                   {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                   {/* @ts-ignore */}
                   <cds-icon
@@ -367,7 +366,6 @@ function VmsSelectionStep({
                 </CdsIconWrapper>
               </Tooltip>
               <Box>{displayName}</Box>
-            </Box>
             {params.row.isMigrated && (
               <Chip variant="outlined" label="Migrated" color="info" size="small" />
             )}
