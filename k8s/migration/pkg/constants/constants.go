@@ -139,9 +139,6 @@ const (
 	ESXiSSHCredsStatusPartiallySucceeded = "PartiallySucceeded"
 	ESXiSSHCredsStatusFailed             = "Failed"
 
-	// ESXiSSHCredsLabel is the label for ESXi SSH credentials
-	ESXiSSHCredsLabel = "vjailbreak.k8s.pf9.io/esxisshcreds" //nolint:gosec // not a password string
-
 	// ESXiSSHValidationConcurrency is the number of concurrent ESXi SSH validations
 	ESXiSSHValidationConcurrency = 10
 

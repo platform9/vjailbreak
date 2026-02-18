@@ -126,7 +126,7 @@ func (r *ESXiSSHCredsReconciler) reconcileNormal(ctx context.Context, esxiSSHCre
 	}
 
 	// Get list of VMwareHosts to validate
-	vmwareHosts, err := r.getVMwareHosts(ctx, esxiSSHCreds)
+	vmwareHosts, err := r.getVMwareHosts(ctx)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get VMwareHosts")
 		esxiSSHCreds.Status.ValidationStatus = constants.ESXiSSHCredsStatusFailed
@@ -280,16 +280,8 @@ func (r *ESXiSSHCredsReconciler) getSSHCredentialsFromSecret(ctx context.Context
 }
 
 // getVMwareHosts returns the list of VMwareHost objects to validate
-func (r *ESXiSSHCredsReconciler) getVMwareHosts(ctx context.Context, esxiSSHCreds *vjailbreakv1alpha1.ESXiSSHCreds) ([]*vjailbreakv1alpha1.VMwareHost, error) {
+func (r *ESXiSSHCredsReconciler) getVMwareHosts(ctx context.Context) ([]*vjailbreakv1alpha1.VMwareHost, error) {
 	ctxlog := log.FromContext(ctx)
-
-	// If explicit hosts are specified in spec, we can't update VMwareHost status for them
-	// So we skip explicit hosts mode and only work with discovered VMwareHosts
-	if len(esxiSSHCreds.Spec.Hosts) > 0 {
-		ctxlog.Info("Explicit hosts specified in spec - these will be validated but VMwareHost status won't be updated")
-		// For explicit hosts, we create temporary VMwareHost-like structures
-		// but we won't update their status since they may not exist as CRs
-	}
 
 	// List all VMwareHosts in the system
 	vmwareHostList := &vjailbreakv1alpha1.VMwareHostList{}

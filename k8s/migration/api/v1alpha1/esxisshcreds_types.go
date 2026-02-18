@@ -39,11 +39,6 @@ type ESXiSSHCredsSpec struct {
 	// +kubebuilder:default:="root"
 	// +optional
 	Username string `json:"username,omitempty"`
-
-	// Hosts is an optional explicit list of ESXi host IPs or hostnames to validate
-	// If not specified, the controller will automatically discover all ESXi hosts from all VMwareCreds in the system
-	// +optional
-	Hosts []string `json:"hosts,omitempty"`
 }
 
 // ESXiSSHCredsStatus defines the observed state of ESXiSSHCreds

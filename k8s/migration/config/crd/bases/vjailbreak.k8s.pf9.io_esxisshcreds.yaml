@@ -57,13 +57,6 @@ spec:
           spec:
             description: ESXiSSHCredsSpec defines the desired state of ESXiSSHCreds
             properties:
-              hosts:
-                description: |-
-                  Hosts is an optional explicit list of ESXi host IPs or hostnames to validate
-                  If not specified, the controller will automatically discover all ESXi hosts from all VMwareCreds in the system
-                items:
-                  type: string
-                type: array
               secretRef:
                 description: |-
                   SecretRef is the reference to the Kubernetes secret holding the SSH private key
