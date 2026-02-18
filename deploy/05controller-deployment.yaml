@@ -41,7 +41,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:-9cee342b
+        image: quay.io/platform9/vjailbreak-controller:-367e3512
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
