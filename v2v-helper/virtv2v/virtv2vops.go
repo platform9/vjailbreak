@@ -273,9 +273,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
-	if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
-		args = append(args, "--firstboot", "/home/fedora/install-virtio-win12")
-	}
 	if useSingleDisk {
 		args = append(args, "-i", "disk", diskPath)
 	} else {
