@@ -583,14 +583,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	if err != nil {
 		migobj.logMessage(fmt.Sprintf("WARNING: Failed to get migration params: %v, continuing with migration", err))
 	} else {
-		if migobj.MigrationType == "mock"{
+		if migobj.MigrationType == "mock" {
 
-		if migrationParams.AcknowledgeNetworkConflictRisk {
-			migobj.logMessage("User acknowledged the risk involved")
-		}else{
-			migobj.logMessage("User did not acknowledge the risk involved")
+			if migrationParams.AcknowledgeNetworkConflictRisk {
+				migobj.logMessage("User acknowledged the risk involved")
+			} else {
+				migobj.logMessage("User did not acknowledge the risk involved")
+			}
 		}
-	}
 	}
 
 	cutoverLabelPresent, cutoverLabelValue := migobj.CheckCutoverOptions()
@@ -1050,18 +1050,20 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	firstbootscripts := []string{}
-
+	firstbootwinscripts := []virtv2v.FirstBootWindows{}
 	// Fix NTFS for Windows
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
-
+		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "Firstboot-Scheduler.ps1",
+		})
 		if persisNetwork {
 			firstbootscriptname := "windows-persist-network"
 			firstbootscript := constants.WindowsPersistFirstBootScript
 			firstbootscripts = append(firstbootscripts, firstbootscriptname)
-
 			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
 				return errors.Wrap(err, "failed to add first boot script")
 			}
@@ -1098,6 +1100,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
+	}
+
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
+			return errors.Wrap(err, "failed to inject first boot scripts")
+		}
 	}
 
 	// Set volume as bootable
@@ -1899,7 +1907,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			for _, fixedIP := range port.FixedIPs {
 				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
 			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s\n", port.MACAddress, addressesOfPort))
+			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
 			networkids = append(networkids, network.ID)
 			portids = append(portids, port.ID)
 			for _, fixedIP := range port.FixedIPs {

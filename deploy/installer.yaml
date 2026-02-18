@@ -732,6 +732,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -799,6 +804,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -945,6 +951,7 @@ spec:
                 enum:
                 - hot
                 - cold
+                - mock
                 type: string
               podRef:
                 description: PodRef is the name of the pod
@@ -1389,8 +1396,12 @@ spec:
                 type: string
               osDomainName:
                 type: string
+              osIdentityApiVersion:
+                type: string
               osInsecure:
                 type: boolean
+              osInterface:
+                type: string
               osPassword:
                 type: string
               osRegionName:
@@ -1935,6 +1946,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -2088,6 +2104,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -4153,7 +4170,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.3.8
+        image: quay.io/platform9/vjailbreak-controller:update-manifests-46a902f8
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4236,7 +4253,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.3.8
+        image: quay.io/platform9/vjailbreak-vpwned:update-manifests-46a902f8
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4294,3 +4311,43 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ui
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ui
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ui
+    spec:
+      serviceAccountName: migration-controller-manager
+      containers:
+        - name: vjailbreak-ui-container
+          image: quay.io/platform9/vjailbreak-ui:update-manifests-46a902f8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: nginx-shadow-htpasswd
+            mountPath: /etc/nginx/shadow
+          - name: pf9-logs
+            mountPath: /var/log/pf9
+            readOnly: true
+      volumes:
+      - name: nginx-shadow-htpasswd
+        hostPath:
+          path: /etc/htpasswd
+          type: FileOrCreate
+      - name: pf9-logs
+        hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
+---
