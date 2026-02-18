@@ -37,7 +37,10 @@ export const ExpandToggleBar = styled(Box, {
   shouldForwardProp: (prop) => prop !== 'vertical' && prop !== 'expanded'
 })<{ vertical?: boolean; expanded?: boolean }>(({ theme, vertical, expanded }) => ({
   position: 'absolute',
-  backgroundColor: expanded ? theme.palette.text.secondary : theme.palette.text.primary,
+  top: '50%',
+  left: '50%',
+  display: 'block',
+  background: expanded ? theme.palette.text.primary : theme.palette.text.secondary,
   borderRadius: 2,
   ...(vertical
     ? {
@@ -47,12 +50,13 @@ export const ExpandToggleBar = styled(Box, {
           duration: theme.transitions.duration.shorter,
           easing: theme.transitions.easing.easeInOut
         }),
-        transform: expanded ? 'scaleY(0)' : 'scaleY(1)',
+        transform: expanded ? 'translate(-50%, -50%) scaleY(0)' : 'translate(-50%, -50%) scaleY(1)',
         opacity: expanded ? 0 : 1
       }
     : {
         height: 2,
-        width: 10
+        width: 10,
+        transform: 'translate(-50%, -50%)'
       })
 }))
 
