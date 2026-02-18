@@ -1584,8 +1584,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
 
-		if migrationobj.Status.Phase != vjailbreakv1alpha1.VMMigrationPhasePending {
-			ctxlog.Info("Skipping VM - migration already triggered", "vm", vm, "phase", migrationobj.Status.Phase)
+		if migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+			ctxlog.Info("Skipping VM with terminal migration status", "vm", vm, "phase", migrationobj.Status.Phase)
 			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 			continue
 		}
