@@ -533,13 +533,49 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	// Validate VM OS types before proceeding with migration
-	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	terminalMigrations := make(map[string]bool)
+	for _, vmName := range allVMNames {
+		vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vmName, vmwcreds.Name)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to convert VM name to k8s name", "vm", vmName)
+			continue
+		}
+		migrationName := utils.MigrationNameFromVMName(vmk8sname)
+		existingMigration := &vjailbreakv1alpha1.Migration{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationName, Namespace: migrationplan.Namespace}, existingMigration); err == nil {
+			if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				terminalMigrations[vmName] = true
+				r.ctxlog.Info("Skipping terminal migration from validation", "vm", vmName, "phase", existingMigration.Status.Phase)
+			}
+		}
+	}
+
+	// Filter out VMs with terminal migrations for validation
+	vmsToValidate := []string{}
+	for _, vmName := range allVMNames {
+		if !terminalMigrations[vmName] {
+			vmsToValidate = append(vmsToValidate, vmName)
+		}
+	}
+
+	var validVMs []*vjailbreakv1alpha1.VMwareMachine
+	var validationErr error
+	if len(vmsToValidate) > 0 {
+		// Validate VM OS types before proceeding with migration
+		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	}
 
 	if validationErr != nil {
 		r.ctxlog.Error(validationErr, "Migration plan validation failed", "migrationplan", migrationplan.Name)
 
 		for _, vmName := range allVMNames {
+			// Skip VMs with terminal migrations
+			if terminalMigrations[vmName] {
+				continue
+			}
+
 			vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
 			if err != nil {
 				r.ctxlog.Error(err, "Failed to get vmMachine for pre-creation", "vm", vmName)
@@ -562,6 +598,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	for _, vmName := range allVMNames {
+		// Skip VMs with terminal migrations
+		if terminalMigrations[vmName] {
+			continue
+		}
+
 		vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
 		if err != nil {
 			r.ctxlog.Error(err, "Failed to get vmMachine for migration creation", "vm", vmName)
@@ -729,12 +770,27 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			return false, err
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
+				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
+				continue
+			}
+
 			r.ctxlog.Info("Migration succeeded for VM, applying post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
 			if err != nil {
 				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
 				return false, errors.Wrap(err, "failed post-migration")
 			}
+
+			migrationCopy := migration.DeepCopy()
+			if migrationCopy.Annotations == nil {
+				migrationCopy.Annotations = make(map[string]string)
+			}
+			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = "true"
+			if err := r.Update(ctx, migrationCopy); err != nil {
+				r.ctxlog.Error(err, "Failed to set post-migration complete annotation", "vm", migration.Spec.VMName)
+			}
+
 			r.ctxlog.Info("Post-migration actions completed for VM", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			continue
 
