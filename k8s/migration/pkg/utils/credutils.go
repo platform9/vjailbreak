@@ -1008,7 +1008,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if vmNameCounts != nil && vmNameCounts[vminfo.Name] > 1 {
 		// Duplicate VM name detected, append MOID to make it unique
 		vmNameForK8s = fmt.Sprintf("%s-%s", vminfo.Name, vminfo.VMID)
-		log.Info("Duplicate VM name detected, using MOID-suffixed name for K8s resource",
+		log.FromContext(ctx).Info("Duplicate VM name detected, using MOID-suffixed name for K8s resource",
 			"originalName", vminfo.Name, "vmid", vminfo.VMID, "k8sName", vmNameForK8s)
 	}
 
