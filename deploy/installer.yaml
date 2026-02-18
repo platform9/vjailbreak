@@ -4170,7 +4170,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:update-manifests-46a902f8
+        image: quay.io/platform9/vjailbreak-controller:origin/1410-vmware-tool-removal-script-winserver-12-16-19-42007c13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4253,7 +4253,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:update-manifests-46a902f8
+        image: quay.io/platform9/vjailbreak-vpwned:origin/1410-vmware-tool-removal-script-winserver-12-16-19-42007c13
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/platform9/vjailbreak-controller
-  newTag: update-manifests-46a902f8
+  newTag: origin/1410-vmware-tool-removal-script-winserver-12-16-19-42007c13

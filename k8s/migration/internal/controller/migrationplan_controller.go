@@ -1581,12 +1581,15 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
-			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
-				continue
-			}
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
+
+		if migrationobj.Status.Phase != vjailbreakv1alpha1.VMMigrationPhasePending {
+			ctxlog.Info("Skipping VM - migration already triggered", "vm", vm, "phase", migrationobj.Status.Phase)
+			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
+			continue
+		}
+
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 
 		if migrationtemplate.Spec.UseFlavorless && hotplugFlavorMissing {
