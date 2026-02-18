@@ -57,8 +57,58 @@ if %errorlevel% neq 0 (
     echo Requesting admin rights ─ please accept the UAC prompt...
     echo.
 
+    :: Attempt to elevate via UAC
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs" 2>nul
+        "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs -Wait" 2>nul
+
+    :: Check if elevation succeeded
+    if %errorlevel% neq 0 (
+        echo [%DATE% %TIME%] UAC elevation failed or was denied.    >> "%LOGFILE%"
+        echo [%DATE% %TIME%] Attempting to schedule for next boot using PowerShell... >> "%LOGFILE%"
+        echo.
+        echo UAC elevation failed or was denied.
+        echo Attempting to schedule the script to run at next boot...
+        echo.
+
+        :: Create a scheduled task using PowerShell to run at system startup
+        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+            "$Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File \"%PS_SCRIPT%\"'; " ^
+            "$Trigger = New-ScheduledTaskTrigger -AtStartup; " ^
+            "$Principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest; " ^
+            "$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; " ^
+            "Register-ScheduledTask -TaskName 'FirstbootScheduler-Elevated' -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force; " ^
+            "exit $LASTEXITCODE" >nul 2>&1
+
+        if %errorlevel% equ 0 (
+            echo [%DATE% %TIME%] Scheduled task created successfully via PowerShell. >> "%LOGFILE%"
+            echo.
+            echo ============================================================
+            echo  Firstboot Scheduler has been scheduled to run at next
+            echo  system startup with SYSTEM privileges.
+            echo.
+            echo  Please restart the computer.
+            echo  The script will run automatically during boot.
+            echo ============================================================
+            echo.
+            echo [%DATE% %TIME%] Exiting - will run at next startup.      >> "%LOGFILE%"
+            pause
+            exit /b 0
+        ) else (
+            echo [%DATE% %TIME%] ERROR: Failed to create scheduled task via PowerShell. >> "%LOGFILE%"
+            echo.
+            echo ============================================================
+            echo  ERROR: Could not obtain administrator rights.
+            echo.
+            echo  The script could not be scheduled for automatic
+            echo  execution. Please run this script as an administrator
+            echo  manually or contact your system administrator.
+            echo ============================================================
+            echo.
+            echo [%DATE% %TIME%] All elevation methods failed.            >> "%LOGFILE%"
+            pause
+            exit /b 1
+        )
+    )
 
     exit /b
 )
