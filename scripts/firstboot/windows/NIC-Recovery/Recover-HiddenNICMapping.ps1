@@ -14,14 +14,19 @@ function Get-Network {
     param ([string]$IP, [int]$Prefix)
     $ipBytes = ([System.Net.IPAddress]::Parse($IP)).GetAddressBytes()
     $maskBytes = @(0,0,0,0)
+    if ($prefix -lt 0 -or $prefix -gt 32) { 
+        Write-Warning "Invalid prefix length $Prefix for $IP"
+    }else{
+
     for ($i=0; $i -lt 4; $i++) {
         $bits = [Math]::Min(8, $Prefix - ($i*8))
         if ($bits -gt 0) { 
-            $maskBytes[$i] = [byte](255 -shl (8-$bits)) 
+            $maskBytes[$i] = [byte](0xFF -shr (8 - $bits))
         }
     }
     for ($i=0; $i -lt 4; $i++) { 
         $ipBytes[$i] = $ipBytes[$i] -band $maskBytes[$i] 
+    }
     }
     ([System.Net.IPAddress]$ipBytes).ToString()
 }

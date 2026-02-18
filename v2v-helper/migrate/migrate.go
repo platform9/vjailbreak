@@ -1061,13 +1061,9 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 			Script: "Firstboot-Scheduler.ps1",
 		})
 		if persisNetwork {
-			firstbootscriptname := "windows-persist-network"
-			firstbootscript := constants.WindowsPersistFirstBootScript
-			firstbootscripts = append(firstbootscripts, firstbootscriptname)
-			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
-				return errors.Wrap(err, "failed to add first boot script")
-			}
-			utils.PrintLog("First boot script added successfully")
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "Orchestrate-NICRecovery.ps1",
+			})
 		}
 	}
 
