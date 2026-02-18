@@ -14,7 +14,17 @@ spec:
     singular: vmwaremachine
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.powerState
+      name: PowerState
+      type: string
+    - jsonPath: .spec.migrated
+      name: Migrated
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-

@@ -9,7 +9,6 @@ import MigrationFormDrawer from './features/migration/MigrationForm'
 import RollingMigrationFormDrawer from './features/migration/RollingMigrationForm'
 import MigrationsPage from './features/migration/pages/MigrationsPage'
 import AgentsPage from './features/agents/pages/AgentsPage'
-import CredentialsPage from './features/credentials/pages/CredentialsPage'
 import ClusterConversionsPage from './features/clusterConversions/pages/ClusterConversionsPage'
 import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
@@ -18,6 +17,9 @@ import StorageManagementPage from './features/storageManagement/pages/StorageMan
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
+import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
+import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
+import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -84,7 +86,7 @@ function DashboardIndexRedirect() {
     return hasAnyCredentials ? (
       <Navigate to="/dashboard/migrations" replace />
     ) : (
-      <Navigate to="/dashboard/credentials" replace />
+      <Navigate to="/dashboard/credentials/vm" replace />
     )
   }
 
@@ -95,7 +97,7 @@ function DashboardIndexRedirect() {
   return hasAnyCredentials ? (
     <Navigate to="/dashboard/migrations" replace />
   ) : (
-    <Navigate to="/dashboard/credentials" replace />
+    <Navigate to="/dashboard/credentials/vm" replace />
   )
 }
 
@@ -146,7 +148,7 @@ function App() {
 
     if (guideMode === 'credentials') {
       return {
-        path: '/dashboard/credentials',
+        path: '/dashboard/credentials/vm',
         target: '[data-tour="add-vmware-creds"]',
         placement: 'bottom' as const,
         spotlightPadding: 8,
@@ -258,7 +260,7 @@ function App() {
       return
     }
 
-    if (guideMode === 'credentials' && guideConfig.path === '/dashboard/credentials') {
+    if (guideMode === 'credentials' && guideConfig.path === '/dashboard/credentials/vm') {
       if (location.pathname !== guideConfig.path) {
         navigate(guideConfig.path, { replace: true })
       }
@@ -360,39 +362,47 @@ function App() {
           },
           buttonBack: {
             color: 'gray'
-          },
-          buttonSkip: {
-            color: 'gray'
           }
         }}
       />
-      <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
-      <AppContent ref={appContentRef}>
-        {openMigrationForm && migrationType === 'standard' && (
-          <MigrationFormDrawer
-            open
-            onClose={() => setOpenMigrationForm(false)}
-            onSuccess={handleSuccess}
-          />
-        )}
-        {openMigrationForm && migrationType === 'rolling' && (
-          <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
-        )}
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardLayout />}>
-            <Route index element={<DashboardIndexRedirect />} />
-            <Route path="migrations" element={<MigrationsPage />} />
-            <Route path="agents" element={<AgentsPage />} />
-            <Route path="credentials" element={<CredentialsPage />} />
-            <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
-            <Route path="baremetal-config" element={<MaasConfigPage />} />
-            <Route path="global-settings" element={<GlobalSettingsPage />} />
-            <Route path="storage-management" element={<StorageManagementPage />} />
-          </Route>
-          <Route path="/onboarding" element={<Onboarding />} />
-        </Routes>
-      </AppContent>
+      <AppBar hide={hideAppbar} />
+      <MigrationFormContext.Provider
+        value={{
+          openMigrationForm: (type) => handleOpenMigrationForm(true, type)
+        }}
+      >
+        <AppContent ref={appContentRef}>
+          {openMigrationForm && migrationType === 'standard' && (
+            <MigrationFormDrawer
+              open
+              onClose={() => setOpenMigrationForm(false)}
+              onSuccess={handleSuccess}
+            />
+          )}
+          {openMigrationForm && migrationType === 'rolling' && (
+            <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
+          )}
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<DashboardIndexRedirect />} />
+              <Route path="migrations" element={<MigrationsPage />} />
+              <Route path="agents" element={<AgentsPage />} />
+              <Route
+                path="credentials"
+                element={<Navigate to="/dashboard/credentials/vm" replace />}
+              />
+              <Route path="credentials/vm" element={<VmCredentialsPage />} />
+              <Route path="credentials/pcd" element={<PcdCredentialsPage />} />
+              <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
+              <Route path="baremetal-config" element={<MaasConfigPage />} />
+              <Route path="global-settings" element={<GlobalSettingsPage />} />
+              <Route path="storage-management" element={<StorageManagementPage />} />
+            </Route>
+            <Route path="/onboarding" element={<Onboarding />} />
+          </Routes>
+        </AppContent>
+      </MigrationFormContext.Provider>
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}

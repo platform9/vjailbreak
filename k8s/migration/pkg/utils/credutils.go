@@ -1818,8 +1818,10 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
+			// Network is orphaned/deleted - log error but continue VM discovery
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
-			return
+			networks = append(networks, "Orphaned Network")
+			continue
 		}
 		networks = append(networks, netObj.Name)
 	}

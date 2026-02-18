@@ -18,6 +18,12 @@ spec:
     - jsonPath: .status.migrationStatus
       name: Status
       type: string
+    - jsonPath: .spec.migrationTemplate
+      name: Migration Template
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
