@@ -848,15 +848,18 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
 
-					// incremental block copy
-
 					startTime := time.Now()
 					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
 
-					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-					if err != nil {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %v", err))
+					// Use exponential backoff for retry logic (3 retries, 30 second cap)
+					copyErr := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+					}, 3, 30*time.Second)
+
+					if copyErr != nil {
 						changedBlockCopySuccess = false
+						// Fail the migration if copy fails after 3 retries
+						return vminfo, errors.Wrap(copyErr, fmt.Sprintf("failed to copy changed blocks for disk %d after 3 attempts", idx))
 					}
 
 					duration := time.Since(startTime)
@@ -866,10 +869,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 					if err != nil {
 						return vminfo, errors.Wrap(err, "failed to update disk info")
-					}
-					if !changedBlockCopySuccess {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 					}
 					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
 				}
