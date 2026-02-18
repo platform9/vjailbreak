@@ -18,6 +18,12 @@ spec:
     - jsonPath: .status.openstackValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
