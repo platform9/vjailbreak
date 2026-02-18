@@ -333,6 +333,10 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 		ctxlog.Error(err, "Failed to find VM and its datacenter", "vm", vm)
 		return errors.Wrapf(err, "failed to find VM '%s' and its datacenter", vm)
 	}
+	if dc == nil {
+		ctxlog.Error(nil, "Datacenter is nil after auto-detection", "vm", vm)
+		return errors.Errorf("datacenter is nil for VM '%s'", vm)
+	}
 	ctxlog.Info("Auto-detected datacenter for VM", "vm", vm, "datacenter", dc.Name())
 
 	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
