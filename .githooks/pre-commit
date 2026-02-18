@@ -19,4 +19,5 @@ if [[ "${before_status}" != "${after_status}" ]]; then
   echo "[pre-commit] Please commit the generated changes (or revert them) and retry." >&2
   echo "[pre-commit] Current git status:" >&2
   git status --porcelain >&2
+  exit 1
 fi
