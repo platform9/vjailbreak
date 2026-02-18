@@ -5,25 +5,9 @@ metadata:
     app.kubernetes.io/component: exporter
     app.kubernetes.io/name: kube-state-metrics
     app.kubernetes.io/part-of: kube-prometheus
-    app.kubernetes.io/version: 2.13.0
+    app.kubernetes.io/version: 2.18.0
   name: kube-state-metrics
 rules:
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
-  verbs:
-  - list
-  - get
-  - watch
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - migrations
-  verbs:
-  - list
-  - get
-  - watch
 - apiGroups:
   - ""
   resources:
