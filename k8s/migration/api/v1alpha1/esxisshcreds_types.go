@@ -39,6 +39,11 @@ type ESXiSSHCredsSpec struct {
 	// +kubebuilder:default:="root"
 	// +optional
 	Username string `json:"username,omitempty"`
+
+	// ForceReconcileToken is an opaque token that can be updated to force a reconciliation.
+	// Updating this field will increment metadata.generation and trigger the controller.
+	// +optional
+	ForceReconcileToken string `json:"forceReconcileToken,omitempty"`
 }
 
 // ESXiSSHCredsStatus defines the observed state of ESXiSSHCreds

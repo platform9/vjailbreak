@@ -736,6 +736,11 @@ spec:
           spec:
             description: ESXiSSHCredsSpec defines the desired state of ESXiSSHCreds
             properties:
+              forceReconcileToken:
+                description: |-
+                  ForceReconcileToken is an opaque token that can be updated to force a reconciliation.
+                  Updating this field will increment metadata.generation and trigger the controller.
+                type: string
               secretRef:
                 description: |-
                   SecretRef is the reference to the Kubernetes secret holding the SSH private key

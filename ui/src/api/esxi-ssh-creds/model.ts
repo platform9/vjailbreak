@@ -15,6 +15,7 @@ export interface ESXiSSHCreds {
       namespace?: string
     }
     username?: string
+    forceReconcileToken?: string
   }
   status?: {
     validationStatus?: string
