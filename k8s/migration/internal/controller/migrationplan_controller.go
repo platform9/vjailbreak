@@ -632,7 +632,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name == vmName {
+			// Compare using K8s resource name since vmName now contains vmWareMachineName
+			if v.Name == vmName {
 				isValid = true
 				break
 			}
@@ -1275,7 +1276,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	} else {
 		virtiodrivers = migrationtemplate.Spec.VirtioWinDriver
 	}
-	openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
+	openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx, migrationtemplate, openstackcreds, vmwcreds, vm, vmMachine)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconcile mapping")
 	}
@@ -1459,9 +1460,10 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 ) (openstacknws, openstackvolumetypes []string, err error) {
-	// Get datacenter from VM's cluster annotation
-	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
+	// Get datacenter from VM's VMwareMachine annotation directly
+	datacenter, err := getDatacenterFromVMwareMachine(vmMachine)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get datacenter for VM")
 	}
@@ -2118,13 +2120,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	return validVMs, skippedVMs, nil
 }
 
-// getDatacenterForVM retrieves the datacenter for a given VM from its VMwareMachine annotation
-func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm string, vmwcreds *vjailbreakv1alpha1.VMwareCreds, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) (string, error) {
-	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
-	}
-
+// getDatacenterFromVMwareMachine extracts the datacenter from an already-fetched VMwareMachine
+func getDatacenterFromVMwareMachine(vmMachine *vjailbreakv1alpha1.VMwareMachine) (string, error) {
 	if vmMachine.Annotations == nil {
 		return "", fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
 	}

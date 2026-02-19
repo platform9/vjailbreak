@@ -27,7 +27,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:1410-vmware-tool-removal-script-bbed33aa
+        image: quay.io/platform9/vjailbreak-vpwned:origin/HEAD-5cf61fcb
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
