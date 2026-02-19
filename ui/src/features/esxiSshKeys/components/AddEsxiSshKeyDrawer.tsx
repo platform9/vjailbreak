@@ -23,6 +23,18 @@ type FormData = {
   sshPrivateKey: string
 }
 
+const toDnsCompatibleNameFromFilename = (filename: string) => {
+  const withoutExt = filename.replace(/\.[^./\\]+$/, '')
+  const normalized = withoutExt
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+
+  return normalized.slice(0, 63)
+}
+
 const validateOpenSshPrivateKey = (value: string): string | null => {
   const trimmed = value.trim()
   if (!trimmed) return 'SSH private key is required'
@@ -63,6 +75,7 @@ export default function AddEsxiSshKeyDrawer({
   const {
     reset,
     setValue,
+    getValues,
     formState: { isValid }
   } = form
 
@@ -106,6 +119,16 @@ export default function AddEsxiSshKeyDrawer({
         return
       }
       try {
+        if (mode === 'add') {
+          const currentName = (getValues('name') || '').trim()
+          if (!currentName) {
+            const suggested = toDnsCompatibleNameFromFilename(file.name)
+            if (suggested && isValidName(suggested)) {
+              setValue('name', suggested, { shouldDirty: true, shouldValidate: true })
+            }
+          }
+        }
+
         const text = await file.text()
         setValue('sshPrivateKey', text, { shouldDirty: true, shouldValidate: true })
         setError(null)
@@ -113,7 +136,7 @@ export default function AddEsxiSshKeyDrawer({
         setError('Failed to read file')
       }
     },
-    [setValue]
+    [getValues, mode, setValue]
   )
 
   const onSubmit = async (data: FormData) => {
@@ -202,6 +225,7 @@ export default function AddEsxiSshKeyDrawer({
           name="name"
           label="SSH Key Name"
           placeholder="esxi-ssh-key-1"
+          required
           disabled={isPending || mode === 'edit'}
           rules={{
             required: 'SSH key name is required',
@@ -210,7 +234,7 @@ export default function AddEsxiSshKeyDrawer({
           onValueChange={() => setError(null)}
         />
 
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: { xs: 'flex-start', md: 'center' } }}>
           <ActionButton tone="secondary" component="label" disabled={isPending}>
             Upload key file
             <input
@@ -219,8 +243,8 @@ export default function AddEsxiSshKeyDrawer({
               onChange={(e) => handleKeyFileChange(e.target.files?.[0] ?? null)}
             />
           </ActionButton>
-          <Typography variant="body2" color="text.secondary">
-            Only the key content will be stored (do not include a field name).
+          <Typography variant="body2" color="text.secondary" sx={{ pt: { xs: 0.5, md: 0 } }}>
+            Only the key content will be stored. Paste the key content only (no field name).
           </Typography>
         </Box>
 
@@ -228,10 +252,12 @@ export default function AddEsxiSshKeyDrawer({
           name="sshPrivateKey"
           label="SSH Private Key"
           placeholder="-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+          required
           multiline
           minRows={12}
           disabled={isPending}
           rules={{
+            required: 'SSH private key is required',
             validate: (val: string) => validateOpenSshPrivateKey(val) || true
           }}
           onValueChange={() => setError(null)}

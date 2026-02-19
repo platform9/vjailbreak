@@ -296,7 +296,6 @@ export default function EsxiSshKeysPage() {
       {drawerState.open && (
         <AddEsxiSshKeyDrawer
           open
-          requireCloseConfirmation={true}
           mode={drawerState.mode}
           initialValues={drawerState.initialValues}
           onClose={() => {
