@@ -223,7 +223,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--no-fstrim"}
+
+	if strings.ToLower(ostype) == constants.OSFamilyLinux {
+		args = append(args, "--firstboot", "/home/fedora/scripts/user_firstboot.sh")
+	}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}

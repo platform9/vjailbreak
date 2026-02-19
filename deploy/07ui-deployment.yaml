@@ -16,7 +16,7 @@ spec:
       serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:-dfebea25
+          image: quay.io/platform9/vjailbreak-ui:-f64f3871
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

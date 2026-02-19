@@ -51,6 +51,8 @@ try {
     }
     
     # Check if pnputil.exe is recognized
+    if (Test-Path "$ScriptRoot\netconfig.json"){
+
     if ((Get-Command pnputil.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Windows\System32\pnputil.exe")) {
         Write-Log "pnputil.exe is recognized"
         # Run Cleanup-GhostNICs.ps1
@@ -85,6 +87,10 @@ try {
         exit 0
     }
 
+    }else{
+        Write-Log "Network configuration not found, exiting"
+        exit 0
+    }
 
 } catch {
     Write-Log "FATAL ERROR: $_" -Level "ERROR"

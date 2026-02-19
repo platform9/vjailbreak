@@ -27,7 +27,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:-dfebea25
+        image: quay.io/platform9/vjailbreak-vpwned:-f64f3871
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
