@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
           target: `${env.VITE_API_HOST}`,
           changeOrigin: true,
           secure: false, // Allow self-signed certificates for HTTPS
+          ws: true, // Enable WebSocket support for Kubernetes exec API
           headers: {
             Authorization: `Bearer ${env.VITE_API_TOKEN}`,
           },

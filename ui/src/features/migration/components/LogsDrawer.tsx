@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import DownloadIcon from '@mui/icons-material/Download'
 import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Clear'
 import FilterListIcon from '@mui/icons-material/FilterList'
@@ -28,6 +29,7 @@ import ReplayIcon from '@mui/icons-material/Replay'
 import { DrawerShell, DrawerHeader } from 'src/components'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
+import { fetchPodDebugLogs } from 'src/api/kubernetes/pods'
 import LogLine from './LogLine'
 import {
   DARK_BG_PAPER,
@@ -65,6 +67,8 @@ export default function LogsDrawer({
   const [searchTerm, setSearchTerm] = useState('')
   const [logLevelFilter, setLogLevelFilter] = useState<string>('ALL')
   const [copySuccess, setCopySuccess] = useState(false)
+  const [downloadSuccess, setDownloadSuccess] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null)
   const [sessionKey, setSessionKey] = useState(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
@@ -198,19 +202,6 @@ export default function LogsDrawer({
     return filtered
   }, [currentLogs, searchTerm, logLevelFilter])
 
-  const handleCopyLogs = useCallback(() => {
-    const logsText = filteredLogs.join('\n')
-    navigator.clipboard.writeText(logsText).then(
-      () => {
-        setCopySuccess(true)
-        setTimeout(() => setCopySuccess(false), 2000)
-      },
-      (err) => {
-        console.error('Failed to copy logs:', err)
-      }
-    )
-  }, [filteredLogs])
-
   const vmDisplayName = useMemo(() => {
     const fromMigration = (() => {
       if (!migrationName) return null
@@ -232,6 +223,73 @@ export default function LogsDrawer({
     }
     return withoutPrefix
   }, [migrationName, podName])
+
+  const handleCopyLogs = useCallback(() => {
+    const logsText = filteredLogs.join('\n')
+    navigator.clipboard.writeText(logsText).then(
+      () => {
+        setCopySuccess(true)
+        setTimeout(() => setCopySuccess(false), 2000)
+      },
+      (err) => {
+        console.error('Failed to copy logs:', err)
+      }
+    )
+  }, [filteredLogs])
+
+  const handleDownloadLogs = useCallback(async () => {
+    setIsDownloading(true)
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const fileName = `${vmDisplayName || podName || 'logs'}-${logSource}-${timestamp}.txt`
+      
+      let combinedLogs = ''
+      
+      // Add stdout/stderr logs
+      combinedLogs += '='.repeat(80) + '\n'
+      combinedLogs += `STDOUT/STDERR LOGS (${logSource})\n`
+      combinedLogs += '='.repeat(80) + '\n\n'
+      combinedLogs += filteredLogs.join('\n')
+      
+      // Fetch and add debug logs from /var/log/pf9 (only for pod logs, not controller)
+      if (logSource === 'pod' && podName && namespace) {
+        try {
+          const debugLogs = await fetchPodDebugLogs(namespace, podName, migrationName)
+          if (debugLogs && debugLogs.trim()) {
+            combinedLogs += '\n\n'
+            combinedLogs += '='.repeat(80) + '\n'
+            combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
+            combinedLogs += '='.repeat(80) + '\n\n'
+            combinedLogs += debugLogs
+          }
+        } catch (error) {
+          console.warn('Failed to fetch debug logs:', error)
+          combinedLogs += '\n\n'
+          combinedLogs += '='.repeat(80) + '\n'
+          combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
+          combinedLogs += '='.repeat(80) + '\n\n'
+          combinedLogs += '[Failed to fetch debug logs from pod filesystem]\n'
+        }
+      }
+      
+      const blob = new Blob([combinedLogs], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      setDownloadSuccess(true)
+      setTimeout(() => setDownloadSuccess(false), 2000)
+    } catch (error) {
+      console.error('Failed to download logs:', error)
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [filteredLogs, vmDisplayName, podName, logSource, namespace, migrationName])
 
   const headerTitle = logSource === 'pod' ? 'Migration Pod Logs' : 'Controller Logs'
   const headerSubtitle = vmDisplayName || ''
@@ -431,6 +489,17 @@ export default function LogsDrawer({
                     disabled={filteredLogs.length === 0}
                   >
                     <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title={downloadSuccess ? 'Downloaded!' : isDownloading ? 'Downloading...' : 'Download logs (includes debug logs from /var/log/pf9)'}>
+                  <IconButton
+                    onClick={handleDownloadLogs}
+                    size="small"
+                    color={downloadSuccess ? 'success' : 'default'}
+                    disabled={filteredLogs.length === 0 || isDownloading}
+                  >
+                    {isDownloading ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
                   </IconButton>
                 </Tooltip>
 
