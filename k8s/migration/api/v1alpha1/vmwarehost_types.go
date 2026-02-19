@@ -30,6 +30,10 @@ type VMwareHostSpec struct {
 	HostConfigID string `json:"hostConfigId,omitempty"`
 	// Cluster name of the host
 	ClusterName string `json:"clusterName,omitempty"`
+	// VMCount is the number of VMs on the host
+	VMCount int `json:"vmCount,omitempty"`
+	// State is the connection state of the host
+	State string `json:"state,omitempty"`
 }
 
 // VMwareHostStatus defines the observed state of VMwareHost

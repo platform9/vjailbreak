@@ -165,6 +165,7 @@ interface ESXHost {
   vms: number
   state: string
   pcdHostConfigName?: string
+  pcdHostConfigId?: string
 }
 
 interface VM {
@@ -609,8 +610,9 @@ export default function RollingMigrationFormDrawer({
         ip: '',
         bmcIp: '',
         maasState: 'Unknown',
-        vms: 0,
-        state: 'Active'
+        vms: host.spec.vmCount || 0,
+        state: host.spec.state || 'Active',
+        pcdHostConfigId: host.spec.hostConfigId
       }))
 
       setOrderedESXHosts(mappedHosts)
@@ -864,6 +866,36 @@ export default function RollingMigrationFormDrawer({
       )
     },
     {
+      field: 'vms',
+      headerName: 'VM Count',
+      flex: 0.5,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <Typography variant="body2">{params.value}</Typography>
+        </Box>
+      )
+    },
+    {
+      field: 'state',
+      headerName: 'State',
+      flex: 0.8,
+      renderCell: (params) => {
+        const state = params.value || 'Unknown'
+        let color = 'text.secondary'
+        if (state === 'connected') color = 'success.main'
+        if (state === 'disconnected' || state === 'notResponding') color = 'error.main'
+        if (state === 'maintenance') color = 'warning.main'
+
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Typography variant="body2" sx={{ color, textTransform: 'capitalize' }}>
+              {state}
+            </Typography>
+          </Box>
+        )
+      }
+    },
+    {
       field: 'pcdHostConfigName',
       headerName: 'Host Config',
       flex: 1,
@@ -982,6 +1014,31 @@ export default function RollingMigrationFormDrawer({
       }
     }
   }, [openstackFlavors, vmsWithAssignments])
+
+  // Update ESXi host config names when OpenStack host configs become available
+  useEffect(() => {
+    const pcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
+    if (pcdHostConfigs.length > 0 && orderedESXHosts.length > 0) {
+      const updatedHosts = orderedESXHosts.map((host) => {
+        if (host.pcdHostConfigId) {
+          const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
+          if (configObj && host.pcdHostConfigName !== configObj.name) {
+            return { ...host, pcdHostConfigName: configObj.name }
+          }
+        }
+        return host
+      })
+
+      // Only update if there are actual changes
+      const hasChanges = updatedHosts.some(
+        (host, index) => host.pcdHostConfigName !== orderedESXHosts[index]?.pcdHostConfigName
+      )
+
+      if (hasChanges) {
+        setOrderedESXHosts(updatedHosts)
+      }
+    }
+  }, [openstackCredData, orderedESXHosts])
 
   const handleMappingsChange = (key: string) => (value: unknown) => {
     markTouched('mapResources')
