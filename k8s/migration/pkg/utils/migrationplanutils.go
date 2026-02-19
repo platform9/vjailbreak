@@ -124,3 +124,43 @@ func GenerateSha256Hash(input string) string {
 
 	return hashStr[:len(hashStr)-1] + string(replacement)
 }
+
+// ValidateMixedOSWithFirstboot checks if a migration plan has both Windows and Linux VMs
+// when a firstboot script is provided. Returns an error if this condition is detected.
+func ValidateMixedOSWithFirstboot(migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines []*vjailbreakv1alpha1.VMwareMachine) error {
+	// If no firstboot script is provided, no validation needed
+	firstbootScript := strings.TrimSpace(migrationplan.Spec.FirstBootScript)
+	defaultScript := `echo "Add your startup script here!"`
+	
+	// Skip validation if script is empty or is the default placeholder
+	if firstbootScript == "" || firstbootScript == defaultScript {
+		return nil
+	}
+
+	// Collect unique OS families from all VMs
+	osFamilies := make(map[string]bool)
+	for _, vmMachine := range vmMachines {
+		osFamily := strings.ToLower(strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily))
+		if osFamily == "" || osFamily == "unknown" {
+			continue
+		}
+		
+		// Normalize OS family to either "windows" or "linux"
+		if strings.Contains(osFamily, "windows") {
+			osFamilies["windows"] = true
+		} else if strings.Contains(osFamily, "linux") || strings.Contains(osFamily, "centos") || 
+			strings.Contains(osFamily, "rhel") || strings.Contains(osFamily, "ubuntu") ||
+			strings.Contains(osFamily, "debian") || strings.Contains(osFamily, "fedora") {
+			osFamilies["linux"] = true
+		}
+	}
+
+	// Check if we have both Windows and Linux VMs
+	if osFamilies["windows"] && osFamilies["linux"] {
+		return fmt.Errorf("firstboot scripts cannot be used when migrating both Windows and Linux VMs together. " +
+			"Please either: (1) remove the firstboot script, (2) migrate Windows and Linux VMs separately, " +
+			"or (3) create separate migration plans for each OS type")
+	}
+
+	return nil
+}
