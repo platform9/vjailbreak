@@ -158,7 +158,7 @@ build {
     "sudo df -h",
     "sudo bash /tmp/user_setup_daemon.sh",
     "sudo apt-get update",
-    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient",
+    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient netcat-openbsd vim telnet dnsutils net-tools iputils-ping traceroute tcpdump iproute2 bind9-dnsutils nmap htop iotop strace lsof",
     "sudo systemctl enable cron",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
     "curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
