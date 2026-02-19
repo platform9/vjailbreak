@@ -2908,6 +2908,10 @@ spec:
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
+                  vmid:
+                    description: VMID is the vCenter Managed Object ID (MOID) of the
+                      virtual machine
+                    type: string
                 required:
                 - name
                 type: object

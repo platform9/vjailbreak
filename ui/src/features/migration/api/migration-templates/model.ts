@@ -63,6 +63,7 @@ export interface VmData {
   datastores: string[]
   id: string
   name: string
+  vmid?: string
   networks?: string[]
   isMigrated?: boolean
   vmState?: string

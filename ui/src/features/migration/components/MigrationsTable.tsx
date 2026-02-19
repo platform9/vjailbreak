@@ -17,6 +17,7 @@ import { RefetchOptions } from '@tanstack/react-query'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import AddIcon from '@mui/icons-material/Add'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
@@ -173,7 +174,7 @@ const CustomToolbar = ({
     <Button
       variant="contained"
       color="primary"
-      startIcon={<PlayArrowIcon />}
+      startIcon={<AddIcon />}
       onClick={onStartMigration}
       sx={{ height: 40 }}
     >

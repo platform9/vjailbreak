@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: vpwned
   newName: quay.io/platform9/vjailbreak-vpwned
-  newTag: main-fdbc1e59
+  newTag: main-e14f3639
