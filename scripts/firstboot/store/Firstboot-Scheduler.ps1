@@ -316,7 +316,10 @@ try {
         Write-Log "Found scripts.json at: $scriptsJsonPath"
         Schedule-MyTask -TaskName $TaskName -ScriptPath $SchedulerScriptPath -Description "Firstboot Scheduler" 
         try {
-            Init-Table
+            if (-not (Test-Path $StateFilePath)) {
+                Write-Log "State file does not exist, creating..."
+                Init-Table
+            }
             while ($true) {
                 $script = Get-Script
                 Write-Log "Selected script: $script"
