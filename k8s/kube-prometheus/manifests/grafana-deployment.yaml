@@ -37,8 +37,9 @@ spec:
           name: http
         readinessProbe:
           httpGet:
-            path: /api/health
+            path: /grafana/api/health
             port: http
+            scheme: HTTPS
         resources:
           limits:
             cpu: 200m
@@ -64,8 +65,14 @@ spec:
         - mountPath: /etc/grafana/provisioning/dashboards
           name: grafana-dashboards
           readOnly: false
+        - mountPath: /etc/grafana/provisioning/folders
+          name: grafana-folders
+          readOnly: false
         - mountPath: /tmp
           name: tmp-plugins
+          readOnly: false
+        - mountPath: /grafana-dashboard-definitions/migration-dashboards/migration-overview
+          name: grafana-dashboard-migration-overview
           readOnly: false
         - mountPath: /grafana-dashboard-definitions/0/alertmanager-overview
           name: grafana-dashboard-alertmanager-overview
@@ -163,6 +170,9 @@ spec:
         - mountPath: /grafana-dashboard-definitions/0/workload-total
           name: grafana-dashboard-workload-total
           readOnly: false
+        - mountPath: /grafana-dashboard-definitions/k8s-dashboards/k8s-overview
+          name: grafana-dashboard-k8s-overview
+          readOnly: false
         - mountPath: /etc/grafana
           name: grafana-config
           readOnly: false
@@ -183,9 +193,15 @@ spec:
       - configMap:
           name: grafana-dashboards
         name: grafana-dashboards
+      - configMap:
+          name: grafana-folders
+        name: grafana-folders
       - emptyDir:
           medium: Memory
         name: tmp-plugins
+      - configMap:
+          name: grafana-dashboard-migration-overview
+        name: grafana-dashboard-migration-overview
       - configMap:
           name: grafana-dashboard-alertmanager-overview
         name: grafana-dashboard-alertmanager-overview
@@ -282,6 +298,9 @@ spec:
       - configMap:
           name: grafana-dashboard-workload-total
         name: grafana-dashboard-workload-total
+      - configMap:
+          name: grafana-dashboard-k8s-overview
+        name: grafana-dashboard-k8s-overview
       - name: grafana-config
         secret:
           secretName: grafana-config

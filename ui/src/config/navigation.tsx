@@ -54,7 +54,7 @@ export const navigationItems: NavigationItem[] = [
       },
       {
         id: 'esxi-ssh-keys',
-        label: 'ESXi SSH Keys',
+        label: 'ESXi SSH',
         path: '/dashboard/esxi-ssh-keys',
         icon: <VpnKeyIcon />
       }
