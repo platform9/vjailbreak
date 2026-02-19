@@ -44,6 +44,8 @@ func (g GPUInfo) TotalCount() int {
 type VMInfo struct {
 	// Name is the name of the virtual machine
 	Name string `json:"name"`
+	// VMID is the vCenter Managed Object ID (MOID) of the virtual machine
+	VMID string `json:"vmid,omitempty"`
 	// Datastores is the list of datastores for the virtual machine
 	Datastores []string `json:"datastores,omitempty"`
 	// Disks is the list of disks for the virtual machine
@@ -124,6 +126,9 @@ type VMwareMachineStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.powerState`,name=PowerState,type=string
+// +kubebuilder:printcolumn:name="Migrated",type="boolean",JSONPath=".spec.migrated"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
 // in the VMware source environment targeted for migration. It tracks VM configuration,

@@ -1,4 +1,4 @@
-import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip, Chip, Alert, Snackbar } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
@@ -6,7 +6,7 @@ import WarningIcon from '@mui/icons-material/Warning'
 import AddIcon from '@mui/icons-material/Add'
 import SdStorageIcon from '@mui/icons-material/SdStorage'
 import KeyIcon from '@mui/icons-material/Key'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
@@ -174,45 +174,42 @@ const CustomToolbar = ({
   selectedCount,
   onDeleteSelected
 }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <SdStorageIcon />
-        <Typography variant="h6" component="h2">
-          Storage Management
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2 }}>
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {selectedCount > 0 && (
         <Button
           variant="outlined"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAddCredential}
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={onDeleteSelected}
           sx={{ height: 40 }}
         >
-          ADD ARRAY CREDENTIALS
+          Delete Selected ({selectedCount})
         </Button>
-        {selectedCount > 0 && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({selectedCount})
-          </Button>
-        )}
-        <CustomSearchToolbar placeholder="Search by Name" onRefresh={onRefresh} />
-      </Box>
-    </GridToolbarContainer>
+      )}
+      <CustomSearchToolbar placeholder="Search by Name" onRefresh={onRefresh} />
+    </Box>
+  )
+
+  const actions = (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<AddIcon />}
+      onClick={onAddCredential}
+      sx={{ height: 40 }}
+    >
+      Add Array Credentials
+    </Button>
+  )
+
+  return (
+    <ListingToolbar
+      title="Storage Management"
+      icon={<SdStorageIcon />}
+      search={search}
+      actions={actions}
+    />
   )
 }
 

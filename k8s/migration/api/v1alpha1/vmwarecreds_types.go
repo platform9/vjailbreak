@@ -56,6 +56,8 @@ type VMwareCredsStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.vmwareValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Secret Name",type="string",JSONPath=".spec.secretRef.name"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // VMwareCreds is the Schema for the vmwarecreds API that defines authentication
 // and connection details for VMware vSphere environments. It provides a secure way to

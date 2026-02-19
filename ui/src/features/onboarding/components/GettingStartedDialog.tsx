@@ -22,7 +22,7 @@ export default function GettingStartedDialog({
 
   const goToCredentials = () => {
     onClose()
-    navigate('/dashboard/credentials')
+    navigate('/dashboard/credentials/vm')
   }
 
   const goToVddkUpload = () => {

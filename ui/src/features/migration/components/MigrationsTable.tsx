@@ -1,11 +1,11 @@
-import { GridColDef, GridRowSelectionModel, GridToolbarContainer } from '@mui/x-data-grid'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { LogsDrawer } from '.'
@@ -17,9 +17,11 @@ import { RefetchOptions } from '@tanstack/react-query'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import AddIcon from '@mui/icons-material/Add'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
+import { useMigrationFormActions } from '../context/MigrationFormContext'
 
 const pulse = keyframes`
   0% {
@@ -90,7 +92,11 @@ const getProgressText = (
   }
 
   let diskInfo = ''
-  if (currentDisk && totalDisks && (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)) {
+  if (
+    currentDisk &&
+    totalDisks &&
+    (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)
+  ) {
     const parsedDisk = parseInt(currentDisk, 10)
     const currentDiskNum = Number.isNaN(parsedDisk) ? 1 : parsedDisk + 1
     diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
@@ -100,7 +106,6 @@ const getProgressText = (
 
   return progressText
 }
-
 
 interface CustomToolbarProps {
   numSelected: number
@@ -112,6 +117,7 @@ interface CustomToolbarProps {
   currentStatusFilter: string
   onDateFilterChange: (filter: string) => void
   currentDateFilter: string
+  onStartMigration: () => void
 }
 
 const CustomToolbar = ({
@@ -123,59 +129,61 @@ const CustomToolbar = ({
   onStatusFilterChange,
   currentStatusFilter,
   onDateFilterChange,
-  currentDateFilter
+  currentDateFilter,
+  onStartMigration
 }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <MigrationIcon />
-        <Typography variant="h6" component="h2">
-          Migrations
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        {numSelected > 0 ? (
-          <>
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {numSelected > 0 ? (
+        <>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={onDeleteSelected}
+            sx={{ height: 40 }}
+          >
+            Delete Selected ({numSelected})
+          </Button>
+
+          {numEligibleForCutover > 0 && (
             <Button
               variant="outlined"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={onDeleteSelected}
+              color="primary"
+              startIcon={<PlayArrowIcon />}
+              onClick={onBulkAdminCutover}
               sx={{ height: 40 }}
             >
-              Delete Selected ({numSelected})
+              Trigger Cutover ({numEligibleForCutover})
             </Button>
+          )}
+        </>
+      ) : null}
+      <CustomSearchToolbar
+        placeholder="Search by Name, Status, or Progress"
+        onRefresh={refetchMigrations}
+        onStatusFilterChange={numSelected === 0 ? onStatusFilterChange : undefined}
+        currentStatusFilter={currentStatusFilter}
+        onDateFilterChange={numSelected === 0 ? onDateFilterChange : undefined}
+        currentDateFilter={currentDateFilter}
+      />
+    </Box>
+  )
 
-            {numEligibleForCutover > 0 && (
-              <Button
-                variant="outlined"
-                color="primary"
-                startIcon={<PlayArrowIcon />}
-                onClick={onBulkAdminCutover}
-                sx={{ height: 40 }}
-              >
-                Trigger Cutover ({numEligibleForCutover})
-              </Button>
-            )}
-          </>
-        ) : null}
-        <CustomSearchToolbar
-          placeholder="Search by Name, Status, or Progress"
-          onRefresh={refetchMigrations}
-          onStatusFilterChange={numSelected === 0 ? onStatusFilterChange : undefined}
-          currentStatusFilter={currentStatusFilter}
-          onDateFilterChange={numSelected === 0 ? onDateFilterChange : undefined}
-          currentDateFilter={currentDateFilter}
-        />
-      </Box>
-    </GridToolbarContainer>
+  const actions = (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<AddIcon />}
+      onClick={onStartMigration}
+      sx={{ height: 40 }}
+    >
+      Start Migration
+    </Button>
+  )
+
+  return (
+    <ListingToolbar title="Migrations" icon={<MigrationIcon />} search={search} actions={actions} />
   )
 }
 
@@ -184,14 +192,17 @@ interface MigrationsTableProps {
   onDeleteMigration?: (name: string) => void
   onDeleteSelected?: (migrations: Migration[]) => void
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
+  loading?: boolean
 }
 
 export default function MigrationsTable({
   migrations,
   onDeleteMigration,
   onDeleteSelected,
-  refetchMigrations
+  refetchMigrations,
+  loading = false
 }: MigrationsTableProps) {
+  const { openMigrationForm } = useMigrationFormActions()
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
@@ -269,9 +280,10 @@ export default function MigrationsTable({
           const isHotMigration = migrationType?.toLowerCase() === 'hot'
           const isColdMigration = migrationType?.toLowerCase() === 'cold'
           const isMockMigration = migrationType?.toLowerCase() === 'mock'
-          
+
           const namespace = params.row.metadata?.namespace
-          const planName = params.row.spec?.migrationPlan || params.row.metadata?.labels?.migrationplan
+          const planName =
+            params.row.spec?.migrationPlan || params.row.metadata?.labels?.migrationplan
           const key = namespace && planName ? `${namespace}::${planName}` : ''
           const destination = key ? destinationByPlan[key] : null
 
@@ -279,47 +291,59 @@ export default function MigrationsTable({
           const destinationCluster = destination?.destinationCluster || 'N/A'
 
           const tooltipTitle = (
-            <TooltipContent title="Destination" lines={[`Tenant: ${destinationTenant}`, `Cluster: ${destinationCluster}`]} />
+            <TooltipContent
+              title="Destination"
+              lines={[`Tenant: ${destinationTenant}`, `Cluster: ${destinationCluster}`]}
+            />
           )
 
           // Logic for the blinking pulse
           const activePhases = new Set([
-            Phase.Pending, Phase.Validating, Phase.AwaitingDataCopyStart,
-            Phase.CopyingBlocks, Phase.CopyingChangedBlocks, Phase.ConvertingDisk,
-            Phase.AwaitingCutOverStartTime, Phase.AwaitingAdminCutOver, Phase.Unknown
+            Phase.Pending,
+            Phase.Validating,
+            Phase.AwaitingDataCopyStart,
+            Phase.CopyingBlocks,
+            Phase.CopyingChangedBlocks,
+            Phase.ConvertingDisk,
+            Phase.AwaitingCutOverStartTime,
+            Phase.AwaitingAdminCutOver,
+            Phase.Unknown
           ])
           const isInProgress = activePhases.has(phase)
-          const syncedPulse = `${pulse} 2s ease-in-out -20s infinite` 
+          const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
 
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {isHotMigration && (
                 <Tooltip title="Hot Migration">
-                  <FiberManualRecordIcon 
-                    sx={{ 
-                      fontSize: 12, color: '#FFAE42',
+                  <FiberManualRecordIcon
+                    sx={{
+                      fontSize: 12,
+                      color: '#FFAE42',
                       ...(isInProgress && { animation: syncedPulse })
-                    }} 
+                    }}
                   />
                 </Tooltip>
               )}
               {isColdMigration && (
                 <Tooltip title="Cold Migration">
-                  <FiberManualRecordIcon 
-                    sx={{ 
-                      fontSize: 12, color: '#4293FF',
+                  <FiberManualRecordIcon
+                    sx={{
+                      fontSize: 12,
+                      color: '#4293FF',
                       ...(isInProgress && { animation: syncedPulse })
-                    }} 
+                    }}
                   />
                 </Tooltip>
               )}
               {isMockMigration && (
                 <Tooltip title="Migration without poweroff">
-                  <FiberManualRecordIcon 
-                    sx={{ 
-                      fontSize: 12, color: '#9e1111ff',
+                  <FiberManualRecordIcon
+                    sx={{
+                      fontSize: 12,
+                      color: '#9e1111ff',
                       ...(isInProgress && { animation: syncedPulse })
-                    }} 
+                    }}
                   />
                 </Tooltip>
               )}
@@ -360,10 +384,13 @@ export default function MigrationsTable({
         flex: 0.8,
         renderCell: (params) => {
           const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
-          const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}` 
+          const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
           return (
             <Tooltip title={tooltip} arrow>
-              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Typography
+                variant="body2"
+                sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
                 {String(params.value ?? '-')}
               </Typography>
             </Tooltip>
@@ -380,7 +407,12 @@ export default function MigrationsTable({
         field: 'status.conditions',
         headerName: 'Progress',
         valueGetter: (_, row) =>
-          getProgressText(row.status?.phase, row.status?.conditions, row.status?.currentDisk, row.status?.totalDisks),
+          getProgressText(
+            row.status?.phase,
+            row.status?.conditions,
+            row.status?.currentDisk,
+            row.status?.totalDisks
+          ),
         flex: 2,
         renderCell: (params) => {
           const phase = params.row?.status?.phase
@@ -450,8 +482,8 @@ export default function MigrationsTable({
                 <Tooltip
                   title={
                     isRetryDisabled
-                      ? "This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration."
-                      : "Retry migration"
+                      ? 'This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration.'
+                      : 'Retry migration'
                   }
                 >
                   <span>
@@ -500,9 +532,18 @@ export default function MigrationsTable({
     [migrations, selectedRows]
   )
   const eligibleForCutover = useMemo(
-    () => selectedMigrations.filter((migration) => migration.status?.phase === Phase.AwaitingAdminCutOver),
+    () =>
+      selectedMigrations.filter(
+        (migration) => migration.status?.phase === Phase.AwaitingAdminCutOver
+      ),
     [selectedMigrations]
   )
+
+  const handleDeleteSelected = useCallback(() => {
+    if (onDeleteSelected) {
+      onDeleteSelected(selectedMigrations)
+    }
+  }, [onDeleteSelected, selectedMigrations])
 
   const handleBulkAdminCutover = useCallback(async () => {
     if (eligibleForCutover.length === 0) return
@@ -544,6 +585,8 @@ export default function MigrationsTable({
       setBulkCutoverError(null)
     }
   }, [isBulkCutoverLoading])
+
+  const hasSelectionActions = onDeleteSelected !== undefined && onDeleteMigration !== undefined
 
   const migrationsWithActions = useMemo(
     () =>
@@ -587,40 +630,31 @@ export default function MigrationsTable({
             }
           }
         }}
-        pageSizeOptions={[25, 50, 100]}
-        localeText={{ noRowsLabel: 'No Migrations Available' }}
-        emptyMessage="No migrations available"
-        getRowId={(row) => row.metadata?.name}
-        checkboxSelection={onDeleteSelected !== undefined && onDeleteMigration !== undefined}
+        pageSizeOptions={[10, 25, 50, 100]}
+        checkboxSelection={hasSelectionActions}
+        disableRowSelectionOnClick
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
-        disableRowSelectionOnClick
-        loading={isBulkCutoverLoading}
         slots={{
-          toolbar:
-            onDeleteSelected !== undefined && onDeleteMigration !== undefined
-              ? () => (
-                  <CustomToolbar
-                    numSelected={selectedRows.length}
-                    numEligibleForCutover={eligibleForCutover.length}
-                    onDeleteSelected={() => {
-                      const selectedMigrations = migrations?.filter((m) =>
-                        selectedRows.includes(m.metadata?.name)
-                      )
-                      if (onDeleteSelected) {
-                        onDeleteSelected(selectedMigrations || [])
-                      }
-                    }}
-                    onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
-                    refetchMigrations={refetchMigrations}
-                    onStatusFilterChange={setStatusFilter}
-                    currentStatusFilter={statusFilter}
-                    onDateFilterChange={setDateFilter}
-                    currentDateFilter={dateFilter}
-                  />
-                )
-              : undefined
+          toolbar: hasSelectionActions
+            ? () => (
+                <CustomToolbar
+                  numSelected={selectedRows.length}
+                  onDeleteSelected={handleDeleteSelected}
+                  onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
+                  numEligibleForCutover={eligibleForCutover.length}
+                  refetchMigrations={refetchMigrations}
+                  onStatusFilterChange={setStatusFilter}
+                  currentStatusFilter={statusFilter}
+                  onDateFilterChange={setDateFilter}
+                  currentDateFilter={dateFilter}
+                  onStartMigration={() => openMigrationForm('standard')}
+                />
+              )
+            : undefined
         }}
+        getRowId={(row) => row.metadata?.name}
+        loading={loading}
       />
 
       <ConfirmationDialog
