@@ -16,6 +16,13 @@ export interface VMwareHost {
     name: string
     hardwareUuid: string
     hostConfigId?: string
+    clusterName?: string
+  }
+  status?: {
+    sshStatus?: string
+    sshMessage?: string
+    sshLastChecked?: string
+    esxiVersion?: string
   }
 }
 
