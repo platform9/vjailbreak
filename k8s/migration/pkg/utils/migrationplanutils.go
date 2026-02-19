@@ -22,6 +22,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+const (
+	// ScriptOSTypeWindows represents a Windows script type
+	ScriptOSTypeWindows = "windows"
+	// ScriptOSTypeLinux represents a Linux script type
+	ScriptOSTypeLinux = "linux"
+	// ScriptOSTypeUnknown represents an unknown script type
+	ScriptOSTypeUnknown = "unknown"
+)
+
 // MigrationNameFromVMName generates a migration name from a VM name
 func MigrationNameFromVMName(vmname string) string {
 	return fmt.Sprintf("migration-%s", vmname)
@@ -126,10 +135,10 @@ func GenerateSha256Hash(input string) string {
 }
 
 // DetectScriptOSType detects whether a script is intended for Windows or Linux
-// Returns "windows", "linux", or "unknown"
+// Returns ScriptOSTypeWindows, ScriptOSTypeLinux, or ScriptOSTypeUnknown
 func DetectScriptOSType(script string) string {
 	if script == "" {
-		return "unknown"
+		return ScriptOSTypeUnknown
 	}
 
 	script = strings.TrimSpace(script)
@@ -145,21 +154,21 @@ func DetectScriptOSType(script string) string {
 			strings.HasPrefix(line, "#!/usr/bin/env bash") ||
 			strings.HasPrefix(line, "#!/usr/bin/env sh") ||
 			strings.HasPrefix(line, "#!/usr/bin/python") {
-			return "linux"
+			return ScriptOSTypeLinux
 		}
 
 		// Windows batch file indicators
 		if strings.HasPrefix(line, "@echo off") ||
 			strings.HasPrefix(line, "REM ") ||
 			strings.HasPrefix(line, "rem ") {
-			return "windows"
+			return ScriptOSTypeWindows
 		}
 
 		// PowerShell indicators
 		if strings.Contains(line, "param(") ||
 			strings.Contains(line, "Param(") ||
 			regexp.MustCompile(`\$[A-Za-z_]`).MatchString(line) {
-			return "windows"
+			return ScriptOSTypeWindows
 		}
 	}
 
@@ -197,13 +206,13 @@ func DetectScriptOSType(script string) string {
 
 	// Determine based on scores
 	if windowsScore > linuxScore && windowsScore > 0 {
-		return "windows"
+		return ScriptOSTypeWindows
 	}
 	if linuxScore > windowsScore && linuxScore > 0 {
-		return "linux"
+		return ScriptOSTypeLinux
 	}
 
-	return "unknown"
+	return ScriptOSTypeUnknown
 }
 
 // IsScriptCompatibleWithOS checks if a script is compatible with the given OS family
@@ -211,7 +220,7 @@ func IsScriptCompatibleWithOS(script string, osFamily string) bool {
 	scriptType := DetectScriptOSType(script)
 
 	// If we can't detect the script type, allow it (backward compatibility)
-	if scriptType == "unknown" {
+	if scriptType == ScriptOSTypeUnknown {
 		return true
 	}
 
@@ -219,10 +228,10 @@ func IsScriptCompatibleWithOS(script string, osFamily string) bool {
 	osLower := strings.ToLower(osFamily)
 
 	// Check compatibility
-	if scriptType == "windows" && strings.Contains(osLower, "windows") {
+	if scriptType == ScriptOSTypeWindows && strings.Contains(osLower, ScriptOSTypeWindows) {
 		return true
 	}
-	if scriptType == "linux" && (strings.Contains(osLower, "linux") || strings.Contains(osLower, "centos") || 
+	if scriptType == ScriptOSTypeLinux && (strings.Contains(osLower, ScriptOSTypeLinux) || strings.Contains(osLower, "centos") || 
 		strings.Contains(osLower, "rhel") || strings.Contains(osLower, "ubuntu")) {
 		return true
 	}

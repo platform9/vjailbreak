@@ -15,13 +15,13 @@ func TestDetectScriptOSType(t *testing.T) {
 			script: `#!/bin/bash
 echo "Hello World"
 apt-get update`,
-			expected: "linux",
+			expected: ScriptOSTypeLinux,
 		},
 		{
 			name: "Linux sh script with shebang",
 			script: `#!/bin/sh
 echo "Hello"`,
-			expected: "linux",
+			expected: ScriptOSTypeLinux,
 		},
 		{
 			name: "Windows batch script",
@@ -29,37 +29,37 @@ echo "Hello"`,
 REM This is a comment
 echo Hello World
 ipconfig`,
-			expected: "windows",
+			expected: ScriptOSTypeWindows,
 		},
 		{
 			name: "PowerShell script",
 			script: `param($Name)
 $env:PATH
 Get-Service`,
-			expected: "windows",
+			expected: ScriptOSTypeWindows,
 		},
 		{
 			name: "Linux script with common commands",
 			script: `echo "Starting"
 systemctl start service
 chmod 755 /tmp/file`,
-			expected: "linux",
+			expected: ScriptOSTypeLinux,
 		},
 		{
 			name: "Windows script with paths",
 			script: `set PATH=C:\Windows\System32
 echo %PROGRAMFILES%`,
-			expected: "windows",
+			expected: ScriptOSTypeWindows,
 		},
 		{
 			name: "Empty script",
 			script: "",
-			expected: "unknown",
+			expected: ScriptOSTypeUnknown,
 		},
 		{
 			name: "Ambiguous script",
 			script: `echo "Hello"`,
-			expected: "unknown",
+			expected: ScriptOSTypeUnknown,
 		},
 	}
 
