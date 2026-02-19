@@ -4,7 +4,6 @@ export interface VMwareVM {
   disks: string[]
   memory: number
   name: string
-  vmid?: string
   networks?: string[]
   vmState: string
   ipAddress?: string

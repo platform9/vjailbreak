@@ -228,7 +228,7 @@ function VmsSelectionStep({
   // RDM validation logic
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: Array.from(selectedVMs)
-      .map((vmId) => vmsWithFlavor.find((vm) => vm.id === vmId))
+      .map((vmName) => vmsWithFlavor.find((vm) => vm.name === vmName))
       .filter(Boolean) as VmData[],
     rdmDisks: rdmDisks
   })
@@ -330,64 +330,51 @@ function VmsSelectionStep({
     return parts.length === 3 ? parts[1] : undefined
   }, [vmwareCluster])
 
-  const vmNameCounts = React.useMemo(() => {
-    const counts: Record<string, number> = {}
-    vmsWithFlavor.forEach((vm) => {
-      counts[vm.name] = (counts[vm.name] || 0) + 1
-    })
-    return counts
-  }, [vmsWithFlavor])
-
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
     {
       field: 'name',
       headerName: 'VM Name',
       flex: 2.5,
-      renderCell: (params) => {
-        // Check if this VM name has duplicates - if so, show MOID in parentheses
-        const isDuplicate = vmNameCounts[params.value] > 1
-        const vmid = params.row.vmid
-        const displayName = isDuplicate && vmid ? `${params.value} (${vmid})` : params.value
-
-        return (
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
               <CdsIconWrapper>
-                  {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                {/* @ts-ignore */}
+                <cds-icon
+                  shape="vm"
+                  size="md"
+                  badge={params.row.vmState === 'running' ? 'success' : 'danger'}
+                >
                   {/* @ts-ignore */}
-                  <cds-icon
-                    shape="vm"
-                    size="md"
-                    badge={params.row.vmState === 'running' ? 'success' : 'danger'}
-                  >
-                    {/* @ts-ignore */}
-                  </cds-icon>
-                </CdsIconWrapper>
-              </Tooltip>
-              <Box>{displayName}</Box>
-            {params.row.isMigrated && (
-              <Chip variant="outlined" label="Migrated" color="info" size="small" />
-            )}
-            {params.row.flavorNotFound && (
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <WarningIcon color="warning" fontSize="small" />
-              </Box>
-            )}
-            {params.row.hasSharedRdm && (
-              <Tooltip title="This VM has shared RDM disks">
-                <Chip
-                  variant="outlined"
-                  label="RDM"
-                  color="secondary"
-                  size="small"
-                  sx={{ fontSize: '0.7rem', height: '20px' }}
-                />
-              </Tooltip>
-            )}
+                </cds-icon>
+              </CdsIconWrapper>
+            </Tooltip>
+            <Box>{params.value}</Box>
           </Box>
-        )
-      }
+          {params.row.isMigrated && (
+            <Chip variant="outlined" label="Migrated" color="info" size="small" />
+          )}
+          {params.row.flavorNotFound && (
+            <Box display="flex" alignItems="center" gap={0.5}>
+              <WarningIcon color="warning" fontSize="small" />
+            </Box>
+          )}
+          {params.row.hasSharedRdm && (
+            <Tooltip title="This VM has shared RDM disks">
+              <Chip
+                variant="outlined"
+                label="RDM"
+                color="secondary"
+                size="small"
+                sx={{ fontSize: '0.7rem', height: '20px' }}
+              />
+            </Tooltip>
+          )}
+        </Box>
+      )
     },
     {
       field: 'ipAddress',
@@ -396,7 +383,7 @@ function VmsSelectionStep({
       hideable: true,
       renderCell: (params) => {
         const vm = params.row as VmDataWithFlavor
-        const vmId = vm.id
+        const vmId = vm.name
         const isSelected = selectedVMs.has(vmId)
         const networkInterfaces = Array.isArray(vm.networkInterfaces) ? vm.networkInterfaces : []
         const hasMultipleInterfaces = networkInterfaces.length > 1
@@ -779,15 +766,15 @@ function VmsSelectionStep({
     if (vmsWithFlavor.length === 0) return
 
     // Clean up selection - remove VMs that no longer exist
-    const availableVmIds = new Set(vmsWithFlavor.map((vm) => vm.id))
+    const availableVmNames = new Set(vmsWithFlavor.map((vm) => vm.name))
     const cleanedSelection = new Set(
-      Array.from(selectedVMs).filter((vmId) => availableVmIds.has(vmId))
+      Array.from(selectedVMs).filter((vmName) => availableVmNames.has(vmName))
     )
 
     if (!areSetsEqual(cleanedSelection, selectedVMs)) {
       setSelectedVMs(cleanedSelection)
 
-      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.id))
+      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.name))
       syncSelectedVmSelection(selectedVmData)
 
       if (rdmConfigurations.length > 0) {
@@ -804,7 +791,7 @@ function VmsSelectionStep({
   ])
 
   useEffect(() => {
-    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
+    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
     syncSelectedVmSelection(selectedVmData)
 
     if (selectedVmData.length > 0 && rdmConfigurations.length > 0) {
@@ -827,7 +814,7 @@ function VmsSelectionStep({
 
     setSelectedVMs(newSelection)
 
-    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.id))
+    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name))
     syncSelectedVmSelection(selectedVmData)
 
     if (rdmConfigurations.length > 0) {
@@ -1266,7 +1253,7 @@ function VmsSelectionStep({
           : selectedFlavor
 
       const updatedVms = vmsWithFlavor.map((vm) => {
-        if (selectedVMs.has(vm.id)) {
+        if (selectedVMs.has(vm.name)) {
           return {
             ...vm,
             targetFlavorId: isAutoAssign ? '' : selectedFlavor,
@@ -1278,10 +1265,10 @@ function VmsSelectionStep({
         return vm
       })
 
-      const selectedVmIds = Array.from(selectedVMs)
+      const selectedVmNames = Array.from(selectedVMs)
 
-      const updatePromises = selectedVmIds.map((vmId) => {
-        const vmwareMachineName = vmList.find((vm) => vm.id === vmId)?.vmWareMachineName
+      const updatePromises = selectedVmNames.map((vmName) => {
+        const vmwareMachineName = vmList.find((vm) => vm.name === vmName)?.vmWareMachineName
         const payload = {
           spec: {
             targetFlavorId: isAutoAssign ? '' : selectedFlavor
@@ -1296,12 +1283,12 @@ function VmsSelectionStep({
       await Promise.all(updatePromises)
 
       setVmsWithFlavor(updatedVms)
-      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
+      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
 
       const actionText = isAutoAssign ? 'cleared flavor assignment for' : 'assigned flavor to'
       setSnackbarMessage(
-        `Successfully ${actionText} ${selectedVmIds.length} VM${
-          selectedVmIds.length > 1 ? 's' : ''
+        `Successfully ${actionText} ${selectedVmNames.length} VM${
+          selectedVmNames.length > 1 ? 's' : ''
         }`
       )
       setSnackbarSeverity('success')
@@ -1408,7 +1395,7 @@ function VmsSelectionStep({
 
   const rowSelectionModelArray = React.useMemo(
     () =>
-      Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
+      Array.from(selectedVMs).filter((vmName) => vmsWithFlavor.some((vm) => vm.name === vmName)),
     [selectedVMs, vmsWithFlavor]
   )
 
@@ -1456,7 +1443,7 @@ function VmsSelectionStep({
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               rowSelectionModel={rowSelectionModelArray}
-              getRowId={(row) => row.id}
+              getRowId={(row) => row.name}
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
               slots={{
@@ -1532,7 +1519,7 @@ function VmsSelectionStep({
 
         {/* GPU Warning Message */}
         {(() => {
-          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
+          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
           const hasGPUVMs = selectedVmsData.some((vm) => (vm as any).useGPU)
           const hasAssignedFlavors = selectedVmsData.some((vm) => vm.targetFlavorId)
 
