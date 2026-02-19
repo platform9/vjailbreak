@@ -705,10 +705,10 @@ export default function MigrationFormDrawer({
         const overrides = vm.networkInterfaces
           ?.map((nic, idx) => ({
             interfaceIndex: idx,
-            preserveIP: nic.preserveIP !== false,
-            preserveMAC: nic.preserveMAC !== false
+            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
+            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
           }))
-          .filter((o) => !o.preserveIP || !o.preserveMAC)
+          .filter((o) => o.preserveIP === false || o.preserveMAC === false)
         if (overrides && overrides.length > 0) {
           networkOverridesPerVM[vm.name] = overrides
         }

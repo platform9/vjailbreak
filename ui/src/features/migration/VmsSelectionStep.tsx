@@ -992,7 +992,7 @@ function VmsSelectionStep({
 
     // Check if there are any override changes (preserve toggles)
     const hasOverrideChanges = Object.values(bulkEditOverrides).some((interfaces) =>
-      Object.values(interfaces).some((o) => !o.preserveIP || !o.preserveMAC)
+      Object.values(interfaces).some((o) => o.preserveIP === false || o.preserveMAC === false)
     )
 
     if (ipsToApply.length === 0 && !hasOverrideChanges) return
@@ -1269,8 +1269,8 @@ function VmsSelectionStep({
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
           initialOverrides[vmName][index] = {
-            preserveIP: nic.preserveIP !== false,
-            preserveMAC: nic.preserveMAC !== false
+            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
+            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
           }
         })
       } else {
