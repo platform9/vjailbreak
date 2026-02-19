@@ -9,6 +9,22 @@ metadata:
   name: kube-state-metrics
 rules:
 - apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - list
+  - get
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - migrations
+  verbs:
+  - list
+  - get
+  - watch
+- apiGroups:
   - ""
   resources:
   - configmaps
