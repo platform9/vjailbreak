@@ -3071,10 +3071,6 @@ spec:
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
-                  vmid:
-                    description: VMID is the vCenter Managed Object ID (MOID) of the
-                      virtual machine
-                    type: string
                 required:
                 - name
                 type: object
@@ -4372,7 +4368,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:main-e14f3639
+        image: quay.io/platform9/vjailbreak-controller:main-bbed33aa
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4455,7 +4451,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:main-e14f3639
+        image: quay.io/platform9/vjailbreak-vpwned:main-bbed33aa
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4533,7 +4529,7 @@ spec:
       serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:main-e14f3639
+          image: quay.io/platform9/vjailbreak-ui:main-bbed33aa
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
