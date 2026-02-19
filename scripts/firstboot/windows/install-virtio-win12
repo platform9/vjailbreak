@@ -11,6 +11,7 @@ echo VirtIO Driver Installation Starting >> "%LOG_FILE%"
 echo Date: %DATE% %TIME% >> "%LOG_FILE%"
 echo ====================================== >> "%LOG_FILE%"
 
+
 if exist "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" (
     echo Running pnp_wait.exe... >> "%LOG_FILE%"
     "%ProgramFiles%\Guestfs\Firstboot\pnp_wait.exe" >> "%LOG_FILE%" 2>&1
