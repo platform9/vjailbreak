@@ -697,6 +697,12 @@ spec:
     - jsonPath: .status.migrationStatus
       name: Status
       type: string
+    - jsonPath: .spec.migrationTemplate
+      name: Migration Template
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -894,6 +900,9 @@ spec:
       type: string
     - jsonPath: .status.agentName
       name: Agent Name
+      type: string
+    - jsonPath: .spec.migrationPlan
+      name: MigrationPlan
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -1299,6 +1308,12 @@ spec:
     - jsonPath: .status.openstackValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2545,6 +2560,12 @@ spec:
     - jsonPath: .status.vmwareValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2724,7 +2745,17 @@ spec:
     singular: vmwaremachine
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.powerState
+      name: PowerState
+      type: string
+    - jsonPath: .spec.migrated
+      name: Migrated
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
@@ -2876,6 +2907,10 @@ spec:
                     type: array
                   vmState:
                     description: VMState is the state of the virtual machine
+                    type: string
+                  vmid:
+                    description: VMID is the vCenter Managed Object ID (MOID) of the
+                      virtual machine
                     type: string
                 required:
                 - name
@@ -4170,7 +4205,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:main-435bbd7c
+        image: quay.io/platform9/vjailbreak-controller:main-22a9dbd3
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4253,7 +4288,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:main-435bbd7c
+        image: quay.io/platform9/vjailbreak-vpwned:main-22a9dbd3
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4311,3 +4346,43 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ui
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ui
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ui
+    spec:
+      serviceAccountName: migration-controller-manager
+      containers:
+        - name: vjailbreak-ui-container
+          image: quay.io/platform9/vjailbreak-ui:main-22a9dbd3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: nginx-shadow-htpasswd
+            mountPath: /etc/nginx/shadow
+          - name: pf9-logs
+            mountPath: /var/log/pf9
+            readOnly: true
+      volumes:
+      - name: nginx-shadow-htpasswd
+        hostPath:
+          path: /etc/htpasswd
+          type: FileOrCreate
+      - name: pf9-logs
+        hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
+---

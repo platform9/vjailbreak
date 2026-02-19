@@ -15,7 +15,7 @@ make build-installer
 after_status="$(git status --porcelain)"
 
 if [[ "${before_status}" != "${after_status}" ]]; then
-  echo "[pre-commit] ERROR: 'make build-installer' modified your working tree." >&2
+  echo "[pre-commit] WARN: 'make build-installer' modified your working tree." >&2
   echo "[pre-commit] Please commit the generated changes (or revert them) and retry." >&2
   echo "[pre-commit] Current git status:" >&2
   git status --porcelain >&2
