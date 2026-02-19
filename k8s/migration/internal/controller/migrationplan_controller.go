@@ -1236,7 +1236,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 		scriptType := utils.DetectScriptOSType(scriptContent)
 		isCompatible := utils.IsScriptCompatibleWithOS(scriptContent, vmOSFamily)
 		
-		if !isCompatible && scriptType != "unknown" {
+		if !isCompatible && scriptType != utils.ScriptOSTypeUnknown {
 			r.ctxlog.Info(fmt.Sprintf(
 				"Skipping incompatible firstboot script for VM '%s': script type '%s' does not match VM OS '%s'",
 				vm, scriptType, vmOSFamily,
