@@ -190,7 +190,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
 
-			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
+			if (progressInt == 0 && lastLoggedProgress != 0) || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
 				utils.PrintLog(msg)
 				lastLoggedProgress = progressInt
 			}
