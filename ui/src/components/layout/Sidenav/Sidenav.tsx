@@ -1,20 +1,6 @@
-import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
-  Box,
-  Chip,
-  Tooltip,
-  Divider,
-  styled,
-  alpha
-} from '@mui/material'
-import { ChevronLeft, ChevronRight, OpenInNew } from '@mui/icons-material'
-import { useState, useEffect } from 'react'
+import { List, Box, Tooltip, Divider, Collapse } from '@mui/material'
+import { ChevronLeft, ChevronRight } from '@mui/icons-material'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { NavigationItem, SidenavProps } from 'src/types/navigation'
 import { useVersionQuery } from 'src/hooks/api/useVersionQuery'
@@ -27,318 +13,27 @@ import { useTheme } from '@mui/material/styles'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
 import { Phase } from 'src/api/migrations/model'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
-
-const DRAWER_WIDTH = 280
-const DRAWER_WIDTH_COLLAPSED = 72
-
-const StyledDrawer = styled(Drawer, {
-  shouldForwardProp: (prop) => prop !== 'collapsed'
-})<{ collapsed: boolean }>(({ theme, collapsed }) => ({
-  width: collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH,
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-  boxSizing: 'border-box',
-  '& .MuiDrawer-paper': {
-    width: collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH,
-    transition: theme.transitions.create('width', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen
-    }),
-    overflow: 'visible',
-    borderRight: `1px solid ${theme.palette.divider}`,
-    backgroundColor: theme.palette.background.paper,
-    '&::-webkit-scrollbar': {
-      display: 'none'
-    },
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none'
-  }
-}))
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: theme.spacing(1.5, 2),
-  ...theme.mixins.toolbar,
-  minHeight: '64px !important',
-  borderBottom: `1px solid ${alpha(theme.palette.divider, 0.12)}`,
-  marginBottom: theme.spacing(1),
-  position: 'relative'
-}))
-
-const BrandContainer = styled(Box, {
-  shouldForwardProp: (prop) => prop !== 'collapsed'
-})<{ collapsed?: boolean }>(({ theme, collapsed }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: collapsed ? 'center' : 'flex-start',
-  width: '100%',
-  paddingLeft: collapsed ? 0 : theme.spacing(2),
-  transition: theme.transitions.create(['justify-content', 'padding-left'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen
-  })
-}))
-
-const VersionBadge = styled(Box, {
-  shouldForwardProp: (prop) => prop !== 'collapsed'
-})<{ collapsed?: boolean }>(({ theme, collapsed }) => ({
-  fontSize: '0.8rem',
-  color: alpha(theme.palette.text.secondary, 0.6),
-  fontWeight: 400,
-  width: collapsed ? '60px' : 'auto',
-  textAlign: 'center',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  padding: collapsed ? theme.spacing(0.5, 1) : 0
-}))
-
-const VersionDisplay = ({ collapsed }: { collapsed?: boolean }) => {
-  const { data: versionInfo, isLoading, error } = useVersionQuery()
-
-  if (isLoading) {
-    const content = (
-      <VersionBadge collapsed={collapsed}>{collapsed ? '...' : 'Loading version...'}</VersionBadge>
-    )
-
-    if (collapsed) {
-      return (
-        <Tooltip title="Loading version..." placement="right" arrow>
-          {content}
-        </Tooltip>
-      )
-    }
-    return content
-  }
-
-  if (error) {
-    const content = (
-      <VersionBadge collapsed={collapsed}>
-        {collapsed ? 'v?' : 'Version: Unable to load'}
-      </VersionBadge>
-    )
-
-    if (collapsed) {
-      return (
-        <Tooltip title="Version: Unable to load" placement="right" arrow>
-          {content}
-        </Tooltip>
-      )
-    }
-    return content
-  }
-
-  const content = (
-    <VersionBadge collapsed={collapsed}>
-      {collapsed ? `${versionInfo?.version || '?'}` : `Version: ${versionInfo?.version}`}
-    </VersionBadge>
-  )
-
-  if (collapsed) {
-    return (
-      <Tooltip
-        title={
-          <Box>
-            Version: {versionInfo?.version}
-            {versionInfo?.upgradeAvailable && versionInfo?.upgradeVersion && (
-              <Box component="span" sx={{ display: 'block', fontSize: '0.85rem', mt: 0.5 }}>
-                Update available: {versionInfo.upgradeVersion}
-              </Box>
-            )}
-          </Box>
-        }
-        placement="right"
-        arrow
-      >
-        {content}
-      </Tooltip>
-    )
-  }
-
-  return content
-}
-
-const StyledListItemButton = styled(ListItemButton, {
-  shouldForwardProp: (prop) => prop !== 'active' && prop !== 'collapsed'
-})<{ active?: boolean; collapsed?: boolean }>(({ theme, active, collapsed }) => ({
-  minHeight: 48,
-  margin: collapsed ? theme.spacing(0.5, 1) : theme.spacing(0.5, 1),
-  borderRadius: theme.spacing(1),
-  paddingLeft: collapsed ? 'auto' : theme.spacing(2),
-  paddingRight: collapsed ? 'auto' : theme.spacing(2),
-  justifyContent: collapsed ? 'center' : 'initial',
-  position: 'relative',
-  overflow: 'hidden',
-  cursor: 'pointer',
-  transition: theme.transitions.create(['background-color', 'box-shadow'], {
-    duration: theme.transitions.duration.shorter
-  }),
-  ...(active && {
-    backgroundColor: alpha(theme.palette.primary.main, 0.08),
-    color: theme.palette.primary.main,
-    '& .MuiTypography-root': {
-      fontWeight: 600
-    },
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 3,
-      backgroundColor: theme.palette.primary.main
-    },
-    '& .MuiListItemIcon-root': {
-      color: theme.palette.primary.main
-    }
-  }),
-  '&:hover': {
-    backgroundColor: alpha(theme.palette.primary.main, 0.05)
-  },
-  '&.Mui-focusVisible': {
-    boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.25)}`
-  }
-}))
-
-const StyledListItemIcon = styled(ListItemIcon, {
-  shouldForwardProp: (prop) => prop !== 'collapsed'
-})<{ collapsed?: boolean }>(({ collapsed }) => ({
-  minWidth: collapsed ? 0 : 56,
-  justifyContent: 'center'
-}))
-
-const NavigationBadge = styled(Chip)(({ theme }) => ({
-  fontSize: '0.6rem',
-  height: '16px',
-  fontWeight: 600,
-  marginLeft: theme.spacing(1),
-  transform: 'translateY(-6px)',
-  px: 0.75,
-  lineHeight: '16px',
-  display: 'flex',
-  alignItems: 'center'
-}))
-
-const CornerToggleButton = styled(IconButton)(({ theme }) => ({
-  position: 'absolute',
-  right: -18,
-  bottom: -18,
-  width: 32,
-  height: 32,
-  borderRadius: '50%',
-  backgroundColor: theme.palette.background.paper,
-  border: `1px solid ${theme.palette.divider}`,
-  color: theme.palette.text.secondary,
-  boxShadow: theme.shadows[1],
-  transition: theme.transitions.create(
-    ['background-color', 'border-color', 'box-shadow', 'color'],
-    {
-      duration: theme.transitions.duration.shorter
-    }
-  ),
-  '&:hover': {
-    backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.18 : 0.12),
-    borderColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.55 : 0.4),
-    color: theme.palette.primary.main,
-    boxShadow: theme.shadows[3]
-  },
-  '&:active': {
-    backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.24 : 0.16),
-    borderColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.65 : 0.5),
-    boxShadow: theme.shadows[2]
-  },
-  '&.Mui-focusVisible': {
-    boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.25)}`
-  }
-}))
-
-interface NavigationItemProps {
-  item: NavigationItem
-  isActive: boolean
-  isCollapsed: boolean
-  onClick: (item: NavigationItem) => void
-}
-
-function NavigationItemComponent({ item, isActive, isCollapsed, onClick }: NavigationItemProps) {
-  const handleClick = () => {
-    if (!item.disabled) {
-      onClick(item)
-    }
-  }
-
-  const listItemContent = (
-    <StyledListItemButton
-      active={isActive}
-      collapsed={isCollapsed}
-      onClick={handleClick}
-      disabled={item.disabled}
-      data-tour={`nav-${item.id}`}
-    >
-      {item.icon && <StyledListItemIcon collapsed={isCollapsed}>{item.icon}</StyledListItemIcon>}
-      {!isCollapsed && (
-        <ListItemText
-          primary={
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                {item.label}
-                {item.badge && (
-                  <NavigationBadge
-                    label={item.badge.label}
-                    size="small"
-                    color={item.badge.color}
-                    variant={item.badge.variant}
-                  />
-                )}
-              </Box>
-              {item.external && <OpenInNew sx={{ fontSize: '0.875rem', opacity: 0.7 }} />}
-            </Box>
-          }
-          sx={{
-            opacity: isCollapsed ? 0 : 1,
-            '& .MuiTypography-root': {
-              fontSize: '0.875rem'
-            }
-          }}
-        />
-      )}
-    </StyledListItemButton>
-  )
-
-  if (isCollapsed && (item.label || item.badge)) {
-    return (
-      <Tooltip
-        title={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {item.label}
-            {item.badge && (
-              <NavigationBadge
-                label={item.badge.label}
-                size="small"
-                color={item.badge.color}
-                variant={item.badge.variant}
-              />
-            )}
-            {item.external && <OpenInNew sx={{ fontSize: '0.75rem' }} />}
-          </Box>
-        }
-        placement="right"
-        arrow
-      >
-        <ListItem disablePadding sx={{ display: 'block' }}>
-          {listItemContent}
-        </ListItem>
-      </Tooltip>
-    )
-  }
-
-  return (
-    <ListItem disablePadding sx={{ display: 'block' }}>
-      {listItemContent}
-    </ListItem>
-  )
-}
+import {
+  ACTIVE_MIGRATION_PHASES,
+  SUBMENU_CONNECTOR_BLUE,
+  SUBMENU_CONNECTOR_GREY,
+  SUBMENU_ROW_HEIGHT_PX,
+  SUBMENU_SPINE_X_PX,
+  SUBMENU_CONNECTOR_SVG_LEFT_PX,
+  isPathActive
+} from './Sidenav.constants'
+import {
+  StyledDrawer,
+  DrawerHeader,
+  BrandContainer,
+  ChildGroupContainer,
+  ChildNavItemWrapper,
+  CornerToggleButton
+} from './Sidenav.styles'
+import { VersionDisplay } from './VersionDisplay'
+import { NavigationItemComponent } from './NavigationItem'
+import { SubmenuConnectorIcon } from './SubmenuConnectorIcon'
+import { SidenavFlyout } from './SidenavFlyout'
 
 export default function Sidenav({
   items,
@@ -351,15 +46,25 @@ export default function Sidenav({
   const location = useLocation()
   const theme = useTheme()
 
+  const [flyoutAnchorEl, setFlyoutAnchorEl] = useState<HTMLElement | null>(null)
+  const [flyoutItemId, setFlyoutItemId] = useState<string | null>(null)
+
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidenav-collapsed')
     return saved ? JSON.parse(saved) : false
   })
 
   const isCollapsed = controlledCollapsed ?? internalCollapsed
-  const activeItem = controlledActiveItem ?? location.pathname
 
-  const { data: versionInfo } = useVersionQuery()
+  const activeItem = controlledActiveItem ?? `${location.pathname}${location.search}`
+
+  const [expandedItem, setExpandedItem] = useState<string | null>(() => {
+    const saved = localStorage.getItem('sidenav-expanded')
+    return saved ? JSON.parse(saved) : null
+  })
+
+  const versionQuery = useVersionQuery()
+  const versionInfo = versionQuery.data
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
   const { data: migrations } = useMigrationsQuery(undefined, {
     refetchInterval: (query) => {
@@ -372,22 +77,11 @@ export default function Sidenav({
     refetchOnMount: true
   })
 
-  // checking if there's any active migrations
-  const activePhases = new Set<Phase>([
-    Phase.Pending,
-    Phase.Validating,
-    Phase.AwaitingDataCopyStart,
-    Phase.CopyingBlocks,
-    Phase.CopyingChangedBlocks,
-    Phase.ConvertingDisk,
-    Phase.AwaitingCutOverStartTime,
-    Phase.AwaitingAdminCutOver,
-    Phase.Unknown
-  ])
-
-  const hasActiveMigrations = Array.isArray(migrations)
-    ? migrations.some((m) => activePhases.has(m.status?.phase as Phase))
-    : false
+  const hasActiveMigrations = useMemo(() => {
+    return Array.isArray(migrations)
+      ? migrations.some((m) => ACTIVE_MIGRATION_PHASES.has(m.status?.phase as Phase))
+      : false
+  }, [migrations])
 
   useEffect(() => {
     if (controlledCollapsed === undefined) {
@@ -395,46 +89,102 @@ export default function Sidenav({
     }
   }, [internalCollapsed, controlledCollapsed])
 
-  const handleToggleCollapse = () => {
+  useEffect(() => {
+    localStorage.setItem('sidenav-expanded', JSON.stringify(expandedItem))
+  }, [expandedItem])
+
+  const handleToggleCollapse = useCallback(() => {
     if (onToggleCollapse) {
       onToggleCollapse()
     } else {
       setInternalCollapsed((prev: boolean) => !prev)
     }
-  }
+  }, [onToggleCollapse])
 
-  const handleItemClick = (item: NavigationItem) => {
-    if ((window as any).__VDDK_UPLOAD_IN_PROGRESS__) {
-      const confirmed = window.confirm(
-        'File upload is in progress. If you leave this page, the upload may be interrupted. Do you want to continue?'
-      )
-      if (!confirmed) return
+  useEffect(() => {
+    if (!isCollapsed) {
+      setFlyoutAnchorEl(null)
+      setFlyoutItemId(null)
     }
+  }, [isCollapsed])
 
-    if (onItemClick) {
-      onItemClick(item)
-    } else if (item.external) {
-      const url =
-        item.externalUrl && item.externalUrl.trim()
-          ? item.externalUrl
-          : `https://${window.location.host}${item.path}`
-      window.open(url, '_blank', 'noopener,noreferrer')
-    } else {
-      navigate(item.path)
+  const closeFlyout = useCallback(() => {
+    setFlyoutAnchorEl(null)
+    setFlyoutItemId(null)
+  }, [])
+
+  const handleOpenFlyout = useCallback(
+    (item: NavigationItem, anchorEl: HTMLElement) => {
+      if (!isCollapsed) return
+      if (!item.children?.length) return
+      if (item.external) return
+      setFlyoutItemId(item.id)
+      setFlyoutAnchorEl(anchorEl)
+    },
+    [isCollapsed]
+  )
+
+  const handleItemClick = useCallback(
+    (item: NavigationItem) => {
+      if (item.children?.length && !isCollapsed && !item.external) {
+        setExpandedItem((prev) => (prev === item.id ? null : item.id))
+        return
+      }
+
+      if ((window as any).__VDDK_UPLOAD_IN_PROGRESS__) {
+        const confirmed = window.confirm(
+          'File upload is in progress. If you leave this page, the upload may be interrupted. Do you want to continue?'
+        )
+        if (!confirmed) return
+      }
+
+      if (isCollapsed && flyoutItemId) {
+        window.setTimeout(() => {
+          closeFlyout()
+        }, 150)
+      } else {
+        closeFlyout()
+      }
+
+      if (onItemClick) {
+        onItemClick(item)
+      } else if (item.external) {
+        const url =
+          item.externalUrl && item.externalUrl.trim()
+            ? item.externalUrl
+            : `https://${window.location.host}${item.path}`
+        window.open(url, '_blank', 'noopener,noreferrer')
+      } else {
+        navigate(item.path)
+      }
+    },
+    [closeFlyout, flyoutItemId, isCollapsed, navigate, onItemClick]
+  )
+
+  const flattenItems = useMemo(() => {
+    const out: NavigationItem[] = []
+    const walk = (list: NavigationItem[]) => {
+      for (const it of list) {
+        out.push(it)
+        if (it.children?.length) walk(it.children)
+      }
     }
-  }
+    walk(items)
+    return out
+  }, [items])
 
-  const getActiveItem = (currentPath: string): string => {
-    const exactMatch = items.find((item) => item.path === currentPath)
-    if (exactMatch) return exactMatch.path
+  const currentActiveItem = useMemo(() => {
+    const exact = flattenItems.find((it) => it.path === activeItem)
+    if (exact) return exact.path
+    const match = flattenItems.find((it) => isPathActive(it.path, activeItem))
+    return match?.path || activeItem
+  }, [activeItem, flattenItems])
 
-    const partialMatch = items.find(
-      (item) => currentPath.startsWith(item.path) && item.path !== '/dashboard'
-    )
-    return partialMatch?.path || currentPath
-  }
+  const handleToggleExpand = useCallback((itemId: string) => {
+    setExpandedItem((prev) => (prev === itemId ? null : itemId))
+  }, [])
 
-  const currentActiveItem = getActiveItem(activeItem)
+  const visibleItems = useMemo(() => items.filter((item) => !item.hidden), [items])
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -466,24 +216,118 @@ export default function Sidenav({
           msOverflowStyle: 'none'
         }}
       >
-        {items
-          .filter((item) => !item.hidden)
-          .map((item) => (
+        {visibleItems.map((item) => {
+          const isItemActive = currentActiveItem === item.path
+          const isChildActive = !!item.children?.some((c) => currentActiveItem === c.path)
+          const isItemVisuallyActive = isCollapsed ? isItemActive || isChildActive : isItemActive
+          const isExpanded = expandedItem === item.id
+          const visibleChildren = item.children?.filter((child) => !child.hidden) ?? []
+          const activeChildIndex = visibleChildren.findIndex((c) => currentActiveItem === c.path)
+
+          return (
             <Box key={item.id}>
               {item.id === 'monitoring' && <Divider sx={{ my: 1, mx: 2 }} />}
               <NavigationItemComponent
                 item={item}
-                isActive={currentActiveItem === item.path}
+                isActive={isItemVisuallyActive}
+                isGroupActive={isChildActive}
                 isCollapsed={isCollapsed}
                 onClick={handleItemClick}
+                onOpenFlyout={handleOpenFlyout}
+                isExpanded={isExpanded}
+                onToggleExpand={handleToggleExpand}
+                depth={0}
               />
+
+              {!isCollapsed && visibleChildren.length ? (
+                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                  <ChildGroupContainer
+                    sx={{
+                      pl: 0.5,
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        left: `${SUBMENU_SPINE_X_PX}px`,
+                        top: '-8px',
+                        height: `${Math.max(visibleChildren.length * SUBMENU_ROW_HEIGHT_PX - SUBMENU_ROW_HEIGHT_PX / 2, 0)}px`,
+                        width: '1px',
+                        backgroundColor: SUBMENU_CONNECTOR_GREY,
+                        borderRadius: 1
+                      },
+                      '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        left: `${SUBMENU_SPINE_X_PX}px`,
+                        top: '-8px',
+                        width: '1px',
+                        height:
+                          activeChildIndex >= 0
+                            ? `${activeChildIndex * SUBMENU_ROW_HEIGHT_PX + SUBMENU_ROW_HEIGHT_PX / 2}px`
+                            : '0px',
+                        backgroundColor: SUBMENU_CONNECTOR_BLUE,
+                        borderRadius: 1
+                      }
+                    }}
+                  >
+                    <List disablePadding>
+                      {visibleChildren.map((child, idx) => {
+                        const isSelected = currentActiveItem === child.path
+                        const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
+                        const lineColor = isActiveBranch
+                          ? SUBMENU_CONNECTOR_BLUE
+                          : SUBMENU_CONNECTOR_GREY
+
+                        return (
+                          <ChildNavItemWrapper key={child.id}>
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
+                                top: '50%',
+                                transform: 'translateY(-65%)',
+                                visibility: isSelected ? 'visible' : 'hidden'
+                              }}
+                            >
+                              <SubmenuConnectorIcon color={lineColor} />
+                            </Box>
+                            <NavigationItemComponent
+                              item={child}
+                              isActive={isSelected}
+                              isCollapsed={isCollapsed}
+                              onClick={handleItemClick}
+                              depth={1}
+                            />
+                          </ChildNavItemWrapper>
+                        )
+                      })}
+                    </List>
+                  </ChildGroupContainer>
+                </Collapse>
+              ) : null}
             </Box>
-          ))}
+          )
+        })}
       </List>
+
+      <SidenavFlyout
+        open={Boolean(isCollapsed && flyoutAnchorEl && flyoutItemId)}
+        anchorEl={flyoutAnchorEl}
+        flyoutItemId={flyoutItemId}
+        items={items}
+        currentActiveItem={currentActiveItem}
+        onClose={closeFlyout}
+        onItemClick={handleItemClick}
+        zIndex={theme.zIndex.drawer + 2}
+      />
 
       <Box sx={{ mt: 'auto', px: 2, pb: 1.5, pt: 1.5, position: 'relative' }}>
         <Divider sx={{ mb: 1.5, opacity: 0.6 }} />
-        <VersionDisplay collapsed={isCollapsed} />
+        <VersionDisplay
+          collapsed={isCollapsed}
+          versionInfo={versionQuery.data}
+          isLoading={versionQuery.isLoading}
+          error={versionQuery.error}
+        />
         {versionInfo?.upgradeAvailable &&
           versionInfo?.upgradeVersion &&
           (isCollapsed ? (

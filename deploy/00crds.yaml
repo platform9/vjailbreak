@@ -842,6 +842,12 @@ spec:
     - jsonPath: .status.migrationStatus
       name: Status
       type: string
+    - jsonPath: .spec.migrationTemplate
+      name: Migration Template
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -1039,6 +1045,9 @@ spec:
       type: string
     - jsonPath: .status.agentName
       name: Agent Name
+      type: string
+    - jsonPath: .spec.migrationPlan
+      name: MigrationPlan
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -1444,6 +1453,12 @@ spec:
     - jsonPath: .status.openstackValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2690,6 +2705,12 @@ spec:
     - jsonPath: .status.vmwareValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2887,7 +2908,17 @@ spec:
     singular: vmwaremachine
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.powerState
+      name: PowerState
+      type: string
+    - jsonPath: .spec.migrated
+      name: Migrated
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-

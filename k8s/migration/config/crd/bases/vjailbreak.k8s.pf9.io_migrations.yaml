@@ -21,6 +21,9 @@ spec:
     - jsonPath: .status.agentName
       name: Agent Name
       type: string
+    - jsonPath: .spec.migrationPlan
+      name: MigrationPlan
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

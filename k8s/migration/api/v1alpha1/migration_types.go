@@ -134,6 +134,7 @@ type MigrationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Agent Name",type="string",JSONPath=".status.agentName"
+// +kubebuilder:printcolumn:name="MigrationPlan",type="string",JSONPath=".spec.migrationPlan"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Migration is the Schema for the migrations API that represents a single virtual machine
