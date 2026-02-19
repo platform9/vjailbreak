@@ -8,6 +8,8 @@ interface RdmConfigValidationProps {
   backendVolumeTypeMap?: { [key: string]: string }
 }
 
+const emptyBackendVolumeTypeMap: { [key: string]: string } = {}
+
 interface RdmConfigValidationResult {
   hasValidationError: boolean
   errorMessage: string
@@ -58,7 +60,7 @@ const emptyResult: RdmConfigValidationResult = {
 export const useRdmConfigValidation = ({
   selectedVMs,
   rdmDisks,
-  backendVolumeTypeMap = {}
+  backendVolumeTypeMap = emptyBackendVolumeTypeMap
 }: RdmConfigValidationProps): RdmConfigValidationResult => {
   const validationResult = useMemo(() => {
     // If no VMs are selected or no RDM disks exist, no validation errors
@@ -186,9 +188,10 @@ export const useRdmConfigValidation = ({
 
     if (hasVolumeTypeError) {
       const messages = disksWithVolumeTypeError.map((disk) => {
-        const vt = disk.incompatibleVolumeType!
+        const vt = disk.incompatibleVolumeType
+        if (!vt) return ''
         return `"${disk.diskName}" has volume type "${vt.selectedType}" but backend "${vt.backendPool}" expects "${vt.expectedType}"`
-      })
+      }).filter(Boolean)
       volumeTypeErrorMessage = `Incompatible volume type mapping: ${messages.join('; ')}.`
     }
 

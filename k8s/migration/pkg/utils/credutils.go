@@ -354,7 +354,9 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 
 	backendVolumeTypeMap := make(map[string]string)
 	backendToVolumeType, err := buildBackendToVolumeTypeMap(ctx, openstackClients.BlockStorageClient)
-	if err == nil {
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to build backend to volume type map; backend volume type validation will be skipped")
+	} else {
 		for _, poolName := range volumeBackendPools {
 			_, backendName := parsePoolName(poolName)
 			if vtName, ok := backendToVolumeType[backendName]; ok {
@@ -2132,8 +2134,13 @@ func buildBackendToVolumeTypeMap(ctx context.Context, cinderClient *gophercloud.
 	for _, vt := range allVolumeTypes {
 		// Check if volume_backend_name exists in extra specs
 		if backendName, ok := vt.ExtraSpecs["volume_backend_name"]; ok {
-			backendToVolumeType[backendName] = vt.Name
-			ctxlog.Info("Mapped backend to volume type", "backend", backendName, "volumeType", vt.Name)
+			if existing, alreadyMapped := backendToVolumeType[backendName]; alreadyMapped {
+				ctxlog.Info("Multiple volume types share the same backend name; keeping first mapping",
+					"backend", backendName, "existing", existing, "skipped", vt.Name)
+			} else {
+				backendToVolumeType[backendName] = vt.Name
+				ctxlog.Info("Mapped backend to volume type", "backend", backendName, "volumeType", vt.Name)
+			}
 		} else {
 			ctxlog.V(1).Info("Volume type has no volume_backend_name in extra specs", "volumeType", vt.Name)
 		}
