@@ -216,7 +216,7 @@ func CheckClusterCapacityAfterHostRemoval(ctx context.Context, pc *property.Coll
 
 	// Cluster total capacity
 	clusterCPUCapacity := int64(summary.TotalCpu) // MHz
-	clusterMemCapacity := summary.TotalMemory      // bytes
+	clusterMemCapacity := summary.TotalMemory     // bytes
 
 	// Get cluster-wide actual usage by summing quickStats across all hosts
 	var clusterCPUUsed int64
@@ -247,6 +247,21 @@ func CheckClusterCapacityAfterHostRemoval(ctx context.Context, pc *property.Coll
 	// Check if remaining capacity can absorb the workload
 	canFitCPU := totalCPUWorkload <= remainingCPUCapacity
 	canFitMem := totalMemWorkload <= remainingMemCapacity
+
+	log.FromContext(ctx).Info("Cluster remaining-host capacity calculation summary",
+		"targetHost", hostRef.Value,
+		"cluster", clusterRef.Value,
+		"removedHostCPUCapacityMHz", hostCPUCapacity,
+		"removedHostMemCapacityBytes", hostMemCapacity,
+		"clusterTotalCPUCapacityMHz", clusterCPUCapacity,
+		"clusterTotalMemCapacityBytes", clusterMemCapacity,
+		"remainingCPUCapacityMHz", remainingCPUCapacity,
+		"remainingMemCapacityBytes", remainingMemCapacity,
+		"totalCPUWorkloadMHz", totalCPUWorkload,
+		"totalMemWorkloadBytes", totalMemWorkload,
+		"canFitCPU", canFitCPU,
+		"canFitMem", canFitMem,
+	)
 
 	if !canFitCPU || !canFitMem {
 		// Calculate usage percentages for reporting
@@ -465,7 +480,7 @@ func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context
 		"CheckDRSEnabled":                         trueString,
 		"CheckDRSIsFullyAutomated":                trueString,
 		"CheckIfThereAreMoreThanOneHostInCluster": trueString,
-		"CheckClusterRemainingHostCapacity":       falseString,
+		"CheckClusterRemainingHostCapacity":       trueString,
 		"CheckVMsAreNotBlockedForMigration":       trueString,
 		"CheckESXiInMAAS":                         trueString,
 		"CheckPCDHasClusterConfigured":            trueString,
