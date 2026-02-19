@@ -589,13 +589,13 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		}
 
 		syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
-		if syncInProgress == "true" {
+		if syncInProgress == constants.AnnotationValueTrue {
 			ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
 			return nil
 		}
 
 		// Mark sync as in progress
-		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = "true"
+		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = constants.AnnotationValueTrue
 		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
 			return nil
