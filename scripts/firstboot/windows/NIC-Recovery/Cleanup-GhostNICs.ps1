@@ -162,6 +162,7 @@ try {
 
     Write-Log "=== Cleanup finished ==="
     if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes were made" }
+
     exit 0
 }
 catch {
