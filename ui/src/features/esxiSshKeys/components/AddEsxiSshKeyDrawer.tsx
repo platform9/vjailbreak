@@ -154,7 +154,7 @@ export default function AddEsxiSshKeyDrawer({
     <DrawerShell
       open={open}
       onClose={handleClose}
-      requireCloseConfirmation={false}
+      requireCloseConfirmation={true}
       width={820}
       header={
         <DrawerHeader

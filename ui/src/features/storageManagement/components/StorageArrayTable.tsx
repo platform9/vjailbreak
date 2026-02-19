@@ -200,7 +200,7 @@ const CustomToolbar = ({
 
   return (
     <ListingToolbar
-      title="Storage Management"
+      title="Storage Array Credentials"
       icon={<SdStorageIcon />}
       search={search}
       actions={actions}
@@ -385,9 +385,6 @@ export default function StorageArrayTable() {
         loading={isLoading || deleting}
         emptyMessage="No storage array credentials available"
         sx={{
-          '& .MuiDataGrid-main': {
-            overflow: 'auto'
-          },
           '& .MuiDataGrid-cell:focus': {
             outline: 'none'
           }

@@ -216,15 +216,7 @@ export default function EsxiSshKeysPage() {
   }
 
   const search = (
-    <CustomSearchToolbar
-      placeholder="Search by SSH key name"
-      onRefresh={handleRefresh}
-      disableRefresh={isLoading}
-    />
-  )
-
-  const actions = (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
       {rowSelectionModel.length > 0 && (
         <Button
           variant="outlined"
@@ -238,6 +230,16 @@ export default function EsxiSshKeysPage() {
         </Button>
       )}
 
+      <CustomSearchToolbar
+        placeholder="Search by SSH key name"
+        onRefresh={handleRefresh}
+        disableRefresh={isLoading}
+      />
+    </Box>
+  )
+
+  const actions = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
       <Button
         variant="contained"
         color="primary"
@@ -294,6 +296,7 @@ export default function EsxiSshKeysPage() {
       {drawerState.open && (
         <AddEsxiSshKeyDrawer
           open
+          requireCloseConfirmation={true}
           mode={drawerState.mode}
           initialValues={drawerState.initialValues}
           onClose={() => {
