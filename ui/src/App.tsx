@@ -14,6 +14,7 @@ import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
 import StorageManagementPage from './features/storageManagement/pages/StorageManagementPage'
+import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
@@ -398,6 +399,7 @@ function App() {
               <Route path="baremetal-config" element={<MaasConfigPage />} />
               <Route path="global-settings" element={<GlobalSettingsPage />} />
               <Route path="storage-management" element={<StorageManagementPage />} />
+              <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>
