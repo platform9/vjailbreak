@@ -683,6 +683,156 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: esxisshcreds.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ESXiSSHCreds
+    listKind: ESXiSSHCredsList
+    plural: esxisshcreds
+    singular: esxisshcreds
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validationStatus
+      name: Status
+      type: string
+    - jsonPath: .status.successfulHosts
+      name: Successful
+      type: integer
+    - jsonPath: .status.failedHosts
+      name: Failed
+      type: integer
+    - jsonPath: .status.totalHosts
+      name: Total
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ESXiSSHCreds is the Schema for the esxisshcreds API that defines SSH credentials
+          for connecting to ESXi hosts. It validates SSH connectivity to ESXi hosts either
+          discovered from vCenter via VMwareCreds or explicitly specified in the hosts list.
+          The controller validates connections in parallel with throttling to avoid overwhelming
+          the network, and reports per-host validation results in the status.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ESXiSSHCredsSpec defines the desired state of ESXiSSHCreds
+            properties:
+              forceReconcileToken:
+                description: |-
+                  ForceReconcileToken is an opaque token that can be updated to force a reconciliation.
+                  Updating this field will increment metadata.generation and trigger the controller.
+                type: string
+              secretRef:
+                description: |-
+                  SecretRef is the reference to the Kubernetes secret holding the SSH private key
+                  The secret should contain a key named "privateKey" with the SSH private key in PEM format
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              username:
+                default: root
+                description: 'Username is the SSH username to use for connecting to
+                  ESXi hosts (default: "root")'
+                type: string
+            required:
+            - secretRef
+            type: object
+          status:
+            description: ESXiSSHCredsStatus defines the observed state of ESXiSSHCreds
+            properties:
+              failedHosts:
+                description: FailedHosts is the number of ESXi hosts that failed validation
+                type: integer
+              lastValidationTime:
+                description: LastValidationTime is the timestamp of the last validation
+                  run
+                format: date-time
+                type: string
+              successfulHosts:
+                description: SuccessfulHosts is the number of ESXi hosts that passed
+                  validation
+                type: integer
+              totalHosts:
+                description: TotalHosts is the total number of ESXi hosts to validate
+                type: integer
+              validationMessage:
+                description: ValidationMessage is the message associated with the
+                  overall validation
+                type: string
+              validationStatus:
+                description: |-
+                  ValidationStatus is the overall status of the ESXi SSH validation
+                  Possible values: Pending, Validating, Succeeded, PartiallySucceeded, Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationplans.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -697,6 +847,12 @@ spec:
     - jsonPath: .status.migrationStatus
       name: Status
       type: string
+    - jsonPath: .spec.migrationTemplate
+      name: Migration Template
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -732,6 +888,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -799,6 +960,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -889,6 +1051,9 @@ spec:
     - jsonPath: .status.agentName
       name: Agent Name
       type: string
+    - jsonPath: .spec.migrationPlan
+      name: MigrationPlan
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -945,6 +1110,7 @@ spec:
                 enum:
                 - hot
                 - cold
+                - mock
                 type: string
               podRef:
                 description: PodRef is the name of the pod
@@ -1292,6 +1458,12 @@ spec:
     - jsonPath: .status.openstackValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -1389,8 +1561,12 @@ spec:
                 type: string
               osDomainName:
                 type: string
+              osIdentityApiVersion:
+                type: string
               osInsecure:
                 type: boolean
+              osInterface:
+                type: string
               osPassword:
                 type: string
               osRegionName:
@@ -1935,6 +2111,11 @@ spec:
                 description: AdvancedOptions is a list of advanced options for the
                   migration
                 properties:
+                  acknowledgeNetworkConflictRisk:
+                    description: AcknowledgeNetworkConflictRisk indicates that the
+                      user acknowledges the risk of network conflicts when doing live
+                      migration
+                    type: boolean
                   granularNetworks:
                     description: GranularNetworks is a list of networks to be migrated
                     items:
@@ -2088,6 +2269,7 @@ spec:
                     enum:
                     - hot
                     - cold
+                    - mock
                     type: string
                   vmCutoverEnd:
                     format: date-time
@@ -2528,6 +2710,12 @@ spec:
     - jsonPath: .status.vmwareValidationStatus
       name: Status
       type: string
+    - jsonPath: .spec.secretRef.name
+      name: Secret Name
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2685,6 +2873,24 @@ spec:
             type: object
           status:
             description: VMwareHostStatus defines the observed state of VMwareHost
+            properties:
+              esxiVersion:
+                description: ESXiVersion is the ESXi version retrieved via SSH if
+                  connection succeeded
+                type: string
+              sshLastChecked:
+                description: SSHLastChecked is the timestamp of the last SSH validation
+                  attempt
+                format: date-time
+                type: string
+              sshMessage:
+                description: SSHMessage contains details about the SSH validation
+                  result or error
+                type: string
+              sshStatus:
+                description: SSHStatus is the SSH validation status for this host
+                  (Succeeded, Failed, Pending)
+                type: string
             type: object
         type: object
     served: true
@@ -2707,7 +2913,17 @@ spec:
     singular: vmwaremachine
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.powerState
+      name: PowerState
+      type: string
+    - jsonPath: .spec.migrated
+      name: Migrated
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
@@ -3208,6 +3424,7 @@ rules:
   - bmconfigs
   - clustermigrations
   - esximigrations
+  - esxisshcreds
   - migrationplans
   - migrations
   - migrationtemplates
@@ -3238,6 +3455,7 @@ rules:
   - bmconfigs/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
+  - esxisshcreds/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -3258,6 +3476,7 @@ rules:
   - bmconfigs/status
   - clustermigrations/status
   - esximigrations/status
+  - esxisshcreds/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
@@ -3270,6 +3489,7 @@ rules:
   - storagemappings/status
   - vjailbreaknodes/status
   - vmwarecreds/status
+  - vmwarehosts/status
   - vmwaremachines/status
   verbs:
   - get

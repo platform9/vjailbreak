@@ -1377,21 +1377,67 @@ export default function RollingMigrationFormDrawer({
       ) || !storageMappingComplete
     )
 
-    // Migration options validation
-    const migrationOptionValidated = Object.keys(selectedMigrationOptions).every((key) => {
-      if (selectedMigrationOptions[key]) {
-        if (key === 'cutoverOption' && params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW) {
-          return (
-            params.cutoverStartTime &&
-            params.cutoverEndTime &&
-            !fieldErrors['cutoverStartTime'] &&
-            !fieldErrors['cutoverEndTime']
-          )
-        }
-        return params?.[key] && !fieldErrors[key]
-      }
-      return true
-    })
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    const hasAnyMigrationOptionSelected =
+      Boolean(selectedMigrationOptions.dataCopyMethod) ||
+      Boolean(selectedMigrationOptions.dataCopyStartTime) ||
+      Boolean(selectedMigrationOptions.cutoverOption) ||
+      Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(selectedMigrationOptions.osFamily) ||
+      postMigrationActionSelected
+
+    const dataCopyMethodOk =
+      !selectedMigrationOptions.dataCopyMethod || Boolean(params.dataCopyMethod)
+
+    const dataCopyStartTimeOk =
+      !selectedMigrationOptions.dataCopyStartTime ||
+      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+
+    const cutoverOk = !selectedMigrationOptions.cutoverOption
+      ? true
+      : Boolean(
+          params.cutoverOption &&
+            !fieldErrors['cutoverOption'] &&
+            (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
+              (params.cutoverStartTime &&
+                params.cutoverEndTime &&
+                !fieldErrors['cutoverStartTime'] &&
+                !fieldErrors['cutoverEndTime']))
+        )
+
+    const postMigrationScriptOk =
+      !selectedMigrationOptions.postMigrationScript ||
+      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
+
+    const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const postMigrationActionOk = !postMigrationActionSelected
+      ? true
+      : Boolean(
+          postMigrationAction &&
+            typeof postMigrationAction === 'object' &&
+            (Boolean(postMigrationAction.renameVm) ||
+              Boolean(postMigrationAction.moveToFolder) ||
+              !postMigrationAction.suffix ||
+              Boolean((params as any)?.postMigrationActionSuffix) ||
+              !postMigrationAction.folderName ||
+              Boolean((params as any)?.postMigrationActionFolderName))
+        )
+
+    const migrationOptionValidated =
+      !hasAnyMigrationOptionSelected ||
+      (dataCopyMethodOk &&
+        dataCopyStartTimeOk &&
+        cutoverOk &&
+        postMigrationScriptOk &&
+        osFamilyOk &&
+        postMigrationActionOk)
 
     // PCD host config validation - not needed anymore since validation is handled by esxHostConfigValid
 
@@ -1569,6 +1615,89 @@ export default function RollingMigrationFormDrawer({
         (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript']))
   )
 
+  const hasAnyMigrationOptionSelected = useMemo(() => {
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    return (
+      Boolean(selectedMigrationOptions.dataCopyMethod) ||
+      Boolean(selectedMigrationOptions.dataCopyStartTime) ||
+      Boolean(selectedMigrationOptions.cutoverOption) ||
+      Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(selectedMigrationOptions.osFamily) ||
+      postMigrationActionSelected
+    )
+  }, [selectedMigrationOptions])
+
+  const areSelectedMigrationOptionsConfigured = useMemo(() => {
+    if (!hasAnyMigrationOptionSelected) return false
+
+    const dataCopyStartTimeOk =
+      !selectedMigrationOptions.dataCopyStartTime ||
+      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+
+    const cutoverOk = !selectedMigrationOptions.cutoverOption
+      ? true
+      : Boolean(
+          params.cutoverOption &&
+            !fieldErrors['cutoverOption'] &&
+            (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
+              (params.cutoverStartTime &&
+                params.cutoverEndTime &&
+                !fieldErrors['cutoverStartTime'] &&
+                !fieldErrors['cutoverEndTime']))
+        )
+
+    const postMigrationScriptOk =
+      !selectedMigrationOptions.postMigrationScript ||
+      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
+
+    const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    const postMigrationActionOk = !postMigrationActionSelected
+      ? true
+      : Boolean(
+          postMigrationAction &&
+            typeof postMigrationAction === 'object' &&
+            (Boolean(postMigrationAction.renameVm) ||
+              Boolean(postMigrationAction.moveToFolder) ||
+              !postMigrationAction.suffix ||
+              Boolean((params as any)?.postMigrationActionSuffix) ||
+              !postMigrationAction.folderName ||
+              Boolean((params as any)?.postMigrationActionFolderName))
+        )
+
+    return (
+      dataCopyStartTimeOk &&
+      cutoverOk &&
+      postMigrationScriptOk &&
+      osFamilyOk &&
+      postMigrationActionOk
+    )
+  }, [
+    hasAnyMigrationOptionSelected,
+    selectedMigrationOptions,
+    params.dataCopyStartTime,
+    params.cutoverOption,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    params.postMigrationScript,
+    params.osFamily,
+    params,
+    fieldErrors
+  ])
+
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [
       {
@@ -1636,7 +1765,7 @@ export default function RollingMigrationFormDrawer({
         description: 'Scheduling and advanced behavior',
         status: step6HasErrors
           ? 'attention'
-          : touchedSections.options && !step6HasErrors
+          : touchedSections.options && areSelectedMigrationOptionsConfigured && !step6HasErrors
             ? 'complete'
             : 'incomplete'
       }
@@ -1667,6 +1796,8 @@ export default function RollingMigrationFormDrawer({
       step4HasErrors,
       step5HasErrors,
       step6HasErrors,
+      hasAnyMigrationOptionSelected,
+      areSelectedMigrationOptionsConfigured,
       touchedSections
     ]
   )

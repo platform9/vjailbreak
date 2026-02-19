@@ -49,10 +49,13 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -154,6 +157,7 @@ func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *MigrationPlanReconciler) reconcileNormal(ctx context.Context, scope *scope.MigrationPlanScope) (ctrl.Result, error) {
 	migrationplan := scope.MigrationPlan
 	log := scope.Logger
+
 	log.Info(fmt.Sprintf("Reconciling MigrationPlan '%s'", migrationplan.Name))
 
 	controllerutil.AddFinalizer(migrationplan, migrationPlanFinalizer)
@@ -221,16 +225,25 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	migrationplan := scope.MigrationPlan
 	ctxlog := log.FromContext(ctx).WithName(constants.MigrationControllerName)
 
+	ctxlog.Info("Starting post-migration reconciliation for VM", "vm", vm, "migrationplan", migrationplan.Name)
+
 	if migrationplan.Spec.PostMigrationAction == nil {
-		ctxlog.Info("No post-migration actions configured")
+		ctxlog.Info("No post-migration actions configured for VM", "vm", vm)
 		return nil
 	}
 
 	if migrationplan.Spec.PostMigrationAction.RenameVM == nil &&
 		migrationplan.Spec.PostMigrationAction.MoveToFolder == nil {
-		ctxlog.Info("No post-migration actions enabled")
+		ctxlog.Info("No post-migration actions enabled for VM", "vm", vm)
 		return nil
 	}
+
+	ctxlog.Info("Post-migration actions configured for VM",
+		"vm", vm,
+		"renameVM", migrationplan.Spec.PostMigrationAction.RenameVM,
+		"moveToFolder", migrationplan.Spec.PostMigrationAction.MoveToFolder,
+		"suffix", migrationplan.Spec.PostMigrationAction.Suffix,
+		"folderName", migrationplan.Spec.PostMigrationAction.FolderName)
 
 	// Get required resources
 	_, vmwcreds, secret, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
@@ -244,8 +257,8 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		return errors.Wrap(err, "invalid vCenter credentials")
 	}
 
-	// Create vCenter client and get datacenter
-	vcClient, dc, err := createVCenterClientAndDC(ctx, host, username, password, vmwcreds.Spec.DataCenter)
+	// Create vCenter client (datacenter is auto-detected from VM during move operation)
+	vcClient, _, err := createVCenterClientAndDC(ctx, host, username, password, vmwcreds.Spec.DataCenter)
 	if err != nil {
 		return errors.Wrap(err, "failed to create vCenter client")
 	}
@@ -267,7 +280,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		if err := r.moveVMToFolder(ctx, vcClient, dc, migrationplan, vm); err != nil {
+		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vm); err != nil {
 			return errors.Wrap(err, "failed to move VM to folder")
 		}
 	}
@@ -288,14 +301,19 @@ func (*MigrationPlanReconciler) renameVM(
 		ctxlog.Info("Using default suffix", "suffix", suffix)
 	}
 	newVMName := vm + suffix
-	ctxlog.Info("Renaming VM", "oldName", vm, "newName", newVMName)
-	return vcClient.RenameVM(ctx, vm, newVMName)
+	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+	err := vcClient.RenameVM(ctx, vm, newVMName)
+	if err != nil {
+		ctxlog.Error(err, "Failed to rename VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+		return err
+	}
+	ctxlog.Info("Successfully renamed VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+	return nil
 }
 
 func (*MigrationPlanReconciler) moveVMToFolder(
 	ctx context.Context,
 	vcClient *vcenter.VCenterClient,
-	dc *object.Datacenter,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vm string,
 ) error {
@@ -306,17 +324,33 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 		ctxlog.Info("Using default folder name", "folderName", folderName)
 	}
 
+	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
+
+	// Auto-detect datacenter from the VM itself
+	ctxlog.Info("Auto-detecting datacenter from VM...", "vm", vm)
+	_, dc, err := vcClient.GetVMWithDatacenter(ctx, vm)
+	if err != nil {
+		ctxlog.Error(err, "Failed to find VM and its datacenter", "vm", vm)
+		return errors.Wrapf(err, "failed to find VM '%s' and its datacenter", vm)
+	}
+	if dc == nil {
+		ctxlog.Error(nil, "Datacenter is nil after auto-detection", "vm", vm)
+		return errors.Errorf("datacenter is nil for VM '%s'", vm)
+	}
+	ctxlog.Info("Auto-detected datacenter for VM", "vm", vm, "datacenter", dc.Name())
+
 	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
 	if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
-		ctxlog.Error(err, "Folder creation/verification failed")
+		ctxlog.Error(err, "Folder creation/verification failed", "folder", folderName, "vm", vm, "migrationplan", migrationplan.Name)
 		return errors.Wrapf(err, "failed to ensure folder '%s' exists", folderName)
 	}
 
-	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName)
+	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
-		ctxlog.Error(err, "VM move failed")
+		ctxlog.Error(err, "VM move failed", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 		return errors.Wrapf(err, "failed to move VM '%s' to folder '%s'", vm, folderName)
 	}
+	ctxlog.Info("Successfully moved VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	return nil
 }
 
@@ -503,13 +537,49 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
-	// Validate VM OS types before proceeding with migration
-	validVMs, _, validationErr := r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	terminalMigrations := make(map[string]bool)
+	for _, vmName := range allVMNames {
+		vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vmName, vmwcreds.Name)
+		if err != nil {
+			r.ctxlog.Error(err, "Failed to convert VM name to k8s name", "vm", vmName)
+			continue
+		}
+		migrationName := utils.MigrationNameFromVMName(vmk8sname)
+		existingMigration := &vjailbreakv1alpha1.Migration{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationName, Namespace: migrationplan.Namespace}, existingMigration); err == nil {
+			if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				terminalMigrations[vmName] = true
+				r.ctxlog.Info("Skipping terminal migration from validation", "vm", vmName, "phase", existingMigration.Status.Phase)
+			}
+		}
+	}
+
+	// Filter out VMs with terminal migrations for validation
+	vmsToValidate := []string{}
+	for _, vmName := range allVMNames {
+		if !terminalMigrations[vmName] {
+			vmsToValidate = append(vmsToValidate, vmName)
+		}
+	}
+
+	var validVMs []*vjailbreakv1alpha1.VMwareMachine
+	var validationErr error
+	if len(vmsToValidate) > 0 {
+		// Validate VM OS types before proceeding with migration
+		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+	}
 
 	if validationErr != nil {
 		r.ctxlog.Error(validationErr, "Migration plan validation failed", "migrationplan", migrationplan.Name)
 
 		for _, vmName := range allVMNames {
+			// Skip VMs with terminal migrations
+			if terminalMigrations[vmName] {
+				continue
+			}
+
 			vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
 			if err != nil {
 				r.ctxlog.Error(err, "Failed to get vmMachine for pre-creation", "vm", vmName)
@@ -532,6 +602,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	for _, vmName := range allVMNames {
+		// Skip VMs with terminal migrations
+		if terminalMigrations[vmName] {
+			continue
+		}
+
 		vmMachine, err := GetVMwareMachineForVM(ctx, r, vmName, migrationtemplate, vmwcreds)
 		if err != nil {
 			r.ctxlog.Error(err, "Failed to get vmMachine for migration creation", "vm", vmName)
@@ -557,7 +632,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
-	r.ctxlog.Info("Reconciling MigrationPlanJob", "migrationplan", migrationplan.Name)
 	// Fetch VMwareCreds CR
 	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
@@ -631,14 +705,25 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
 
-		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, migrationobjs, parallelvms)
+		// Fetch all migrations for this plan to catch already-completed migrations from previous reconciliations
+		allMigrations := &vjailbreakv1alpha1.MigrationList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(migrationplan.Namespace),
+			client.MatchingLabels{"migrationplan": migrationplan.Name},
+		}
+		if err := r.List(ctx, allMigrations, listOpts...); err != nil {
+			r.ctxlog.Error(err, "Failed to list all migrations for post-migration processing", "migrationplan", migrationplan.Name)
+			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for post-migration processing")
+		}
+
+		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, allMigrations, parallelvms)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		if !allFinished {
-			r.ctxlog.Info("Migration(s) still in progress, requeuing plan", "migrationplan", migrationplan.Name)
-			return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+			// Don't requeue - rely on event-driven reconciliation when Migrations reach terminal states
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -676,6 +761,8 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 ) (bool, error) {
 	allFinished := true
 
+	r.ctxlog.Info("Processing migration phases", "migrationplan", migrationplan.Name, "totalMigrations", len(migrationobjs.Items), "currentBatch", parallelvms)
+
 	for i := 0; i < len(migrationobjs.Items); i++ {
 		migration := migrationobjs.Items[i]
 
@@ -687,11 +774,28 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			return false, err
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
+				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
+				continue
+			}
+
+			r.ctxlog.Info("Migration succeeded for VM, applying post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
 			if err != nil {
 				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
 				return false, errors.Wrap(err, "failed post-migration")
 			}
+
+			migrationCopy := migration.DeepCopy()
+			if migrationCopy.Annotations == nil {
+				migrationCopy.Annotations = make(map[string]string)
+			}
+			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = "true"
+			if err := r.Update(ctx, migrationCopy); err != nil {
+				r.ctxlog.Error(err, "Failed to set post-migration complete annotation", "vm", migration.Spec.VMName)
+			}
+
+			r.ctxlog.Info("Post-migration actions completed for VM", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
 			continue
 
 		default:
@@ -800,7 +904,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 ) (*vjailbreakv1alpha1.Migration, error) {
 	ctxlog := r.ctxlog.WithValues("vm", vm)
-	ctxlog.Info("Creating Migration for VM")
 
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
@@ -1199,26 +1302,26 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"SOURCE_VM_NAME":             vm,
-				"CONVERT":                    "true", // Assume that the vm always has to be converted
-				"TYPE":                       migrationplan.Spec.MigrationStrategy.Type,
-				"DATACOPYSTART":              migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
-				"CUTOVERSTART":               migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
-				"CUTOVEREND":                 migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
-				"NEUTRON_NETWORK_NAMES":      strings.Join(openstacknws, ","),
-				"NEUTRON_PORT_IDS":           strings.Join(openstackports, ","),
-				"CINDER_VOLUME_TYPES":        strings.Join(openstackvolumetypes, ","),
-				"VIRTIO_WIN_DRIVER":          virtiodrivers,
-				"PERFORM_HEALTH_CHECKS":      strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
-				"HEALTH_CHECK_PORT":          migrationplan.Spec.MigrationStrategy.HealthCheckPort,
-				"VMWARE_MACHINE_OBJECT_NAME": vmMachine.Name,
-				"SECURITY_GROUPS":            strings.Join(migrationplan.Spec.SecurityGroups, ","),
-				"SERVER_GROUP":               migrationplan.Spec.ServerGroup,
-				"RDM_DISK_NAMES":             strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
-				"FALLBACK_TO_DHCP":           strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
-				"PERIODIC_SYNC_INTERVAL":     migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
-				"PERIODIC_SYNC_ENABLED":      strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
-				"NETWORK_PERSISTENCE":        strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
+				"SOURCE_VM_NAME":                    vm,
+				"CONVERT":                           "true", // Assume that the vm always has to be converted
+				"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
+				"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+				"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+				"CUTOVEREND":                        migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
+				"NEUTRON_NETWORK_NAMES":             strings.Join(openstacknws, ","),
+				"NEUTRON_PORT_IDS":                  strings.Join(openstackports, ","),
+				"CINDER_VOLUME_TYPES":               strings.Join(openstackvolumetypes, ","),
+				"VIRTIO_WIN_DRIVER":                 virtiodrivers,
+				"PERFORM_HEALTH_CHECKS":             strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+				"HEALTH_CHECK_PORT":                 migrationplan.Spec.MigrationStrategy.HealthCheckPort,
+				"VMWARE_MACHINE_OBJECT_NAME":        vmMachine.Name,
+				"SECURITY_GROUPS":                   strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"SERVER_GROUP":                      migrationplan.Spec.ServerGroup,
+				"RDM_DISK_NAMES":                    strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
+				"FALLBACK_TO_DHCP":                  strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
+				"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
+				"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
+				"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
 				"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 			},
 		}
@@ -1346,8 +1449,6 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
 ) (openstacknws, openstackvolumetypes []string, err error) {
-	ctxlog := r.ctxlog.WithValues("reconcileMapping", vm)
-	ctxlog.Info("Reconciling mapping for VM")
 	// Get datacenter from VM's cluster annotation
 	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
 	if err != nil {
@@ -1358,8 +1459,6 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
-	ctxlog.Info("Reconciled network", "vm", vm, "openstacknws", openstacknws)
-	ctxlog.Info("storage method", "vm", vm, "storage method", migrationtemplate.Spec.StorageCopyMethod)
 	// Skip storage mapping reconciliation for StorageCopyMethod storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
 	if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
@@ -1542,12 +1641,17 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
-			if apierrors.IsAlreadyExists(err) && migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
-				r.ctxlog.Info(fmt.Sprintf("Migration for VM '%s' already exists", vm))
-				continue
-			}
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
 		}
+
+		if migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+			ctxlog.Info("Skipping VM with terminal migration status", "vm", vm, "phase", migrationobj.Status.Phase)
+			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
+			continue
+		}
+
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 
 		if migrationtemplate.Spec.UseFlavorless && hotplugFlavorMissing {
@@ -1607,7 +1711,48 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.MigrationPlan{}).
-		Owns(&vjailbreakv1alpha1.Migration{}).
+		Owns(&vjailbreakv1alpha1.Migration{}, builder.WithPredicates(
+			predicate.Funcs{
+				// Only reconcile on Migration create, delete of non-terminal migrations, or when phase changes to terminal state
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldMigration, oldOk := e.ObjectOld.(*vjailbreakv1alpha1.Migration)
+					newMigration, newOk := e.ObjectNew.(*vjailbreakv1alpha1.Migration)
+
+					if !oldOk || !newOk {
+						return false
+					}
+
+					// Reconcile if phase changed to a terminal state
+					isTerminal := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+
+					phaseChanged := oldMigration.Status.Phase != newMigration.Status.Phase
+
+					// Only reconcile if phase changed AND it's now in a terminal state
+					return phaseChanged && isTerminal
+				},
+				CreateFunc: func(_ event.CreateEvent) bool {
+					return true
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					// Only reconcile if a non-terminal migration is deleted
+					// This prevents log flooding when succeeded migrations are deleted
+					// while pending migrations still exist
+					migration, ok := e.Object.(*vjailbreakv1alpha1.Migration)
+					if !ok {
+						return false
+					}
+
+					// Don't reconcile if a terminal state migration is deleted
+					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+
+					return !isTerminal
+				},
+			},
+		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -1685,9 +1830,8 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		}
 	}
 
-	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
-	migrationobj.Status.Conditions = cleanedConditions
-
+	// Only update conditions if they changed - don't force phase to Pending
+	// Let the Migration controller manage phase progression naturally
 	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			currentMigration := &vjailbreakv1alpha1.Migration{}
@@ -1695,7 +1839,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
 			}
 
-			currentMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			// Only update conditions, don't modify the phase
 			currentMigration.Status.Conditions = cleanedConditions
 
 			return r.Status().Update(ctx, currentMigration)

@@ -1,27 +1,22 @@
-import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Chip, Alert, Snackbar } from '@mui/material'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
+import { Button, Box, IconButton, Tooltip, Chip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import WarningIcon from '@mui/icons-material/Warning'
 import AddIcon from '@mui/icons-material/Add'
 import SdStorageIcon from '@mui/icons-material/SdStorage'
-import KeyIcon from '@mui/icons-material/Key'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
 import {
   useArrayCredentialsQuery,
   ARRAY_CREDS_QUERY_KEY
 } from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { ConfirmationDialog } from 'src/components/dialogs'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { getSecret, upsertSecret } from 'src/api/secrets/secrets'
-import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
-import { DesignSystemForm, RHFTextField } from 'src/shared/components/forms'
 import AddArrayCredentialsDrawer from './AddArrayCredentialsDrawer'
 import EditArrayCredentialsDrawer from './EditArrayCredentialsDrawer'
 
@@ -174,103 +169,48 @@ const CustomToolbar = ({
   selectedCount,
   onDeleteSelected
 }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <SdStorageIcon />
-        <Typography variant="h6" component="h2">
-          Storage Management
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2 }}>
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {selectedCount > 0 && (
         <Button
           variant="outlined"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAddCredential}
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={onDeleteSelected}
           sx={{ height: 40 }}
         >
-          ADD ARRAY CREDENTIALS
+          Delete Selected ({selectedCount})
         </Button>
-        {selectedCount > 0 && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({selectedCount})
-          </Button>
-        )}
-        <CustomSearchToolbar placeholder="Search by Name" onRefresh={onRefresh} />
-      </Box>
-    </GridToolbarContainer>
+      )}
+      <CustomSearchToolbar placeholder="Search by Name" onRefresh={onRefresh} />
+    </Box>
+  )
+
+  const actions = (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<AddIcon />}
+      onClick={onAddCredential}
+      sx={{ height: 40 }}
+    >
+      Add Array Credentials
+    </Button>
+  )
+
+  return (
+    <ListingToolbar
+      title="Storage Management"
+      icon={<SdStorageIcon />}
+      search={search}
+      actions={actions}
+    />
   )
 }
 
 export default function StorageArrayTable() {
   const { reportError } = useErrorHandler({ component: 'StorageArrayTable' })
   const queryClient = useQueryClient()
-
-  const [esxiKeyDrawerOpen, setEsxiKeyDrawerOpen] = useState(false)
-  const [esxiKeyError, setEsxiKeyError] = useState<string | null>(null)
-  const [esxiKeyToastOpen, setEsxiKeyToastOpen] = useState(false)
-  const [esxiKeyToastMessage, setEsxiKeyToastMessage] = useState<string>('')
-  const [esxiKeyToastSeverity, setEsxiKeyToastSeverity] = useState<'success' | 'error'>('success')
-
-  type EsxiKeyFormData = {
-    sshPrivateKey: string
-  }
-
-  const esxiKeyForm = useForm<EsxiKeyFormData>({
-    defaultValues: {
-      sshPrivateKey: ''
-    }
-  })
-
-  const {
-    reset: resetEsxiKeyForm,
-    setValue: setEsxiKeyValue,
-    getValues: getEsxiKeyValues
-  } = esxiKeyForm
-
-  const {
-    data: esxiKeySecret,
-    isLoading: isEsxiKeyLoading,
-    refetch: refetchEsxiKey
-  } = useQuery({
-    queryKey: ['secret', 'migration-system', 'esxi-ssh-key'],
-    queryFn: async () => {
-      try {
-        return await getSecret('esxi-ssh-key', 'migration-system')
-      } catch (error: any) {
-        if (error?.response?.status === 404) {
-          return null
-        }
-        throw error
-      }
-    },
-    retry: false
-  })
-
-  const { mutateAsync: saveEsxiKey, isPending: isSavingEsxiKey } = useMutation({
-    mutationFn: async (keyContent: string) => {
-      return upsertSecret('esxi-ssh-key', { 'ssh-privatekey': keyContent }, 'migration-system')
-    },
-    onSuccess: () => {
-      refetchEsxiKey()
-    }
-  })
-
-  const isEsxiKeyConfigured = !!esxiKeySecret?.metadata?.name
 
   const {
     data: arrayCredentials,
@@ -316,87 +256,7 @@ export default function StorageArrayTable() {
 
   const handleRefresh = useCallback(() => {
     refetch()
-    refetchEsxiKey()
-  }, [refetch, refetchEsxiKey])
-
-  const validateOpenSshPrivateKey = (value: string): string | null => {
-    const trimmed = value.trim()
-    if (!trimmed) return 'SSH private key is required'
-    if (/^ssh-privatekey\s*:/m.test(trimmed)) {
-      return 'Paste only the key content (do not include "ssh-privatekey:")'
-    }
-    const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
-    const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
-    if (!hasBegin || !hasEnd) {
-      return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
-    }
-    return null
-  }
-
-  const handleOpenEsxiKeyDrawer = () => {
-    setEsxiKeyError(null)
-    const existing = (esxiKeySecret as any)?.data?.['ssh-privatekey']
-    resetEsxiKeyForm({ sshPrivateKey: typeof existing === 'string' ? existing : '' })
-    setEsxiKeyDrawerOpen(true)
-  }
-
-  const handleCloseEsxiKeyDrawer = () => {
-    if (isSavingEsxiKey) return
-    const formValues = getEsxiKeyValues()
-    const hasChanges = Boolean(formValues.sshPrivateKey)
-
-    if (hasChanges) {
-      resetEsxiKeyForm({ sshPrivateKey: '' })
-    }
-
-    setEsxiKeyDrawerOpen(false)
-    setEsxiKeyError(null)
-  }
-
-  const handleCloseEsxiKeyToast = () => {
-    setEsxiKeyToastOpen(false)
-  }
-
-  const handleEsxiKeyFileChange = async (file: File | null) => {
-    if (!file) return
-    const MAX_KEY_FILE_SIZE = 1024 * 1024 // 1 MB limit for SSH key files
-    if (file.size > MAX_KEY_FILE_SIZE) {
-      setEsxiKeyError('File is too large. SSH private key files should be less than 1 MB.')
-      return
-    }
-    try {
-      const text = await file.text()
-      setEsxiKeyValue('sshPrivateKey', text, { shouldDirty: true })
-      setEsxiKeyError(null)
-    } catch (error) {
-      setEsxiKeyError('Failed to read file')
-    }
-  }
-
-  const onSubmitEsxiKey = async (data: EsxiKeyFormData) => {
-    const validationError = validateOpenSshPrivateKey(data.sshPrivateKey)
-    if (validationError) {
-      setEsxiKeyError(validationError)
-      return
-    }
-
-    try {
-      setEsxiKeyError(null)
-      await saveEsxiKey(data.sshPrivateKey.trim())
-      setEsxiKeyToastSeverity('success')
-      setEsxiKeyToastMessage('ESXi SSH key saved successfully.')
-      setEsxiKeyToastOpen(true)
-      setEsxiKeyDrawerOpen(false)
-    } catch (error: any) {
-      const errorMessage =
-        error?.response?.data?.message || error?.message || 'Failed to save ESXi SSH key'
-      setEsxiKeyError(errorMessage)
-      setEsxiKeyToastSeverity('error')
-      setEsxiKeyToastMessage(errorMessage)
-      setEsxiKeyToastOpen(true)
-      reportError(error, { context: 'save-esxi-ssh-key' })
-    }
-  }
+  }, [refetch])
 
   const handleEditClick = (row: ArrayCredentialRow) => {
     setSelectedForEdit(row)
@@ -494,71 +354,6 @@ export default function StorageArrayTable() {
 
   return (
     <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
-      <Box
-        sx={{
-          mx: 2,
-          mt: 2,
-          mb: 1.5,
-          px: 2,
-          py: 1.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          backgroundColor: 'background.paper'
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-          <Box
-            sx={{
-              mt: '2px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 32,
-              height: 32,
-              borderRadius: 1,
-              backgroundColor: 'action.hover'
-            }}
-          >
-            <KeyIcon fontSize="small" />
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="subtitle1" fontWeight={600} sx={{ lineHeight: 1.2 }}>
-              ESXi SSH Key
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Configure the ESXi SSH private key secret (migration-system/esxi-ssh-key)
-            </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip
-            label={
-              isEsxiKeyLoading ? 'Loading' : isEsxiKeyConfigured ? 'Configured' : 'Not configured'
-            }
-            color={isEsxiKeyConfigured ? 'success' : 'default'}
-            variant="outlined"
-            size="small"
-            sx={{ borderRadius: '4px' }}
-          />
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={handleOpenEsxiKeyDrawer}
-            disabled={isEsxiKeyLoading}
-            size="small"
-            sx={{ height: 30, minWidth: 72 }}
-          >
-            {isEsxiKeyConfigured ? 'Edit' : 'Configure'}
-          </Button>
-        </Box>
-      </Box>
-
       <CommonDataGrid
         rows={rows}
         columns={tableColumns}
@@ -641,103 +436,6 @@ export default function StorageArrayTable() {
           credential={selectedForEdit.credObject}
         />
       )}
-
-      <DrawerShell
-        open={esxiKeyDrawerOpen}
-        onClose={handleCloseEsxiKeyDrawer}
-        requireCloseConfirmation={false}
-        width={820}
-        header={
-          <DrawerHeader
-            title={
-              isEsxiKeyConfigured ? 'Edit ESXi SSH Private Key' : 'Configure ESXi SSH Private Key'
-            }
-            subtitle="Paste or upload an OpenSSH private key."
-            onClose={handleCloseEsxiKeyDrawer}
-          />
-        }
-        footer={
-          <DrawerFooter>
-            <ActionButton
-              tone="secondary"
-              onClick={handleCloseEsxiKeyDrawer}
-              disabled={isSavingEsxiKey}
-            >
-              Cancel
-            </ActionButton>
-            <ActionButton
-              tone="primary"
-              type="submit"
-              form="esxi-ssh-key-form"
-              loading={isSavingEsxiKey}
-            >
-              Save
-            </ActionButton>
-          </DrawerFooter>
-        }
-        data-testid="esxi-ssh-key-drawer"
-      >
-        <DesignSystemForm
-          id="esxi-ssh-key-form"
-          form={esxiKeyForm}
-          onSubmit={onSubmitEsxiKey}
-          keyboardSubmitProps={{
-            open: esxiKeyDrawerOpen,
-            onClose: handleCloseEsxiKeyDrawer,
-            isSubmitDisabled: isSavingEsxiKey
-          }}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          {esxiKeyError && (
-            <Alert severity="error" sx={{ mb: 1 }} onClose={() => setEsxiKeyError(null)}>
-              {esxiKeyError}
-            </Alert>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <ActionButton tone="secondary" component="label" disabled={isSavingEsxiKey}>
-              Upload key file
-              <input
-                type="file"
-                hidden
-                onChange={(e) => handleEsxiKeyFileChange(e.target.files?.[0] ?? null)}
-              />
-            </ActionButton>
-            <Typography variant="body2" color="text.secondary">
-              Only the key content will be stored (do not include a field name).
-            </Typography>
-          </Box>
-
-          <RHFTextField
-            name="sshPrivateKey"
-            label="SSH Private Key"
-            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
-            multiline
-            minRows={12}
-            disabled={isSavingEsxiKey}
-            rules={{
-              validate: (val: string) => validateOpenSshPrivateKey(val) || true
-            }}
-            onValueChange={() => setEsxiKeyError(null)}
-          />
-        </DesignSystemForm>
-      </DrawerShell>
-
-      <Snackbar
-        open={esxiKeyToastOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseEsxiKeyToast}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={handleCloseEsxiKeyToast}
-          severity={esxiKeyToastSeverity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {esxiKeyToastMessage}
-        </Alert>
-      </Snackbar>
     </div>
   )
 }

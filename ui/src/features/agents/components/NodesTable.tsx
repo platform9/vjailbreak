@@ -1,17 +1,11 @@
-import {
-  DataGrid,
-  GridColDef,
-  GridToolbarContainer,
-  GridRowParams,
-  GridRowSelectionModel
-} from '@mui/x-data-grid'
+import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip, Alert, Snackbar } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import WarningIcon from '@mui/icons-material/Warning'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import AgentsIcon from '@mui/icons-material/Computer'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { useState } from 'react'
 import ScaleUpDrawer from './ScaleUpDrawer'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -136,7 +130,7 @@ const columns: GridColDef[] = [
       const hasMigrations = params.row.activeMigrations.length > 0
       const isMaster = params.row.role === 'master'
       const isDisabled = isMaster || isDeleting || (hasMigrations && !isErrorState)
-      
+
       const getTooltip = () => {
         if (isMaster) return 'Master node cannot be scaled down'
         if (isDeleting) return 'Node is being deleted'
@@ -208,54 +202,46 @@ const NodesToolbar = ({
     return ''
   }
 
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <AgentsIcon />
-        <Typography variant="h6" component="h2">
-          Agents
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        <Tooltip title={loading ? 'Operation in progress' : ''}>
-          <span>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={onScaleUp}
-              disabled={loading}
-              sx={{ height: 40 }}
-            >
-              Scale Up
-            </Button>
-          </span>
-        </Tooltip>
-        <Tooltip title={getScaleDownTooltip()}>
-          <span>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<RemoveIcon />}
-              onClick={onScaleDown}
-              disabled={disableScaleDown || loading}
-              sx={{ height: 40 }}
-            >
-              Scale Down {selectedCount > 0 && `(${selectedCount})`}
-            </Button>
-          </span>
-        </Tooltip>
-        <CustomSearchToolbar placeholder="Search by Name, Status, or IP" onRefresh={onRefresh} />
-      </Box>
-    </GridToolbarContainer>
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      <CustomSearchToolbar placeholder="Search by Name, Status, or IP" onRefresh={onRefresh} />
+    </Box>
   )
+
+  const actions = (
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      <Tooltip title={loading ? 'Operation in progress' : ''}>
+        <span>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={onScaleUp}
+            disabled={loading}
+            sx={{ height: 40 }}
+          >
+            Scale Up
+          </Button>
+        </span>
+      </Tooltip>
+      <Tooltip title={getScaleDownTooltip()}>
+        <span>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<RemoveIcon />}
+            onClick={onScaleDown}
+            disabled={disableScaleDown || loading}
+            sx={{ height: 40 }}
+          >
+            Scale Down {selectedCount > 0 && `(${selectedCount})`}
+          </Button>
+        </span>
+      </Tooltip>
+    </Box>
+  )
+
+  return <ListingToolbar title="Agents" icon={<AgentsIcon />} search={search} actions={actions} />
 }
 
 export default function NodesTable() {
@@ -355,7 +341,9 @@ export default function NodesTable() {
     const isDeleting = params.row.phase === 'Deleting'
     // Don't allow selection of nodes being deleted
     if (isDeleting) return false
-    return params.row.role === 'worker' && (params.row.activeMigrations.length === 0 || isErrorState)
+    return (
+      params.row.role === 'worker' && (params.row.activeMigrations.length === 0 || isErrorState)
+    )
   }
 
   return (
@@ -411,34 +399,34 @@ export default function NodesTable() {
         }}
         title="Confirm Scale Down"
         icon={<WarningIcon color="warning" />}
-        message={
-          (() => {
-            const selectedNodesData = transformedNodes.filter((node) => selectedNodes.includes(node.name))
-            const hasErrorNodes = selectedNodesData.some((node) => node.phase === 'Error')
-            
-            if (hasErrorNodes) {
-              return (
-                <Box>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedNodes.length > 1
-                      ? 'Are you sure you want to delete these nodes?'
-                      : 'Are you sure you want to delete this node?'}
+        message={(() => {
+          const selectedNodesData = transformedNodes.filter((node) =>
+            selectedNodes.includes(node.name)
+          )
+          const hasErrorNodes = selectedNodesData.some((node) => node.phase === 'Error')
+
+          if (hasErrorNodes) {
+            return (
+              <Box>
+                <Typography variant="body1" gutterBottom>
+                  {selectedNodes.length > 1
+                    ? 'Are you sure you want to delete these nodes?'
+                    : 'Are you sure you want to delete this node?'}
+                </Typography>
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Warning:</strong> One or more nodes are in an error state. The system
+                    will attempt to clean up resources, but some manual cleanup may be required.
                   </Typography>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    <Typography variant="body2">
-                      <strong>Warning:</strong> One or more nodes are in an error state. 
-                      The system will attempt to clean up resources, but some manual cleanup may be required.
-                    </Typography>
-                  </Alert>
-                </Box>
-              )
-            }
-            
-            return selectedNodes.length > 1
-              ? 'Are you sure you want to scale down these nodes?'
-              : 'Are you sure you want to scale down this node?'
-          })()
-        }
+                </Alert>
+              </Box>
+            )
+          }
+
+          return selectedNodes.length > 1
+            ? 'Are you sure you want to scale down these nodes?'
+            : 'Are you sure you want to scale down this node?'
+        })()}
         items={transformedNodes
           .filter((node) => selectedNodes.includes(node.name))
           .map((node) => ({

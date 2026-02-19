@@ -134,7 +134,11 @@ export default function MigrationOptions({
                   <Checkbox
                     checked={selectedMigrationOptions.dataCopyMethod}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('dataCopyMethod')(isChecked)
+                      if (!isChecked) {
+                        onChange('dataCopyMethod')('cold')
+                      }
                     }}
                   />
                 }
@@ -164,7 +168,11 @@ export default function MigrationOptions({
                   <Checkbox
                     checked={selectedMigrationOptions?.dataCopyStartTime}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('dataCopyStartTime')(isChecked)
+                      if (!isChecked) {
+                        onChange('dataCopyStartTime')('')
+                      }
                     }}
                   />
                 }
@@ -192,7 +200,13 @@ export default function MigrationOptions({
                     checked={selectedMigrationOptions.cutoverOption}
                     disabled={isPowerOffThenCopy}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('cutoverOption')(isChecked)
+                      if (!isChecked) {
+                        onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
+                        onChange('cutoverStartTime')('')
+                        onChange('cutoverEndTime')('')
+                      }
                     }}
                   />
                 }
@@ -258,7 +272,11 @@ export default function MigrationOptions({
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationScript')(isChecked)
+                      if (!isChecked) {
+                        onChange('postMigrationScript')('')
+                      }
                     }}
                   />
                 }
@@ -312,8 +330,8 @@ const TimePicker = ({
     (newValue: dayjs.Dayjs | null, identifier) => {
       // Use format() with timezone offset instead of toISOString() which converts to UTC
       // This preserves the user's local timezone (e.g., "2025-11-20T12:40:00+05:30" for IST)
-      const formattedTime = newValue?.format()
-      onChange(identifier)(String(formattedTime))
+      const formattedTime = newValue?.format() ?? ''
+      onChange(identifier)(formattedTime)
     },
     [onChange]
   )
