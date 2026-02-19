@@ -569,6 +569,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	if len(vmsToValidate) > 0 {
 		// Validate VM OS types before proceeding with migration
 		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+		
+		// Additionally check for mixed OS types with firstboot scripts
+		if validationErr == nil && len(validVMs) > 0 {
+			if mixedOSErr := utils.ValidateMixedOSWithFirstboot(migrationplan, validVMs); mixedOSErr != nil {
+				validationErr = mixedOSErr
+			}
+		}
 	}
 
 	if validationErr != nil {

@@ -41,7 +41,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:-bd4bfed1
+        image: quay.io/platform9/vjailbreak-controller:origin/1410-vmware-tool-removal-script-d4c0b1af
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
