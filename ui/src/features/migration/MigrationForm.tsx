@@ -683,14 +683,18 @@ export default function MigrationFormDrawer({
       ? params.postMigrationAction
       : undefined
 
-    const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
+    // Use vmWareMachineName (K8s resource name) for unique identification of VMs
+    // This is required for duplicate VM names where the K8s resource name includes VMID suffix
+    const vmsToMigrate = (params.vms || []).map((vm) => vm.vmWareMachineName || vm.name)
 
     // Build AssignedIPsPerVM map for cold migration
+    // Use vmWareMachineName as key for unique identification
     const assignedIPsPerVM: Record<string, string> = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
         if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
-          assignedIPsPerVM[vm.name] = vm.assignedIPs
+          const vmKey = vm.vmWareMachineName || vm.name
+          assignedIPsPerVM[vmKey] = vm.assignedIPs
         }
       })
     }

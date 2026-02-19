@@ -1208,25 +1208,27 @@ function VmsSelectionStep({
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
     > = {}
 
-    Array.from(selectedVMs).forEach((vmName) => {
-      const vm = vmsWithFlavor.find((v) => v.name === vmName)
+    Array.from(selectedVMs).forEach((vmId) => {
+      // Look up VM by id (vmid/MOID) for unique identification
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (!vm) {
         return
       }
 
-      initialBulkEditIPs[vmName] = {}
-      initialValidationStatus[vmName] = {}
+      // Use vm.id as the key for unique identification
+      initialBulkEditIPs[vmId] = {}
+      initialValidationStatus[vmId] = {}
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         // Multiple network interfaces
         vm.networkInterfaces.forEach((nic, index) => {
-          initialBulkEditIPs[vmName][index] = nic.ipAddress || ''
-          initialValidationStatus[vmName][index] = nic.ipAddress ? 'valid' : 'empty'
+          initialBulkEditIPs[vmId][index] = nic.ipAddress || ''
+          initialValidationStatus[vmId][index] = nic.ipAddress ? 'valid' : 'empty'
         })
       } else {
         // Single interface (treat as interface 0)
-        initialBulkEditIPs[vmName][0] = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-        initialValidationStatus[vmName][0] =
+        initialBulkEditIPs[vmId][0] = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        initialValidationStatus[vmId][0] =
           vm.ipAddress && vm.ipAddress !== '—' ? 'valid' : 'empty'
       }
     })
@@ -1710,13 +1712,13 @@ function VmsSelectionStep({
                 gap: 2
               }}
             >
-              {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
-                const vm = vmsWithFlavor.find((v) => v.name === vmName)
+              {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
+                const vm = vmsWithFlavor.find((v) => v.id === vmId)
                 if (!vm) return null
 
                 return (
                   <Box
-                    key={vmName}
+                    key={vmId}
                     sx={{
                       p: 2,
                       border: '1px solid',
@@ -1734,8 +1736,8 @@ function VmsSelectionStep({
                     {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
                       const interfaceIndex = parseInt(interfaceIndexStr)
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
-                      const status = bulkValidationStatus[vmName]?.[interfaceIndex]
-                      const message = bulkValidationMessages[vmName]?.[interfaceIndex]
+                      const status = bulkValidationStatus[vmId]?.[interfaceIndex]
+                      const message = bulkValidationMessages[vmId]?.[interfaceIndex]
                       return (
                         <Box
                           key={interfaceIndex}
@@ -1760,7 +1762,7 @@ function VmsSelectionStep({
                           <SharedTextField
                             value={ip}
                             onChange={(e) =>
-                              handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                              handleBulkIpChange(vmId, interfaceIndex, e.target.value)
                             }
                             placeholder="Enter IP address"
                             size="small"
