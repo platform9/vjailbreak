@@ -320,6 +320,11 @@ function VmsSelectionStep({
       Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
     )
   }, [bulkEditIPs])
+  const hasBulkOverrideChanges = React.useMemo(() => {
+    return Object.values(bulkEditOverrides).some((interfaces) =>
+      Object.values(interfaces).some((o) => o.preserveIP === false || o.preserveMAC === false)
+    )
+  }, [bulkEditOverrides])
 
   const clusterName = React.useMemo(() => {
     if (!vmwareCluster) return undefined
@@ -990,12 +995,7 @@ function VmsSelectionStep({
       })
     })
 
-    // Check if there are any override changes (preserve toggles)
-    const hasOverrideChanges = Object.values(bulkEditOverrides).some((interfaces) =>
-      Object.values(interfaces).some((o) => o.preserveIP === false || o.preserveMAC === false)
-    )
-
-    if (ipsToApply.length === 0 && !hasOverrideChanges) return
+    if (ipsToApply.length === 0 && !hasBulkOverrideChanges) return
     if (hasBulkIpValidationErrors) {
       showToast('Resolve invalid IP addresses before applying changes.', 'error')
       return
@@ -1024,7 +1024,7 @@ function VmsSelectionStep({
 
     try {
       // If only override changes (no IPs to validate), apply directly
-      if (ipsToApply.length === 0 && hasOverrideChanges) {
+      if (ipsToApply.length === 0 && hasBulkOverrideChanges) {
         const updatedVms = vmsWithFlavor.map((vm) => {
           const vmOverrides = bulkEditOverrides[vm.name]
           if (!vmOverrides) return vm
@@ -1820,27 +1820,6 @@ function VmsSelectionStep({
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  size="small"
-                                  checked={overrides.preserveIP}
-                                  onChange={(e) =>
-                                    setBulkEditOverrides((prev) => ({
-                                      ...prev,
-                                      [vmName]: {
-                                        ...prev[vmName],
-                                        [interfaceIndex]: {
-                                          ...prev[vmName]?.[interfaceIndex],
-                                          preserveIP: e.target.checked
-                                        }
-                                      }
-                                    }))
-                                  }
-                                />
-                              }
-                              label="Preserve IP"
-                            />
                             {overrides.preserveIP ? (
                               <SharedTextField
                                 value={ip}
@@ -1862,6 +1841,27 @@ function VmsSelectionStep({
                                 New IP will be assigned from destination subnet
                               </Typography>
                             )}
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  size="small"
+                                  checked={overrides.preserveIP}
+                                  onChange={(e) =>
+                                    setBulkEditOverrides((prev) => ({
+                                      ...prev,
+                                      [vmName]: {
+                                        ...prev[vmName],
+                                        [interfaceIndex]: {
+                                          ...prev[vmName]?.[interfaceIndex],
+                                          preserveIP: e.target.checked
+                                        }
+                                      }
+                                    }))
+                                  }
+                                />
+                              }
+                              label="Preserve IP"
+                            />
                             <FormControlLabel
                               control={
                                 <Checkbox
@@ -1911,7 +1911,7 @@ function VmsSelectionStep({
           <ActionButton
             tone="primary"
             onClick={handleApplyBulkIPs}
-            disabled={!hasBulkIpsToApply || assigningIPs || hasBulkIpValidationErrors}
+            disabled={(!hasBulkIpsToApply && !hasBulkOverrideChanges) || assigningIPs || hasBulkIpValidationErrors}
             loading={assigningIPs}
           >
             Apply Changes
