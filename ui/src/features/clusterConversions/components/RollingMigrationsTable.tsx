@@ -15,6 +15,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ClusterIcon from '@mui/icons-material/Hub'
+import AddIcon from '@mui/icons-material/Add'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { QueryObserverResult } from '@tanstack/react-query'
 import { RefetchOptions } from '@tanstack/react-query'
@@ -363,7 +364,7 @@ const CustomToolbar = ({
     <Button
       variant="contained"
       color="primary"
-      startIcon={<ClusterIcon />}
+      startIcon={<AddIcon />}
       onClick={onStartConversion}
       sx={{ height: 40 }}
     >

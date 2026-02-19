@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/platform9/vjailbreak-controller
-  newTag: main-22a9dbd3
+  newTag: 1410-vmware-tool-removal-script-9b6e08a2
