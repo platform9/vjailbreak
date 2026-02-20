@@ -84,6 +84,8 @@ export interface VmNetworkInterface {
   mac: string
   network: string
   ipAddress: string
+  preserveIP?: boolean
+  preserveMAC?: boolean
 }
 
 export interface GetMigrationTemplatesMetadata {
