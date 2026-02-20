@@ -1018,26 +1018,41 @@ export default function RollingMigrationFormDrawer({
   // Update ESXi host config names when OpenStack host configs become available
   useEffect(() => {
     const pcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
-    if (pcdHostConfigs.length > 0 && orderedESXHosts.length > 0) {
-      const updatedHosts = orderedESXHosts.map((host) => {
-        if (host.pcdHostConfigId) {
-          const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
-          if (configObj && host.pcdHostConfigName !== configObj.name) {
-            return { ...host, pcdHostConfigName: configObj.name }
-          }
+    if (pcdHostConfigs.length === 0) return
+
+    if (orderedESXHosts.length === 0) return
+
+    const needsUpdate = orderedESXHosts.some((host) => {
+      if (!host.pcdHostConfigId) return false
+      const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
+      if (!configObj) return false
+      return host.pcdHostConfigName !== configObj.name
+    })
+
+    if (!needsUpdate) return
+
+    setOrderedESXHosts((prevHosts) => {
+      if (prevHosts.length === 0) return prevHosts
+
+      const updatedHosts = prevHosts.map((host) => {
+        if (!host.pcdHostConfigId) return host
+
+        const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
+        if (!configObj) return host
+
+        if (host.pcdHostConfigName !== configObj.name) {
+          return { ...host, pcdHostConfigName: configObj.name }
         }
+
         return host
       })
 
-      // Only update if there are actual changes
       const hasChanges = updatedHosts.some(
-        (host, index) => host.pcdHostConfigName !== orderedESXHosts[index]?.pcdHostConfigName
+        (host, index) => host.pcdHostConfigName !== prevHosts[index]?.pcdHostConfigName
       )
 
-      if (hasChanges) {
-        setOrderedESXHosts(updatedHosts)
-      }
-    }
+      return hasChanges ? updatedHosts : prevHosts
+    })
   }, [openstackCredData, orderedESXHosts])
 
   const handleMappingsChange = (key: string) => (value: unknown) => {
