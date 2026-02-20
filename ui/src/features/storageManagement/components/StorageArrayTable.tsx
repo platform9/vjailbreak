@@ -14,9 +14,12 @@ import {
 } from 'src/hooks/api/useArrayCredentialsQuery'
 import { ArrayCreds, ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { ConfirmationDialog } from 'src/components/dialogs'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { getSecret } from 'src/api/secrets/secrets'
+import { useNavigate } from 'react-router-dom'
+import { Banner } from 'src/components/design-system'
 import AddArrayCredentialsDrawer from './AddArrayCredentialsDrawer'
 import EditArrayCredentialsDrawer from './EditArrayCredentialsDrawer'
 
@@ -211,6 +214,26 @@ const CustomToolbar = ({
 export default function StorageArrayTable() {
   const { reportError } = useErrorHandler({ component: 'StorageArrayTable' })
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  const SECRET_NAMESPACE = 'migration-system'
+  const ESXI_SSH_KEY_SECRET_NAME = 'esxi-ssh-key'
+
+  const { data: esxiSshKeySecret, isLoading: isEsxiSshKeyLoading } = useQuery({
+    queryKey: ['secret', SECRET_NAMESPACE, ESXI_SSH_KEY_SECRET_NAME],
+    queryFn: async () => {
+      try {
+        return await getSecret(ESXI_SSH_KEY_SECRET_NAME, SECRET_NAMESPACE)
+      } catch (error: any) {
+        if (error?.response?.status === 404) {
+          return null
+        }
+        reportError(error as Error, { context: 'get-esxi-ssh-key-secret' })
+        throw error
+      }
+    },
+    retry: false
+  })
 
   const {
     data: arrayCredentials,
@@ -354,6 +377,20 @@ export default function StorageArrayTable() {
 
   return (
     <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+      {!isEsxiSshKeyLoading && !esxiSshKeySecret && (
+        <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
+          <Banner
+            variant="warning"
+            title="Warning"
+            message={
+              'ESXi SSH key is not configured. Configure an SSH private key to validate ESXi host connectivity.'
+            }
+            actionLabel="Configure Now"
+            onAction={() => navigate('/dashboard/esxi-ssh-keys')}
+          />
+        </Box>
+      )}
+
       <CommonDataGrid
         rows={rows}
         columns={tableColumns}
@@ -382,7 +419,7 @@ export default function StorageArrayTable() {
           )
         }}
         pageSizeOptions={[10, 25, 50, 100]}
-        loading={isLoading || deleting}
+        loading={isLoading || deleting || isEsxiSshKeyLoading}
         emptyMessage="No storage array credentials available"
         sx={{
           '& .MuiDataGrid-cell:focus': {

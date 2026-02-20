@@ -1,15 +1,5 @@
 import { GridColDef } from '@mui/x-data-grid'
-import {
-  Box,
-  Button,
-  Chip,
-  FormControl,
-  MenuItem,
-  Select,
-  SelectChangeEvent,
-  Tooltip,
-  Typography
-} from '@mui/material'
+import { Box, Button, Chip, Tooltip, Typography } from '@mui/material'
 import KeyIcon from '@mui/icons-material/Key'
 import ComputerIcon from '@mui/icons-material/Computer'
 import { useCallback, useMemo, useState } from 'react'
@@ -126,7 +116,7 @@ export default function EsxiSshKeysPage() {
     | { open: false }
     | { open: true; mode: 'add' | 'edit'; initialValues?: { name: string; sshPrivateKey: string } }
   >({ open: false })
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('All')
 
   const SECRET_NAMESPACE = 'migration-system'
   const ESXI_SSH_KEY_SECRET_NAME = 'esxi-ssh-key'
@@ -188,8 +178,20 @@ export default function EsxiSshKeysPage() {
   }, [vmwareHosts])
 
   const filteredRows = useMemo(() => {
-    if (statusFilter === 'all') return rows
-    return rows.filter((row) => row.sshStatus.toLowerCase() === statusFilter.toLowerCase())
+    switch (statusFilter) {
+      case 'Succeeded':
+        return rows.filter((row) => row.sshStatus.toLowerCase() === 'succeeded')
+      case 'Failed':
+        return rows.filter((row) => row.sshStatus.toLowerCase() === 'failed')
+      case 'In Progress':
+        return rows.filter((row) => {
+          const normalized = row.sshStatus.toLowerCase()
+          return normalized === 'pending' || normalized === 'validating'
+        })
+      case 'All':
+      default:
+        return rows
+    }
   }, [rows, statusFilter])
 
   const handleRefresh = useCallback(() => {
@@ -213,22 +215,12 @@ export default function EsxiSshKeysPage() {
 
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-      <FormControl size="small" sx={{ minWidth: 150 }}>
-        <Select
-          labelId="status-filter-label"
-          value={statusFilter}
-          onChange={(e: SelectChangeEvent) => setStatusFilter(e.target.value)}
-        >
-          <MenuItem value="all">All</MenuItem>
-          <MenuItem value="succeeded">Succeeded</MenuItem>
-          <MenuItem value="failed">Failed</MenuItem>
-          <MenuItem value="pending">Pending</MenuItem>
-        </Select>
-      </FormControl>
       <CustomSearchToolbar
         placeholder="Search by hostname or cluster"
         onRefresh={handleRefresh}
         disableRefresh={isLoading}
+        onStatusFilterChange={setStatusFilter}
+        currentStatusFilter={statusFilter}
       />
     </Box>
   )
