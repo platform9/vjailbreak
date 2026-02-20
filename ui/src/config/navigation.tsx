@@ -50,7 +50,12 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'array-credentials',
         label: 'Storage Array',
-        path: '/dashboard/storage-management'
+        path: '/dashboard/storage-management',
+        badge: {
+          label: 'Beta',
+          color: 'warning',
+          variant: 'outlined'
+        }
       },
       {
         id: 'esxi-ssh-keys',
