@@ -36,6 +36,9 @@ const (
 	// ArrayCredsControllerName is the name of the storage array credentials controller
 	ArrayCredsControllerName = "arraycreds-controller" //nolint:gosec // not a password string
 
+	// ESXiSSHCredsControllerName is the name of the ESXi SSH credentials controller
+	ESXiSSHCredsControllerName = "esxisshcreds-controller" //nolint:gosec // not a password string
+
 	// MigrationControllerName is the name of the migration controller
 	MigrationControllerName = "migration-controller"
 
@@ -87,6 +90,9 @@ const (
 	// RollingMigrationPlanLabel is the label for rolling migration plan
 	RollingMigrationPlanLabel = "vjailbreak.k8s.pf9.io/rollingmigrationplan"
 
+	// PostMigrationCompleteAnnotation is the annotation for tracking post-migration completion
+	PostMigrationCompleteAnnotation = "vjailbreak.k8s.pf9.io/post-migration-complete"
+
 	// PauseMigrationLabel is the label for pausing rolling migration plan
 	PauseMigrationLabel = "vjailbreak.k8s.pf9.io/pause"
 
@@ -125,6 +131,19 @@ const (
 
 	// ArrayCredsFinalizer is the finalizer for storage array credentials
 	ArrayCredsFinalizer = "arraycreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ESXiSSHCredsFinalizer is the finalizer for ESXi SSH credentials
+	ESXiSSHCredsFinalizer = "esxisshcreds.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// ESXiSSHCreds validation statuses
+	ESXiSSHCredsStatusPending            = "Pending"
+	ESXiSSHCredsStatusValidating         = "Validating"
+	ESXiSSHCredsStatusSucceeded          = "Succeeded"
+	ESXiSSHCredsStatusPartiallySucceeded = "PartiallySucceeded"
+	ESXiSSHCredsStatusFailed             = "Failed"
+
+	// ESXiSSHValidationConcurrency is the number of concurrent ESXi SSH validations
+	ESXiSSHValidationConcurrency = 10
 
 	// ArrayCreds phases
 	ArrayCredsPhaseDiscovered = "Discovered"
@@ -265,6 +284,9 @@ const (
 	AutoPXEBootOnConversionDefault = false
 	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion
 	AutoPXEBootOnConversionKey = "AUTO_PXE_BOOT_ON_CONVERSION"
+
+	// AnnotationValueTrue is the string value "true" used for annotations
+	AnnotationValueTrue = "true"
 )
 
 // CloudInitScript contains the cloud-init script for VM initialization

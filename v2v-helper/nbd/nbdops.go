@@ -190,7 +190,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 			msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", diskindex, progressInt)
 
-			if progressInt == 0 || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
+			if (progressInt == 0 && lastLoggedProgress != 0) || progressInt == 100 || (progressInt > lastLoggedProgress && progressInt%logInterval == 0) {
 				utils.PrintLog(msg)
 				lastLoggedProgress = progressInt
 			}
@@ -438,7 +438,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 			prog := fmt.Sprintf("Progress: %d%%", currentPct)
 
-			if currentPct == 0 || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
+			if (currentPct == 0 && lastLoggedPct != 0) || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
 				utils.PrintLog(prog)
 				lastLoggedPct = currentPct
 			}
