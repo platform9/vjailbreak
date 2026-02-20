@@ -1128,8 +1128,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 									{
 										Name:      "firstboot",
-										MountPath: "/home/fedora/store/user_firstboot.ps1",
-										SubPath:   "user_firstboot.ps1",
+										MountPath: "/home/fedora/store",
 									},
 									{
 										Name:      "logs",
