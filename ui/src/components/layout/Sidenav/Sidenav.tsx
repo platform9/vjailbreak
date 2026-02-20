@@ -270,10 +270,9 @@ export default function Sidenav({
                     }}
                   >
                     <List disablePadding>
-                      {visibleChildren.map((child, idx) => {
+                      {visibleChildren.map((child) => {
                         const isSelected = currentActiveItem === child.path
-                        const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
-                        const lineColor = isActiveBranch
+                        const lineColor = isSelected
                           ? SUBMENU_CONNECTOR_BLUE
                           : SUBMENU_CONNECTOR_GREY
 
@@ -285,7 +284,7 @@ export default function Sidenav({
                                 left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
                                 top: '50%',
                                 transform: 'translateY(-65%)',
-                                visibility: isSelected ? 'visible' : 'hidden'
+                                visibility: 'visible'
                               }}
                             >
                               <SubmenuConnectorIcon color={lineColor} />

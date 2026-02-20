@@ -23,6 +23,8 @@ export interface VMwareHost {
     sshMessage?: string
     sshLastChecked?: string
     esxiVersion?: string
+    vmCount?: number
+    state?: string
   }
 }
 

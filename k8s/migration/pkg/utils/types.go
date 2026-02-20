@@ -48,6 +48,12 @@ type VMwareHostInfo struct {
 	Name string
 	// HardwareUUID is the unique identifier of the host
 	HardwareUUID string
+	// VMCount is the number of VMs on the host
+	VMCount int
+	// State is the connection state of the host
+	State string
+	// HostConfig is the host config assigned to the host
+	HostConfig string
 }
 
 // VMwareClusterInfo represents a cluster in a VMware environment.

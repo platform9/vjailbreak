@@ -49,7 +49,7 @@ const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
   height: '100%',
   minHeight: 0,
-  padding: theme.spacing(4),
+  padding: theme.spacing(2),
   boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column'

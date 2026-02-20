@@ -56,6 +56,12 @@ spec:
               name:
                 description: Name of the host
                 type: string
+              state:
+                description: State is the connection state of the host
+                type: string
+              vmCount:
+                description: VMCount is the number of VMs on the host
+                type: integer
             type: object
           status:
             description: VMwareHostStatus defines the observed state of VMwareHost
