@@ -1060,14 +1060,17 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "Firstboot-Scheduler.ps1",
 		})
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "user_firstboot.ps1",
-		})
 		if persisNetwork {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "Orchestrate-NICRecovery.ps1",
 			})
 		}
+		if err := virtv2v.PushWindowsFirstBoot(); err != nil {
+			return err
+		}
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "user_firstboot.ps1",
+		})
 	}
 
 	// Add first boot scripts for RHEL family
