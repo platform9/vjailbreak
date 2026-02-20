@@ -90,6 +90,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') - Network fix script completed" >> "$LOG_FILE
 	EventMessageWaitingForDataCopyStart           = "Waiting for data copy start time"
 	EventMessageDataCopyStart                     = "Data copy start time reached"
 	EventMessageWaitingForAdminCutOver            = "Waiting for Admin Cutover conditions to be met"
+	EventMessagePeriodicSyncWarning               = "Periodic Sync: In WARNING state - manual intervention required"
 	EventMessageMigrationSucessful                = "VM created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
 	EventMessageCopyingDisk                       = "Copying disk"

@@ -205,6 +205,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
 
+	// Extract sync warning state from events
+	r.ExtractSyncWarning(migration, filteredEvents)
+
 	if migration.Status.TotalDisks == 0 {
 		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
 			if n, err := strconv.Atoi(v); err == nil {
@@ -561,6 +564,53 @@ func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.M
 	for _, condition := range migration.Status.Conditions {
 		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
 			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+}
+
+// ExtractSyncWarning extracts the periodic sync warning state from pod events
+// It looks for "WARNING" messages which indicate the sync failed but will auto-retry
+func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	// Look for the most recent warning or resolution
+
+	for i := range events.Items {
+		msg := events.Items[i].Message
+
+		// Check if sync completed successfully (warning resolved)
+		if strings.Contains(msg, "Sync cycle completed successfully") {
+			migration.Status.SyncWarningMessage = ""
+			return
+		}
+
+		// Check if sync warning is active - two possible formats:
+		// 1. Direct warning: "Periodic Sync: WARNING - <message>"
+		// 2. State info with warning: "Periodic Sync: Waiting ... (state: Idle (WARNING: <message>))"
+		if strings.Contains(msg, "Periodic Sync: WARNING -") {
+			// Extract the warning message after "WARNING - "
+			if idx := strings.Index(msg, "WARNING - "); idx != -1 {
+				migration.Status.SyncWarningMessage = strings.TrimSpace(msg[idx+len("WARNING - "):])
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
+			return
+		}
+
+		// Check for warning embedded in state info
+		if strings.Contains(msg, "Periodic Sync:") && strings.Contains(msg, "(WARNING:") {
+			// Extract the warning message between "(WARNING: " and the closing ")"
+			if idx := strings.Index(msg, "(WARNING: "); idx != -1 {
+				warningStart := idx + len("(WARNING: ")
+				// Find the closing parenthesis, accounting for nested parens
+				remaining := msg[warningStart:]
+				// Remove trailing "))" if present (one for WARNING, one for state)
+				remaining = strings.TrimSuffix(remaining, "))")
+				remaining = strings.TrimSuffix(remaining, ")")
+				migration.Status.SyncWarningMessage = strings.TrimSpace(remaining)
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
 			return
 		}
 	}
