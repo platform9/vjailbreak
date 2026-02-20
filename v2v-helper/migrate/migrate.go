@@ -123,8 +123,7 @@ func (s PeriodicSyncStates) String() string {
 type PeriodicSyncContext struct {
 	CurrentState   PeriodicSyncStates
 	LastError      error
-	SyncWarning    bool   // Indicates if sync is in warning state (failed but will retry)
-	WarningMessage string // Actionable message when in warning state
+	WarningMessage string // Non-empty indicates sync is in warning state (failed but will retry)
 }
 
 // disconnects the source VM's network interfaces
@@ -530,7 +529,7 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 
 			waitTime := syncInterval - elapsed
 			stateInfo := syncCtx.CurrentState.String()
-			if syncCtx.SyncWarning {
+			if syncCtx.WarningMessage != "" {
 				stateInfo = fmt.Sprintf("%s (WARNING: %s)", stateInfo, syncCtx.WarningMessage)
 			}
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle (state: %s)", waitTime, stateInfo))
@@ -560,7 +559,6 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			}, maxRetries, capInterval)
 			if err != nil {
 				syncCtx.LastError = err
-				syncCtx.SyncWarning = true
 				syncCtx.WarningMessage = fmt.Sprintf("Snapshot cleanup failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
 				syncCtx.CurrentState = StateIdle
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
@@ -575,7 +573,6 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			}, maxRetries, capInterval)
 			if err != nil {
 				syncCtx.LastError = err
-				syncCtx.SyncWarning = true
 				syncCtx.WarningMessage = fmt.Sprintf("Snapshot creation '%s' failed after %d retries: %v. Will retry on next sync interval.", constants.MigrationSnapshotName, maxRetries, err)
 				syncCtx.CurrentState = StateIdle
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
@@ -590,7 +587,6 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			}, maxRetries, capInterval)
 			if err != nil {
 				syncCtx.LastError = err
-				syncCtx.SyncWarning = true
 				syncCtx.WarningMessage = fmt.Sprintf("CBT sync failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
 				syncCtx.CurrentState = StateIdle
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
@@ -600,7 +596,6 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 
 			// Sync completed successfully - clear warning state
 			syncCtx.CurrentState = StateIdle
-			syncCtx.SyncWarning = false
 			syncCtx.WarningMessage = ""
 			syncCtx.LastError = nil
 			migobj.logMessage("Periodic Sync: Sync cycle completed successfully")

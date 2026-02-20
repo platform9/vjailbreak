@@ -580,7 +580,6 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 
 		// Check if sync completed successfully (warning resolved)
 		if strings.Contains(msg, "Sync cycle completed successfully") {
-			migration.Status.SyncWarning = false
 			migration.Status.SyncWarningMessage = ""
 			return
 		}
@@ -589,7 +588,6 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 		// 1. Direct warning: "Periodic Sync: WARNING - <message>"
 		// 2. State info with warning: "Periodic Sync: Waiting ... (state: Idle (WARNING: <message>))"
 		if strings.Contains(msg, "Periodic Sync: WARNING -") {
-			migration.Status.SyncWarning = true
 			// Extract the warning message after "WARNING - "
 			if idx := strings.Index(msg, "WARNING - "); idx != -1 {
 				migration.Status.SyncWarningMessage = strings.TrimSpace(msg[idx+len("WARNING - "):])
@@ -601,7 +599,6 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 
 		// Check for warning embedded in state info
 		if strings.Contains(msg, "Periodic Sync:") && strings.Contains(msg, "(WARNING:") {
-			migration.Status.SyncWarning = true
 			// Extract the warning message between "(WARNING: " and the closing ")"
 			if idx := strings.Index(msg, "(WARNING: "); idx != -1 {
 				warningStart := idx + len("(WARNING: ")

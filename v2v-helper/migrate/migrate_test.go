@@ -49,34 +49,29 @@ func TestPeriodicSyncContext(t *testing.T) {
 	ctx := &PeriodicSyncContext{
 		CurrentState:   StateIdle,
 		LastError:      nil,
-		SyncWarning:    false,
 		WarningMessage: "",
 	}
 
 	// Test initial state
 	assert.Equal(t, StateIdle, ctx.CurrentState)
-	assert.False(t, ctx.SyncWarning)
 	assert.Nil(t, ctx.LastError)
 	assert.Empty(t, ctx.WarningMessage)
 
 	// Test transition to warning state (sync failed but will auto-retry)
 	testErr := errors.New("test error")
-	ctx.SyncWarning = true
 	ctx.LastError = testErr
 	ctx.WarningMessage = "Snapshot cleanup failed. Will retry on next sync interval."
 
-	assert.True(t, ctx.SyncWarning)
+	assert.NotEmpty(t, ctx.WarningMessage) // Non-empty WarningMessage indicates warning state
 	assert.Equal(t, testErr, ctx.LastError)
 	assert.Equal(t, "Snapshot cleanup failed. Will retry on next sync interval.", ctx.WarningMessage)
 
 	// Test recovery from warning state (sync succeeded)
-	ctx.SyncWarning = false
 	ctx.LastError = nil
 	ctx.WarningMessage = ""
 
-	assert.False(t, ctx.SyncWarning)
+	assert.Empty(t, ctx.WarningMessage) // Empty WarningMessage indicates no warning
 	assert.Nil(t, ctx.LastError)
-	assert.Empty(t, ctx.WarningMessage)
 }
 
 func TestCreateVolumes(t *testing.T) {

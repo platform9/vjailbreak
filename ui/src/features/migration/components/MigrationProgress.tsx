@@ -20,13 +20,13 @@ const ProgressContainer = styled(Box)({
 interface MigrationProgressProps {
   phase: Phase
   progressText: string
-  syncWarning?: boolean
+  syncWarningMessage?: string
 }
 
-export default function MigrationProgress({ progressText, phase, syncWarning }: MigrationProgressProps) {
+export default function MigrationProgress({ progressText, phase, syncWarningMessage }: MigrationProgressProps) {
   const statusIcon = useMemo(() => {
-    // Show warning icon if sync is in warning state
-    if (syncWarning) {
+    // Show warning icon if sync is in warning state (non-empty warning message)
+    if (syncWarningMessage) {
       return <WarningAmberIcon style={{ color: '#ed6c02' }} />
     }
     if (phase === Phase.Succeeded) {
@@ -49,7 +49,7 @@ export default function MigrationProgress({ progressText, phase, syncWarning }: 
     } else {
       return <HourglassBottomIcon style={{ color: 'grey' }} />
     }
-  }, [phase, syncWarning])
+  }, [phase, syncWarningMessage])
 
   return (
     <>

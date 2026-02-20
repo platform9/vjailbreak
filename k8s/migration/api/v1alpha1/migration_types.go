@@ -129,11 +129,8 @@ type MigrationStatus struct {
 	// +optional
 	Retryable *bool `json:"retryable,omitempty"`
 
-	// SyncWarning indicates if the periodic sync is in a warning state requiring manual intervention
-	// +optional
-	SyncWarning bool `json:"syncWarning,omitempty"`
-
-	// SyncWarningMessage contains the actionable error message when SyncWarning is true
+	// SyncWarningMessage contains the warning message when periodic sync is in a warning state.
+	// If non-empty, indicates the sync failed but will auto-retry on next interval.
 	// +optional
 	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
 }
