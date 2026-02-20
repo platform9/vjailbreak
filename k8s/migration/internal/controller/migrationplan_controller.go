@@ -1727,10 +1727,13 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
 						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
 
+					// Reconcile if phase changed to AwaitingAdminCutOver (so UI can show cutover status)
+					isAwaitingCutover := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
+
 					phaseChanged := oldMigration.Status.Phase != newMigration.Status.Phase
 
-					// Only reconcile if phase changed AND it's now in a terminal state
-					return phaseChanged && isTerminal
+					// Reconcile if phase changed AND it's now in a terminal state or awaiting admin cutover
+					return phaseChanged && (isTerminal || isAwaitingCutover)
 				},
 				CreateFunc: func(_ event.CreateEvent) bool {
 					return true
