@@ -1,5 +1,4 @@
 name: Cleanup Old Images (Quay + S3)
-name: Cleanup Old Images (Quay + S3)
 
 on:
   schedule:

@@ -1,165 +1,602 @@
 name: Build and Push Images
-name: Cleanup Old Images (Quay + S3)
 
 on:
-  schedule:
-    - cron: "0 4 * * *"
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    branches:
+      - main
+      - release-*
+  release:
+    types:
+      - published
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to use"
+        required: true
+        default: "main"
+        type: string
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: false
+        type: string
+        default: ''
+      short_sha:
+        description: 'Short commit SHA'
+        required: false
+        type: string
+        default: ''
+      is_nightly:
+        description: 'Whether this is a nightly build'
+        required: false
+        type: boolean
+        default: false
 
 env:
-  REGISTRY: ${{ vars.REGISTRY || 'quay.io' }}
-  ORG: ${{ vars.REPO || 'platform9' }}
-  REPOS: "vjailbreak vjailbreak-ui vjailbreak-v2v-helper vjailbreak-controller vjailbreak-vpwned"
-  # S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+  PACKER_VERSION: "latest"
+  QCOW2_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak
+  UI_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-ui
+  V2V_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
+  CONTROLLER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-controller
+  VPWNED_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-vpwned
+  NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
+  AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
+  BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
+  S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
   S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
   S3_REGION: ${{ vars.S3_REGION }}
-  DAYS_TO_KEEP: 300
+
+
 
 jobs:
-  cleanup:
+  determine-release:
     runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ env.release_found }}
+      is_nightly: ${{ github.event.inputs.is_nightly }}
+      tag: ${{ steps.set_env.outputs.tag }}
+      ui_img: ${{ steps.set_env.outputs.ui_img }}
+      v2v_img: ${{ steps.set_env.outputs.v2v_img }}
+      controller_img: ${{ steps.set_env.outputs.controller_img }}
+      qcow2_img: ${{ steps.set_env.outputs.qcow2_img }}
+      vpwned_img: ${{ steps.set_env.outputs.vpwned_img }}
 
     steps:
-      - name: Install jq
-        run: sudo apt-get install -y jq
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          fetch-depth: 0
 
-      ###########################################
-      # Login to Quay (same pattern as build)
-      ###########################################
-      - name: Login to Quay
+      - name: Check PR Title
+        id: check_pr
+        run: |
+          echo "PR message: ${{ github.event.pull_request.title }}"
+          if [[ "${{ github.event.pull_request.title }}" == *"release"* ]]; then
+            echo "Release keyword found."
+            echo "release_found=true" >> $GITHUB_ENV
+          else
+            echo "Release keyword not found."
+            echo "release_found=false" >> $GITHUB_ENV
+          fi
+
+      - name: Check if release event
+        id: check_release
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "release_found=true" >> $GITHUB_ENV
+          fi
+
+      - name: Check if manual trigger
+        id: check_manual
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "release_found=true" >> $GITHUB_ENV
+          fi
+
+      - name: Check if nightly build
+        id: check_nightly
+        run: |
+          if [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            echo "is_nightly=true" >> $GITHUB_ENV
+            echo "is_nightly=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if PR raised from release branch
+        id: check_pr_is_from_release_branch
+        if: github.event.pull_request && startsWith(github.head_ref, 'release-v')
+        run: |
+          echo "release_found=true" >> $GITHUB_ENV
+
+      - name: Set environment variables for images
+        id: set_env
+        run: |
+          GIT_SHA=$(git rev-parse --short HEAD)
+          BUILD_VERSION=${{ github.run_number }}
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.short_sha }}" != "" ]]; then
+              echo "short_sha is provided as ${{ github.event.inputs.short_sha }}"
+              GIT_SHA=${{ github.event.inputs.short_sha }}
+            fi
+            if [[ "${{ github.event.inputs.version }}" != "" ]]; then
+              echo "version is provided as ${{ github.event.inputs.version }}"
+              BUILD_VERSION=${{ github.event.inputs.version }}
+            fi
+          fi
+
+          # Release Event
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG=${{ github.event.release.tag_name }}
+
+          # Nightly Build
+          elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            LAST_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            TAG="${LAST_VERSION}-${GIT_SHA}"
+          
+          # Push and Workflow dispatch
+          else
+            TAG="${BUILD_VERSION}-${GIT_SHA}"
+          fi
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "qcow2_img=${{ env.QCOW2_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "ui_img=${{ env.UI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "v2v_img=${{ env.V2V_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "controller_img=${{ env.CONTROLLER_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "vpwned_img=${{ env.VPWNED_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "Final tag generated: ${TAG}"
+
+  build-ui:
+    runs-on: ubuntu-latest
+    needs: determine-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set environment variables
+        run: |
+          echo "UI_IMG=${{ needs.determine-release.outputs.ui_img }}" >> $GITHUB_ENV
+
+      - name: Build UI image
+        run: make ui
+        
+      - name: Save UI image as tar file
+        run: |
+          docker save ${{ env.UI_IMG }} -o ui-image.tar
+          
+      - name: Upload UI image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-docker-image
+          path: ui-image.tar
+          retention-days: 1
+
+  build-v2v-helper:
+    runs-on: ubuntu-latest
+    needs: determine-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set environment variables
+        run: |
+          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
+      - name: Install libnbd dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libguestfs-dev libnbd-dev pkg-config
+      - name: Build v2v-helper image
+        run: make v2v-helper
+        
+      - name: Save v2v-helper image as tar file
+        run: |
+          docker save ${{ env.V2V_IMG }} -o v2v-image.tar
+          
+      - name: Upload v2v-helper image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2v-docker-image
+          path: v2v-image.tar
+          retention-days: 1
+
+  build-controller:
+    runs-on: ubuntu-latest
+    needs: determine-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'k8s/migration/go.mod'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set environment variables
+        run: |
+          echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
+          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
+
+      - name: Build controller image
+        run: make vjail-controller-only
+        
+      - name: Save controller image as tar file
+        run: |
+          docker save ${{ env.CONTROLLER_IMG }} -o controller-image.tar
+          
+      - name: Upload controller image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-docker-image
+          path: controller-image.tar
+          retention-days: 1
+
+  build-vpwned:
+    runs-on: ubuntu-latest
+    needs: determine-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set environment variables
+        run: |
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+
+      - name: Build vpwned image
+        run: make build-vpwned
+        
+      - name: Save vpwned image as tar file
+        run: |
+          docker save ${{ env.VPWNED_IMG }} -o vpwned-image.tar
+          
+      - name: Upload vpwned image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpwned-docker-image
+          path: vpwned-image.tar
+          retention-days: 1
+
+  push-images:
+    runs-on: ubuntu-latest
+    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned]
+    if: |
+      always() && 
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          
+      - name: Login to Docker Hub
+        if: ${{ !env.ACT }}
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ vars.REGISTRY }}
           username: ${{ secrets.QUAY_ROBOT_USERNAME }}
           password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
-
-      ###########################################
-      # Delete old images from Quay
-      ###########################################
-      - name: Cleanup old Quay tags
-        env:
-          QUAY_TOKEN: ${{ secrets.QUAY_API_TOKEN }}
-        run: |
-          set -e
-          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
-          CUTOFF_DATE=$(date -u -d "${DAYS_TO_KEEP} days ago" +%Y-%m-%d)
           
-          echo "=== Quay Cleanup Configuration ==="
-          echo "Retention period: ${DAYS_TO_KEEP} days"
-          echo "Cutoff date: $CUTOFF_DATE (timestamp: $THRESHOLD)"
-          echo "Will delete tags older than: $CUTOFF_DATE"
-          echo ""
+      - name: Set environment variables
+        run: |
+          echo "TAG=${{ needs.determine-release.outputs.tag }}" >> $GITHUB_ENV
+          echo "UI_IMG=${{ needs.determine-release.outputs.ui_img }}" >> $GITHUB_ENV
+          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
+          echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
+          echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+          
+      - name: Download UI image artifact
+        if: ${{ !env.ACT }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-docker-image
+          path: ./docker-images
 
-          for REPO in $REPOS; do
-            echo "=== Checking repository: $REPO ==="
+      - name: Download V2V Helper image artifact
+        if: ${{ !env.ACT }}
+        uses: actions/download-artifact@v4
+        with:
+          name: v2v-docker-image
+          path: ./docker-images
+          
+      - name: Download Controller image artifact
+        if: ${{ !env.ACT }}
+        uses: actions/download-artifact@v4
+        with:
+          name: controller-docker-image
+          path: ./docker-images
+          
+      - name: Download VPWNED image artifact
+        if: ${{ !env.ACT }}
+        uses: actions/download-artifact@v4
+        with:
+          name: vpwned-docker-image
+          path: ./docker-images
+          
+      - name: Load Docker images
+        if: ${{ !env.ACT }}
+        run: |
+          docker load -i ./docker-images/ui-image.tar
+          docker load -i ./docker-images/v2v-image.tar
+          docker load -i ./docker-images/controller-image.tar
+          docker load -i ./docker-images/vpwned-image.tar
+        
+      - name: Push UI Image
+        if: ${{ !env.ACT }}
+        run: docker push ${{ env.UI_IMG }}
+        
+      - name: Push V2V Helper Image
+        if: ${{ !env.ACT }}
+        run: docker push ${{ env.V2V_IMG }}
+        
+      - name: Push Controller Image
+        if: ${{ !env.ACT }}
+        run: docker push ${{ env.CONTROLLER_IMG }}
+        
+      - name: Push VPWNED Image
+        if: ${{ !env.ACT }}
+        run: docker push ${{ env.VPWNED_IMG }}
+        
+  post-build:
+    runs-on: ubuntu-latest
+    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, push-images]
+    if: |
+      always() && 
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') && 
+      (needs.push-images.result == 'success')
 
-            TAGS=$(curl -s -H "Authorization: Bearer $QUAY_TOKEN" \
-              "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/?limit=200")
+    steps:
 
-            echo "$TAGS" | jq -c '.tags[]' | while read tag; do
-              TAG_NAME=$(echo $tag | jq -r '.name')
-              LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+          
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
-              # Skip protected tags
-              if [[ "$TAG_NAME" == "latest" || "$TAG_NAME" == "ubuntu-base-prebaked" || "$TAG_NAME" == "base-v0.1.6" || "$TAG_NAME" == "base-v0.1.4" || "$TAG_NAME" == "base" || "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo "Skipping protected tag: $TAG_NAME"
-                continue
-              fi
+      - name: Create deploy folder
+        run: mkdir -p image_builder/deploy
 
-              TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
-              TAG_DATE=$(date -d "$LAST_MODIFIED" +%Y-%m-%d 2>/dev/null || echo "unknown")
-              
-              if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
-                echo "[DRY RUN] Would delete old tag: $TAG_NAME (last modified: $TAG_DATE)"
-                
-                # UNCOMMENT TO ENABLE ACTUAL DELETION:
-                # RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
-                #   -H "Authorization: Bearer $QUAY_TOKEN" \
-                #   "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/${TAG_NAME}")
-                # 
-                # HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-                # if [[ $HTTP_CODE == "204" || $HTTP_CODE == "200" ]]; then
-                #   echo "Deleted successfully"
-                # else
-                #   echo "Delete failed with HTTP $HTTP_CODE"
-                # fi
-              elif [[ $TAG_TIME -gt 0 ]]; then
-                echo "Keeping recent tag: $TAG_NAME (last modified: $TAG_DATE)"
-              fi
-            done
-          done
+      - name: Set environment variables
+        run: |
+          echo "TAG=${{ needs.determine-release.outputs.tag }}" >> $GITHUB_ENV
+          echo "UI_IMG=${{ needs.determine-release.outputs.ui_img }}" >> $GITHUB_ENV
+          echo "V2V_IMG=${{ needs.determine-release.outputs.v2v_img }}" >> $GITHUB_ENV
+          echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
+          echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
+          echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
 
-      ###########################################
-      # Configure AWS (same style as packer job)
-      ###########################################
+          if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
+            echo "release_found=true" >> $GITHUB_ENV
+          else
+            echo "release_found=false" >> $GITHUB_ENV
+          fi
+
+          if [[ "${{ needs.determine-release.outputs.is_nightly }}" == "true" ]]; then
+            echo "is_nightly=true" >> $GITHUB_ENV
+          else
+            echo "is_nightly=false" >> $GITHUB_ENV
+          fi
+
+      - name: Substitue image tags in manifests
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./ui/deploy/ui.yaml
+          output: ./image_builder/deploy/01ui.yaml
+
+      - name: Substitue image tags in version config
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./image_builder/configs/version-config.yaml
+          output: ./image_builder/deploy/version-config.yaml
+
+      - name: Set base64-encoded environment variables
+        run: |
+          echo "AMPLITUDE_API_KEY=$(echo -n ${{ secrets.AMPLITUDE_API_KEY }} | base64 -w 0)" >> $GITHUB_ENV
+          echo "BUGSNAG_API_KEY=$(echo -n ${{ secrets.BUGSNAG_API_KEY }} | base64 -w 0)" >> $GITHUB_ENV
+          echo "VJB_VERSION_TAG=$(echo -n ${{ needs.determine-release.outputs.tag }}| base64 -w 0)" >> $GITHUB_ENV
+
+      - name: Substitute image tags in analytics secret
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./image_builder/configs/analytics-keys.yaml 
+          output: ./image_builder/deploy/analytics-keys.yaml
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.22.5"
+
+      - name: Download images and export as tar
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y containerd.
+          sudo mkdir -p ./image_builder/images
+          sudo chmod +x ./image_builder/scripts/download_images.sh
+          sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
+
+      - name: Generate Controller Manifests
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          make -C ./k8s/migration/ build-installer
+          cp ./k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
+          cp -r ./k8s/kube-prometheus image_builder/deploy/
+          mkdir -p image_builder/deploy/cert-manager
+          cp image_builder/cert-manager-manifests/cert-manager.yaml image_builder/deploy/cert-manager/
+          cp k8s/cert-manager/00-selfsigned-issuer.yaml image_builder/deploy/cert-manager/
+          
+      - name: Copy opensource.txt to image_builder
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: cp ./opensource.txt ./image_builder/opensource.txt
+
+      - name: Enable KVM group perms
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up QEMU
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: sudo apt-get install qemu-system qemu-utils -y
+
+      - name: Setup packer
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: hashicorp/setup-packer@main
+        id: setup
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Run packer init
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        id: init
+        run: "packer init ./image_builder/vjailbreak-image.pkr.hcl"
+
+      - name: Run packer validate
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        id: validate
+        run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
+
+      - name: setup-oras
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: oras-project/setup-oras@v1.2.1
+
+      - name: Run packer build for normal image
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        id: build-1
+        run: "PACKER_LOG=1 packer build ./image_builder/vjailbreak-image.pkr.hcl"
+
+      - name: Upload vjailbreak qcow2 to quay
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          oras push ${{ env.QCOW2_IMG }} \
+          --artifact-type="application/qcow2" \
+          ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Upload QCOW2 image artifact
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vjailbreak-qcow2
+          path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
+
+      - name: Set AWS credentials based on build type
+        id: set-creds
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "Using production AWS keys."
+            echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_OUTPUT
+            echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using development AWS keys."
+            echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID_DEV }}" >> $GITHUB_OUTPUT
+            echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-access-key-id: ${{ steps.set-creds.outputs.aws_access_key_id }}
+          aws-secret-access-key: ${{ steps.set-creds.outputs.aws_secret_access_key }}
           aws-region: ${{ env.S3_REGION }}
 
-      ###########################################
-      # Delete old QCOW2 files from S3
-      ###########################################
-      - name: Cleanup old S3 QCOW2 artifacts
+      - name: Determine S3 path and upload artifacts
+        if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           set -e
-          CUTOFF_DATE=$(date -u -d "${DAYS_TO_KEEP} days ago" +%Y-%m-%d)
-          CUTOFF_TIMESTAMP=$(date -u -d "$CUTOFF_DATE" +%s)
-          
-          echo "=== S3 Cleanup Configuration ==="
-          echo "Retention period: ${DAYS_TO_KEEP} days"
-          echo "Cutoff date: $CUTOFF_DATE (timestamp: $CUTOFF_TIMESTAMP)"
-          echo "Will delete folders older than: $CUTOFF_DATE"
-          echo ""
+          TAG=${{ needs.determine-release.outputs.tag }}
+          DATE_FOLDER=$(date -u +"%Y-%m-%d")
+          REGION="${S3_REGION}"
 
-          # Packer creates: dev/YYYY-MM-DD/TAG/ and nightly/YYYY-MM-DD/TAG/
-          # We delete entire dated folders, not individual files
-          
-          cleanup_s3_folders() {
-            local BUCKET=$1
-            local PREFIX=$2
-            
-            echo "Scanning s3://$BUCKET/${PREFIX}"
-            
-            # List date folders under prefix
-            aws s3api list-objects-v2 \
-              --bucket "$BUCKET" \
-              --prefix "${PREFIX}" \
-              --delimiter "/" \
-              --query 'CommonPrefixes[].Prefix' \
-              --output text | tr '\t' '\n' | while read -r folder; do
-              
-              if [[ -z "$folder" ]]; then
-                continue
-              fi
-              
-              # Extract date from folder (format: dev/YYYY-MM-DD/ or nightly/YYYY-MM-DD/)
-              if [[ $folder =~ ${PREFIX}([0-9]{4}-[0-9]{2}-[0-9]{2})/ ]]; then
-                BUILD_DATE="${BASH_REMATCH[1]}"
-                BUILD_TIMESTAMP=$(date -u -d "$BUILD_DATE" +%s 2>/dev/null || echo 0)
-                
-                if [[ $BUILD_TIMESTAMP -gt 0 && $BUILD_TIMESTAMP -lt $CUTOFF_TIMESTAMP ]]; then
-                  echo "[DRY RUN] Would delete old folder: s3://$BUCKET/${folder} (date: $BUILD_DATE)"
-                  # UNCOMMENT TO ENABLE ACTUAL DELETION:
-                  # aws s3 rm "s3://$BUCKET/${folder}" --recursive
-                  # echo "Deleted successfully"
-                elif [[ $BUILD_TIMESTAMP -gt 0 ]]; then
-                  echo "Keeping recent folder: ${folder} (date: $BUILD_DATE)"
-                else
-                  echo "Skipping folder with invalid date: ${folder}"
-                fi
-              fi
-            done
-          }
-          
-          # Cleanup dev bucket
-          if [ -n "$S3_BUCKET_DEV" ]; then
-            echo "=== Cleaning DEV bucket: $S3_BUCKET_DEV ==="
-            cleanup_s3_folders "$S3_BUCKET_DEV" "dev/"
-            cleanup_s3_folders "$S3_BUCKET_DEV" "nightly/"
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            S3_BUCKET=${S3_BUCKET_PROD}
+            S3_PATH_PREFIX="releases/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="releases/latest/${TAG}"
+            QCOW2_FILENAME="vjailbreak.qcow2"
+            DO_LATEST=true
+
+          elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
+            S3_BUCKET=${S3_BUCKET_DEV}
+            S3_PATH_PREFIX="nightly/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="nightly/latest/${TAG}"
+            QCOW2_FILENAME="vjailbreak.qcow2"
+            DO_LATEST=true
+
+          else
+            S3_BUCKET=${S3_BUCKET_DEV}
+            S3_PATH_PREFIX="dev/${DATE_FOLDER}/${TAG}"
+            QCOW2_FILENAME="vjailbreak.qcow2"
+            DO_LATEST=false
           fi
-          
-          # Note: PROD bucket cleanup requires separate credentials
-          # Skipping PROD for now - releases should be kept indefinitely 
+
+          QCOW2_HTTP_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+
+          aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_PATH_PREFIX}/${QCOW2_FILENAME}"
+          echo "QCOW2 uploaded: ${QCOW2_HTTP_URL}" | tee s3-urls.txt
+
+          if [[ "$DO_LATEST" == "true" ]]; then
+            QCOW2_HTTP_LATEST_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
+            aws s3 cp ./vjailbreak_qcow2/vjailbreak-image.qcow2 "s3://${S3_BUCKET}/${S3_LATEST_PATH_PREFIX}/${QCOW2_FILENAME}"
+            echo "Latest QCOW2 uploaded: ${QCOW2_HTTP_LATEST_URL}" | tee -a s3-urls.txt
+          fi
+
+      - name: S3 URL
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: cat s3-urls.txt
+
+      - name: Upload S3 URLs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3-urls
+          path: s3-urls.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vjailbreak-yamls
+          path: |
+            image_builder/deploy/00controller.yaml
+            image_builder/deploy/01ui.yaml
+            image_builder/deploy/version-config.yaml
+            image_builder/deploy/version-checker.yaml
+            image_builder/deploy/vjailbreak-settings.yaml
