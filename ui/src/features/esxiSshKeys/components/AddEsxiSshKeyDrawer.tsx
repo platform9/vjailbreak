@@ -12,6 +12,7 @@ interface AddEsxiSshKeyDrawerProps {
   open: boolean
   onClose: () => void
   mode?: 'add' | 'edit'
+  fixedName?: string
   initialValues?: {
     name: string
     sshPrivateKey: string
@@ -53,6 +54,7 @@ export default function AddEsxiSshKeyDrawer({
   open,
   onClose,
   mode = 'add',
+  fixedName,
   initialValues
 }: AddEsxiSshKeyDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'AddEsxiSshKeyDrawer' })
@@ -60,10 +62,10 @@ export default function AddEsxiSshKeyDrawer({
 
   const defaultValues = useMemo(
     () => ({
-      name: initialValues?.name ?? '',
+      name: fixedName ?? initialValues?.name ?? '',
       sshPrivateKey: initialValues?.sshPrivateKey ?? ''
     }),
-    [initialValues?.name, initialValues?.sshPrivateKey]
+    [fixedName, initialValues?.name, initialValues?.sshPrivateKey]
   )
 
   const form = useForm<FormData>({
@@ -87,16 +89,17 @@ export default function AddEsxiSshKeyDrawer({
 
   const { mutateAsync: saveKey, isPending } = useMutation({
     mutationFn: async (data: FormData) => {
+      const normalizedName = (fixedName ?? data.name).trim()
       if (mode === 'edit') {
         return replaceSecret(
-          data.name.trim(),
+          normalizedName,
           { 'ssh-privatekey': data.sshPrivateKey.trim() },
           'migration-system'
         )
       }
 
       return createSecret(
-        data.name.trim(),
+        normalizedName,
         { 'ssh-privatekey': data.sshPrivateKey.trim() },
         'migration-system'
       )
@@ -119,7 +122,7 @@ export default function AddEsxiSshKeyDrawer({
         return
       }
       try {
-        if (mode === 'add') {
+        if (mode === 'add' && !fixedName) {
           const currentName = (getValues('name') || '').trim()
           if (!currentName) {
             const suggested = toDnsCompatibleNameFromFilename(file.name)
@@ -136,11 +139,11 @@ export default function AddEsxiSshKeyDrawer({
         setError('Failed to read file')
       }
     },
-    [getValues, mode, setValue]
+    [fixedName, getValues, mode, setValue]
   )
 
   const onSubmit = async (data: FormData) => {
-    const name = data.name.trim()
+    const name = (fixedName ?? data.name).trim()
     if (!name) {
       setError('SSH key name is required')
       return
@@ -226,7 +229,7 @@ export default function AddEsxiSshKeyDrawer({
           label="SSH Key Name"
           placeholder="esxi-ssh-key-1"
           required
-          disabled={isPending || mode === 'edit'}
+          disabled={isPending || mode === 'edit' || !!fixedName}
           rules={{
             required: 'SSH key name is required',
             validate: (val: string) => (isValidName(val.trim()) ? true : 'Invalid name')

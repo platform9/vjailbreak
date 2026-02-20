@@ -1,94 +1,121 @@
-import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Box, Button, IconButton, Tooltip } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import VpnKeyIcon from '@mui/icons-material/VpnKey'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import EditIcon from '@mui/icons-material/EditOutlined'
-import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import WarningIcon from '@mui/icons-material/Warning'
+import { GridColDef } from '@mui/x-data-grid'
+import {
+  Box,
+  Button,
+  Chip,
+  FormControl,
+  MenuItem,
+  Select,
+  SelectChangeEvent,
+  Tooltip,
+  Typography
+} from '@mui/material'
+import KeyIcon from '@mui/icons-material/Key'
+import ComputerIcon from '@mui/icons-material/Computer'
 import { useCallback, useMemo, useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { deleteSecret, listSecrets } from 'src/api/secrets/secrets'
-import type { Secret } from 'src/api/secrets/model'
+import { useQuery } from '@tanstack/react-query'
+import { getSecret } from 'src/api/secrets/secrets'
+import { getVMwareHosts } from 'src/api/vmware-hosts/vmwareHosts'
+import { VMwareHost } from 'src/api/vmware-hosts/model'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { ConfirmationDialog } from 'src/components/dialogs'
 import AddEsxiSshKeyDrawer from '../components/AddEsxiSshKeyDrawer'
 
-export const ESXI_SSH_KEYS_QUERY_KEY = ['secrets', 'migration-system', 'esxi-ssh-keys']
-
-type EsxiSshKeyRow = {
+interface HostRow {
   id: string
-  name: string
-  secret: Secret
+  hostname: string
+  clusterName: string
+  sshStatus: string
+  sshMessage: string
+  esxiVersion: string
+  lastChecked: string
+  hostObject: VMwareHost
 }
 
-const getColumns = (handlers: {
-  onEdit: (row: EsxiSshKeyRow) => void
-  onDelete: (row: EsxiSshKeyRow) => void
-}): GridColDef[] => [
+const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
+  if (!status) return 'default'
+  const normalizedStatus = status.toLowerCase()
+  if (normalizedStatus === 'succeeded') return 'success'
+  if (normalizedStatus === 'failed') return 'error'
+  if (normalizedStatus === 'pending' || normalizedStatus === 'validating') return 'warning'
+  return 'default'
+}
+
+const getColumns = (): GridColDef[] => [
   {
-    field: 'name',
-    headerName: 'SSH Key Name',
-    flex: 1,
-    minWidth: 240
+    field: 'hostname',
+    headerName: 'Host',
+    flex: 1.5,
+    minWidth: 150
   },
   {
-    field: 'actions',
-    headerName: 'Actions',
-    sortable: false,
-    filterable: false,
-    width: 180,
+    field: 'clusterName',
+    headerName: 'Cluster',
+    flex: 1,
+    minWidth: 120
+  },
+  {
+    field: 'esxiVersion',
+    headerName: 'ESXi Version',
+    flex: 1,
+    minWidth: 120,
+    renderCell: (params) => params.value || '-'
+  },
+  {
+    field: 'sshStatus',
+    headerName: 'SSH Status',
+    flex: 1,
+    minWidth: 130,
+    renderCell: (params) => (
+      <Chip
+        label={params.value || 'Pending'}
+        variant="outlined"
+        color={getStatusColor(params.value)}
+        size="small"
+        sx={{ borderRadius: '4px' }}
+      />
+    )
+  },
+  {
+    field: 'sshMessage',
+    headerName: 'Message',
+    flex: 2,
+    minWidth: 200,
     renderCell: (params) => {
-      const keyContent = params.row.secret.data?.['ssh-privatekey']
-      const canCopy = typeof keyContent === 'string' && keyContent.trim() !== ''
-
+      const message = params.value || ''
+      const status = params.row.sshStatus?.toLowerCase()
+      if (!message) return '-'
       return (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title={canCopy ? 'Copy key content' : 'No key content'}>
-            <span>
-              <IconButton
-                size="small"
-                aria-label="copy ssh key"
-                disabled={!canCopy}
-                onClick={async (e) => {
-                  e.stopPropagation()
-                  if (!canCopy) return
-                  await navigator.clipboard.writeText(keyContent)
-                }}
-              >
-                <ContentCopyIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Edit">
-            <IconButton
-              size="small"
-              aria-label="edit ssh key"
-              onClick={(e) => {
-                e.stopPropagation()
-                handlers.onEdit(params.row)
-              }}
-            >
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              aria-label="delete ssh key"
-              onClick={(e) => {
-                e.stopPropagation()
-                handlers.onDelete(params.row)
-              }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <Tooltip title={message}>
+          <Typography
+            variant="body2"
+            color={status === 'failed' ? 'error' : 'text.secondary'}
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%'
+            }}
+          >
+            {message}
+          </Typography>
+        </Tooltip>
       )
+    }
+  },
+  {
+    field: 'lastChecked',
+    headerName: 'Last Checked',
+    flex: 1,
+    minWidth: 150,
+    renderCell: (params) => {
+      if (!params.value) return '-'
+      try {
+        const date = new Date(params.value)
+        return date.toLocaleString()
+      } catch {
+        return params.value
+      }
     }
   }
 ]
@@ -99,139 +126,107 @@ export default function EsxiSshKeysPage() {
     | { open: false }
     | { open: true; mode: 'add' | 'edit'; initialValues?: { name: string; sshPrivateKey: string } }
   >({ open: false })
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedForDeletion, setSelectedForDeletion] = useState<EsxiSshKeyRow | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-
-  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
-  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null)
+  const SECRET_NAMESPACE = 'migration-system'
+  const ESXI_SSH_KEY_SECRET_NAME = 'esxi-ssh-key'
 
   const {
-    data: secrets,
-    isLoading,
-    refetch
+    data: esxiSshKeySecret,
+    isLoading: isEsxiSshKeyLoading,
+    refetch: refetchEsxiSshKey
   } = useQuery({
-    queryKey: ESXI_SSH_KEYS_QUERY_KEY,
+    queryKey: ['secret', SECRET_NAMESPACE, ESXI_SSH_KEY_SECRET_NAME],
     queryFn: async () => {
       try {
-        return await listSecrets('migration-system')
-      } catch (error) {
-        reportError(error as Error, { context: 'list-esxi-ssh-key-secrets' })
+        return await getSecret(ESXI_SSH_KEY_SECRET_NAME, SECRET_NAMESPACE)
+      } catch (error: any) {
+        if (error?.response?.status === 404) {
+          return null
+        }
+        reportError(error as Error, { context: 'get-esxi-ssh-key-secret' })
         throw error
       }
     },
-    staleTime: 0,
-    refetchOnMount: true
+    retry: false
   })
 
-  const rows: EsxiSshKeyRow[] = useMemo(() => {
-    const items = Array.isArray(secrets) ? secrets : []
-    return items
-      .filter((secret) => {
-        const data = secret.data
-        return data && Object.prototype.hasOwnProperty.call(data, 'ssh-privatekey')
-      })
-      .map((secret) => ({
-        id: secret.metadata.name,
-        name: secret.metadata.name,
-        secret
-      }))
-  }, [secrets])
+  const {
+    data: vmwareHosts,
+    isLoading,
+    refetch
+  } = useQuery({
+    queryKey: ['vmwarehosts', SECRET_NAMESPACE],
+    queryFn: async () => {
+      try {
+        const result = await getVMwareHosts(SECRET_NAMESPACE)
+        return result.items || []
+      } catch (error: any) {
+        if (error?.response?.status === 404) {
+          return []
+        }
+        reportError(error as Error, { context: 'list-vmware-hosts' })
+        throw error
+      }
+    },
+    retry: false,
+    refetchInterval: 30000
+  })
+
+  const rows: HostRow[] = useMemo(() => {
+    const items = Array.isArray(vmwareHosts) ? vmwareHosts : []
+    return items.map((host: VMwareHost) => ({
+      id: host.metadata.name,
+      hostname: host.spec.name,
+      clusterName: host.spec.clusterName || '-',
+      sshStatus: host.status?.sshStatus || 'Pending',
+      sshMessage: host.status?.sshMessage || '',
+      esxiVersion: host.status?.esxiVersion || '',
+      lastChecked: host.status?.sshLastChecked || '',
+      hostObject: host
+    }))
+  }, [vmwareHosts])
+
+  const filteredRows = useMemo(() => {
+    if (statusFilter === 'all') return rows
+    return rows.filter((row) => row.sshStatus.toLowerCase() === statusFilter.toLowerCase())
+  }, [rows, statusFilter])
 
   const handleRefresh = useCallback(() => {
     refetch()
-  }, [refetch])
+    refetchEsxiSshKey()
+  }, [refetch, refetchEsxiSshKey])
 
-  const { mutateAsync: deleteKeys, isPending: deleting } = useMutation({
-    mutationFn: async (names: string[]) => {
-      await Promise.all(names.map((name) => deleteSecret(name, 'migration-system')))
-    },
-    onSuccess: () => {
-      setRowSelectionModel([])
-      refetch()
-    },
-    onError: (error: any) => {
-      reportError(error as Error, { context: 'delete-esxi-ssh-keys' })
-    }
-  })
+  const isKeyConfigured = !!esxiSshKeySecret?.metadata?.name
 
-  const handleOpenAdd = () => setDrawerState({ open: true, mode: 'add' })
-
-  const handleEdit = (row: EsxiSshKeyRow) => {
+  const handleOpenConfigure = () => {
+    const existingKeyContent = (esxiSshKeySecret as any)?.data?.['ssh-privatekey']
     setDrawerState({
       open: true,
-      mode: 'edit',
+      mode: isKeyConfigured ? 'edit' : 'add',
       initialValues: {
-        name: row.secret.metadata.name,
-        sshPrivateKey: row.secret.data?.['ssh-privatekey'] || ''
+        name: ESXI_SSH_KEY_SECRET_NAME,
+        sshPrivateKey: typeof existingKeyContent === 'string' ? existingKeyContent : ''
       }
     })
   }
 
-  const handleDelete = (row: EsxiSshKeyRow) => {
-    setSelectedForDeletion(row)
-    setDeleteError(null)
-    setDeleteDialogOpen(true)
-  }
-
-  const handleDeleteClose = () => {
-    setDeleteDialogOpen(false)
-    setSelectedForDeletion(null)
-    setDeleteError(null)
-  }
-
-  const handleConfirmDelete = async () => {
-    if (!selectedForDeletion) return
-    await deleteKeys([selectedForDeletion.secret.metadata.name])
-  }
-
-  const selectedRows = useMemo(() => {
-    const selected = new Set(rowSelectionModel as string[])
-    return rows.filter((r) => selected.has(r.id))
-  }, [rowSelectionModel, rows])
-
-  const handleBulkDelete = () => {
-    if (selectedRows.length === 0) return
-    setBulkDeleteError(null)
-    setBulkDeleteDialogOpen(true)
-  }
-
-  const handleBulkDeleteClose = () => {
-    setBulkDeleteDialogOpen(false)
-    setBulkDeleteError(null)
-  }
-
-  const handleConfirmBulkDelete = async () => {
-    if (selectedRows.length === 0) return
-    try {
-      await deleteKeys(selectedRows.map((r) => r.secret.metadata.name))
-    } catch (e: any) {
-      const message = e?.response?.data?.message || e?.message || 'Failed to delete SSH keys'
-      setBulkDeleteError(message)
-      throw e
-    }
-  }
-
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-      {rowSelectionModel.length > 0 && (
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<DeleteIcon />}
-          onClick={handleBulkDelete}
-          disabled={deleting}
-          sx={{ height: 40 }}
+      <FormControl size="small" sx={{ minWidth: 150 }}>
+        <Select
+          labelId="status-filter-label"
+          value={statusFilter}
+          onChange={(e: SelectChangeEvent) => setStatusFilter(e.target.value)}
         >
-          Delete Selected ({rowSelectionModel.length})
-        </Button>
-      )}
-
+          <MenuItem value="all">All</MenuItem>
+          <MenuItem value="succeeded">Succeeded</MenuItem>
+          <MenuItem value="failed">Failed</MenuItem>
+          <MenuItem value="pending">Pending</MenuItem>
+        </Select>
+      </FormControl>
       <CustomSearchToolbar
-        placeholder="Search by SSH key name"
+        placeholder="Search by hostname or cluster"
         onRefresh={handleRefresh}
         disableRefresh={isLoading}
       />
@@ -241,43 +236,37 @@ export default function EsxiSshKeysPage() {
   const actions = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
       <Button
-        variant="contained"
+        variant={isKeyConfigured ? 'outlined' : 'contained'}
         color="primary"
-        startIcon={<AddIcon />}
-        onClick={handleOpenAdd}
-        disabled={deleting}
+        startIcon={<KeyIcon />}
+        onClick={handleOpenConfigure}
         sx={{ height: 40 }}
       >
-        Add SSH Key
+        {isKeyConfigured ? 'Edit SSH Key' : 'Configure SSH Key'}
       </Button>
     </Box>
   )
 
   const toolbar = (
-    <ListingToolbar title="ESXi SSH Keys" icon={<VpnKeyIcon />} search={search} actions={actions} />
+    <ListingToolbar
+      title="ESXi SSH Credentials"
+      icon={<ComputerIcon />}
+      search={search}
+      actions={actions}
+    />
   )
 
-  const columns = useMemo(
-    () =>
-      getColumns({
-        onEdit: handleEdit,
-        onDelete: handleDelete
-      }),
-    [handleEdit, handleDelete]
-  )
+  const columns = useMemo(() => getColumns(), [])
 
   return (
     <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
       <CommonDataGrid
-        rows={rows}
+        rows={filteredRows}
         columns={columns}
-        checkboxSelection
         disableRowSelectionOnClick
-        rowSelectionModel={rowSelectionModel}
-        onRowSelectionModelChange={setRowSelectionModel}
         initialState={{
           sorting: {
-            sortModel: [{ field: 'name', sort: 'asc' }]
+            sortModel: [{ field: 'hostname', sort: 'asc' }]
           },
           pagination: {
             paginationModel: {
@@ -289,58 +278,23 @@ export default function EsxiSshKeysPage() {
           toolbar: () => toolbar
         }}
         pageSizeOptions={[10, 25, 50, 100]}
-        loading={isLoading || deleting}
-        emptyMessage="No ESXi SSH keys configured"
+        loading={isLoading || isEsxiSshKeyLoading}
+        emptyMessage="No ESXi hosts discovered"
       />
 
       {drawerState.open && (
         <AddEsxiSshKeyDrawer
           open
           mode={drawerState.mode}
+          fixedName={ESXI_SSH_KEY_SECRET_NAME}
           initialValues={drawerState.initialValues}
           onClose={() => {
             setDrawerState({ open: false })
             refetch()
+            refetchEsxiSshKey()
           }}
         />
       )}
-
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteClose}
-        title="Confirm Delete"
-        icon={<WarningIcon color="warning" />}
-        message={
-          selectedForDeletion
-            ? `Are you sure you want to delete SSH key "${selectedForDeletion.secret.metadata.name}"?`
-            : 'Are you sure you want to delete this SSH key?'
-        }
-        actionLabel="Delete"
-        actionColor="error"
-        actionVariant="outlined"
-        onConfirm={handleConfirmDelete}
-        errorMessage={deleteError}
-        onErrorChange={setDeleteError}
-      />
-
-      <ConfirmationDialog
-        open={bulkDeleteDialogOpen}
-        onClose={handleBulkDeleteClose}
-        title="Confirm Delete"
-        icon={<WarningIcon color="warning" />}
-        message={
-          selectedRows.length > 1
-            ? 'Are you sure you want to delete these SSH keys?'
-            : 'Are you sure you want to delete this SSH key?'
-        }
-        items={selectedRows.map((r) => ({ id: r.id, name: r.name }))}
-        actionLabel="Delete"
-        actionColor="error"
-        actionVariant="outlined"
-        onConfirm={handleConfirmBulkDelete}
-        errorMessage={bulkDeleteError}
-        onErrorChange={setBulkDeleteError}
-      />
     </div>
   )
 }
