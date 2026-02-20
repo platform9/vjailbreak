@@ -585,12 +585,32 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 			return
 		}
 
-		// Check if sync warning is active (WARNING message from periodic sync)
+		// Check if sync warning is active - two possible formats:
+		// 1. Direct warning: "Periodic Sync: WARNING - <message>"
+		// 2. State info with warning: "Periodic Sync: Waiting ... (state: Idle (WARNING: <message>))"
 		if strings.Contains(msg, "Periodic Sync: WARNING -") {
 			migration.Status.SyncWarning = true
 			// Extract the warning message after "WARNING - "
 			if idx := strings.Index(msg, "WARNING - "); idx != -1 {
 				migration.Status.SyncWarningMessage = strings.TrimSpace(msg[idx+len("WARNING - "):])
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
+			return
+		}
+
+		// Check for warning embedded in state info
+		if strings.Contains(msg, "Periodic Sync:") && strings.Contains(msg, "(WARNING:") {
+			migration.Status.SyncWarning = true
+			// Extract the warning message between "(WARNING: " and the closing ")"
+			if idx := strings.Index(msg, "(WARNING: "); idx != -1 {
+				warningStart := idx + len("(WARNING: ")
+				// Find the closing parenthesis, accounting for nested parens
+				remaining := msg[warningStart:]
+				// Remove trailing "))" if present (one for WARNING, one for state)
+				remaining = strings.TrimSuffix(remaining, "))")
+				remaining = strings.TrimSuffix(remaining, ")")
+				migration.Status.SyncWarningMessage = strings.TrimSpace(remaining)
 			} else {
 				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
 			}
