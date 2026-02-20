@@ -610,8 +610,8 @@ export default function RollingMigrationFormDrawer({
         ip: '',
         bmcIp: '',
         maasState: 'Unknown',
-        vms: host.spec.vmCount || 0,
-        state: host.spec.state || 'Active',
+        vms: host.status?.vmCount || 0,
+        state: host.status?.state || 'Active',
         pcdHostConfigId: host.spec.hostConfigId
       }))
 
