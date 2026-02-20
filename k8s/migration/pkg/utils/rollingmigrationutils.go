@@ -354,7 +354,7 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 	pc := property.DefaultCollector(c)
 
 	var hs mo.HostSystem
-	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary", "config", "hardware"}, &hs)
+	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary", "config", "hardware", "vm", "runtime"}, &hs)
 	if err != nil {
 		return mo.HostSystem{}, errors.Wrap(err, "failed to get host properties")
 	}
