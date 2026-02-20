@@ -1,11 +1,11 @@
-import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from '@mui/x-data-grid'
+import { GridColDef, GridRowParams, GridRowSelectionModel } from '@mui/x-data-grid'
 import { Button, Typography, Box, IconButton, Tooltip, Alert, Snackbar } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import WarningIcon from '@mui/icons-material/Warning'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import AgentsIcon from '@mui/icons-material/Computer'
-import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
+import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { useState } from 'react'
 import ScaleUpDrawer from './ScaleUpDrawer'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -348,7 +348,7 @@ export default function NodesTable() {
 
   return (
     <>
-      <DataGrid
+      <CommonDataGrid
         rows={nodesWithActions}
         columns={columns}
         initialState={{
@@ -363,6 +363,7 @@ export default function NodesTable() {
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedNodes}
         loading={fetchingNodes}
+        emptyMessage="No agents available"
         slots={{
           toolbar: () => (
             <NodesToolbar
@@ -374,18 +375,6 @@ export default function NodesTable() {
               totalNodes={transformedNodes.length}
               onRefresh={handleRefresh}
             />
-          ),
-          noRowsOverlay: () => (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%'
-              }}
-            >
-              <Typography>No Agents</Typography>
-            </Box>
           )
         }}
       />
