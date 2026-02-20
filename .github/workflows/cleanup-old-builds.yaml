@@ -1,0 +1,164 @@
+name: Cleanup Old Images (Quay + S3)
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ vars.REGISTRY || 'quay.io' }}
+  ORG: ${{ vars.REPO || 'platform9' }}
+  REPOS: "vjailbreak vjailbreak-ui vjailbreak-v2v-helper vjailbreak-controller vjailbreak-vpwned"
+  # S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
+  DAYS_TO_KEEP: 300
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      ###########################################
+      # Login to Quay (same pattern as build)
+      ###########################################
+      - name: Login to Quay
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+
+      ###########################################
+      # Delete old images from Quay
+      ###########################################
+      - name: Cleanup old Quay tags
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_API_TOKEN }}
+        run: |
+          set -e
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+          CUTOFF_DATE=$(date -u -d "${DAYS_TO_KEEP} days ago" +%Y-%m-%d)
+          
+          echo "=== Quay Cleanup Configuration ==="
+          echo "Retention period: ${DAYS_TO_KEEP} days"
+          echo "Cutoff date: $CUTOFF_DATE (timestamp: $THRESHOLD)"
+          echo "Will delete tags older than: $CUTOFF_DATE"
+          echo ""
+
+          for REPO in $REPOS; do
+            echo "=== Checking repository: $REPO ==="
+
+            TAGS=$(curl -s -H "Authorization: Bearer $QUAY_TOKEN" \
+              "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/?limit=200")
+
+            echo "$TAGS" | jq -c '.tags[]' | while read tag; do
+              TAG_NAME=$(echo $tag | jq -r '.name')
+              LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
+
+              # Skip protected tags
+              if [[ "$TAG_NAME" == "latest" || "$TAG_NAME" == "ubuntu-base-prebaked" || "$TAG_NAME" == "base-v0.1.6" || "$TAG_NAME" == "base-v0.1.4" || "$TAG_NAME" == "base" || "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "Skipping protected tag: $TAG_NAME"
+                continue
+              fi
+
+              TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+              TAG_DATE=$(date -d "$LAST_MODIFIED" +%Y-%m-%d 2>/dev/null || echo "unknown")
+              
+              if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                echo "[DRY RUN] Would delete old tag: $TAG_NAME (last modified: $TAG_DATE)"
+                
+                # UNCOMMENT TO ENABLE ACTUAL DELETION:
+                # RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
+                #   -H "Authorization: Bearer $QUAY_TOKEN" \
+                #   "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/${TAG_NAME}")
+                # 
+                # HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                # if [[ $HTTP_CODE == "204" || $HTTP_CODE == "200" ]]; then
+                #   echo "Deleted successfully"
+                # else
+                #   echo "Delete failed with HTTP $HTTP_CODE"
+                # fi
+              elif [[ $TAG_TIME -gt 0 ]]; then
+                echo "Keeping recent tag: $TAG_NAME (last modified: $TAG_DATE)"
+              fi
+            done
+          done
+
+      ###########################################
+      # Configure AWS (same style as packer job)
+      ###########################################
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: ${{ env.S3_REGION }}
+
+      ###########################################
+      # Delete old QCOW2 files from S3
+      ###########################################
+      - name: Cleanup old S3 QCOW2 artifacts
+        run: |
+          set -e
+          CUTOFF_DATE=$(date -u -d "${DAYS_TO_KEEP} days ago" +%Y-%m-%d)
+          CUTOFF_TIMESTAMP=$(date -u -d "$CUTOFF_DATE" +%s)
+          
+          echo "=== S3 Cleanup Configuration ==="
+          echo "Retention period: ${DAYS_TO_KEEP} days"
+          echo "Cutoff date: $CUTOFF_DATE (timestamp: $CUTOFF_TIMESTAMP)"
+          echo "Will delete folders older than: $CUTOFF_DATE"
+          echo ""
+
+          # Packer creates: dev/YYYY-MM-DD/TAG/ and nightly/YYYY-MM-DD/TAG/
+          # We delete entire dated folders, not individual files
+          
+          cleanup_s3_folders() {
+            local BUCKET=$1
+            local PREFIX=$2
+            
+            echo "Scanning s3://$BUCKET/${PREFIX}"
+            
+            # List date folders under prefix
+            aws s3api list-objects-v2 \
+              --bucket "$BUCKET" \
+              --prefix "${PREFIX}" \
+              --delimiter "/" \
+              --query 'CommonPrefixes[].Prefix' \
+              --output text | tr '\t' '\n' | while read -r folder; do
+              
+              if [[ -z "$folder" ]]; then
+                continue
+              fi
+              
+              # Extract date from folder (format: dev/YYYY-MM-DD/ or nightly/YYYY-MM-DD/)
+              if [[ $folder =~ ${PREFIX}([0-9]{4}-[0-9]{2}-[0-9]{2})/ ]]; then
+                BUILD_DATE="${BASH_REMATCH[1]}"
+                BUILD_TIMESTAMP=$(date -u -d "$BUILD_DATE" +%s 2>/dev/null || echo 0)
+                
+                if [[ $BUILD_TIMESTAMP -gt 0 && $BUILD_TIMESTAMP -lt $CUTOFF_TIMESTAMP ]]; then
+                  echo "[DRY RUN] Would delete old folder: s3://$BUCKET/${folder} (date: $BUILD_DATE)"
+                  # UNCOMMENT TO ENABLE ACTUAL DELETION:
+                  # aws s3 rm "s3://$BUCKET/${folder}" --recursive
+                  # echo "Deleted successfully"
+                elif [[ $BUILD_TIMESTAMP -gt 0 ]]; then
+                  echo "Keeping recent folder: ${folder} (date: $BUILD_DATE)"
+                else
+                  echo "Skipping folder with invalid date: ${folder}"
+                fi
+              fi
+            done
+          }
+          
+          # Cleanup dev bucket
+          if [ -n "$S3_BUCKET_DEV" ]; then
+            echo "=== Cleaning DEV bucket: $S3_BUCKET_DEV ==="
+            cleanup_s3_folders "$S3_BUCKET_DEV" "dev/"
+            cleanup_s3_folders "$S3_BUCKET_DEV" "nightly/"
+          fi
+          
+          # Note: PROD bucket cleanup requires separate credentials
+          # Skipping PROD for now - releases should be kept indefinitely 
