@@ -69,8 +69,8 @@ type RollingMigartionValidationConfig struct {
 	CheckDRSIsFullyAutomated bool `json:"checkDRSIsFullyAutomated"` // Check if DRS is in fully automated mode
 	// CheckIfThereAreMoreThanOneHostInCluster checks if there are more than one host in the cluster
 	CheckIfThereAreMoreThanOneHostInCluster bool `json:"checkIfThereAreMoreThanOneHostInCluster"` // Check if there are more than one host in the cluster
-	// CheckClusterRemainingHostCapacity checks if the cluster has enough remaining capacity
-	CheckClusterRemainingHostCapacity bool `json:"checkClusterRemainingHostCapacity"` // Check if the cluster has enough remaining capacity
+	// CheckClusterRemainingHostCapacity checks if the cluster has enough remaining capacity using per-host capacity calculation
+	CheckClusterRemainingHostCapacity bool `json:"checkClusterRemainingHostCapacity"` // Check if the cluster has enough remaining capacity using per-host capacity calculation
 	// CheckVMsAreNotBlockedForMigration checks if the VMs are not blocked for migration
 	CheckVMsAreNotBlockedForMigration bool `json:"checkVMsAreNotBlockedForMigration"` // Check if the VMs are not blocked for migration
 	// CheckESXiInMAAS checks if the ESXi host is in MAAS
