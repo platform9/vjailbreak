@@ -1766,12 +1766,8 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						return false
 					}
 
-					// Don't reconcile if a terminal state migration is deleted
-					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-
-					return !isTerminal
+					// Always reconcile if OwnerReference exists
+					return metav1.IsControlledBy(migration, &vjailbreakv1alpha1.MigrationPlan{})
 				},
 			},
 		)).
