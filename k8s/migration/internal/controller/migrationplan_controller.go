@@ -973,14 +973,35 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		// VMs with RDM disks cannot be retried through UI because shared RDM disk state
 		// prevents automatic retry (RDMDisk CR may be in Error or Managed state)
 		hasRDMDisks := len(vmMachine.Spec.VMInfo.RDMDisks) > 0
-		retryable := !hasRDMDisks
 
-		migrationobj.Status.Retryable = &retryable
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
-			ctxlog.Error(err, "Failed to set retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
+		// Use retry and re-fetch to avoid ResourceVersion conflicts after creation
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latestMigration := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{
+				Name:      migrationobj.Name,
+				Namespace: migrationobj.Namespace,
+			}, latestMigration); getErr != nil {
+				return getErr
+			}
+
+			// Set the retryable status and preserve existing status fields
+			retryable := !hasRDMDisks
+			latestMigration.Status.Retryable = &retryable
+
+			// Ensure phase is explicitly set to avoid the "Unsupported value" error
+			if latestMigration.Status.Phase == "" {
+				latestMigration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			}
+
+			return r.Status().Update(ctx, latestMigration)
+		})
+
+		if err != nil {
+			ctxlog.Error(err, "Failed to set retryable status after multiple retries", "hasRDMDisks", hasRDMDisks)
 			// Don't fail migration creation if status update fails, just log the error
+			// The next reconciliation cycle will attempt to fix the status.
 		} else {
-			ctxlog.Info("Set migration retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
+			ctxlog.Info("Successfully set migration retryable status", "retryable", !hasRDMDisks)
 		}
 	}
 	return migrationobj, nil
@@ -1766,8 +1787,12 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						return false
 					}
 
-					// Always reconcile if OwnerReference exists
-					return metav1.IsControlledBy(migration, &vjailbreakv1alpha1.MigrationPlan{})
+					// Don't reconcile if a terminal state migration is deleted
+					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+
+					return !isTerminal
 				},
 			},
 		)).
