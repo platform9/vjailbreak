@@ -1765,10 +1765,6 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				CreateFunc: func(_ event.CreateEvent) bool {
 					return true
 				},
-				DeleteFunc: func(_ event.DeleteEvent) bool {
-					// Reconcile on any Migration delete to check for retries
-					return true
-				},
 			},
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
