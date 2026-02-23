@@ -1109,8 +1109,7 @@ export default function MigrationFormDrawer({
     (params.vms?.length || 0) > 0 &&
       !fieldErrors['vms'] &&
       !vmValidation.hasError &&
-      !rdmValidation.hasConfigError &&
-      !rdmValidation.hasVolumeTypeError
+      !rdmValidation.hasConfigError
   )
 
   const isStep3Complete = useMemo(() => {
@@ -1573,7 +1572,7 @@ export default function MigrationFormDrawer({
                   <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
                 )}
                 {rdmValidation.hasVolumeTypeError && (
-                  <Alert severity="error">{rdmValidation.volumeTypeErrorMessage}</Alert>
+                  <Alert severity="warning">{rdmValidation.volumeTypeErrorMessage}</Alert>
                 )}
               </SurfaceCard>
             </Box>

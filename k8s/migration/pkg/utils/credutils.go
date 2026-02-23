@@ -355,13 +355,19 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	backendVolumeTypeMap := make(map[string]string)
 	backendToVolumeType, err := buildBackendToVolumeTypeMap(ctx, openstackClients.BlockStorageClient)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to build backend to volume type map; backend volume type validation will be skipped")
-	} else {
-		for _, poolName := range volumeBackendPools {
-			_, backendName := parsePoolName(poolName)
-			if vtName, ok := backendToVolumeType[backendName]; ok {
-				backendVolumeTypeMap[poolName] = vtName
-			}
+		log.FromContext(ctx).Error(err, "failed to build backend to volume type map; falling back to pool name parsing")
+	}
+	for _, poolName := range volumeBackendPools {
+		poolVolumeType, backendName := parsePoolName(poolName)
+		if backendName == "" {
+			continue
+		}
+		if vtName, ok := backendToVolumeType[backendName]; ok {
+			// Prefer the authoritative volume type from Cinder volume types API
+			backendVolumeTypeMap[poolName] = vtName
+		} else if poolVolumeType != "" && poolVolumeType != "default" {
+			// Fall back to pool name parsing (e.g. "host@backend#pool-name" → pool-name)
+			backendVolumeTypeMap[poolName] = poolVolumeType
 		}
 	}
 
