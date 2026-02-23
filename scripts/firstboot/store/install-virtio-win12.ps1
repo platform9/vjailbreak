@@ -1,59 +1,84 @@
 $DriverPath = 'C:\Windows\Drivers\VirtIO'
-$LogFile = 'C:\ProgramData\virtio-install.log'
+$LogFile = 'C:\firstboot\virtio-install.log'
 
-$log = @()
-$log += '======================================'
-$log += 'VirtIO Driver Installation'
-$log += "Date: $(Get-Date)"
-$log += '======================================'
-
-if (Test-Path "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe") {
-    $log += 'Running pnp_wait.exe...'
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "$timestamp - $Level - $Message"
+    
     try {
-        & "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe"
-        $log += 'pnp_wait.exe completed'
+        $ScriptRoot = Split-Path $LogFile -Parent
+        if (-not (Test-Path $ScriptRoot)) {
+            New-Item -ItemType Directory -Path $ScriptRoot -Force | Out-Null
+        }
+        $logEntry | Out-File -FilePath $LogFile -Append -Encoding utf8
     } catch {
-        $log += "Warning: pnp_wait.exe failed: $_"
+        Write-Host "Failed to write to log file: $_"
+    }
+    
+    if ($Level -eq "ERROR") {
+        Write-Host $logEntry -ForegroundColor Red
+    } else {
+        Write-Host $logEntry
     }
 }
 
-$log += 'Waiting for system initialization...'
+Write-Log "======================================"
+Write-Log "VirtIO Driver Installation"
+Write-Log "Date: $(Get-Date)"
+Write-Log "======================================"
+
+if (Test-Path "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe") {
+    Write-Log 'Running pnp_wait.exe...'
+    try {
+        & "$env:ProgramFiles\Guestfs\Firstboot\pnp_wait.exe"
+        Write-Log 'pnp_wait.exe completed'
+    } catch {
+        Write-Log "Warning: pnp_wait.exe failed: $_" -Level "WARNING"
+    }
+}
+
+Write-Log 'Waiting for system initialization...'
 Start-Sleep -Seconds 30
 
 if (-not (Test-Path $DriverPath)) {
-    $log += 'ERROR: Driver path not found'
-    $log | Add-Content $LogFile
+    Write-Log 'ERROR: Driver path not found' -Level "ERROR"
     exit 1
 }
 
-$log += 'Installing VirtIO drivers...'
+Write-Log 'Installing VirtIO drivers...'
 
 $drivers = @('balloon.inf', 'vioser.inf', 'viorng.inf', 'vioinput.inf', 'pvpanic.inf', 'netkvm.inf', 'vioscsi.inf', 'viostor.inf')
 
 foreach ($driver in $drivers) {
     $inf = Join-Path $DriverPath $driver
     if (Test-Path $inf) {
-        $log += "Installing $driver..."
+        Write-Log "Installing $driver..."
         try {
             $output = & pnputil.exe -i -a $inf 2>&1
-            $log += $output
+            foreach ($line in $output) {
+                Write-Log "$line"
+            }
         } catch {
-            $log += "Error installing ${driver}: $_"
+            Write-Log "Error installing ${driver}: $_" -Level "ERROR"
+            exit 1
         }
     }
 }
 
-$log += 'Rescanning hardware...'
+Write-Log 'Rescanning hardware...'
 try {
     $output = & pnputil.exe /scan-devices 2>&1
-    $log += $output
+    foreach ($line in $output) {
+        Write-Log "$line"
+    }
 } catch {
-    $log += "Error rescanning: $_"
+    Write-Log "Error rescanning: $_" -Level "ERROR"
+    exit 1
 }
 
-$log += ''
-$log += '======================================'
-$log += 'VirtIO Driver Installation Complete'
-$log += '======================================'
-
-$log | Add-Content $LogFile
+Write-Log ""
+Write-Log "======================================"
+Write-Log "VirtIO Driver Installation Complete"
+Write-Log "======================================"
+exit 0
