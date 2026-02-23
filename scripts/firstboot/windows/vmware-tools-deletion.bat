@@ -1,194 +1,304 @@
-@echo off
-REM Test script to verify the generated PowerShell matches the reference file
-REM This does NOT execute the PowerShell script
+<#
+.SYNOPSIS
+    Script to completely remove VMware Tools from Windows VMs after migration.
+    Handles multi-stage removal with reboots if necessary.
+    Designed to run as a post-migration script.
+#>
 
-REM Delete the file if it exists to start fresh
-if exist "%~dp0vmware-tools-removal.ps1" del "%~dp0vmware-tools-removal.ps1"
+param(
+    [string]$WorkDir = "$env:ProgramData\VMwareRemoval",
+    [string]$MarkerPath = "$WorkDir\vmware_tools_removed.marker",
+    [string]$LogPath = "C:\VMware_Removal_Log.txt",
+    [string]$BootLogPath = "$WorkDir\vmware-removal-bootstrap.log",
+    [string]$TaskName = "VMwareToolsRemoval",
+    [int]$MaxAttempts = 10
+)
 
-REM Generate the PowerShell script line by line using append redirection
-echo # VMware Tools Manual Removal Script > "%~dp0vmware-tools-removal.ps1"
-echo # This script performs manual cleanup of VMware Tools from Windows machines >> "%~dp0vmware-tools-removal.ps1"
-echo # Run as Administrator for full functionality >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo param( >> "%~dp0vmware-tools-removal.ps1"
-echo     [string]$LogPath = "C:\VMware_Removal_Log.txt" >> "%~dp0vmware-tools-removal.ps1"
-echo ) >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Function to log messages >> "%~dp0vmware-tools-removal.ps1"
-echo function Write-Log { >> "%~dp0vmware-tools-removal.ps1"
-echo     param([string]$Message, [string]$Level = "INFO") >> "%~dp0vmware-tools-removal.ps1"
-echo     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss" >> "%~dp0vmware-tools-removal.ps1"
-echo     $logEntry = "[$timestamp] [$Level] $Message" >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Host $logEntry >> "%~dp0vmware-tools-removal.ps1"
-echo     Add-Content -Path $LogPath -Value $logEntry >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "=== VMware Tools Manual Removal Started ===" >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Check if running as Administrator >> "%~dp0vmware-tools-removal.ps1"
-echo if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Log "This script must be run as Administrator!" "ERROR" >> "%~dp0vmware-tools-removal.ps1"
-echo     exit 1 >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Get current username for user-specific paths >> "%~dp0vmware-tools-removal.ps1"
-echo $currentUser = $env:USERNAME >> "%~dp0vmware-tools-removal.ps1"
-echo $allUsers = Get-ChildItem "C:\Users" -Directory ^| Where-Object { $_.Name -notmatch "^(Public|Default|All Users)$" } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "Starting VMware Tools removal process..." >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Step 1: Delete VMware installation files >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "Step 1: Removing VMware installation files..." >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo $vmwarePaths = @( >> "%~dp0vmware-tools-removal.ps1"
-echo     "C:\Program Files\VMware", >> "%~dp0vmware-tools-removal.ps1"
-echo     "C:\Program Files (x86)\VMware", >> "%~dp0vmware-tools-removal.ps1"
-echo     "C:\Program Files\Common Files\VMware", >> "%~dp0vmware-tools-removal.ps1"
-echo     "C:\Program Files (x86)\Common Files\VMware", >> "%~dp0vmware-tools-removal.ps1"
-echo     "C:\ProgramData\VMware" >> "%~dp0vmware-tools-removal.ps1"
-echo ) >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Add user-specific paths for all users >> "%~dp0vmware-tools-removal.ps1"
-echo foreach ($user in $allUsers) { >> "%~dp0vmware-tools-removal.ps1"
-echo     $userPath = "C:\Users\$($user.Name)\AppData\Local\VMware" >> "%~dp0vmware-tools-removal.ps1"
-echo     $vmwarePaths += $userPath >> "%~dp0vmware-tools-removal.ps1"
-echo     $userPath = "C:\Users\$($user.Name)\AppData\Roaming\VMware" >> "%~dp0vmware-tools-removal.ps1"
-echo     $vmwarePaths += $userPath >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo foreach ($path in $vmwarePaths) { >> "%~dp0vmware-tools-removal.ps1"
-echo     if (Test-Path $path) { >> "%~dp0vmware-tools-removal.ps1"
-echo         try { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Removing directory: $path" >> "%~dp0vmware-tools-removal.ps1"
-echo             Remove-Item -Path $path -Recurse -Force -ErrorAction Stop >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Successfully removed: $path" >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo         catch { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Failed to remove $path : $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo     else { >> "%~dp0vmware-tools-removal.ps1"
-echo         Write-Log "Path not found (skipping): $path" >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Step 2: Delete VMware drivers from Sysnative\drivers >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "Step 2: Removing VMware drivers from Sysnative\drivers..." >> "%~dp0vmware-tools-removal.ps1"
-echo $driversPath = "C:\Windows\Sysnative\drivers" >> "%~dp0vmware-tools-removal.ps1"
-echo $vmwareDrivers = @( >> "%~dp0vmware-tools-removal.ps1"
-echo     "vmci.sys", "vm3dmp.sys", "vmaudio.sys", "vmhgfs.sys", "vmmemctl.sys",  >> "%~dp0vmware-tools-removal.ps1"
-echo     "vmmouse.sys", "vmrawdsk.sys", "vmtools.sys", "vmusbmouse.sys",  >> "%~dp0vmware-tools-removal.ps1"
-echo     "vmvss.sys", "vsock.sys", "vmx_svga.sys", "vmxnet3.sys" >> "%~dp0vmware-tools-removal.ps1"
-echo ) >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo foreach ($driver in $vmwareDrivers) { >> "%~dp0vmware-tools-removal.ps1"
-echo     $driverPath = Join-Path $driversPath $driver >> "%~dp0vmware-tools-removal.ps1"
-echo     if (Test-Path $driverPath) { >> "%~dp0vmware-tools-removal.ps1"
-echo         try { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Removing driver: $driver" >> "%~dp0vmware-tools-removal.ps1"
-echo             Remove-Item -Path $driverPath -Force >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Successfully removed driver: $driver" >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo         catch { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Failed to remove driver $driver : $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo     else { >> "%~dp0vmware-tools-removal.ps1"
-echo         Write-Log "Driver not found: $driver" >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Remove any additional VMware drivers >> "%~dp0vmware-tools-removal.ps1"
-echo try { >> "%~dp0vmware-tools-removal.ps1"
-echo     $additionalDrivers = Get-ChildItem $driversPath ^| Where-Object { $_.VersionInfo.CompanyName -eq "VMware, Inc." } >> "%~dp0vmware-tools-removal.ps1"
-echo     foreach ($driver in $additionalDrivers) { >> "%~dp0vmware-tools-removal.ps1"
-echo         Write-Log "Removing additional VMware driver: $($driver.Name)" >> "%~dp0vmware-tools-removal.ps1"
-echo         Remove-Item -Path $driver.FullName -Force >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo catch { >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Log "Error removing additional drivers: $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo # Step 3: Remove VMware SVGA driver from Device Manager >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "Step 3: Removing VMware SVGA driver from Device Manager..." >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo try { >> "%~dp0vmware-tools-removal.ps1"
-echo     # Use PnPUtil to remove VMware drivers >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Log "Attempting to remove VMware drivers using PnPUtil..." >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo     # Get all VMware-related drivers >> "%~dp0vmware-tools-removal.ps1"
-echo     $pnpDrivers = ^& C:\Windows\Sysnative\pnputil.exe /enum-drivers ^| Select-String -Pattern "vmware" -Context 2 >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo     if ($pnpDrivers) { >> "%~dp0vmware-tools-removal.ps1"
-echo         # Extract OEM names and remove drivers >> "%~dp0vmware-tools-removal.ps1"
-echo         foreach ($line in $pnpDrivers) { >> "%~dp0vmware-tools-removal.ps1"
-echo             if ($line -match "oem(\d+)\.inf") { >> "%~dp0vmware-tools-removal.ps1"
-echo                 $oemName = $matches[0] >> "%~dp0vmware-tools-removal.ps1"
-echo                 Write-Log "Removing driver package: $oemName" >> "%~dp0vmware-tools-removal.ps1"
-echo                 ^& C:\Windows\Sysnative\pnputil.exe /delete-driver $oemName /uninstall /force >> "%~dp0vmware-tools-removal.ps1"
-echo             } >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo     # Additional method: Remove devices via PowerShell >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Log "Removing VMware devices from Device Manager..." >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo     $vmwareDevices = Get-PnpDevice ^| Where-Object {  >> "%~dp0vmware-tools-removal.ps1"
-echo         $_.FriendlyName -like "*VMware*" -or  >> "%~dp0vmware-tools-removal.ps1"
-echo         $_.HardwareID -like "*VMware*" -or >> "%~dp0vmware-tools-removal.ps1"
-echo         $_.InstanceId -like "*VMware*" >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo     foreach ($device in $vmwareDevices) { >> "%~dp0vmware-tools-removal.ps1"
-echo         try { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Removing device: $($device.FriendlyName)" >> "%~dp0vmware-tools-removal.ps1"
-echo             # $device ^| Disable-PnpDevice -Confirm:$false >> "%~dp0vmware-tools-removal.ps1"
-echo             C:\Windows\Sysnative\pnputil.exe /remove-device $device.InstanceId >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo         catch { >> "%~dp0vmware-tools-removal.ps1"
-echo             Write-Log "Could not remove device $($device.FriendlyName): $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
-echo         } >> "%~dp0vmware-tools-removal.ps1"
-echo     } >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo catch { >> "%~dp0vmware-tools-removal.ps1"
-echo     Write-Log "Error during device removal: $($_.Exception.Message)" "WARNING" >> "%~dp0vmware-tools-removal.ps1"
-echo } >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "=== VMware Tools related Files removal completed ===" >> "%~dp0vmware-tools-removal.ps1"
-echo Write-Log "Log file saved to: $LogPath" >> "%~dp0vmware-tools-removal.ps1"
-echo. >> "%~dp0vmware-tools-removal.ps1"
-echo Generated vmware-tools-removal.ps1 successfully!
-echo Running VMware Tools removal script...
-echo Please note: This script requires Administrator privileges.
-echo.
+$ErrorActionPreference = 'SilentlyContinue'
 
-REM Execute the PowerShell script with execution policy bypass
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0vmware-tools-removal.ps1"
+# Function to write logs
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$Level = 'INFO',
+        [string]$LogFile = $LogPath
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[$ts] [$Level] $Message"
+    try { Add-Content -Path $LogFile -Value $line } catch { }
+    try { Add-Content -Path (Join-Path $WorkDir 'VMware_Removal_Log.txt') -Value $line } catch { }
+}
 
-echo.
-echo Powershell execution completed. Check the log file at C:\VMware_Removal_Log.txt for details.
+# Create working directory if it doesn't exist
+if (-not (Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
 
-echo Setting up Startup script to delete the VMware, Inc Key from Registry.
-SET startupScriptPath=C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\vmware_tools_removal.bat
-echo REG DELETE "HKEY_LOCAL_MACHINE\SOFTWARE\VMware, Inc." /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SOFTWARE\VMware" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\VMware, Inc." /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\VMware" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmci" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vm3dmp" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmaudio" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmhgfs" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMMemCtl" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmmouse" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMRawDisk" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMTools" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmusbmouse" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\vmvss" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMwareCAF" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMwareCAFCommAmqpListener" /f >> "%startupScriptPath%"
-echo REG DELETE "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VMwareCAFManagementAgentHost" /f >> "%startupScriptPath%"
-echo echo "Deleted all entries" >> "%startupScriptPath%"
-echo timeout /t 60 >> "%startupScriptPath%"
-echo start /b "" cmd /c del "%%~f0"^&exit /b >> "%startupScriptPath%"
-echo Script execution completed.
+# Check if marker exists (removal complete)
+if (Test-Path $MarkerPath) {
+    Write-Log 'Marker found. Deleting task and exiting.' -LogFile $BootLogPath
+    schtasks /Delete /TN $TaskName /F > $null 2>&1
+    exit 0
+}
+
+# Bootstrap logic: If not running from WorkDir, stage the script and schedule task
+$scriptPath = $PSCommandPath
+$stagedScript = Join-Path $WorkDir 'vmware-tools-removal.ps1'
+
+if ($scriptPath -ne $stagedScript) {
+    Write-Log 'First run detected. Staging script...' -LogFile $BootLogPath
+    Copy-Item -Path $scriptPath -Destination $stagedScript -Force
+
+    Write-Log "Creating Scheduled Task $TaskName..." -LogFile $BootLogPath
+    $taskExists = schtasks /Query /TN $TaskName > $null 2>&1
+    if (-not $taskExists) {
+        $taskAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$stagedScript`" -WorkDir `"$WorkDir`" -MarkerPath `"$MarkerPath`" -LogPath `"$LogPath`" -TaskName `"$TaskName`""
+        $taskTrigger = New-ScheduledTaskTrigger -AtStartup
+        $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -Hidden
+        $taskPrincipal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+        Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
+    }
+
+    Write-Log 'Script scheduled. Triggering reboot to release driver locks.' -LogFile $BootLogPath
+    Restart-Computer -Force -Delay 5 -Reason 'VMware Removal Initial Phase'
+    exit 0
+}
+
+# Post-reboot execution starts here
+Write-Log '--- Post-Reboot Execution Start ---' -LogFile $BootLogPath
+
+# Attempt counter to prevent reboot loops
+$attemptFile = Join-Path $WorkDir 'attempts.txt'
+$attempt = 0
+if (Test-Path $attemptFile) {
+    $attempt = [int](Get-Content -Path $attemptFile -ErrorAction SilentlyContinue)
+}
+$attempt++
+Set-Content -Path $attemptFile -Value $attempt
+
+if ($attempt -gt $MaxAttempts) {
+    Write-Log "Max attempts reached ($attempt/$MaxAttempts). Stopping to avoid reboot loop." 'ERROR'
+    New-Item -ItemType File -Path (Join-Path $WorkDir 'vmware_tools_removed.failed') -Force | Out-Null
+    schtasks /Delete /TN $TaskName /F | Out-Null
+    exit 1
+}
+
+$didWork = $false
+
+# Function to stop and delete service if exists
+function Stop-IfExistsService {
+    param([string]$Name)
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($svc) {
+        if ($svc.Status -ne 'Stopped') { Stop-Service -Name $Name -Force -ErrorAction SilentlyContinue }
+        sc.exe delete $Name | Out-Null
+        $script:didWork = $true
+    }
+}
+
+# Function to uninstall VMware Tools
+function Try-UninstallVMwareTools {
+    $exitCode = $null
+    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    $vmw = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' } | Select-Object -First 1
+    if ($vmw) {
+        $u = $vmw.QuietUninstallString
+        if (-not $u) { $u = $vmw.UninstallString }
+        if ($u) {
+            if ($u -match '\{[0-9A-Fa-f-]{36}\}') {
+                $guid = $matches[0]
+                Write-Log "Uninstalling VMware Tools via msiexec product code: $guid"
+                $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/x $guid /qn /norestart" -Wait -PassThru
+                $exitCode = $p.ExitCode
+            } else {
+                Write-Log "Uninstalling VMware Tools via uninstall string: $u"
+                $p = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c $u" -Wait -PassThru
+                $exitCode = $p.ExitCode
+            }
+            Write-Log "Uninstall exit code: $exitCode"
+            $script:didWork = $true
+        }
+    }
+    return $exitCode
+}
+
+# Function for MSI custom action hack (if standard uninstall fails)
+function Try-MsiCustomActionHack {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $productsRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products'
+    $productKeys = Get-ChildItem -Path $productsRoot -ErrorAction SilentlyContinue
+    foreach ($pk in $productKeys) {
+        $ip = Join-Path $pk.PSPath 'InstallProperties'
+        $props = Get-ItemProperty -Path $ip -ErrorAction SilentlyContinue
+        if ($props -and $props.DisplayName -eq 'VMware Tools') {
+            $localPackage = $props.LocalPackage
+            if ($localPackage -and (Test-Path $localPackage)) {
+                Write-Log "Attempting MSI custom action hack for LocalPackage: $localPackage" 'WARNING'
+                $db = $installer.OpenDatabase($localPackage, 2)
+                $q = "DELETE FROM CustomAction WHERE Action='VM_LogStart' OR Action='VM_CheckRequirements'"
+                $view = $db.OpenView($q)
+                $view.Execute()
+                $view.Close()
+                $db.Commit()
+                $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/x `"$localPackage`" /qn /norestart" -Wait -PassThru
+                Write-Log "MSI hack uninstall exit code: $($p.ExitCode)" 'WARNING'
+                $script:didWork = $true
+                break
+            }
+        }
+    }
+}
+
+# Function to remove path forcefully
+function Remove-PathForce {
+    param([string]$Path)
+    if (Test-Path $Path) {
+        takeown.exe /f $Path /r /d y | Out-Null
+        icacls.exe $Path /grant Administrators:F /t /q | Out-Null
+        Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
+        $script:didWork = $true
+    }
+}
+
+# Function to remove registry key
+function Remove-RegKey {
+    param([string]$Key)
+    if (Test-Path $Key) {
+        Remove-Item -Path $Key -Recurse -Force -ErrorAction SilentlyContinue
+        $script:didWork = $true
+    }
+}
+
+# Function to get pnputil path
+function Get-PnpUtilPath {
+    $sysDir = if (Test-Path "$env:WINDIR\Sysnative") { "$env:WINDIR\Sysnative" } else { "$env:WINDIR\System32" }
+    return Join-Path $sysDir 'pnputil.exe'
+}
+
+# Function to remove VMware drivers from DriverStore
+function Remove-DriverStoreVMware {
+    $pnputil = Get-PnpUtilPath
+    if (-not (Test-Path $pnputil)) { return }
+
+    $out = & $pnputil /enum-drivers 2>&1 | Out-String
+    $blocks = $out -split "(\r?\n){2,}"
+
+    foreach ($b in $blocks) {
+        $oem = $null
+        $provider = $null
+        $original = $null
+
+        if ($b -match '(?im)^Published Name\s*:\s*(oem\d+\.inf)') { $oem = $matches[1] }
+        if ($b -match '(?im)^Provider Name\s*:\s*(.+)$') { $provider = $matches[1].Trim() }
+        if ($b -match '(?im)^Original Name\s*:\s*(.+)$') { $original = $matches[1].Trim() }
+
+        $isVmw = $false
+        if ($provider -match 'VMware') { $isVmw = $true }
+        if ($original -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|vgauth|vmvss|vmvsock|vsock') { $isVmw = $true }
+        if ($b -match '(?i)VMware') { $isVmw = $true }
+
+        if ($oem -and $isVmw) {
+            Write-Log "Removing driver package: $oem (Provider='$provider', Original='$original')"
+            & $pnputil /delete-driver $oem /uninstall /force | Out-Null
+            $script:didWork = $true
+        }
+    }
+}
+
+Write-Log '=== VMware Tools removal run started ==='
+
+# Stop and delete services
+$services = @(
+    'VMTools','VGAuthService','VMwareCAF','VMwareCAFCommAmqpListener','VMwareCAFManagementAgentHost',
+    'vmci','vm3dmp','vmaudio','vmhgfs','VMMemCtl','vmmouse','VMRawDisk','vmusbmouse','vmvss','vmvsock','vsock','vmxnet3'
+)
+foreach ($svc in $services) { Stop-IfExistsService $svc }
+
+# Stop processes
+$processes = @('vmtoolsd','vmwaretray','vmwareuser','VGAuthService')
+foreach ($proc in $processes) { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue; $didWork = $true }
+
+# Attempt uninstall
+$uninstallExit = Try-UninstallVMwareTools
+if ($uninstallExit -ne $null -and $uninstallExit -ne 0 -and $uninstallExit -ne 3010) {
+    Try-MsiCustomActionHack
+}
+
+# Remove registry keys
+$regKeys = @(
+    'HKLM:\SOFTWARE\VMware, Inc.','HKLM:\SOFTWARE\VMware',
+    'HKLM:\SOFTWARE\WOW6432Node\VMware, Inc.','HKLM:\SOFTWARE\WOW6432Node\VMware'
+)
+foreach ($rk in $regKeys) { Remove-RegKey $rk }
+
+$svcRegKeys = @(
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmci',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vm3dmp',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmaudio',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmhgfs',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMMemCtl',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMRawDisk',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmrawdsk',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMTools',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmusbmouse',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmvss',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmvsock',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vsock',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\vmxnet3',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAF',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAFCommAmqpListener',
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAFManagementAgentHost'
+)
+foreach ($sk in $svcRegKeys) { Remove-RegKey $sk }
+
+# Remove files and folders
+$paths = @(
+    'C:\Program Files\VMware',
+    'C:\Program Files (x86)\VMware',
+    'C:\Program Files\Common Files\VMware',
+    'C:\Program Files (x86)\Common Files\VMware',
+    'C:\ProgramData\VMware',
+    'C:\Windows\System32\drivers\vmci.sys',
+    'C:\Windows\System32\drivers\vm3dmp.sys',
+    'C:\Windows\System32\drivers\vmaudio.sys',
+    'C:\Windows\System32\drivers\vmhgfs.sys',
+    'C:\Windows\System32\drivers\vmmemctl.sys',
+    'C:\Windows\System32\drivers\vmmouse.sys',
+    'C:\Windows\System32\drivers\vmrawdsk.sys',
+    'C:\Windows\System32\drivers\vmusbmouse.sys',
+    'C:\Windows\System32\drivers\vmvss.sys',
+    'C:\Windows\System32\drivers\vmvsock.sys',
+    'C:\Windows\System32\drivers\vsock.sys',
+    'C:\Windows\System32\drivers\vmxnet3.sys'
+)
+foreach ($p in $paths) { Remove-PathForce $p }
+
+# Remove drivers from DriverStore
+Remove-DriverStoreVMware
+
+# Test if any remnants remain
+function Test-Remaining {
+    $testPaths = @(
+        'C:\Program Files\VMware',
+        'C:\Program Files (x86)\VMware',
+        'C:\ProgramData\VMware'
+    )
+    foreach ($p in $testPaths) { if (Test-Path $p) { return $true } }
+
+    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    $vmw = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }
+    if ($vmw) { return $true }
+
+    return $false
+}
+
+if (-not (Test-Remaining)) {
+    Write-Log 'No remaining VMware Tools artifacts detected. Marking complete.'
+    New-Item -ItemType File -Path $MarkerPath -Force | Out-Null
+    schtasks /Delete /TN $TaskName /F | Out-Null
+    # Exit with 3010 to indicate potential final reboot if needed, but since clean, can be 0
+    exit 0
+}
+
+Write-Log 'VMware Tools artifacts still detected; rebooting to continue cleanup.' 'WARNING'
+Restart-Computer -Force -Delay 5
+exit 0
