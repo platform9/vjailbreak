@@ -128,6 +128,8 @@ type MigrationPlanStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.migrationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Migration Template",type="string",JSONPath=".spec.migrationTemplate"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // MigrationPlan is the Schema for the migrationplans API that defines
 // how to migrate virtual machines from VMware to OpenStack including migration strategy and scheduling.

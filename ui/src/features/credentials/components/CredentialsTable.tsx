@@ -1,11 +1,11 @@
-import { GridColDef, GridToolbarContainer, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Chip, CircularProgress } from '@mui/material'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
+import { Button, Box, IconButton, Tooltip, Chip, CircularProgress } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
 import AddIcon from '@mui/icons-material/Add'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import SyncIcon from '@mui/icons-material/Sync'
-import { CustomSearchToolbar } from 'src/components/grid'
+import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
@@ -136,87 +136,82 @@ const getColumns = (
   }
 ]
 
+type CredentialType = 'vmware' | 'pcd'
+
 interface CustomToolbarProps {
+  title: string
   numSelected: number
   onDeleteSelected: () => void
   loading: boolean
   onRefresh: () => void
-  onAddVMwareCredential: () => void
-  onAddOpenstackCredential: () => void
+  onAddCredential: () => void
+  actionLabel: string
+  actionDataTour?: string
 }
 
 const CustomToolbar = ({
+  title,
   numSelected,
   onDeleteSelected,
   loading,
   onRefresh,
-  onAddVMwareCredential,
-  onAddOpenstackCredential
+  onAddCredential,
+  actionLabel,
+  actionDataTour
 }: CustomToolbarProps) => {
-  return (
-    <GridToolbarContainer
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {numSelected > 0 && (
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={onDeleteSelected}
+          disabled={loading}
+          sx={{ height: 40 }}
+        >
+          Delete Selected ({numSelected})
+        </Button>
+      )}
+      <CustomSearchToolbar placeholder="Search by Name or Type" onRefresh={onRefresh} />
+    </Box>
+  )
+
+  const actions = (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<AddIcon />}
+      onClick={onAddCredential}
+      sx={{ height: 40 }}
+      data-tour={actionDataTour}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <CredentialsIcon />
-        <Typography variant="h6" component="h2">
-          Credentials
-        </Typography>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        <Button
-          variant="outlined"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAddVMwareCredential}
-          sx={{ height: 40 }}
-          data-tour="add-vmware-creds"
-        >
-          Add VMware Credentials
-        </Button>
-        <Button
-          variant="outlined"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAddOpenstackCredential}
-          sx={{ height: 40 }}
-          data-tour="add-pcd-creds"
-        >
-          Add PCD Credentials
-        </Button>
-        {numSelected > 0 && (
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            disabled={loading}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({numSelected})
-          </Button>
-        )}
-        <CustomSearchToolbar placeholder="Search by Name or Type" onRefresh={onRefresh} />
-      </Box>
-    </GridToolbarContainer>
+      {actionLabel}
+    </Button>
+  )
+
+  return (
+    <ListingToolbar title={title} icon={<CredentialsIcon />} search={search} actions={actions} />
   )
 }
 
-export default function CredentialsTable() {
+interface CredentialsTableProps {
+  credentialType: CredentialType
+}
+
+export default function CredentialsTable({ credentialType }: CredentialsTableProps) {
   const { reportError } = useErrorHandler({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
+
+  const isVmware = credentialType === 'vmware'
 
   const {
     data: vmwareCredentials,
     isLoading: loadingVmware,
     refetch: refetchVmware
   } = useVmwareCredentialsQuery(undefined, {
+    enabled: isVmware,
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: revalidatingId ? 5000 : false
@@ -227,6 +222,7 @@ export default function CredentialsTable() {
     isLoading: loadingOpenstack,
     refetch: refetchOpenstack
   } = useOpenstackCredentialsQuery(undefined, {
+    enabled: !isVmware,
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: revalidatingId ? 5000 : false
@@ -284,7 +280,7 @@ export default function CredentialsTable() {
       credObject: cred
     })) || []
 
-  const allCredentials = [...vmwareItems, ...openstackItems]
+  const allCredentials = isVmware ? vmwareItems : openstackItems
 
   useEffect(() => {
     if (revalidatingId) {
@@ -317,14 +313,20 @@ export default function CredentialsTable() {
   }, [allCredentials, revalidatingId])
 
   useEffect(() => {
-    refetchVmware()
-    refetchOpenstack()
-  }, [refetchVmware, refetchOpenstack])
+    if (isVmware) {
+      refetchVmware()
+    } else {
+      refetchOpenstack()
+    }
+  }, [isVmware, refetchOpenstack, refetchVmware])
 
   const handleRefresh = useCallback(() => {
-    refetchVmware()
-    refetchOpenstack()
-  }, [refetchVmware, refetchOpenstack])
+    if (isVmware) {
+      refetchVmware()
+    } else {
+      refetchOpenstack()
+    }
+  }, [isVmware, refetchOpenstack, refetchVmware])
 
   const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
     const credentialName = id.startsWith('vmware-')
@@ -451,7 +453,7 @@ export default function CredentialsTable() {
 
   const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId)
 
-  const isLoading = loadingVmware || loadingOpenstack || deleting
+  const isLoading = (isVmware ? loadingVmware : loadingOpenstack) || deleting
 
   const handleOpenVMwareCredDrawer = () => {
     setVmwareCredDrawerOpen(true)
@@ -470,6 +472,11 @@ export default function CredentialsTable() {
     setOpenstackCredDrawerOpen(false)
     refetchOpenstack()
   }
+
+  const title = isVmware ? 'VMware Credentials' : 'PCD Credentials'
+  const actionLabel = isVmware ? 'Add VMware Credentials' : 'Add PCD Credentials'
+  const actionDataTour = isVmware ? 'add-vmware-creds' : 'add-pcd-creds'
+  const handleOpenDrawer = isVmware ? handleOpenVMwareCredDrawer : handleOpenOpenstackCredDrawer
 
   return (
     <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
@@ -493,12 +500,14 @@ export default function CredentialsTable() {
         slots={{
           toolbar: () => (
             <CustomToolbar
+              title={title}
               numSelected={selectedIds.length}
               onDeleteSelected={handleDeleteSelected}
               loading={isLoading}
               onRefresh={handleRefresh}
-              onAddVMwareCredential={handleOpenVMwareCredDrawer}
-              onAddOpenstackCredential={handleOpenOpenstackCredDrawer}
+              onAddCredential={handleOpenDrawer}
+              actionLabel={actionLabel}
+              actionDataTour={actionDataTour}
             />
           )
         }}
@@ -506,9 +515,6 @@ export default function CredentialsTable() {
         loading={isLoading}
         emptyMessage="No credentials available"
         sx={{
-          '& .MuiDataGrid-main': {
-            overflow: 'auto'
-          },
           '& .MuiDataGrid-cell:focus': {
             outline: 'none'
           }

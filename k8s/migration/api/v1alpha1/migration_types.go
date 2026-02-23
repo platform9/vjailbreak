@@ -132,12 +132,18 @@ type MigrationStatus struct {
 	// as RDM disk migration state prevents automatic retry.
 	// +optional
 	Retryable *bool `json:"retryable,omitempty"`
+
+	// SyncWarningMessage contains the warning message when periodic sync is in a warning state.
+	// If non-empty, indicates the sync failed but will auto-retry on next interval.
+	// +optional
+	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Agent Name",type="string",JSONPath=".status.agentName"
+// +kubebuilder:printcolumn:name="MigrationPlan",type="string",JSONPath=".spec.migrationPlan"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Migration is the Schema for the migrations API that represents a single virtual machine
