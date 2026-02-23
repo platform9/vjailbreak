@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/pkg/errors"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/xml"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )

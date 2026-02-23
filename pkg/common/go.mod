@@ -5,7 +5,7 @@ go 1.24.10
 require (
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20251203111109-fd5964e9ea7c
+	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20260223101627-bea2b6892624
 	github.com/vmware/govmomi v0.51.0
 	golang.org/x/net v0.47.0
 	k8s.io/api v0.33.3
@@ -29,6 +29,7 @@ require (
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -95,5 +96,9 @@ require (
 )
 
 replace github.com/platform9/vjailbreak/k8s/migration => ../../k8s/migration
+
+replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
+
+replace github.com/platform9/vjailbreak/pkg/vpwned => ../vpwned
 
 replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v0.0.5

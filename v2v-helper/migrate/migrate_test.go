@@ -9,7 +9,7 @@ import (
 
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/golang/mock/gomock"
