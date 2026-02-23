@@ -82,6 +82,10 @@ spec:
                 - cold
                 - mock
                 type: string
+              networkOverrides:
+                description: NetworkOverrides is the JSON-serialized per-NIC overrides
+                  for IP and MAC preservation
+                type: string
               podRef:
                 description: PodRef is the name of the pod
                 type: string

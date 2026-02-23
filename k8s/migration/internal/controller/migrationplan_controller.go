@@ -975,8 +975,16 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		hasRDMDisks := len(vmMachine.Spec.VMInfo.RDMDisks) > 0
 		retryable := !hasRDMDisks
 
-		migrationobj.Status.Retryable = &retryable
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			latest.Status.Retryable = &retryable
+			return r.Status().Update(ctx, latest)
+		})
+		if err != nil {
 			ctxlog.Error(err, "Failed to set retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 			// Don't fail migration creation if status update fails, just log the error
 		} else {
@@ -1756,22 +1764,6 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 				CreateFunc: func(_ event.CreateEvent) bool {
 					return true
-				},
-				DeleteFunc: func(e event.DeleteEvent) bool {
-					// Only reconcile if a non-terminal migration is deleted
-					// This prevents log flooding when succeeded migrations are deleted
-					// while pending migrations still exist
-					migration, ok := e.Object.(*vjailbreakv1alpha1.Migration)
-					if !ok {
-						return false
-					}
-
-					// Don't reconcile if a terminal state migration is deleted
-					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-
-					return !isTerminal
 				},
 			},
 		)).
