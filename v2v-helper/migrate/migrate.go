@@ -82,6 +82,14 @@ type Migrate struct {
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
+	NetworkOverrides  []NICOverride
+}
+
+// NICOverride defines per-NIC overrides for IP and MAC preservation during migration
+type NICOverride struct {
+	InterfaceIndex int  `json:"interfaceIndex"`
+	PreserveIP     bool `json:"preserveIP"`
+	PreserveMAC    bool `json:"preserveMAC"`
 }
 
 type MigrationTimes struct {
@@ -1935,6 +1943,17 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
+			// Check for per-NIC overrides
+			preserveIP := true
+			preserveMAC := true
+			for _, override := range migobj.NetworkOverrides {
+				if override.InterfaceIndex == idx {
+					preserveIP = override.PreserveIP
+					preserveMAC = override.PreserveMAC
+					break
+				}
+			}
+
 			var ippm []string
 
 			// VMware Tools detected IPs
@@ -1965,8 +1984,19 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				}
 			}
 
+			// Apply per-NIC overrides
+			mac := vminfo.Mac[idx]
+			if !preserveIP {
+				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, clearing IP entries for MAC %s — OpenStack will assign from pool", idx, mac))
+				vminfo.IPperMac[mac] = nil
+			}
+			if !preserveMAC {
+				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
+				mac = ""
+			}
+
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx, network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

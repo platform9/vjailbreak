@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -117,6 +118,15 @@ func main() {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 		return
 	}
+	// Parse network overrides if present
+	var networkOverrides []migrate.NICOverride
+	if migrationparams.NetworkOverrides != "" {
+		if err := json.Unmarshal([]byte(migrationparams.NetworkOverrides), &networkOverrides); err != nil {
+			handleError(fmt.Sprintf("Failed to parse network overrides: %v", err))
+			return
+		}
+	}
+
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
 		UserName:                vCenterUserName,
@@ -163,6 +173,7 @@ func main() {
 		ArrayInsecure:          arrayInsecure,
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
+		NetworkOverrides:       networkOverrides,
 	}
 
 	if migrationobj.ServerGroup != "" {
