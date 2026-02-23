@@ -1,5 +1,6 @@
 import {
   Box,
+  Chip,
   Typography,
   styled,
   Paper,
@@ -13,6 +14,7 @@ import {
   MenuItem,
   GlobalStyles,
   FormLabel,
+  Switch,
   Snackbar,
   useMediaQuery,
   Divider
@@ -184,6 +186,8 @@ interface VM {
   ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
   ipValidationMessage?: string
   networkInterfaces?: VmNetworkInterface[]
+  preserveIp?: Record<number, boolean>
+  preserveMac?: Record<number, boolean>
 }
 
 export interface VmNetworkInterface {
@@ -400,6 +404,11 @@ export default function RollingMigrationFormDrawer({
   // Bulk IP editing state - updated for multiple interfaces
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
   const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
+  const [bulkPreserveIp, setBulkPreserveIp] = useState<Record<string, Record<number, boolean>>>({})
+  const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
+    {}
+  )
+  const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
   const [bulkValidationStatus, setBulkValidationStatus] = useState<
     Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
   >({})
@@ -414,10 +423,17 @@ export default function RollingMigrationFormDrawer({
   }, [bulkValidationStatus])
 
   const hasBulkIpsToApply = useMemo(() => {
-    return Object.values(bulkEditIPs).some((interfaces) =>
+    const anyTypedIp = Object.values(bulkEditIPs).some((interfaces) =>
       Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
     )
-  }, [bulkEditIPs])
+    const anyPreserveIpOff = Object.values(bulkPreserveIp).some((interfaces) =>
+      Object.values(interfaces || {}).some((flag) => flag === false)
+    )
+    const anyPreserveMacOff = Object.values(bulkPreserveMac).some((interfaces) =>
+      Object.values(interfaces || {}).some((flag) => flag === false)
+    )
+    return anyTypedIp || anyPreserveIpOff || anyPreserveMacOff
+  }, [bulkEditIPs, bulkPreserveIp, bulkPreserveMac])
 
   // Flavor assignment state
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
@@ -1216,6 +1232,31 @@ export default function RollingMigrationFormDrawer({
           vmName: vm.name
         })) as VMSequence[]
 
+      const networkInterfacePreservation: Record<
+        string,
+        Record<string, { preserveIp: boolean; preserveMac: boolean }>
+      > = {}
+      vmsWithAssignments
+        .filter((vm) => selectedVMs.includes(vm.id))
+        .forEach((vm) => {
+          const preserveIp = vm.preserveIp || {}
+          const preserveMac = vm.preserveMac || {}
+
+          const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+
+          if (indices.size === 0) return
+
+          networkInterfacePreservation[vm.name] = {}
+          indices.forEach((indexStr) => {
+            const ipFlag = preserveIp[Number(indexStr)]
+            const macFlag = preserveMac[Number(indexStr)]
+            networkInterfacePreservation[vm.name][indexStr] = {
+              preserveIp: ipFlag !== false,
+              preserveMac: macFlag !== false
+            }
+          })
+        })
+
       // Create cluster mapping between VMware cluster and PCD cluster
       const selectedPCD = pcdData.find((p) => p.id === destinationPCD)
       const pcdClusterName = selectedPCD?.name || ''
@@ -1328,6 +1369,11 @@ export default function RollingMigrationFormDrawer({
         bmConfigRef: {
           name: selectedMaasConfig?.metadata.name || ''
         },
+        ...(Object.keys(networkInterfacePreservation).length > 0 && {
+          advancedOptions: {
+            networkInterfacePreservation
+          }
+        }),
         migrationStrategy: {
           adminInitiatedCutOver:
             selectedMigrationOptions.cutoverOption &&
@@ -2037,7 +2083,9 @@ export default function RollingMigrationFormDrawer({
                 display: 'flex',
                 alignItems: 'center',
                 width: '100%',
-                height: '100%'
+                height: '100%',
+                gap: 1,
+                minWidth: 0
               }}
             >
               <Typography
@@ -2051,6 +2099,12 @@ export default function RollingMigrationFormDrawer({
               >
                 {ipDisplay}
               </Typography>
+              {Object.values(vm.preserveIp || {}).some((v) => v === false) ? (
+                <Chip variant="outlined" label="Auto IP" size="small" sx={{ height: 20 }} />
+              ) : null}
+              {Object.values(vm.preserveMac || {}).some((v) => v === false) ? (
+                <Chip variant="outlined" label="Auto MAC" size="small" sx={{ height: 20 }} />
+              ) : null}
             </Box>
           )
 
@@ -2306,11 +2360,59 @@ export default function RollingMigrationFormDrawer({
   const handleCloseBulkEditDialog = () => {
     setBulkEditDialogOpen(false)
     setBulkEditIPs({})
+    setBulkPreserveIp({})
+    setBulkPreserveMac({})
+    setBulkExistingIPs({})
     setBulkValidationStatus({})
     setBulkValidationMessages({})
   }
 
+  const handleBulkPreserveIpChange = (vmId: string, interfaceIndex: number, value: boolean) => {
+    setBulkPreserveIp((prev) => ({
+      ...prev,
+      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
+    }))
+
+    if (value) {
+      const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+      if (existingIp.trim() !== '') {
+        setBulkEditIPs((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: existingIp }
+        }))
+        setBulkValidationStatus((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: 'valid' }
+        }))
+        setBulkValidationMessages((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+        }))
+      }
+    }
+
+    if (!value) {
+      // Preserve IP disabled: keep the current value so the user can edit/override it.
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+      }))
+    }
+  }
+
+  const handleBulkPreserveMacChange = (vmId: string, interfaceIndex: number, value: boolean) => {
+    setBulkPreserveMac((prev) => ({
+      ...prev,
+      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
+    }))
+  }
+
   const handleBulkIpChange = (vmId: string, interfaceIndex: number, value: string) => {
+    // Ignore edits when Preserve IP is disabled for this interface.
+    if (bulkPreserveIp?.[vmId]?.[interfaceIndex] === false) {
+      return
+    }
+
     setBulkEditIPs((prev) => ({
       ...prev,
       [vmId]: { ...prev[vmId], [interfaceIndex]: value }
@@ -2373,19 +2475,71 @@ export default function RollingMigrationFormDrawer({
     // Collect all IPs to apply with their VM and interface info
     const ipsToApply: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
 
+    let missingRequiredIp = false
     Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
       Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        if (ip.trim() !== '') {
-          ipsToApply.push({
-            vmId,
-            interfaceIndex: parseInt(interfaceIndexStr),
-            ip: ip.trim()
-          })
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+
+        if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
+          missingRequiredIp = true
+          setBulkValidationStatus((prev) => ({
+            ...prev,
+            [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
+          }))
+          setBulkValidationMessages((prev) => ({
+            ...prev,
+            [vmId]: {
+              ...prev[vmId],
+              [interfaceIndex]: 'IP is required when Preserve IP is enabled'
+            }
+          }))
         }
       })
     })
 
-    if (ipsToApply.length === 0) return
+    if (missingRequiredIp) {
+      return
+    }
+
+    Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
+      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+        const typedIp = ip.trim()
+
+        if (typedIp === '') return
+
+        // If Preserve IP is enabled and an existing IP is present, we keep it as-is.
+        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
+          return
+        }
+
+        ipsToApply.push({
+          vmId,
+          interfaceIndex,
+          ip: typedIp
+        })
+      })
+    })
+
+    if (ipsToApply.length === 0) {
+      const updatedVMs = vmsWithAssignments.map((vm) => {
+        const preserveIp = bulkPreserveIp[vm.id]
+        const preserveMac = bulkPreserveMac[vm.id]
+        if (!preserveIp && !preserveMac) return vm
+        return {
+          ...vm,
+          ...(preserveIp && { preserveIp }),
+          ...(preserveMac && { preserveMac })
+        }
+      })
+      setVmsWithAssignments(updatedVMs)
+      handleCloseBulkEditDialog()
+      return
+    }
 
     setAssigningIPs(true)
 
@@ -2518,9 +2672,17 @@ export default function RollingMigrationFormDrawer({
         // Update local VM state
         const updatedVMs = vmsWithAssignments.map((vm) => {
           const vmUpdates = validIPs.filter((item) => item.vmId === vm.id)
-          if (vmUpdates.length === 0) return vm
+          const preserveIp = bulkPreserveIp[vm.id]
+          const preserveMac = bulkPreserveMac[vm.id]
+          if (vmUpdates.length === 0 && !preserveIp && !preserveMac) return vm
 
           const updatedVM = { ...vm }
+          if (preserveIp) {
+            updatedVM.preserveIp = preserveIp
+          }
+          if (preserveMac) {
+            updatedVM.preserveMac = preserveMac
+          }
 
           if (vm.networkInterfaces) {
             const updatedInterfaces = [...vm.networkInterfaces]
@@ -2599,6 +2761,9 @@ export default function RollingMigrationFormDrawer({
 
     // Initialize bulk edit IPs for selected VMs
     const initialBulkEditIPs: Record<string, Record<number, string>> = {}
+    const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
+    const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
+    const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
     const initialValidationStatus: Record<
       string,
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
@@ -2608,23 +2773,37 @@ export default function RollingMigrationFormDrawer({
       const vm = vmsWithAssignments.find((v) => v.id === vmId)
       if (vm && vm.powerState === 'powered-off') {
         initialBulkEditIPs[vm.id] = {}
+        initialBulkPreserveIp[vm.id] = {}
+        initialBulkPreserveMac[vm.id] = {}
+        initialBulkExistingIPs[vm.id] = {}
         initialValidationStatus[vm.id] = {}
 
         if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
           // Multiple network interfaces
           vm.networkInterfaces.forEach((nic, index) => {
-            initialBulkEditIPs[vm.id][index] = nic.ipAddress || ''
-            initialValidationStatus[vm.id][index] = nic.ipAddress ? 'valid' : 'empty'
+            const existingIp = nic.ipAddress || ''
+            initialBulkExistingIPs[vm.id][index] = existingIp
+            initialBulkEditIPs[vm.id][index] = existingIp
+            initialBulkPreserveIp[vm.id][index] = vm.preserveIp?.[index] !== false
+            initialBulkPreserveMac[vm.id][index] = vm.preserveMac?.[index] !== false
+            initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
           })
         } else {
           // Single interface (treat as interface 0)
-          initialBulkEditIPs[vm.id][0] = vm.ip && vm.ip !== '—' ? vm.ip : ''
-          initialValidationStatus[vm.id][0] = vm.ip && vm.ip !== '—' ? 'valid' : 'empty'
+          const existingIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
+          initialBulkExistingIPs[vm.id][0] = existingIp
+          initialBulkEditIPs[vm.id][0] = existingIp
+          initialBulkPreserveIp[vm.id][0] = vm.preserveIp?.[0] !== false
+          initialBulkPreserveMac[vm.id][0] = vm.preserveMac?.[0] !== false
+          initialValidationStatus[vm.id][0] = existingIp ? 'valid' : 'empty'
         }
       }
     })
 
     setBulkEditIPs(initialBulkEditIPs)
+    setBulkPreserveIp(initialBulkPreserveIp)
+    setBulkPreserveMac(initialBulkPreserveMac)
+    setBulkExistingIPs(initialBulkExistingIPs)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
     setBulkEditDialogOpen(true)
@@ -3488,9 +3667,17 @@ export default function RollingMigrationFormDrawer({
                 return (
                   <Box
                     key={vmId}
-                    sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
+                    sx={{
+                      mb: 3,
+                      p: 2,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      bgcolor: 'background.paper',
+                      boxShadow: 1
+                    }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
                       {vm.name}
                     </Typography>
 
@@ -3499,38 +3686,142 @@ export default function RollingMigrationFormDrawer({
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
                       const status = bulkValidationStatus[vmId]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmId]?.[interfaceIndex]
+                      const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+                      const preserveMac = bulkPreserveMac?.[vmId]?.[interfaceIndex] !== false
 
                       return (
                         <Box
                           key={interfaceIndex}
-                          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
+                          sx={{
+                            mb: 2,
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '260px 150px 1fr' },
+                            gap: 2,
+                            alignItems: 'start'
+                          }}
                         >
-                          <Box sx={{ width: 120, flexShrink: 0 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
-                            </Typography>
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              Current: {networkInterface?.ipAddress || vm.ip || '—'}
-                            </Typography>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 0.75,
+                              minWidth: 0
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ minWidth: 36 }}
+                              >
+                                IP:
+                              </Typography>
+                              <Box
+                                component="span"
+                                sx={{
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  bgcolor: 'grey.100',
+                                  color: 'text.primary',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {networkInterface?.ipAddress || vm.ip || '—'}
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ minWidth: 36 }}
+                              >
+                                MAC:
+                              </Typography>
+                              <Box
+                                component="span"
+                                sx={{
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  bgcolor: 'grey.100',
+                                  color: 'text.primary',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {networkInterface?.mac || '—'}
+                              </Box>
+                            </Box>
+                            {!preserveMac ? (
+                              <Typography variant="caption" sx={{ color: 'warning.main' }}>
+                                A new MAC address will be assigned in the destination
+                              </Typography>
+                            ) : null}
                           </Box>
-                          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Switch
+                                size="small"
+                                checked={preserveIp}
+                                onChange={(e) =>
+                                  handleBulkPreserveIpChange(vmId, interfaceIndex, e.target.checked)
+                                }
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                Preserve IP
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Switch
+                                size="small"
+                                checked={preserveMac}
+                                onChange={(e) =>
+                                  handleBulkPreserveMacChange(
+                                    vmId,
+                                    interfaceIndex,
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                Preserve MAC
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TextField
                               value={ip}
                               onChange={(e) =>
                                 handleBulkIpChange(vmId, interfaceIndex, e.target.value)
                               }
-                              placeholder="Enter IP address"
+                              placeholder={
+                                preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
+                              }
                               size="small"
-                              sx={{ flex: 1 }}
+                              fullWidth
+                              disabled={
+                                preserveIp &&
+                                Boolean(bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim())
+                              }
                               error={status === 'invalid'}
-                              helperText={message}
+                              helperText={
+                                preserveIp
+                                  ? bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()
+                                    ? 'Preserving existing IP'
+                                    : message
+                                  : 'If left empty, a new IP will be assigned from destination subnet'
+                              }
                             />
                             <Box sx={{ width: 24, display: 'flex' }}>
-                              {status === 'validating' && <CircularProgress size={20} />}
-                              {status === 'valid' && (
+                              {status === 'validating' && preserveIp && (
+                                <CircularProgress size={20} />
+                              )}
+                              {status === 'valid' && preserveIp && (
                                 <CheckCircleIcon color="success" fontSize="small" />
                               )}
-                              {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
+                              {status === 'invalid' && preserveIp && (
+                                <ErrorIcon color="error" fontSize="small" />
+                              )}
                             </Box>
                           </Box>
                         </Box>
