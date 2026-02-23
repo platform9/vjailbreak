@@ -1,0 +1,748 @@
+name: Go Security scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  setup:
+    name: Shared Setup
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: '1.22'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Export Go Version
+        run: echo "go-version=1.22" >> $GITHUB_OUTPUT
+
+  gosec_scan:
+    name: Gosec Security Scan (Full)
+    needs: setup
+    runs-on: ubuntu-latest
+    outputs:
+      gosec_high_found: ${{ steps.scan.outputs.gosec_high_found }}
+      gosec_current_count: ${{ steps.gosec_compare.outputs.current_count }}
+      gosec_baseline_count: ${{ steps.gosec_compare.outputs.baseline_count }}
+      gosec_added_count: ${{ steps.gosec_compare.outputs.added_count }}
+      gosec_fixed_count: ${{ steps.gosec_compare.outputs.fixed_count }}
+      gosec_baseline_method: ${{ steps.gosec_compare.outputs.baseline_method }}
+      gosec_added_details: ${{ steps.gosec_compare.outputs.added_details }}
+      gosec_fixed_details: ${{ steps.gosec_compare.outputs.fixed_details }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '${{ needs.setup.outputs.go-version }}'
+
+      - name: Install gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Sanitize branch name
+        run: echo "SAFE_REF_NAME=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+
+      - name: Run Gosec Scan
+        id: scan
+        run: |
+          echo "Running Gosec scan..."
+          mkdir -p tmp
+          gosec -fmt=json -severity=medium -out=tmp/gosec-report.json ./... || true
+          cat tmp/gosec-report.json || echo '{"Issues":[]}'
+          count=$(jq '[.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' tmp/gosec-report.json || echo 0)
+
+          if [[ "$count" -gt 0 ]]; then
+            echo "gosec_high_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gosec_high_found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Gosec Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-json-${{ env.SAFE_REF_NAME }}
+          path: tmp/gosec-report.json
+
+      - name: Generate PR Body (if vulnerabilities found)
+        if: ${{ steps.scan.outputs.gosec_high_found == 'true' }}
+        run: |
+          echo "# 🚨 Gosec Vulnerability Report for branch \`${GITHUB_REF_NAME}\`" > tmp/pr-body.md
+          jq -r '
+            .Issues[]
+            | select(.severity == "HIGH" or .severity == "CRITICAL")
+            | "* File: \(.file)\n  • Line: \(.line)\n  • Rule ID: \(.rule_id)\n  • Details: \(.details)\n  • Confidence: \(.confidence)\n  • Severity: \(.severity)\n"
+          ' tmp/gosec-report.json >> tmp/pr-body.md
+
+      - name: Debug - List Available Artifacts
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          echo "Looking for artifacts from base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Expected Gosec artifact: gosec-security-report-${{ github.event.pull_request.base.sha }}"
+          echo "Base branch: ${{ github.event.pull_request.base.ref }}"
+
+      - name: Download Baseline Gosec Report (PR only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          name: gosec-security-report-${{ github.event.pull_request.base.sha }}
+          path: ./baseline-reports
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: security.yml
+          branch: ${{ github.event.pull_request.base.ref }}
+          workflow_conclusion: ""
+          check_artifacts: true
+          if_no_artifact_found: warn
+          repo: ${{ github.repository }}
+          search_artifacts: true
+
+      - name: Compare Vulnerabilities with Baseline (PR only)
+        if: github.event_name == 'pull_request'
+        id: gosec_compare
+        run: |
+          echo "Comparing Gosec vulnerabilities with baseline..."
+          
+          # Initialize counts
+          current_count=0
+          baseline_count=0
+          added_count=0
+          fixed_count=0
+          baseline_method="none"
+          
+          # Count current vulnerabilities
+          if [[ -f "tmp/gosec-report.json" ]]; then
+            current_count=$(jq '[.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' tmp/gosec-report.json || echo 0)
+          fi
+          
+          # Try to use artifact baseline first
+          if [[ -f "baseline-reports/gosec-report.json" ]]; then
+            echo "✅ Using artifact baseline from main branch"
+            baseline_method="artifact"
+            baseline_count=$(jq '[.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' baseline-reports/gosec-report.json || echo 0)
+            
+            # Create unique vulnerability identifiers for comparison
+            jq -r '.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL") | "\(.file):\(.line):\(.rule_id)"' tmp/gosec-report.json | sort > tmp/current-vulns.txt
+            jq -r '.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL") | "\(.file):\(.line):\(.rule_id)"' baseline-reports/gosec-report.json | sort > tmp/baseline-vulns.txt
+            
+            # Calculate added and fixed vulnerabilities
+            added_count=$(comm -23 tmp/current-vulns.txt tmp/baseline-vulns.txt | wc -l)
+            fixed_count=$(comm -13 tmp/current-vulns.txt tmp/baseline-vulns.txt | wc -l)
+            
+          else
+            echo "⚠️ No baseline artifact found, scanning base branch live..."
+            baseline_method="live_scan"
+            
+            # Save current state
+            cp tmp/gosec-report.json tmp/gosec-report-pr.json
+            
+            # Checkout and scan base branch
+            git fetch origin ${{ github.event.pull_request.base.ref }}
+            git checkout ${{ github.event.pull_request.base.sha }}
+            
+            # Run baseline Gosec scan
+            gosec -fmt=json -severity=medium -out=tmp/gosec-report-baseline.json ./... || true
+            cat tmp/gosec-report-baseline.json || echo '{"Issues":[]}'
+            
+            baseline_count=$(jq '[.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' tmp/gosec-report-baseline.json || echo 0)
+            
+            # Create comparison files
+            jq -r '.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL") | "\(.file):\(.line):\(.rule_id)"' tmp/gosec-report-pr.json | sort > tmp/current-vulns.txt
+            jq -r '.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL") | "\(.file):\(.line):\(.rule_id)"' tmp/gosec-report-baseline.json | sort > tmp/baseline-vulns.txt
+            
+            # Calculate differences
+            added_count=$(comm -23 tmp/current-vulns.txt tmp/baseline-vulns.txt | wc -l)
+            fixed_count=$(comm -13 tmp/current-vulns.txt tmp/baseline-vulns.txt | wc -l)
+            
+            # Restore PR state
+            git checkout ${{ github.sha }}
+            cp tmp/gosec-report-pr.json tmp/gosec-report.json
+          fi
+          
+          echo "Baseline method: $baseline_method"
+          echo "Current HIGH/CRITICAL vulnerabilities: $current_count"
+          echo "Baseline HIGH/CRITICAL vulnerabilities: $baseline_count"
+          echo "Added vulnerabilities: $added_count"
+          echo "Fixed vulnerabilities: $fixed_count"
+          
+          # Generate detailed vulnerability lists
+          added_details=""
+          fixed_details=""
+          
+          if [[ -f "tmp/current-vulns.txt" && -f "tmp/baseline-vulns.txt" ]]; then
+            # Get added vulnerabilities with details
+            if [[ $added_count -gt 0 ]]; then
+              added_vulns=$(comm -23 tmp/current-vulns.txt tmp/baseline-vulns.txt)
+              added_details=""
+              while IFS= read -r vuln_id; do
+                if [[ -n "$vuln_id" ]]; then
+                  # Extract file, line, rule_id from the identifier
+                  file_path=$(echo "$vuln_id" | cut -d':' -f1)
+                  line_num=$(echo "$vuln_id" | cut -d':' -f2)
+                  rule_id=$(echo "$vuln_id" | cut -d':' -f3)
+                  
+                  # Get full details from the report
+                  details=$(jq -r --arg file "$file_path" --arg line "$line_num" --arg rule "$rule_id" '
+                    .Issues[] | select(.file == $file and (.line | tostring) == $line and .rule_id == $rule and (.severity == "HIGH" or .severity == "CRITICAL")) | 
+                    "**File:** `\(.file)` (Line \(.line))\\n**Rule:** \(.rule_id)\\n**Severity:** \(.severity)\\n**Details:** \(.details)\\n"
+                  ' tmp/gosec-report.json)
+                  
+                  if [[ -n "$details" ]]; then
+                    added_details="${added_details}${details}\\n"
+                  fi
+                fi
+              done <<< "$added_vulns"
+            fi
+            
+            # Get fixed vulnerabilities with details  
+            if [[ $fixed_count -gt 0 ]]; then
+              fixed_vulns=$(comm -13 tmp/current-vulns.txt tmp/baseline-vulns.txt)
+              fixed_details=""
+              while IFS= read -r vuln_id; do
+                if [[ -n "$vuln_id" ]]; then
+                  # Extract file, line, rule_id from the identifier
+                  file_path=$(echo "$vuln_id" | cut -d':' -f1)
+                  line_num=$(echo "$vuln_id" | cut -d':' -f2)
+                  rule_id=$(echo "$vuln_id" | cut -d':' -f3)
+                  
+                  # Get full details from the baseline report
+                  baseline_report="baseline-reports/gosec-report.json"
+                  if [[ "$baseline_method" == "live_scan" ]]; then
+                    baseline_report="tmp/gosec-report-baseline.json"
+                  fi
+                  
+                  details=$(jq -r --arg file "$file_path" --arg line "$line_num" --arg rule "$rule_id" '
+                    .Issues[] | select(.file == $file and (.line | tostring) == $line and .rule_id == $rule and (.severity == "HIGH" or .severity == "CRITICAL")) | 
+                    "**File:** `\(.file)` (Line \(.line))\\n**Rule:** \(.rule_id)\\n**Severity:** \(.severity)\\n**Details:** \(.details)\\n"
+                  ' "$baseline_report")
+                  
+                  if [[ -n "$details" ]]; then
+                    fixed_details="${fixed_details}${details}\\n"
+                  fi
+                fi
+              done <<< "$fixed_vulns"
+            fi
+          fi
+          
+          # Set outputs
+          echo "current_count=$current_count" >> "$GITHUB_OUTPUT"
+          echo "baseline_count=$baseline_count" >> "$GITHUB_OUTPUT"
+          echo "added_count=$added_count" >> "$GITHUB_OUTPUT"
+          echo "fixed_count=$fixed_count" >> "$GITHUB_OUTPUT"
+          echo "baseline_method=$baseline_method" >> "$GITHUB_OUTPUT"
+          
+          # Set detailed outputs (escape for GitHub Actions)
+          {
+            echo "added_details<<EOF"
+            echo -e "$added_details"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          
+          {
+            echo "fixed_details<<EOF"
+            echo -e "$fixed_details"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Display Gosec Vulnerability Report
+        if: ${{ steps.scan.outputs.gosec_high_found == 'true' }}
+        run: |
+          echo "=========================================="
+          echo "Gosec Vulnerability Report:"
+          echo "=========================================="
+          cat tmp/pr-body.md
+          echo "=========================================="
+
+      - name: Store Gosec Report as Artifact (Main/Release)
+        if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-security-report-${{ github.sha }}
+          path: tmp/gosec-report.json
+          retention-days: 90
+
+      - name: Create Pull Request (if vulnerabilities found)
+        if: ${{ github.event_name == 'push' && steps.scan.outputs.gosec_high_found == 'true' }}
+        continue-on-error: true
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'chore: vulnerabilities detected by Gosec (HIGH/CRITICAL)'
+          title: 'Gosec Vulnerability Report for branch ${{ github.ref_name }}'
+          body-path: tmp/pr-body.md
+          branch: auto/gosec-scan/${{ env.SAFE_REF_NAME }}
+          base: ${{ github.ref_name }}
+          delete-branch: true
+
+      - name: Fail Job If Vulnerabilities Found
+        if: ${{ steps.scan.outputs.gosec_high_found == 'true' }}
+        run: exit 1
+
+  trivy_scan:
+    name: Trivy Security Scan (Full)
+    needs: setup
+    runs-on: ubuntu-latest
+    outputs:
+      trivy_high_found: ${{ steps.scan.outputs.trivy_high_found }}
+      trivy_current_count: ${{ steps.trivy_compare.outputs.current_count }}
+      trivy_baseline_count: ${{ steps.trivy_compare.outputs.baseline_count }}
+      trivy_added_count: ${{ steps.trivy_compare.outputs.added_count }}
+      trivy_fixed_count: ${{ steps.trivy_compare.outputs.fixed_count }}
+      trivy_baseline_method: ${{ steps.trivy_compare.outputs.baseline_method }}
+      trivy_added_details: ${{ steps.trivy_compare.outputs.added_details }}
+      trivy_fixed_details: ${{ steps.trivy_compare.outputs.fixed_details }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          sudo apt update
+          sudo apt install wget -y
+          wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo tee /etc/apt/trusted.gpg.d/trivy.asc
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt update
+          sudo apt install -y trivy jq
+
+      - name: Sanitize branch name
+        run: echo "SAFE_REF_NAME=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+
+      - name: Run Trivy Filesystem Scan
+        id: scan
+        run: |
+          echo "Running Trivy scan (HIGH/CRITICAL)..."
+          mkdir -p tmp
+          trivy fs --format json --severity HIGH,CRITICAL --output tmp/trivy-report.json .
+          [[ -f tmp/trivy-report.json ]] || echo '{"Results":[]}' > tmp/trivy-report.json
+          count=$(jq -e '
+            (.Results // [])
+            | map(.Vulnerabilities? // [])
+            | add
+            | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+            | length
+          ' tmp/trivy-report.json || echo 0)
+
+          if [[ "$count" -gt 0 ]]; then
+            echo "trivy_high_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trivy_high_found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Trivy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-json-${{ env.SAFE_REF_NAME }}
+          path: tmp/trivy-report.json
+
+      - name: Generate PR Body (if vulnerabilities found)
+        if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
+        run: |
+          echo "# 🛡️ Trivy Scan Report for branch \`${GITHUB_REF_NAME}\`" > tmp/pr-body.md
+          jq -r '
+            (.Results // [])
+            | .[]
+            | .Target as $file
+            | (.Vulnerabilities? // [])
+            | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+            | .[]
+            | "* File: \($file)\n  • Vulnerability ID: \(.VulnerabilityID)\n  • Pkg: \(.PkgName) \(.InstalledVersion)\n  • Severity: \(.Severity)\n  • Title: \(.Title)\n"
+          ' tmp/trivy-report.json >> tmp/pr-body.md
+
+      - name: Debug - List Available Trivy Artifacts
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          echo "Looking for Trivy artifacts from base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Expected Trivy artifact: trivy-filesystem-report-${{ github.event.pull_request.base.sha }}"
+          echo "Base branch: ${{ github.event.pull_request.base.ref }}"
+
+      - name: Download Baseline Trivy Report (PR only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          name: trivy-filesystem-report-${{ github.event.pull_request.base.sha }}
+          path: ./baseline-reports
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: security.yml
+          branch: ${{ github.event.pull_request.base.ref }}
+          workflow_conclusion: ""
+          check_artifacts: true
+          if_no_artifact_found: warn
+          repo: ${{ github.repository }}
+          search_artifacts: true
+
+      - name: Compare Trivy Vulnerabilities with Baseline (PR only)
+        if: github.event_name == 'pull_request'
+        id: trivy_compare
+        run: |
+          echo "Comparing Trivy vulnerabilities with baseline..."
+          
+          # Initialize counts
+          current_count=0
+          baseline_count=0
+          added_count=0
+          fixed_count=0
+          baseline_method="none"
+          
+          # Count current vulnerabilities
+          if [[ -f "tmp/trivy-report.json" ]]; then
+            current_count=$(jq -e '
+              (.Results // [])
+              | map(.Vulnerabilities? // [])
+              | add
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | length
+            ' tmp/trivy-report.json || echo 0)
+          fi
+          
+          # Try to use artifact baseline first
+          if [[ -f "baseline-reports/trivy-report.json" ]]; then
+            echo "✅ Using artifact baseline from main branch"
+            baseline_method="artifact"
+            baseline_count=$(jq -e '
+              (.Results // [])
+              | map(.Vulnerabilities? // [])
+              | add
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | length
+            ' baseline-reports/trivy-report.json || echo 0)
+            
+            # Create unique vulnerability identifiers for comparison
+            jq -r '
+              (.Results // [])
+              | .[]
+              | .Target as $file
+              | (.Vulnerabilities? // [])
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | .[]
+              | "\($file):\(.VulnerabilityID):\(.PkgName)"
+            ' tmp/trivy-report.json | sort > tmp/current-trivy-vulns.txt
+            
+            jq -r '
+              (.Results // [])
+              | .[]
+              | .Target as $file
+              | (.Vulnerabilities? // [])
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | .[]
+              | "\($file):\(.VulnerabilityID):\(.PkgName)"
+            ' baseline-reports/trivy-report.json | sort > tmp/baseline-trivy-vulns.txt
+            
+            # Calculate added and fixed vulnerabilities
+            added_count=$(comm -23 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt | wc -l)
+            fixed_count=$(comm -13 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt | wc -l)
+            
+          else
+            echo "⚠️ No baseline artifact found, scanning base branch live..."
+            baseline_method="live_scan"
+            
+            # Save current state
+            cp tmp/trivy-report.json tmp/trivy-report-pr.json
+            
+            # Checkout and scan base branch
+            git fetch origin ${{ github.event.pull_request.base.ref }}
+            git checkout ${{ github.event.pull_request.base.sha }}
+            
+            # Run baseline scan
+            trivy fs --format json --severity HIGH,CRITICAL --output tmp/trivy-report-baseline.json .
+            [[ -f tmp/trivy-report-baseline.json ]] || echo '{"Results":[]}' > tmp/trivy-report-baseline.json
+            
+            baseline_count=$(jq -e '
+              (.Results // [])
+              | map(.Vulnerabilities? // [])
+              | add
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | length
+            ' tmp/trivy-report-baseline.json || echo 0)
+            
+            # Create comparison files
+            jq -r '
+              (.Results // [])
+              | .[]
+              | .Target as $file
+              | (.Vulnerabilities? // [])
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | .[]
+              | "\($file):\(.VulnerabilityID):\(.PkgName)"
+            ' tmp/trivy-report-pr.json | sort > tmp/current-trivy-vulns.txt
+            
+            jq -r '
+              (.Results // [])
+              | .[]
+              | .Target as $file
+              | (.Vulnerabilities? // [])
+              | map(select(.Severity=="HIGH" or .Severity=="CRITICAL"))
+              | .[]
+              | "\($file):\(.VulnerabilityID):\(.PkgName)"
+            ' tmp/trivy-report-baseline.json | sort > tmp/baseline-trivy-vulns.txt
+            
+            # Calculate differences
+            added_count=$(comm -23 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt | wc -l)
+            fixed_count=$(comm -13 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt | wc -l)
+            
+            # Restore PR state
+            git checkout ${{ github.sha }}
+            cp tmp/trivy-report-pr.json tmp/trivy-report.json
+          fi
+          
+          echo "Baseline method: $baseline_method"
+          echo "Current Trivy HIGH/CRITICAL vulnerabilities: $current_count"
+          echo "Baseline Trivy HIGH/CRITICAL vulnerabilities: $baseline_count"
+          echo "Added Trivy vulnerabilities: $added_count"
+          echo "Fixed Trivy vulnerabilities: $fixed_count"
+          
+          # Generate detailed vulnerability lists
+          added_details=""
+          fixed_details=""
+          
+          if [[ -f "tmp/current-trivy-vulns.txt" && -f "tmp/baseline-trivy-vulns.txt" ]]; then
+            # Get added vulnerabilities with details
+            if [[ $added_count -gt 0 ]]; then
+              added_vulns=$(comm -23 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt)
+              added_details=""
+              while IFS= read -r vuln_id; do
+                if [[ -n "$vuln_id" ]]; then
+                  # Extract target, vuln_id, pkg_name from the identifier
+                  target=$(echo "$vuln_id" | cut -d':' -f1)
+                  vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
+                  pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
+                  
+                  # Get full details from the report
+                  details=$(jq -r --arg target "$target" --arg vuln "$vuln_cve" --arg pkg "$pkg_name" '
+                    (.Results // []) | .[] | select(.Target == $target) | 
+                    (.Vulnerabilities? // []) | .[] | 
+                    select(.VulnerabilityID == $vuln and .PkgName == $pkg and (.Severity == "HIGH" or .Severity == "CRITICAL")) | 
+                    "**Target:** `\(.Target // $target)`\\n**Package:** \(.PkgName) \(.InstalledVersion)\\n**Vulnerability:** \(.VulnerabilityID)\\n**Severity:** \(.Severity)\\n**Title:** \(.Title)\\n"
+                  ' tmp/trivy-report.json)
+                  
+                  if [[ -n "$details" ]]; then
+                    added_details="${added_details}${details}\\n"
+                  fi
+                fi
+              done <<< "$added_vulns"
+            fi
+            
+            # Get fixed vulnerabilities with details  
+            if [[ $fixed_count -gt 0 ]]; then
+              fixed_vulns=$(comm -13 tmp/current-trivy-vulns.txt tmp/baseline-trivy-vulns.txt)
+              fixed_details=""
+              while IFS= read -r vuln_id; do
+                if [[ -n "$vuln_id" ]]; then
+                  # Extract target, vuln_id, pkg_name from the identifier
+                  target=$(echo "$vuln_id" | cut -d':' -f1)
+                  vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
+                  pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
+                  
+                  # Get full details from the baseline report
+                  baseline_report="baseline-reports/trivy-report.json"
+                  if [[ "$baseline_method" == "live_scan" ]]; then
+                    baseline_report="tmp/trivy-report-baseline.json"
+                  fi
+                  
+                  details=$(jq -r --arg target "$target" --arg vuln "$vuln_cve" --arg pkg "$pkg_name" '
+                    (.Results // []) | .[] | select(.Target == $target) | 
+                    (.Vulnerabilities? // []) | .[] | 
+                    select(.VulnerabilityID == $vuln and .PkgName == $pkg and (.Severity == "HIGH" or .Severity == "CRITICAL")) | 
+                    "**Target:** `\(.Target // $target)`\\n**Package:** \(.PkgName) \(.InstalledVersion)\\n**Vulnerability:** \(.VulnerabilityID)\\n**Severity:** \(.Severity)\\n**Title:** \(.Title)\\n"
+                  ' "$baseline_report")
+                  
+                  if [[ -n "$details" ]]; then
+                    fixed_details="${fixed_details}${details}\\n"
+                  fi
+                fi
+              done <<< "$fixed_vulns"
+            fi
+          fi
+          
+          # Set outputs
+          echo "current_count=$current_count" >> "$GITHUB_OUTPUT"
+          echo "baseline_count=$baseline_count" >> "$GITHUB_OUTPUT"
+          echo "added_count=$added_count" >> "$GITHUB_OUTPUT"
+          echo "fixed_count=$fixed_count" >> "$GITHUB_OUTPUT"
+          echo "baseline_method=$baseline_method" >> "$GITHUB_OUTPUT"
+          
+          # Set detailed outputs (escape for GitHub Actions)
+          {
+            echo "added_details<<EOF"
+            echo -e "$added_details"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          
+          {
+            echo "fixed_details<<EOF"
+            echo -e "$fixed_details"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Display Trivy Vulnerability Report
+        if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
+        run: |
+          echo "=========================================="
+          echo "Trivy Vulnerability Report:"
+          echo "=========================================="
+          cat tmp/pr-body.md
+          echo "=========================================="
+
+      - name: Store Trivy Filesystem Report as Artifact (Main/Release)
+        if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-filesystem-report-${{ github.sha }}
+          path: tmp/trivy-report.json
+          retention-days: 90
+
+      - name: Create Pull Request (if vulnerabilities found)
+        if: ${{ github.event_name == 'push' && steps.scan.outputs.trivy_high_found == 'true' }}
+        continue-on-error: true
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'chore: vulnerabilities detected by Trivy (HIGH/CRITICAL)'
+          title: 'Trivy Vulnerability Report for branch ${{ github.ref_name }}'
+          body-path: tmp/pr-body.md
+          branch: auto/trivy-scan/${{ env.SAFE_REF_NAME }}
+          base: ${{ github.ref_name }}
+          delete-branch: true
+
+      - name: Fail Job If Vulnerabilities Found
+        if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
+        run: exit 1
+
+  vulnerability_summary:
+    name: Vulnerability Summary Report
+    needs: [gosec_scan, trivy_scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && always()
+    steps:
+      - name: Create Vulnerability Summary Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const gosecCurrent = '${{ needs.gosec_scan.outputs.gosec_current_count }}' || '0';
+            const gosecBaseline = '${{ needs.gosec_scan.outputs.gosec_baseline_count }}' || '0';
+            const gosecAdded = '${{ needs.gosec_scan.outputs.gosec_added_count }}' || '0';
+            const gosecFixed = '${{ needs.gosec_scan.outputs.gosec_fixed_count }}' || '0';
+            
+            const trivyCurrent = '${{ needs.trivy_scan.outputs.trivy_current_count }}' || '0';
+            const trivyBaseline = '${{ needs.trivy_scan.outputs.trivy_baseline_count }}' || '0';
+            const trivyAdded = '${{ needs.trivy_scan.outputs.trivy_added_count }}' || '0';
+            const trivyFixed = '${{ needs.trivy_scan.outputs.trivy_fixed_count }}' || '0';
+            
+            const gosecMethod = '${{ needs.gosec_scan.outputs.gosec_baseline_method }}' || 'none';
+            const trivyMethod = '${{ needs.trivy_scan.outputs.trivy_baseline_method }}' || 'none';
+            
+            // Get detailed vulnerability information (safely encoded)
+            const gosecAddedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_added_details) }} || '';
+            const gosecFixedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_fixed_details) }} || '';
+            const trivyAddedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_added_details) }} || '';
+            const trivyFixedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_fixed_details) }} || '';
+            const totalAdded = parseInt(gosecAdded) + parseInt(trivyAdded);
+            const totalFixed = parseInt(gosecFixed) + parseInt(trivyFixed);
+            const totalCurrent = parseInt(gosecCurrent) + parseInt(trivyCurrent);
+            const totalBaseline = parseInt(gosecBaseline) + parseInt(trivyBaseline);
+            
+            // Method indicators
+            const getMethodIcon = (method) => {
+              switch(method) {
+                case 'artifact': return '📦';
+                case 'live_scan': return '🔄';
+                case 'no_baseline': return '⚠️';
+                default: return '❓';
+              }
+            };
+            
+            let statusIcon = '✅';
+            let statusText = 'No change in security posture';
+            
+            if (totalAdded > 0 && totalFixed === 0) {
+              statusIcon = '🚨';
+              statusText = 'Security posture degraded';
+            } else if (totalAdded === 0 && totalFixed > 0) {
+              statusIcon = '🎉';
+              statusText = 'Security posture improved';
+            } else if (totalAdded > 0 && totalFixed > 0) {
+              statusIcon = '⚠️';
+              statusText = 'Mixed security changes';
+            }
+            
+            const comment = `## ${statusIcon} Security Vulnerability Summary
+            
+            **${statusText}**
+            
+            ### 📊 Overall Changes
+            | Metric | Count |
+            |--------|-------|
+            | **Total Added** | **${totalAdded}** |
+            | **Total Fixed** | **${totalFixed}** |
+            | **Net Change** | **${totalAdded - totalFixed > 0 ? '+' : ''}${totalAdded - totalFixed}** |
+            
+            ### 🔍 Detailed Breakdown
+            
+            #### ${getMethodIcon(gosecMethod)} Gosec (Static Analysis)
+            | Current | Baseline | Added | Fixed | Method |
+            |---------|----------|-------|-------|--------|
+            | ${gosecCurrent} | ${gosecBaseline} | ${gosecAdded} | ${gosecFixed} | ${gosecMethod} |
+            
+            #### ${getMethodIcon(trivyMethod)} Trivy (Dependency Scan)
+            | Current | Baseline | Added | Fixed | Method |
+            |---------|----------|-------|-------|--------|
+            | ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
+            
+            ### 📋 Baseline Methods
+            - **📦 artifact**: Used stored report from main branch
+            - **🔄 live_scan**: Scanned base branch in real-time  
+            - **⚠️ no_baseline**: No baseline available (all vulnerabilities treated as new)
+            
+            ${totalAdded > 0 ? `
+            ### 🚨 Added Vulnerabilities
+            
+            ${parseInt(gosecAdded) > 0 ? `
+            #### Gosec (Static Analysis) - ${gosecAdded} Added
+            ${gosecAddedDetails || '*No detailed information available*'}
+            ` : ''}
+            
+            ${parseInt(trivyAdded) > 0 ? `
+            #### Trivy (Dependencies) - ${trivyAdded} Added
+            ${trivyAddedDetails || '*No detailed information available*'}
+            ` : ''}
+            
+            ` : ''}
+            
+            ${totalFixed > 0 ? `
+            ### 🎉 Fixed Vulnerabilities
+            
+            ${parseInt(gosecFixed) > 0 ? `
+            #### Gosec (Static Analysis) - ${gosecFixed} Fixed
+            ${gosecFixedDetails || '*No detailed information available*'}
+            ` : ''}
+            
+            ${parseInt(trivyFixed) > 0 ? `
+            #### Trivy (Dependencies) - ${trivyFixed} Fixed
+            ${trivyFixedDetails || '*No detailed information available*'}
+            ` : ''}
+            
+            ` : ''}
+            
+            ---
+            *Only HIGH and CRITICAL severity vulnerabilities are tracked*
+            *Baseline: \`${{ github.event.pull_request.base.sha }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
