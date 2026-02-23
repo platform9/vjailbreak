@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
 func ParseFraction(text string) (int, int, error) {

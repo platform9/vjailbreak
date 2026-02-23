@@ -13,7 +13,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"

@@ -11,7 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
