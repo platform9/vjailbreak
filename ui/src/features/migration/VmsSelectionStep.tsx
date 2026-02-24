@@ -2039,7 +2039,20 @@ function VmsSelectionStep({
                       gap: 2
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Tooltip title={vm.vmState === 'running' ? 'Running' : 'Stopped'}>
+                        <CdsIconWrapper>
+                          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                          {/* @ts-ignore */}
+                          <cds-icon
+                            shape="vm"
+                            size="md"
+                            badge={vm.vmState === 'running' ? 'success' : 'danger'}
+                          >
+                            {/* @ts-ignore */}
+                          </cds-icon>
+                        </CdsIconWrapper>
+                      </Tooltip>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {vm.name}
                       </Typography>
@@ -2052,6 +2065,7 @@ function VmsSelectionStep({
                       const message = bulkValidationMessages[vmName]?.[interfaceIndex]
                       const preserveIp = bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
                       const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
+                      const isPoweredOff = vm.vmState !== 'running'
                       return (
                         <Box
                           key={interfaceIndex}
@@ -2127,22 +2141,24 @@ function VmsSelectionStep({
                             </Box>
                           </Box>
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Switch
-                                size="small"
-                                checked={preserveIp}
-                                onChange={(e) =>
-                                  handleBulkPreserveIpChange(
-                                    vmName,
-                                    interfaceIndex,
-                                    e.target.checked
-                                  )
-                                }
-                              />
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                Preserve IP
-                              </Typography>
-                            </Box>
+                            {!isPoweredOff ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Switch
+                                  size="small"
+                                  checked={preserveIp}
+                                  onChange={(e) =>
+                                    handleBulkPreserveIpChange(
+                                      vmName,
+                                      interfaceIndex,
+                                      e.target.checked
+                                    )
+                                  }
+                                />
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  Preserve IP
+                                </Typography>
+                              </Box>
+                            ) : null}
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Switch
                                 size="small"
