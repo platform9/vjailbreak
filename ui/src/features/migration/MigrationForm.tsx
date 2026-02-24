@@ -695,11 +695,32 @@ export default function MigrationFormDrawer({
       })
     }
 
+    // Build NetworkOverridesPerVM for per-NIC IP/MAC preservation
+    const networkOverridesPerVM: Record<
+      string,
+      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+    > = {}
+    if (params.vms) {
+      params.vms.forEach((vm) => {
+        const overrides = vm.networkInterfaces
+          ?.map((nic, idx) => ({
+            interfaceIndex: idx,
+            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
+            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
+          }))
+          .filter((o) => o.preserveIP === false || o.preserveMAC === false)
+        if (overrides && overrides.length > 0) {
+          networkOverridesPerVM[vm.name] = overrides
+        }
+      })
+    }
+
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
       ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
+      ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime
@@ -973,7 +994,8 @@ export default function MigrationFormDrawer({
   // RDM validation - check if RDM disks have missing required configuration
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: params.vms || [],
-    rdmDisks: rdmDisks
+    rdmDisks: rdmDisks,
+    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
   })
 
   const storageCopyMethod = params.storageCopyMethod || 'normal'
@@ -1172,7 +1194,9 @@ export default function MigrationFormDrawer({
   )
 
   const step2HasErrors = Boolean(
-    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
+    fieldErrors['vms'] ||
+      vmValidation.hasError ||
+      rdmValidation.hasConfigError
   )
 
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
@@ -1566,6 +1590,9 @@ export default function MigrationFormDrawer({
                 )}
                 {rdmValidation.hasConfigError && (
                   <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                )}
+                {rdmValidation.hasVolumeTypeError && (
+                  <Alert severity="warning">{rdmValidation.volumeTypeErrorMessage}</Alert>
                 )}
               </SurfaceCard>
             </Box>

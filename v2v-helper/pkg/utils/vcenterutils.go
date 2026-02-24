@@ -42,8 +42,9 @@ type MigrationParams struct {
 	FallbackToDHCP          bool
 	PeriodicSyncInterval    string
 	PeriodicSyncEnabled     bool
-	NetworkPersistance      bool
+	NetworkPersistance             bool
 	AcknowledgeNetworkConflictRisk bool
+	NetworkOverrides               string
 
 	StorageCopyMethod string
 	VendorType        string
@@ -95,6 +96,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		StorageCopyMethod:       string(configMap.Data["STORAGE_COPY_METHOD"]),
 		VendorType:              string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:       string(configMap.Data["ARRAY_CREDS_MAPPING"]),
-	AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
+		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
+		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 	}, nil
 }

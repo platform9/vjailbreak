@@ -14,13 +14,13 @@ import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
 import StorageManagementPage from './features/storageManagement/pages/StorageManagementPage'
+import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
-import EsxiSshCredentialsPage from './features/esxiSshCredentials/pages/EsxiSshCredentialsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -395,11 +395,11 @@ function App() {
               />
               <Route path="credentials/vm" element={<VmCredentialsPage />} />
               <Route path="credentials/pcd" element={<PcdCredentialsPage />} />
-              <Route path="credentials/esxi-ssh" element={<EsxiSshCredentialsPage />} />
               <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
               <Route path="baremetal-config" element={<MaasConfigPage />} />
               <Route path="global-settings" element={<GlobalSettingsPage />} />
               <Route path="storage-management" element={<StorageManagementPage />} />
+              <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>

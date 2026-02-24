@@ -269,7 +269,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot"}
+	args := []string{"-v", "--no-fstrim"}
+
+	if strings.ToLower(ostype) == constants.OSFamilyLinux {
+		args = append(args, "--firstboot", "/home/fedora/scripts/user_firstboot.sh")
+	}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -1066,5 +1070,36 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
 		return err
 	}
+	return nil
+}
+
+// PushWindowsFirstBoot moves the user_firstboot script from scripts directory to store directory
+// and changes extension from .sh to .ps1 for Windows compatibility
+func PushWindowsFirstBoot() error {
+	srcPath := "/home/fedora/scripts/user_firstboot.sh"
+	dstPath := "/home/fedora/store/user_firstboot.ps1"
+
+	// Check if source file exists
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("source file not found at %s: %w", srcPath, err)
+	}
+
+	// Read the source file content
+	content, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to read source file %s: %w", srcPath, err)
+	}
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll("/home/fedora/store", 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Write to destination with new extension
+	if err := os.WriteFile(dstPath, content, 0644); err != nil {
+		return fmt.Errorf("failed to write destination file %s: %w", dstPath, err)
+	}
+
+	log.Printf("Successfully moved %s to %s", srcPath, dstPath)
 	return nil
 }

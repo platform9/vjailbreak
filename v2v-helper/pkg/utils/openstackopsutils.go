@@ -532,8 +532,10 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
 		NetworkID:      network.ID,
-		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
+	}
+	if mac != "" {
+		createOpts.MACAddress = mac
 	}
 	if len(ipEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)

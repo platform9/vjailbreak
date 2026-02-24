@@ -237,18 +237,42 @@ func GetESXiHostSystem(ctx context.Context, k8sClient client.Client, esxiName st
 	if dcName == "" {
 		dcName = vmwarecreds.Spec.DataCenter
 	}
-	dc, err := finder.Datacenter(ctx, dcName)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find datacenter")
-	}
-	finder.SetDatacenter(dc)
-
-	hostSystem, err := finder.HostSystem(ctx, esxiName)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to find host %s", esxiName)
+	if dcName == "" {
+		// Fall back to the datacenter value stored in the referenced secret
+		vmwareCredsInfo, secretErr := GetVMwareCredentialsFromSecret(ctx, k8sClient, vmwarecreds.Spec.SecretRef.Name)
+		if secretErr != nil {
+			return nil, nil, errors.Wrap(secretErr, "failed to get vmware credentials from secret while resolving datacenter")
+		}
+		dcName = vmwareCredsInfo.Datacenter
 	}
 
-	return hostSystem, c, nil
+	if dcName != "" {
+		dc, err := finder.Datacenter(ctx, dcName)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to find datacenter '%s'", dcName)
+		}
+		finder.SetDatacenter(dc)
+
+		hostSystem, err := finder.HostSystem(ctx, esxiName)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to find host %s in datacenter '%s'", esxiName, dcName)
+		}
+		return hostSystem, c, nil
+	}
+
+	// No datacenter specified anywhere — search all datacenters for the ESXi host
+	allDCs, err := finder.DatacenterList(ctx, "*")
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to list datacenters while searching for ESXi host")
+	}
+	for _, dc := range allDCs {
+		finder.SetDatacenter(dc)
+		hostSystem, err := finder.HostSystem(ctx, esxiName)
+		if err == nil {
+			return hostSystem, c, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("failed to find ESXi host %s in any datacenter", esxiName)
 }
 
 // PutESXiInMaintenanceMode places the ESXi host into maintenance mode to prepare for migration
@@ -330,7 +354,7 @@ func GetESXiSummary(ctx context.Context, k8sClient client.Client, esxiName strin
 	pc := property.DefaultCollector(c)
 
 	var hs mo.HostSystem
-	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary", "config", "hardware"}, &hs)
+	err = pc.RetrieveOne(ctx, hostSystem.Reference(), []string{"summary", "config", "hardware", "vm", "runtime"}, &hs)
 	if err != nil {
 		return mo.HostSystem{}, errors.Wrap(err, "failed to get host properties")
 	}

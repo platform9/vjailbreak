@@ -80,6 +80,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
 
   const availableBackendPools = openstackCreds?.status?.openstack?.volumeBackends || []
   const availableVolumeTypes = openstackCreds?.status?.openstack?.volumeTypes || []
+  const backendVolumeTypeMap = openstackCreds?.status?.openstack?.backendVolumeTypeMap || {}
 
   if (rdmDisks.length === 0) {
     return (
@@ -215,6 +216,19 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
                   </FormControl>
                 </Grid>
               </Grid>
+
+              {config.cinderBackendPool &&
+                config.volumeType &&
+                backendVolumeTypeMap[config.cinderBackendPool] &&
+                backendVolumeTypeMap[config.cinderBackendPool] !== config.volumeType && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      Volume type "<strong>{config.volumeType}</strong>" may not be compatible with
+                      backend "<strong>{config.cinderBackendPool}</strong>". Expected volume type: "
+                      <strong>{backendVolumeTypeMap[config.cinderBackendPool]}</strong>".
+                    </Typography>
+                  </Alert>
+                )}
 
               <Box>
                 <Box

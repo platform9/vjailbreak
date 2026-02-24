@@ -1,6 +1,6 @@
 import axios from '../axios'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
-import { Secret } from './model'
+import { Secret, SecretList } from './model'
 
 // Interface for secret data
 export interface SecretData {
@@ -266,6 +266,30 @@ export const getSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `/api/v1/namespaces/${namespace}/secrets`
   const response = await axios.get({ endpoint })
   return response
+}
+
+export const listSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE): Promise<Secret[]> => {
+  const endpoint = `/api/v1/namespaces/${namespace}/secrets`
+  const response = await axios.get<SecretList>({ endpoint })
+
+  const items = Array.isArray(response?.items) ? response.items : []
+  return items.map((secret) => {
+    if (!secret?.data) return secret
+    const decodedData = Object.entries(secret.data).reduce((acc, [key, value]) => {
+      try {
+        acc[key] = typeof value === 'string' ? atob(value) : (value as any)
+      } catch (error) {
+        console.error(`Error decoding secret data for key ${key}:`, error)
+        acc[key] = value as any
+      }
+      return acc
+    }, {} as SecretData)
+
+    return {
+      ...secret,
+      data: decodedData
+    }
+  })
 }
 
 // Function to create storage array credentials secret
