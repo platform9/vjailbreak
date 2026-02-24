@@ -1504,11 +1504,14 @@ function VmsSelectionStep({
                 ? true
                 : nic.preserveMAC
 
-          initialBulkPreserveIp[vmName][index] = initialPreserveIp
+          const isPoweredOff = vm.vmState !== 'running'
+          const effectivePreserveIp = isPoweredOff ? false : initialPreserveIp
+
+          initialBulkPreserveIp[vmName][index] = effectivePreserveIp
           initialBulkPreserveMac[vmName][index] = initialPreserveMac
 
           initialBulkEditOverrides[vmName][index] = {
-            preserveIP: initialPreserveIp,
+            preserveIP: effectivePreserveIp,
             preserveMAC: initialPreserveMac
           }
 
@@ -1518,7 +1521,8 @@ function VmsSelectionStep({
         const existingIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
         initialBulkExistingIPs[vmName][0] = existingIp
         initialBulkEditIPs[vmName][0] = existingIp
-        initialBulkPreserveIp[vmName][0] = vm.preserveIp?.[0] !== false
+        initialBulkPreserveIp[vmName][0] =
+          vm.vmState !== 'running' ? false : vm.preserveIp?.[0] !== false
         initialBulkPreserveMac[vmName][0] = vm.preserveMac?.[0] !== false
         initialBulkEditOverrides[vmName][0] = {
           preserveIP: initialBulkPreserveIp[vmName][0],
@@ -1999,16 +2003,6 @@ function VmsSelectionStep({
         </DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Warning banner when any NIC has preserve toggled off */}
-            {Object.values(bulkEditOverrides).some((interfaces) =>
-              Object.values(interfaces).some((o) => !o.preserveIP || !o.preserveMAC)
-            ) && (
-              <Alert severity="warning">
-                One or more NICs are configured to receive new IP/MAC addresses. The VM will not
-                retain its original network identity for those interfaces.
-              </Alert>
-            )}
-
             {/* Quick Actions */}
             <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
               <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
@@ -2070,9 +2064,10 @@ function VmsSelectionStep({
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
                       const status = bulkValidationStatus[vmName]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmName]?.[interfaceIndex]
-                      const preserveIp = bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
-                      const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
                       const isPoweredOff = vm.vmState !== 'running'
+                      const preserveIp =
+                        !isPoweredOff && bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
+                      const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
                       return (
                         <Box
                           key={interfaceIndex}
@@ -2148,24 +2143,23 @@ function VmsSelectionStep({
                             </Box>
                           </Box>
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
-                            {!isPoweredOff ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Switch
-                                  size="small"
-                                  checked={preserveIp}
-                                  onChange={(e) =>
-                                    handleBulkPreserveIpChange(
-                                      vmName,
-                                      interfaceIndex,
-                                      e.target.checked
-                                    )
-                                  }
-                                />
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  Preserve IP
-                                </Typography>
-                              </Box>
-                            ) : null}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Switch
+                                size="small"
+                                checked={preserveIp}
+                                disabled={isPoweredOff}
+                                onChange={(e) =>
+                                  handleBulkPreserveIpChange(
+                                    vmName,
+                                    interfaceIndex,
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                Preserve IP
+                              </Typography>
+                            </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Switch
                                 size="small"
@@ -2203,11 +2197,9 @@ function VmsSelectionStep({
                               }}
                               error={status === 'invalid'}
                               helperText={
-                                preserveIp
-                                  ? bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim()
-                                    ? 'Preserving existing IP'
-                                    : message
-                                  : 'If left empty, a new IP will be assigned from destination subnet'
+                                preserveIp && !bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim()
+                                  ? message
+                                  : ''
                               }
                             />
                           </Box>

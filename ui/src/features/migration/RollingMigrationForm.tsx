@@ -3804,11 +3804,9 @@ export default function RollingMigrationFormDrawer({
                               }
                               error={status === 'invalid'}
                               helperText={
-                                preserveIp
-                                  ? bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()
-                                    ? 'Preserving existing IP'
-                                    : message
-                                  : 'If left empty, a new IP will be assigned from destination subnet'
+                                preserveIp && !bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()
+                                  ? message
+                                  : ''
                               }
                             />
                             <Box sx={{ width: 24, display: 'flex' }}>

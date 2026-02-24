@@ -937,7 +937,7 @@ export default function MigrationFormDrawer({
     })
   }, [selectedMigrationOptions, params, fieldErrors])
 
-  // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
+  // VM validation - ensure OS is assigned/detected for selected VMs
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
       return { hasError: false, errorMessage: '' }
@@ -955,11 +955,6 @@ export default function MigrationFormDrawer({
       return powerState === 'powered-on'
     })
 
-    // Check for powered-off VMs without IP addresses
-    const vmsWithoutIPs = poweredOffVMs.filter(
-      (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
-    )
-
     // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
@@ -969,17 +964,9 @@ export default function MigrationFormDrawer({
         )
       )
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
+    if (vmsWithoutOSAssigned.length > 0) {
       let errorMessage = 'Cannot proceed with migration: '
       const issues: string[] = []
-
-      if (vmsWithoutIPs.length > 0) {
-        issues.push(
-          `${vmsWithoutIPs.length} powered-off VM${
-            vmsWithoutIPs.length === 1 ? '' : 's'
-          } missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`
-        )
-      }
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
