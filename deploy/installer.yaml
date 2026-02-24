@@ -1694,6 +1694,10 @@ spec:
               openstack:
                 description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
+                  backendVolumeTypeMap:
+                    additionalProperties:
+                      type: string
+                    type: object
                   networks:
                     items:
                       type: string
