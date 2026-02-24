@@ -5,7 +5,26 @@
 
 set -e
 
+# Check if running as root first
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: This script must be run as root"
+    exit 1
+fi
+
 LOG_FILE="/var/log/vmware-tools-cleanup.log"
+
+# Ensure log directory exists and is writable
+if [ ! -d "$(dirname "$LOG_FILE")" ]; then
+    mkdir -p "$(dirname "$LOG_FILE")" || {
+        echo "ERROR: Cannot create log directory $(dirname "$LOG_FILE")"
+        exit 1
+    }
+fi
+
+if [ ! -w "$(dirname "$LOG_FILE")" ]; then
+    echo "ERROR: No write permission for log directory $(dirname "$LOG_FILE")"
+    exit 1
+fi
 
 log() {
     local level="$1"
@@ -17,11 +36,21 @@ log() {
 
 log "INFO" "=== VMware Tools Cleanup Started ==="
 
-# Check if running as root
-if [ "$(id -u)" -ne 0 ]; then
-    log "ERROR" "This script must be run as root"
-    exit 1
-fi
+# Stop VMware services if running
+log "INFO" "Stopping VMware services..."
+VMWARE_SERVICES=("vmware" "vmware-tools" "vmtoolsd" "open-vm-tools")
+for service in "${VMWARE_SERVICES[@]}"; do
+    if systemctl is-active --quiet "$service" 2>/dev/null; then
+        log "INFO" "Stopping service: $service"
+        if systemctl stop "$service" 2>/dev/null; then
+            log "INFO" "Successfully stopped: $service"
+        else
+            log "WARNING" "Failed to stop: $service"
+        fi
+    else
+        log "INFO" "Service not running (skipping): $service"
+    fi
+done
 
 # Directories to remove
 VMWARE_DIRS=(
@@ -48,9 +77,9 @@ done
 
 # Remove VMware log files from /var/log/
 log "INFO" "Removing VMware log files from /var/log/..."
-vmware_logs=$(find /var/log -maxdepth 1 -type f -name "vmware-*" 2>/dev/null || true)
-if [ -n "$vmware_logs" ]; then
-    for logfile in $vmware_logs; do
+mapfile -t vmware_logs < <(find /var/log -maxdepth 1 -type f -name "vmware-*" 2>/dev/null)
+if [ ${#vmware_logs[@]} -gt 0 ]; then
+    for logfile in "${vmware_logs[@]}"; do
         log "INFO" "Removing log file: $logfile"
         if rm -f "$logfile"; then
             log "INFO" "Successfully removed: $logfile"
