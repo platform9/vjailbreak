@@ -92,6 +92,10 @@ spec:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
                     type: string
+                  removeVMwareTools:
+                    description: RemoveVMwareTools instructs the migration helper
+                      to remove VMware Tools post migration
+                    type: boolean
                 type: object
               assignedIPsPerVM:
                 additionalProperties:

@@ -294,6 +294,7 @@ export default function MigrationDetailModal({
   const disconnectSourceNetwork = enabledOrNA(planStrategy?.disconnectSourceNetwork)
   const fallbackToDhcp = enabledOrNA(planSpec?.fallbackToDHCP)
   const networkPersistence = enabledOrNA(planAdvanced?.networkPersistence)
+  const removeVMwareTools = enabledOrNA(planAdvanced?.removeVMwareTools)
 
   const postMigrationScript = useMemo(() => {
     const raw = (planSpec?.firstBootScript as string) || ''
@@ -358,6 +359,7 @@ export default function MigrationDetailModal({
       disconnectSourceNetwork,
       fallbackToDhcp,
       networkPersistence,
+      removeVMwareTools,
       useGPUFlavor: enabledOrNA(useGPUFlavor),
       useFlavorless: enabledOrNA(useFlavorless)
     }),
@@ -367,6 +369,7 @@ export default function MigrationDetailModal({
       fallbackToDhcp,
       folderName,
       networkPersistence,
+      removeVMwareTools,
       renameSuffix,
       scheduleDataCopy,
       securityGroups,

@@ -180,3 +180,12 @@ func GetNetworkPersistance(ctx context.Context, client client.Client) bool {
 	PrintLog(fmt.Sprintf("Network persistence value from ConfigMap: %t", migrationParams.NetworkPersistance))
 	return migrationParams.NetworkPersistance
 }
+
+func GetRemoveVMwareTools(ctx context.Context, client client.Client) bool {
+	migrationParams, err := GetMigrationParams(ctx, client)
+	if err != nil {
+		return false
+	}
+	PrintLog(fmt.Sprintf("Remove VMware Tools value from ConfigMap: %t", migrationParams.RemoveVMwareTools))
+	return migrationParams.RemoveVMwareTools
+}

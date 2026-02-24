@@ -62,6 +62,8 @@ type AdvancedOptions struct {
 	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 	// NetworkPersistence instructs the migration helper to persist the source networking configuration
 	NetworkPersistence bool `json:"networkPersistence,omitempty"`
+	// RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration
+	RemoveVMwareTools bool `json:"removeVMwareTools,omitempty"`
 	// AcknowledgeNetworkConflictRisk indicates that the user acknowledges the risk of network conflicts when doing live migration
 	AcknowledgeNetworkConflictRisk bool `json:"acknowledgeNetworkConflictRisk,omitempty"`
 }

@@ -140,6 +140,7 @@ export interface FormValues extends Record<string, unknown> {
   fallbackToDHCP?: boolean
   useGPU?: boolean
   networkPersistence?: boolean
+  removeVMwareTools?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -755,6 +756,9 @@ export default function MigrationFormDrawer({
         }),
       ...(typeof params.networkPersistence === 'boolean' && {
         networkPersistence: params.networkPersistence
+      }),
+      ...(typeof params.removeVMwareTools === 'boolean' && {
+        removeVMwareTools: params.removeVMwareTools
       }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
