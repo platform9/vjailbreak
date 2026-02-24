@@ -195,8 +195,8 @@ export const useRdmConfigValidation = ({
       volumeTypeErrorMessage = `Incompatible volume type mapping: ${messages.join('; ')}.`
     }
 
-    // Combined validation - any error prevents submission
-    const hasValidationError = hasPoweredOnVMs || hasConfigError || hasVolumeTypeError
+    // Combined validation - only blocking errors prevent submission (volume type mismatch is a warning only)
+    const hasValidationError = hasPoweredOnVMs || hasConfigError
 
     // Priority: power state > volume type > config
     let errorMessage = ''

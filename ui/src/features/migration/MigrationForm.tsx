@@ -1175,8 +1175,7 @@ export default function MigrationFormDrawer({
   const step2HasErrors = Boolean(
     fieldErrors['vms'] ||
       vmValidation.hasError ||
-      rdmValidation.hasConfigError ||
-      rdmValidation.hasVolumeTypeError
+      rdmValidation.hasConfigError
   )
 
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
