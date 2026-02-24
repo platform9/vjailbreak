@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
@@ -926,6 +927,18 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			}
 		}
 
+		// Get network overrides for this VM from the migration plan
+		networkOverrides := ""
+		if migrationplan.Spec.NetworkOverridesPerVM != nil {
+			if overrides, ok := migrationplan.Spec.NetworkOverridesPerVM[vm]; ok && len(overrides) > 0 {
+				overridesJSON, err := json.Marshal(overrides)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to marshal network overrides for VM %s", vm)
+				}
+				networkOverrides = string(overridesJSON)
+			}
+		}
+
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
@@ -942,6 +955,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				AssignedIP:              assignedIP,
+				NetworkOverrides:        networkOverrides,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 			},
 			Status: vjailbreakv1alpha1.MigrationStatus{
@@ -961,8 +975,16 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		hasRDMDisks := len(vmMachine.Spec.VMInfo.RDMDisks) > 0
 		retryable := !hasRDMDisks
 
-		migrationobj.Status.Retryable = &retryable
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			latest.Status.Retryable = &retryable
+			return r.Status().Update(ctx, latest)
+		})
+		if err != nil {
 			ctxlog.Error(err, "Failed to set retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 			// Don't fail migration creation if status update fails, just log the error
 		} else {
@@ -1334,6 +1356,11 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
 		} else {
 			configMap.Data["ASSIGNED_IP"] = ""
+		}
+
+		// Pass network overrides if set
+		if migrationobj.Spec.NetworkOverrides != "" {
+			configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 		}
 
 		// Check if target flavor is set
@@ -1727,29 +1754,16 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
 						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
 
+					// Reconcile if phase changed to AwaitingAdminCutOver (so UI can show cutover status)
+					isAwaitingCutover := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
+
 					phaseChanged := oldMigration.Status.Phase != newMigration.Status.Phase
 
-					// Only reconcile if phase changed AND it's now in a terminal state
-					return phaseChanged && isTerminal
+					// Reconcile if phase changed AND it's now in a terminal state or awaiting admin cutover
+					return phaseChanged && (isTerminal || isAwaitingCutover)
 				},
 				CreateFunc: func(_ event.CreateEvent) bool {
 					return true
-				},
-				DeleteFunc: func(e event.DeleteEvent) bool {
-					// Only reconcile if a non-terminal migration is deleted
-					// This prevents log flooding when succeeded migrations are deleted
-					// while pending migrations still exist
-					migration, ok := e.Object.(*vjailbreakv1alpha1.Migration)
-					if !ok {
-						return false
-					}
-
-					// Don't reconcile if a terminal state migration is deleted
-					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-
-					return !isTerminal
 				},
 			},
 		)).

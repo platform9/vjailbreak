@@ -975,6 +975,34 @@ spec:
                 description: MigrationTemplate is the template to be used for the
                   migration
                 type: string
+              networkOverridesPerVM:
+                additionalProperties:
+                  items:
+                    description: NICOverride defines per-NIC overrides for IP and
+                      MAC preservation during migration
+                    properties:
+                      interfaceIndex:
+                        description: InterfaceIndex is the zero-based index of the
+                          NIC
+                        type: integer
+                      preserveIP:
+                        description: PreserveIP indicates whether to preserve the
+                          source VM's IP address for this NIC
+                        type: boolean
+                      preserveMAC:
+                        description: PreserveMAC indicates whether to preserve the
+                          source VM's MAC address for this NIC
+                        type: boolean
+                    required:
+                    - interfaceIndex
+                    - preserveIP
+                    - preserveMAC
+                    type: object
+                  type: array
+                description: |-
+                  NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
+                  Only NICs with non-default settings (i.e., preserve=false) need to be listed
+                type: object
               postMigrationAction:
                 description: PostMigrationAction defines the post migration action
                   for the virtual machine
@@ -1112,6 +1140,10 @@ spec:
                 - cold
                 - mock
                 type: string
+              networkOverrides:
+                description: NetworkOverrides is the JSON-serialized per-NIC overrides
+                  for IP and MAC preservation
+                type: string
               podRef:
                 description: PodRef is the name of the pod
                 type: string
@@ -1212,6 +1244,11 @@ spec:
                   Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
                   as RDM disk migration state prevents automatic retry.
                 type: boolean
+              syncWarningMessage:
+                description: |-
+                  SyncWarningMessage contains the warning message when periodic sync is in a warning state.
+                  If non-empty, indicates the sync failed but will auto-retry on next interval.
+                type: string
               totalDisks:
                 description: TotalDisks is the total number of disks to be migrated
                 type: integer
@@ -2870,6 +2907,12 @@ spec:
               name:
                 description: Name of the host
                 type: string
+              state:
+                description: State is the connection state of the host
+                type: string
+              vmCount:
+                description: VMCount is the number of VMs on the host
+                type: integer
             type: object
           status:
             description: VMwareHostStatus defines the observed state of VMwareHost
@@ -4373,7 +4416,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:-bd4bfed1
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4456,7 +4499,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:-bd4bfed1
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4534,7 +4577,7 @@ spec:
       serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:-bd4bfed1
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

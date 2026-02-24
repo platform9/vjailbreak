@@ -98,6 +98,10 @@ type MigrationSpec struct {
 	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
 	AssignedIP string `json:"assignedIP,omitempty"`
 
+	// NetworkOverrides is the JSON-serialized per-NIC overrides for IP and MAC preservation
+	// +optional
+	NetworkOverrides string `json:"networkOverrides,omitempty"`
+
 	// MigrationType indicates whether this is a hot (live) or cold migration
 	// +optional
 	// +kubebuilder:validation:Enum=hot;cold;mock
@@ -128,6 +132,11 @@ type MigrationStatus struct {
 	// as RDM disk migration state prevents automatic retry.
 	// +optional
 	Retryable *bool `json:"retryable,omitempty"`
+
+	// SyncWarningMessage contains the warning message when periodic sync is in a warning state.
+	// If non-empty, indicates the sync failed but will auto-retry on next interval.
+	// +optional
+	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

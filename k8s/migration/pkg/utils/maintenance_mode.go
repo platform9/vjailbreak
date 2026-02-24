@@ -128,26 +128,18 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 	}
 
 	if config.CheckClusterRemainingHostCapacity {
-		// Check if remaining hosts have enough capacity
-		if clusterResourceUsageSummary.Summary != nil && clusterResourceUsageSummary.Summary.GetComputeResourceSummary() != nil {
-			summary := clusterResourceUsageSummary.Summary.GetComputeResourceSummary()
-
-			// Calculate if removing this host would leave enough capacity
-			// This is a basic estimation - in reality vSphere DRS has more sophisticated algorithms
-			effectiveHosts := len(clusterHosts.Host) - 1 // Removing the host we're checking
-			if effectiveHosts > 0 {
-				currentCPUUsage := float64(summary.TotalCpu-summary.EffectiveCpu) / float64(summary.TotalCpu)
-				currentMemUsage := float64(summary.TotalMemory-summary.EffectiveMemory) / float64(summary.TotalMemory)
-
-				// A rough estimation assuming equal hosts
-				projectedCPUUsage := currentCPUUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
-				projectedMemUsage := currentMemUsage * float64(len(clusterHosts.Host)) / float64(effectiveHosts)
-
-				if projectedCPUUsage > 1 || projectedMemUsage > 1 {
-					return false, fmt.Sprintf("Cluster might not have enough resources after removing host. Projected usage: CPU %.2f%%, Memory %.2f%%",
-						projectedCPUUsage*100, projectedMemUsage*100), nil
-				}
-			}
+		// Per-host capacity calculation: directly answers "can remaining hosts absorb the VMs?"
+		// This fixes 4 critical bugs in the old implementation:
+		// 1. Measures actual VM workload (not overhead from TotalCpu-EffectiveCpu)
+		// 2. Correct unit handling (bytes to bytes, MB to bytes conversion)
+		// 3. Subtracts target host's actual capacity (not equal-host assumption)
+		// 4. Uses actual host references (no host count issues)
+		canFit, reason, err := CheckClusterCapacityAfterHostRemoval(ctx, pc, host.Reference(), clusterMoRef, clusterHosts.Host)
+		if err != nil {
+			return false, fmt.Sprintf("failed to check cluster capacity: %v", err), fmt.Errorf("failed to check cluster capacity: %w", err)
+		}
+		if !canFit {
+			return false, reason, nil
 		}
 	}
 
@@ -176,6 +168,122 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		if len(blockedVMs) > 0 {
 			return false, fmt.Sprintf("some VMs on host %s are blocked for migration: %v", hostName, blockedVMs), nil
 		}
+	}
+
+	return true, "", nil
+}
+
+// CheckClusterCapacityAfterHostRemoval checks if the remaining hosts in a cluster can absorb
+// the workload after removing a specific host. This uses per-host capacity data to directly
+// answer: "can the remaining hosts absorb the VMs?"
+//
+// Algorithm:
+// 1. Get target host's capacity (CPU MHz, Memory bytes) and current usage
+// 2. Get cluster totals from ComputeResourceSummary
+// 3. Get cluster-wide actual usage from ClusterResourceUsageSummary
+// 4. Compute remaining capacity after removing target host
+// 5. Check if total workload fits in remaining capacity
+func CheckClusterCapacityAfterHostRemoval(ctx context.Context, pc *property.Collector, hostRef types.ManagedObjectReference, clusterRef *types.ManagedObjectReference, allHostRefs []types.ManagedObjectReference) (bool, string, error) {
+	// Get target host's hardware and quickStats
+	var targetHost mo.HostSystem
+	err := pc.RetrieveOne(ctx, hostRef, []string{"hardware", "summary.hardware", "summary.quickStats"}, &targetHost)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get target host properties: %w", err)
+	}
+
+	if targetHost.Hardware == nil {
+		return false, "", fmt.Errorf("target host hardware not available")
+	}
+
+	// Calculate target host's capacity
+	// CPU capacity in MHz
+	hostCPUCapacity := int64(targetHost.Summary.Hardware.CpuMhz) * int64(targetHost.Summary.Hardware.NumCpuCores)
+	// Memory capacity in bytes
+	hostMemCapacity := targetHost.Hardware.MemorySize
+
+	// Get cluster summary for total capacity
+	var cluster mo.ClusterComputeResource
+	err = pc.RetrieveOne(ctx, *clusterRef, []string{"summary"}, &cluster)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get cluster summary: %w", err)
+	}
+
+	if cluster.Summary == nil || cluster.Summary.GetComputeResourceSummary() == nil {
+		return false, "", fmt.Errorf("cluster summary not available")
+	}
+
+	summary := cluster.Summary.GetComputeResourceSummary()
+
+	// Cluster total capacity
+	clusterCPUCapacity := int64(summary.TotalCpu) // MHz
+	clusterMemCapacity := summary.TotalMemory     // bytes
+
+	// Get cluster-wide actual usage by summing quickStats across all hosts
+	var clusterCPUUsed int64
+	var clusterMemUsed int64
+
+	// Sum quickStats across all hosts to get actual VM workload
+	var allHosts []mo.HostSystem
+	err = pc.Retrieve(ctx, allHostRefs, []string{"summary.quickStats"}, &allHosts)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get all hosts quickStats: %w", err)
+	}
+
+	for _, h := range allHosts {
+		// QuickStats is a struct, not a pointer, so we access it directly
+		clusterCPUUsed += int64(h.Summary.QuickStats.OverallCpuUsage) // MHz
+		// OverallMemoryUsage is in MB, convert to bytes
+		clusterMemUsed += int64(h.Summary.QuickStats.OverallMemoryUsage) * 1024 * 1024
+	}
+
+	// Calculate remaining capacity after removing target host
+	remainingCPUCapacity := clusterCPUCapacity - hostCPUCapacity
+	remainingMemCapacity := clusterMemCapacity - hostMemCapacity
+
+	// Total workload stays the same (VMs vMotion to remaining hosts)
+	totalCPUWorkload := clusterCPUUsed
+	totalMemWorkload := clusterMemUsed
+
+	// Check if remaining capacity can absorb the workload
+	canFitCPU := totalCPUWorkload <= remainingCPUCapacity
+	canFitMem := totalMemWorkload <= remainingMemCapacity
+
+	log.FromContext(ctx).Info("Cluster remaining-host capacity calculation summary",
+		"targetHost", hostRef.Value,
+		"cluster", clusterRef.Value,
+		"removedHostCPUCapacityMHz", hostCPUCapacity,
+		"removedHostMemCapacityBytes", hostMemCapacity,
+		"clusterTotalCPUCapacityMHz", clusterCPUCapacity,
+		"clusterTotalMemCapacityBytes", clusterMemCapacity,
+		"remainingCPUCapacityMHz", remainingCPUCapacity,
+		"remainingMemCapacityBytes", remainingMemCapacity,
+		"totalCPUWorkloadMHz", totalCPUWorkload,
+		"totalMemWorkloadBytes", totalMemWorkload,
+		"canFitCPU", canFitCPU,
+		"canFitMem", canFitMem,
+	)
+
+	if !canFitCPU || !canFitMem {
+		// Calculate usage percentages for reporting
+		var cpuUsagePercent, memUsagePercent float64
+		if remainingCPUCapacity > 0 {
+			cpuUsagePercent = float64(totalCPUWorkload) / float64(remainingCPUCapacity) * 100
+		} else {
+			cpuUsagePercent = 100.0
+		}
+		if remainingMemCapacity > 0 {
+			memUsagePercent = float64(totalMemWorkload) / float64(remainingMemCapacity) * 100
+		} else {
+			memUsagePercent = 100.0
+		}
+
+		reason := fmt.Sprintf("Remaining hosts cannot absorb workload after host removal. "+
+			"CPU: %d MHz used / %d MHz remaining (%.1f%%), "+
+			"Memory: %d MB used / %d MB remaining (%.1f%%)",
+			totalCPUWorkload, remainingCPUCapacity, cpuUsagePercent,
+			totalMemWorkload/(1024*1024), remainingMemCapacity/(1024*1024), memUsagePercent)
+
+		return false, reason, nil
 	}
 
 	return true, "", nil
@@ -372,7 +480,7 @@ func CreateDefaultValidationConfigMapForRollingMigrationPlan(ctx context.Context
 		"CheckDRSEnabled":                         trueString,
 		"CheckDRSIsFullyAutomated":                trueString,
 		"CheckIfThereAreMoreThanOneHostInCluster": trueString,
-		"CheckClusterRemainingHostCapacity":       falseString,
+		"CheckClusterRemainingHostCapacity":       trueString,
 		"CheckVMsAreNotBlockedForMigration":       trueString,
 		"CheckESXiInMAAS":                         trueString,
 		"CheckPCDHasClusterConfigured":            trueString,
