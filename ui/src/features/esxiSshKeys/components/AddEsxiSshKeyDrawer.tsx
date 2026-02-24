@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query'
 import { DrawerShell, DrawerHeader, DrawerFooter, ActionButton } from 'src/components/design-system'
 import { DesignSystemForm, RHFTextField } from 'src/shared/components/forms'
 import { createSecret, replaceSecret } from 'src/api/secrets/secrets'
+import { upsertESXiSSHCreds } from 'src/api/esxi-ssh-creds/esxiSshCreds'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { isValidName } from 'src/utils'
 
@@ -91,18 +92,21 @@ export default function AddEsxiSshKeyDrawer({
     mutationFn: async (data: FormData) => {
       const normalizedName = (fixedName ?? data.name).trim()
       if (mode === 'edit') {
-        return replaceSecret(
+        await replaceSecret(
+          normalizedName,
+          { 'ssh-privatekey': data.sshPrivateKey.trim() },
+          'migration-system'
+        )
+      } else {
+        await createSecret(
           normalizedName,
           { 'ssh-privatekey': data.sshPrivateKey.trim() },
           'migration-system'
         )
       }
 
-      return createSecret(
-        normalizedName,
-        { 'ssh-privatekey': data.sshPrivateKey.trim() },
-        'migration-system'
-      )
+      // Create or update the ESXiSSHCreds CR that references this secret
+      await upsertESXiSSHCreds(normalizedName, normalizedName, 'root', 'migration-system')
     }
   })
 
