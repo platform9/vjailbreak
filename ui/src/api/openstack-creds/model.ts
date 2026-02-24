@@ -85,6 +85,7 @@ export interface OpenstackCredsStatus {
     networks?: string[]
     volumeTypes?: string[]
     volumeBackends?: string[]
+    backendVolumeTypeMap?: { [key: string]: string }
     securityGroups?: SecurityGroupOption[]
     serverGroups?: ServerGroupOption[]
   }

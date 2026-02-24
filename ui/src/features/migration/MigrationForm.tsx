@@ -994,7 +994,8 @@ export default function MigrationFormDrawer({
   // RDM validation - check if RDM disks have missing required configuration
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: params.vms || [],
-    rdmDisks: rdmDisks
+    rdmDisks: rdmDisks,
+    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
   })
 
   const storageCopyMethod = params.storageCopyMethod || 'normal'
@@ -1193,7 +1194,9 @@ export default function MigrationFormDrawer({
   )
 
   const step2HasErrors = Boolean(
-    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
+    fieldErrors['vms'] ||
+      vmValidation.hasError ||
+      rdmValidation.hasConfigError
   )
 
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
@@ -1587,6 +1590,9 @@ export default function MigrationFormDrawer({
                 )}
                 {rdmValidation.hasConfigError && (
                   <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                )}
+                {rdmValidation.hasVolumeTypeError && (
+                  <Alert severity="warning">{rdmValidation.volumeTypeErrorMessage}</Alert>
                 )}
               </SurfaceCard>
             </Box>
