@@ -22,8 +22,7 @@ export const createMigrationPlanJson = (params) => {
     assignedIPsPerVM,
     networkOverridesPerVM,
     networkPersistence,
-    acknowledgeNetworkConflictRisk,
-    networkInterfacePreservation
+    acknowledgeNetworkConflictRisk
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -53,9 +52,6 @@ export const createMigrationPlanJson = (params) => {
   }
   if (typeof acknowledgeNetworkConflictRisk === 'boolean') {
     advancedOptions.acknowledgeNetworkConflictRisk = acknowledgeNetworkConflictRisk
-  }
-  if (networkInterfacePreservation) {
-    advancedOptions.networkInterfacePreservation = networkInterfacePreservation
   }
   if (Object.keys(advancedOptions).length > 0) {
     spec.advancedOptions = advancedOptions

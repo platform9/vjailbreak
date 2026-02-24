@@ -1232,9 +1232,9 @@ export default function RollingMigrationFormDrawer({
           vmName: vm.name
         })) as VMSequence[]
 
-      const networkInterfacePreservation: Record<
+      const networkOverridesPerVM: Record<
         string,
-        Record<string, { preserveIp: boolean; preserveMac: boolean }>
+        Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
       > = {}
       vmsWithAssignments
         .filter((vm) => selectedVMs.includes(vm.id))
@@ -1246,15 +1246,18 @@ export default function RollingMigrationFormDrawer({
 
           if (indices.size === 0) return
 
-          networkInterfacePreservation[vm.name] = {}
-          indices.forEach((indexStr) => {
-            const ipFlag = preserveIp[Number(indexStr)]
-            const macFlag = preserveMac[Number(indexStr)]
-            networkInterfacePreservation[vm.name][indexStr] = {
-              preserveIp: ipFlag !== false,
-              preserveMac: macFlag !== false
-            }
-          })
+          networkOverridesPerVM[vm.name] = Array.from(indices)
+            .map((indexStr) => {
+              const interfaceIndex = Number(indexStr)
+              const ipFlag = preserveIp[interfaceIndex]
+              const macFlag = preserveMac[interfaceIndex]
+              return {
+                interfaceIndex,
+                preserveIP: ipFlag !== false,
+                preserveMAC: macFlag !== false
+              }
+            })
+            .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
         })
 
       // Create cluster mapping between VMware cluster and PCD cluster
@@ -1369,11 +1372,7 @@ export default function RollingMigrationFormDrawer({
         bmConfigRef: {
           name: selectedMaasConfig?.metadata.name || ''
         },
-        ...(Object.keys(networkInterfacePreservation).length > 0 && {
-          advancedOptions: {
-            networkInterfacePreservation
-          }
-        }),
+        ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
         migrationStrategy: {
           adminInitiatedCutOver:
             selectedMigrationOptions.cutoverOption &&

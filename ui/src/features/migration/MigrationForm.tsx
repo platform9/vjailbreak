@@ -697,7 +697,7 @@ export default function MigrationFormDrawer({
 
     const networkOverridesPerVM: Record<
       string,
-      Record<string, { preserveIP: boolean; preserveMAC: boolean }>
+      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
     > = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
@@ -708,15 +708,18 @@ export default function MigrationFormDrawer({
 
         if (indices.size === 0) return
 
-        networkOverridesPerVM[vm.name] = {}
-        indices.forEach((indexStr) => {
-          const ipFlag = preserveIp[Number(indexStr)]
-          const macFlag = preserveMac[Number(indexStr)]
-          networkOverridesPerVM[vm.name][indexStr] = {
-            preserveIP: ipFlag !== false,
-            preserveMAC: macFlag !== false
-          }
-        })
+        networkOverridesPerVM[vm.name] = Array.from(indices)
+          .map((indexStr) => {
+            const interfaceIndex = Number(indexStr)
+            const ipFlag = preserveIp[interfaceIndex]
+            const macFlag = preserveMac[interfaceIndex]
+            return {
+              interfaceIndex,
+              preserveIP: ipFlag !== false,
+              preserveMAC: macFlag !== false
+            }
+          })
+          .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
       })
     }
 
@@ -769,7 +772,6 @@ export default function MigrationFormDrawer({
     const body = createMigrationPlanJson(migrationFields)
 
     try {
-      console.log('body=', body, 'migrationFields=', migrationFields)
       const data = await postMigrationPlan(body)
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
@@ -1199,9 +1201,7 @@ export default function MigrationFormDrawer({
   )
 
   const step2HasErrors = Boolean(
-    fieldErrors['vms'] ||
-      vmValidation.hasError ||
-      rdmValidation.hasConfigError
+    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
   )
 
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
