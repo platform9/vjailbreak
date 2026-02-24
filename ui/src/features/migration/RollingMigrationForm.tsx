@@ -2391,7 +2391,14 @@ export default function RollingMigrationFormDrawer({
     }
 
     if (!value) {
-      // Preserve IP disabled: keep the current value so the user can edit/override it.
+      setBulkEditIPs((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+      }))
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: 'empty' }
+      }))
       setBulkValidationMessages((prev) => ({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
@@ -3798,10 +3805,7 @@ export default function RollingMigrationFormDrawer({
                               }
                               size="small"
                               fullWidth
-                              disabled={
-                                preserveIp &&
-                                Boolean(bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim())
-                              }
+                              disabled={!preserveIp}
                               error={status === 'invalid'}
                               helperText={
                                 preserveIp && !bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()

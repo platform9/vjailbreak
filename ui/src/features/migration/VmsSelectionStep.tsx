@@ -958,6 +958,19 @@ function VmsSelectionStep({
           [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
         }))
       }
+    } else {
+      setBulkEditIPs((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }))
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
+      }))
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }))
     }
   }
 
@@ -2188,10 +2201,7 @@ function VmsSelectionStep({
                               }
                               size="small"
                               fullWidth
-                              disabled={
-                                preserveIp &&
-                                Boolean(bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim())
-                              }
+                              disabled={!preserveIp}
                               InputProps={{
                                 endAdornment: renderValidationAdornment(status)
                               }}
