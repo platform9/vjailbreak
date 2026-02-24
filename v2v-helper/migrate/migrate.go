@@ -1145,6 +1145,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "Firstboot-Scheduler.ps1",
 		})
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "install-virtio-win12.ps1",
+			})
+		}
 		if persisNetwork {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "Orchestrate-NICRecovery.ps1",
@@ -1190,12 +1196,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
-			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
-			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-				Script: "install-virtio-win12.ps1",
-			})
-		}
+
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
 		}
