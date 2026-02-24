@@ -2078,7 +2078,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	vmsToValidate []string,
 ) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
 	if len(vmsToValidate) == 0 {
-		return nil, nil, fmt.Errorf("no VMs to migrate in migration plan")
+		r.ctxlog.Info("No VMs left to validate; all in terminal states or plan complete")
+		return nil, nil, nil
 	}
 
 	validVMs := make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
