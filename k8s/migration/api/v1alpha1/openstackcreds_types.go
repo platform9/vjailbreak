@@ -72,11 +72,12 @@ type ServerGroupInfo struct {
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
-	VolumeTypes    []string            `json:"volumeTypes,omitempty"`
-	VolumeBackends []string            `json:"volumeBackends,omitempty"`
-	Networks       []string            `json:"networks,omitempty"`
-	SecurityGroups []SecurityGroupInfo `json:"securityGroups,omitempty"`
-	ServerGroups   []ServerGroupInfo   `json:"serverGroups,omitempty"`
+	VolumeTypes          []string            `json:"volumeTypes,omitempty"`
+	VolumeBackends       []string            `json:"volumeBackends,omitempty"`
+	BackendVolumeTypeMap map[string]string   `json:"backendVolumeTypeMap,omitempty"`
+	Networks             []string            `json:"networks,omitempty"`
+	SecurityGroups       []SecurityGroupInfo `json:"securityGroups,omitempty"`
+	ServerGroups         []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds

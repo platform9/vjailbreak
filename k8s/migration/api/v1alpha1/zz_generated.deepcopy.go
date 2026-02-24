@@ -1458,6 +1458,13 @@ func (in *OpenstackInfo) DeepCopyInto(out *OpenstackInfo) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.BackendVolumeTypeMap != nil {
+		in, out := &in.BackendVolumeTypeMap, &out.BackendVolumeTypeMap
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Networks != nil {
 		in, out := &in.Networks, &out.Networks
 		*out = make([]string, len(*in))

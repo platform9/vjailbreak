@@ -217,6 +217,12 @@ spec:
               openstack:
                 description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
+                  backendVolumeTypeMap:
+                    additionalProperties:
+                      type: string
+                    description: BackendVolumeTypeMap maps Cinder backend pool names
+                      to their associated volume type names
+                    type: object
                   networks:
                     items:
                       type: string
