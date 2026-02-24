@@ -36,7 +36,7 @@ log() {
 
 log "INFO" "=== VMware Tools Cleanup Started ==="
 
-# Stop VMware services if running
+# Stop and disable VMware services if running
 log "INFO" "Stopping VMware services..."
 VMWARE_SERVICES=("vmware" "vmware-tools" "vmtoolsd" "open-vm-tools")
 for service in "${VMWARE_SERVICES[@]}"; do
@@ -44,13 +44,63 @@ for service in "${VMWARE_SERVICES[@]}"; do
         log "INFO" "Stopping service: $service"
         if systemctl stop "$service" 2>/dev/null; then
             log "INFO" "Successfully stopped: $service"
+            # Disable service from starting on boot
+            if systemctl disable "$service" 2>/dev/null; then
+                log "INFO" "Successfully disabled: $service"
+            else
+                log "WARNING" "Failed to disable: $service"
+            fi
         else
             log "WARNING" "Failed to stop: $service"
         fi
     else
         log "INFO" "Service not running (skipping): $service"
+        # Still try to disable it if it exists
+        if systemctl list-unit-files 2>/dev/null | grep -q "$service"; then
+            if systemctl disable "$service" 2>/dev/null; then
+                log "INFO" "Successfully disabled: $service"
+            else
+                log "WARNING" "Failed to disable: $service"
+            fi
+        fi
     fi
 done
+
+# Remove VMware packages if installed
+log "INFO" "Removing VMware packages..."
+# For apt-based systems (Debian/Ubuntu)
+if command -v apt-get &>/dev/null; then
+    VMWARE_PACKAGES=("open-vm-tools" "vmware-tools-core" "vmware-tools")
+    for pkg in "${VMWARE_PACKAGES[@]}"; do
+        if dpkg -l | grep -q "$pkg"; then
+            log "INFO" "Removing package: $pkg"
+            if apt-get remove -y "$pkg" 2>/dev/null; then
+                log "INFO" "Successfully removed package: $pkg"
+            else
+                log "WARNING" "Failed to remove package: $pkg"
+            fi
+        fi
+    done
+# For yum/dnf-based systems (RHEL/CentOS/Fedora)
+elif command -v yum &>/dev/null || command -v dnf &>/dev/null; then
+    VMWARE_PACKAGES=("open-vm-tools" "vmware-tools-core" "vmware-tools")
+    PKG_MANAGER="yum"
+    if command -v dnf &>/dev/null; then
+        PKG_MANAGER="dnf"
+    fi
+    for pkg in "${VMWARE_PACKAGES[@]}"; do
+        if rpm -q "$pkg" &>/dev/null; then
+            log "INFO" "Removing package: $pkg"
+            if $PKG_MANAGER remove -y "$pkg" 2>/dev/null; then
+                log "INFO" "Successfully removed package: $pkg"
+            else
+                log "WARNING" "Failed to remove package: $pkg"
+            fi
+        fi
+    done
+else
+    log "INFO" "No supported package manager found, skipping package removal"
+fi
 
 # Directories to remove
 VMWARE_DIRS=(
@@ -77,7 +127,7 @@ done
 
 # Remove VMware log files from /var/log/
 log "INFO" "Removing VMware log files from /var/log/..."
-mapfile -t vmware_logs < <(find /var/log -maxdepth 1 -type f -name "vmware-*" 2>/dev/null)
+mapfile -t vmware_logs < <(find /var/log -maxdepth 1 -type f \( -name "vmware-*" -o -name "*vmtools*" -o -name "*vm-tools*" \) 2>/dev/null)
 if [ ${#vmware_logs[@]} -gt 0 ]; then
     for logfile in "${vmware_logs[@]}"; do
         log "INFO" "Removing log file: $logfile"
