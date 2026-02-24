@@ -2191,27 +2191,22 @@ function VmsSelectionStep({
                             </Box>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TextField
-                              value={ip}
-                              onChange={(e) =>
-                                handleBulkIpChange(vmName, interfaceIndex, e.target.value)
-                              }
-                              placeholder={
-                                preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
-                              }
-                              size="small"
-                              fullWidth
-                              disabled={!preserveIp}
-                              InputProps={{
-                                endAdornment: renderValidationAdornment(status)
-                              }}
-                              error={status === 'invalid'}
-                              helperText={
-                                preserveIp && !bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim()
-                                  ? message
-                                  : ''
-                              }
-                            />
+                            {preserveIp && !bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim() && (
+                              <TextField
+                                value={ip}
+                                onChange={(e) =>
+                                  handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                                }
+                                placeholder="Enter IP address"
+                                size="small"
+                                fullWidth
+                                InputProps={{
+                                  endAdornment: renderValidationAdornment(status)
+                                }}
+                                error={status === 'invalid'}
+                                helperText={message || ''}
+                              />
+                            )}
                           </Box>
                         </Box>
                       )

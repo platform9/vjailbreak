@@ -3795,35 +3795,32 @@ export default function RollingMigrationFormDrawer({
                             </Box>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TextField
-                              value={ip}
-                              onChange={(e) =>
-                                handleBulkIpChange(vmId, interfaceIndex, e.target.value)
-                              }
-                              placeholder={
-                                preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
-                              }
-                              size="small"
-                              fullWidth
-                              disabled={!preserveIp}
-                              error={status === 'invalid'}
-                              helperText={
-                                preserveIp && !bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()
-                                  ? message
-                                  : ''
-                              }
-                            />
-                            <Box sx={{ width: 24, display: 'flex' }}>
-                              {status === 'validating' && preserveIp && (
-                                <CircularProgress size={20} />
-                              )}
-                              {status === 'valid' && preserveIp && (
-                                <CheckCircleIcon color="success" fontSize="small" />
-                              )}
-                              {status === 'invalid' && preserveIp && (
-                                <ErrorIcon color="error" fontSize="small" />
-                              )}
-                            </Box>
+                            {preserveIp && !bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim() && (
+                              <>
+                                <TextField
+                                  value={ip}
+                                  onChange={(e) =>
+                                    handleBulkIpChange(vmId, interfaceIndex, e.target.value)
+                                  }
+                                  placeholder="Enter IP address"
+                                  size="small"
+                                  fullWidth
+                                  error={status === 'invalid'}
+                                  helperText={message || ''}
+                                />
+                                <Box sx={{ width: 24, display: 'flex' }}>
+                                  {status === 'validating' && (
+                                    <CircularProgress size={20} />
+                                  )}
+                                  {status === 'valid' && (
+                                    <CheckCircleIcon color="success" fontSize="small" />
+                                  )}
+                                  {status === 'invalid' && (
+                                    <ErrorIcon color="error" fontSize="small" />
+                                  )}
+                                </Box>
+                              </>
+                            )}
                           </Box>
                         </Box>
                       )
