@@ -3695,7 +3695,7 @@ export default function RollingMigrationFormDrawer({
                           sx={{
                             mb: 2,
                             display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', md: '260px 150px 1fr' },
+                            gridTemplateColumns: { xs: '1fr', md: '240px 150px 1fr' },
                             gap: 2,
                             alignItems: 'start'
                           }}

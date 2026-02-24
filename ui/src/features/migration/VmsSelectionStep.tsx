@@ -1,6 +1,5 @@
 import {
   Chip,
-  FormControl,
   FormHelperText,
   Paper,
   styled,
@@ -402,7 +401,8 @@ function VmsSelectionStep({
     {
       field: 'ipAddress',
       headerName: 'IP Address(es)',
-      flex: 1,
+      flex: 1.2,
+      minWidth: 260,
       hideable: true,
       renderCell: (params) => {
         const vm = params.row as VmDataWithFlavor
@@ -437,6 +437,8 @@ function VmsSelectionStep({
               variant="body2"
               sx={{
                 fontSize: '0.875rem',
+                flex: 1,
+                minWidth: 0,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
@@ -445,10 +447,20 @@ function VmsSelectionStep({
               {ipDisplay}
             </Typography>
             {anyPreserveIpOff ? (
-              <Chip variant="outlined" label="Auto IP" size="small" sx={{ height: 20 }} />
+              <Chip
+                variant="outlined"
+                label="Auto IP"
+                size="small"
+                sx={{ height: 20, flexShrink: 0 }}
+              />
             ) : null}
             {anyPreserveMacOff ? (
-              <Chip variant="outlined" label="Auto MAC" size="small" sx={{ height: 20 }} />
+              <Chip
+                variant="outlined"
+                label="Auto MAC"
+                size="small"
+                sx={{ height: 20, flexShrink: 0 }}
+              />
             ) : null}
           </Box>
         )
@@ -1110,14 +1122,28 @@ function VmsSelectionStep({
       const updatedVms = vmsWithFlavor.map((vm) => {
         const preserveIp = bulkPreserveIp[vm.name]
         const preserveMac = bulkPreserveMac[vm.name]
-        if (!preserveIp && !preserveMac) return vm
+        const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
+        if (!hasAnyPreserveFlags) return vm
+
+        const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
+          const preserveIP = preserveIp?.[index] !== false
+          const preserveMAC = preserveMac?.[index] !== false
+          return {
+            ...nic,
+            preserveIP,
+            preserveMAC
+          }
+        })
+
         return {
           ...vm,
+          networkInterfaces: updatedNetworkInterfaces,
           ...(preserveIp && { preserveIp }),
           ...(preserveMac && { preserveMac })
         }
       })
       setVmsWithFlavor(updatedVms)
+      setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
       showToast('Preserve settings saved.', 'success')
       handleCloseBulkEditDialog()
       return
@@ -1160,9 +1186,17 @@ function VmsSelectionStep({
               ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
               : nic
           })
-          return { ...vm, networkInterfaces: updatedNetworkInterfaces }
+          const preserveIp = bulkPreserveIp[vm.name]
+          const preserveMac = bulkPreserveMac[vm.name]
+          return {
+            ...vm,
+            networkInterfaces: updatedNetworkInterfaces,
+            ...(preserveIp && { preserveIp }),
+            ...(preserveMac && { preserveMac })
+          }
         })
         setVmsWithFlavor(updatedVms)
+        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
         showToast('Network override settings applied', 'success')
         handleCloseBulkEditDialog()
         setAssigningIPs(false)
@@ -1282,10 +1316,12 @@ function VmsSelectionStep({
 
           // Update networkInterfaces with assigned IPs (only if this VM had IPs edited)
           let updatedNetworkInterfaces = vm.networkInterfaces
-          if (assignedIPs && updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
+          if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
             updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
               const assignedIP = assignedIPs?.[index]
               const overrides = vmOverrides?.[index]
+              const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
+              const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
               return {
                 ...nic,
                 ...(assignedIP && assignedIP.trim() !== '' ? { ipAddress: assignedIP } : {}),
@@ -1294,7 +1330,7 @@ function VmsSelectionStep({
                       preserveIP: overrides.preserveIP,
                       preserveMAC: overrides.preserveMAC
                     }
-                  : {})
+                  : { preserveIP, preserveMAC })
               }
             })
           }
@@ -1317,6 +1353,7 @@ function VmsSelectionStep({
         })
 
         setVmsWithFlavor(updatedVms)
+        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
 
         // Mark all as successfully applied
         validIPs.forEach(({ vmName, interfaceIndex }) => {
@@ -1359,6 +1396,8 @@ function VmsSelectionStep({
             updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
               const assignedIP = assignedIPs?.[index]
               const overrides = vmOverrides?.[index]
+              const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
+              const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
               return {
                 ...nic,
                 ...(assignedIP && assignedIP.trim() !== '' ? { ipAddress: assignedIP } : {}),
@@ -1367,7 +1406,7 @@ function VmsSelectionStep({
                       preserveIP: overrides.preserveIP,
                       preserveMAC: overrides.preserveMAC
                     }
-                  : {})
+                  : { preserveIP, preserveMAC })
               }
             })
           }
@@ -1388,6 +1427,7 @@ function VmsSelectionStep({
         })
 
         setVmsWithFlavor(updatedVms)
+        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
         showToast(`Successfully assigned IPs to ${ipsToApply.length} interface(s)`, 'success')
         handleCloseBulkEditDialog()
       }
@@ -1449,12 +1489,28 @@ function VmsSelectionStep({
           const existingIp = nic.ipAddress || ''
           initialBulkExistingIPs[vmName][index] = existingIp
           initialBulkEditIPs[vmName][index] = existingIp
-          initialBulkPreserveIp[vmName][index] = vm.preserveIp?.[index] !== false
-          initialBulkPreserveMac[vmName][index] = vm.preserveMac?.[index] !== false
+
+          const initialPreserveIp =
+            vm.preserveIp?.[index] !== undefined
+              ? vm.preserveIp[index]
+              : nic.preserveIP === undefined
+                ? true
+                : nic.preserveIP
+          const initialPreserveMac =
+            vm.preserveMac?.[index] !== undefined
+              ? vm.preserveMac[index]
+              : nic.preserveMAC === undefined
+                ? true
+                : nic.preserveMAC
+
+          initialBulkPreserveIp[vmName][index] = initialPreserveIp
+          initialBulkPreserveMac[vmName][index] = initialPreserveMac
+
           initialBulkEditOverrides[vmName][index] = {
-            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
-            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
+            preserveIP: initialPreserveIp,
+            preserveMAC: initialPreserveMac
           }
+
           initialValidationStatus[vmName][index] = existingIp ? 'valid' : 'empty'
         })
       } else {
@@ -1463,7 +1519,10 @@ function VmsSelectionStep({
         initialBulkEditIPs[vmName][0] = existingIp
         initialBulkPreserveIp[vmName][0] = vm.preserveIp?.[0] !== false
         initialBulkPreserveMac[vmName][0] = vm.preserveMac?.[0] !== false
-        initialBulkEditOverrides[vmName][0] = { preserveIP: true, preserveMAC: true }
+        initialBulkEditOverrides[vmName][0] = {
+          preserveIP: initialBulkPreserveIp[vmName][0],
+          preserveMAC: initialBulkPreserveMac[vmName][0]
+        }
         initialValidationStatus[vmName][0] = existingIp ? 'valid' : 'empty'
       }
     })
@@ -1673,7 +1732,7 @@ function VmsSelectionStep({
         <Box sx={{ mb: 1 }}>
           <FieldLabel label="Virtual Machines" required align="flex-start" />
         </Box>
-        <FormControl error={!!error} required>
+        <Box>
           <Paper sx={{ width: '100%', height: 389 }}>
             <DataGrid
               rows={vmsWithFlavor}
@@ -1756,7 +1815,7 @@ function VmsSelectionStep({
               keepNonExistentRowsSelected
             />
           </Paper>
-        </FormControl>
+        </Box>
         {error && <FormHelperText error>{error}</FormHelperText>}
         {/* Separate RDM Error Messages */}
         {rdmValidation.hasSelectionError && (
@@ -1927,7 +1986,7 @@ function VmsSelectionStep({
       </Snackbar>
 
       {/* Bulk IP Editor Dialog */}
-      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md">
+      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
@@ -1998,7 +2057,7 @@ function VmsSelectionStep({
                           key={interfaceIndex}
                           sx={{
                             display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', sm: '260px 150px 1fr' },
+                            gridTemplateColumns: { xs: '1fr', sm: '240px 150px 1fr' },
                             columnGap: { xs: 1.5, sm: 2 },
                             rowGap: 1,
                             alignItems: 'flex-start'
@@ -2036,24 +2095,36 @@ function VmsSelectionStep({
                                 MAC:
                               </Typography>
                               <Box
-                                component="span"
                                 sx={{
-                                  px: 1,
-                                  py: 0.25,
-                                  borderRadius: 1,
-                                  bgcolor: 'grey.100',
-                                  color: 'text.primary',
-                                  fontFamily: 'monospace'
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.75,
+                                  minWidth: 0
                                 }}
                               >
-                                {networkInterface?.mac || '—'}
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    px: 1,
+                                    py: 0.25,
+                                    borderRadius: 1,
+                                    bgcolor: 'grey.100',
+                                    color: 'text.primary',
+                                    fontFamily: 'monospace'
+                                  }}
+                                >
+                                  {networkInterface?.mac || '—'}
+                                </Box>
+                                {!preserveMac ? (
+                                  <Tooltip
+                                    title="A new MAC address will be assigned in the destination"
+                                    placement="right"
+                                  >
+                                    <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                                  </Tooltip>
+                                ) : null}
                               </Box>
                             </Box>
-                            {!preserveMac ? (
-                              <Typography variant="caption" sx={{ color: 'warning.main' }}>
-                                A new MAC address will be assigned in the destination
-                              </Typography>
-                            ) : null}
                           </Box>
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

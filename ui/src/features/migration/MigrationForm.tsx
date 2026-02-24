@@ -695,23 +695,28 @@ export default function MigrationFormDrawer({
       })
     }
 
-    // Build NetworkOverridesPerVM for per-NIC IP/MAC preservation
     const networkOverridesPerVM: Record<
       string,
-      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+      Record<string, { preserveIP: boolean; preserveMAC: boolean }>
     > = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
-        const overrides = vm.networkInterfaces
-          ?.map((nic, idx) => ({
-            interfaceIndex: idx,
-            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
-            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
-          }))
-          .filter((o) => o.preserveIP === false || o.preserveMAC === false)
-        if (overrides && overrides.length > 0) {
-          networkOverridesPerVM[vm.name] = overrides
-        }
+        const preserveIp = vm.preserveIp || {}
+        const preserveMac = vm.preserveMac || {}
+
+        const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+
+        if (indices.size === 0) return
+
+        networkOverridesPerVM[vm.name] = {}
+        indices.forEach((indexStr) => {
+          const ipFlag = preserveIp[Number(indexStr)]
+          const macFlag = preserveMac[Number(indexStr)]
+          networkOverridesPerVM[vm.name][indexStr] = {
+            preserveIP: ipFlag !== false,
+            preserveMAC: macFlag !== false
+          }
+        })
       })
     }
 
@@ -764,8 +769,8 @@ export default function MigrationFormDrawer({
     const body = createMigrationPlanJson(migrationFields)
 
     try {
+      console.log('body=', body, 'migrationFields=', migrationFields)
       const data = await postMigrationPlan(body)
-
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
         migrationName: data.metadata?.name,
