@@ -16,7 +16,7 @@ export interface NavigationItemProps {
   onClick: (item: NavigationItemType) => void
   onOpenFlyout?: (item: NavigationItemType, anchorEl: HTMLElement) => void
   isExpanded?: boolean
-  onToggleExpand?: (itemId: string) => void
+  onToggleExpand?: (item: NavigationItemType) => void
   depth?: number
 }
 
@@ -44,7 +44,7 @@ export const NavigationItemComponent = memo(function NavigationItemComponent({
 
   const handleToggleExpand = (e: ReactMouseEvent) => {
     e.stopPropagation()
-    onToggleExpand?.(item.id)
+    onToggleExpand?.(item)
   }
 
   const listItemContent = (
