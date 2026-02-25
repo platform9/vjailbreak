@@ -2094,7 +2094,12 @@ function VmsSelectionStep({
                                   px: 1,
                                   py: 0.25,
                                   borderRadius: 1,
-                                  bgcolor: 'grey.100',
+                                  bgcolor: (theme) =>
+                                    theme.palette.mode === 'dark'
+                                      ? 'rgba(255, 255, 255, 0.08)'
+                                      : theme.palette.grey[100],
+                                  border: '1px solid',
+                                  borderColor: 'divider',
                                   color: 'text.primary',
                                   fontFamily: 'monospace'
                                 }}
@@ -2124,7 +2129,12 @@ function VmsSelectionStep({
                                     px: 1,
                                     py: 0.25,
                                     borderRadius: 1,
-                                    bgcolor: 'grey.100',
+                                    bgcolor: (theme) =>
+                                      theme.palette.mode === 'dark'
+                                        ? 'rgba(255, 255, 255, 0.08)'
+                                        : theme.palette.grey[100],
+                                    border: '1px solid',
+                                    borderColor: 'divider',
                                     color: 'text.primary',
                                     fontFamily: 'monospace'
                                   }}
