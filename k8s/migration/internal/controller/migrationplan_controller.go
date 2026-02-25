@@ -305,6 +305,10 @@ func (*MigrationPlanReconciler) renameVM(
 	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
 	err := vcClient.RenameVM(ctx, vm, newVMName)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			ctxlog.Info("VM not found for rename; possibly already processed or deleted", "oldName", vm, "newName", newVMName)
+			return nil
+		}
 		ctxlog.Error(err, "Failed to rename VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
 		return err
 	}
@@ -331,6 +335,10 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 	ctxlog.Info("Auto-detecting datacenter from VM...", "vm", vm)
 	_, dc, err := vcClient.GetVMWithDatacenter(ctx, vm)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm)
+			return nil
+		}
 		ctxlog.Error(err, "Failed to find VM and its datacenter", "vm", vm)
 		return errors.Wrapf(err, "failed to find VM '%s' and its datacenter", vm)
 	}
@@ -569,7 +577,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	var validationErr error
 	if len(vmsToValidate) > 0 {
 		// Validate VM OS types before proceeding with migration
-		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds)
+		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, vmsToValidate)
 	}
 
 	if validationErr != nil {
@@ -975,8 +983,16 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		hasRDMDisks := len(vmMachine.Spec.VMInfo.RDMDisks) > 0
 		retryable := !hasRDMDisks
 
-		migrationobj.Status.Retryable = &retryable
-		if err := r.Status().Update(ctx, migrationobj); err != nil {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+			latest.Status.Retryable = &retryable
+			return r.Status().Update(ctx, latest)
+		})
+		if err != nil {
 			ctxlog.Error(err, "Failed to set retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 			// Don't fail migration creation if status update fails, just log the error
 		} else {
@@ -1246,7 +1262,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
+				"user_firstboot": migrationplan.Spec.FirstBootScript,
 			},
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
@@ -1757,22 +1773,6 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				CreateFunc: func(_ event.CreateEvent) bool {
 					return true
 				},
-				DeleteFunc: func(e event.DeleteEvent) bool {
-					// Only reconcile if a non-terminal migration is deleted
-					// This prevents log flooding when succeeded migrations are deleted
-					// while pending migrations still exist
-					migration, ok := e.Object.(*vjailbreakv1alpha1.Migration)
-					if !ok {
-						return false
-					}
-
-					// Don't reconcile if a terminal state migration is deleted
-					isTerminal := migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-						migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
-
-					return !isTerminal
-				},
 			},
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
@@ -2075,31 +2075,32 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vmsToValidate []string,
 ) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
-	var validVMs, skippedVMs []*vjailbreakv1alpha1.VMwareMachine
-
-	if len(migrationplan.Spec.VirtualMachines) == 0 {
-		return nil, nil, fmt.Errorf("no VMs to migrate in migration plan")
+	if len(vmsToValidate) == 0 {
+		r.ctxlog.Info("No VMs left to validate; all in terminal states or plan complete")
+		return nil, nil, nil
 	}
 
-	for _, vmGroup := range migrationplan.Spec.VirtualMachines {
-		for _, vm := range vmGroup {
-			vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
-			}
+	validVMs := make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
+	skippedVMs := make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
 
-			_, skipped, err := r.validateVMOS(vmMachine)
-			if err != nil {
-				return nil, nil, err
-			}
-			if skipped {
-				skippedVMs = append(skippedVMs, vmMachine)
-				continue
-			}
-
-			validVMs = append(validVMs, vmMachine)
+	for _, vm := range vmsToValidate {
+		vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
 		}
+
+		_, skipped, err := r.validateVMOS(vmMachine)
+		if err != nil {
+			return nil, nil, err
+		}
+		if skipped {
+			skippedVMs = append(skippedVMs, vmMachine)
+			continue
+		}
+
+		validVMs = append(validVMs, vmMachine)
 	}
 
 	if len(validVMs) == 0 {

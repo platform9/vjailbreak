@@ -975,6 +975,34 @@ spec:
                 description: MigrationTemplate is the template to be used for the
                   migration
                 type: string
+              networkOverridesPerVM:
+                additionalProperties:
+                  items:
+                    description: NICOverride defines per-NIC overrides for IP and
+                      MAC preservation during migration
+                    properties:
+                      interfaceIndex:
+                        description: InterfaceIndex is the zero-based index of the
+                          NIC
+                        type: integer
+                      preserveIP:
+                        description: PreserveIP indicates whether to preserve the
+                          source VM's IP address for this NIC
+                        type: boolean
+                      preserveMAC:
+                        description: PreserveMAC indicates whether to preserve the
+                          source VM's MAC address for this NIC
+                        type: boolean
+                    required:
+                    - interfaceIndex
+                    - preserveIP
+                    - preserveMAC
+                    type: object
+                  type: array
+                description: |-
+                  NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
+                  Only NICs with non-default settings (i.e., preserve=false) need to be listed
+                type: object
               postMigrationAction:
                 description: PostMigrationAction defines the post migration action
                   for the virtual machine
@@ -1111,6 +1139,10 @@ spec:
                 - hot
                 - cold
                 - mock
+                type: string
+              networkOverrides:
+                description: NetworkOverrides is the JSON-serialized per-NIC overrides
+                  for IP and MAC preservation
                 type: string
               podRef:
                 description: PodRef is the name of the pod

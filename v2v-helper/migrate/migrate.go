@@ -1098,19 +1098,31 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 }
 
 // handleWindowsBootDetection handles boot volume detection for Windows systems
-func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, error) {
+func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, string, error) {
 	utils.PrintLog("operating system compatibility check passed")
+
+	var finalBootIndex int
+	var err error
 
 	if !useSingleDisk {
 		utils.PrintLog("checking for bootable volume in case of LDM")
-		finalBootIndex, err := virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+		finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
 		if err != nil {
-			return -1, errors.Wrap(err, "Failed to get bootable volume index")
+			return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
 		}
-		return finalBootIndex, nil
+	} else {
+		finalBootIndex = bootVolumeIndex
 	}
 
-	return bootVolumeIndex, nil
+	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to detect Windows version: %v", err))
+		osRelease = "Windows (version unknown)"
+	}
+
+	utils.PrintLog(fmt.Sprintf("Windows OS detected: %s", osRelease))
+
+	return finalBootIndex, osRelease, nil
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
@@ -1133,6 +1145,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "Firstboot-Scheduler.ps1",
 		})
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "install-virtio-win12.ps1",
+			})
+		}
 		if persisNetwork {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "Orchestrate-NICRecovery.ps1",
@@ -1173,11 +1191,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
 		}
@@ -1346,7 +1365,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 
 	case constants.OSFamilyWindows:
-		bootVolumeIndex, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
+		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
 		if err != nil {
 			return err
 		}
