@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     VMware Tools removal script for use with Firstboot-Scheduler.ps1.
-    Designed to run across multiple reboots via scheduled task.
+    Designed to run across multiple reboots via the scheduler.
     Exit codes:
       0    = VMware Tools fully removed (done)
       3010 = Reboot required to continue removal
@@ -12,7 +12,6 @@ param(
     [string]$WorkDir = "$env:ProgramData\VMwareRemoval",
     [string]$MarkerPath = "$WorkDir\vmware_tools_removed.marker",
     [string]$LogPath = "$WorkDir\VMware_Removal_Log.txt",
-    [string]$TaskName = "VMwareToolsRemoval",
     [int]$MaxAttempts = 15
 )
 
@@ -30,24 +29,9 @@ function Write-Log {
 # Create working dir
 if (-not (Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
 
-# Marker check
 if (Test-Path $MarkerPath) {
     Write-Log 'Marker found. VMware Tools already removed.'
-    schtasks /Delete /TN $TaskName /F > $null 2>&1
     exit 0
-}
-
-# Bootstrap: If not staged, copy self and schedule task
-$scriptPath = $PSCommandPath
-$stagedScript = Join-Path $WorkDir 'vmware-tools-deletion.ps1'
-if ($scriptPath -ne $stagedScript) {
-    Write-Log 'First run: Staging script and scheduling task.'
-    Copy-Item -Path $scriptPath -Destination $stagedScript -Force
-    $taskAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$stagedScript`""
-    $taskTrigger = New-ScheduledTaskTrigger -AtStartup
-    $taskPrincipal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
-    Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger -Principal $taskPrincipal -Force | Out-Null
-    exit 0  
 }
 
 # Attempt counter
@@ -59,7 +43,6 @@ Set-Content -Path $attemptFile -Value $attempt
 if ($attempt -gt $MaxAttempts) {
     Write-Log "Max attempts ($MaxAttempts) reached. Suggest running in Safe Mode." 'ERROR'
     New-Item -ItemType File -Path "$WorkDir\vmware_tools_removed.failed" -Force | Out-Null
-    schtasks /Delete /TN $TaskName /F > $null 2>&1
     exit 1
 }
 
@@ -293,17 +276,42 @@ if (Test-Path $lockPath) {
 
 # ====================== REMAINING CHECK ======================
 function Test-Remaining {
+    $hasRemnants = $false
+
     # Folders
     $testPaths = @('C:\Program Files\VMware', 'C:\Program Files\Common Files\VMware', 'C:\ProgramData\VMware', 'C:\ProgramData\VMware\VMware VGAuth')
-    foreach ($p in $testPaths) { if (Test-Path $p) { return $true } }
+    foreach ($p in $testPaths) { 
+        if (Test-Path $p) { 
+            Write-Log "Remnant found: Folder $p" 'WARNING'
+            $hasRemnants = $true
+        } 
+    }
 
-    # Services/Processes
-    if (Get-Service $services -ErrorAction SilentlyContinue) { return $true }
-    if (Get-Process $processes -ErrorAction SilentlyContinue) { return $true }
+    # Services
+    $coreServices = @('VMTools', 'vm3dservice', 'VGAuthService')
+    foreach ($svc in $coreServices) {
+        if (Get-Service $svc -ErrorAction SilentlyContinue) { 
+            Write-Log "Remnant found: Service $svc" 'WARNING'
+            $hasRemnants = $true 
+        }
+    }
+
+    # Processes
+    $coreProcs = @('vmtoolsd', 'vm3dservice', 'VGAuthService', 'vmwaretray', 'vmwareuser')
+    foreach ($proc in $coreProcs) {
+        if (Get-Process $proc -ErrorAction SilentlyContinue) { 
+            Write-Log "Remnant found: Process $proc" 'WARNING'
+            $hasRemnants = $true 
+        }
+    }
 
     # Uninstall entry
-    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-    if ($apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }) { return $true }
+    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    $vmwApps = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }
+    if ($vmwApps) { 
+        Write-Log "Remnant found: Uninstall registry key" 'WARNING'
+        $hasRemnants = $true 
+    }
 
     # Drivers
     try {
@@ -316,36 +324,21 @@ function Test-Remaining {
         foreach ($line in $outLines) {
             if ($line -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') { $oem = $matches[1] }
             elseif ($line -match '^\s*$') { $oem = $null }
-            elseif ($line -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -and $oem) { return $true }
+            elseif ($line -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -and $oem) { 
+                Write-Log "Remnant found: Driver $oem" 'WARNING'
+                $hasRemnants = $true
+                break
+            }
         }
     } catch {}
 
-    # Reg keys
-    foreach ($k in ($regKeys + $svcRegKeys)) { if (Test-Path $k) { return $true } }
-
-    return $false
+    return $hasRemnants
 }
 
 if (-not (Test-Remaining)) {
     Write-Log '=== NO REMNANTS DETECTED === VMware Tools fully removed'
     New-Item -ItemType File -Path $MarkerPath -Force | Out-Null
-    schtasks /Delete /TN $TaskName /F > $null 2>&1
     Write-Log 'Cleanup finished successfully.'
-    
-    try {
-        Start-Sleep -Seconds 2
-        # Schedule a one-time task to delete the work directory after a short delay
-        # to ensure this script can finish its execution cleanly
-        $cleanupScript = "Start-Sleep -Seconds 10; Remove-Item -LiteralPath `"$WorkDir`" -Recurse -Force"
-        $cleanupEncoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($cleanupScript))
-        $cleanupAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -EncodedCommand $cleanupEncoded"
-        $cleanupTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
-        Register-ScheduledTask -TaskName "VMwareRemovalCleanup" -Action $cleanupAction -Trigger $cleanupTrigger -User "SYSTEM" -Force | Out-Null
-        Write-Log "Scheduled final directory cleanup for $WorkDir"
-    } catch {
-        Write-Log "Failed to schedule final directory cleanup: $_" 'WARNING'
-    }
-
     exit 0
 }
 
