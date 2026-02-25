@@ -553,7 +553,12 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if len(ipEntries) == 0 {
+	} else if ipEntries != nil {
+		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
+		PrintLog("Creating port with no fixed IPs for mac " + mac)
+		createOpts.FixedIPs = []ports.IP{}
+	} else {
+		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
 		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
 		if err != nil {
