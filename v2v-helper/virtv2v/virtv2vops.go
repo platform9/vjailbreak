@@ -34,7 +34,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -72,6 +72,46 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
 		return err
 	}
+	return nil
+}
+
+// UploadVirtIOScripts uploads the VirtIO installation scripts into the guest
+func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	log.Println("Uploading VirtIO installation scripts to guest")
+
+	// Verify the PowerShell script exists in the container
+	scriptPath := "/home/fedora/install-virtio-win12.ps1"
+	if _, err := os.Stat(scriptPath); err != nil {
+		return fmt.Errorf("PowerShell script not found at %s: %w", scriptPath, err)
+	}
+	log.Printf("Found PowerShell script at %s", scriptPath)
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var (
+		ans string
+		err error
+	)
+
+	// Upload PowerShell script to Windows\Temp which always exists
+	log.Println("Executing guestfs upload command...")
+	if useSingleDisk {
+		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Temp\install-virtio-win12.ps1`
+		log.Printf("Upload command: %s", command)
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		log.Printf("Upload command: %s /home/fedora/install-virtio-win12.ps1 C:\\Windows\\Temp\\install-virtio-win12.ps1", command)
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
+	}
+	if err != nil {
+		log.Printf("Upload command failed: %v", err)
+		log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload PowerShell script: %w: %s", err, strings.TrimSpace(ans))
+	}
+	log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+
+	log.Println("Successfully uploaded VirtIO installation scripts")
 	return nil
 }
 
@@ -196,10 +236,16 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
+
+		// Use Windows Server 2012-specific ISO if detected
+		if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+			filePath = "/home/fedora/virtio-win/virtio-win-server12.iso"
+			log.Printf("Detected Windows Server 2012, using virtio-win-server12.iso")
+		}
 
 		found, err := CheckForVirtioDrivers()
 		if err != nil {
@@ -473,7 +519,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"-i")
 	cmd.Stdin = strings.NewReader(command)
 	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
@@ -706,6 +752,49 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 
 	// Return original error if not a missing file issue
 	return "", err
+}
+
+// GetWindowsVersion detects the Windows version using guestfish inspect commands
+func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var osPath string
+	var err error
+
+	if useSingleDisk {
+		osPath, err = RunCommandInGuest(diskPath, "inspect-os", false)
+	} else {
+		osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect OS: %v", err)
+	}
+
+	osPath = strings.TrimSpace(osPath)
+	if osPath == "" {
+		return "", fmt.Errorf("empty OS path from inspect-os")
+	}
+
+	var productName string
+	if useSingleDisk {
+		productName, err = RunCommandInGuest(diskPath, fmt.Sprintf("inspect-get-product-name %s", osPath), false)
+	} else {
+		productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
+	}
+
+	if err != nil {
+		log.Printf("Failed to get Windows product name: %v", err)
+		return "Windows (version unknown)", nil
+	}
+
+	productName = strings.TrimSpace(productName)
+	if productName == "" {
+		return "Windows (version unknown)", nil
+	}
+
+	log.Printf("Detected Windows version: %s", productName)
+	return strings.ToLower(productName), nil
 }
 
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
