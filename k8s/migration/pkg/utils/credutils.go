@@ -1208,7 +1208,8 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context, client client.Client, v
 	}
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
 	for _, vm := range vmList.Items {
-		if !VMExistsInVcenter(vm.Spec.VMInfo.Name, vcenterVMs) {
+		// skip vmware machine deletion if it is migrated
+		if !VMExistsInVcenter(vm.Spec.VMInfo.Name, vcenterVMs) && !vm.Status.Migrated {
 			staleVMs = append(staleVMs, vm)
 		}
 	}
