@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
 // GetClosestFlavour gets the closest flavor for the given CPU, memory, and GPU requirements.
