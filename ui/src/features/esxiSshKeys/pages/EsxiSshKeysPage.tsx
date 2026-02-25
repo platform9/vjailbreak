@@ -271,7 +271,7 @@ export default function EsxiSshKeysPage() {
         }}
         pageSizeOptions={[10, 25, 50, 100]}
         loading={isLoading || isEsxiSshKeyLoading}
-        emptyMessage="No ESXi hosts discovered"
+        emptyMessage="No ESXi hosts discovered" 
       />
 
       {drawerState.open && (
