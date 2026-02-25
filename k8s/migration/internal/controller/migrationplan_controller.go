@@ -924,29 +924,29 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
+	// Get assigned IPs for this VM from the migration plan
+	assignedIP := ""
+	if migrationplan.Spec.AssignedIPsPerVM != nil {
+		if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
+			assignedIP = ips
+		}
+	}
+
+	// Get network overrides for this VM from the migration plan
+	networkOverrides := ""
+	if migrationplan.Spec.NetworkOverridesPerVM != nil {
+		if overrides, ok := migrationplan.Spec.NetworkOverridesPerVM[vm]; ok && len(overrides) > 0 {
+			overridesJSON, err := json.Marshal(overrides)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to marshal network overrides for VM %s", vm)
+			}
+			networkOverrides = string(overridesJSON)
+		}
+	}
+
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Get assigned IPs for this VM from the migration plan
-		assignedIP := ""
-		if migrationplan.Spec.AssignedIPsPerVM != nil {
-			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
-				assignedIP = ips
-			}
-		}
-
-		// Get network overrides for this VM from the migration plan
-		networkOverrides := ""
-		if migrationplan.Spec.NetworkOverridesPerVM != nil {
-			if overrides, ok := migrationplan.Spec.NetworkOverridesPerVM[vm]; ok && len(overrides) > 0 {
-				overridesJSON, err := json.Marshal(overrides)
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to marshal network overrides for VM %s", vm)
-				}
-				networkOverrides = string(overridesJSON)
-			}
-		}
-
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
@@ -998,6 +998,22 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		} else {
 			ctxlog.Info("Set migration retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 		}
+	} else if err == nil {
+		// Migration already exists — update AssignedIP and NetworkOverrides from the MigrationPlan
+		// in case the user changed them before retrying.
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Spec.AssignedIP = assignedIP
+			latest.Spec.NetworkOverrides = networkOverrides
+			return r.Update(ctx, latest)
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to update Migration spec for VM %s", vm)
+		}
+		ctxlog.Info("Updated migration spec from MigrationPlan", "assignedIP", assignedIP, "networkOverrides", networkOverrides)
 	}
 	return migrationobj, nil
 }
