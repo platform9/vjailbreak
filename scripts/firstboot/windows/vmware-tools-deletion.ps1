@@ -65,35 +65,6 @@ if ($attempt -gt $MaxAttempts) {
 
 Write-Log "=== VMware Tools Removal - Run #$attempt of $MaxAttempts ==="
 
-# ====================== SERVICES ======================
-$services = @(
-    'VMTools','vm3dservice','VGAuthService','VMwareCAF','VMwareCAFCommAmqpListener','VMwareCAFManagementAgentHost',
-    'vmci','vm3dmp','vmaudio','vmhgfs','VMMemCtl','vmmouse','VMRawDisk','vmusbmouse','vmvss','vmvsock','vsock','vmxnet3',
-    'vmStatsProvider'
-)
-
-foreach ($svc in $services) {
-    try {
-        $s = Get-Service -Name $svc
-        Stop-Service -Name $svc -Force
-        sc.exe delete $svc 2>&1 | Out-Null
-        $Global:didWork = $true
-        Write-Log "Deleted service: $svc"
-    } catch {
-        Write-Log "Failed to delete service $svc: $_" 'WARNING'
-    }
-}
-
-# ====================== PROCESSES ======================
-$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser')
-
-foreach ($proc in $processes) {
-    try {
-        Get-Process -Name $proc | Stop-Process -Force
-        $Global:didWork = $true
-    } catch {}
-}
-
 # ====================== MSI UNINSTALL ======================
 function Try-UninstallVMwareTools {
     $uninstallPaths = @(
@@ -102,7 +73,7 @@ function Try-UninstallVMwareTools {
     )
     $productCode = $null
     foreach ($path in $uninstallPaths) {
-        $entries = Get-ItemProperty -Path $path |
+        $entries = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
             Where-Object { $_.DisplayName -like '*VMware Tools*' }
         if ($entries) {
             $productCode = $entries[0].PSChildName
@@ -128,19 +99,35 @@ function Try-MsiHack {
     foreach ($pk in $productKeys) {
         $ip = Join-Path $pk.PSPath 'InstallProperties'
         $props = Get-ItemProperty -Path $ip -ErrorAction SilentlyContinue
-        if ($props.DisplayName -eq 'VMware Tools') {
+        if ($props.DisplayName -match 'VMware Tools') {
             $localPackage = $props.LocalPackage
             if (Test-Path $localPackage) {
                 Write-Log "Applying MSI hack for: $localPackage" 'WARNING'
                 try {
                     $db = $installer.OpenDatabase($localPackage, 2)
-                    $q = "DELETE FROM CustomAction WHERE Action LIKE 'VM_%'"
-                    $view = $db.OpenView($q)
+                    $view = $db.OpenView("SELECT Action FROM CustomAction")
                     $view.Execute()
+                    $record = $view.Fetch()
+                    $actionsToDelete = @()
+                    while ($record -ne $null) {
+                        $actionName = $record.StringData(1)
+                        if ($actionName -match '^VM_') {
+                            $actionsToDelete += $actionName
+                        }
+                        $record = $view.Fetch()
+                    }
                     $view.Close()
+
+                    foreach ($action in $actionsToDelete) {
+                        $delView = $db.OpenView("DELETE FROM CustomAction WHERE Action = '$action'")
+                        $delView.Execute()
+                        $delView.Close()
+                    }
                     $db.Commit()
                     $Global:didWork = $true
+                    
                     # Retry uninstall after hack
+                    Write-Log "Retrying msiexec after removing custom actions"
                     $proc = Start-Process 'msiexec.exe' -ArgumentList "/x `"$localPackage`" /qn /norestart REBOOT=ReallySuppress" -Wait -PassThru
                     Write-Log "MSI hack uninstall exit code: $($proc.ExitCode)"
                 } catch {
@@ -152,10 +139,40 @@ function Try-MsiHack {
     }
 }
 
+# Run MSI Uninstall FIRST before destroying services/processes it might depend on
 $uninstallExit = Try-UninstallVMwareTools
 if ($uninstallExit -and $uninstallExit -ne 0 -and $uninstallExit -ne 3010) {
     Write-Log "Standard uninstall failed ($uninstallExit). Trying MSI hack."
     Try-MsiHack
+}
+
+# ====================== SERVICES ======================
+$services = @(
+    'VMTools','vm3dservice','VGAuthService','VMwareCAF','VMwareCAFCommAmqpListener','VMwareCAFManagementAgentHost',
+    'vmci','vm3dmp','vmaudio','vmhgfs','VMMemCtl','vmmouse','VMRawDisk','vmusbmouse','vmvss','vmvsock','vsock','vmxnet3',
+    'vmStatsProvider'
+)
+
+foreach ($svc in $services) {
+    try {
+        $s = Get-Service -Name $svc
+        Stop-Service -Name $svc -Force
+        sc.exe delete $svc 2>&1 | Out-Null
+        $Global:didWork = $true
+        Write-Log "Deleted service: $svc"
+    } catch {
+        Write-Log "Failed to delete service ${svc}: $_" 'WARNING'
+    }
+}
+
+# ====================== PROCESSES ======================
+$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser')
+
+foreach ($proc in $processes) {
+    try {
+        Get-Process -Name $proc | Stop-Process -Force
+        $Global:didWork = $true
+    } catch {}
 }
 
 # ====================== REGISTRY CLEANUP ======================
@@ -184,7 +201,7 @@ foreach ($k in ($regKeys + $svcRegKeys)) {
             Write-Log "Removed registry key: $k"
         }
     } catch {
-        Write-Log "Failed to remove reg key $k: $_" 'WARNING'
+        Write-Log "Failed to remove reg key $($k): $_" 'WARNING'
     }
 }
 
@@ -198,14 +215,25 @@ $paths = @(
 foreach ($p in $paths) {
     try {
         if (Test-Path $p) {
+            Get-Process | Where-Object { $_.Path -like "$p\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+        
             takeown /F $p /R /D Y 2>&1 | Out-Null
             icacls $p /grant Administrators:F /T /Q 2>&1 | Out-Null
-            Remove-Item $p -Recurse -Force
-            $Global:didWork = $true
-            Write-Log "Removed folder: $p"
+        
+            Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path $p) {
+                cmd.exe /c "rd /s /q `"$p`""
+            }
+        
+            if (-not (Test-Path $p)) {
+                $Global:didWork = $true
+                Write-Log "Removed folder: $p"
+            } else {
+                Write-Log "Failed to fully remove folder: $p" 'WARNING'
+            }
         }
     } catch {
-        Write-Log "Failed to remove folder $p: $_" 'WARNING'
+        Write-Log "Failed to remove folder ${p}: $_" 'WARNING'
     }
 }
 
@@ -213,15 +241,35 @@ foreach ($p in $paths) {
 $pnputil = if (Test-Path "$env:WINDIR\Sysnative\pnputil.exe") { "$env:WINDIR\Sysnative\pnputil.exe" } else { "$env:WINDIR\System32\pnputil.exe" }
 
 try {
-    $driverOutput = & $pnputil /enum-drivers 2>&1 | Out-String
-    $driverOutput | Select-String -Pattern '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -Context 0,10 |
-        ForEach-Object {
-            if ($_ -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') {
-                & $pnputil /delete-driver $matches[1] /uninstall /force 2>&1 | Out-Null
-                $Global:didWork = $true
-                Write-Log "DriverStore deleted: $($matches[1])"
+    $driverOutput = & $pnputil -e 2>&1 | Out-String
+    if ($driverOutput -match "Invalid command" -or $driverOutput -match "not recognized") {
+        $driverOutput = & $pnputil /enum-drivers 2>&1 | Out-String
+    }
+    
+    $driverLines = $driverOutput -split "`r`n"
+    $oem = $null
+    $driversToDelete = @()
+    
+    foreach ($line in $driverLines) {
+        if ($line -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') {
+            $oem = $matches[1]
+        }
+        elseif ($line -match '^\s*$') {
+            $oem = $null
+        }
+        elseif ($line -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -and $oem) {
+            if ($driversToDelete -notcontains $oem) {
+                $driversToDelete += $oem
             }
         }
+    }
+
+    foreach ($d in $driversToDelete) {
+        & $pnputil /delete-driver $d /uninstall /force 2>&1 | Out-Null
+        & $pnputil -f -d $d 2>&1 | Out-Null
+        $Global:didWork = $true
+        Write-Log "DriverStore deleted: $d"
+    }
 } catch {
     Write-Log "DriverStore cleanup failed: $_" 'ERROR'
 }
@@ -259,8 +307,17 @@ function Test-Remaining {
 
     # Drivers
     try {
-        $out = & $pnputil /enum-drivers 2>&1 | Out-String
-        if ($out -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw') { return $true }
+        $outStr = & $pnputil -e 2>&1 | Out-String
+        if ($outStr -match "Invalid command" -or $outStr -match "not recognized") {
+            $outStr = & $pnputil /enum-drivers 2>&1 | Out-String
+        }
+        $outLines = $outStr -split "`r`n"
+        $oem = $null
+        foreach ($line in $outLines) {
+            if ($line -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') { $oem = $matches[1] }
+            elseif ($line -match '^\s*$') { $oem = $null }
+            elseif ($line -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -and $oem) { return $true }
+        }
     } catch {}
 
     # Reg keys
@@ -274,6 +331,21 @@ if (-not (Test-Remaining)) {
     New-Item -ItemType File -Path $MarkerPath -Force | Out-Null
     schtasks /Delete /TN $TaskName /F > $null 2>&1
     Write-Log 'Cleanup finished successfully.'
+    
+    try {
+        Start-Sleep -Seconds 2
+        # Schedule a one-time task to delete the work directory after a short delay
+        # to ensure this script can finish its execution cleanly
+        $cleanupScript = "Start-Sleep -Seconds 10; Remove-Item -LiteralPath `"$WorkDir`" -Recurse -Force"
+        $cleanupEncoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($cleanupScript))
+        $cleanupAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -EncodedCommand $cleanupEncoded"
+        $cleanupTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
+        Register-ScheduledTask -TaskName "VMwareRemovalCleanup" -Action $cleanupAction -Trigger $cleanupTrigger -User "SYSTEM" -Force | Out-Null
+        Write-Log "Scheduled final directory cleanup for $WorkDir"
+    } catch {
+        Write-Log "Failed to schedule final directory cleanup: $_" 'WARNING'
+    }
+
     exit 0
 }
 

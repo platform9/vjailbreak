@@ -227,6 +227,7 @@ FALLBACK_TO_DHCP=%s
 PERIODIC_SYNC_INTERVAL=%s
 PERIODIC_SYNC_ENABLED=%s
 NETWORK_PERSISTENCE=%s
+REMOVE_VMWARE_TOOLS=%s
 STORAGE_COPY_METHOD=%s
 VENDOR_TYPE=%s
 ARRAY_CREDS_MAPPING=%s
@@ -245,6 +246,7 @@ ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
 		migrationparams.PeriodicSyncInterval,
 		migrationparams.PeriodicSyncEnabled,
 		migrationparams.NetworkPersistance,
+		migrationparams.RemoveVMwareTools,
 		migrationparams.StorageCopyMethod,
 		migrationparams.VendorType,
 		migrationparams.ArrayCredsMapping,
