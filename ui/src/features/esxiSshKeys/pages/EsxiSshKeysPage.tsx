@@ -183,11 +183,10 @@ export default function EsxiSshKeysPage() {
         return rows.filter((row) => row.sshStatus.toLowerCase() === 'succeeded')
       case 'Failed':
         return rows.filter((row) => row.sshStatus.toLowerCase() === 'failed')
-      case 'In Progress':
-        return rows.filter((row) => {
-          const normalized = row.sshStatus.toLowerCase()
-          return normalized === 'pending' || normalized === 'validating'
-        })
+      case 'Pending':
+        return rows.filter((row) => row.sshStatus.toLowerCase() === 'pending')
+      case 'Validating':
+        return rows.filter((row) => row.sshStatus.toLowerCase() === 'validating')
       case 'All':
       default:
         return rows
@@ -221,6 +220,7 @@ export default function EsxiSshKeysPage() {
         disableRefresh={isLoading}
         onStatusFilterChange={setStatusFilter}
         currentStatusFilter={statusFilter}
+        statusFilterOptions={['All', 'Succeeded', 'Failed', 'Pending', 'Validating']}
       />
     </Box>
   )
