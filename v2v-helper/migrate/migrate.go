@@ -2012,8 +2012,21 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			// Apply per-NIC overrides
 			mac := vminfo.Mac[idx]
 			if !preserveIP {
-				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, clearing IP entries for MAC %s — OpenStack will assign from pool", idx, mac))
-				vminfo.IPperMac[mac] = nil
+				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
+				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
+				hasUserAssignedIP := false
+				if migobj.AssignedIP != "" {
+					assignedIPs := strings.Split(migobj.AssignedIP, ",")
+					if idx < len(assignedIPs) && strings.TrimSpace(assignedIPs[idx]) != "" {
+						hasUserAssignedIP = true
+					}
+				}
+				if !hasUserAssignedIP {
+					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
+					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
+				} else {
+					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
+				}
 			}
 			if !preserveMAC {
 				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
