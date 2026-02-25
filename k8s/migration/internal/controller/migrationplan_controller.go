@@ -1262,7 +1262,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"user_firstboot": migrationplan.Spec.FirstBootScript,
+				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
 			},
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
