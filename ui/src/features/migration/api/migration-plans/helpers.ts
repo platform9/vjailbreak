@@ -22,6 +22,7 @@ export const createMigrationPlanJson = (params) => {
     assignedIPsPerVM,
     networkOverridesPerVM,
     networkPersistence,
+    removeVMwareTools,
     acknowledgeNetworkConflictRisk
   } = params || {}
 
@@ -49,6 +50,9 @@ export const createMigrationPlanJson = (params) => {
   }
   if (typeof networkPersistence === 'boolean') {
     advancedOptions.networkPersistence = networkPersistence
+  }
+  if (typeof removeVMwareTools === 'boolean') {
+    advancedOptions.removeVMwareTools = removeVMwareTools
   }
   if (typeof acknowledgeNetworkConflictRisk === 'boolean') {
     advancedOptions.acknowledgeNetworkConflictRisk = acknowledgeNetworkConflictRisk

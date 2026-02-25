@@ -35,6 +35,12 @@ import { NavigationItemComponent } from './NavigationItem'
 import { SubmenuConnectorIcon } from './SubmenuConnectorIcon'
 import { SidenavFlyout } from './SidenavFlyout'
 
+declare global {
+  interface Window {
+    __VDDK_UPLOAD_IN_PROGRESS__?: boolean
+  }
+}
+
 export default function Sidenav({
   items,
   isCollapsed: controlledCollapsed,
@@ -45,6 +51,11 @@ export default function Sidenav({
   const navigate = useNavigate()
   const location = useLocation()
   const theme = useTheme()
+
+  const getFirstChildItem = useCallback((item: NavigationItem) => {
+    const visibleChildren = item.children?.filter((child) => !child.hidden && !child.disabled) ?? []
+    return visibleChildren.length ? visibleChildren[0] : undefined
+  }, [])
 
   const [flyoutAnchorEl, setFlyoutAnchorEl] = useState<HTMLElement | null>(null)
   const [flyoutItemId, setFlyoutItemId] = useState<string | null>(null)
@@ -118,20 +129,32 @@ export default function Sidenav({
       if (!isCollapsed) return
       if (!item.children?.length) return
       if (item.external) return
+
+      const firstChild = getFirstChildItem(item)
+      if (firstChild && !firstChild.external) {
+        navigate(firstChild.path)
+      }
       setFlyoutItemId(item.id)
       setFlyoutAnchorEl(anchorEl)
     },
-    [isCollapsed]
+    [getFirstChildItem, isCollapsed, navigate]
   )
 
   const handleItemClick = useCallback(
     (item: NavigationItem) => {
+      const itemToNavigate =
+        item.children?.length && !item.external ? (getFirstChildItem(item) ?? item) : item
+
       if (item.children?.length && !isCollapsed && !item.external) {
-        setExpandedItem((prev) => (prev === item.id ? null : item.id))
-        return
+        if (expandedItem === item.id) {
+          setExpandedItem(null)
+          return
+        }
+
+        setExpandedItem(item.id)
       }
 
-      if ((window as any).__VDDK_UPLOAD_IN_PROGRESS__) {
+      if (window.__VDDK_UPLOAD_IN_PROGRESS__) {
         const confirmed = window.confirm(
           'File upload is in progress. If you leave this page, the upload may be interrupted. Do you want to continue?'
         )
@@ -147,18 +170,18 @@ export default function Sidenav({
       }
 
       if (onItemClick) {
-        onItemClick(item)
-      } else if (item.external) {
+        onItemClick(itemToNavigate)
+      } else if (itemToNavigate.external) {
         const url =
-          item.externalUrl && item.externalUrl.trim()
-            ? item.externalUrl
-            : `https://${window.location.host}${item.path}`
+          itemToNavigate.externalUrl && itemToNavigate.externalUrl.trim()
+            ? itemToNavigate.externalUrl
+            : `https://${window.location.host}${itemToNavigate.path}`
         window.open(url, '_blank', 'noopener,noreferrer')
       } else {
-        navigate(item.path)
+        navigate(itemToNavigate.path)
       }
     },
-    [closeFlyout, flyoutItemId, isCollapsed, navigate, onItemClick]
+    [closeFlyout, expandedItem, flyoutItemId, getFirstChildItem, isCollapsed, navigate, onItemClick]
   )
 
   const flattenItems = useMemo(() => {
@@ -180,9 +203,20 @@ export default function Sidenav({
     return match?.path || activeItem
   }, [activeItem, flattenItems])
 
-  const handleToggleExpand = useCallback((itemId: string) => {
-    setExpandedItem((prev) => (prev === itemId ? null : itemId))
-  }, [])
+  const handleToggleExpand = useCallback(
+    (item: NavigationItem) => {
+      const willExpand = expandedItem !== item.id
+      setExpandedItem(willExpand ? item.id : null)
+
+      if (!willExpand) return
+
+      const firstChild = getFirstChildItem(item)
+      if (firstChild && !firstChild.external) {
+        navigate(firstChild.path)
+      }
+    },
+    [expandedItem, getFirstChildItem, navigate]
+  )
 
   const visibleItems = useMemo(() => items.filter((item) => !item.hidden), [items])
 

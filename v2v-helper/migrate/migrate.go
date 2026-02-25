@@ -1129,6 +1129,7 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
+	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
 
 	if !migobj.Convert {
 		return nil
@@ -1154,6 +1155,11 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if persisNetwork {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "Orchestrate-NICRecovery.ps1",
+			})
+		}
+		if removeVMwareTools {
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "vmware-tools-deletion.ps1",
 			})
 		}
 		if err := virtv2v.PushWindowsFirstBoot(); err != nil {

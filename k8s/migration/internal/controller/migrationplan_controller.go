@@ -1262,7 +1262,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"user_firstboot": migrationplan.Spec.FirstBootScript,
+				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
 			},
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
@@ -1352,6 +1352,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 				"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 				"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
 				"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
+				"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
 				"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 			},
 		}

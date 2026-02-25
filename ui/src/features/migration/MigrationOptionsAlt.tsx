@@ -13,7 +13,7 @@ import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
 import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
@@ -104,6 +104,15 @@ export default function MigrationOptionsAlt({
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
 
   const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
+
+  const hasWindowsVMSelected = useMemo(() => {
+    if (!params?.vms || params.vms.length === 0) return false
+    return params.vms.some(
+      (vm) =>
+        vm.osFamily &&
+        (vm.osFamily.toLowerCase() === 'windows' || vm.osFamily.toLowerCase() === 'windowsguest')
+    )
+  }, [params?.vms])
 
   // Iniitialize fields
   useEffect(() => {
@@ -688,6 +697,27 @@ export default function MigrationOptionsAlt({
             </Typography>
           </SectionHeaderRow>
           <Divider />
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Remove VMware Tools"
+                control={
+                  <Checkbox
+                    checked={params?.removeVMwareTools || false}
+                    disabled={!hasWindowsVMSelected}
+                    onChange={(e) => {
+                      onChange('removeVMwareTools')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Remove VMware Tools from the Windows VM post-migration
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
 
           <OptionRow>
             <OptionLeft>

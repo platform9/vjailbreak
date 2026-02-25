@@ -921,6 +921,10 @@ spec:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
                     type: string
+                  removeVMwareTools:
+                    description: RemoveVMwareTools instructs the migration helper
+                      to remove VMware Tools post migration
+                    type: boolean
                 type: object
               assignedIPsPerVM:
                 additionalProperties:
@@ -1694,6 +1698,10 @@ spec:
               openstack:
                 description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
+                  backendVolumeTypeMap:
+                    additionalProperties:
+                      type: string
+                    type: object
                   networks:
                     items:
                       type: string
@@ -2181,6 +2189,10 @@ spec:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
                     type: string
+                  removeVMwareTools:
+                    description: RemoveVMwareTools instructs the migration helper
+                      to remove VMware Tools post migration
+                    type: boolean
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
