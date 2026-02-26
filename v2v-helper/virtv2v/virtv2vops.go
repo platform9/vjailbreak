@@ -853,7 +853,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var runOutput string
 
 	if useSingleDisk {
-		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
+		command := "sh \"/tmp/generate-mount-persistence.sh --force-uuid\""
 		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "sh"
