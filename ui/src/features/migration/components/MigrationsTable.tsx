@@ -22,6 +22,8 @@ import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 
 const pulse = keyframes`
   0% {
@@ -118,6 +120,8 @@ interface CustomToolbarProps {
   onDateFilterChange: (filter: string) => void
   currentDateFilter: string
   onStartMigration: () => void
+  startMigrationDisabled: boolean
+  startMigrationDisabledReason: string
 }
 
 const CustomToolbar = ({
@@ -130,7 +134,9 @@ const CustomToolbar = ({
   currentStatusFilter,
   onDateFilterChange,
   currentDateFilter,
-  onStartMigration
+  onStartMigration,
+  startMigrationDisabled,
+  startMigrationDisabledReason
 }: CustomToolbarProps) => {
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -171,15 +177,20 @@ const CustomToolbar = ({
   )
 
   const actions = (
-    <Button
-      variant="contained"
-      color="primary"
-      startIcon={<AddIcon />}
-      onClick={onStartMigration}
-      sx={{ height: 40 }}
-    >
-      Start Migration
-    </Button>
+    <Tooltip title={startMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
+      <span>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={onStartMigration}
+          disabled={startMigrationDisabled}
+          sx={{ height: 40 }}
+        >
+          Start Migration
+        </Button>
+      </span>
+    </Tooltip>
   )
 
   return (
@@ -203,6 +214,28 @@ export default function MigrationsTable({
   loading = false
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
+
+  const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+  const { data: openstackCreds } = useOpenstackCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+
+  const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
+  const hasPcdCredentials = useMemo(() => {
+    const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
+    return (
+      openstack.filter(
+        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+      ).length > 0
+    )
+  }, [openstackCreds])
+
+  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
+  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
@@ -651,12 +684,15 @@ export default function MigrationsTable({
                   onDateFilterChange={setDateFilter}
                   currentDateFilter={dateFilter}
                   onStartMigration={() => openMigrationForm('standard')}
+                  startMigrationDisabled={startMigrationDisabled}
+                  startMigrationDisabledReason={startMigrationDisabledReason}
                 />
               )
             : undefined
         }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}
+        emptyMessage="No migrations available"
       />
 
       <ConfirmationDialog
