@@ -3,9 +3,12 @@ import TextSnippetIcon from '@mui/icons-material/TextSnippet'
 import { Divider, Typography } from '@mui/material'
 import Button from '@mui/material/Button'
 import { styled } from '@mui/system'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import MigrationFormDrawer from '../../migration/MigrationForm'
 import GuidesList from './GuidesList'
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import Tooltip from '@mui/material/Tooltip'
 
 const OnboardingContainer = styled('div')({
   display: 'flex',
@@ -62,6 +65,28 @@ const advancedTopicsLinks = [
 export default function Onboarding() {
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
 
+  const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+  const { data: openstackCreds } = useOpenstackCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+
+  const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
+  const hasPcdCredentials = useMemo(() => {
+    const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
+    return (
+      openstack.filter(
+        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+      ).length > 0
+    )
+  }, [openstackCreds])
+
+  const isStartMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
+  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
+
   return (
     <OnboardingContainer>
       {openMigrationForm && (
@@ -76,9 +101,18 @@ export default function Onboarding() {
           Ready to migrate from VMware to PCD? <br />
           Click below to start moving your VMware workloads to PCD with ease.
         </Typography>
-        <Button variant="contained" size="large" onClick={() => setOpenMigrationForm(true)}>
-          Start Migration
-        </Button>
+        <Tooltip title={isStartMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
+          <span>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => setOpenMigrationForm(true)}
+              disabled={isStartMigrationDisabled}
+            >
+              Start Migration
+            </Button>
+          </span>
+        </Tooltip>
         <Divider />
         <InfoSection>
           <GuidesList
