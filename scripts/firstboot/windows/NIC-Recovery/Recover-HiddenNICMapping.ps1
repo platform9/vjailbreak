@@ -81,28 +81,43 @@ $activeAliases = try {
 Write-Log "Found $($activeAliases.Count) active adapter aliases"
 
 Write-Log "Reading hidden IP configurations from registry..."
-$hiddenIPs = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue | 
-    ForEach-Object { 
-        $p = Get-ItemProperty $_.PsPath -ErrorAction SilentlyContinue
+try{
+
+$hiddenIps = [System.Collections.Generic.List[PSObject]]::new()
+$registryValues = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -ErrorAction SilentlyContinue  
+foreach($regobj in $registryValues) {
+        $p = Get-ItemProperty $regobj.PsPath -ErrorAction SilentlyContinue
         $ip = ($p.IPAddress | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1)
         $mask = ($p.SubnetMask | Select-Object -First 1)
-        if (-not $ip -or -not $mask) { return }
+        Write-Host "IP: $ip $mask"
+        if (-not $ip -or -not $mask) { 
+            Write-Log "Warning: Invalid IP or mask for GUID $($regobj.PSChildName.ToUpper())"
+            continue 
+        }
         
         $prefix = Convert-SubnetToPrefix $mask
         $dns = @(($p.NameServer -split ','), ($p.DhcpNameServer -split ',')) | 
                Where-Object { $_ -and $_.Trim() }
         
-        Write-Log "Found hidden IP config: GUID=$($_.PSChildName.ToUpper()), IP=$ip, Prefix=$prefix"
+        Write-Log "Found hidden IP config: GUID=$($regobj.PSChildName.ToUpper()), IP=$ip, Prefix=$prefix"
         
-        [PSCustomObject]@{
-            GUID = $_.PSChildName.ToUpper()
+        $IpInfo = [PSCustomObject]@{
+            GUID = $regobj.PSChildName.ToUpper()
             IPAddress = $ip
             PrefixLength = $prefix
             Network = Get-Network $ip $prefix
             Gateway = ($p.DefaultGateway | Select-Object -First 1)
             DNSServers = $dns
         }
-    }
+        Write-Host " $IpInfo"
+        $hiddenIps.Add($IpInfo)
+}
+}
+catch{
+    Write-Log "Warning: Could not read hidden IP configurations from registry: $($_.Exception.Message)"
+    $hiddenIps = [System.Collections.Generic.List[PSObject]]::new()
+}
+
 Write-Log "Found $($hiddenIPs.Count) hidden IP configurations"
 
 Write-Log "Reading hidden adapter names from registry..."
