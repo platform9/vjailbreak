@@ -94,6 +94,7 @@ const CustomToolbarWithActions = (props) => {
     hasRdmVMs,
     onAssignRdmConfiguration,
     selectedCount,
+    rdmVMsCount,
     ...toolbarProps
   } = props
 
@@ -110,14 +111,14 @@ const CustomToolbarWithActions = (props) => {
             <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
             </Button>
-            {hasRdmVMs && (
+            {hasRdmVMs && rdmVMsCount > 0 && (
               <Button
                 variant="text"
                 color="secondary"
                 onClick={onAssignRdmConfiguration}
                 size="small"
               >
-                Configure RDM ({rowSelectionModel.length})
+                Configure RDM ({rdmVMsCount})
               </Button>
             )}
             {selectedCount > 0 && (
@@ -1783,6 +1784,11 @@ function VmsSelectionStep({
                       hasRdmVMs={rdmValidation.hasRdmVMs}
                       onAssignIP={handleOpenBulkIPAssignment}
                       selectedCount={rowSelectionModelArray.length}
+                      rdmVMsCount={
+                        rowSelectionModelArray.filter((vmName) =>
+                          rdmDisks.some((disk) => disk.spec.ownerVMs.includes(vmName as string))
+                        ).length
+                      }
                     />
                   )
                 },
