@@ -57,7 +57,6 @@ const enabledOrNA = (value: unknown) => {
   return value === true ? 'Enabled' : 'N/A'
 }
 
-
 function MappingTable({
   rows,
   sourceLabel,
@@ -113,7 +112,6 @@ function MappingTable({
   )
 }
 
-
 export default function MigrationDetailModal({
   open,
   migration,
@@ -150,7 +148,8 @@ export default function MigrationDetailModal({
     (migrationSpec?.assignedIp as string) ||
     (migrationSpec?.assignedIpAddress as string) ||
     ''
-  const assignedIpFromPlan = ((planSpec?.assignedIPsPerVM as Record<string, string> | undefined) || {})[vmName] || ''
+  const assignedIpFromPlan =
+    ((planSpec?.assignedIPsPerVM as Record<string, string> | undefined) || {})[vmName] || ''
   const assignedIps = formatCommaSeparated(assignedIpRaw || assignedIpFromPlan)
 
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
@@ -158,6 +157,8 @@ export default function MigrationDetailModal({
   const templateSpec = (data?.migrationTemplate?.spec as any) || {}
   const useFlavorless = templateSpec?.useFlavorless === true
   const useGPUFlavor = templateSpec?.useGPUFlavor === true
+  const storageCopyMethod = (templateSpec?.storageCopyMethod as string) || 'normal'
+  const isStorageAcceleratedCopy = storageCopyMethod === 'StorageAcceleratedCopy'
 
   const vmSpec = (data?.vmwareMachine?.spec as any)?.vms || {}
   const vmMeta = (data?.vmwareMachine?.metadata as any) || {}
@@ -166,9 +167,13 @@ export default function MigrationDetailModal({
     (templateSpec?.source?.datacenter as string) ||
     'N/A'
   const sourceCluster =
-    (vmSpec?.clusterName as string) || (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) || 'N/A'
+    (vmSpec?.clusterName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
+    'N/A'
   const esxiHost =
-    (vmSpec?.esxiName as string) || (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/esxi-name'] as string) || 'N/A'
+    (vmSpec?.esxiName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/esxi-name'] as string) ||
+    'N/A'
 
   const guestOS = (vmSpec?.osFamily as string) || 'N/A'
   const cpu = typeof vmSpec?.cpu === 'number' ? String(vmSpec.cpu) : 'N/A'
@@ -192,13 +197,27 @@ export default function MigrationDetailModal({
   const destinationTenant = (data?.openstackCreds?.spec as any)?.projectName || 'N/A'
 
   const rawNetworkMappings = useMemo(
-    () => normalizeMappingRows(((((data?.networkMapping?.spec as any)?.networks as any[]) || []) as any) || []),
+    () =>
+      normalizeMappingRows(
+        ((((data?.networkMapping?.spec as any)?.networks as any[]) || []) as any) || []
+      ),
     [data?.networkMapping]
   )
 
   const rawStorageMappings = useMemo(
-    () => normalizeMappingRows(((((data?.storageMapping?.spec as any)?.storages as any[]) || []) as any) || []),
+    () =>
+      normalizeMappingRows(
+        ((((data?.storageMapping?.spec as any)?.storages as any[]) || []) as any) || []
+      ),
     [data?.storageMapping]
+  )
+
+  const rawArrayCredsMappings = useMemo(
+    () =>
+      normalizeMappingRows(
+        ((((data?.arrayCredsMapping?.spec as any)?.mappings as any[]) || []) as any) || []
+      ),
+    [data?.arrayCredsMapping]
   )
 
   const vmSourceNetworks = useMemo(() => {
@@ -209,7 +228,9 @@ export default function MigrationDetailModal({
           .map((s) => s.trim())
           .filter(Boolean)
       : []
-    return Array.from(new Set([...directNetworks, ...ifaceNetworks].map((s) => String(s).trim()).filter(Boolean)))
+    return Array.from(
+      new Set([...directNetworks, ...ifaceNetworks].map((s) => String(s).trim()).filter(Boolean))
+    )
   }, [vmSpec?.networks, vmSpec?.networkInterfaces])
 
   const vmSourceDatastores = useMemo(() => {
@@ -227,8 +248,15 @@ export default function MigrationDetailModal({
     return rawStorageMappings.filter((row) => vmSourceDatastores.includes(row.source))
   }, [rawStorageMappings, vmSourceDatastores])
 
+  const arrayCredsMappings = useMemo(() => {
+    if (!vmSourceDatastores.length) return rawArrayCredsMappings
+    return rawArrayCredsMappings.filter((row) => vmSourceDatastores.includes(row.source))
+  }, [rawArrayCredsMappings, vmSourceDatastores])
+
   const migrationType = (planStrategy?.type as string) || 'N/A'
-  const scheduleDataCopy = planStrategy?.dataCopyStart ? formatDateTime(planStrategy?.dataCopyStart) : 'N/A'
+  const scheduleDataCopy = planStrategy?.dataCopyStart
+    ? formatDateTime(planStrategy?.dataCopyStart)
+    : 'N/A'
 
   const periodicSyncEnabled = planAdvanced?.periodicSyncEnabled === true
   const periodicSyncInterval = (planAdvanced?.periodicSyncInterval as string) || ''
@@ -246,7 +274,9 @@ export default function MigrationDetailModal({
     }
 
     if (planStrategy?.vmCutoverStart || planStrategy?.vmCutoverEnd) {
-      const start = planStrategy?.vmCutoverStart ? formatDateTime(planStrategy?.vmCutoverStart) : 'N/A'
+      const start = planStrategy?.vmCutoverStart
+        ? formatDateTime(planStrategy?.vmCutoverStart)
+        : 'N/A'
       const end = planStrategy?.vmCutoverEnd ? formatDateTime(planStrategy?.vmCutoverEnd) : 'N/A'
       return `Time window (${start} - ${end})`
     }
@@ -261,8 +291,10 @@ export default function MigrationDetailModal({
     planStrategy?.vmCutoverStart
   ])
 
-  const securityGroupOptions = ((data?.openstackCreds as any)?.status?.openstack?.securityGroups as any[]) || []
-  const serverGroupOptions = ((data?.openstackCreds as any)?.status?.openstack?.serverGroups as any[]) || []
+  const securityGroupOptions =
+    ((data?.openstackCreds as any)?.status?.openstack?.securityGroups as any[]) || []
+  const serverGroupOptions =
+    ((data?.openstackCreds as any)?.status?.openstack?.serverGroups as any[]) || []
 
   const securityGroups = useMemo(() => {
     const configured = planSpec?.securityGroups
@@ -281,15 +313,17 @@ export default function MigrationDetailModal({
   const serverGroup = useMemo(() => {
     const configured = (planSpec?.serverGroup as string) || ''
     if (!configured) return 'N/A'
-    const match = serverGroupOptions.find((opt) => opt?.id === configured || opt?.name === configured)
+    const match = serverGroupOptions.find(
+      (opt) => opt?.id === configured || opt?.name === configured
+    )
     return (match?.name as string) || configured
   }, [planSpec?.serverGroup, serverGroupOptions])
 
   const renameVmEnabled = planPostAction?.renameVm === true
-  const renameSuffix = renameVmEnabled ? ((planPostAction?.suffix as string) || 'N/A') : 'N/A'
+  const renameSuffix = renameVmEnabled ? (planPostAction?.suffix as string) || 'N/A' : 'N/A'
 
   const moveToFolderEnabled = planPostAction?.moveToFolder === true
-  const folderName = moveToFolderEnabled ? ((planPostAction?.folderName as string) || 'N/A') : 'N/A'
+  const folderName = moveToFolderEnabled ? (planPostAction?.folderName as string) || 'N/A' : 'N/A'
 
   const disconnectSourceNetwork = enabledOrNA(planStrategy?.disconnectSourceNetwork)
   const fallbackToDhcp = enabledOrNA(planSpec?.fallbackToDHCP)
@@ -311,7 +345,8 @@ export default function MigrationDetailModal({
 
   const rdmDisksSummary = useMemo(() => {
     if (data?.rdmDisks?.length) return `${data.rdmDisks.length} disk(s)`
-    if (Array.isArray(vmSpec?.rdmDisks) && vmSpec.rdmDisks.length) return `${vmSpec.rdmDisks.length} disk(s)`
+    if (Array.isArray(vmSpec?.rdmDisks) && vmSpec.rdmDisks.length)
+      return `${vmSpec.rdmDisks.length} disk(s)`
     return 'N/A'
   }, [data?.rdmDisks, vmSpec?.rdmDisks])
 
@@ -427,7 +462,11 @@ export default function MigrationDetailModal({
             onClose={onClose}
             actions={<StatusChip label={phaseLabel} size="small" variant="filled" />}
           />
-          <NavTabs value={tab} onChange={handleTabChange} sx={{ px: 2, borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}>
+          <NavTabs
+            value={tab}
+            onChange={handleTabChange}
+            sx={{ px: 2, borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}
+          >
             <NavTab label="General" value={0} />
             <NavTab label="Advanced" value={1} />
           </NavTabs>
@@ -457,7 +496,11 @@ export default function MigrationDetailModal({
           <Section>
             {tab === 0 ? (
               <Box sx={{ display: 'grid', gap: 2 }}>
-                <SurfaceCard variant="card" title="Migration Environment" subtitle="Source and destination overview">
+                <SurfaceCard
+                  variant="card"
+                  title="Migration Environment"
+                  subtitle="Source and destination overview"
+                >
                   <KeyValueGrid items={migrationEnvironmentItems} />
                 </SurfaceCard>
 
@@ -495,7 +538,11 @@ export default function MigrationDetailModal({
                   ) : null}
                 </SurfaceCard>
 
-                <SurfaceCard variant="card" title="Mappings" subtitle="Network and storage mappings">
+                <SurfaceCard
+                  variant="card"
+                  title="Mappings"
+                  subtitle="Network and storage mappings"
+                >
                   <Box sx={{ display: 'grid', gap: 2.5 }}>
                     <Box sx={{ display: 'grid', gap: 1 }}>
                       <FieldLabel label="Network Mapping" />
@@ -511,20 +558,35 @@ export default function MigrationDetailModal({
 
                     <Box sx={{ display: 'grid', gap: 1 }}>
                       <FieldLabel label="Storage Mapping" />
-                      <MappingTable
-                        rows={storageMappings}
-                        sourceLabel="Source Datastore"
-                        targetLabel="Target Volume Type"
-                        emptyLabel="N/A"
-                        sourceIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
-                        targetIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
-                      />
+                      {isStorageAcceleratedCopy ? (
+                        <MappingTable
+                          rows={arrayCredsMappings}
+                          sourceLabel="Source Datastore"
+                          targetLabel="Array Credentials"
+                          emptyLabel="N/A"
+                          sourceIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
+                          targetIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
+                        />
+                      ) : (
+                        <MappingTable
+                          rows={storageMappings}
+                          sourceLabel="Source Datastore"
+                          targetLabel="Target Volume Type"
+                          emptyLabel="N/A"
+                          sourceIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
+                          targetIcon={<StorageOutlinedIcon fontSize="small" color="action" />}
+                        />
+                      )}
                     </Box>
                   </Box>
                 </SurfaceCard>
               </Box>
             ) : (
-              <SurfaceCard variant="card" title="Migration Policies" subtitle="Flags and post-migration actions">
+              <SurfaceCard
+                variant="card"
+                title="Migration Policies"
+                subtitle="Flags and post-migration actions"
+              >
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
                   <FormControlLabel
                     control={
@@ -546,7 +608,14 @@ export default function MigrationDetailModal({
 
                 {postMigrationScript || !onlyShowOverrides ? (
                   <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 2
+                      }}
+                    >
                       <FieldLabel label="Post-migration script" />
                     </Box>
 
