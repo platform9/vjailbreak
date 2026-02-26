@@ -266,7 +266,8 @@ export default function OpenstackCredentialsDrawer({
               setPromptAddVmwareOpen(true)
               return
             }
-          } catch {
+          } catch (error) {
+            console.error('Error checking VMware credentials:', error)
             // If we cannot determine VMware creds state, fall back to existing behavior.
           }
         }

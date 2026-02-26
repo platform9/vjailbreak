@@ -368,7 +368,7 @@ const CustomToolbar = ({
 
   const actions = (
     <Tooltip title={startConversionDisabled ? startConversionDisabledReason : ''} arrow>
-      <span>
+      <div>
         <Button
           variant="contained"
           color="primary"
@@ -379,7 +379,7 @@ const CustomToolbar = ({
         >
           Start Cluster Conversion
         </Button>
-      </span>
+      </div>
     </Tooltip>
   )
 
