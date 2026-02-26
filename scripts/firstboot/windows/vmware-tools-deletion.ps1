@@ -162,6 +162,16 @@ if ($uninstallExit -and $uninstallExit -ne 0 -and $uninstallExit -ne 3010) {
     Try-MsiHack
 }
 
+# ====================== PROCESSES ======================
+$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser','vmware-svga') # Added for locked DLLs
+foreach ($proc in $processes) {
+    try {
+        Get-Process -Name $proc | Stop-Process -Force
+        $Global:didWork = $true
+    } catch {
+        Write-Log "Failed to stop process $($proc): $_" 'WARNING'
+    }
+}
 # ====================== SERVICES ======================
 $services = @(
     'VMTools','vm3dservice','VGAuthService','VMwareCAF','VMwareCAFCommAmqpListener','VMwareCAFManagementAgentHost',
@@ -175,24 +185,37 @@ foreach ($svc in $services) {
         Stop-Service -Name $svc -Force
         sc.exe delete $svc 2>&1 | Out-Null
         $Global:didWork = $true
-        Write-Log "Deleted service: $svc"
+        Write-Log "Deleted service: $($svc)"
     } catch {
         Write-Log "Failed to delete service $($svc): $_" 'WARNING'
     }
 }
 
-# ====================== PROCESSES ======================
-$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser','vmware-svga')  # Added for locked DLLs
-
-foreach ($proc in $processes) {
+# ====================== DRIVER FILES ======================
+$driversPath = "C:\Windows\System32\drivers"
+$targetDrivers = @("vmci.sys", "vm3dmp.sys", "vmaudio.sys", "vmhgfs.sys", "vmmemctl.sys", "vmmouse.sys", "vmrawdsk.sys", "vmtools.sys", "vmusbmouse.sys", "vmvss.sys", "vsock.sys", "vmx_svga.sys", "vmxnet3.sys")
+foreach ($d in $targetDrivers) {
+    $driverFullPath = Join-Path $driversPath $d
     try {
-        Get-Process -Name $proc | Stop-Process -Force
-        $Global:didWork = $true
+        if (Test-Path $driverFullPath) {
+            Stop-Service -Name $d.Replace('.sys','') -Force -ErrorAction SilentlyContinue
+            Remove-Item $driverFullPath -Force -ErrorAction Stop
+            $Global:didWork = $true
+            Write-Log "Removed driver file: $($d)"
+        }
     } catch {
-        Write-Log "Failed to stop process $($proc): $_" 'WARNING'
+        Write-Log "Failed to remove driver $($d): $_ - attempting rename for reboot delete" 'WARNING'
+        $newName = $d + ".delete"
+        $newPath = Join-Path $driversPath $newName
+        if (Test-Path $newPath) { Remove-Item $newPath -Force -ErrorAction SilentlyContinue }
+        Rename-Item -Path $driverFullPath -NewName $newName -Force -ErrorAction SilentlyContinue
+        if (Test-Path $newPath) {
+            $runOnceKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+            Set-ItemProperty -Path $runOnceKey -Name "!DeleteVMwareDriver_$($d.Replace('.sys',''))" -Value "cmd.exe /c del /f /q `"$newPath`"" -Force
+            $Global:didWork = $true
+        }
     }
 }
-
 # ====================== REGISTRY CLEANUP ======================
 $regKeys = @(
     'HKLM:\SOFTWARE\VMware, Inc.','HKLM:\SOFTWARE\VMware',
@@ -201,7 +224,6 @@ $regKeys = @(
     'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\vmStatsProvider',
     'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\vmtools','HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\VMware Tools'
 )
-
 $svcRegKeys = @(
     'HKLM:\SYSTEM\CurrentControlSet\Services\vmci','HKLM:\SYSTEM\CurrentControlSet\Services\vm3dmp','HKLM:\SYSTEM\CurrentControlSet\Services\vm3dservice',
     'HKLM:\SYSTEM\CurrentControlSet\Services\vmaudio','HKLM:\SYSTEM\CurrentControlSet\Services\vmhgfs','HKLM:\SYSTEM\CurrentControlSet\Services\VMMemCtl',
@@ -216,13 +238,25 @@ foreach ($k in ($regKeys + $svcRegKeys)) {
         if (Test-Path $k) {
             Remove-Item $k -Recurse -Force
             $Global:didWork = $true
-            Write-Log "Removed registry key: $k"
+            Write-Log "Removed registry key: $($k)"
         }
     } catch {
         Write-Log "Failed to remove reg key $($k): $_" 'WARNING'
     }
 }
 
+$uninstallGuid = '{A18706D7-E79F-44F4-A0C6-1DB887F47F64}'
+$uninstallPaths = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$uninstallGuid",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$uninstallGuid"
+)
+foreach ($up in $uninstallPaths) {
+    if (Test-Path $up) {
+        Remove-Item $up -Force
+        $Global:didWork = $true
+        Write-Log "Removed uninstall registry: $($up)"
+    }
+}
 # ====================== FOLDER CLEANUP ======================
 $paths = @(
     'C:\Program Files\VMware','C:\Program Files (x86)\VMware',
@@ -258,11 +292,11 @@ foreach ($p in $paths) {
                 $Global:didWork = $true
             } else {
                 $Global:didWork = $true
-                Write-Log "Removed folder: $p"
+                Write-Log "Removed folder: $($p)"
             }
         }
     } catch {
-        Write-Log "Failed to remove folder $($p): $_" 'DEBUG'  # Changed to DEBUG to suppress in main output
+        Write-Log "Failed to remove folder $($p): $_" 'DEBUG' # Changed to DEBUG to suppress in main output
     }
 }
 
@@ -300,7 +334,7 @@ try {
         }
         & $pnputil -f -d $d 2>&1 | Out-Null
         $Global:didWork = $true
-        Write-Log "DriverStore deleted: $d"
+        Write-Log "DriverStore deleted: $($d)"
     }
 } catch {
     Write-Log "DriverStore cleanup failed: $_" 'ERROR'
@@ -315,7 +349,7 @@ if (Test-Path $lockPath) {
         foreach ($name in $lockProps) {
             if ($name -match '(?i)vm|pvscsi|efifw|vm3d|vmStatsProvider') {
                 Remove-ItemProperty -Path $lockPath -Name $name -Force -ErrorAction SilentlyContinue
-                Write-Log "Cleared PnpLockdown: $name"
+                Write-Log "Cleared PnpLockdown: $($name)"
                 $Global:didWork = $true
             }
         }
@@ -327,74 +361,71 @@ if (Test-Path $lockPath) {
 # ====================== REMAINING CHECK ======================
 function Test-Remaining {
     $hasRemnants = $false
-    # Folders (ignore .delete renamed ones)
-    $testPaths = @('C:\Program Files\VMware', 'C:\Program Files\Common Files\VMware', 'C:\ProgramData\VMware', 'C:\ProgramData\VMware\VMware VGAuth')
-    foreach ($p in $testPaths) {
-        if (Test-Path $p -and -not (Test-Path "$p.delete")) {
-            Write-Log "Remnant found: Folder $p" 'WARNING'
-            $hasRemnants = $true
-            Get-ChildItem $p -Recurse -File | ForEach-Object { Write-Log "Locked file in $($p): $($_.FullName)" 'DEBUG' }
-        }
-    }
-    # Services
-    foreach ($svc in $services) {
-        if (Get-Service $svc -ErrorAction SilentlyContinue) {
-            Write-Log "Remnant found: Service $svc" 'WARNING'
+    $checkProcesses = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser')
+    foreach ($p in $checkProcesses) {
+        $found = Get-Process -Name $p -ErrorAction SilentlyContinue
+        if ($found) {
+            Write-Log "Remnant found: Process $($p)" 'WARNING'
             $hasRemnants = $true
         }
     }
-    # Processes
-    foreach ($proc in $processes) {
-        if (Get-Process $proc -ErrorAction SilentlyContinue) {
-            Write-Log "Remnant found: Process $proc" 'WARNING'
+    $checkServices = @('VMTools','vm3dservice','VGAuthService','VMwareCAF','VMwareCAFCommAmqpListener','VMwareCAFManagementAgentHost','vmci','vm3dmp','vmaudio','vmhgfs','VMMemCtl','vmmouse','VMRawDisk','vmusbmouse','vmvss','vmvsock','vsock','vmxnet3','vmStatsProvider')
+    foreach ($s in $checkServices) {
+        $found = Get-Service -Name $s -ErrorAction SilentlyContinue
+        if ($found) {
+            Write-Log "Remnant found: Service $($s)" 'WARNING'
             $hasRemnants = $true
         }
     }
-    # Uninstall entry
-    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
-    $vmwApps = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }
-    if ($vmwApps) {
-        Write-Log "Remnant found: Uninstall registry key" 'WARNING'
+    $driversPath = "C:\Windows\System32\drivers"
+    $checkDrivers = @("vmci.sys", "vm3dmp.sys", "vmaudio.sys", "vmhgfs.sys", "vmmemctl.sys", "vmmouse.sys", "vmrawdsk.sys", "vmtools.sys", "vmusbmouse.sys", "vmvss.sys", "vsock.sys", "vmx_svga.sys", "vmxnet3.sys")
+    foreach ($d in $checkDrivers) {
+        $found = Test-Path (Join-Path $driversPath $d)
+        if ($found) {
+            Write-Log "Remnant found: Driver File $($d)" 'WARNING'
+            $hasRemnants = $true
+        }
+    }
+    $pnputil = if (Test-Path "$env:WINDIR\Sysnative\pnputil.exe") { "$env:WINDIR\Sysnative\pnputil.exe" } else { "$env:WINDIR\System32\pnputil.exe" }
+    $pnpOutput = if ($osVersion -lt 10) {
+        & $pnputil -e 2>&1 | Out-String
+    } else {
+        & $pnputil /enum-drivers 2>&1 | Out-String
+    }
+    $pnpPresent = $pnpOutput -match "VMware|vmxnet|vmmouse|pvscsi"
+    if ($pnpPresent) {
+        Write-Log "Remnant found: DriverStore VMware INF Packages" 'WARNING'
         $hasRemnants = $true
     }
-    # Drivers
-    try {
-        $out = if ($osVersion -lt 10) {
-            & $pnputil -e 2>&1 | Out-String
-        } else {
-            & $pnputil /enum-drivers 2>&1 | Out-String
-        }
-        if ($out -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw') {
-            Write-Log "Remnant found: VMware driver in DriverStore" 'WARNING'
+    $checkFolders = @('C:\Program Files\VMware','C:\Program Files (x86)\VMware','C:\ProgramData\VMware','C:\Program Files\Common Files\VMware')
+    foreach ($f in $checkFolders) {
+        if (Test-Path $f -and -not (Test-Path "$f.delete")) {
+            Write-Log "Remnant found: Folder $($f)" 'WARNING'
             $hasRemnants = $true
-        }
-    } catch {}
-    # Reg keys
-    foreach ($k in ($regKeys + $svcRegKeys)) {
-        if (Test-Path $k) {
-            Write-Log "Remnant found: Reg key $k" 'WARNING'
-            $hasRemnants = $true
+            Get-ChildItem $f -Recurse -File | ForEach-Object { Write-Log "Locked file in $($f): $($_.FullName)" 'DEBUG' }
         }
     }
-    # PnpLockdown
-    if (Test-Path $lockPath) {
-        $remainingLocks = Get-Item $lockPath | Select-Object -ExpandProperty Property | Where-Object { $_ -match '(?i)vm|pvscsi|efifw|vm3d|vmStatsProvider' }
-        if ($remainingLocks) {
-            Write-Log "Remnant found: PnpLockdown entries" 'WARNING'
+    $checkRegKeys = @(
+        'HKLM:\SOFTWARE\VMware, Inc.',
+        'HKLM:\SOFTWARE\VMware',
+        'HKLM:\SOFTWARE\WOW6432Node\VMware, Inc.',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{A18706D7-E79F-44F4-A0C6-1DB887F47F64}',
+        'HKLM:\SYSTEM\CurrentControlSet\Services\vmci'
+    )
+    foreach ($k in $checkRegKeys) {
+        if (Test-Path $k) {
+            Write-Log "Remnant found: Registry $($k)" 'WARNING'
             $hasRemnants = $true
         }
     }
     return $hasRemnants
 }
-
 if (-not (Test-Remaining)) {
     Write-Log '=== NO REMNANTS DETECTED === VMware Tools fully removed'
     New-Item -ItemType File -Path $MarkerPath -Force | Out-Null
     Write-Log 'Cleanup finished successfully.'
     exit 0
 }
-
 Write-Log 'Remnants still present - rebooting for next pass' 'WARNING'
 Restart-Computer -Force
-Start-Sleep -Seconds 30
 exit 3010

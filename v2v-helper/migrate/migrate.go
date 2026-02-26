@@ -1157,6 +1157,9 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 				Script: "Orchestrate-NICRecovery.ps1",
 			})
 		}
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "user_firstboot.ps1",
+		})
 		if removeVMwareTools {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "vmware-tools-deletion.ps1",
@@ -1165,9 +1168,6 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.PushWindowsFirstBoot(); err != nil {
 			return err
 		}
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "user_firstboot.ps1",
-		})
 	}
 
 	// Add first boot scripts for RHEL family
