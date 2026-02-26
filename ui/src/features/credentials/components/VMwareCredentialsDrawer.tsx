@@ -25,6 +25,7 @@ import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import axios from 'axios'
 
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { useInterval } from 'src/hooks/useInterval'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
@@ -32,6 +33,8 @@ import { useAmplitude } from 'src/hooks/useAmplitude'
 import { isValidName } from 'src/utils'
 import { THREE_SECONDS } from 'src/constants'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import ConfirmationDialog from 'src/components/dialogs/ConfirmationDialog'
+import { useNavigate } from 'react-router-dom'
 
 interface VMwareCredentialsDrawerProps {
   open: boolean
@@ -59,7 +62,12 @@ const defaultValues: VMwareCredentialFormValues = {
 export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'VMwareCredentialsDrawer' })
   const { track } = useAmplitude({ component: 'VMwareCredentialsDrawer' })
+  const navigate = useNavigate()
   const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery()
+  const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
 
   const form = useForm<VMwareCredentialFormValues>({
     defaultValues,
@@ -91,6 +99,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   const [vmwareCredsValidated, setVmwareCredsValidated] = useState<boolean | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
+  const [promptAddPcdOpen, setPromptAddPcdOpen] = useState(false)
 
   const shouldPollVmwareCreds = Boolean(createdCredentialName && validatingVmwareCreds)
 
@@ -145,8 +154,24 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
           stage: 'validation_success'
         })
 
-        setTimeout(() => {
+        setTimeout(async () => {
           refetchVmwareCreds()
+
+          try {
+            const openstack = await refetchOpenstackCreds()
+            const hasPcdCreds =
+              (openstack.data || []).filter(
+                (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+              ).length > 0
+
+            if (!hasPcdCreds) {
+              setPromptAddPcdOpen(true)
+              return
+            }
+          } catch {
+            // If we cannot determine PCD creds state, fall back to existing behavior.
+          }
+
           resetDrawerState()
         }, 1500)
       } else if (status === 'Failed') {
@@ -189,7 +214,14 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
       setSubmitting(false)
     },
-    [createdCredentialName, refetchVmwareCreds, reportError, resetDrawerState, track]
+    [
+      createdCredentialName,
+      refetchOpenstackCreds,
+      refetchVmwareCreds,
+      reportError,
+      resetDrawerState,
+      track
+    ]
   )
 
   useInterval(
@@ -428,61 +460,80 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   )
 
   return (
-    <DrawerShell
-      open={open}
-      onClose={closeDrawer}
-      header={
-        <DrawerHeader
-          title="Add VMware Credentials"
-          subtitle="Provide vCenter connection details and validate access"
-          onClose={closeDrawer}
-        />
-      }
-      footer={
-        <DrawerFooter>
-          <ActionButton tone="secondary" onClick={closeDrawer} data-testid="vmware-cred-cancel">
-            Cancel
-          </ActionButton>
-          <ActionButton
-            tone="primary"
-            type="submit"
-            form={formId}
-            loading={submitting}
-            disabled={isSubmitDisabled}
-            data-testid="vmware-cred-submit"
-          >
-            Save Credential
-          </ActionButton>
-        </DrawerFooter>
-      }
-    >
-      <DesignSystemForm
-        form={form}
-        onSubmit={onSubmit}
-        keyboardSubmitProps={{ open, onClose: closeDrawer, isSubmitDisabled }}
-        data-testid="vmware-cred-form"
-        id={formId}
-      >
-        <SurfaceCard>
-          <Box sx={{ display: 'grid', gap: 2 }}>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                gap: 2,
-                alignItems: 'start'
-              }}
+    <>
+      <DrawerShell
+        open={open}
+        onClose={closeDrawer}
+        header={
+          <DrawerHeader
+            title="Add VMware Credentials"
+            subtitle="Provide vCenter connection details and validate access"
+            onClose={closeDrawer}
+          />
+        }
+        footer={
+          <DrawerFooter>
+            <ActionButton tone="secondary" onClick={closeDrawer} data-testid="vmware-cred-cancel">
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              type="submit"
+              form={formId}
+              loading={submitting}
+              disabled={isSubmitDisabled}
+              data-testid="vmware-cred-submit"
             >
-              {renderBasicsSection()}
-              {renderAuthSection()}
+              Save Credential
+            </ActionButton>
+          </DrawerFooter>
+        }
+      >
+        <DesignSystemForm
+          form={form}
+          onSubmit={onSubmit}
+          keyboardSubmitProps={{ open, onClose: closeDrawer, isSubmitDisabled }}
+          data-testid="vmware-cred-form"
+          id={formId}
+        >
+          <SurfaceCard>
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                  gap: 2,
+                  alignItems: 'start'
+                }}
+              >
+                {renderBasicsSection()}
+                {renderAuthSection()}
+              </Box>
+
+              {renderSecuritySection()}
+
+              {renderStatusRow()}
             </Box>
+          </SurfaceCard>
+        </DesignSystemForm>
+      </DrawerShell>
 
-            {renderSecuritySection()}
-
-            {renderStatusRow()}
-          </Box>
-        </SurfaceCard>
-      </DesignSystemForm>
-    </DrawerShell>
+      <ConfirmationDialog
+        open={promptAddPcdOpen}
+        onClose={() => {
+          setPromptAddPcdOpen(false)
+          resetDrawerState()
+        }}
+        title="Add PCD Credentials"
+        message="Your VMware credentials are ready. Add your PCD credentials next to start migrations."
+        actionLabel="Go to PCD Credentials"
+        actionVariant="contained"
+        onConfirm={async () => {
+          navigate('/dashboard/credentials/pcd')
+          resetDrawerState()
+        }}
+        cancelLabel="Later"
+      />
+    </>
   )
 }
