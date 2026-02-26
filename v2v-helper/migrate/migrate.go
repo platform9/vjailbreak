@@ -2030,6 +2030,11 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			}
 			if !preserveMAC {
 				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
+				if preserveIP {
+					// Copy IPs from original MAC key to "" key so GetCreateOpts still uses them
+					// when no MAC is specified (OpenStack generates one).
+					vminfo.IPperMac[""] = vminfo.IPperMac[mac]
+				}
 				mac = ""
 			}
 
