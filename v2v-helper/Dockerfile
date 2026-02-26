@@ -74,5 +74,4 @@ COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
 COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
 COPY scripts/firstboot/store /home/fedora/store
-COPY scripts/firstboot/windows/vmware-tools-deletion.ps1 /home/fedora/store/vmware-tools-deletion.ps1
 COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
