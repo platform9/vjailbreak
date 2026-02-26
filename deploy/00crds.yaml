@@ -990,17 +990,17 @@ spec:
                           NIC
                         type: integer
                       preserveIP:
-                        description: PreserveIP indicates whether to preserve the
-                          source VM's IP address for this NIC
+                        description: |-
+                          PreserveIP indicates whether to preserve the source VM's IP address for this NIC.
+                          When nil the migration default (preserve) is used.
                         type: boolean
                       preserveMAC:
-                        description: PreserveMAC indicates whether to preserve the
-                          source VM's MAC address for this NIC
+                        description: |-
+                          PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC.
+                          When nil the migration default (preserve) is used.
                         type: boolean
                     required:
                     - interfaceIndex
-                    - preserveIP
-                    - preserveMAC
                     type: object
                   type: array
                 description: |-

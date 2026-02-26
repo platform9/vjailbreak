@@ -87,9 +87,9 @@ type Migrate struct {
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
-	InterfaceIndex int  `json:"interfaceIndex"`
-	PreserveIP     bool `json:"preserveIP"`
-	PreserveMAC    bool `json:"preserveMAC"`
+	InterfaceIndex int   `json:"interfaceIndex"`
+	PreserveIP     *bool `json:"preserveIP,omitempty"`
+	PreserveMAC    *bool `json:"preserveMAC,omitempty"`
 }
 
 type MigrationTimes struct {
@@ -1968,13 +1968,18 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
 
-			// Check for per-NIC overrides
+			// Check for per-NIC overrides. Default to true (preserve everything).
+			// Only override when explicitly set — nil means "not specified, keep default".
 			preserveIP := true
 			preserveMAC := true
 			for _, override := range migobj.NetworkOverrides {
 				if override.InterfaceIndex == idx {
-					preserveIP = override.PreserveIP
-					preserveMAC = override.PreserveMAC
+					if override.PreserveIP != nil {
+						preserveIP = *override.PreserveIP
+					}
+					if override.PreserveMAC != nil {
+						preserveMAC = *override.PreserveMAC
+					}
 					break
 				}
 			}

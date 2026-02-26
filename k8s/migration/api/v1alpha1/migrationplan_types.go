@@ -80,10 +80,12 @@ type PostMigrationAction struct {
 type NICOverride struct {
 	// InterfaceIndex is the zero-based index of the NIC
 	InterfaceIndex int `json:"interfaceIndex"`
-	// PreserveIP indicates whether to preserve the source VM's IP address for this NIC
-	PreserveIP bool `json:"preserveIP"`
-	// PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC
-	PreserveMAC bool `json:"preserveMAC"`
+	// PreserveIP indicates whether to preserve the source VM's IP address for this NIC.
+	// When nil the migration default (preserve) is used.
+	PreserveIP *bool `json:"preserveIP,omitempty"`
+	// PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC.
+	// When nil the migration default (preserve) is used.
+	PreserveMAC *bool `json:"preserveMAC,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan including
