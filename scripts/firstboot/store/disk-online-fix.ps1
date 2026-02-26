@@ -1,6 +1,5 @@
 [string]$LogPath = "C:\DiskStatus_Report.txt"
 
-# Function to log messages
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -11,10 +10,7 @@ function Write-Log {
 
 Write-Log "=== Disk Status Check Started (Post-VMware to KVM Migration Fix Mode) ==="
 
-# Check if running as Administrator
-if (-NOT ([Security.Principal.WindowsPrincipal] 
-    [Security.Principal.WindowsIdentity]::GetCurrent()
-    ).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Log "This script must be run as Administrator!" "ERROR"
     exit 1
 }
@@ -31,13 +27,7 @@ try {
     # Get all partitions
     Write-Log "Scanning for partition drive letter assignments..."
     $allPartitions = Get-Partition
-    $unassignedPartitions = @(
-        $allPartitions | Where-Object {
-            $_.DriveLetter -eq 0 -and
-            $_.Type -notin @("Recovery", "Reserved", "System", "Dynamic") -and
-            $_.Size -gt 100MB
-        }
-    )
+    $unassignedPartitions = @($allPartitions | Where-Object { $_.DriveLetter -eq 0 -and $_.Type -notin @("Recovery", "Reserved", "System", "Dynamic") -and $_.Size -gt 100MB })
 
     if ($unassignedPartitions.Count -gt 0) {
         Write-Log "ISSUE: Found $($unassignedPartitions.Count) partition(s) without drive letters" "WARNING"

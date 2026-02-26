@@ -62,8 +62,13 @@ function Remove-VMwareServices {
     )
 
     foreach ($svc in $services) {
-        Stop-Service $svc -Force -ErrorAction SilentlyContinue
-        sc.exe delete $svc 2>&1 | Out-Null
+        $serviceObj = Get-Service -Name $svc -ErrorAction SilentlyContinue
+        if ($serviceObj) {
+            if ($serviceObj.Status -eq "Running" -and $serviceObj.ServiceType -ne "KernelDriver") {
+                Stop-Service $svc -Force -ErrorAction SilentlyContinue
+            }
+            sc.exe delete $svc 2>&1 | Out-Null
+        }
     }
 }
 
@@ -152,14 +157,22 @@ function Remove-VMwareRegistry {
     Write-Log "Cleaning VMware registry keys..."
 
     $keys = @(
-        'HKLM:\SOFTWARE\VMwareInc.',
+        'HKLM:\SOFTWARE\VMware, Inc.',
         'HKLM:\SOFTWARE\VMware',
-        'HKLM:\SOFTWARE\WOW6432Node\VMwareInc',
+        'HKLM:\SOFTWARE\WOW6432Node\VMware, Inc.',
         'HKLM:\SOFTWARE\WOW6432Node\VMware'
     )
 
     foreach ($k in $keys) {
-        Remove-Item $k -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $k) {
+            try {
+                Remove-Item $k -Recurse -Force
+                Write-Log "Removed registry key: $k"
+            }
+            catch {
+                Write-Log "Failed to remove registry key: $k" "WARNING"
+            }
+        }
     }
 
     $serviceRoot = 'HKLM:\SYSTEM\CurrentControlSet\Services'
@@ -171,7 +184,10 @@ function Remove-VMwareRegistry {
     )
 
     foreach ($s in $serviceKeys) {
-        Remove-Item "$serviceRoot\$s" -Recurse -Force -ErrorAction SilentlyContinue
+        $full = "$serviceRoot\$s"
+        if (Test-Path $full) {
+            Remove-Item $full -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -179,23 +195,39 @@ function Remove-VMwareDriverStore {
 
     Write-Log "Cleaning DriverStore entries..."
 
-    $osVersion = (Get-CimInstance Win32_OperatingSystem).Version
+    $output = pnputil /enum-drivers
 
-    if ($osVersion -like "6.2*") {
-        $drivers = pnputil -e | Select-String -Pattern "vmware"
-        foreach ($line in $drivers) {
-            if ($line -match "Published Name\s*:\s*(oem\d+\.inf)") {
-                pnputil -d $matches[1] | Out-Null
+    $current = @{}
+    $packages = @()
+
+    foreach ($line in $output) {
+
+        if ($line -match "Published Name\s*:\s*(oem\d+\.inf)") {
+            $current = @{}
+            $current.PublishedName = $matches[1]
+        }
+
+        elseif ($line -match "Provider Name\s*:\s*(.+)") {
+            $current.Provider = $matches[1].Trim()
+        }
+
+        elseif ($line -match "Class Name\s*:\s*(.+)") {
+            $current.Class = $matches[1].Trim()
+
+            if ($current.Provider -match "VMware" -and
+                $current.Class -notin @("SCSIAdapter","System","Display","DiskDrive")) {
+
+                $packages += [PSCustomObject]@{
+                    PublishedName = $current.PublishedName
+                    ClassName     = $current.Class
+                }
             }
         }
     }
-    else {
-        $drivers = pnputil /enum-drivers | Select-String -Pattern "vmware" -Context 0,3
-        foreach ($block in $drivers) {
-            if ($block.Context.PostContext -match "Published Name\s*:\s*(oem\d+\.inf)") {
-                pnputil /delete-driver $matches[1] /uninstall /force | Out-Null
-            }
-        }
+
+    foreach ($pkg in $packages) {
+        Write-Log "Removing DriverStore package: $($pkg.PublishedName) ($($pkg.ClassName))"
+        pnputil /delete-driver $($pkg.PublishedName) /uninstall /force | Out-Null
     }
 }
 
