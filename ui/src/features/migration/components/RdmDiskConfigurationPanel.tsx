@@ -108,9 +108,11 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
           Selected VMs:
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {selectedVMs.map((vmName) => (
-            <Chip key={vmName} label={vmName} size="small" color="primary" variant="outlined" />
-          ))}
+          {selectedVMs
+            .filter((vmName) => rdmDisks.some((disk) => disk.spec.ownerVMs.includes(vmName)))
+            .map((vmName) => (
+              <Chip key={vmName} label={vmName} size="small" color="primary" variant="outlined" />
+            ))}
         </Box>
       </Box>
 
