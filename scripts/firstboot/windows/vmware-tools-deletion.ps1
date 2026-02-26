@@ -48,6 +48,9 @@ if ($attempt -gt $MaxAttempts) {
 
 Write-Log "=== VMware Tools Removal - Run #$attempt of $MaxAttempts ==="
 
+# Get OS version for version-specific logic
+$osVersion = [System.Environment]::OSVersion.Version.Major
+
 # ====================== MSI UNINSTALL ======================
 function Try-UninstallVMwareTools {
     $uninstallPaths = @(
@@ -66,17 +69,46 @@ function Try-UninstallVMwareTools {
     if ($productCode) {
         Write-Log "Attempting MSI uninstall for product: $productCode"
         $args = "/x $productCode /qn /norestart REBOOT=ReallySuppress"
-        $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $args -Wait -PassThru
-        Write-Log "MSI uninstall exit code: $($proc.ExitCode)"
-        $Global:didWork = $true
-        return $proc.ExitCode
+        $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $args -Wait -PassThru -ErrorAction SilentlyContinue
+        if ($proc) {
+            Write-Log "MSI uninstall exit code: $($proc.ExitCode)"
+            $Global:didWork = $true
+            return $proc.ExitCode
+        }
     }
     return $null
 }
 
 # MSI Hack if uninstall fails
 function Try-MsiHack {
-    $installer = New-Object -ComObject WindowsInstaller.Installer
+    if ($osVersion -lt 10) {
+        Write-Log "Skipping MSI hack on older OS (e.g., 2012) due to COM limitations - falling back to manual cleanup" 'WARNING'
+        # Manual fallback for older OS: Delete uninstall reg key
+        $uninstallPaths = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        )
+        foreach ($path in $uninstallPaths) {
+            $entries = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -like '*VMware Tools*' }
+            if ($entries) {
+                $keyPath = $entries.PSPath
+                try {
+                    Remove-Item -Path $keyPath -Force
+                    Write-Log "Manually deleted uninstall registry key: $keyPath" 'INFO'
+                    $Global:didWork = $true
+                } catch {
+                    Write-Log "Failed to manually delete uninstall reg key: $_" 'WARNING'
+                }
+            }
+        }
+        return
+    }
+    $installer = New-Object -ComObject WindowsInstaller.Installer -ErrorAction SilentlyContinue
+    if (-not $installer) {
+        Write-Log "Failed to create WindowsInstaller COM object - skipping hack" 'ERROR'
+        return
+    }
     $productsRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products'
     $productKeys = Get-ChildItem -Path $productsRoot -ErrorAction SilentlyContinue
     foreach ($pk in $productKeys) {
@@ -88,31 +120,25 @@ function Try-MsiHack {
                 Write-Log "Applying MSI hack for: $localPackage" 'WARNING'
                 try {
                     $db = $installer.OpenDatabase($localPackage, 2)
-                    $view = $db.OpenView("SELECT Action FROM CustomAction")
+                    $q = "DELETE FROM CustomAction WHERE Action = 'VM_LogStart' OR Action = 'VM_CheckRequirements' OR Action LIKE 'VM_%'"
+                    $view = $db.OpenView($q)
                     $view.Execute()
-                    $record = $view.Fetch()
-                    $actionsToDelete = @()
-                    while ($record -ne $null) {
-                        $actionName = $record.StringData(1)
-                        if ($actionName -match '^VM_') {
-                            $actionsToDelete += $actionName
-                        }
-                        $record = $view.Fetch()
-                    }
                     $view.Close()
-
-                    foreach ($action in $actionsToDelete) {
-                        $delView = $db.OpenView("DELETE FROM CustomAction WHERE Action = '$action'")
-                        $delView.Execute()
-                        $delView.Close()
-                    }
                     $db.Commit()
                     $Global:didWork = $true
-                    
-                    # Retry uninstall after hack
-                    Write-Log "Retrying msiexec after removing custom actions"
-                    $proc = Start-Process 'msiexec.exe' -ArgumentList "/x `"$localPackage`" /qn /norestart REBOOT=ReallySuppress" -Wait -PassThru
-                    Write-Log "MSI hack uninstall exit code: $($proc.ExitCode)"
+                   
+                    # Retry uninstall after hack (up to 2 times if locked)
+                    Write-Log "Retrying msiexec after hack"
+                    $retryCount = 0
+                    do {
+                        $proc = Start-Process 'msiexec.exe' -ArgumentList "/x `"$localPackage`" /qn /norestart REBOOT=ReallySuppress" -Wait -PassThru -ErrorAction SilentlyContinue
+                        if ($proc) {
+                            Write-Log "MSI hack uninstall exit code: $($proc.ExitCode) (retry $retryCount)"
+                            if ($proc.ExitCode -eq 0) { break }
+                        }
+                        $retryCount++
+                        Start-Sleep -Seconds 5
+                    } while ($retryCount -lt 2)
                 } catch {
                     Write-Log "MSI hack failed: $_" 'ERROR'
                 }
@@ -120,9 +146,16 @@ function Try-MsiHack {
             }
         }
     }
+    # Force unregister if still registered
+    $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    $vmwApps = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }
+    if ($vmwApps) {
+        $productCode = $vmwApps[0].PSChildName
+        Start-Process 'msiexec.exe' -ArgumentList "/x $productCode /qn /norestart REBOOT=ReallySuppress" -Wait -ErrorAction SilentlyContinue
+    }
 }
 
-# Run MSI Uninstall FIRST before destroying services/processes it might depend on
+# Run MSI Uninstall FIRST
 $uninstallExit = Try-UninstallVMwareTools
 if ($uninstallExit -and $uninstallExit -ne 0 -and $uninstallExit -ne 3010) {
     Write-Log "Standard uninstall failed ($uninstallExit). Trying MSI hack."
@@ -144,18 +177,20 @@ foreach ($svc in $services) {
         $Global:didWork = $true
         Write-Log "Deleted service: $svc"
     } catch {
-        Write-Log "Failed to delete service ${svc}: $_" 'WARNING'
+        Write-Log "Failed to delete service $($svc): $_" 'WARNING'
     }
 }
 
 # ====================== PROCESSES ======================
-$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser')
+$processes = @('vmtoolsd','vm3dservice','VGAuthService','vmwaretray','vmwareuser','vmware-svga')  # Added for locked DLLs
 
 foreach ($proc in $processes) {
     try {
         Get-Process -Name $proc | Stop-Process -Force
         $Global:didWork = $true
-    } catch {}
+    } catch {
+        Write-Log "Failed to stop process $($proc): $_" 'WARNING'
+    }
 }
 
 # ====================== REGISTRY CLEANUP ======================
@@ -173,7 +208,7 @@ $svcRegKeys = @(
     'HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse','HKLM:\SYSTEM\CurrentControlSet\Services\VMRawDisk','HKLM:\SYSTEM\CurrentControlSet\Services\vmusbmouse',
     'HKLM:\SYSTEM\CurrentControlSet\Services\vmvss','HKLM:\SYSTEM\CurrentControlSet\Services\vmvsock','HKLM:\SYSTEM\CurrentControlSet\Services\vsock',
     'HKLM:\SYSTEM\CurrentControlSet\Services\vmxnet3','HKLM:\SYSTEM\CurrentControlSet\Services\VMTools','HKLM:\SYSTEM\CurrentControlSet\Services\VGAuthService',
-    'HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAF','HKLM:\SYSTEM\CurrentControlSet\Services\vmStatsProvider'  # Added
+    'HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAF','HKLM:\SYSTEM\CurrentControlSet\Services\vmStatsProvider'
 )
 
 foreach ($k in ($regKeys + $svcRegKeys)) {
@@ -199,24 +234,35 @@ foreach ($p in $paths) {
     try {
         if (Test-Path $p) {
             Get-Process | Where-Object { $_.Path -like "$p\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-        
             takeown /F $p /R /D Y 2>&1 | Out-Null
             icacls $p /grant Administrators:F /T /Q 2>&1 | Out-Null
-        
-            Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue
-            if (Test-Path $p) {
-                cmd.exe /c "rd /s /q `"$p`""
-            }
-        
-            if (-not (Test-Path $p)) {
+            # Retry removal up to 3 times
+            $retryCount = 0
+            do {
+                Remove-Item $p -Recurse -Force -ErrorAction Continue
+                Start-Sleep -Seconds 2
+                if (Test-Path $p) {
+                    cmd.exe /c "rd /s /q `"$p`""
+                }
+                $retryCount++
+            } while ((Test-Path $p) -and $retryCount -lt 3)
+            if ((Test-Path $p)) {
+                # Rename if still locked, schedule delete on reboot
+                $newPath = $p + ".delete"
+                if (Test-Path $newPath) { Remove-Item $newPath -Recurse -Force -ErrorAction SilentlyContinue }
+                Rename-Item -Path $p -NewName $newPath -Force -ErrorAction SilentlyContinue
+                Write-Log "Renamed locked folder $p to $newPath for deletion on reboot" 'WARNING'
+                # Schedule cmd to delete on reboot
+                $runOnceKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+                Set-ItemProperty -Path $runOnceKey -Name "!DeleteVMwareFolder" -Value "cmd.exe /c rd /s /q `"$newPath`"" -Force
+                $Global:didWork = $true
+            } else {
                 $Global:didWork = $true
                 Write-Log "Removed folder: $p"
-            } else {
-                Write-Log "Failed to fully remove folder: $p" 'WARNING'
             }
         }
     } catch {
-        Write-Log "Failed to remove folder ${p}: $_" 'WARNING'
+        Write-Log "Failed to remove folder $($p): $_" 'DEBUG'  # Changed to DEBUG to suppress in main output
     }
 }
 
@@ -224,15 +270,15 @@ foreach ($p in $paths) {
 $pnputil = if (Test-Path "$env:WINDIR\Sysnative\pnputil.exe") { "$env:WINDIR\Sysnative\pnputil.exe" } else { "$env:WINDIR\System32\pnputil.exe" }
 
 try {
-    $driverOutput = & $pnputil -e 2>&1 | Out-String
-    if ($driverOutput -match "Invalid command" -or $driverOutput -match "not recognized") {
-        $driverOutput = & $pnputil /enum-drivers 2>&1 | Out-String
+    # For older OS like 2012, use -e
+    $driverOutput = if ($osVersion -lt 10) {
+        & $pnputil -e 2>&1 | Out-String
+    } else {
+        & $pnputil /enum-drivers 2>&1 | Out-String
     }
-    
     $driverLines = $driverOutput -split "`r`n"
     $oem = $null
     $driversToDelete = @()
-    
     foreach ($line in $driverLines) {
         if ($line -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') {
             $oem = $matches[1]
@@ -246,9 +292,12 @@ try {
             }
         }
     }
-
     foreach ($d in $driversToDelete) {
-        & $pnputil /delete-driver $d /uninstall /force 2>&1 | Out-Null
+        if ($osVersion -lt 10) {
+            & $pnputil -d $d 2>&1 | Out-Null
+        } else {
+            & $pnputil /delete-driver $d /uninstall /force 2>&1 | Out-Null
+        }
         & $pnputil -f -d $d 2>&1 | Out-Null
         $Global:didWork = $true
         Write-Log "DriverStore deleted: $d"
@@ -262,9 +311,10 @@ $lockPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\PnpLockdownFi
 if (Test-Path $lockPath) {
     try {
         $props = Get-Item $lockPath
-        foreach ($name in $props.Property) {
-            if ($name -match '(?i)vm|pvscsi|efifw|vm3d') {
-                Remove-ItemProperty -Path $lockPath -Name $name -Force
+        $lockProps = $props.Property
+        foreach ($name in $lockProps) {
+            if ($name -match '(?i)vm|pvscsi|efifw|vm3d|vmStatsProvider') {
+                Remove-ItemProperty -Path $lockPath -Name $name -Force -ErrorAction SilentlyContinue
                 Write-Log "Cleared PnpLockdown: $name"
                 $Global:didWork = $true
             }
@@ -277,61 +327,63 @@ if (Test-Path $lockPath) {
 # ====================== REMAINING CHECK ======================
 function Test-Remaining {
     $hasRemnants = $false
-
-    # Folders
+    # Folders (ignore .delete renamed ones)
     $testPaths = @('C:\Program Files\VMware', 'C:\Program Files\Common Files\VMware', 'C:\ProgramData\VMware', 'C:\ProgramData\VMware\VMware VGAuth')
-    foreach ($p in $testPaths) { 
-        if (Test-Path $p) { 
+    foreach ($p in $testPaths) {
+        if (Test-Path $p -and -not (Test-Path "$p.delete")) {
             Write-Log "Remnant found: Folder $p" 'WARNING'
             $hasRemnants = $true
-        } 
+            Get-ChildItem $p -Recurse -File | ForEach-Object { Write-Log "Locked file in $($p): $($_.FullName)" 'DEBUG' }
+        }
     }
-
     # Services
-    $coreServices = @('VMTools', 'vm3dservice', 'VGAuthService')
-    foreach ($svc in $coreServices) {
-        if (Get-Service $svc -ErrorAction SilentlyContinue) { 
+    foreach ($svc in $services) {
+        if (Get-Service $svc -ErrorAction SilentlyContinue) {
             Write-Log "Remnant found: Service $svc" 'WARNING'
-            $hasRemnants = $true 
+            $hasRemnants = $true
         }
     }
-
     # Processes
-    $coreProcs = @('vmtoolsd', 'vm3dservice', 'VGAuthService', 'vmwaretray', 'vmwareuser')
-    foreach ($proc in $coreProcs) {
-        if (Get-Process $proc -ErrorAction SilentlyContinue) { 
+    foreach ($proc in $processes) {
+        if (Get-Process $proc -ErrorAction SilentlyContinue) {
             Write-Log "Remnant found: Process $proc" 'WARNING'
-            $hasRemnants = $true 
+            $hasRemnants = $true
         }
     }
-
     # Uninstall entry
     $apps = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
     $vmwApps = $apps | Where-Object { $_.DisplayName -like '*VMware Tools*' }
-    if ($vmwApps) { 
+    if ($vmwApps) {
         Write-Log "Remnant found: Uninstall registry key" 'WARNING'
-        $hasRemnants = $true 
+        $hasRemnants = $true
     }
-
     # Drivers
     try {
-        $outStr = & $pnputil -e 2>&1 | Out-String
-        if ($outStr -match "Invalid command" -or $outStr -match "not recognized") {
-            $outStr = & $pnputil /enum-drivers 2>&1 | Out-String
+        $out = if ($osVersion -lt 10) {
+            & $pnputil -e 2>&1 | Out-String
+        } else {
+            & $pnputil /enum-drivers 2>&1 | Out-String
         }
-        $outLines = $outStr -split "`r`n"
-        $oem = $null
-        foreach ($line in $outLines) {
-            if ($line -match '(?i)Published Name\s*:\s*(oem\d+\.inf)') { $oem = $matches[1] }
-            elseif ($line -match '^\s*$') { $oem = $null }
-            elseif ($line -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw' -and $oem) { 
-                Write-Log "Remnant found: Driver $oem" 'WARNING'
-                $hasRemnants = $true
-                break
-            }
+        if ($out -match '(?i)vmware|vmxnet|vmmouse|vmhgfs|vmci|vm3d|pvscsi|vsock|efifw') {
+            Write-Log "Remnant found: VMware driver in DriverStore" 'WARNING'
+            $hasRemnants = $true
         }
     } catch {}
-
+    # Reg keys
+    foreach ($k in ($regKeys + $svcRegKeys)) {
+        if (Test-Path $k) {
+            Write-Log "Remnant found: Reg key $k" 'WARNING'
+            $hasRemnants = $true
+        }
+    }
+    # PnpLockdown
+    if (Test-Path $lockPath) {
+        $remainingLocks = Get-Item $lockPath | Select-Object -ExpandProperty Property | Where-Object { $_ -match '(?i)vm|pvscsi|efifw|vm3d|vmStatsProvider' }
+        if ($remainingLocks) {
+            Write-Log "Remnant found: PnpLockdown entries" 'WARNING'
+            $hasRemnants = $true
+        }
+    }
     return $hasRemnants
 }
 
@@ -342,8 +394,7 @@ if (-not (Test-Remaining)) {
     exit 0
 }
 
-
 Write-Log 'Remnants still present - rebooting for next pass' 'WARNING'
 Restart-Computer -Force
-Start-Sleep -Seconds 30 
+Start-Sleep -Seconds 30
 exit 3010
