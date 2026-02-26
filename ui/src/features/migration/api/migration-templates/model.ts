@@ -77,6 +77,8 @@ export interface VmData {
   networkInterfaces?: VmNetworkInterface[]
   osFamily?: string
   assignedIPs?: string
+  preserveIp?: Record<number, boolean>
+  preserveMac?: Record<number, boolean>
   hasSharedRdm?: boolean
 }
 

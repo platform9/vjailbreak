@@ -696,23 +696,31 @@ export default function MigrationFormDrawer({
       })
     }
 
-    // Build NetworkOverridesPerVM for per-NIC IP/MAC preservation
     const networkOverridesPerVM: Record<
       string,
       Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
     > = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
-        const overrides = vm.networkInterfaces
-          ?.map((nic, idx) => ({
-            interfaceIndex: idx,
-            preserveIP: nic.preserveIP === undefined ? true : nic.preserveIP,
-            preserveMAC: nic.preserveMAC === undefined ? true : nic.preserveMAC
-          }))
-          .filter((o) => o.preserveIP === false || o.preserveMAC === false)
-        if (overrides && overrides.length > 0) {
-          networkOverridesPerVM[vm.name] = overrides
-        }
+        const preserveIp = vm.preserveIp || {}
+        const preserveMac = vm.preserveMac || {}
+
+        const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+
+        if (indices.size === 0) return
+
+        networkOverridesPerVM[vm.name] = Array.from(indices)
+          .map((indexStr) => {
+            const interfaceIndex = Number(indexStr)
+            const ipFlag = preserveIp[interfaceIndex]
+            const macFlag = preserveMac[interfaceIndex]
+            return {
+              interfaceIndex,
+              preserveIP: ipFlag !== false,
+              preserveMAC: macFlag !== false
+            }
+          })
+          .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
       })
     }
 
@@ -769,7 +777,6 @@ export default function MigrationFormDrawer({
 
     try {
       const data = await postMigrationPlan(body)
-
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
         migrationName: data.metadata?.name,
@@ -934,7 +941,7 @@ export default function MigrationFormDrawer({
     })
   }, [selectedMigrationOptions, params, fieldErrors])
 
-  // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
+  // VM validation - ensure OS is assigned/detected for selected VMs
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
       return { hasError: false, errorMessage: '' }
@@ -952,11 +959,6 @@ export default function MigrationFormDrawer({
       return powerState === 'powered-on'
     })
 
-    // Check for powered-off VMs without IP addresses
-    const vmsWithoutIPs = poweredOffVMs.filter(
-      (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
-    )
-
     // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
@@ -966,17 +968,9 @@ export default function MigrationFormDrawer({
         )
       )
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
+    if (vmsWithoutOSAssigned.length > 0) {
       let errorMessage = 'Cannot proceed with migration: '
       const issues: string[] = []
-
-      if (vmsWithoutIPs.length > 0) {
-        issues.push(
-          `${vmsWithoutIPs.length} powered-off VM${
-            vmsWithoutIPs.length === 1 ? '' : 's'
-          } missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`
-        )
-      }
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
@@ -1198,9 +1192,7 @@ export default function MigrationFormDrawer({
   )
 
   const step2HasErrors = Boolean(
-    fieldErrors['vms'] ||
-      vmValidation.hasError ||
-      rdmValidation.hasConfigError
+    fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
   )
 
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])

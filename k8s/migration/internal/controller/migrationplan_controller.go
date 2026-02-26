@@ -924,29 +924,29 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
+	// Get assigned IPs for this VM from the migration plan
+	assignedIP := ""
+	if migrationplan.Spec.AssignedIPsPerVM != nil {
+		if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
+			assignedIP = ips
+		}
+	}
+
+	// Get network overrides for this VM from the migration plan
+	networkOverrides := ""
+	if migrationplan.Spec.NetworkOverridesPerVM != nil {
+		if overrides, ok := migrationplan.Spec.NetworkOverridesPerVM[vm]; ok && len(overrides) > 0 {
+			overridesJSON, err := json.Marshal(overrides)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to marshal network overrides for VM %s", vm)
+			}
+			networkOverrides = string(overridesJSON)
+		}
+	}
+
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Get assigned IPs for this VM from the migration plan
-		assignedIP := ""
-		if migrationplan.Spec.AssignedIPsPerVM != nil {
-			if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
-				assignedIP = ips
-			}
-		}
-
-		// Get network overrides for this VM from the migration plan
-		networkOverrides := ""
-		if migrationplan.Spec.NetworkOverridesPerVM != nil {
-			if overrides, ok := migrationplan.Spec.NetworkOverridesPerVM[vm]; ok && len(overrides) > 0 {
-				overridesJSON, err := json.Marshal(overrides)
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to marshal network overrides for VM %s", vm)
-				}
-				networkOverrides = string(overridesJSON)
-			}
-		}
-
 		migrationobj = &vjailbreakv1alpha1.Migration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
@@ -998,6 +998,26 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		} else {
 			ctxlog.Info("Set migration retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 		}
+	} else if err == nil {
+		// Migration already exists — update AssignedIP and NetworkOverrides from the MigrationPlan
+		// in case the user changed them before retrying.
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Spec.AssignedIP = assignedIP
+			latest.Spec.NetworkOverrides = networkOverrides
+			if updateErr := r.Update(ctx, latest); updateErr != nil {
+				return updateErr
+			}
+			migrationobj = latest
+			return nil
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to update Migration spec for VM %s", vm)
+		}
+		ctxlog.Info("Updated migration spec from MigrationPlan", "assignedIP", assignedIP, "networkOverrides", networkOverrides)
 	}
 	return migrationobj, nil
 }
@@ -1431,8 +1451,31 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 			return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
 		}
+	} else if err == nil {
+		if err = r.updateMigrationConfigMap(ctx, configMap, migrationobj, configMapName); err != nil {
+			return nil, err
+		}
 	}
 	return configMap, nil
+}
+
+// updateMigrationConfigMap updates the mutable fields of an existing migration ConfigMap.
+func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, configMap *corev1.ConfigMap, migrationobj *vjailbreakv1alpha1.Migration, configMapName string) error {
+	if migrationobj.Spec.AssignedIP != "" {
+		configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
+	} else {
+		configMap.Data["ASSIGNED_IP"] = ""
+	}
+	if migrationobj.Spec.NetworkOverrides != "" {
+		configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
+	} else {
+		delete(configMap.Data, "NETWORK_OVERRIDES")
+	}
+	if err := r.Update(ctx, configMap); err != nil {
+		r.ctxlog.Error(err, fmt.Sprintf("Failed to update ConfigMap '%s'", configMapName))
+		return errors.Wrapf(err, "failed to update config map '%s'", configMapName)
+	}
+	return nil
 }
 
 func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner metav1.Object, controlled client.Object) error {
