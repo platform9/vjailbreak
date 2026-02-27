@@ -191,6 +191,7 @@ function VmsSelectionStep({
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
   const [selectedFlavor, setSelectedFlavor] = useState<string>('')
   const [rdmConfigDialogOpen, setRdmConfigDialogOpen] = useState(false)
+  const [rdmConfirmDialogOpen, setRdmConfirmDialogOpen] = useState(false)
   const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set())
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
   const [snackbarOpen, setSnackbarOpen] = useState(false)
@@ -1634,8 +1635,29 @@ function VmsSelectionStep({
     }
   }
 
+  // Check if any RDM configuration has volume type warnings
+  const hasRdmVolumeTypeWarnings = React.useMemo(() => {
+    if (!rdmConfigurations || rdmConfigurations.length === 0) return false
+    const backendVolumeTypeMap = openstackCredentials?.status?.openstack?.backendVolumeTypeMap || {}
+    return rdmConfigurations.some((config) => {
+      if (!config.cinderBackendPool || !config.volumeType) return false
+      const expectedType = backendVolumeTypeMap[config.cinderBackendPool]
+      return expectedType && expectedType !== config.volumeType
+    })
+  }, [rdmConfigurations, openstackCredentials?.status?.openstack?.backendVolumeTypeMap])
+
+  // Handle apply button click - show confirmation if there are warnings
+  const handleApplyRdmConfigurationsClick = () => {
+    if (hasRdmVolumeTypeWarnings) {
+      setRdmConfirmDialogOpen(true)
+    } else {
+      handleApplyRdmConfigurations()
+    }
+  }
+
   // RDM disk configuration functions
   const handleApplyRdmConfigurations = async () => {
+    setRdmConfirmDialogOpen(false)
     if (!rdmConfigurations || rdmConfigurations.length === 0) {
       showToast('No RDM configurations to apply', 'warning')
       return
@@ -1976,7 +1998,7 @@ function VmsSelectionStep({
           {rdmValidation.hasRdmVMs && rdmDisks.length > 0 && (
             <ActionButton
               tone="primary"
-              onClick={handleApplyRdmConfigurations}
+              onClick={handleApplyRdmConfigurationsClick}
               disabled={
                 updating ||
                 !rdmConfigurations ||
@@ -1988,6 +2010,35 @@ function VmsSelectionStep({
               Apply RDM Configuration
             </ActionButton>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* RDM Volume Type Warning Confirmation Dialog */}
+      <Dialog
+        open={rdmConfirmDialogOpen}
+        onClose={() => setRdmConfirmDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm RDM Configuration</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              One or more RDM disk configurations have volume type mismatches with the selected
+              backend pool. This may cause issues during migration.
+            </Typography>
+          </Alert>
+          <Typography variant="body2">
+            Are you sure you want to apply this configuration?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <ActionButton tone="secondary" onClick={() => setRdmConfirmDialogOpen(false)}>
+            Cancel
+          </ActionButton>
+          <ActionButton tone="primary" onClick={handleApplyRdmConfigurations}>
+            Yes, Apply Configuration
+          </ActionButton>
         </DialogActions>
       </Dialog>
 

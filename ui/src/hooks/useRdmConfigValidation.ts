@@ -143,11 +143,19 @@ export const useRdmConfigValidation = ({
       const backendPool = rdmDisk.spec.openstackVolumeRef?.cinderBackendPool
       const volumeType = rdmDisk.spec.openstackVolumeRef?.volumeType
 
-      if (backendPool && volumeType && backendVolumeTypeMap[backendPool]) {
+      if (backendPool && backendVolumeTypeMap[backendPool]) {
         const expectedType = backendVolumeTypeMap[backendPool]
-        if (expectedType !== volumeType) {
+        // Check if volume type is set and doesn't match expected type
+        if (volumeType && expectedType !== volumeType) {
           incompatibleVolumeType = {
             selectedType: volumeType,
+            expectedType,
+            backendPool
+          }
+        } else if (!volumeType) {
+          // Volume type is empty but backend pool expects a specific type
+          incompatibleVolumeType = {
+            selectedType: '(not set)',
             expectedType,
             backendPool
           }
