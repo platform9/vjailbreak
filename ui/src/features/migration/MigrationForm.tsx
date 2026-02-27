@@ -1587,9 +1587,6 @@ export default function MigrationFormDrawer({
                 {rdmValidation.hasConfigError && (
                   <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
                 )}
-                {rdmValidation.hasVolumeTypeError && (
-                  <Alert severity="warning">{rdmValidation.volumeTypeErrorMessage}</Alert>
-                )}
               </SurfaceCard>
             </Box>
             <Divider />
