@@ -417,10 +417,6 @@ function VmsSelectionStep({
           ? networkInterfaces.map((nic) => nic.ipAddress || '—').join(', ')
           : networkInterfaces[0]?.ipAddress || vm.ipAddress || '—'
 
-        const preserveIpFlags = vm.preserveIp || {}
-        const preserveMacFlags = vm.preserveMac || {}
-        const anyPreserveIpOff = Object.values(preserveIpFlags).some((v) => v === false)
-        const anyPreserveMacOff = Object.values(preserveMacFlags).some((v) => v === false)
         const tooltipMessage = hasMultipleInterfaces
           ? "Use 'Assign IP' button in toolbar to edit IP addresses for multiple network interfaces"
           : "Use 'Assign IP' button in toolbar to assign IP address"
@@ -449,22 +445,6 @@ function VmsSelectionStep({
             >
               {ipDisplay}
             </Typography>
-            {anyPreserveIpOff ? (
-              <Chip
-                variant="outlined"
-                label="Auto IP"
-                size="small"
-                sx={{ height: 20, flexShrink: 0 }}
-              />
-            ) : null}
-            {anyPreserveMacOff ? (
-              <Chip
-                variant="outlined"
-                label="Auto MAC"
-                size="small"
-                sx={{ height: 20, flexShrink: 0 }}
-              />
-            ) : null}
           </Box>
         )
 
@@ -2263,11 +2243,7 @@ function VmsSelectionStep({
                                 endAdornment: renderValidationAdornment(status)
                               }}
                               error={status === 'invalid'}
-                              helperText={
-                                preserveIp && !bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim()
-                                  ? message
-                                  : ''
-                              }
+                              helperText={status === 'invalid' ? message || 'Invalid IP' : ''}
                             />
                           </Box>
                         </Box>

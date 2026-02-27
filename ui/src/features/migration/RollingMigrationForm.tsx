@@ -1,25 +1,25 @@
 import {
   Box,
   Button,
-  Chip,
-  Typography,
-  styled,
+  CircularProgress,
+  Dialog,
   Paper,
   Tooltip,
-  Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
   Select,
   MenuItem,
+  TextField,
   GlobalStyles,
   FormLabel,
   Switch,
   Snackbar,
   InputAdornment,
   useMediaQuery,
-  Divider
+  Divider,
+  Typography
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
@@ -79,7 +79,6 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import { TextField, CircularProgress } from '@mui/material'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -89,7 +88,7 @@ import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 import { DrawerShell, DrawerHeader, DrawerFooter, SectionNav, SurfaceCard } from 'src/components'
 import type { SectionNavItem } from 'src/components'
-import { useTheme } from '@mui/material/styles'
+import { styled, useTheme } from '@mui/material/styles'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
 
 // Define types for MigrationOptions
@@ -2078,11 +2077,6 @@ export default function RollingMigrationFormDrawer({
             tooltipMessage = "Use 'Assign IP' button in toolbar to assign IP address"
           }
 
-          const preserveIpFlags = vm.preserveIp || {}
-          const preserveMacFlags = vm.preserveMac || {}
-          const anyPreserveIpOff = Object.values(preserveIpFlags).some((v) => v === false)
-          const anyPreserveMacOff = Object.values(preserveMacFlags).some((v) => v === false)
-
           const content = (
             <Box
               sx={{
@@ -2107,22 +2101,6 @@ export default function RollingMigrationFormDrawer({
               >
                 {ipDisplay}
               </Typography>
-              {anyPreserveIpOff ? (
-                <Chip
-                  variant="outlined"
-                  label="Auto IP"
-                  size="small"
-                  sx={{ height: 20, flexShrink: 0 }}
-                />
-              ) : null}
-              {anyPreserveMacOff ? (
-                <Chip
-                  variant="outlined"
-                  label="Auto MAC"
-                  size="small"
-                  sx={{ height: 20, flexShrink: 0 }}
-                />
-              ) : null}
             </Box>
           )
 
@@ -2140,11 +2118,6 @@ export default function RollingMigrationFormDrawer({
 
         // For powered-on VMs, show IP but indicate it's not editable
         if (powerState === 'powered-on') {
-          const preserveIpFlags = vm.preserveIp || {}
-          const preserveMacFlags = vm.preserveMac || {}
-          const anyPreserveIpOff = Object.values(preserveIpFlags).some((v) => v === false)
-          const anyPreserveMacOff = Object.values(preserveMacFlags).some((v) => v === false)
-
           return (
             <Tooltip title="IP assignment is only available for powered-off VMs" arrow>
               <Box
@@ -2167,22 +2140,6 @@ export default function RollingMigrationFormDrawer({
                 >
                   {currentIp}
                 </Typography>
-                {anyPreserveIpOff ? (
-                  <Chip
-                    variant="outlined"
-                    label="Auto IP"
-                    size="small"
-                    sx={{ height: 20, flexShrink: 0, ml: 1 }}
-                  />
-                ) : null}
-                {anyPreserveMacOff ? (
-                  <Chip
-                    variant="outlined"
-                    label="Auto MAC"
-                    size="small"
-                    sx={{ height: 20, flexShrink: 0, ml: 1 }}
-                  />
-                ) : null}
               </Box>
             </Tooltip>
           )
@@ -2936,7 +2893,10 @@ export default function RollingMigrationFormDrawer({
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
-          const existingIp = nic.ipAddress || ''
+          const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
+          const fallbackIp =
+            index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
+          const existingIp = nic.ipAddress || fallbackIp || ''
           initialBulkExistingIPs[vm.id][index] = existingIp
           initialBulkEditIPs[vm.id][index] = existingIp
 
