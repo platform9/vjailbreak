@@ -151,6 +151,12 @@ export interface SelectedMigrationOptionsType {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   periodicSyncEnabled?: boolean
+  disconnectSourceNetwork?: boolean
+  fallbackToDHCP?: boolean
+  networkPersistence?: boolean
+  removeVMwareTools?: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -169,6 +175,12 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
+  disconnectSourceNetwork: false,
+  fallbackToDHCP: false,
+  networkPersistence: false,
+  removeVMwareTools: false,
+  useGPU: false,
+  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -1227,6 +1239,12 @@ export default function MigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
+      Boolean(selectedMigrationOptions.disconnectSourceNetwork) ||
+      Boolean(selectedMigrationOptions.fallbackToDHCP) ||
+      Boolean(selectedMigrationOptions.networkPersistence) ||
+      Boolean(selectedMigrationOptions.removeVMwareTools) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
     )
   }, [selectedMigrationOptions])

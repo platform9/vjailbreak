@@ -193,6 +193,37 @@ export default function MigrationOptionsAlt({
 
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
 
+  useEffect(() => {
+    if (hasWindowsVMSelected) return
+    if (selectedMigrationOptions.removeVMwareTools) {
+      updateSelectedMigrationOptions('removeVMwareTools')(false)
+      onChange('removeVMwareTools')(false)
+    }
+  }, [
+    hasWindowsVMSelected,
+    onChange,
+    selectedMigrationOptions.removeVMwareTools,
+    updateSelectedMigrationOptions
+  ])
+
+  useEffect(() => {
+    if (isPCD) return
+    if (selectedMigrationOptions.useGPU) {
+      updateSelectedMigrationOptions('useGPU')(false)
+      onChange('useGPU')(false)
+    }
+    if (selectedMigrationOptions.useFlavorless) {
+      updateSelectedMigrationOptions('useFlavorless')(false)
+      onChange('useFlavorless')(false)
+    }
+  }, [
+    isPCD,
+    onChange,
+    selectedMigrationOptions.useFlavorless,
+    selectedMigrationOptions.useGPU,
+    updateSelectedMigrationOptions
+  ])
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Box sx={{ display: 'grid', gap: 2 }}>
@@ -579,9 +610,11 @@ export default function MigrationOptionsAlt({
                 label="Disconnect source VM network"
                 control={
                   <Checkbox
-                    checked={params?.disconnectSourceNetwork || false}
+                    checked={Boolean(selectedMigrationOptions.disconnectSourceNetwork)}
                     onChange={(e) => {
-                      onChange('disconnectSourceNetwork')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('disconnectSourceNetwork')(isChecked)
+                      onChange('disconnectSourceNetwork')(isChecked)
                     }}
                   />
                 }
@@ -599,9 +632,11 @@ export default function MigrationOptionsAlt({
                 label="Fallback to DHCP"
                 control={
                   <Checkbox
-                    checked={params?.fallbackToDHCP || false}
+                    checked={Boolean(selectedMigrationOptions.fallbackToDHCP)}
                     onChange={(e) => {
-                      onChange('fallbackToDHCP')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('fallbackToDHCP')(isChecked)
+                      onChange('fallbackToDHCP')(isChecked)
                     }}
                   />
                 }
@@ -617,9 +652,11 @@ export default function MigrationOptionsAlt({
                 label="Persist source network interfaces"
                 control={
                   <Checkbox
-                    checked={params?.networkPersistence || false}
+                    checked={Boolean(selectedMigrationOptions.networkPersistence)}
                     onChange={(e) => {
-                      onChange('networkPersistence')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('networkPersistence')(isChecked)
+                      onChange('networkPersistence')(isChecked)
                     }}
                   />
                 }
@@ -648,11 +685,11 @@ export default function MigrationOptionsAlt({
                   label="Use GPU-enabled flavours"
                   control={
                     <Checkbox
-                      checked={params?.useGPU || false}
+                      checked={Boolean(selectedMigrationOptions.useGPU)}
                       onChange={(e) => {
                         const isChecked = e.target.checked
                         updateSelectedMigrationOptions('useGPU')(isChecked)
-                        onChange('useGPU')(isChecked)
+                        onChange('useGPU')(isChecked ? true : undefined)
                       }}
                     />
                   }
@@ -671,11 +708,11 @@ export default function MigrationOptionsAlt({
                   label="Use dynamic hotplug-enabled flavors"
                   control={
                     <Checkbox
-                      checked={params?.useFlavorless || false}
+                      checked={Boolean(selectedMigrationOptions.useFlavorless)}
                       onChange={(e) => {
                         const isChecked = e.target.checked
                         updateSelectedMigrationOptions('useFlavorless')(isChecked)
-                        onChange('useFlavorless')(isChecked)
+                        onChange('useFlavorless')(isChecked ? true : undefined)
                       }}
                     />
                   }
@@ -704,10 +741,12 @@ export default function MigrationOptionsAlt({
                 label="Remove VMware Tools"
                 control={
                   <Checkbox
-                    checked={params?.removeVMwareTools || false}
+                    checked={Boolean(selectedMigrationOptions.removeVMwareTools)}
                     disabled={!hasWindowsVMSelected}
                     onChange={(e) => {
-                      onChange('removeVMwareTools')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('removeVMwareTools')(isChecked)
+                      onChange('removeVMwareTools')(isChecked)
                     }}
                   />
                 }

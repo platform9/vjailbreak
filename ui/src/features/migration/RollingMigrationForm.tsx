@@ -102,6 +102,12 @@ interface FormValues extends Record<string, unknown> {
   postMigrationScript?: string
   osFamily?: string
   storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
+  disconnectSourceNetwork?: boolean
+  fallbackToDHCP?: boolean
+  networkPersistence?: boolean
+  removeVMwareTools?: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
 }
 
 type RollingMigrationRHFValues = {
@@ -120,6 +126,12 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
+  disconnectSourceNetwork?: boolean
+  fallbackToDHCP?: boolean
+  networkPersistence?: boolean
+  removeVMwareTools?: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -137,6 +149,12 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osFamily: false,
+  disconnectSourceNetwork: false,
+  fallbackToDHCP: false,
+  networkPersistence: false,
+  removeVMwareTools: false,
+  useGPU: false,
+  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -1748,6 +1766,12 @@ export default function RollingMigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
+      Boolean(selectedMigrationOptions.disconnectSourceNetwork) ||
+      Boolean(selectedMigrationOptions.fallbackToDHCP) ||
+      Boolean(selectedMigrationOptions.networkPersistence) ||
+      Boolean(selectedMigrationOptions.removeVMwareTools) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
     )
   }, [selectedMigrationOptions])
@@ -1777,6 +1801,19 @@ export default function RollingMigrationFormDrawer({
 
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
 
+    const networkIpOptionsOk =
+      (!selectedMigrationOptions.disconnectSourceNetwork ||
+        params.disconnectSourceNetwork === true) &&
+      (!selectedMigrationOptions.fallbackToDHCP || params.fallbackToDHCP === true) &&
+      (!selectedMigrationOptions.networkPersistence || params.networkPersistence === true)
+
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || params.useGPU === true) &&
+      (!selectedMigrationOptions.useFlavorless || params.useFlavorless === true)
+
+    const removeVmwareToolsOk =
+      !selectedMigrationOptions.removeVMwareTools || params.removeVMwareTools === true
+
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
       postMigrationAction &&
@@ -1802,6 +1839,9 @@ export default function RollingMigrationFormDrawer({
       cutoverOk &&
       postMigrationScriptOk &&
       osFamilyOk &&
+      networkIpOptionsOk &&
+      pcdOptionsOk &&
+      removeVmwareToolsOk &&
       postMigrationActionOk
     )
   }, [
@@ -1813,6 +1853,12 @@ export default function RollingMigrationFormDrawer({
     params.cutoverEndTime,
     params.postMigrationScript,
     params.osFamily,
+    params.disconnectSourceNetwork,
+    params.fallbackToDHCP,
+    params.networkPersistence,
+    params.removeVMwareTools,
+    params.useGPU,
+    params.useFlavorless,
     params,
     fieldErrors
   ])
