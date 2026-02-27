@@ -1045,90 +1045,287 @@ function VmsSelectionStep({
     return null
   }
 
-  const handleApplyBulkIPs = async () => {
-    // Collect all IPs to apply with their VM and interface info
-    const ipsToApply: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
+  type BulkIpEdit = { vmName: string; interfaceIndex: number; ip: string }
 
+  const getPreserveIpFlag = (vmName: string, interfaceIndex: number) =>
+    bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
+
+  const getExistingIp = (vmName: string, interfaceIndex: number) =>
+    bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
+
+  const markIpFieldInvalid = (vmName: string, interfaceIndex: number, message: string) => {
+    setBulkValidationStatus((prev) => ({
+      ...prev,
+      [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+    }))
+    setBulkValidationMessages((prev) => ({
+      ...prev,
+      [vmName]: { ...prev[vmName], [interfaceIndex]: message }
+    }))
+  }
+
+  const validateRequiredIpsForPreserveEnabled = () => {
     let missingRequiredIp = false
     Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
       Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
         const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
-        const existingIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
+        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
+        const existingIp = getExistingIp(vmName, interfaceIndex)
 
         if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
           missingRequiredIp = true
-          setBulkValidationStatus((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-          }))
-          setBulkValidationMessages((prev) => ({
-            ...prev,
-            [vmName]: {
-              ...prev[vmName],
-              [interfaceIndex]: 'IP is required when Preserve IP is enabled'
-            }
-          }))
+          markIpFieldInvalid(vmName, interfaceIndex, 'IP is required when Preserve IP is enabled')
         }
       })
     })
+    return !missingRequiredIp
+  }
 
-    if (missingRequiredIp) {
-      showToast('Provide an IP address for all interfaces where Preserve IP is enabled.', 'error')
-      return
-    }
-
+  const collectIpsToApply = (): BulkIpEdit[] => {
+    const ipsToApply: BulkIpEdit[] = []
     Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
       Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
         const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
-        const existingIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
+        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
+        const existingIp = getExistingIp(vmName, interfaceIndex)
         const typedIp = ip.trim()
 
         if (typedIp === '') return
 
-        // If Preserve IP is enabled and an existing IP is present, we keep it as-is.
         if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
           return
         }
 
-        ipsToApply.push({
-          vmName,
-          interfaceIndex,
-          ip: typedIp
-        })
+        ipsToApply.push({ vmName, interfaceIndex, ip: typedIp })
       })
     })
+    return ipsToApply
+  }
 
-    if (ipsToApply.length === 0) {
-      // No IPs to validate/apply, but we still want to persist preserve flags.
-      const updatedVms = vmsWithFlavor.map((vm) => {
-        const preserveIp = bulkPreserveIp[vm.name]
-        const preserveMac = bulkPreserveMac[vm.name]
-        const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
-        if (!hasAnyPreserveFlags) return vm
+  type BulkIpClear = { vmName: string; interfaceIndex: number }
 
-        const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-          const preserveIP = preserveIp?.[index] !== false
-          const preserveMAC = preserveMac?.[index] !== false
-          return {
-            ...nic,
-            preserveIP,
-            preserveMAC
-          }
-        })
+  const collectIpsToClear = (): BulkIpClear[] => {
+    const clears: BulkIpClear[] = []
+    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
+      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
+        const existingIp = getExistingIp(vmName, interfaceIndex)
+        const typedIp = ip.trim()
 
-        return {
-          ...vm,
-          networkInterfaces: updatedNetworkInterfaces,
-          ...(preserveIp && { preserveIp }),
-          ...(preserveMac && { preserveMac })
+        // Rolling migration behavior: if Preserve IP is disabled and the user clears the field,
+        // treat it as an explicit clear for that interface.
+        if (!preserveIp && typedIp === '' && existingIp.trim() !== '') {
+          clears.push({ vmName, interfaceIndex })
         }
       })
-      setVmsWithFlavor(updatedVms)
-      setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
-      showToast('Preserve settings saved.', 'success')
-      handleCloseBulkEditDialog()
+    })
+    return clears
+  }
+
+  const applyClearsToAssignedIpsMap = (
+    assignedIPsPerVM: Record<string, string[]>,
+    clears: BulkIpClear[]
+  ) => {
+    clears.forEach(({ vmName, interfaceIndex }) => {
+      if (!assignedIPsPerVM[vmName]) {
+        assignedIPsPerVM[vmName] = []
+      }
+      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
+        assignedIPsPerVM[vmName].push('')
+      }
+      assignedIPsPerVM[vmName][interfaceIndex] = ''
+    })
+  }
+
+  const updateVmRowsAndForm = (updatedVms: VmDataWithFlavor[]) => {
+    setVmsWithFlavor(updatedVms)
+    setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
+  }
+
+  const applyPreserveFlagsOnly = () => {
+    const updatedVms = vmsWithFlavor.map((vm) => {
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
+      const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
+      if (!hasAnyPreserveFlags) return vm
+
+      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
+        const preserveIP = preserveIp?.[index] !== false
+        const preserveMAC = preserveMac?.[index] !== false
+        return {
+          ...nic,
+          preserveIP,
+          preserveMAC
+        }
+      })
+
+      return {
+        ...vm,
+        networkInterfaces: updatedNetworkInterfaces,
+        ...(preserveIp && { preserveIp }),
+        ...(preserveMac && { preserveMac })
+      }
+    })
+
+    updateVmRowsAndForm(updatedVms)
+    showToast('Preserve settings saved.', 'success')
+    handleCloseBulkEditDialog()
+  }
+
+  const applyOverrideChangesOnly = () => {
+    const updatedVms = vmsWithFlavor.map((vm) => {
+      const vmOverrides = bulkEditOverrides[vm.name]
+      if (!vmOverrides) return vm
+      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
+        const overrides = vmOverrides[index]
+        return overrides
+          ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
+          : nic
+      })
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
+      return {
+        ...vm,
+        networkInterfaces: updatedNetworkInterfaces,
+        ...(preserveIp && { preserveIp }),
+        ...(preserveMac && { preserveMac })
+      }
+    })
+
+    updateVmRowsAndForm(updatedVms)
+    showToast('Network override settings applied', 'success')
+    handleCloseBulkEditDialog()
+  }
+
+  const markBulkValidationFailure = (ips: BulkIpEdit[], message: string) => {
+    setBulkValidationStatus((prev) => {
+      const newStatus = { ...prev }
+      ips.forEach(({ vmName, interfaceIndex }) => {
+        if (!newStatus[vmName]) newStatus[vmName] = {}
+        newStatus[vmName][interfaceIndex] = 'invalid'
+      })
+      return newStatus
+    })
+    setBulkValidationMessages((prev) => {
+      const newMessages = { ...prev }
+      ips.forEach(({ vmName, interfaceIndex }) => {
+        if (!newMessages[vmName]) newMessages[vmName] = {}
+        newMessages[vmName][interfaceIndex] = message
+      })
+      return newMessages
+    })
+  }
+
+  const setBulkStatusForIps = (
+    ips: BulkIpEdit[],
+    status: 'empty' | 'valid' | 'invalid' | 'validating'
+  ) => {
+    setBulkValidationStatus((prev) => {
+      const next = { ...prev }
+      ips.forEach(({ vmName, interfaceIndex }) => {
+        if (!next[vmName]) next[vmName] = {}
+        next[vmName][interfaceIndex] = status
+      })
+      return next
+    })
+  }
+
+  const buildAssignedIpsPerVm = (ips: BulkIpEdit[]) => {
+    const assignedIPsPerVM: Record<string, string[]> = {}
+    ips.forEach(({ vmName, interfaceIndex, ip }) => {
+      if (!assignedIPsPerVM[vmName]) {
+        assignedIPsPerVM[vmName] = []
+      }
+      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
+        assignedIPsPerVM[vmName].push('')
+      }
+      if (assignedIPsPerVM[vmName].length > interfaceIndex) {
+        assignedIPsPerVM[vmName][interfaceIndex] = ip
+      }
+    })
+    return assignedIPsPerVM
+  }
+
+  const applyIpAssignmentsToRows = (assignedIPsPerVM: Record<string, string[]>) => {
+    const updatedVms = vmsWithFlavor.map((vm) => {
+      const assignedIPs = assignedIPsPerVM[vm.name]
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
+      if (!assignedIPs && !preserveIp && !preserveMac) return vm
+
+      const vmOverrides = bulkEditOverrides[vm.name]
+
+      let updatedNetworkInterfaces = vm.networkInterfaces
+      if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
+        updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
+          const assignedIP = assignedIPs?.[index]
+          const overrides = vmOverrides?.[index]
+          const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
+          const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
+          return {
+            ...nic,
+            ...(assignedIP !== undefined
+              ? { ipAddress: assignedIP.trim() !== '' ? assignedIP : '' }
+              : {}),
+            ...(overrides
+              ? {
+                  preserveIP: overrides.preserveIP,
+                  preserveMAC: overrides.preserveMAC
+                }
+              : { preserveIP, preserveMAC })
+          }
+        })
+      }
+
+      if (!assignedIPs && !vmOverrides) return vm
+
+      const displayIPs = updatedNetworkInterfaces
+        ? updatedNetworkInterfaces
+            .map((nic) => nic.ipAddress)
+            .filter((ip) => ip && ip.trim() !== '')
+        : []
+      const ipDisplay = displayIPs.join(', ')
+      const assignedIPsCsv = updatedNetworkInterfaces
+        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress || '').join(',')
+        : assignedIPs
+          ? assignedIPs.join(',')
+          : undefined
+
+      return {
+        ...vm,
+        ...(updatedNetworkInterfaces && {
+          assignedIPs: assignedIPsCsv,
+          ipAddress: ipDisplay || '—',
+          networkInterfaces: updatedNetworkInterfaces
+        }),
+        ...(preserveIp && { preserveIp }),
+        ...(preserveMac && { preserveMac })
+      }
+    })
+
+    updateVmRowsAndForm(updatedVms)
+  }
+
+  const handleApplyBulkIPs = async () => {
+    // Collect all IPs to apply with their VM and interface info
+    const hasRequiredIps = validateRequiredIpsForPreserveEnabled()
+    if (!hasRequiredIps) {
+      showToast('Provide an IP address for all interfaces where Preserve IP is enabled.', 'error')
+      return
+    }
+
+    const ipsToApply = collectIpsToApply()
+    const ipsToClear = collectIpsToClear()
+
+    if (ipsToApply.length === 0 && ipsToClear.length === 0) {
+      // No IPs to validate/apply.
+      // Apply overrides if present, otherwise persist preserve flags.
+      if (hasBulkOverrideChanges) {
+        applyOverrideChangesOnly()
+      } else {
+        applyPreserveFlagsOnly()
+      }
       return
     }
     if (hasBulkIpValidationErrors) {
@@ -1136,69 +1333,15 @@ function VmsSelectionStep({
       return
     }
 
-    const markBulkValidationFailure = (message: string) => {
-      setBulkValidationStatus((prev) => {
-        const newStatus = { ...prev }
-        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
-          if (!newStatus[vmName]) newStatus[vmName] = {}
-          newStatus[vmName][interfaceIndex] = 'invalid'
-        })
-        return newStatus
-      })
-      setBulkValidationMessages((prev) => {
-        const newMessages = { ...prev }
-        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
-          if (!newMessages[vmName]) newMessages[vmName] = {}
-          newMessages[vmName][interfaceIndex] = message
-        })
-        return newMessages
-      })
-    }
-
     setAssigningIPs(true)
 
     try {
-      // If only override changes (no IPs to validate), apply directly
-      if (ipsToApply.length === 0 && hasBulkOverrideChanges) {
-        const updatedVms = vmsWithFlavor.map((vm) => {
-          const vmOverrides = bulkEditOverrides[vm.name]
-          if (!vmOverrides) return vm
-          const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-            const overrides = vmOverrides[index]
-            return overrides
-              ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
-              : nic
-          })
-          const preserveIp = bulkPreserveIp[vm.name]
-          const preserveMac = bulkPreserveMac[vm.name]
-          return {
-            ...vm,
-            networkInterfaces: updatedNetworkInterfaces,
-            ...(preserveIp && { preserveIp }),
-            ...(preserveMac && { preserveMac })
-          }
-        })
-        setVmsWithFlavor(updatedVms)
-        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
-        showToast('Network override settings applied', 'success')
-        handleCloseBulkEditDialog()
-        setAssigningIPs(false)
-        return
-      }
-
       // Batch validation before applying any changes
       if (openstackCredentials) {
         const ipList = ipsToApply.map((item) => item.ip)
 
         // Set validating status for all IPs
-        setBulkValidationStatus((prev) => {
-          const newStatus = { ...prev }
-          ipsToApply.forEach(({ vmName, interfaceIndex }) => {
-            if (!newStatus[vmName]) newStatus[vmName] = {}
-            newStatus[vmName][interfaceIndex] = 'validating'
-          })
-          return newStatus
-        })
+        setBulkStatusForIps(ipsToApply, 'validating')
 
         let validationResult
         try {
@@ -1218,7 +1361,7 @@ function VmsSelectionStep({
               apiMessage ||
               'PCD IP validation service is unavailable (500). Please verify credentials or try again later.'
 
-            markBulkValidationFailure(validationErrorMessage)
+            markBulkValidationFailure(ipsToApply, validationErrorMessage)
             showToast(validationErrorMessage, 'error')
             reportError(error as Error, {
               context: 'bulk-ip-validation-request',
@@ -1273,70 +1416,9 @@ function VmsSelectionStep({
         }
 
         // Group IPs by VM name
-        const assignedIPsPerVM: Record<string, string[]> = {}
-
-        validIPs.forEach(({ vmName, interfaceIndex, ip }) => {
-          if (!assignedIPsPerVM[vmName]) {
-            assignedIPsPerVM[vmName] = []
-          }
-          // Ensure the array has enough slots
-          while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-            assignedIPsPerVM[vmName].push('')
-          }
-          if (assignedIPsPerVM[vmName].length > interfaceIndex) {
-            assignedIPsPerVM[vmName][interfaceIndex] = ip
-          }
-        })
-
-        // Update vmsWithFlavor to include assigned IPs and preserve overrides
-        const updatedVms = vmsWithFlavor.map((vm) => {
-          const assignedIPs = assignedIPsPerVM[vm.name]
-          const preserveIp = bulkPreserveIp[vm.name]
-          const preserveMac = bulkPreserveMac[vm.name]
-          if (!assignedIPs && !preserveIp && !preserveMac) return vm
-
-          const vmOverrides = bulkEditOverrides[vm.name]
-
-          // Update networkInterfaces with assigned IPs (only if this VM had IPs edited)
-          let updatedNetworkInterfaces = vm.networkInterfaces
-          if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
-            updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-              const assignedIP = assignedIPs?.[index]
-              const overrides = vmOverrides?.[index]
-              const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
-              const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
-              return {
-                ...nic,
-                ...(assignedIP && assignedIP.trim() !== '' ? { ipAddress: assignedIP } : {}),
-                ...(overrides
-                  ? {
-                      preserveIP: overrides.preserveIP,
-                      preserveMAC: overrides.preserveMAC
-                    }
-                  : { preserveIP, preserveMAC })
-              }
-            })
-          }
-
-          if (!assignedIPs && !vmOverrides) return vm
-
-          const validIPs = assignedIPs ? assignedIPs.filter((ip) => ip && ip.trim() !== '') : []
-          const ipDisplay = validIPs.join(', ')
-
-          return {
-            ...vm,
-            ...(assignedIPs && {
-              assignedIPs: assignedIPs.join(','),
-              ipAddress: ipDisplay || vm.ipAddress,
-              networkInterfaces: updatedNetworkInterfaces
-            }),
-            ...(preserveIp && { preserveIp }),
-            ...(preserveMac && { preserveMac })
-          }
-        })
-
-        setVmsWithFlavor(updatedVms)
-        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
+        const assignedIPsPerVM = buildAssignedIpsPerVm(validIPs)
+        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
+        applyIpAssignmentsToRows(assignedIPsPerVM)
 
         // Mark all as successfully applied
         validIPs.forEach(({ vmName, interfaceIndex }) => {
@@ -1351,67 +1433,21 @@ function VmsSelectionStep({
         })
 
         // Notify success
-        showToast(`Successfully assigned IPs to ${validIPs.length} interface(s)`, 'success')
+        showToast(
+          `Successfully applied network changes to ${validIPs.length + ipsToClear.length} interface(s)`,
+          'success'
+        )
 
         handleCloseBulkEditDialog()
       } else {
         // No OpenStack credentials available for remote validation; apply locally.
-        const assignedIPsPerVM: Record<string, string[]> = {}
-        ipsToApply.forEach(({ vmName, interfaceIndex, ip }) => {
-          if (!assignedIPsPerVM[vmName]) {
-            assignedIPsPerVM[vmName] = []
-          }
-          while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-            assignedIPsPerVM[vmName].push('')
-          }
-          assignedIPsPerVM[vmName][interfaceIndex] = ip
-        })
-
-        const updatedVms = vmsWithFlavor.map((vm) => {
-          const assignedIPs = assignedIPsPerVM[vm.name]
-          const preserveIp = bulkPreserveIp[vm.name]
-          const preserveMac = bulkPreserveMac[vm.name]
-          const vmOverrides = bulkEditOverrides[vm.name]
-          if (!assignedIPs && !preserveIp && !preserveMac && !vmOverrides) return vm
-
-          let updatedNetworkInterfaces = vm.networkInterfaces
-          if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
-            updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-              const assignedIP = assignedIPs?.[index]
-              const overrides = vmOverrides?.[index]
-              const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
-              const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
-              return {
-                ...nic,
-                ...(assignedIP && assignedIP.trim() !== '' ? { ipAddress: assignedIP } : {}),
-                ...(overrides
-                  ? {
-                      preserveIP: overrides.preserveIP,
-                      preserveMAC: overrides.preserveMAC
-                    }
-                  : { preserveIP, preserveMAC })
-              }
-            })
-          }
-
-          const validIPs = assignedIPs ? assignedIPs.filter((ip) => ip && ip.trim() !== '') : []
-          const ipDisplay = validIPs.join(', ')
-
-          return {
-            ...vm,
-            ...(assignedIPs && {
-              assignedIPs: assignedIPs.join(','),
-              ipAddress: ipDisplay || vm.ipAddress,
-              networkInterfaces: updatedNetworkInterfaces
-            }),
-            ...(preserveIp && { preserveIp }),
-            ...(preserveMac && { preserveMac })
-          }
-        })
-
-        setVmsWithFlavor(updatedVms)
-        setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
-        showToast(`Successfully assigned IPs to ${ipsToApply.length} interface(s)`, 'success')
+        const assignedIPsPerVM = buildAssignedIpsPerVm(ipsToApply)
+        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
+        applyIpAssignmentsToRows(assignedIPsPerVM)
+        showToast(
+          `Successfully applied network changes to ${ipsToApply.length + ipsToClear.length} interface(s)`,
+          'success'
+        )
         handleCloseBulkEditDialog()
       }
     } catch (error) {
