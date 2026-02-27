@@ -404,8 +404,8 @@ function VmsSelectionStep({
     {
       field: 'ipAddress',
       headerName: 'IP Address(es)',
-      flex: 1.2,
-      minWidth: 260,
+      flex: 0.8,
+      minWidth: 190,
       hideable: true,
       renderCell: (params) => {
         const vm = params.row as VmDataWithFlavor
