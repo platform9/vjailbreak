@@ -1157,6 +1157,9 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 				Script: "Orchestrate-NICRecovery.ps1",
 			})
 		}
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "disk-online-fix.ps1",
+		})
 		if removeVMwareTools {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "vmware-tools-deletion.ps1",
