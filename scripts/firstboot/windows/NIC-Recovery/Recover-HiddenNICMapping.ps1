@@ -89,7 +89,6 @@ foreach($regobj in $registryValues) {
         $p = Get-ItemProperty $regobj.PsPath -ErrorAction SilentlyContinue
         $ip = ($p.IPAddress | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1)
         $mask = ($p.SubnetMask | Select-Object -First 1)
-        Write-Host "IP: $ip $mask"
         if (-not $ip -or -not $mask) { 
             Write-Log "Warning: Invalid IP or mask for GUID $($regobj.PSChildName.ToUpper())"
             continue 
