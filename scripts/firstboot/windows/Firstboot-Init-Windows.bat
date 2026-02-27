@@ -10,7 +10,7 @@ set "TASK_NAME=Firstboot-Scheduler-Auto"
 
 :: Create timestamp for log (YYYYMMDD_HHMM)
 for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-set "LOGFILE=%LOGDIR%\Firstboot-Scheduler_%dt:~0,4%%dt:~4,2%%dt:~6,2%_%dt:~8,2%%dt:~10,2%.log"
+set "LOGFILE=%LOGDIR%\Firstboot-Scheduler_init.log"
 
 :: ────────────────────────────────────────────────
 :: Create log directory if it doesn't exist

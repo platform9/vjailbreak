@@ -45,7 +45,7 @@ try {
                   Where-Object { $_.Name -match '(?i)^vjb|Ethernet|Local Area Connection|Wi-Fi' }
 
     foreach ($nic in $interfaces) {
-        $newName = "tmp_" + [guid]::NewGuid().ToString().Substring(0,8)
+        $newName = "vjb_" + [guid]::NewGuid().ToString().Substring(0,8)
         Write-Log "Renaming '$($nic.Name)' → '$newName' to avoid name conflicts"
         if (-not $WhatIf) {
             try {
