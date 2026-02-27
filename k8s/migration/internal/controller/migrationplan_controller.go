@@ -1262,6 +1262,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 // CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration, vm string,
+	vmMachineObj *vjailbreakv1alpha1.VMwareMachine,
 ) (*corev1.ConfigMap, error) {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
@@ -1276,13 +1277,35 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
 		r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
+		
+		// Check if the firstboot script is compatible with the VM's OS
+		scriptContent := migrationplan.Spec.FirstBootScript
+		vmOSFamily := vmMachineObj.Spec.VMInfo.OSFamily
+		
+		// Detect script type and check compatibility
+		scriptType := utils.DetectScriptOSType(scriptContent)
+		isCompatible := utils.IsScriptCompatibleWithOS(scriptContent, vmOSFamily)
+		
+		if !isCompatible && scriptType != utils.ScriptOSTypeUnknown {
+			r.ctxlog.Info(fmt.Sprintf(
+				"Skipping incompatible firstboot script for VM '%s': script type '%s' does not match VM OS '%s'",
+				vm, scriptType, vmOSFamily,
+			))
+			// Use empty script instead of incompatible one
+			scriptContent = `#!/bin/bash
+# Firstboot script skipped: incompatible with VM OS type
+# VM OS: ` + vmOSFamily + `
+# Script type detected: ` + scriptType + `
+echo "No compatible user firstboot script provided for this VM"`
+		}
+		
 		configMap = &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configMapName,
 				Namespace: migrationplan.Namespace,
 			},
 			Data: map[string]string{
-				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
+				"user_firstboot.sh": scriptContent,
 			},
 		}
 		err = r.createResource(ctx, migrationobj, configMap)
@@ -1744,7 +1767,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
-		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, migrationobj, vm)
+		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, migrationobj, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
