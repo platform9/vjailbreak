@@ -132,4 +132,4 @@ catch {
 Write-Log "=== Disk Status Check Completed ==="
 Write-Log "Status report saved to: $LogPath"
 
-Write-Host "- Detailed report saved to: $LogPath" -ForegroundColor Cyan
+Write-Host "- Detailed report saved to: $LogPath"
