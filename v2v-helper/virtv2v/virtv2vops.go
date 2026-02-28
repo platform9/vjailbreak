@@ -34,11 +34,11 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
-	AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error
+	AddUdevRules(disks []vm.VMDisk, diskPath string, interfaces []string, macs []string) error
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
@@ -189,7 +189,7 @@ func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
-func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
+func AddNetplanConfig(disks []vm.VMDisk, diskPath string, netplanYAML string) error {
 	// Create the netplan file locally
 	localPath := "/home/fedora/50-vj.yaml"
 	if err := os.WriteFile(localPath, []byte(netplanYAML), 0644); err != nil {
@@ -202,13 +202,8 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 		ans string
 		err error
 	)
-	if useSingleDisk {
-		command := `upload /home/fedora/50-vj.yaml /etc/netplan/50-vj.yaml`
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/50-vj.yaml", "/etc/netplan/50-vj.yaml")
-	}
+	command := "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/50-vj.yaml", "/etc/netplan/50-vj.yaml")
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
 		return err
@@ -217,7 +212,7 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 }
 
 // UploadVirtIOScripts uploads the VirtIO installation scripts into the guest
-func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func UploadVirtIOScripts(disks []vm.VMDisk, diskPath string) error {
 	log.Println("Uploading VirtIO installation scripts to guest")
 
 	// Verify the PowerShell script exists in the container
@@ -236,15 +231,8 @@ func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string)
 
 	// Upload PowerShell script to Windows\Temp which always exists
 	log.Println("Executing guestfs upload command...")
-	if useSingleDisk {
-		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Temp\install-virtio-win12.ps1`
-		log.Printf("Upload command: %s", command)
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		log.Printf("Upload command: %s /home/fedora/install-virtio-win12.ps1 C:\\Windows\\Temp\\install-virtio-win12.ps1", command)
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
-	}
+	command := "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
 	if err != nil {
 		log.Printf("Upload command failed: %v", err)
 		log.Printf("Upload command output: %s", strings.TrimSpace(ans))
@@ -377,7 +365,7 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -424,11 +412,8 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
-	if useSingleDisk {
-		args = append(args, "-i", "disk", diskPath)
-	} else {
-		args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
-	}
+	// Always use libvirtxml mode to convert all disks
+	args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
@@ -487,7 +472,7 @@ func GetOsRelease(path string) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
-func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+func InjectMacToIps(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
 	// log the macToIPs
@@ -517,13 +502,8 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	var ans string
-	if useSingleDisk {
-		command := "upload /home/fedora/macToIP /etc/macToIP"
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
-	}
+	command := "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
 	if err != nil {
 		log.Printf("failed to upload macToIP file: %v: %s", err, strings.TrimSpace(ans))
 		return fmt.Errorf("failed to upload macToIP file: %w: %s", err, strings.TrimSpace(ans))
@@ -531,18 +511,13 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	return nil
 }
 
-func AddWildcardNetplanForL2(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func AddWildcardNetplanForL2(disks []vm.VMDisk, diskPath string) error {
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	var ans string
 	var err error
-	if useSingleDisk {
-		command := "upload /home/fedora/99-l2-Netplan.yaml /etc/netplan/99-l2-Netplan.yaml"
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-l2-Netplan.yaml", "/etc/netplan/99-l2-Netplan.yaml")
-	}
+	command := "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-l2-Netplan.yaml", "/etc/netplan/99-l2-Netplan.yaml")
 	if err != nil {
 		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
 		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
@@ -550,7 +525,7 @@ func AddWildcardNetplanForL2(disks []vm.VMDisk, useSingleDisk bool, diskPath str
 	return nil
 
 }
-func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
 	macToDNS := make(map[string][]string)
@@ -625,33 +600,18 @@ func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, 
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	var ans string
-	if useSingleDisk {
-		command := "mv /etc/netplan /etc/netplan-bkp"
-		ans, err = RunCommandInGuest(diskPath, command, true)
-		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-		}
-		command = "mkdir /etc/netplan"
-		ans, err = RunCommandInGuest(diskPath, command, true)
-		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-		}
-		command = "upload /home/fedora/99-wildcard.network /etc/netplan/99-wildcard.yaml"
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "mv"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
-		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-		}
-		command = "mkdir"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
-		if err != nil {
-			return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-		}
-		command = "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
+	command := "mv"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
+	if err != nil {
+		return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
 	}
+	command = "mkdir"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
+	if err != nil {
+		return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
+	}
+	command = "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
 	if err != nil {
 		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
 		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
@@ -800,7 +760,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	return -1, errors.New("bootable volume not found")
 }
 
-func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interfaces []string, macs []string) error {
+func AddUdevRules(disks []vm.VMDisk, diskPath string, interfaces []string, macs []string) error {
 
 	if len(interfaces) != len(macs) {
 		return fmt.Errorf("mismatch between number of interfaces and MACs")
@@ -821,13 +781,8 @@ func AddUdevRules(disks []vm.VMDisk, useSingleDisk bool, diskPath string, interf
 	log.Println("Uploading udev rules file to disk")
 	// Upload it to the disk
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	if useSingleDisk {
-		command := `upload /home/fedora/70-persistent-net.rules /etc/udev/rules.d/70-persistent-net.rules`
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/70-persistent-net.rules", "/etc/udev/rules.d/70-persistent-net.rules")
-	}
+	command := "upload"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/70-persistent-net.rules", "/etc/udev/rules.d/70-persistent-net.rules")
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
 		return err
@@ -921,17 +876,13 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 }
 
 // GetWindowsVersion detects the Windows version using guestfish inspect commands
-func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (string, error) {
+func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	var osPath string
 	var err error
 
-	if useSingleDisk {
-		osPath, err = RunCommandInGuest(diskPath, "inspect-os", false)
-	} else {
-		osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
-	}
+	osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect OS: %v", err)
@@ -943,11 +894,7 @@ func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (
 	}
 
 	var productName string
-	if useSingleDisk {
-		productName, err = RunCommandInGuest(diskPath, fmt.Sprintf("inspect-get-product-name %s", osPath), false)
-	} else {
-		productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
-	}
+	productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
 
 	if err != nil {
 		log.Printf("Failed to get Windows product name: %v", err)
@@ -965,7 +912,7 @@ func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (
 
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
 // during guest inspection phase for Linux migrations
-func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Script should be available in the container at /home/fedora/
@@ -982,13 +929,8 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var uploadErr error
 	var uploadOutput string
 
-	if useSingleDisk {
-		command := fmt.Sprintf("upload %s /tmp/generate-mount-persistence.sh", scriptPath)
-		uploadOutput, uploadErr = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "upload"
-		uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
-	}
+	command := "upload"
+	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
 
 	if uploadErr != nil {
 		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
@@ -1000,13 +942,8 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var chmodErr error
 	var chmodOutput string
 
-	if useSingleDisk {
-		command := "chmod 0755 /tmp/generate-mount-persistence.sh"
-		chmodOutput, chmodErr = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "chmod"
-		chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
-	}
+	command = "chmod"
+	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
 
 	if chmodErr != nil {
 		return fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
@@ -1018,13 +955,8 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var runErr error
 	var runOutput string
 
-	if useSingleDisk {
-		command := "sh \"/tmp/generate-mount-persistence.sh --force-uuid\""
-		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "sh"
-		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
-	}
+	command = "sh"
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
 
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
@@ -1093,7 +1025,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
-func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ostype string, isNetplan bool) error {
+func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, isNetplan bool) error {
 	// Skip this entirely for Windows as it doesn't use these udev rules/bash scripts
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		log.Println("Skipping offline network persistence for Windows guest")
@@ -1110,12 +1042,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	// Construct the guestmount command
 	args := []string{"-i", "--rw"}
 
-	if useSingleDisk {
-		args = append(args, "-a", diskPath)
-	} else {
-		for _, disk := range disks {
-			args = append(args, "-a", disk.Path)
-		}
+	for _, disk := range disks {
+		args = append(args, "-a", disk.Path)
 	}
 	args = append(args, mountPoint)
 
@@ -1167,18 +1095,13 @@ func RunNetworkPersistence(disks []vm.VMDisk, useSingleDisk bool, diskPath strin
 	return nil
 }
 
-func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+func InjectRestorationScript(disks []vm.VMDisk, diskPath string) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	var ans string
 	var err error
-	if useSingleDisk {
-		command := `copy-in /home/fedora/NIC-Recovery /`
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "copy-in"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
-	}
+	command := "copy-in"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/NIC-Recovery", "/")
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
 		return err
@@ -1186,7 +1109,7 @@ func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath str
 	return nil
 }
 
-func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, diskPath string, firstbootwinscripts []FirstBootWindows) error {
+func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, diskPath string, firstbootwinscripts []FirstBootWindows) error {
 	log.Println("Collecting Firstboot Scripts to Inject")
 	var ans string
 	var err error
@@ -1226,13 +1149,8 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 	log.Printf("Wrote scripts metadata to %s", metadataPath)
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	if useSingleDisk {
-		command := `copy-in /home/fedora/firstboot /`
-		ans, err = RunCommandInGuest(diskPath, command, true)
-	} else {
-		command := "copy-in"
-		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/firstboot", "/")
-	}
+	command := "copy-in"
+	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/firstboot", "/")
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
 		return err
