@@ -77,6 +77,7 @@ function Schedule-MyTask {
     Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
 
+
 function Ensure-64BitPowerShell {
     if (-not [Environment]::Is64BitOperatingSystem) {
         Write-Verbose "This is a 32-bit operating system → no 64-bit PowerShell available. Continuing as-is."
