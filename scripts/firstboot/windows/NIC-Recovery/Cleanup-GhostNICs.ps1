@@ -20,6 +20,70 @@ function Write-Log {
     }
     Write-Host "$timestamp - $Message"
 }
+function Remove-StaleNetworkAdapter {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$AdapterName
+    )
+
+    Write-Log "Starting removal of stale network adapters matching: $AdapterName"
+    
+    $classGuid = "{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
+    $paths = @(
+        "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$classGuid",
+        "HKLM:\SYSTEM\CurrentControlSet\Control\Network\$classGuid"
+    )
+
+    $removalCount = 0
+    
+    foreach ($basePath in $paths) {
+        Write-Log "Scanning registry path: $basePath"
+
+        if (-not (Test-Path $basePath)) { 
+            Write-Log "Registry path does not exist: $basePath"
+            continue 
+        }
+
+        $adapterKeys = Get-ChildItem $basePath -ErrorAction SilentlyContinue
+        if ($null -eq $adapterKeys) {
+            Write-Log "No subkeys found in $basePath"
+            continue
+        }
+
+        foreach ($key in $adapterKeys) {
+            try {
+                $props = Get-ItemProperty $key.PSPath -ErrorAction Stop
+
+                $matchesDescription = $props.DriverDesc -and ($props.DriverDesc -like "*$AdapterName*")
+                $matchesName = $props.Name -and ($props.Name -like "*$AdapterName*")
+
+                if ($matchesDescription -or $matchesName) {
+                    Write-Log "Found matching adapter - DriverDesc: '$($props.DriverDesc)', Name: '$($props.Name)', Path: $($key.PSPath)"
+
+                    if ($PSCmdlet.ShouldProcess($key.PSPath, "Remove stale adapter key")) {
+                        Remove-Item $key.PSPath -Recurse -Force -ErrorAction Stop
+                        Write-Log "Successfully removed: $($key.PSPath)"
+                        Write-Host "Removed: $($key.PSPath)" -ForegroundColor Yellow
+                        $removalCount++
+                    } else {
+                        Write-Log "Would remove: $($key.PSPath) (in WhatIf mode)"
+                    }
+                }
+            }
+            catch {
+                Write-Log "Skipping inaccessible key: $($key.PSPath) - Error: $($_.Exception.Message)"
+                Write-Warning "Skipping inaccessible key: $($key.PSPath)"
+            }
+        }
+    }
+
+    Write-Log "Stale network adapter cleanup completed. Total removed: $removalCount"
+    Write-Host "Cleanup complete. Reboot recommended." -ForegroundColor Green
+}
+
+
 
 # Must be admin
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -159,7 +223,7 @@ try {
         & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
         Start-Sleep -Seconds 4   # give PnP manager a moment
     }
-
+    Remove-StaleNetworkAdapter -AdapterName "Intel(R) 82574L Gigabit Network Connection"
     Write-Log "=== Cleanup finished ==="
     if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes were made" }
 
