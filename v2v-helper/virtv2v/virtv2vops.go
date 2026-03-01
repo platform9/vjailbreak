@@ -45,6 +45,7 @@ type VirtV2VOperations interface {
 }
 type FirstBootWindows struct {
 	Script string
+	Async  bool
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
