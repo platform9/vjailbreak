@@ -100,6 +100,7 @@ type VMDisk struct {
 	SnapBackingDisk string
 	ChangeID        string
 	Boot            bool
+	ESP             bool // True if this disk contains the EFI System Partition
 	Datastore       string
 	DatastoreID     string
 }
@@ -302,6 +303,22 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
 		GatewayIP:         make(map[string]string),
 	}
+
+	// Log detailed source VM information for debugging
+	log.Printf("=== SOURCE VM INFORMATION ===")
+	log.Printf("VM Name: %s", vminfo.Name)
+	log.Printf("UEFI Firmware: %t (Firmware type: %s)", vminfo.UEFI, o.Config.Firmware)
+	log.Printf("OS Type: %s", vminfo.OSType)
+	log.Printf("CPU: %d, Memory: %d MB", vminfo.CPU, vminfo.Memory)
+	log.Printf("Number of Disks: %d", len(vminfo.VMDisks))
+	for idx, disk := range vminfo.VMDisks {
+		log.Printf("  [Disk %d] Name: %s, Size: %d bytes (%.2f GB), DeviceKey: %d",
+			idx, disk.Name, disk.Size, float64(disk.Size)/(1024*1024*1024), disk.Disk.Key)
+		log.Printf("           Path: %s", disk.Path)
+		log.Printf("           Datastore: %s (ID: %s)", disk.Datastore, disk.DatastoreID)
+	}
+	log.Printf("=== END SOURCE VM INFO ===")
+
 	return vminfo, nil
 }
 
