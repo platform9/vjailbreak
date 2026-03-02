@@ -220,10 +220,37 @@ try {
     # 4. Trigger hardware rescan
     Write-Log "Triggering hardware rescan..."
     if (-not $WhatIf) {
-        & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
-        Start-Sleep -Seconds 4   # give PnP manager a moment
+        try {
+            & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
+            Start-Sleep -Seconds 4   # give PnP manager a moment
+        } catch {
+            Write-Log "Warning: Failed to trigger hardware rescan: $($_.Exception.Message)"
+        }
     }
-    Remove-StaleNetworkAdapter -AdapterName "Intel(R) 82574L Gigabit Network Connection"
+    
+    # Clean up stale network adapters with common patterns
+    $commonAdapterPatterns = @(
+        "Intel*", 
+        "Broadcom*", 
+        "Realtek*", 
+        "VMware*", 
+        "Hyper-V*",
+        "vEthernet*",
+        "VirtualBox*",
+        "Cisco*",
+        "Qualcomm*",
+        "Microsoft*"
+    )
+    
+    foreach ($pattern in $commonAdapterPatterns) {
+        try {
+            Write-Log "Removing stale network adapters matching pattern: $pattern"
+            Remove-StaleNetworkAdapter -AdapterName $pattern
+        } catch {
+            Write-Log "Warning: Error processing adapter pattern '$pattern': $($_.Exception.Message)"
+        }
+    }
+    
     Write-Log "=== Cleanup finished ==="
     if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes were made" }
 
