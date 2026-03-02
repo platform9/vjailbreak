@@ -4,7 +4,7 @@ set -euo pipefail
 TAG=$1
 
 # Always use k8s.io namespace for Kubernetes images
-CTR="sudo ctr -n k8s.io"
+CTR="sudo ctr"
 
 mkdir -p image_builder/images
 mkdir -p image_builder/cert-manager-manifests
@@ -85,3 +85,11 @@ for img in "${images[@]}"; do
 done
 
 echo "[✔] All images downloaded and exported successfully."
+
+# Download virtio-win.iso
+echo "[*] Downloading virtio-win.iso"
+wget -O image_builder/images/virtio-win.iso "$virtiowin"
+
+# Download virtio-win-server12.iso
+echo "[*] Downloading virtio-win-server12.iso"
+wget -O image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
