@@ -88,8 +88,8 @@ echo "[✔] All images downloaded and exported successfully."
 
 # Download virtio-win.iso
 echo "[*] Downloading virtio-win.iso"
-wget -O image_builder/images/virtio-win.iso "$virtiowin"
+wget -O ./image_builder/images/virtio-win.iso "$virtiowin"
 
 # Download virtio-win-server12.iso
 echo "[*] Downloading virtio-win-server12.iso"
-wget -O image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
+wget -O ./image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
