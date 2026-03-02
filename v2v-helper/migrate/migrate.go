@@ -1145,24 +1145,29 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "Firstboot-Scheduler.ps1",
+			Async:  false,
 		})
 		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
 			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "install-virtio-win12.ps1",
+				Async:  false,
 			})
 		}
 		if persisNetwork {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "Orchestrate-NICRecovery.ps1",
+				Async:  true,
 			})
 		}
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "disk-online-fix.ps1",
+			Async:  true,
 		})
 		if removeVMwareTools {
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "vmware-tools-deletion.ps1",
+				Async:  true,
 			})
 		}
 		if err := virtv2v.PushWindowsFirstBoot(); err != nil {
@@ -1170,6 +1175,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "user_firstboot.ps1",
+			Async:  false,
 		})
 	}
 

@@ -27,8 +27,8 @@ function Write-Log {
 
 try {
     Write-Log "=== Starting Network Configuration Restore ==="
-    Write-Log "Waiting 15 seconds for network interfaces to initialize..."
-    Start-Sleep -Seconds 15
+    Write-Log "Waiting 200 seconds for network interfaces to initialize..."
+    Start-Sleep -Seconds 200
 
     if (-not (Test-Path "C:\NIC-Recovery\netconfig.json")) {
         throw "Network configuration file not found at C:\NIC-Recovery\netconfig.json"

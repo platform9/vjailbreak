@@ -9,6 +9,7 @@ $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
 $StateFilePath = Join-Path $ScriptRoot "Firstboot-Scheduler.state"
 $SchedulerScriptPath = Join-Path $ScriptRoot "Firstboot-Scheduler.ps1"
+$failedScriptNames = New-Object 'System.Collections.Generic.List[string]'
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -76,6 +77,7 @@ function Schedule-MyTask {
 
     Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
+
 
 function Ensure-64BitPowerShell {
     if (-not [Environment]::Is64BitOperatingSystem) {
@@ -204,7 +206,7 @@ function Push-Script {
         if (Test-Path $StateFilePath) {
             $existingScripts = Get-Content -Path $StateFilePath 
             foreach ($existingScript in $existingScripts) {
-                $entryName, [int]$entryNumber = $existingScript -split '\|'
+                $entryName,$scriptAsync, [int]$entryNumber = $existingScript -split '\|'
                 if ($entryName -eq $ScriptName) {
                     Write-Log "Script '$ScriptName' already exists in the state file with number '$entryNumber'."
                     if ($entryNumber -lt 3){
@@ -221,7 +223,7 @@ function Push-Script {
             }else{
                 $originalRunTimes = $scriptRunTimes
                 $scriptRunTimes = $scriptRunTimes + 1
-                $updated = $existingScripts -replace "$ScriptName\|$originalRunTimes", "$ScriptName|$scriptRunTimes"
+                $updated = $existingScripts -replace "$ScriptName\|$scriptAsync\|$originalRunTimes", "$ScriptName|$scriptAsync|$scriptRunTimes"
                 Set-Content -Path $StateFilePath -Value $updated
             }
         }else{
@@ -259,7 +261,9 @@ function Init-Table{
             Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
             
             foreach ($script in $scriptsArray) {
-                Add-Content -Path $StateFilePath -Value "$script|-1"
+                $script_name = $script.Script
+                $script_async = $script.async
+                Add-Content -Path $StateFilePath -Value "$script_name|$script_async|-1"
             }
         } catch {
             Write-Log "Failed to parse scripts.json: $_" -Level "ERROR"
@@ -272,7 +276,7 @@ function Get-Script{
         $stateEntries = Get-Content -Path $StateFilePath
         #validate
         foreach ($entry in $stateEntries){
-            $entryName, [int]$entryNumber = $entry -split '\|'
+            $entryName,$scriptAsync, [int]$entryNumber = $entry -split '\|'
             if ($entryName -ne "" -and $entryNumber -ge -1 -and $entryNumber -lt 3){
                 Write-Log "Script Name: $entryName, Run Times: $entryNumber"
             } else {
@@ -280,15 +284,20 @@ function Get-Script{
             }
         }
         foreach ($entry in $stateEntries) {
-            $entryName, [int]$entryNumber = $entry -split '\|'
+            $entryName,$scriptAsync, [int]$entryNumber = $entry -split '\|'
+            if ($failedScriptNames -contains $entryName) {
+                continue
+            }else{
+
             if ($entryNumber -eq -1){
-                return $entryName
+                return $entryName, $scriptAsync
             } 
             if ($entryNumber -ge 0 -and $entryNumber -lt 3){
-                return $entryName
+                return $entryName, $scriptAsync
+            }
             }
         }
-    return ""
+    return "", ""
     }else{
         throw "State file does not exist."
     }
@@ -321,7 +330,7 @@ try {
                 Init-Table
             }
             while ($true) {
-                $script = Get-Script
+                $script,$async = Get-Script
                 Write-Log "Selected script: $script"
                 if ($script -ne "" -and $script -ne "False"){
                     Push-Script -ScriptName $script
@@ -329,7 +338,10 @@ try {
                     if ($result.ExitCode -ne 0) {
                         Write-Log "Script '$script' failed with exit code $($result.ExitCode)" -Level "ERROR"
                         Write-Log "Output: $($result.Output)" -Level "ERROR"
-                        break
+                        $failedScriptNames.Add($script)
+                        if ($async -eq $false) {
+                                break
+                        }
                     } else {
                         Write-Log "Script '$script' executed successfully"
                         Write-Log "Output: $($result.Output)"
