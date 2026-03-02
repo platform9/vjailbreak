@@ -36,6 +36,11 @@ cert_manager_controller="quay.io/jetstack/cert-manager-controller:${CERT_MANAGER
 cert_manager_webhook="quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}"
 cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}"
 
+INGRESS_NGINX_VERSION="v1.12.1"
+KUBE_WEBHOOK_CERTGEN_VERSION="v1.6.7"
+ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}"
+kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}"
+
 # Download cert-manager manifests
 CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
 MANIFEST_PATH="image_builder/cert-manager-manifests/cert-manager.yaml"
@@ -66,6 +71,8 @@ images=(
   "$cert_manager_controller"
   "$cert_manager_webhook"
   "$cert_manager_cainjector"
+  "$ingress_nginx_controller"
+  "$kube_webhook_certgen"
 )
 
 for img in "${images[@]}"; do
