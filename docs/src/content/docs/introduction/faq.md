@@ -22,6 +22,13 @@ No, vJailbreak will remove them for you, with the help of virt-v2v. The process 
 ### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
 No, vJailbreak will install it for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
+### Why does the conversion step take time?
+The delay is typically not because a single script is slow. The overall conversion process includes OS-level changes that take time, such as installing VirtIO drivers, removing old hypervisor drivers, and (for Windows guests) performing registry changes.
+
+The helper scripts that apply static changes (for example, writing mount persistence entries to `/etc/fstab`) are simple and usually complete quickly.
+
+Conversion time depends heavily on your infrastructure performance (especially CPU) and VM-specific factors, including the guest OS and root disk size.
+
 ### What do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
 
 - **Symptom**
