@@ -60,7 +60,8 @@ export const updateESXiSSHCreds = async (
   secretName: string,
   username = 'root',
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
-  forceReconcileToken?: string
+  forceReconcileToken?: string,
+  resourceVersion?: string
 ): Promise<ESXiSSHCreds> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esxisshcreds/${name}`
 
@@ -69,7 +70,8 @@ export const updateESXiSSHCreds = async (
     kind: 'ESXiSSHCreds',
     metadata: {
       name,
-      namespace
+      namespace,
+      ...(resourceVersion && { resourceVersion })
     },
     spec: {
       secretRef: {
@@ -100,30 +102,14 @@ export const upsertESXiSSHCreds = async (
       // Already exists - fetch current resource to get resourceVersion, then update
       const existing = await getESXiSSHCredsItem(name, namespace)
       const token = new Date().toISOString()
-      
-      const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esxisshcreds/${name}`
-      const payload: ESXiSSHCreds = {
-        apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
-        kind: 'ESXiSSHCreds',
-        metadata: {
-          name,
-          namespace,
-          resourceVersion: existing.metadata.resourceVersion
-        },
-        spec: {
-          secretRef: {
-            name: secretName,
-            namespace
-          },
-          username,
-          forceReconcileToken: token
-        }
-      }
-      
-      return axios.put<ESXiSSHCreds>({
-        endpoint,
-        data: payload
-      })
+      return await updateESXiSSHCreds(
+        name,
+        secretName,
+        username,
+        namespace,
+        token,
+        existing.metadata.resourceVersion
+      )
     }
     throw error
   }
