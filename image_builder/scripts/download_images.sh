@@ -1,15 +1,18 @@
 #!/bin/bash
-# This script downloads the ingress-nginx controller and kube-webhook-certgen images and exports them as tar files.
-# But this script has been run already in base image, so this is just a placeholder for now.
-# In case in the future we need to download images, we can use this script.
 set -euo pipefail
 
-
-# get tag from /etc/pf9/yamls/01ui.yaml
 TAG=$1
 
-REGISTRY="quay.io"
-REPO="platform9"
+# Always use k8s.io namespace for Kubernetes images
+CTR="sudo ctr -n k8s.io"
+
+mkdir -p image_builder/images
+mkdir -p image_builder/cert-manager-manifests
+
+# -----------------------------
+# Image Definitions
+# -----------------------------
+
 kube_state_metrics="registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.18.0"
 prometheus_adapter="registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0"
 prometheus="quay.io/prometheus/prometheus:v3.9.1"
@@ -22,13 +25,11 @@ prometheus_config_reloader="quay.io/prometheus-operator/prometheus-config-reload
 prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.89.0"
 configmap_reload="ghcr.io/jimmidyson/configmap-reload:v0.15.0"
 grafana="docker.io/grafana/grafana:12.3.3"
+
 v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
 controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
-virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-virtiowinserver12="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso"
-# TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
 
 CERT_MANAGER_VERSION="v1.16.1"
@@ -38,19 +39,9 @@ cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER
 
 INGRESS_NGINX_VERSION="v1.14.3"
 KUBE_WEBHOOK_CERTGEN_VERSION="v1.6.7"
-ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}@sha256:82917be97c0939f6ada1717bb39aa7e66c229d6cfb10dcfc8f1bd42f9efe0f81"
-kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}@sha256:7c74a715af2c94cb734785b4d3ea1357b4f02b88e1e123c622a9cb68b62f669c"
+ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}"
+kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}"
 
-# Download cert-manager manifests
-CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
-MANIFEST_PATH="image_builder/cert-manager-manifests/cert-manager.yaml"
-mkdir -p image_builder/cert-manager-manifests
-curl -L "${CERT_MANAGER_URL}" -o "${MANIFEST_PATH}"
-
-sed -i 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' "${MANIFEST_PATH}"
-
-
-# Download and export images
 images=(
   "$kube_state_metrics"
   "$prometheus_adapter"
@@ -59,6 +50,7 @@ images=(
   "$blackbox_exporter"
   "$node_exporter"
   "$pushgateway"
+  "$kube_rbac_proxy"
   "$prometheus_config_reloader"
   "$prometheus_operator"
   "$v2v_helper"
@@ -75,29 +67,21 @@ images=(
   "$kube_webhook_certgen"
 )
 
+# -----------------------------
+# Pull + Export Loop
+# -----------------------------
+
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  sudo ctr  i pull --platform linux/amd64 "$img"
+
+  # Pull all platforms to avoid manifest export errors
+  $CTR images pull --all-platforms "$img"
 
   tag=$(echo "$img" | cut -d'@' -f1)
   fname=$(echo "$tag" | tr '/:@' '_')
 
-  echo "[*] Exporting to $fname.tar"
-  sudo ctr  i export "image_builder/images/$fname.tar" "$img"
+  echo "[*] Exporting to image_builder/images/$fname.tar"
+  $CTR images export "image_builder/images/$fname.tar" "$img"
 done
 
-
-ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.20.2
-sleep 10
-ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.20.2
-
-echo "[✔] All images downloaded and exported as tar files."
-
-
-# Download virtio-win.iso
-echo "[*] Downloading virtio-win.iso"
-wget -O image_builder/images/virtio-win.iso "$virtiowin"
-
-# Download virtio-win-server12.iso
-echo "[*] Downloading virtio-win-server12.iso"
-wget -O image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
+echo "[✔] All images downloaded and exported successfully."
