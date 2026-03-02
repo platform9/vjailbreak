@@ -97,9 +97,33 @@ export const upsertESXiSSHCreds = async (
     return await createESXiSSHCreds(name, secretName, username, namespace)
   } catch (error: any) {
     if (error?.response?.status === 409) {
-      // Already exists - update with a new forceReconcileToken to trigger reconciliation
+      // Already exists - fetch current resource to get resourceVersion, then update
+      const existing = await getESXiSSHCredsItem(name, namespace)
       const token = new Date().toISOString()
-      return await updateESXiSSHCreds(name, secretName, username, namespace, token)
+      
+      const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esxisshcreds/${name}`
+      const payload: ESXiSSHCreds = {
+        apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+        kind: 'ESXiSSHCreds',
+        metadata: {
+          name,
+          namespace,
+          resourceVersion: existing.metadata.resourceVersion
+        },
+        spec: {
+          secretRef: {
+            name: secretName,
+            namespace
+          },
+          username,
+          forceReconcileToken: token
+        }
+      }
+      
+      return axios.put<ESXiSSHCreds>({
+        endpoint,
+        data: payload
+      })
     }
     throw error
   }
