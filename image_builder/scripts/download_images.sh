@@ -36,7 +36,7 @@ cert_manager_controller="quay.io/jetstack/cert-manager-controller:${CERT_MANAGER
 cert_manager_webhook="quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}"
 cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}"
 
-INGRESS_NGINX_VERSION="v1.12.1"
+INGRESS_NGINX_VERSION="v1.14.3"
 KUBE_WEBHOOK_CERTGEN_VERSION="v1.6.7"
 ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}"
 kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}"
