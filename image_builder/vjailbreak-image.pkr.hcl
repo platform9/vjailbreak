@@ -7,14 +7,14 @@ packer {
   }
 }
 
-variable "ubuntu_minimal_url" {
+variable "ubuntu_cloud_url" {
   type    = string
-  default = "https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"
+  default = "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
 }
 
-variable "ubuntu_minimal_checksum" {
+variable "ubuntu_cloud_checksum" {
   type    = string
-  default = "file:https://cloud-images.ubuntu.com/minimal/releases/jammy/release/SHA256SUMS"
+  default = "file:https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS"
 }
 
 variable "k3s_version" {
@@ -30,8 +30,8 @@ variable "helm_version" {
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = var.ubuntu_minimal_url
-  iso_checksum         = var.ubuntu_minimal_checksum
+  iso_url              = var.ubuntu_cloud_url
+  iso_checksum         = var.ubuntu_cloud_checksum
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
