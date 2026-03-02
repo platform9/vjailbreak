@@ -301,7 +301,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		log.Println("Removing stale registries from Windows")
 		// run command virt-win-reg --merge <WindowsGuest> /home/fedora/Remove-Guestor.reg
-		cmd := exec.CommandContext(ctx, "virt-win-reg", "--merge", path, "/home/fedora/Remove-Guestor.reg")
+		cmd := exec.CommandContext(ctx, "virt-win-reg", "--merge", diskPath, "/home/fedora/Remove-Guestor.reg")
 		log.Printf("Executing %s", cmd.String())
 		err := cmd.Run()
 		if err != nil {
