@@ -857,7 +857,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "sh"
-		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh", "--force-uuid")
+		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
 	}
 
 	if runErr != nil {
