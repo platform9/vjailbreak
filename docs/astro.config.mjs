@@ -55,6 +55,7 @@ export default defineConfig({
 						{ label: 'What is vJailbreak', slug: 'introduction/what_is_vjailbreak' },
 						{ label: 'Getting Started', slug: 'introduction/getting_started' },
 						{ label: 'Prerequisites', slug: 'introduction/prerequisites' },
+						{ label: 'FAQ', slug: 'introduction/faq' },
 					],
 				},
 				{
