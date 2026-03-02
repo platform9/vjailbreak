@@ -168,7 +168,7 @@ build {
     "rm /tmp/get_helm.sh",
     "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
     "sudo helm repo update",
-    "sudo helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
+    "sudo helm pull ingress-nginx/ingress-nginx --version 1.14.3 --untar --untardir /etc/pf9/",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
     ]
