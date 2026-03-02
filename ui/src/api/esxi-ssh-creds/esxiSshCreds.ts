@@ -60,7 +60,8 @@ export const updateESXiSSHCreds = async (
   secretName: string,
   username = 'root',
   namespace = VJAILBREAK_DEFAULT_NAMESPACE,
-  forceReconcileToken?: string
+  forceReconcileToken?: string,
+  resourceVersion?: string
 ): Promise<ESXiSSHCreds> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/esxisshcreds/${name}`
 
@@ -69,7 +70,8 @@ export const updateESXiSSHCreds = async (
     kind: 'ESXiSSHCreds',
     metadata: {
       name,
-      namespace
+      namespace,
+      ...(resourceVersion && { resourceVersion })
     },
     spec: {
       secretRef: {
@@ -97,9 +99,17 @@ export const upsertESXiSSHCreds = async (
     return await createESXiSSHCreds(name, secretName, username, namespace)
   } catch (error: any) {
     if (error?.response?.status === 409) {
-      // Already exists - update with a new forceReconcileToken to trigger reconciliation
+      // Already exists - fetch current resource to get resourceVersion, then update
+      const existing = await getESXiSSHCredsItem(name, namespace)
       const token = new Date().toISOString()
-      return await updateESXiSSHCreds(name, secretName, username, namespace, token)
+      return await updateESXiSSHCreds(
+        name,
+        secretName,
+        username,
+        namespace,
+        token,
+        existing.metadata.resourceVersion
+      )
     }
     throw error
   }
