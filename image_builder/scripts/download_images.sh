@@ -10,23 +10,24 @@ TAG=$1
 
 REGISTRY="quay.io"
 REPO="platform9"
-kube_state_metrics="registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0"
+kube_state_metrics="registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.18.0"
 prometheus_adapter="registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0"
-prometheus="quay.io/prometheus/prometheus:v2.54.1"
-alertmanager="quay.io/prometheus/alertmanager:v0.27.0"
+prometheus="quay.io/prometheus/prometheus:v3.9.1"
+alertmanager="quay.io/prometheus/alertmanager:v0.31.1"
 blackbox_exporter="quay.io/prometheus/blackbox-exporter:v0.25.0"
-node_exporter="quay.io/prometheus/node-exporter:v1.8.2"
+node_exporter="quay.io/prometheus/node-exporter:v1.10.2"
 pushgateway="quay.io/prometheus/pushgateway:v1.5.0"
-kube_rbac_proxy="quay.io/brancz/kube-rbac-proxy:v0.19.1"
+kube_rbac_proxy="quay.io/brancz/kube-rbac-proxy:v0.20.2"
 prometheus_config_reloader="quay.io/prometheus-operator/prometheus-config-reloader:v0.76.0"
-prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.76.0"
-configmap_reload="ghcr.io/jimmidyson/configmap-reload:v0.13.1"
-grafana="docker.io/grafana/grafana:11.2.0"
+prometheus_operator="quay.io/prometheus-operator/prometheus-operator:v0.89.0"
+configmap_reload="ghcr.io/jimmidyson/configmap-reload:v0.15.0"
+grafana="docker.io/grafana/grafana:12.3.3"
 v2v_helper="quay.io/platform9/vjailbreak-v2v-helper:$TAG"
 controller="quay.io/platform9/vjailbreak-controller:$TAG"
 ui="quay.io/platform9/vjailbreak-ui:$TAG"
 vpwned="quay.io/platform9/vjailbreak-vpwned:$TAG"
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+virtiowinserver12="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso"
 # TODO(suhas): Create a seperate repository for alpine image in quay
 alpine="quay.io/platform9/vjailbreak:alpine"
 
@@ -79,9 +80,9 @@ for img in "${images[@]}"; do
 done
 
 
-ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.19.1
+ctr images pull --all-platforms quay.io/brancz/kube-rbac-proxy:v0.20.2
 sleep 10
-ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.19.1
+ctr images export "image_builder/images/kube-rbac-proxy.tar" quay.io/brancz/kube-rbac-proxy:v0.20.2
 
 echo "[✔] All images downloaded and exported as tar files."
 
@@ -89,3 +90,7 @@ echo "[✔] All images downloaded and exported as tar files."
 # Download virtio-win.iso
 echo "[*] Downloading virtio-win.iso"
 wget -O image_builder/images/virtio-win.iso "$virtiowin"
+
+# Download virtio-win-server12.iso
+echo "[*] Downloading virtio-win-server12.iso"
+wget -O image_builder/images/virtio-win-server12.iso "$virtiowinserver12"

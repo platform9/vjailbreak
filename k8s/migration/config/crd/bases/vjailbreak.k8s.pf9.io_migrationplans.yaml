@@ -18,6 +18,12 @@ spec:
     - jsonPath: .status.migrationStatus
       name: Status
       type: string
+    - jsonPath: .spec.migrationTemplate
+      name: Migration Template
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -86,6 +92,10 @@ spec:
                     description: PeriodicSyncInterval is the interval at which the
                       migration plan should be synced
                     type: string
+                  removeVMwareTools:
+                    description: RemoveVMwareTools instructs the migration helper
+                      to remove VMware Tools post migration
+                    type: boolean
                 type: object
               assignedIPsPerVM:
                 additionalProperties:
@@ -140,6 +150,34 @@ spec:
                 description: MigrationTemplate is the template to be used for the
                   migration
                 type: string
+              networkOverridesPerVM:
+                additionalProperties:
+                  items:
+                    description: NICOverride defines per-NIC overrides for IP and
+                      MAC preservation during migration
+                    properties:
+                      interfaceIndex:
+                        description: InterfaceIndex is the zero-based index of the
+                          NIC
+                        type: integer
+                      preserveIP:
+                        description: |-
+                          PreserveIP indicates whether to preserve the source VM's IP address for this NIC.
+                          When nil the migration default (preserve) is used.
+                        type: boolean
+                      preserveMAC:
+                        description: |-
+                          PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC.
+                          When nil the migration default (preserve) is used.
+                        type: boolean
+                    required:
+                    - interfaceIndex
+                    type: object
+                  type: array
+                description: |-
+                  NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
+                  Only NICs with non-default settings (i.e., preserve=false) need to be listed
+                type: object
               postMigrationAction:
                 description: PostMigrationAction defines the post migration action
                   for the virtual machine

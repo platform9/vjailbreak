@@ -22,7 +22,7 @@ data:
   DEPLOYMENT_NAME: vJailbreak
   PERIODIC_SYNC_MAX_RETRIES: "3" # max number of retries for CBT sync
   PERIODIC_SYNC_RETRY_CAP: "3h" # max retry interval for CBT sync
-  AUTO_FSTAB_UPDATE: "false" # automatically update fstab
+  AUTO_FSTAB_UPDATE: "true" # automatically update fstab
   AUTO_PXE_BOOT_ON_CONVERSION: "false" # automatically set machine to PXE boot during cluster conversion
   V2V_HELPER_POD_CPU_REQUEST: "1000m"
   V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"

@@ -4,15 +4,38 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/google/go-github/v63/github"
 	"golang.org/x/mod/semver"
+	"golang.org/x/oauth2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+// newGitHubClient creates a GitHub client with optional token authentication.
+func newGitHubClient(ctx context.Context) *github.Client {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		)
+		tc := oauth2.NewClient(ctx, ts)
+		return github.NewClient(tc)
+	}
+	return github.NewClient(nil)
+}
+
+func normalizeSemver(tag string) string {
+	if !strings.HasPrefix(tag, "v") {
+		return "v" + tag
+	}
+	return tag
+}
 
 type ReleaseInfo struct {
 	Version      string
@@ -20,18 +43,8 @@ type ReleaseInfo struct {
 	DownloadURL  string
 }
 
-func getCurrentVersionFromConfigMap() (string, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return "", fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(context.Background(), "version-config", metav1.GetOptions{})
+func GetCurrentVersion(ctx context.Context, clientset *kubernetes.Clientset) (string, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(ctx, "version-config", metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get version-config ConfigMap: %w", err)
 	}
@@ -46,7 +59,20 @@ func getCurrentVersionFromConfigMap() (string, error) {
 
 func GetAllTags(ctx context.Context) ([]string, error) {
 	owner, repo := loadGitHubConfig(ctx)
-	currentVersion, err := getCurrentVersionFromConfigMap()
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		fmt.Printf("Warning: Could not get in-cluster config: %v. Showing all tags.\n", err)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		fmt.Printf("Warning: Could not create kubernetes client: %v. Showing all tags.\n", err)
+		return getAllTagsFromGitHub(ctx, owner, repo)
+	}
+
+	currentVersion, err := GetCurrentVersion(ctx, clientset)
 	if err != nil {
 		fmt.Printf("Warning: Could not get current version from configmap: %v. Showing all tags.\n", err)
 		return getAllTagsFromGitHub(ctx, owner, repo)
@@ -64,32 +90,52 @@ func GetAllTags(ctx context.Context) ([]string, error) {
 }
 
 func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, error) {
-	client := github.NewClient(nil)
+	client := newGitHubClient(ctx)
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
 	var tagNames []string
 	for _, tag := range tags {
-		tagNames = append(tagNames, tag.GetName())
+		tagName := tag.GetName()
+		tagNames = append(tagNames, tagName)
 	}
+	// Sort: semver tags first (sorted by semver), then non-semver tags (sorted alphabetically)
 	sort.Slice(tagNames, func(i, j int) bool {
-		return semver.Compare(tagNames[i], tagNames[j]) < 0
+		normalizedI := normalizeSemver(tagNames[i])
+		normalizedJ := normalizeSemver(tagNames[j])
+		isSemverI := semver.IsValid(normalizedI)
+		isSemverJ := semver.IsValid(normalizedJ)
+
+		if isSemverI && isSemverJ {
+			return semver.Compare(normalizedI, normalizedJ) < 0
+		}
+		if isSemverI && !isSemverJ {
+			return true
+		}
+		if !isSemverI && isSemverJ {
+			return false
+		}
+		return tagNames[i] < tagNames[j]
 	})
 	return tagNames, nil
 }
 
 func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion string) ([]string, error) {
-	client := github.NewClient(nil)
+	client := newGitHubClient(ctx)
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
 
+	normalizedCurrent := normalizeSemver(currentVersion)
 	var newerTagNames []string
 	for _, tag := range tags {
-		tagName := tag.GetName()
-		if semver.Compare(tagName, currentVersion) > 0 {
+		tagName := normalizeSemver(tag.GetName())
+		if !semver.IsValid(tagName) {
+			continue
+		}
+		if semver.Compare(tagName, normalizedCurrent) > 0 {
 			newerTagNames = append(newerTagNames, tagName)
 		}
 	}
@@ -144,10 +190,17 @@ func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
 	}
 
 	for _, imageName := range images {
-		cmd := exec.CommandContext(ctx, "skopeo", "inspect", "docker://"+imageName)
-		if err := cmd.Run(); err != nil {
-			log.Printf("Image check failed for %s: %v", imageName, err)
-			return false, fmt.Errorf("required image not found: %s", imageName)
+		imageURL := "docker://" + imageName
+		log.Printf("Checking image: %s (URL: %s)", imageName, imageURL)
+
+		cmd := exec.CommandContext(ctx, "skopeo", "inspect", imageURL)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Image check failed for %s", imageName)
+			log.Printf("  Registry URL: %s", imageURL)
+			log.Printf("  Error: %v", err)
+			log.Printf("  Output: %s", string(output))
+			return false, fmt.Errorf("required image not found: %s (error: %v, output: %s)", imageName, err, string(output))
 		}
 		log.Printf("Image verified: %s", imageName)
 	}

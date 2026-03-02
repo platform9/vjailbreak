@@ -91,7 +91,12 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 				if err != nil {
 					return nil, errors.Wrap(err, "failed to get ESXi summary")
 				}
-				vmHosts = append(vmHosts, VMwareHostInfo{Name: host.Name(), HardwareUUID: hostSummary.Summary.Hardware.Uuid})
+				vmHosts = append(vmHosts, VMwareHostInfo{
+					Name:         host.Name(),
+					HardwareUUID: hostSummary.Summary.Hardware.Uuid,
+					VMCount:      len(hostSummary.Vm),
+					State:        string(hostSummary.Summary.Runtime.ConnectionState),
+				})
 			}
 			clusters = append(clusters, VMwareClusterInfo{
 				Name:       clusterProperties.Name,
@@ -139,11 +144,18 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 			Name:         host.Name,
 			HardwareUUID: host.HardwareUUID,
 			ClusterName:  clusterName,
+			VMCount:      host.VMCount,
+			State:        host.State,
+			HostConfigID: host.HostConfig,
 		},
 	}
 	existingHost := vjailbreakv1alpha1.VMwareHost{}
 	if err := scope.Client.Get(ctx, client.ObjectKey{Name: hostk8sName, Namespace: namespace}, &existingHost); err == nil {
-		if existingHost.Spec.Name != host.Name || existingHost.Spec.HardwareUUID != host.HardwareUUID || existingHost.Spec.ClusterName != clusterName || !reflect.DeepEqual(existingHost.Labels, vmwareHost.Labels) || !reflect.DeepEqual(existingHost.Annotations, vmwareHost.Annotations) {
+		// Preserve HostConfigID if not set in new spec
+		if vmwareHost.Spec.HostConfigID == "" {
+			vmwareHost.Spec.HostConfigID = existingHost.Spec.HostConfigID
+		}
+		if existingHost.Spec.Name != host.Name || existingHost.Spec.HardwareUUID != host.HardwareUUID || existingHost.Spec.ClusterName != clusterName || existingHost.Spec.VMCount != host.VMCount || existingHost.Spec.State != host.State || !reflect.DeepEqual(existingHost.Labels, vmwareHost.Labels) || !reflect.DeepEqual(existingHost.Annotations, vmwareHost.Annotations) {
 			existingHost.Spec = vmwareHost.Spec
 			existingHost.Labels = vmwareHost.Labels
 			existingHost.Annotations = vmwareHost.Annotations
@@ -498,6 +510,8 @@ func CreateDummyClusterForStandAloneESX(ctx context.Context, scope *scope.VMware
 			dummyClusterInfo.Hosts = append(dummyClusterInfo.Hosts, VMwareHostInfo{
 				Name:         host.Name(),
 				HardwareUUID: hostSummary.Summary.Hardware.Uuid,
+				VMCount:      len(hostSummary.Vm),
+				State:        string(hostSummary.Summary.Runtime.ConnectionState),
 			})
 		}
 

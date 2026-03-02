@@ -12,7 +12,14 @@ export const useMigrationFormActions = () => {
   const context = useContext(MigrationFormContext)
 
   if (!context) {
-    throw new Error('useMigrationFormActions must be used within a MigrationFormContext provider')
+    return {
+      openMigrationForm: () => {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('MigrationFormContext provider missing; openMigrationForm call ignored.')
+        }
+      }
+    }
   }
 
   return context

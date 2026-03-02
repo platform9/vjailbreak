@@ -162,18 +162,24 @@ func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Da
 
 // get VM by name
 func (vcclient *VCenterClient) GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error) {
+	vm, _, err := vcclient.GetVMWithDatacenter(ctx, name)
+	return vm, err
+}
+
+// GetVMWithDatacenter finds a VM by name and returns both the VM and its parent datacenter.
+func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name string) (*object.VirtualMachine, *object.Datacenter, error) {
 	datacenters, err := vcclient.getDatacenters(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get datacenters: %v", err)
+		return nil, nil, fmt.Errorf("failed to get datacenters: %v", err)
 	}
 	for _, datacenter := range datacenters {
 		vcclient.VCFinder.SetDatacenter(datacenter)
 		vm, err := vcclient.VCFinder.VirtualMachine(ctx, name)
 		if err == nil {
-			return vm, nil
+			return vm, datacenter, nil
 		}
 	}
-	return nil, fmt.Errorf("VM not found")
+	return nil, nil, fmt.Errorf("VM not found")
 }
 
 // RenameVM renames a VM in vCenter by appending a suffix to its name

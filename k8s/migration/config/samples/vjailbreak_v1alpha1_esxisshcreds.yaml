@@ -1,0 +1,41 @@
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: ESXiSSHCreds
+metadata:
+  labels:
+    app.kubernetes.io/name: vjailbreak
+    app.kubernetes.io/managed-by: kustomize
+  name: esxisshcreds-sample
+  namespace: migration-system
+spec:
+  # Reference to secret containing the SSH private key
+  # The secret should have a key named "privateKey" (or "ssh-privatekey" or "id_rsa")
+  secretRef:
+    name: esxi-ssh-key
+    namespace: migration-system
+  
+  # SSH username (default: "root")
+  username: root
+  
+  # Option 1: Discover ESXi hosts from VMwareCreds
+  # vmwareCredsRef:
+  #   name: vmware-creds
+  #   namespace: migration-system
+  
+  # Option 2: Explicitly specify ESXi hosts to validate
+  hosts:
+    - 192.168.1.100
+    - 192.168.1.101
+    - esxi-host-03.example.com
+---
+# Example secret containing the SSH private key
+apiVersion: v1
+kind: Secret
+metadata:
+  name: esxi-ssh-key
+  namespace: migration-system
+type: Opaque
+stringData:
+  privateKey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    # Your SSH private key here
+    -----END OPENSSH PRIVATE KEY-----

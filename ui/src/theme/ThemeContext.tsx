@@ -1,8 +1,23 @@
 import { createContext, useState, useContext, useMemo, useEffect, ReactNode } from 'react'
-import { ThemeProvider as MuiThemeProvider, createTheme, alpha } from '@mui/material/styles'
+import {
+  ThemeProvider as MuiThemeProvider,
+  createTheme,
+  alpha,
+  darken,
+  lighten
+} from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
-import { grey, blue } from '@mui/material/colors'
+import { grey } from '@mui/material/colors'
 import customTypography from './typography'
+import { PRIMARY_MAIN } from './theme'
+import eina04Light from './fonts/Eina-04/Extratype - Eina04-Light.otf'
+import eina04LightItalic from './fonts/Eina-04/Extratype - Eina04-LightItalic.otf'
+import eina04Regular from './fonts/Eina-04/Extratype - Eina04-Regular.otf'
+import eina04RegularItalic from './fonts/Eina-04/Extratype - Eina04-RegularItalic.otf'
+import eina04SemiBold from './fonts/Eina-04/Extratype - Eina04-SemiBold.otf'
+import eina04SemiBoldItalic from './fonts/Eina-04/Extratype - Eina04-SemiboldItalic.otf'
+import eina04Bold from './fonts/Eina-04/Extratype - Eina04-Bold.otf'
+import eina04BoldItalic from './fonts/Eina-04/Extratype - Eina04-BoldItalic.otf'
 import {
   // Basic colors
   WHITE,
@@ -126,9 +141,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         palette: {
           mode,
           primary: {
-            main: mode === 'dark' ? blue[300] : blue[700],
-            dark: mode === 'dark' ? blue[200] : blue[800],
-            light: mode === 'dark' ? blue[400] : blue[500],
+            main: PRIMARY_MAIN,
+            dark: darken(PRIMARY_MAIN, mode === 'dark' ? 0.15 : 0.2),
+            light: lighten(PRIMARY_MAIN, mode === 'dark' ? 0.2 : 0.15),
             contrastText: mode === 'dark' ? BLACK : WHITE
           },
           secondary: {
@@ -175,7 +190,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
             styleOverrides: {
               root: {
                 '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: mode === 'dark' ? blue[300] : blue[700]
+                  borderColor: PRIMARY_MAIN
                 }
               }
             }
@@ -192,6 +207,88 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
           },
           MuiCssBaseline: {
             styleOverrides: {
+              '@font-face': [
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Light'),
+                    url('${eina04Light}') format('opentype')
+                  `,
+                  fontWeight: 300,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-LightItalic'),
+                    url('${eina04LightItalic}') format('opentype')
+                  `,
+                  fontWeight: 300,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Regular'),
+                    url('${eina04Regular}') format('opentype')
+                  `,
+                  fontWeight: 400,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-RegularItalic'),
+                    url('${eina04RegularItalic}') format('opentype')
+                  `,
+                  fontWeight: 400,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-SemiBold'),
+                    url('${eina04SemiBold}') format('opentype')
+                  `,
+                  fontWeight: 600,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-SemiBoldItalic'),
+                    url('${eina04SemiBoldItalic}') format('opentype')
+                  `,
+                  fontWeight: 600,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-Bold'),
+                    url('${eina04Bold}') format('opentype')
+                  `,
+                  fontWeight: 700,
+                  fontStyle: 'normal',
+                  fontStretch: 'normal'
+                },
+                {
+                  fontFamily: 'Eina04',
+                  src: `
+                    local('Eina04-BoldItalic'),
+                    url('${eina04BoldItalic}') format('opentype')
+                  `,
+                  fontWeight: 700,
+                  fontStyle: 'italic',
+                  fontStretch: 'normal'
+                }
+              ],
               body: {
                 scrollbarColor:
                   mode === 'dark'

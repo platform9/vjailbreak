@@ -9,15 +9,18 @@ import MigrationFormDrawer from './features/migration/MigrationForm'
 import RollingMigrationFormDrawer from './features/migration/RollingMigrationForm'
 import MigrationsPage from './features/migration/pages/MigrationsPage'
 import AgentsPage from './features/agents/pages/AgentsPage'
-import CredentialsPage from './features/credentials/pages/CredentialsPage'
 import ClusterConversionsPage from './features/clusterConversions/pages/ClusterConversionsPage'
 import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
 import StorageManagementPage from './features/storageManagement/pages/StorageManagementPage'
+import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
+import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
+import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
+import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -59,21 +62,31 @@ function useHasAnyCredentials() {
   const isLoading = vmwareLoading || openstackLoading
   const isError = vmwareError || openstackError
 
-  const hasAnyCredentials = useMemo(() => {
+  const hasVmwareCredentials = useMemo(() => {
     const vmwareCount = Array.isArray(vmwareCredentials) ? vmwareCredentials.length : 0
-    const openstackCount = Array.isArray(openstackCredentials) ? openstackCredentials.length : 0
-    return vmwareCount + openstackCount > 0
-  }, [openstackCredentials, vmwareCredentials])
+    return vmwareCount > 0
+  }, [vmwareCredentials])
 
-  return { hasAnyCredentials, isLoading, isError }
+  const hasPcdCredentials = useMemo(() => {
+    const openstack = Array.isArray(openstackCredentials) ? openstackCredentials : []
+    return (
+      openstack.filter(
+        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+      ).length > 0
+    )
+  }, [openstackCredentials])
+
+  return { hasVmwareCredentials, hasPcdCredentials, isLoading, isError }
 }
 
 function DashboardIndexRedirect() {
-  const { hasAnyCredentials, isLoading, isError } = useHasAnyCredentials()
+  const { hasVmwareCredentials, hasPcdCredentials, isLoading, isError } = useHasAnyCredentials()
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
+
+  const hasAllCredentials = hasVmwareCredentials && hasPcdCredentials
 
   if (isLoading || vddkLoading) return null
   if (isError) return <Navigate to="/dashboard/migrations" replace />
@@ -81,10 +94,10 @@ function DashboardIndexRedirect() {
   // If the status endpoint fails, don't hard-block navigation.
   // Fall back to migrations/credentials behavior based on credentials only.
   if (vddkError) {
-    return hasAnyCredentials ? (
+    return hasAllCredentials ? (
       <Navigate to="/dashboard/migrations" replace />
     ) : (
-      <Navigate to="/dashboard/credentials" replace />
+      <Navigate to="/dashboard/credentials/vm" replace />
     )
   }
 
@@ -92,10 +105,10 @@ function DashboardIndexRedirect() {
     return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
   }
 
-  return hasAnyCredentials ? (
+  return hasAllCredentials ? (
     <Navigate to="/dashboard/migrations" replace />
   ) : (
-    <Navigate to="/dashboard/credentials" replace />
+    <Navigate to="/dashboard/credentials/vm" replace />
   )
 }
 
@@ -115,13 +128,19 @@ function App() {
   })
   const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
 
-  const { hasAnyCredentials, isLoading: credsLoading } = useHasAnyCredentials()
+  const {
+    hasVmwareCredentials,
+    hasPcdCredentials,
+    isLoading: credsLoading
+  } = useHasAnyCredentials()
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
 
-  const missingCredentials = !hasAnyCredentials
+  const missingVmwareCredentials = !hasVmwareCredentials
+  const missingPcdCredentials = !hasPcdCredentials
+  const missingCredentials = missingVmwareCredentials || missingPcdCredentials
   const missingVddk = !vddkUploaded
   const shouldShowGuide = missingCredentials || missingVddk
 
@@ -145,14 +164,36 @@ function App() {
     }
 
     if (guideMode === 'credentials') {
+      if (missingVmwareCredentials) {
+        return {
+          path: '/dashboard/credentials/vm',
+          target: '[data-tour="add-vmware-creds"]',
+          placement: 'bottom' as const,
+          spotlightPadding: 8,
+          content:
+            'Add your VMware credentials here. Then go to the PCD Credentials page to add your PCD credentials so you can start migrations.',
+          navState: undefined
+        }
+      }
+
+      if (missingPcdCredentials) {
+        return {
+          path: '/dashboard/credentials/pcd',
+          target: '[data-tour="add-pcd-creds"]',
+          placement: 'bottom' as const,
+          spotlightPadding: 8,
+          content: 'Add your PCD credentials here so you can start migrations.',
+          navState: undefined
+        }
+      }
+
       return {
-        path: '/dashboard/credentials',
-        target: '[data-tour="add-vmware-creds"]',
-        placement: 'bottom' as const,
-        spotlightPadding: 8,
-        content:
-          'Add your PCD and VMware credentials from the Credentials page. Then you can start migrations.',
-        navState: undefined
+        path: null as string | null,
+        target: null as string | null,
+        placement: 'center' as const,
+        spotlightPadding: 0,
+        content: '',
+        navState: undefined as undefined
       }
     }
 
@@ -164,7 +205,7 @@ function App() {
       content: '',
       navState: undefined as undefined
     }
-  }, [guideMode])
+  }, [guideMode, missingPcdCredentials, missingVmwareCredentials])
 
   const isOnExpectedPage = guideConfig.path ? location.pathname === guideConfig.path : false
 
@@ -258,7 +299,7 @@ function App() {
       return
     }
 
-    if (guideMode === 'credentials' && guideConfig.path === '/dashboard/credentials') {
+    if (guideMode === 'credentials' && guideConfig.path) {
       if (location.pathname !== guideConfig.path) {
         navigate(guideConfig.path, { replace: true })
       }
@@ -360,39 +401,48 @@ function App() {
           },
           buttonBack: {
             color: 'gray'
-          },
-          buttonSkip: {
-            color: 'gray'
           }
         }}
       />
-      <AppBar setOpenMigrationForm={handleOpenMigrationForm} hide={hideAppbar} />
-      <AppContent ref={appContentRef}>
-        {openMigrationForm && migrationType === 'standard' && (
-          <MigrationFormDrawer
-            open
-            onClose={() => setOpenMigrationForm(false)}
-            onSuccess={handleSuccess}
-          />
-        )}
-        {openMigrationForm && migrationType === 'rolling' && (
-          <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
-        )}
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardLayout />}>
-            <Route index element={<DashboardIndexRedirect />} />
-            <Route path="migrations" element={<MigrationsPage />} />
-            <Route path="agents" element={<AgentsPage />} />
-            <Route path="credentials" element={<CredentialsPage />} />
-            <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
-            <Route path="baremetal-config" element={<MaasConfigPage />} />
-            <Route path="global-settings" element={<GlobalSettingsPage />} />
-            <Route path="storage-management" element={<StorageManagementPage />} />
-          </Route>
-          <Route path="/onboarding" element={<Onboarding />} />
-        </Routes>
-      </AppContent>
+      <AppBar hide={hideAppbar} />
+      <MigrationFormContext.Provider
+        value={{
+          openMigrationForm: (type) => handleOpenMigrationForm(true, type)
+        }}
+      >
+        <AppContent ref={appContentRef}>
+          {openMigrationForm && migrationType === 'standard' && (
+            <MigrationFormDrawer
+              open
+              onClose={() => setOpenMigrationForm(false)}
+              onSuccess={handleSuccess}
+            />
+          )}
+          {openMigrationForm && migrationType === 'rolling' && (
+            <RollingMigrationFormDrawer open onClose={() => setOpenMigrationForm(false)} />
+          )}
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<DashboardIndexRedirect />} />
+              <Route path="migrations" element={<MigrationsPage />} />
+              <Route path="agents" element={<AgentsPage />} />
+              <Route
+                path="credentials"
+                element={<Navigate to="/dashboard/credentials/vm" replace />}
+              />
+              <Route path="credentials/vm" element={<VmCredentialsPage />} />
+              <Route path="credentials/pcd" element={<PcdCredentialsPage />} />
+              <Route path="cluster-conversions" element={<ClusterConversionsPage />} />
+              <Route path="baremetal-config" element={<MaasConfigPage />} />
+              <Route path="global-settings" element={<GlobalSettingsPage />} />
+              <Route path="storage-management" element={<StorageManagementPage />} />
+              <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
+            </Route>
+            <Route path="/onboarding" element={<Onboarding />} />
+          </Routes>
+        </AppContent>
+      </MigrationFormContext.Provider>
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}

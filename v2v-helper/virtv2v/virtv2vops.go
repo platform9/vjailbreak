@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +34,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -41,6 +42,9 @@ type VirtV2VOperations interface {
 	GetNetworkInterfaceNames(path string) ([]string, error)
 	IsRHELFamily(osRelease string) (bool, error)
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
+}
+type FirstBootWindows struct {
+	Script string
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
@@ -68,6 +72,46 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
 		return err
 	}
+	return nil
+}
+
+// UploadVirtIOScripts uploads the VirtIO installation scripts into the guest
+func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	log.Println("Uploading VirtIO installation scripts to guest")
+
+	// Verify the PowerShell script exists in the container
+	scriptPath := "/home/fedora/install-virtio-win12.ps1"
+	if _, err := os.Stat(scriptPath); err != nil {
+		return fmt.Errorf("PowerShell script not found at %s: %w", scriptPath, err)
+	}
+	log.Printf("Found PowerShell script at %s", scriptPath)
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var (
+		ans string
+		err error
+	)
+
+	// Upload PowerShell script to Windows\Temp which always exists
+	log.Println("Executing guestfs upload command...")
+	if useSingleDisk {
+		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Temp\install-virtio-win12.ps1`
+		log.Printf("Upload command: %s", command)
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		log.Printf("Upload command: %s /home/fedora/install-virtio-win12.ps1 C:\\Windows\\Temp\\install-virtio-win12.ps1", command)
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
+	}
+	if err != nil {
+		log.Printf("Upload command failed: %v", err)
+		log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload PowerShell script: %w: %s", err, strings.TrimSpace(ans))
+	}
+	log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+
+	log.Println("Successfully uploaded VirtIO installation scripts")
 	return nil
 }
 
@@ -192,10 +236,16 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
+
+		// Use Windows Server 2012-specific ISO if detected
+		if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+			filePath = "/home/fedora/virtio-win/virtio-win-server12.iso"
+			log.Printf("Detected Windows Server 2012, using virtio-win-server12.iso")
+		}
 
 		found, err := CheckForVirtioDrivers()
 		if err != nil {
@@ -219,7 +269,11 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--no-fstrim"}
+
+	if strings.ToLower(ostype) == constants.OSFamilyLinux {
+		args = append(args, "--firstboot", "/home/fedora/scripts/user_firstboot.sh")
+	}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -465,7 +519,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"-i")
 	cmd.Stdin = strings.NewReader(command)
 	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
@@ -700,6 +754,49 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	return "", err
 }
 
+// GetWindowsVersion detects the Windows version using guestfish inspect commands
+func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var osPath string
+	var err error
+
+	if useSingleDisk {
+		osPath, err = RunCommandInGuest(diskPath, "inspect-os", false)
+	} else {
+		osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect OS: %v", err)
+	}
+
+	osPath = strings.TrimSpace(osPath)
+	if osPath == "" {
+		return "", fmt.Errorf("empty OS path from inspect-os")
+	}
+
+	var productName string
+	if useSingleDisk {
+		productName, err = RunCommandInGuest(diskPath, fmt.Sprintf("inspect-get-product-name %s", osPath), false)
+	} else {
+		productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
+	}
+
+	if err != nil {
+		log.Printf("Failed to get Windows product name: %v", err)
+		return "Windows (version unknown)", nil
+	}
+
+	productName = strings.TrimSpace(productName)
+	if productName == "" {
+		return "Windows (version unknown)", nil
+	}
+
+	log.Printf("Detected Windows version: %s", productName)
+	return strings.ToLower(productName), nil
+}
+
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
 // during guest inspection phase for Linux migrations
 func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
@@ -756,11 +853,11 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var runOutput string
 
 	if useSingleDisk {
-		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
+		command := "sh \"/tmp/generate-mount-persistence.sh --force-uuid\""
 		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "sh"
-		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
+		runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh", "--force-uuid")
 	}
 
 	if runErr != nil {
@@ -920,5 +1017,89 @@ func InjectRestorationScript(disks []vm.VMDisk, useSingleDisk bool, diskPath str
 		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
 		return err
 	}
+	return nil
+}
+
+func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, diskPath string, firstbootwinscripts []FirstBootWindows) error {
+	log.Println("Collecting Firstboot Scripts to Inject")
+	var ans string
+	var err error
+	var scriptDir string = "/home/fedora/firstboot"
+	if _, err := os.Stat(scriptDir); os.IsNotExist(err) {
+		log.Printf("Creating directory %s", scriptDir)
+
+		cpCmd := exec.Command("mkdir", scriptDir)
+		if err := cpCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
+		}
+	}
+	scriptsMetadata := []string{}
+	for idx, script := range firstbootwinscripts {
+		log.Printf("Injecting Firstboot Script: %s", script.Script)
+
+		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
+		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
+		if idx > 0 {
+			scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
+		}
+		cpCmd := exec.Command("cp", srcPath, dstPath)
+		if err := cpCmd.Run(); err != nil {
+			return fmt.Errorf("failed to copy firstboot script %s: %v", script.Script, err)
+		}
+	}
+	// Write scripts metadata to JSON file
+	metadataPath := "/home/fedora/firstboot/scripts.json"
+	metadataJSON, err := json.Marshal(scriptsMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal scripts metadata: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, metadataJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write scripts metadata to %s: %v", metadataPath, err)
+	}
+	log.Printf("Wrote scripts metadata to %s", metadataPath)
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	if useSingleDisk {
+		command := `copy-in /home/fedora/firstboot /`
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "copy-in"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/firstboot", "/")
+	}
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", "copy-in", err, strings.TrimSpace(ans))
+		return err
+	}
+	return nil
+}
+
+// PushWindowsFirstBoot moves the user_firstboot script from scripts directory to store directory
+// and changes extension from .sh to .ps1 for Windows compatibility
+func PushWindowsFirstBoot() error {
+	srcPath := "/home/fedora/scripts/user_firstboot.sh"
+	dstPath := "/home/fedora/store/user_firstboot.ps1"
+
+	// Check if source file exists
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("source file not found at %s: %w", srcPath, err)
+	}
+
+	// Read the source file content
+	content, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to read source file %s: %w", srcPath, err)
+	}
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll("/home/fedora/store", 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Write to destination with new extension
+	if err := os.WriteFile(dstPath, content, 0644); err != nil {
+		return fmt.Errorf("failed to write destination file %s: %w", dstPath, err)
+	}
+
+	log.Printf("Successfully moved %s to %s", srcPath, dstPath)
 	return nil
 }

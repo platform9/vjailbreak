@@ -23,6 +23,7 @@ export type MigrationPolicyFieldKey =
   | 'disconnectSourceNetwork'
   | 'fallbackToDhcp'
   | 'networkPersistence'
+  | 'removeVMwareTools'
   | 'useGPUFlavor'
   | 'useFlavorless'
 
@@ -36,6 +37,7 @@ export const MIGRATION_POLICY_FIELDS: Array<{ key: MigrationPolicyFieldKey; labe
   { key: 'disconnectSourceNetwork', label: 'Disconnect source network' },
   { key: 'fallbackToDhcp', label: 'Fallback to DHCP' },
   { key: 'networkPersistence', label: 'Persist source network' },
+  { key: 'removeVMwareTools', label: 'Remove VMware Tools' },
   { key: 'useGPUFlavor', label: 'Use GPU-enabled flavours' },
   { key: 'useFlavorless', label: 'Use dynamic hotplug-enabled flavors' }
 ]

@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metrics provides Prometheus metrics for tracking VM migration progress and status.
-package metrics
+// Package migrationmetrics provides Prometheus metrics for tracking VM migration progress and status.
+package migrationmetrics
 
 import (
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 

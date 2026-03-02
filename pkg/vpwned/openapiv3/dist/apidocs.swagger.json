@@ -95,6 +95,38 @@
         ]
       }
     },
+    "/vpw/v1/cleanup": {
+      "post": {
+        "operationId": "Version_Cleanup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCleanupResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCleanupRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Version"
+        ]
+      }
+    },
     "/vpw/v1/cordon_host": {
       "post": {
         "operationId": "VCenter_CordonHost",
@@ -633,6 +665,38 @@
         ]
       }
     },
+    "/vpw/v1/revalidate_credentials": {
+      "post": {
+        "operationId": "VailbreakProxy_RevalidateCredentials",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiRevalidateCredentialsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiRevalidateCredentialsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/set_resource_bm2pxeboot": {
       "post": {
         "operationId": "BMProvider_SetResourceBM2PXEBoot",
@@ -975,70 +1039,6 @@
         ]
       }
     },
-    "/vpw/v1/upgrade/cleanup_step": {
-      "post": {
-        "operationId": "Version_CleanupStep",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/apiCleanupStepResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/apiCleanupStepRequest"
-            }
-          }
-        ],
-        "tags": [
-          "Version"
-        ]
-      }
-    },
-    "/vpw/v1/upgrade/confirm_cleanup": {
-      "post": {
-        "operationId": "Version_ConfirmCleanupAndUpgrade",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/apiUpgradeResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/apiUpgradeRequest"
-            }
-          }
-        ],
-        "tags": [
-          "Version"
-        ]
-      }
-    },
     "/vpw/v1/upgrade/progress": {
       "get": {
         "operationId": "Version_GetUpgradeProgress",
@@ -1241,20 +1241,12 @@
         }
       }
     },
-    "apiCleanupStepRequest": {
-      "type": "object",
-      "properties": {
-        "step": {
-          "type": "string"
-        }
-      }
+    "apiCleanupRequest": {
+      "type": "object"
     },
-    "apiCleanupStepResponse": {
+    "apiCleanupResponse": {
       "type": "object",
       "properties": {
-        "step": {
-          "type": "string"
-        },
         "success": {
           "type": "boolean"
         },
@@ -1417,6 +1409,23 @@
           "type": "boolean"
         },
         "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiIpmi_type": {
+      "type": "object",
+      "properties": {
+        "lan": {
+          "type": "string"
+        },
+        "lanplus": {
+          "type": "string"
+        },
+        "openIpmi": {
+          "type": "string"
+        },
+        "tool": {
           "type": "string"
         }
       }
@@ -1659,7 +1668,7 @@
           "type": "boolean"
         },
         "ipmiInterface": {
-          "$ref": "#/definitions/apiipmi_type"
+          "$ref": "#/definitions/apiIpmi_type"
         }
       }
     },
@@ -1738,6 +1747,28 @@
         },
         "volume": {
           "$ref": "#/definitions/apiVolumeInfo"
+        }
+      }
+    },
+    "apiRevalidateCredentialsRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "apiRevalidateCredentialsResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
         }
       }
     },
@@ -2114,23 +2145,6 @@
       "type": "object",
       "properties": {
         "providerName": {
-          "type": "string"
-        }
-      }
-    },
-    "apiipmi_type": {
-      "type": "object",
-      "properties": {
-        "lan": {
-          "type": "string"
-        },
-        "lanplus": {
-          "type": "string"
-        },
-        "openIpmi": {
-          "type": "string"
-        },
-        "tool": {
           "type": "string"
         }
       }

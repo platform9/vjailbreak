@@ -52,25 +52,14 @@ export const getUpgradeProgress = async (): Promise<UpgradeProgressResponse> => 
   return get<UpgradeProgressResponse>({ endpoint })
 }
 
-export const confirmCleanupAndUpgrade = async (
-  targetVersion: string,
-  autoCleanup: boolean
-): Promise<UpgradeResponse> => {
-  const endpoint = `/dev-api/sdk/vpw/v1/upgrade/confirm_cleanup`
-  return post<UpgradeResponse>({
-    endpoint,
-    data: { targetVersion, autoCleanup }
-  })
-}
-
 export const getAvailableTags = async (): Promise<AvailableUpdates> => {
   const endpoint = '/dev-api/sdk/vpw/v1/tags'
   return get<AvailableUpdates>({ endpoint })
 }
 
-export async function cleanupStepApiCall(stepKey: string): Promise<{ success: boolean }> {
-  return await post<{ success: boolean }>({
-    endpoint: '/dev-api/sdk/vpw/v1/upgrade/cleanup_step',
-    data: { step: stepKey }
+export async function cleanupApiCall(): Promise<{ success: boolean; message: string }> {
+  return await post<{ success: boolean; message: string }>({
+    endpoint: '/dev-api/sdk/vpw/v1/cleanup',
+    data: {}
   })
 }

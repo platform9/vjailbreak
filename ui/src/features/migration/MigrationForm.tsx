@@ -140,6 +140,7 @@ export interface FormValues extends Record<string, unknown> {
   fallbackToDHCP?: boolean
   useGPU?: boolean
   networkPersistence?: boolean
+  removeVMwareTools?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -606,7 +607,9 @@ export default function MigrationFormDrawer({
     }
   }
 
-  const createArrayCredsMapping = async (arrayCredsMappingsParams: { source: string; target: string }[]) => {
+  const createArrayCredsMapping = async (
+    arrayCredsMappingsParams: { source: string; target: string }[]
+  ) => {
     const body = createArrayCredsMappingJson({
       mappings: arrayCredsMappingsParams
     })
@@ -693,11 +696,40 @@ export default function MigrationFormDrawer({
       })
     }
 
+    const networkOverridesPerVM: Record<
+      string,
+      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+    > = {}
+    if (params.vms) {
+      params.vms.forEach((vm) => {
+        const preserveIp = vm.preserveIp || {}
+        const preserveMac = vm.preserveMac || {}
+
+        const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+
+        if (indices.size === 0) return
+
+        networkOverridesPerVM[vm.name] = Array.from(indices)
+          .map((indexStr) => {
+            const interfaceIndex = Number(indexStr)
+            const ipFlag = preserveIp[interfaceIndex]
+            const macFlag = preserveMac[interfaceIndex]
+            return {
+              interfaceIndex,
+              preserveIP: ipFlag !== false,
+              preserveMAC: macFlag !== false
+            }
+          })
+          .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
+      })
+    }
+
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
       ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
+      ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime
@@ -733,6 +765,9 @@ export default function MigrationFormDrawer({
       ...(typeof params.networkPersistence === 'boolean' && {
         networkPersistence: params.networkPersistence
       }),
+      ...(typeof params.removeVMwareTools === 'boolean' && {
+        removeVMwareTools: params.removeVMwareTools
+      }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
       acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk
@@ -742,7 +777,6 @@ export default function MigrationFormDrawer({
 
     try {
       const data = await postMigrationPlan(body)
-
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
         migrationName: data.metadata?.name,
@@ -907,7 +941,7 @@ export default function MigrationFormDrawer({
     })
   }, [selectedMigrationOptions, params, fieldErrors])
 
-  // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
+  // VM validation - ensure OS is assigned/detected for selected VMs
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
       return { hasError: false, errorMessage: '' }
@@ -925,11 +959,6 @@ export default function MigrationFormDrawer({
       return powerState === 'powered-on'
     })
 
-    // Check for powered-off VMs without IP addresses
-    const vmsWithoutIPs = poweredOffVMs.filter(
-      (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
-    )
-
     // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
@@ -939,17 +968,9 @@ export default function MigrationFormDrawer({
         )
       )
 
-    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
+    if (vmsWithoutOSAssigned.length > 0) {
       let errorMessage = 'Cannot proceed with migration: '
       const issues: string[] = []
-
-      if (vmsWithoutIPs.length > 0) {
-        issues.push(
-          `${vmsWithoutIPs.length} powered-off VM${
-            vmsWithoutIPs.length === 1 ? '' : 's'
-          } missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`
-        )
-      }
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
@@ -971,7 +992,8 @@ export default function MigrationFormDrawer({
   // RDM validation - check if RDM disks have missing required configuration
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: params.vms || [],
-    rdmDisks: rdmDisks
+    rdmDisks: rdmDisks,
+    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
   })
 
   const storageCopyMethod = params.storageCopyMethod || 'normal'
@@ -1155,7 +1177,12 @@ export default function MigrationFormDrawer({
     return availableVmwareDatastores.filter(
       (ds) => !(params.storageMappings || []).some((m) => m.source === ds)
     ).length
-  }, [availableVmwareDatastores, params.storageMappings, params.arrayCredsMappings, params.storageCopyMethod])
+  }, [
+    availableVmwareDatastores,
+    params.storageMappings,
+    params.arrayCredsMappings,
+    params.storageCopyMethod
+  ])
 
   const step1HasErrors = Boolean(
     fieldErrors['vmwareCluster'] ||
@@ -1186,7 +1213,109 @@ export default function MigrationFormDrawer({
       (selectedMigrationOptions.postMigrationScript && fieldErrors['postMigrationScript'])
   )
 
-  const step5Complete = Boolean(touchedSections.options && !step5HasErrors)
+  const hasAnyMigrationOptionSelected = useMemo(() => {
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    return (
+      Boolean(selectedMigrationOptions.dataCopyMethod) ||
+      Boolean(selectedMigrationOptions.dataCopyStartTime) ||
+      Boolean(selectedMigrationOptions.cutoverOption) ||
+      Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
+      postMigrationActionSelected
+    )
+  }, [selectedMigrationOptions])
+
+  const areSelectedMigrationOptionsConfigured = useMemo(() => {
+    if (!hasAnyMigrationOptionSelected) return false
+
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
+    const periodicSyncIntervalValue = String(params.periodicSyncInterval ?? '').trim()
+
+    const dataCopyStartTimeOk =
+      !selectedMigrationOptions.dataCopyStartTime ||
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
+
+    const cutoverOk = !selectedMigrationOptions.cutoverOption
+      ? true
+      : Boolean(
+          params.cutoverOption &&
+            !fieldErrors['cutoverOption'] &&
+            (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
+              (params.cutoverStartTime &&
+                params.cutoverEndTime &&
+                !fieldErrors['cutoverStartTime'] &&
+                !fieldErrors['cutoverEndTime'])) &&
+            (params.cutoverOption !== CUTOVER_TYPES.ADMIN_INITIATED ||
+              !selectedMigrationOptions.periodicSyncEnabled ||
+              (Boolean(periodicSyncIntervalValue) &&
+                periodicSyncIntervalValue !== 'undefined' &&
+                periodicSyncIntervalValue !== 'null' &&
+                !fieldErrors['periodicSyncInterval']))
+        )
+
+    const periodicSyncOk =
+      !selectedMigrationOptions.periodicSyncEnabled ||
+      (Boolean(periodicSyncIntervalValue) &&
+        periodicSyncIntervalValue !== 'undefined' &&
+        periodicSyncIntervalValue !== 'null' &&
+        !fieldErrors['periodicSyncInterval'])
+
+    const postMigrationScriptOk =
+      !selectedMigrationOptions.postMigrationScript ||
+      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
+
+    const postMigrationAction = selectedMigrationOptions.postMigrationAction
+    const postMigrationActionSelected = Boolean(
+      postMigrationAction &&
+        typeof postMigrationAction === 'object' &&
+        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+    )
+
+    const postMigrationActionOk = !postMigrationActionSelected
+      ? true
+      : Boolean(
+          postMigrationAction &&
+            typeof postMigrationAction === 'object' &&
+            (Boolean(postMigrationAction.renameVm) ||
+              Boolean(postMigrationAction.moveToFolder) ||
+              !postMigrationAction.suffix ||
+              Boolean(params.postMigrationAction?.suffix) ||
+              !postMigrationAction.folderName ||
+              Boolean(params.postMigrationAction?.folderName))
+        )
+
+    return (
+      dataCopyStartTimeOk &&
+      cutoverOk &&
+      periodicSyncOk &&
+      postMigrationScriptOk &&
+      postMigrationActionOk
+    )
+  }, [
+    hasAnyMigrationOptionSelected,
+    selectedMigrationOptions,
+    params.dataCopyStartTime,
+    params.cutoverOption,
+    params.cutoverStartTime,
+    params.cutoverEndTime,
+    params.periodicSyncInterval,
+    params.postMigrationScript,
+    params.postMigrationAction,
+    fieldErrors
+  ])
+
+  const step5Complete = Boolean(
+    touchedSections.options && areSelectedMigrationOptionsConfigured && !step5HasErrors
+  )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
     () => [

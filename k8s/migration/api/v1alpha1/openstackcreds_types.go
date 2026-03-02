@@ -72,11 +72,12 @@ type ServerGroupInfo struct {
 
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
-	VolumeTypes    []string            `json:"volumeTypes,omitempty"`
-	VolumeBackends []string            `json:"volumeBackends,omitempty"`
-	Networks       []string            `json:"networks,omitempty"`
-	SecurityGroups []SecurityGroupInfo `json:"securityGroups,omitempty"`
-	ServerGroups   []ServerGroupInfo   `json:"serverGroups,omitempty"`
+	VolumeTypes          []string            `json:"volumeTypes,omitempty"`
+	VolumeBackends       []string            `json:"volumeBackends,omitempty"`
+	BackendVolumeTypeMap map[string]string   `json:"backendVolumeTypeMap,omitempty"`
+	Networks             []string            `json:"networks,omitempty"`
+	SecurityGroups       []SecurityGroupInfo `json:"securityGroups,omitempty"`
+	ServerGroups         []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }
 
 // OpenstackCredsSpec defines the desired state of OpenstackCreds
@@ -128,6 +129,8 @@ type OpenstackCredsStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.openstackValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:name="Secret Name",type="string",JSONPath=".spec.secretRef.name"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // OpenstackCreds is the Schema for the OpenStack credentials API that defines authentication
 // and connection details for OpenStack environments. It provides a secure way to store and validate
