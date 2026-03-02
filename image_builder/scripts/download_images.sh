@@ -77,7 +77,7 @@ images=(
 
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  sudo ctr  i pull "$img"
+  sudo ctr  i pull --platform linux/amd64 "$img"
 
   tag=$(echo "$img" | cut -d'@' -f1)
   fname=$(echo "$tag" | tr '/:@' '_')
