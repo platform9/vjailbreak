@@ -297,6 +297,17 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
 	log.Printf("virt-v2v-in-place conversion took: %s", duration)
+	// Removing stale registries from Windows
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
+		log.Println("Removing stale registries from Windows")
+		// run command virt-win-reg --merge <WindowsGuest> /home/fedora/Remove-Guestor.reg
+		cmd := exec.CommandContext(ctx, "virt-win-reg", "--merge", path, "/home/fedora/Remove-Guestor.reg")
+		log.Printf("Executing %s", cmd.String())
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Failed to remove stale registries: %s", err)
+		}
+	}
 	return nil
 }
 

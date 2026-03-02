@@ -48,6 +48,7 @@ RUN dnf install -y \
     ./virt-v2v-2.7.17-1.fc42.x86_64.rpm \
     ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
     guestfs-tools \
+    virt-win-reg \
     netplan && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
@@ -75,3 +76,4 @@ COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
 COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
 COPY scripts/firstboot/store /home/fedora/store
 COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
+COPY scripts/registry/Remove-Guestor.reg /home/fedora/Remove-Guestor.reg
