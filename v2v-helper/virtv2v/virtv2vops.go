@@ -45,6 +45,7 @@ type VirtV2VOperations interface {
 }
 type FirstBootWindows struct {
 	Script string
+	Async  bool
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
@@ -1033,14 +1034,14 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
 		}
 	}
-	scriptsMetadata := []string{}
+	scriptsMetadata := []FirstBootWindows{}
 	for idx, script := range firstbootwinscripts {
 		log.Printf("Injecting Firstboot Script: %s", script.Script)
 
 		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
 		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
 		if idx > 0 {
-			scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
+			scriptsMetadata = append(scriptsMetadata, FirstBootWindows{Script: fmt.Sprintf("%d-%s", idx, script.Script), Async: script.Async})
 		}
 		cpCmd := exec.Command("cp", srcPath, dstPath)
 		if err := cpCmd.Run(); err != nil {
@@ -1050,6 +1051,7 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 	// Write scripts metadata to JSON file
 	metadataPath := "/home/fedora/firstboot/scripts.json"
 	metadataJSON, err := json.Marshal(scriptsMetadata)
+	log.Printf("Writing scripts metadata to %v", metadataJSON)
 	if err != nil {
 		return fmt.Errorf("failed to marshal scripts metadata: %v", err)
 	}
