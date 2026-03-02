@@ -9,6 +9,7 @@ $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
 $StateFilePath = Join-Path $ScriptRoot "Firstboot-Scheduler.state"
 $SchedulerScriptPath = Join-Path $ScriptRoot "Firstboot-Scheduler.ps1"
+$failedScriptNames = New-Object 'System.Collections.Generic.List[string]'
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -283,11 +284,16 @@ function Get-Script{
         }
         foreach ($entry in $stateEntries) {
             $entryName,$scriptAsync, [int]$entryNumber = $entry -split '\|'
+            if ($failedScriptNames -contains $entryName) {
+                continue
+            }else{
+
             if ($entryNumber -eq -1){
                 return $entryName, $scriptAsync
             } 
             if ($entryNumber -ge 0 -and $entryNumber -lt 3){
                 return $entryName, $scriptAsync
+            }
             }
         }
     return "", ""
@@ -331,6 +337,7 @@ try {
                     if ($result.ExitCode -ne 0) {
                         Write-Log "Script '$script' failed with exit code $($result.ExitCode)" -Level "ERROR"
                         Write-Log "Output: $($result.Output)" -Level "ERROR"
+                        $failedScriptNames.Add($script)
                         if ($async -eq $false) {
                                 break
                         }
