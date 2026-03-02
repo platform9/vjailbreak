@@ -41,6 +41,8 @@ INGRESS_NGINX_VERSION="v1.14.3"
 KUBE_WEBHOOK_CERTGEN_VERSION="v1.6.7"
 ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}"
 kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}"
+virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+virtiowinserver12="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso"
 
 images=(
   "$kube_state_metrics"
