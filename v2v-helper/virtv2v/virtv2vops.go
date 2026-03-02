@@ -525,6 +525,7 @@ func AddWildcardNetplanForL2(disks []vm.VMDisk, diskPath string) error {
 	return nil
 
 }
+
 func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac

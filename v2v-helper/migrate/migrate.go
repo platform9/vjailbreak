@@ -974,23 +974,36 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
 	bootVolumeIndex = -1
 
+	utils.PrintLog("=== BOOT VOLUME DETECTION ===")
+	utils.PrintLog(fmt.Sprintf("VM UEFI Status: %t", vminfo.UEFI))
+	utils.PrintLog(fmt.Sprintf("Boot detection command: %s", getBootCommand))
+	utils.PrintLog(fmt.Sprintf("Total disks to scan: %d", len(vminfo.VMDisks)))
+
 	for idx := range vminfo.VMDisks {
+		utils.PrintLog(fmt.Sprintf("[Disk %d] Scanning %s (Path: %s)", idx, vminfo.VMDisks[idx].Name, vminfo.VMDisks[idx].Path))
 		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
 		if cmdErr != nil {
-			utils.PrintLog(fmt.Sprintf("Error running command '%s' on disk %d: %v", getBootCommand, idx, cmdErr))
+			utils.PrintLog(fmt.Sprintf("[Disk %d] Error running command '%s': %v", idx, getBootCommand, cmdErr))
 			continue
 		}
 
 		if ans == "" {
-			utils.PrintLog(fmt.Sprintf("No output from '%s' on disk %d", getBootCommand, idx))
+			utils.PrintLog(fmt.Sprintf("[Disk %d] No output from '%s'", idx, getBootCommand))
 			continue
 		}
 
-		utils.PrintLog(fmt.Sprintf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans)))
+		utils.PrintLog(fmt.Sprintf("[Disk %d] SUCCESS - Output from '%s': '%s'", idx, getBootCommand, strings.TrimSpace(ans)))
 		osPath = strings.TrimSpace(ans)
 		bootVolumeIndex = idx
 		break
 	}
+
+	if bootVolumeIndex >= 0 {
+		utils.PrintLog(fmt.Sprintf("BOOT VOLUME DETECTED: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
+	} else {
+		utils.PrintLog("WARNING: No boot volume detected")
+	}
+	utils.PrintLog("=== END BOOT VOLUME DETECTION ===")
 
 	return bootVolumeIndex, osPath, nil
 }
@@ -1032,6 +1045,27 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
+	// Add ESP detection for UEFI VMs
+	espDiskIndex := -1
+	if vminfo.UEFI {
+		migobj.logMessage("=== UEFI ESP DETECTION ===")
+		migobj.logMessage("VM is UEFI - checking for EFI System Partition")
+
+		// Detect which disk contains the ESP using all disks together
+		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
+		if espErr != nil {
+			migobj.logMessage(fmt.Sprintf("Error detecting ESP disk: %v", espErr))
+		} else if detectedESPIndex >= 0 {
+			espDiskIndex = detectedESPIndex
+			migobj.logMessage(fmt.Sprintf("ESP FOUND on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+			migobj.logMessage(fmt.Sprintf("ESP Volume ID: %s", vminfo.VMDisks[espDiskIndex].OpenstackVol.ID))
+		} else {
+			migobj.logMessage("WARNING: No ESP detected - this may cause boot failure!")
+		}
+
+		migobj.logMessage("=== END ESP DETECTION ===")
+	}
+
 	lvm, lvmErr := virtv2v.CheckForLVM(vminfo.VMDisks)
 	if lvmErr != nil || lvm == "" {
 		return -1, "", "", errors.Wrap(lvmErr, "OS install location not found, Failed to check for LVM")
@@ -1064,6 +1098,23 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		}
 	} else {
 		migobj.logMessage("Skipping generate-mount-persistence.sh script (AUTO_FSTAB_UPDATE is disabled)")
+	}
+
+	// For UEFI VMs with ESP on a separate disk, we need to handle boot disk selection carefully
+	// The ESP disk index is returned for use in CreateVM
+	if vminfo.UEFI && espDiskIndex >= 0 {
+		// Mark the ESP disk
+		vminfo.VMDisks[espDiskIndex].ESP = true
+
+		if espDiskIndex != finalBootIndex {
+			migobj.logMessage(fmt.Sprintf("UEFI MULTI-DISK LAYOUT DETECTED:"))
+			migobj.logMessage(fmt.Sprintf("  Root/Boot disk: Disk %d (%s)", finalBootIndex, vminfo.VMDisks[finalBootIndex].Name))
+			migobj.logMessage(fmt.Sprintf("  ESP disk: Disk %d (%s)", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+			migobj.logMessage("  ESP disk will be attached at VM creation time with BootIndex=0")
+			migobj.logMessage("  Root disk will be attached at VM creation time with BootIndex=1")
+		} else {
+			migobj.logMessage(fmt.Sprintf("UEFI SINGLE-DISK LAYOUT: ESP and root are on same disk %d (%s)", finalBootIndex, vminfo.VMDisks[finalBootIndex].Name))
+		}
 	}
 
 	return finalBootIndex, finalOsPath, osRelease, nil
@@ -1395,8 +1446,18 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// Step 7: Mark boot volume
+	utils.PrintLog("=== FINAL BOOT DISK SELECTION ===")
+	utils.PrintLog(fmt.Sprintf("Boot disk index: %d", bootVolumeIndex))
+	utils.PrintLog(fmt.Sprintf("Boot disk name: %s", vminfo.VMDisks[bootVolumeIndex].Name))
+	utils.PrintLog(fmt.Sprintf("Boot disk volume ID: %s", vminfo.VMDisks[bootVolumeIndex].OpenstackVol.ID))
+	utils.PrintLog(fmt.Sprintf("VM UEFI: %t", vminfo.UEFI))
+	if vminfo.UEFI {
+		utils.PrintLog("WARNING: For UEFI VMs, ensure the boot disk contains the EFI System Partition!")
+		utils.PrintLog("         If ESP is on a different disk, the VM will drop into UEFI shell!")
+	}
 	utils.PrintLog(fmt.Sprintf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
+	utils.PrintLog("=== END BOOT DISK SELECTION ===")
 
 	// Step 8: Perform disk conversion
 	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease); err != nil {
