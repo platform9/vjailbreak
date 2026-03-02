@@ -7,35 +7,15 @@ packer {
   }
 }
 
-variable "ubuntu_cloud_url" {
-  type    = string
-  default = "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
-}
-
-variable "ubuntu_cloud_checksum" {
-  type    = string
-  default = "file:https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS"
-}
-
-variable "k3s_version" {
-  type    = string
-  default = "v1.31.4+k3s1"
-}
-
-variable "helm_version" {
-  type    = string
-  default = "v3.16.3"
-}
-
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = var.ubuntu_cloud_url
-  iso_checksum         = var.ubuntu_cloud_checksum
+  iso_url              = "vjailbreak-image.qcow2"
+  iso_checksum         = "sha256:e0514d0ee287ca7fec7670e41ba67304f57eded5f4151f87734d7d3cc0a0d60a"
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
-  disk_size            = "10G"
+  disk_size            = "20G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
@@ -66,10 +46,6 @@ build {
   provisioner "file" {
     source      = "${path.root}/scripts/install.sh"
     destination = "/tmp/install.sh"
-  }
-  provisioner "file" {
-    source      = "${path.root}/scripts/setup-k3s.sh"
-    destination = "/tmp/setup-k3s.sh"
   }
   provisioner "file" {
     source      = "${path.root}/scripts/pf9-htpasswd.sh"
@@ -124,13 +100,8 @@ build {
     destination = "/tmp/opensource.txt"
   }
   provisioner "shell" {
-    environment_vars = [
-      "K3S_VERSION=${var.k3s_version}"
-    ]
     inline = [
     "sudo mkdir -p /etc/pf9",
-    "chmod +x /tmp/setup-k3s.sh",
-    "sudo -E /tmp/setup-k3s.sh",
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/log_collector.sh /etc/pf9/log_collector.sh",
@@ -157,20 +128,9 @@ build {
     "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
     "sudo bash /tmp/user_setup_daemon.sh",
-    "sudo apt-get update",
-    "sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y",
-    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient netcat-openbsd vim telnet dnsutils net-tools iputils-ping traceroute tcpdump iproute2 bind9-dnsutils nmap htop iotop strace lsof",
-    "sudo systemctl enable cron",
-    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
-    "curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
-    "chmod 700 /tmp/get_helm.sh",
-    "DESIRED_VERSION=${var.helm_version} /tmp/get_helm.sh",
-    "rm /tmp/get_helm.sh",
-    "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
-    "sudo helm repo update",
-    "sudo helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
+    "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab", 
     ]
   }
 }
