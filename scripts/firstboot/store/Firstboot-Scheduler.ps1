@@ -259,7 +259,7 @@ function Init-Table{
             Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
             
             foreach ($script in $scriptsArray) {
-                $script_name = $script.name
+                $script_name = $script.Script
                 $script_async = $script.async
                 Add-Content -Path $StateFilePath -Value "$script_name|$script_async|-1"
             }
