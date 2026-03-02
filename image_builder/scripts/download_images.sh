@@ -2,8 +2,6 @@
 set -euo pipefail
 
 TAG=$1
-
-# Always use k8s.io namespace for Kubernetes images
 CTR="sudo ctr"
 
 mkdir -p image_builder/images
@@ -39,10 +37,31 @@ cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER
 
 INGRESS_NGINX_VERSION="v1.14.3"
 KUBE_WEBHOOK_CERTGEN_VERSION="v1.6.7"
-ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}"
-kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}"
+
+# SHA pinned images (added)
+ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_NGINX_VERSION}@sha256:82917be97c0939f6ada1717bb39aa7e66c229d6cfb10dcfc8f1bd42f9efe0f81"
+kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:${KUBE_WEBHOOK_CERTGEN_VERSION}@sha256:7c74a715af2c94cb734785b4d3ea1357b4f02b88e1e123c622a9cb68b62f669c"
+
 virtiowin="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 virtiowinserver12="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso"
+
+# -----------------------------
+# Download cert-manager manifest (added)
+# -----------------------------
+
+echo "[*] Downloading cert-manager manifest"
+
+CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+MANIFEST_PATH="image_builder/cert-manager-manifests/cert-manager.yaml"
+
+curl -L "${CERT_MANAGER_URL}" -o "${MANIFEST_PATH}"
+
+# Change imagePullPolicy to IfNotPresent
+sed -i 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' "${MANIFEST_PATH}"
+
+# -----------------------------
+# Image List
+# -----------------------------
 
 images=(
   "$kube_state_metrics"
@@ -76,7 +95,7 @@ images=(
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
 
-  # Pull all platforms to avoid manifest export errors
+  # Keep original behavior (all platforms)
   $CTR images pull --all-platforms "$img"
 
   tag=$(echo "$img" | cut -d'@' -f1)
@@ -88,10 +107,14 @@ done
 
 echo "[✔] All images downloaded and exported successfully."
 
-# Download virtio-win.iso
+# -----------------------------
+# Download virtio ISOs
+# -----------------------------
+
 echo "[*] Downloading virtio-win.iso"
 wget -O ./image_builder/images/virtio-win.iso "$virtiowin"
 
-# Download virtio-win-server12.iso
 echo "[*] Downloading virtio-win-server12.iso"
 wget -O ./image_builder/images/virtio-win-server12.iso "$virtiowinserver12"
+
+echo "[✔] ISO downloads completed."
