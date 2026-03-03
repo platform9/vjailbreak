@@ -45,6 +45,9 @@ env:
   NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
   AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
+  S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
 
 
 jobs:
@@ -460,12 +463,12 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+          aws-region: ${{ env.S3_REGION }}
 
       - name: Download ubuntu base image from S3
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+          S3_BUCKET: ${{ vars.S3_BUCKET_PROD }}
           BASE_IMAGE_PATH: "base-image/ubuntu-base-prebaked.qcow2"
         run: |
           if aws s3 ls "s3://$S3_BUCKET/$BASE_IMAGE_PATH"; then
@@ -577,13 +580,13 @@ jobs:
         with:
           aws-access-key-id: ${{ steps.set-creds.outputs.aws_access_key_id }}
           aws-secret-access-key: ${{ steps.set-creds.outputs.aws_secret_access_key }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'us-west-2' }}
+          aws-region: ${{ env.S3_REGION }}
 
       - name: Determine S3 path and upload artifacts
         if: env.release_found == 'true' || env.is_nightly == 'true'
         env:
-          S3_BUCKET_PROD: ${{ secrets.S3_BUCKET_NAME }}
-          S3_BUCKET_DEV: ${{ secrets.S3_BUCKET_NAME_DEV }}
+          S3_BUCKET_PROD: ${{ vars.S3_BUCKET_PROD }}
+          S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
           TAG: ${{ needs.determine-release.outputs.tag }}
         run: |
           set -e
