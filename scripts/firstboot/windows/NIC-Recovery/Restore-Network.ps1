@@ -116,7 +116,25 @@ try {
         }
     }
 
-    Write-Log "=== Network Configuration Restore Completed Successfully ==="
+    Write-Log "=== Network Interface Name Restore Completed Successfully ==="
+    Write-Log "=== Initiating Static Routes Restore ==="
+
+    try {
+        if (Test-Path "./Collect-StaticRoutes.ps1") {
+            $result = & ./Collect-StaticRoutes.ps1 -Mode "Restore"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "Static routes restore failed with exit code: $LASTEXITCODE" -Level "ERROR"
+                exit 1
+            }
+        } else {
+            Write-Log "Collect-StaticRoutes.ps1 not found" -Level "ERROR"
+            exit 1
+        }
+    } catch {
+        Write-Log "Error during static routes restore: $_" -Level "ERROR"
+        exit 1
+    }
+
     exit 0
 
 } catch {
