@@ -29,6 +29,18 @@ The helper scripts that apply static changes (for example, writing mount persist
 
 Conversion time depends heavily on your infrastructure performance (especially CPU) and VM-specific factors, including the guest OS and root disk size.
 
+### Why does nbdcopy fail during disk copy?
+If this issue is seen, most of the time it is a DNS/name-resolution problem. Debug logs typically show DNS resolution errors when vJailbreak tries to connect to an ESXi host.
+
+Error signature:
+```text
+failed to run nbdcopy: exec: already started
+```
+
+See: [Debug Logs](../../guides/Troubleshooting/debuglogs/).
+
+See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/Troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
+
 ### What do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
 
 - **Symptom**
