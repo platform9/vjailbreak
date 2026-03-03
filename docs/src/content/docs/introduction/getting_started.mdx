@@ -15,14 +15,28 @@ Ensure that your vJailbreak VM can communicate with your OpenStack and VMware en
 
 <ReadMore>Further details can be found in [Prerequisites](../prerequisites/).</ReadMore>
 
-### Install ORAS and download vJailbreak
+### Download vJailbreak Image
+
+You can download the vJailbreak image using one of the following methods:
+
+#### Option 1: Using ORAS
 
 Download and install [ORAS](https://oras.land/docs/installation), a toolkit to download the qcow2 image of vJailbreak. Then, download the latest version of the vJailbreak image with the following command:
-  ```shell
-  # remember the actual version would vary
-  oras pull quay.io/platform9/vjailbreak:v0.4.1
-  ```
+```shell
+# remember the actual version would vary
+oras pull quay.io/platform9/vjailbreak:v0.4.1
+```
 This will download the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
+
+#### Option 2: Direct Download from S3
+
+For the latest builds, download directly using wget:
+```shell
+wget https://vjailbreak.s3.us-west-2.amazonaws.com/releases/latest/v0.4.1/vjailbreak.qcow2
+```
+This will download the image as `vjailbreak.qcow2`.
+
+Note: This direct download method is supported starting from v0.4.1 and later versions.
 
 ### Upload image to OpenStack
 These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9 hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
