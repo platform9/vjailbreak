@@ -135,7 +135,11 @@ jobs:
           
           # Push and Workflow dispatch
           else
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.event.inputs.version }}" != "" ]] && [[ "${{ github.event.inputs.short_sha }}" == "" ]]; then
+              TAG="${BUILD_VERSION}"
+            else
             TAG="${BUILD_VERSION}-${GIT_SHA}"
+          fi
           fi
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
