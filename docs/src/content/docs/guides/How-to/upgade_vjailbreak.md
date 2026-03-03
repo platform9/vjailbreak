@@ -32,12 +32,12 @@ kubectl logs <cronjob-pod-name> -n migration-system
 
 If v0.4.1 is available, the logs will indicate the upgrade availability.
 
-![Trigger CronJob](/images/path-cronjob.png)
+![Trigger CronJob](../../../../../public/images/cronjob-logs-available.png)
 
 ### 2. Check for Updates
 Look for the **Upgrade Available** button at the bottom left of the vJailbreak navigation sidebar. Clicking this button will open the Upgrade vJailbreak modal.
 
-![Check for Updates](/images/path-upgrade-available.png)
+![Check for Updates](../../../../../public/images/upgrade_available.png)
 
 ### 3. Pre-Upgrade Cleanup
 Before upgrading, vJailbreak requires a cleanup of existing resources to ensure a smooth transition. The pre-upgrade checklist includes:
@@ -50,22 +50,29 @@ Before upgrading, vJailbreak requires a cleanup of existing resources to ensure 
 
 Click the **Cleanup** button to initiate this process. Wait for all items to show a green checkmark and the "Cleanup completed successfully" message to appear.
 
-![Pre-Upgrade Cleanup](/images/path-cleanup.png)
+![Pre-Upgrade Cleanup](../../../../../public/images/cleaning_up_resources.png)
+![Cleanup completed successfully ](../../../../../public/images/cleaned_up_sucessfully.png)
 
 ### 4. Select Version
 Once the cleanup is successful, click the **Select a version...** dropdown and choose the target version you wish to upgrade to (e.g., `v0.4.1`).
 
-![Select Version](/images/path-select-version.png)
+![Select Version](../../../../../public/images/upgrade_modal.png)
 
 ### 5. Initiate Upgrade
 With the version selected, the **Upgrade** button will become enabled. Click it to start the upgrade process.
 
-![Initiate Upgrade](/images/path-initiate.png)
+![Initiate Upgrade](../../../../../public/images/upgrade_in_progress.png)
 
 ### 6. Wait for Completion
 You will see an "Upgrading" spinner and a warning: **Processing. Please do not close or refresh this page.** Wait for the process to complete.
 
-![Wait for Completion](/images/path-upgrading.png)
+![Wait for Completion](../../../../../public/images/upgrade_completed.png)
+
+Once the upgrade is marked as successfully completed, the UI will hold on the screen for 3 seconds before automatically refreshing.
+
+:::tip[Recommendation]
+For safety, it is highly advised to perform a **hard refresh** of your browser before using the UI immediately after an upgrade.
+:::
 
 :::caution[Important]
 Do not close or refresh your browser window while the upgrade is in progress, as this may interrupt the operation.
