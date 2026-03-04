@@ -21,10 +21,11 @@ The Linux network persistence mechanism operates on the first boot post-migratio
 
 | Distribution | Support Status |
 | --- | --- |
-| Ubuntu 16 | Supported |
-| Ubuntu 20 | Supported |
-| Ubuntu 22 | Supported |
-| Ubuntu 24 | Supported |
+|   Ubuntu       | Supported |
+|   OpenSuse     | Supported |
+|   RHEL         | Supported |
+|   CentOS       | Supported |
+|   Rocky        | Unsupported |
 
 ## Windows Network Persistence
 
@@ -43,10 +44,12 @@ The network persistence mechanism has been validated and is supported on the fol
 
 | Version | Support Status |
 | --- | --- |
-| Windows Server 2016 | Supported |
-| Windows Server 2019 | Supported |
-| Windows Server 2022 | Supported |
-| Windows Server 2025 | Supported |
+|   Windows Server 2016 | Supported |
+|   Windows Server 2019 | Supported |
+|   Windows Server 2022 | Supported |
+|   Windows Server 2025 | Supported |
+|   Windows Server 2008 | Unsupported |
+|   Windows Server 2012 | Unsupported |
 
 ## User Guidance for Virtio Installation
 
