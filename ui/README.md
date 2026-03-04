@@ -12,7 +12,7 @@ To run the app locally:
 1. Create a .env file and set these env variables:
 
 - **VITE_API_HOST**: Specify the backend server.
-- **VITE_API_TOKEN**: This token is added in the Authorization header for API requests.
+- **VITE_API_TOKEN** (optional): If set, this token is added as a Bearer token in the Authorization header for API requests in development.
 
 2. Install dependencies:
    `yarn`

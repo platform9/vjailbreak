@@ -55,10 +55,8 @@ export const streamPodLogs = async (
   const url = `${endpoint}?${params.toString()}`
 
   // For streaming endpoints, we need to use raw fetch instead of axios
-  const authToken = import.meta.env.VITE_API_TOKEN
   const headers = {
-    'Content-Type': 'application/json;charset=UTF-8',
-    ...(authToken && { Authorization: `Bearer ${authToken}` })
+    'Content-Type': 'application/json;charset=UTF-8'
   }
 
   const baseUrl = import.meta.env.MODE === 'development' ? '/dev-api' : ''

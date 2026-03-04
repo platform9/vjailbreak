@@ -26,9 +26,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false, // Allow self-signed certificates for HTTPS
           ws: true, // Enable WebSocket support for Kubernetes exec API
-          headers: {
-            Authorization: `Bearer ${env.VITE_API_TOKEN}`,
-          },
+          headers: env.VITE_API_TOKEN
+            ? {
+                Authorization: `Bearer ${env.VITE_API_TOKEN}`,
+              }
+            : {},
           rewrite: (path) => path.replace(/^\/dev-api/, ""),
         },
       },
