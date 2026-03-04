@@ -269,6 +269,12 @@ process_rhel(){
   else
     display_msg "Notice: No standard ifcfg directory found."
   fi
+
+  if [[ ! -d "$SYS_LINK" ]]; then
+    # create syslink dir 
+    mkdir -p "$SYS_LINK"
+  fi
+  
   local VJB_INDEX=1
   cat "$NET_MAPPING_DATA" | while read -r line_entry; do
   local found=0
