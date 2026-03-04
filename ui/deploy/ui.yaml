@@ -13,7 +13,7 @@ spec:
       labels:
         app: vjailbreak-ui
     spec:
-      serviceAccountName: migration-controller-manager
+      serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
           image: ${UI_IMG}
@@ -122,3 +122,149 @@ spec:
             name: grafana
             port:
               number: 3000
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: ui-manager-sa
+  namespace: migration-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ui-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps/status
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - arraycreds
+  - bmconfigs
+  - clustermigrations
+  - esximigrations
+  - migrationplans
+  - migrations
+  - migrationtemplates
+  - networkmappings
+  - openstackcreds
+  - pcdclusters
+  - pcdhosts
+  - rdmdisks
+  - rollingmigrationplans
+  - storagemappings
+  - vjailbreaknodes
+  - vmwareclusters
+  - vmwarecreds
+  - vmwarehosts
+  - vmwaremachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - arraycreds/finalizers
+  - bmconfigs/finalizers
+  - clustermigrations/finalizers
+  - esximigrations/finalizers
+  - migrationplans/finalizers
+  - migrationtemplates/finalizers
+  - networkmappings/finalizers
+  - openstackcreds/finalizers
+  - pcdclusters/finalizers
+  - pcdhosts/finalizers
+  - rdmdisks/finalizers
+  - rollingmigrationplans/finalizers
+  - storagemappings/finalizers
+  - vjailbreaknodes/finalizers
+  - vmwarecreds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - arraycreds/status
+  - bmconfigs/status
+  - clustermigrations/status
+  - esximigrations/status
+  - migrationplans/status
+  - migrations/status
+  - migrationtemplates/status
+  - networkmappings/status
+  - openstackcreds/status
+  - pcdclusters/status
+  - pcdhosts/status
+  - rdmdisks/status
+  - rollingmigrationplans/status
+  - storagemappings/status
+  - vjailbreaknodes/status
+  - vmwarecreds/status
+  - vmwaremachines/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: ui-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ui-manager-role 
+subjects:
+- kind: ServiceAccount
+  name: ui-manager-sa
+  namespace: migration-system
