@@ -3,9 +3,13 @@ title: Network Persistence
 description: Guide to Linux and Windows network interface persistence post-migration
 ---
 
-# Network Persistence Post-Migration Overview
+# Network Persistence Post-Migration
 
 This document details the mechanism for ensuring network interface persistence following a virtual machine migration for both Linux and Windows operating systems.
+
+## Prerequisites
+
+Network persistence is only applied when the **"Persist source network interfaces"** option is enabled in the migration form. This option must be selected during migration configuration to ensure that network interface names are preserved on the destination VM.
 
 ## Linux Network Persistence
 
@@ -19,13 +23,13 @@ The Linux network persistence mechanism operates on the first boot post-migratio
 
 ### Supported Distributions
 
-| Distribution | Support Status |
-| --- | --- |
-|   Ubuntu       | Supported |
-|   OpenSuse     | Supported |
-|   RHEL         | Supported |
-|   CentOS       | Supported |
-|   Rocky        | Unsupported |
+| Distribution | Expected | Verified |
+| --- | --- | --- |
+|   Ubuntu       | Supported | Yes |
+|   OpenSuse     | Supported | Yes |
+|   RHEL         | Supported | Yes |
+|   CentOS       | Supported | Yes |
+|   Rocky        | Supported | No |
 
 ## Windows Network Persistence
 
@@ -42,14 +46,14 @@ The network persistence script runs on the first boot post-migration. Its primar
 
 The network persistence mechanism has been validated and is supported on the following Windows Server operating systems:
 
-| Version | Support Status |
-| --- | --- |
-|   Windows Server 2016 | Supported |
-|   Windows Server 2019 | Supported |
-|   Windows Server 2022 | Supported |
-|   Windows Server 2025 | Supported |
-|   Windows Server 2008 | Unsupported |
-|   Windows Server 2012 | Unsupported |
+| Version | Expected | Verified |
+| --- | --- | --- |
+|   Windows Server 2016 | Supported | Yes |
+|   Windows Server 2019 | Supported | Yes |
+|   Windows Server 2022 | Supported | Yes |
+|   Windows Server 2025 | Supported | Yes |
+|   Windows Server 2008 | Unsupported | No |
+|   Windows Server 2012 | Unsupported | No |
 
 ## User Guidance for Virtio Installation
 
