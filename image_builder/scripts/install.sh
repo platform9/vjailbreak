@@ -189,6 +189,12 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
+  log "Setting up htpasswd"
+
+  # Create Kubernetes secret pf9-htpasswd in migration-system namespace with same credentials
+  HTPASSWD_CONTENT="admin:$(openssl passwd -apr1 password)"
+  echo "$HTPASSWD_CONTENT" | kubectl create secret generic pf9-htpasswd -n migration-system --from-file=/dev/stdin
+  check_command "Creating pf9-htpasswd secret"
 
   log "Installing cert-manager"
   if [ -d "/etc/pf9/yamls/cert-manager" ]; then

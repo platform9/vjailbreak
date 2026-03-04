@@ -23,6 +23,9 @@ spec:
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow
+          - name: pf9-htpasswd-secret
+            mountPath: /etc/nginx/shadow1
+            readOnly: true
           - name: pf9-logs
             mountPath: /var/log/pf9
             readOnly: true
@@ -31,6 +34,9 @@ spec:
         hostPath:
           path: /etc/htpasswd
           type: FileOrCreate
+      - name: pf9-htpasswd-secret
+        secret:
+          secretName: pf9-htpasswd
       - name: pf9-logs
         hostPath:
           path: /var/log/pf9
