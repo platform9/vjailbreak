@@ -1,0 +1,6 @@
+# /etc/rancher/k3s/config.yaml
+secrets-encryption: true
+kube-apiserver-arg:
+  - "service-account-issuer=https://kubernetes.default.svc"
+  - "service-account-signing-key-file=/var/lib/rancher/k3s/server/tls/service.key"
+  - "service-account-extend-token-expiration=false"

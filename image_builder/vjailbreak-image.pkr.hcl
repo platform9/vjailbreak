@@ -93,6 +93,10 @@ build {
     source      = "${path.root}/configs/k3s.env"
     destination = "/tmp/k3s.env"
   }
+  provisioner "file" {
+    source      = "${path.root}/configs/k3s.config.yaml"
+    destination = "/tmp/k3s.config.yaml"
+  }
 
   provisioner "file" {
     source      = "${path.root}/configs/daemonset.yaml"
@@ -145,6 +149,7 @@ build {
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/log_collector.sh /etc/pf9/log_collector.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
+    "sudo mv /tmp/k3s.config.yaml /etc/rancher/k3s/config.yaml",
     "sudo mkdir -p /etc/pf9/images",
     "sudo mv /home/ubuntu/images/* /etc/pf9/images",
     "sudo mkdir -p /home/ubuntu/virtio-win",
@@ -164,6 +169,8 @@ build {
     "sudo chmod +x /etc/pf9/log_collector.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
+    "sudo chown root:root /etc/rancher/k3s/config.yaml",
+    "sudo chmod 644 /etc/rancher/k3s/config.yaml",
     "sudo chmod 644 /etc/pf9/env",
     "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
