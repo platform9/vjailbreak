@@ -4763,6 +4763,7 @@ rules:
   resources:
   - arraycreds
   - bmconfigs
+  - esxisshcreds
   - clustermigrations
   - esximigrations
   - migrationplans
@@ -4793,6 +4794,7 @@ rules:
   resources:
   - arraycreds/finalizers
   - bmconfigs/finalizers
+  - esxisshcreds/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - migrationplans/finalizers
@@ -4813,6 +4815,7 @@ rules:
   resources:
   - arraycreds/status
   - bmconfigs/status
+  - esxisshcreds/status
   - clustermigrations/status
   - esximigrations/status
   - migrationplans/status
