@@ -19,6 +19,7 @@ UDEV_OUTPUT_TARGET="${UDEV_OUTPUT_TARGET:-/etc/udev/rules.d/70-persistent-net.ru
 NETPLAN_BASE_DIR="${NETPLAN_BASE_DIR:-/}"
 NETPLAN_EXT_CONF="${NETPLAN_EXT_CONF:-/etc/netplan/99-netcfg.yaml}"
 USE_NETPLAN_LOGIC="${USE_NETPLAN_LOGIC:-true}"
+SYS_LINK="${SYS_LINK:-/etc/systemd/network}"
 
 # Setup custom file descriptor for logging to stdout
 exec 3>&1
@@ -310,8 +311,23 @@ process_rhel(){
             done | sort -nr | head -1 | cut -d' ' -f2)
 
             if [[ -z "$IF_NAME" ]]; then
+                display_msg "Notice: No interface name found for MAC $FOUND_MAC"
             else
                 found=1
+                if [[ -d "$SYS_LINK" ]]; then
+                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
+
+                    # Increment VJB_INDEX safely
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
+
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -330,6 +346,19 @@ process_rhel(){
                 display_msg "Notice: Missing interface-name entry for $FOUND_IP."
             else
                 found=1
+                if [[ -d "$SYS_LINK" ]]; then
+                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
+
+                    # Increment VJB_INDEX safely
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",A/TTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -352,6 +381,19 @@ process_rhel(){
                 display_msg "Notice: Could not determine valid interface for $CFG_FILE"
             else 
                 found=1
+                if [[ -d "$SYS_LINK" ]]; then
+                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
+
+                    # Increment VJB_INDEX safely
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -639,17 +681,37 @@ process_ifquery_infrastructure() {
 }
 # Filters out any duplicate hardware addresses before writing
 validate_hardware_uniqueness() {
-    local RAW_CONTENT=$(cat)
-    # Isolate MACs, standardize casing, and look for repeats
-    local DUPLICATE_LIST=$(echo "$RAW_CONTENT" | grep -ioE "[0-9A-F:]{17}" | tr 'a-f' 'A-F' | sort | uniq -d)
+    local RAW_CONTENT
+    RAW_CONTENT=$(cat)
 
-    if [[ -n "$DUPLICATE_LIST" ]]; then
-        display_msg "Warning: Detected redundant MAC addresses: $DUPLICATE_LIST"
-        return 0
-    fi
+    echo "$RAW_CONTENT" | awk '
+    BEGIN { IGNORECASE=1 }
+    {
+        mac = ""
+        if (match($0, /[0-9A-F:]{17}/)) {
+            mac = toupper(substr($0, RSTART, RLENGTH))
+        }
 
-    echo "$RAW_CONTENT"
+        if (mac != "") {
+            line[NR] = $0
+            last_seen[mac] = NR
+            mac_for_line[NR] = mac
+        } else {
+            line[NR] = $0
+        }
+    }
+    END {
+        for (i = 1; i <= NR; i++) {
+            if (mac_for_line[i] != "") {
+                if (last_seen[mac_for_line[i]] == i)
+                    print line[i]
+            } else {
+                print line[i]
+            }
+        }
+    }'
 }
+
 
 # Orchestrates the discovery modules and finalizes udev rules
 execute_main_workflow() {
