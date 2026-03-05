@@ -331,7 +331,7 @@ try {
             }
             while ($true) {
                 $script,$async = Get-Script
-                Write-Log "Selected script: $script"
+                Write-Log "Selected script: $script (async: $async)"
                 if ($script -ne "" -and $script -ne "False"){
                     Push-Script -ScriptName $script
                     $result = Script-Runner -ScriptPath (Join-Path $ScriptRoot $script)
@@ -339,8 +339,12 @@ try {
                         Write-Log "Script '$script' failed with exit code $($result.ExitCode)" -Level "ERROR"
                         Write-Log "Output: $($result.Output)" -Level "ERROR"
                         $failedScriptNames.Add($script)
-                        if ($async -eq $false) {
-                                break
+
+                        if ($async -eq $false -and $script -notlike "user_firstboot_part_*") {
+                            Write-Log "Script failed - breaking to reschedule on reboot" -Level "ERROR"
+                            break
+                        } else {
+                            Write-Log "Continuing to next script" -Level "WARNING"
                         }
                     } else {
                         Write-Log "Script '$script' executed successfully"
@@ -352,6 +356,10 @@ try {
                     Remove-MyTask -TaskName $TaskName
                     break
                 }
+            }
+
+            if ($failedScriptNames.Count -gt 0) {
+                Write-Log "SUMMARY: $($failedScriptNames.Count) script(s) failed but scheduler continued: $($failedScriptNames -join ', ')" -Level "WARNING"
             }
 
         } catch {
