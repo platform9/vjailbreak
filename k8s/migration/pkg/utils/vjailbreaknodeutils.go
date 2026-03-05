@@ -14,6 +14,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -218,9 +219,18 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master vjailbreak node")
 	}
 
-	networkIDs, masterSecurityGroups, err := GetCurrentInstanceNetworkInfo()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get network info")
+	var networkIDs []servers.Network
+	var masterSecurityGroups []string
+	if creds.Spec.VJBInstanceID != "" {
+		networkIDs, masterSecurityGroups, err = GetInstanceNetworkInfoByID(ctx, openstackClients, creds.Spec.VJBInstanceID)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get network info")
+		}
+	} else {
+		networkIDs, masterSecurityGroups, err = GetCurrentInstanceNetworkInfo()
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get network info")
+		}
 	}
 
 	// Determine security groups: use spec value if provided, otherwise use master's
@@ -424,6 +434,50 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
 		// Log the error but don't fail the entire operation
 		fmt.Printf("Warning: failed to get security groups: %v\n", err)
 		return networks, []string{}, nil
+	}
+
+	return networks, securityGroups, nil
+}
+
+// GetInstanceNetworkInfoByID retrieves network and security group information for a given instance using OpenStack clients
+func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStackClients, instanceID string) ([]servers.Network, []string, error) {
+	// Get server details from OpenStack
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get server details")
+	}
+
+	// Query ports attached to this instance to get network information
+	networks := []servers.Network{}
+	networkIDSet := make(map[string]bool)
+	allPages, err := ports.List(openstackClients.NetworkingClient, ports.ListOpts{
+		DeviceID: instanceID,
+	}).AllPages(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to list ports for instance")
+	}
+
+	portList, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to extract ports")
+	}
+
+	// Extract unique network IDs from ports
+	for _, port := range portList {
+		if !networkIDSet[port.NetworkID] {
+			networkIDSet[port.NetworkID] = true
+			networks = append(networks, servers.Network{
+				UUID: port.NetworkID,
+			})
+		}
+	}
+
+	// Extract security group names from server
+	securityGroups := []string{}
+	for _, sg := range server.SecurityGroups {
+		if sgName, ok := sg["name"].(string); ok {
+			securityGroups = append(securityGroups, sgName)
+		}
 	}
 
 	return networks, securityGroups, nil
