@@ -20,6 +20,7 @@ NETPLAN_BASE_DIR="${NETPLAN_BASE_DIR:-/}"
 NETPLAN_EXT_CONF="${NETPLAN_EXT_CONF:-/etc/netplan/99-netcfg.yaml}"
 USE_NETPLAN_LOGIC="${USE_NETPLAN_LOGIC:-true}"
 SYS_LINK="${SYS_LINK:-/etc/systemd/network}"
+USR_SYS_LINK="${SYS_LINK:-/usr/lib/systemd/network}"
 
 # Setup custom file descriptor for logging to stdout
 exec 3>&1
@@ -321,9 +322,10 @@ process_rhel(){
                 display_msg "Notice: No interface name found for MAC $FOUND_MAC"
             else
                 found=1
-                if [[ -d "$SYS_LINK" ]]; then
+                if [[ -d "$SYS_LINK" || -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    local USR_LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -332,6 +334,13 @@ process_rhel(){
                         echo "Name=$(clean_string_input "$IF_NAME")"
                     } > "$LINK_FILE"
 
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$USR_LINK_FILE"
                     # Increment VJB_INDEX safely
                     VJB_INDEX=$((VJB_INDEX + 1))
                 fi
@@ -354,9 +363,10 @@ process_rhel(){
                 display_msg "Notice: Missing interface-name entry for $FOUND_IP."
             else
                 found=1
-                if [[ -d "$SYS_LINK" ]]; then
+                if [[ -d "$SYS_LINK" || -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    local USR_LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -365,6 +375,13 @@ process_rhel(){
                         echo "Name=$(clean_string_input "$IF_NAME")"
                     } > "$LINK_FILE"
 
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$USR_LINK_FILE"
                     # Increment VJB_INDEX safely
                     VJB_INDEX=$((VJB_INDEX + 1))
                 fi
@@ -390,9 +407,10 @@ process_rhel(){
                 display_msg "Notice: Could not determine valid interface for $CFG_FILE"
             else 
                 found=1
-                if [[ -d "$SYS_LINK" ]]; then
+                if [[ -d "$SYS_LINK" || -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    local USR_LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -401,6 +419,13 @@ process_rhel(){
                         echo "Name=$(clean_string_input "$IF_NAME")"
                     } > "$LINK_FILE"
 
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$USR_LINK_FILE"
                     # Increment VJB_INDEX safely
                     VJB_INDEX=$((VJB_INDEX + 1))
                 fi
