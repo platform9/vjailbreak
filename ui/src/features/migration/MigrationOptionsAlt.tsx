@@ -62,6 +62,8 @@ const CustomTextField = styled(TextField)(() => ({
   }
 }))
 
+const NEXT_SCRIPT_DELIMITER = '### NEXT SCRIPT ###'
+
 // Interfaces
 export interface MigrationOptionsPropsInterface {
   params: FormValues & { useFlavorless?: boolean; useGPU?: boolean }
@@ -113,6 +115,59 @@ export default function MigrationOptionsAlt({
         (vm.osFamily.toLowerCase() === 'windows' || vm.osFamily.toLowerCase() === 'windowsguest')
     )
   }, [params?.vms])
+
+  const hasLinuxVMSelected = useMemo(() => {
+    if (!params?.vms || params.vms.length === 0) return false
+    return params.vms.some(
+      (vm) =>
+        vm.osFamily &&
+        (vm.osFamily.toLowerCase() === 'linux' || vm.osFamily.toLowerCase() === 'linuxguest')
+    )
+  }, [params?.vms])
+
+  const postMigrationScriptValue = String(params?.postMigrationScript || '')
+  const hasBashShebang = /(^|\n)\s*#!\/bin\/(ba)?sh/i.test(postMigrationScriptValue)
+  const hasPowerShellSyntax = /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
+    postMigrationScriptValue
+  )
+  const hasLinuxTag = /(^|\n)\s*(\/\/|#)\s*LINUX-SCRIPT:/i.test(postMigrationScriptValue)
+  const hasWindowsTag = /(^|\n)\s*(\/\/|#)\s*WINDOWS-SCRIPT:/i.test(postMigrationScriptValue)
+
+  const postMigrationScriptWarning = useMemo(() => {
+    if (!selectedMigrationOptions.postMigrationScript) return ''
+    if (
+      hasWindowsVMSelected &&
+      hasLinuxVMSelected &&
+      postMigrationScriptValue.trim() !== '' &&
+      !hasLinuxTag &&
+      !hasWindowsTag
+    ) {
+      return 'Mixed OS plan detected. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of blocks that should run only on that OS.'
+    }
+    if (hasWindowsVMSelected && !hasLinuxVMSelected && hasBashShebang) {
+      return 'Detected bash shebang in a Windows-Script plan. Use PowerShell script blocks for Windows VMs.'
+    }
+    if (!hasWindowsVMSelected && hasLinuxVMSelected && hasPowerShellSyntax) {
+      return 'Detected PowerShell-like syntax in a Linux-Script plan. Use bash script blocks for Linux VMs.'
+    }
+    return ''
+  }, [
+    hasLinuxVMSelected,
+    hasPowerShellSyntax,
+    hasWindowsVMSelected,
+    hasBashShebang,
+    hasLinuxTag,
+    hasWindowsTag,
+    postMigrationScriptValue,
+    selectedMigrationOptions.postMigrationScript
+  ])
+
+  const postMigrationScriptPlaceholder =
+    hasWindowsVMSelected && hasLinuxVMSelected
+      ? `// LINUX-SCRIPT:\n#!/bin/bash\necho "Linux script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Windows script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Windows script 2 fails"\nthrow "Intentional failure"\n${NEXT_SCRIPT_DELIMITER}\n// LINUX-SCRIPT:\necho "Linux script 2 still runs"`
+      : hasWindowsVMSelected
+        ? `// WINDOWS-SCRIPT:\nWrite-Host "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Script 2"\nthrow "Intentional failure"\n${NEXT_SCRIPT_DELIMITER}\nWrite-Host "Script 3 runs even if script 2 fails"`
+        : `#!/bin/bash\necho "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 2 will fail"\nfalse\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 3 runs even if script 2 fails"`
 
   // Iniitialize fields
   useEffect(() => {
@@ -736,19 +791,24 @@ export default function MigrationOptionsAlt({
                   />
                 }
               />
-              <OptionHelp variant="caption">Provide a script to run after migration.</OptionHelp>
+              <OptionHelp variant="caption" sx={{ whiteSpace: 'pre-line' }}>
+                {hasWindowsVMSelected
+                  ? `PowerShell for Windows VMs, Bash for Linux VMs. Separate scripts with ${NEXT_SCRIPT_DELIMITER} on its own line. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of a block to target that OS only.`
+                  : `Bash for Linux VMs, PowerShell for Windows VMs. Separate scripts with ${NEXT_SCRIPT_DELIMITER} on its own line. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of a block to target that OS only.`}
+              </OptionHelp>
             </OptionLeft>
             <CustomTextField
               // label="Script"
               size="small"
               multiline
               rows={4}
-              value={params?.postMigrationScript || ''}
+              value={postMigrationScriptValue}
               onChange={(e) => onChange('postMigrationScript')(String(e.target.value))}
               disabled={!selectedMigrationOptions.postMigrationScript}
               error={!!errors['postMigrationScript']}
               required={selectedMigrationOptions.postMigrationScript}
-              placeholder="Enter your post-migration script here..."
+              placeholder={postMigrationScriptPlaceholder}
+              helperText={postMigrationScriptWarning}
             />
           </OptionRow>
         </SectionBlock>
