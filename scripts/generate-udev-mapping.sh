@@ -272,6 +272,7 @@ process_rhel(){
 
   if [[ ! -d "$SYS_LINK" ]]; then
     # create syslink dir 
+    display_msg "creating sys directory"
     mkdir -p "$SYS_LINK"
   fi
   
@@ -321,6 +322,7 @@ process_rhel(){
             else
                 found=1
                 if [[ -d "$SYS_LINK" ]]; then
+                    display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
@@ -353,6 +355,7 @@ process_rhel(){
             else
                 found=1
                 if [[ -d "$SYS_LINK" ]]; then
+                    display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
@@ -388,6 +391,7 @@ process_rhel(){
             else 
                 found=1
                 if [[ -d "$SYS_LINK" ]]; then
+                    display_msg "creating sys link"
                     local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     {
                         echo "[Match]"
