@@ -127,7 +127,7 @@ process_rhel(){
   
   local VJB_INDEX=1
   cat "$NET_MAPPING_DATA" | while read -r line_entry; do
-  local found=0
+    local found=0
     parse_address_pair "$line_entry"
     if [[ -z "$FOUND_MAC" ]]; then
       display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
@@ -170,13 +170,15 @@ process_rhel(){
                 display_msg "Notice: No interface name found for MAC $FOUND_MAC"
             else
                 found=1
+                local LINK_FILE=""
                 if [[ -d "$SYS_LINK" ]]; then
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                     display_msg "creating sys link"
-                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 elif [[ -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating usr sys link"
-                    local LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 fi
+                if [[ -n "$LINK_FILE" ]]; then
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -186,6 +188,7 @@ process_rhel(){
                     } > "$LINK_FILE"
 
                     VJB_INDEX=$((VJB_INDEX + 1))
+                fi
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -204,13 +207,15 @@ process_rhel(){
                 display_msg "Notice: Missing interface-name entry for $FOUND_IP."
             else
                 found=1
+                local LINK_FILE=""
                 if [[ -d "$SYS_LINK" ]]; then
                     display_msg "creating sys link"
-                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 elif [[ -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating usr sys link"
-                    local LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 fi
+                if [[ -n "$LINK_FILE" ]]; then
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -220,7 +225,7 @@ process_rhel(){
                     } > "$LINK_FILE"
 
                     VJB_INDEX=$((VJB_INDEX + 1))
-
+                fi
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -243,13 +248,15 @@ process_rhel(){
                 display_msg "Notice: Could not determine valid interface for $CFG_FILE"
             else 
                 found=1
+                local LINK_FILE=""
                 if [[ -d "$SYS_LINK" ]]; then
                     display_msg "creating sys link"
-                    local LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 elif [[ -d "$USR_SYS_LINK" ]]; then
                     display_msg "creating usr sys link"
-                    local LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
                 fi
+                if [[ -n "$LINK_FILE" ]]; then
                     {
                         echo "[Match]"
                         echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
@@ -259,6 +266,7 @@ process_rhel(){
                     } > "$LINK_FILE"
 
                     VJB_INDEX=$((VJB_INDEX + 1))
+                fi
                 echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
@@ -266,37 +274,36 @@ process_rhel(){
   if [[ $found -eq 0 ]]; then
     display_msg "Notice: No matching interface found for MAC $FOUND_MAC in the mapping files. Injecting own configuration"
     # IFCFG
-    if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
-            display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
-            
-            # Create a virtual bridge/dhcp interface if none exists
-            {
-                echo "TYPE=Ethernet"
-                echo "BOOTPROTO=dhcp"
-                echo "NAME=vjb$VJB_INDEX"                
-                echo "DEVICE=vjb$VJB_INDEX"                
-                echo "ONBOOT=yes"
-                echo "HWADDR=$FOUND_MAC"
-                echo "PEERDNS=yes"                 
-                echo "PEERROUTES=yes"              
-                echo "DHCP_HOSTNAME=myhost" 
-            } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
-            VJB_INDEX=$((VJB_INDEX+1))
-    else if [[ -d "$NM_CONN_PATH" ]]; then
-        display_msg "NM System Connection Path found Generating vjb interface"
-        {
-            echo "[connection]"
-            echo "id=vjb$VJB_INDEX"
-            echo "type=ethernet"
-            echo "interface-name=vjb$VJB_INDEX"
-            echo "mac-address=$FOUND_MAC"
-            echo "[ipv4]"
-            echo "method=auto"
-        } > "$NM_CONN_PATH/vjb$VJB_INDEX.nmconnection"
-    else 
-        display_msg "Notice: No valid interface configuration path found. Skipping vjb interface generation."
-    fi
-    fi
+                if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
+                        display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
+                        
+                        # Create a virtual bridge/dhcp interface if none exists
+                        {
+                            echo "TYPE=Ethernet"
+                            echo "BOOTPROTO=dhcp"
+                            echo "NAME=vjb$VJB_INDEX"                
+                            echo "DEVICE=vjb$VJB_INDEX"                
+                            echo "ONBOOT=yes"
+                            echo "HWADDR=$FOUND_MAC"
+                            echo "PEERDNS=yes"                 
+                            echo "PEERROUTES=yes"              
+                            echo "DHCP_HOSTNAME=myhost" 
+                        } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
+                        VJB_INDEX=$((VJB_INDEX+1))
+                elif [[ -d "$NM_CONN_PATH" ]]; then
+                    display_msg "NM System Connection Path found Generating vjb interface"
+                    {
+                        echo "[connection]"
+                        echo "id=vjb$VJB_INDEX"
+                        echo "type=ethernet"
+                        echo "interface-name=vjb$VJB_INDEX"
+                        echo "mac-address=$FOUND_MAC"
+                        echo "[ipv4]"
+                        echo "method=auto"
+                    } > "$NM_CONN_PATH/vjb$VJB_INDEX.nmconnection"
+                else 
+                    display_msg "Notice: No valid interface configuration path found. Skipping vjb interface generation."
+                fi
   fi
   done
 }
