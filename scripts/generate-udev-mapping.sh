@@ -20,7 +20,7 @@ NETPLAN_BASE_DIR="${NETPLAN_BASE_DIR:-/}"
 NETPLAN_EXT_CONF="${NETPLAN_EXT_CONF:-/etc/netplan/99-netcfg.yaml}"
 USE_NETPLAN_LOGIC="${USE_NETPLAN_LOGIC:-true}"
 SYS_LINK="${SYS_LINK:-/etc/systemd/network}"
-USR_SYS_LINK="${SYS_LINK:-/usr/lib/systemd/network}"
+USR_SYS_LINK="${USR_SYS_LINK:-/usr/lib/systemd/network}"
 
 # Setup custom file descriptor for logging to stdout
 exec 3>&1
