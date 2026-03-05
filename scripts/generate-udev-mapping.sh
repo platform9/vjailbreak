@@ -181,7 +181,7 @@ process_network_manager_files() {
             continue
         fi
 
-        echo "SUBSYSTEM==\"net\",ACTION==\"add\",A/TTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
+        echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
     done
 }
 
