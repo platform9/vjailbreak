@@ -42,6 +42,7 @@ import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
 import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
+import axios from 'axios'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
 
@@ -803,6 +804,8 @@ export default function GlobalSettingsPage() {
   const vddkMessageRef = useRef('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
 
+  const vddkUploadAbortControllerRef = useRef<AbortController | null>(null)
+
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const existingVddkPath = vddkStatusQuery.data?.uploaded ? vddkStatusQuery.data?.path || '' : ''
   const existingVddkVersion = vddkStatusQuery.data?.version || ''
@@ -832,6 +835,8 @@ export default function GlobalSettingsPage() {
   }, [])
 
   const handleVddkClear = useCallback(() => {
+    vddkUploadAbortControllerRef.current?.abort()
+    vddkUploadAbortControllerRef.current = null
     setVddkFile(null)
     setVddkStatus('idle')
     setVddkProgress(0)
@@ -862,7 +867,11 @@ export default function GlobalSettingsPage() {
           setVddkMessage('Uploading VDDK file...')
           vddkMessageRef.current = 'Uploading VDDK file...'
 
+          const abortController = new AbortController()
+          vddkUploadAbortControllerRef.current = abortController
+
           const response = await uploadVddkFile(vddkFile, {
+            signal: abortController.signal,
             onProgress: (next) => {
               vddkProgressRef.current = next
               if (activeTabRef.current === 'vddk') {
@@ -870,6 +879,8 @@ export default function GlobalSettingsPage() {
               }
             }
           })
+
+          vddkUploadAbortControllerRef.current = null
 
           setVddkExtractedPath(response.extracted_path || '')
           localStorage.setItem(VDDK_UPLOADED_KEY, 'true')
@@ -894,6 +905,17 @@ export default function GlobalSettingsPage() {
             vddkMessageRef.current = nextMessage
           }
         } catch (err) {
+          vddkUploadAbortControllerRef.current = null
+
+          if (axios.isAxiosError(err) && err.code === 'ERR_CANCELED') {
+            setVddkStatus('idle')
+            setVddkProgress(0)
+            vddkProgressRef.current = 0
+            setVddkMessage('Upload cancelled.')
+            vddkMessageRef.current = 'Upload cancelled.'
+            return
+          }
+
           setVddkStatus('error')
           const nextMessage = err instanceof Error ? err.message : 'Upload failed'
           setVddkMessage(nextMessage)
@@ -908,6 +930,16 @@ export default function GlobalSettingsPage() {
     },
     [onSave, validateVddkFile, vddkFile, vddkStatus]
   )
+
+  const handleCancelClick = useCallback(() => {
+    if (vddkStatus === 'uploading') {
+      vddkUploadAbortControllerRef.current?.abort()
+      vddkUploadAbortControllerRef.current = null
+      handleVddkClear()
+    }
+
+    onCancel()
+  }, [handleVddkClear, onCancel, vddkStatus])
 
   useEffect(() => {
     if (activeTab !== 'vddk') return
@@ -1370,7 +1402,12 @@ export default function GlobalSettingsPage() {
             >
               Reset to Defaults
             </Button>
-            <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
+            <Button
+              variant="outlined"
+              onClick={handleCancelClick}
+              disabled={vddkStatus !== 'uploading'}
+              data-testid="global-settings-cancel"
+            >
               Cancel
             </Button>
             <Button
