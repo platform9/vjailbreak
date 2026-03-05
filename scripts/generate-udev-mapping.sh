@@ -385,7 +385,7 @@ process_rhel(){
                     # Increment VJB_INDEX safely
                     VJB_INDEX=$((VJB_INDEX + 1))
                 fi
-                echo "SUBSYSTEM==\"net\",ACTION==\"add\",A/TTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
+                echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
         fi
     fi
