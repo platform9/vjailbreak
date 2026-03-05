@@ -767,7 +767,6 @@ export default function GlobalSettingsPage() {
     tabHasError,
     handleTabChange,
     onResetDefaults,
-    onCancel,
     onSave,
     handleNotificationClose
   } = useGlobalSettingsController()
@@ -845,6 +844,13 @@ export default function GlobalSettingsPage() {
     vddkMessageRef.current = ''
     setVddkExtractedPath('')
   }, [])
+
+  const cancelVddkUpload = useCallback(() => {
+    if (vddkStatusRef.current !== 'uploading') return
+    vddkUploadAbortControllerRef.current?.abort()
+    vddkUploadAbortControllerRef.current = null
+    handleVddkClear()
+  }, [handleVddkClear])
 
   const handleSave = useCallback(
     async (e: React.FormEvent) => {
@@ -932,14 +938,15 @@ export default function GlobalSettingsPage() {
   )
 
   const handleCancelClick = useCallback(() => {
-    if (vddkStatus === 'uploading') {
+    cancelVddkUpload()
+  }, [cancelVddkUpload])
+
+  useEffect(() => {
+    return () => {
       vddkUploadAbortControllerRef.current?.abort()
       vddkUploadAbortControllerRef.current = null
-      handleVddkClear()
     }
-
-    onCancel()
-  }, [handleVddkClear, onCancel, vddkStatus])
+  }, [])
 
   useEffect(() => {
     if (activeTab !== 'vddk') return
@@ -1408,7 +1415,7 @@ export default function GlobalSettingsPage() {
               disabled={vddkStatus !== 'uploading'}
               data-testid="global-settings-cancel"
             >
-              Cancel
+              Cancel Upload
             </Button>
             <Button
               variant="contained"
