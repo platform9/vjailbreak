@@ -7,8 +7,10 @@ import {
   MenuItem,
   Select,
   styled,
+  Tooltip,
   Typography
 } from '@mui/material'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
@@ -791,10 +793,68 @@ export default function MigrationOptionsAlt({
                   />
                 }
               />
-              <OptionHelp variant="caption" sx={{ whiteSpace: 'pre-line' }}>
-                {hasWindowsVMSelected
-                  ? `PowerShell for Windows VMs, Bash for Linux VMs. Separate scripts with ${NEXT_SCRIPT_DELIMITER} on its own line. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of a block to target that OS only.`
-                  : `Bash for Linux VMs, PowerShell for Windows VMs. Separate scripts with ${NEXT_SCRIPT_DELIMITER} on its own line. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of a block to target that OS only.`}
+              <OptionHelp variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <span>Supports PowerShell for Windows and Bash for Linux.</span>
+                <Tooltip
+                  arrow
+                  placement="top"
+                  slotProps={{
+                    tooltip: {
+                      sx: {
+                        maxWidth: 500,
+                        bgcolor: 'background.paper',
+                        color: 'text.primary',
+                        boxShadow: 3,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        p: 1.5
+                      }
+                    },
+                    arrow: {
+                      sx: {
+                        color: 'background.paper',
+                        '&::before': {
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }
+                      }
+                    }
+                  }}
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Post-Migration Script Guide
+                      </Typography>
+                      
+                      <Box sx={{ 
+                        bgcolor: 'action.hover', 
+                        p: 1, 
+                        borderRadius: 1, 
+                        fontFamily: 'monospace',
+                        mb: 1.5,
+                        border: '1px solid',
+                        borderColor: 'divider'
+                      }}>
+                        <Typography variant="caption" component="div">
+                          <Box component="span" sx={{ color: 'primary.main' }}>// WINDOWS-SCRIPT:</Box><br />
+                          Write-Host "Hello Windows"<br />
+                          <Box component="span" sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}>{NEXT_SCRIPT_DELIMITER}</Box>
+                          <Box component="span" sx={{ color: 'success.main' }}>// LINUX-SCRIPT:</Box><br />
+                          echo "Hello Linux"
+                        </Typography>
+                      </Box>
+
+                      <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
+                      <Typography variant="caption" component="div">
+                        • Separate scripts with "{NEXT_SCRIPT_DELIMITER}" on its own line.<br />
+                        • Use tag "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" on line 1 to target an OS.<br />
+                        • Untagged blocks execute on all selected VMs irrespective of OS.
+                      </Typography>
+                    </Box>
+                  }
+                >
+                  <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', ml: 0.5 }} />
+                </Tooltip>
               </OptionHelp>
             </OptionLeft>
             <CustomTextField
