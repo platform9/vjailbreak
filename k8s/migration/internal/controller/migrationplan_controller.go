@@ -31,10 +31,12 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	v2vutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -1308,148 +1310,13 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
 	configMapName := utils.GetMigrationConfigMapName(vmname)
-	virtiodrivers := ""
-	if migrationtemplate.Spec.VirtioWinDriver == "" {
-		virtiodrivers = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-	} else {
-		virtiodrivers = migrationtemplate.Spec.VirtioWinDriver
-	}
-	openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to reconcile mapping")
-	}
 
-	openstackports := []string{}
-	// If advanced options are set, replace the networks and/or volume types with the ones in the advanced options
-	if !reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
-		if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
-			if err = utils.VerifyNetworks(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
-				return nil, errors.Wrap(err, "failed to verify networks in advanced mapping")
-			}
-			openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
-		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
-			if err = utils.VerifyStorage(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
-				return nil, errors.Wrap(err, "failed to verify volume types in advanced mapping")
-			}
-			openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
-		}
-		if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
-			if err = utils.VerifyPorts(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
-				return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
-			}
-			openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
-		}
-	}
-	// Create MigrationConfigMap
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
-		r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
-		configMap = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      configMapName,
-				Namespace: migrationplan.Namespace,
-			},
-			Data: map[string]string{
-				"SOURCE_VM_NAME":                    vm,
-				"CONVERT":                           "true", // Assume that the vm always has to be converted
-				"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
-				"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
-				"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
-				"CUTOVEREND":                        migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
-				"NEUTRON_NETWORK_NAMES":             strings.Join(openstacknws, ","),
-				"NEUTRON_PORT_IDS":                  strings.Join(openstackports, ","),
-				"CINDER_VOLUME_TYPES":               strings.Join(openstackvolumetypes, ","),
-				"VIRTIO_WIN_DRIVER":                 virtiodrivers,
-				"PERFORM_HEALTH_CHECKS":             strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
-				"HEALTH_CHECK_PORT":                 migrationplan.Spec.MigrationStrategy.HealthCheckPort,
-				"VMWARE_MACHINE_OBJECT_NAME":        vmMachine.Name,
-				"SECURITY_GROUPS":                   strings.Join(migrationplan.Spec.SecurityGroups, ","),
-				"SERVER_GROUP":                      migrationplan.Spec.ServerGroup,
-				"RDM_DISK_NAMES":                    strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
-				"FALLBACK_TO_DHCP":                  strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
-				"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
-				"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
-				"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
-				"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
-				"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
-			},
-		}
-		if utils.IsOpenstackPCD(*openstackcreds) {
-			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
-		}
-
-		// Check if assigned IP is set from Migration spec
-		if migrationobj.Spec.AssignedIP != "" {
-			configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
-		} else {
-			configMap.Data["ASSIGNED_IP"] = ""
-		}
-
-		// Pass network overrides if set
-		if migrationobj.Spec.NetworkOverrides != "" {
-			configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
-		}
-
-		// Check if target flavor is set
-		if vmMachine.Spec.TargetFlavorID != "" {
-			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
-		} else {
-			// If target flavor is not set, use the closest matching flavor
-			allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to list all flavors")
-			}
-
-			// UseGPUFlavor is only applicable for PCD credentials
-			useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
-
-			// Get GPU requirements from VM
-			passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
-			vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
-
-			var flavor *flavors.Flavor
-			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to get closest flavor")
-			}
-			if flavor == nil {
-				gpuInfo := ""
-				if passthroughGPUCount > 0 || vgpuCount > 0 {
-					gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
-				} else {
-					gpuInfo = " without GPU"
-				}
-				return nil, errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
-			}
-			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
-		}
-
-		if vmMachine.Spec.VMInfo.OSFamily == "" {
-			return nil, errors.Errorf(
-				"OSFamily is not available for the VM '%s', "+
-					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
-				vmMachine.Name)
-		}
-
-		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
-		configMap.Data["DISCONNECT_SOURCE_NETWORK"] = strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork)
-
-		if migrationtemplate.Spec.OSFamily != "" {
-			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
-		}
-
-		if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
-			configMap.Data["STORAGE_COPY_METHOD"] = StorageCopyMethod
-			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
-			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
-		}
-
-		err = r.createResource(ctx, migrationobj, configMap)
+		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds)
 		if err != nil {
-			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
-			return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
+			return nil, err
 		}
 	} else if err == nil {
 		if err = r.updateMigrationConfigMap(ctx, configMap, migrationobj, configMapName); err != nil {
@@ -1457,6 +1324,235 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 		}
 	}
 	return configMap, nil
+}
+
+func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vm, vmname, configMapName string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+) (*corev1.ConfigMap, error) {
+	r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
+
+	virtiodrivers := resolveVirtioDriverURL(migrationtemplate)
+
+	openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconcile mapping")
+	}
+
+	currentInstanceID, err := getCurrentInstanceID(openstackcreds)
+	if err != nil {
+		return nil, err
+	}
+
+	openstackports, err := r.processAdvancedOptions(ctx, migrationplan, openstackcreds, &openstacknws, &openstackvolumetypes)
+	if err != nil {
+		return nil, err
+	}
+
+	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, vm, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
+
+	if utils.IsOpenstackPCD(*openstackcreds) {
+		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
+	}
+
+	r.setMigrationSpecificFields(configMapData, migrationobj)
+
+	if err := r.determineAndSetTargetFlavor(ctx, configMapData, vmMachine, migrationtemplate, openstackcreds); err != nil {
+		return nil, err
+	}
+
+	if err := r.setOSFamilyAndStorageFields(configMapData, vmMachine, migrationtemplate, arraycreds); err != nil {
+		return nil, err
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: migrationplan.Namespace,
+		},
+		Data: configMapData,
+	}
+
+	err = r.createResource(ctx, migrationobj, configMap)
+	if err != nil {
+		r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
+		return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
+	}
+
+	return configMap, nil
+}
+
+func resolveVirtioDriverURL(migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) string {
+	if migrationtemplate.Spec.VirtioWinDriver == "" {
+		return "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+	}
+	return migrationtemplate.Spec.VirtioWinDriver
+}
+
+func getCurrentInstanceID(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	if openstackcreds.Spec.VJBInstanceID != "" {
+		return openstackcreds.Spec.VJBInstanceID, nil
+	}
+	currentInstanceID, err := v2vutils.GetCurrentInstanceUUID()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get current instance uuid")
+	}
+	return currentInstanceID, nil
+}
+
+func (r *MigrationPlanReconciler) processAdvancedOptions(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	openstacknws *[]string,
+	openstackvolumetypes *[]string,
+) ([]string, error) {
+	openstackports := []string{}
+
+	if reflect.DeepEqual(migrationplan.Spec.AdvancedOptions, vjailbreakv1alpha1.AdvancedOptions{}) {
+		return openstackports, nil
+	}
+
+	if len(migrationplan.Spec.AdvancedOptions.GranularNetworks) > 0 {
+		if err := utils.VerifyNetworks(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularNetworks); err != nil {
+			return nil, errors.Wrap(err, "failed to verify networks in advanced mapping")
+		}
+		*openstacknws = migrationplan.Spec.AdvancedOptions.GranularNetworks
+	}
+
+	if len(migrationplan.Spec.AdvancedOptions.GranularVolumeTypes) > 0 {
+		if err := utils.VerifyStorage(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularVolumeTypes); err != nil {
+			return nil, errors.Wrap(err, "failed to verify volume types in advanced mapping")
+		}
+		*openstackvolumetypes = migrationplan.Spec.AdvancedOptions.GranularVolumeTypes
+	}
+
+	if len(migrationplan.Spec.AdvancedOptions.GranularPorts) > 0 {
+		if err := utils.VerifyPorts(ctx, r.Client, openstackcreds, migrationplan.Spec.AdvancedOptions.GranularPorts); err != nil {
+			return nil, errors.Wrap(err, "failed to verify ports in advanced mapping")
+		}
+		openstackports = migrationplan.Spec.AdvancedOptions.GranularPorts
+	}
+
+	return openstackports, nil
+}
+
+func (r *MigrationPlanReconciler) buildBaseConfigMapData(
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	vm, virtiodrivers string,
+	openstacknws, openstackports, openstackvolumetypes []string,
+	currentInstanceID string,
+) map[string]string {
+	return map[string]string{
+		"SOURCE_VM_NAME":                    vm,
+		"CONVERT":                           "true",
+		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
+		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+		"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+		"CUTOVEREND":                        migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
+		"NEUTRON_NETWORK_NAMES":             strings.Join(openstacknws, ","),
+		"NEUTRON_PORT_IDS":                  strings.Join(openstackports, ","),
+		"CINDER_VOLUME_TYPES":               strings.Join(openstackvolumetypes, ","),
+		"VIRTIO_WIN_DRIVER":                 virtiodrivers,
+		"PERFORM_HEALTH_CHECKS":             strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+		"HEALTH_CHECK_PORT":                 migrationplan.Spec.MigrationStrategy.HealthCheckPort,
+		"VMWARE_MACHINE_OBJECT_NAME":        vmMachine.Name,
+		"SECURITY_GROUPS":                   strings.Join(migrationplan.Spec.SecurityGroups, ","),
+		"SERVER_GROUP":                      migrationplan.Spec.ServerGroup,
+		"RDM_DISK_NAMES":                    strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
+		"FALLBACK_TO_DHCP":                  strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
+		"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
+		"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
+		"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
+		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
+		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
+		"CURRENT_INSTANCE_ID":               currentInstanceID,
+		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
+	}
+}
+
+func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[string]string, migrationobj *vjailbreakv1alpha1.Migration) {
+	if migrationobj.Spec.AssignedIP != "" {
+		configMapData["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
+	} else {
+		configMapData["ASSIGNED_IP"] = ""
+	}
+
+	if migrationobj.Spec.NetworkOverrides != "" {
+		configMapData["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
+	}
+}
+
+func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Context,
+	configMapData map[string]string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+) error {
+	if vmMachine.Spec.TargetFlavorID != "" {
+		configMapData["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
+		return nil
+	}
+
+	allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
+	if err != nil {
+		return errors.Wrap(err, "failed to list all flavors")
+	}
+
+	useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
+	passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
+	vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
+
+	flavor, err := openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
+	if err != nil {
+		return errors.Wrap(err, "failed to get closest flavor")
+	}
+
+	if flavor == nil {
+		gpuInfo := " without GPU"
+		if passthroughGPUCount > 0 || vgpuCount > 0 {
+			gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
+		}
+		return errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
+	}
+
+	configMapData["TARGET_FLAVOR_ID"] = flavor.ID
+	return nil
+}
+
+func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
+	configMapData map[string]string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+) error {
+	if vmMachine.Spec.VMInfo.OSFamily == "" {
+		return errors.Errorf(
+			"OSFamily is not available for the VM '%s', "+
+				"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
+			vmMachine.Name)
+	}
+
+	configMapData["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
+
+	if migrationtemplate.Spec.OSFamily != "" {
+		configMapData["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
+	}
+
+	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
+		configMapData["STORAGE_COPY_METHOD"] = StorageCopyMethod
+		configMapData["VENDOR_TYPE"] = arraycreds.Spec.VendorType
+		configMapData["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+	}
+
+	return nil
 }
 
 // updateMigrationConfigMap updates the mutable fields of an existing migration ConfigMap.

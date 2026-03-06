@@ -19,8 +19,8 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +61,12 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
+	currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+	if currentInstanceUUID == "" {
+		PrintLog("CURRENT_INSTANCE_ID environment variable is not set")
+	} else {
+		return currentInstanceUUID, nil
+	}
 
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
