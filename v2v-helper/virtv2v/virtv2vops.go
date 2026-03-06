@@ -170,13 +170,14 @@ func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 	wrapper.WriteString("set +e\n")
 
 	for idx, script := range scripts {
-		partPath := fmt.Sprintf("%s/user_firstboot_part_%03d.sh", userScriptWorkDir, idx+1)
-		if err := os.WriteFile(partPath, []byte(script+"\n"), 0755); err != nil {
-			return "", fmt.Errorf("failed to write Linux user script part %d: %w", idx+1, err)
-		}
-
 		wrapper.WriteString(fmt.Sprintf("echo \"-> running user script part %d\"\n", idx+1))
-		wrapper.WriteString(fmt.Sprintf("/bin/bash \"%s\"\n", partPath))
+		heredocMarker := fmt.Sprintf("VJ_USER_SCRIPT_PART_%03d", idx+1)
+		wrapper.WriteString(fmt.Sprintf("/bin/bash <<'%s'\n", heredocMarker))
+		wrapper.WriteString(script)
+		if !strings.HasSuffix(script, "\n") {
+			wrapper.WriteString("\n")
+		}
+		wrapper.WriteString(fmt.Sprintf("%s\n", heredocMarker))
 		wrapper.WriteString("rc=$?\n")
 		wrapper.WriteString(fmt.Sprintf("if [ $rc -ne 0 ]; then echo \"WARNING: user script part %d failed with exit code $rc, continuing\"; fi\n", idx+1))
 	}
