@@ -30,9 +30,7 @@ import (
 )
 
 // CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
-func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
-	var openstackuuid string
-
+func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool, openstackuuid string) error {
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
@@ -44,14 +42,16 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 		return nil
 	}
 
-	if local {
-		// Local mode
-		openstackuuid = "fake-openstackuuid"
-	} else {
-		// Controller manager is always on the master node due to pod affinity
-		openstackuuid, err = utils.GetCurrentInstanceUUID()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current instance uuid")
+	if openstackuuid == "" {
+		if local {
+			// Local mode
+			openstackuuid = "fake-openstackuuid"
+		} else {
+			// Controller manager is always on the master node due to pod affinity
+			openstackuuid, err = utils.GetCurrentInstanceUUID()
+			if err != nil {
+				return errors.Wrap(err, "failed to get current instance uuid")
+			}
 		}
 	}
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{
