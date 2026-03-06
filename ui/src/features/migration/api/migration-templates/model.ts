@@ -86,6 +86,7 @@ export interface VmNetworkInterface {
   mac: string
   network: string
   ipAddress: string
+  originalIpAddress?: string
   preserveIP?: boolean
   preserveMAC?: boolean
 }
