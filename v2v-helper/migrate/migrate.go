@@ -1170,13 +1170,16 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 				Async:  true,
 			})
 		}
-		if err := virtv2v.PushWindowsFirstBoot(); err != nil {
+		userFirstBootScripts, err := virtv2v.PushWindowsFirstBoot(vminfo.OSType)
+		if err != nil {
 			return err
 		}
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "user_firstboot.ps1",
-			Async:  false,
-		})
+		for _, scriptName := range userFirstBootScripts {
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: scriptName,
+				Async:  true,
+			})
+		}
 	}
 
 	// Add first boot scripts for RHEL family
