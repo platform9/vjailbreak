@@ -50,6 +50,8 @@ type MigrationParams struct {
 	StorageCopyMethod string
 	VendorType        string
 	ArrayCredsMapping string
+
+	CurrentInstanceID string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -100,5 +102,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		ArrayCredsMapping:              string(configMap.Data["ARRAY_CREDS_MAPPING"]),
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
+		CurrentInstanceID:              string(configMap.Data["CURRENT_INSTANCE_ID"]),
 	}, nil
 }
