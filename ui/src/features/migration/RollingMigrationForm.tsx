@@ -195,7 +195,6 @@ export interface VmNetworkInterface {
   mac: string
   network: string
   ipAddress: string
-  originalIpAddress?: string
 }
 
 // ESX columns will be defined inside the component
@@ -410,47 +409,13 @@ export default function RollingMigrationFormDrawer({
   const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
     {}
   )
-  const [bulkCurrentIPs, setBulkCurrentIPs] = useState<Record<string, Record<number, string>>>({})
   const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
-  const [originalIPsPerVM, setOriginalIPsPerVM] = useState<Record<string, Record<number, string>>>(
-    {}
-  )
   const [bulkValidationStatus, setBulkValidationStatus] = useState<
     Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
   >({})
   const [bulkValidationMessages, setBulkValidationMessages] = useState<
     Record<string, Record<number, string>>
   >({}) // Updated for multiple interfaces
-
-  useEffect(() => {
-    setOriginalIPsPerVM((prev) => {
-      const next = { ...prev }
-      vmsWithAssignments.forEach((vm) => {
-        if (!next[vm.id]) next[vm.id] = {}
-
-        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-          vm.networkInterfaces.forEach((nic, index) => {
-            if (next[vm.id][index] !== undefined) return
-
-            const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
-            const fallbackIp =
-              index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-            const discoveredIp = nic.ipAddress || fallbackIp || ''
-            if (discoveredIp.trim() !== '') {
-              next[vm.id][index] = discoveredIp
-            }
-          })
-        } else {
-          if (next[vm.id][0] !== undefined) return
-          const discoveredIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
-          if (discoveredIp.trim() !== '') {
-            next[vm.id][0] = discoveredIp
-          }
-        }
-      })
-      return next
-    })
-  }, [vmsWithAssignments])
 
   const hasBulkIpValidationErrors = useMemo(() => {
     return Object.values(bulkValidationStatus).some((interfaces) =>
@@ -2404,7 +2369,6 @@ export default function RollingMigrationFormDrawer({
     setBulkEditIPs({})
     setBulkPreserveIp({})
     setBulkPreserveMac({})
-    setBulkCurrentIPs({})
     setBulkExistingIPs({})
     setBulkValidationStatus({})
     setBulkValidationMessages({})
@@ -2540,21 +2504,6 @@ export default function RollingMigrationFormDrawer({
   }
 
   const handleApplyBulkIPs = async () => {
-    setOriginalIPsPerVM((prev) => {
-      const next = { ...prev }
-      Object.entries(bulkExistingIPs).forEach(([vmId, interfaces]) => {
-        if (!next[vmId]) next[vmId] = {}
-        Object.entries(interfaces || {}).forEach(([idxStr, ip]) => {
-          const idx = Number(idxStr)
-          if (next[vmId][idx] !== undefined) return
-          if (typeof ip === 'string' && ip.trim() !== '') {
-            next[vmId][idx] = ip
-          }
-        })
-      })
-      return next
-    })
-
     // Collect all IPs to apply with their VM and interface info
     const ipsToApply: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
     const clearIpsToApply: Array<{ vmId: string; interfaceIndex: number }> = []
@@ -2592,7 +2541,6 @@ export default function RollingMigrationFormDrawer({
         const interfaceIndex = parseInt(interfaceIndexStr)
         const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
         const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
-        const currentIp = bulkCurrentIPs?.[vmId]?.[interfaceIndex] || ''
         const typedIp = ip.trim()
 
         // When Preserve IP is disabled, allow clearing the IP (empty value)
@@ -2605,8 +2553,8 @@ export default function RollingMigrationFormDrawer({
 
         if (typedIp === '') return
 
-        // If the desired IP already matches the current IP, skip applying.
-        if (typedIp !== '' && typedIp === currentIp.trim()) {
+        // If Preserve IP is enabled and an existing IP is present, we keep it as-is.
+        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
           return
         }
 
@@ -2925,7 +2873,6 @@ export default function RollingMigrationFormDrawer({
     const initialBulkEditIPs: Record<string, Record<number, string>> = {}
     const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
     const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
-    const initialBulkCurrentIPs: Record<string, Record<number, string>> = {}
     const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
     const initialValidationStatus: Record<
       string,
@@ -2939,7 +2886,6 @@ export default function RollingMigrationFormDrawer({
       initialBulkEditIPs[vm.id] = {}
       initialBulkPreserveIp[vm.id] = {}
       initialBulkPreserveMac[vm.id] = {}
-      initialBulkCurrentIPs[vm.id] = {}
       initialBulkExistingIPs[vm.id] = {}
       initialValidationStatus[vm.id] = {}
 
@@ -2950,48 +2896,28 @@ export default function RollingMigrationFormDrawer({
           const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
           const fallbackIp =
             index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-          const originalIp =
-            originalIPsPerVM?.[vm.id]?.[index] !== undefined
-              ? originalIPsPerVM[vm.id][index]
-              : nic.ipAddress || fallbackIp || ''
-          const currentIp = nic.ipAddress || fallbackIp || ''
-          initialBulkExistingIPs[vm.id][index] = originalIp
-          initialBulkCurrentIPs[vm.id][index] = currentIp
+          const existingIp = nic.ipAddress || fallbackIp || ''
+          initialBulkExistingIPs[vm.id][index] = existingIp
+          initialBulkEditIPs[vm.id][index] = existingIp
 
           const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[index] !== false
-          initialBulkEditIPs[vm.id][index] = effectivePreserveIp ? originalIp : currentIp
-
           initialBulkPreserveIp[vm.id][index] = effectivePreserveIp
           initialBulkPreserveMac[vm.id][index] = vm.preserveMac?.[index] !== false
-          initialValidationStatus[vm.id][index] = (effectivePreserveIp ? originalIp : currentIp)
-            ? 'valid'
-            : 'empty'
+          initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
         })
       } else {
-        const originalIp =
-          originalIPsPerVM?.[vm.id]?.[0] !== undefined
-            ? originalIPsPerVM[vm.id][0]
-            : vm.ip && vm.ip !== '—'
-              ? vm.ip
-              : ''
-        const currentIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
-        initialBulkExistingIPs[vm.id][0] = originalIp
-        initialBulkCurrentIPs[vm.id][0] = currentIp
-
-        const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[0] !== false
-        initialBulkEditIPs[vm.id][0] = effectivePreserveIp ? originalIp : currentIp
-        initialBulkPreserveIp[vm.id][0] = effectivePreserveIp
+        const existingIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
+        initialBulkExistingIPs[vm.id][0] = existingIp
+        initialBulkEditIPs[vm.id][0] = existingIp
+        initialBulkPreserveIp[vm.id][0] = isPoweredOff ? false : vm.preserveIp?.[0] !== false
         initialBulkPreserveMac[vm.id][0] = vm.preserveMac?.[0] !== false
-        initialValidationStatus[vm.id][0] = (effectivePreserveIp ? originalIp : currentIp)
-          ? 'valid'
-          : 'empty'
+        initialValidationStatus[vm.id][0] = existingIp ? 'valid' : 'empty'
       }
     })
 
     setBulkEditIPs(initialBulkEditIPs)
     setBulkPreserveIp(initialBulkPreserveIp)
     setBulkPreserveMac(initialBulkPreserveMac)
-    setBulkCurrentIPs(initialBulkCurrentIPs)
     setBulkExistingIPs(initialBulkExistingIPs)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
