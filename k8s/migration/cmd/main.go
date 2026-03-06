@@ -194,8 +194,9 @@ func main() {
 	}
 
 	// Now that cache is synced, we can create master node entry
-	if err = utils.CheckAndCreateMasterNodeEntry(ctx, mgr.GetClient(), local); err != nil {
-		handleStartupError(err, "Problem creating master node entry")
+	if err = utils.CheckAndCreateMasterNodeEntry(ctx, mgr.GetClient(), local, ""); err != nil {
+		setupLog.Error(err, "Problem creating master node entry. Possibly because metadata service was unreachable, will try again later")
+		// handleStartupError(err, "Problem creating master node entry")
 	}
 
 	// Block forever
