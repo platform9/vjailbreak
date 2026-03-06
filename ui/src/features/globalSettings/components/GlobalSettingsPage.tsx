@@ -937,10 +937,6 @@ export default function GlobalSettingsPage() {
     [onSave, validateVddkFile, vddkFile, vddkStatus]
   )
 
-  const handleCancelClick = useCallback(() => {
-    cancelVddkUpload()
-  }, [cancelVddkUpload])
-
   useEffect(() => {
     return () => {
       vddkUploadAbortControllerRef.current?.abort()
@@ -1394,6 +1390,7 @@ export default function GlobalSettingsPage() {
               existingVddkVersion={existingVddkVersion}
               onFileSelected={handleVddkFileSelected}
               onClear={handleVddkClear}
+              onCancelUpload={cancelVddkUpload}
             />
           </TabPanel>
 
@@ -1408,14 +1405,6 @@ export default function GlobalSettingsPage() {
               data-testid="global-settings-reset-defaults"
             >
               Reset to Defaults
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={handleCancelClick}
-              disabled={vddkStatus !== 'uploading'}
-              data-testid="global-settings-cancel"
-            >
-              Cancel Upload
             </Button>
             <Button
               variant="contained"
