@@ -1,85 +1,48 @@
-package k8sutils
+package config
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	commonconfig "github.com/platform9/vjailbreak/pkg/common/config"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
-	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	client "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetInclusterClient() (client.Client, error) {
-	return k8scommon.GetInclusterClient()
+// VjailbreakSettings holds configuration settings for vjailbreak operations
+type VjailbreakSettings struct {
+	ChangedBlocksCopyIterationThreshold int
+	PeriodicSyncInterval                string
+	VMActiveWaitIntervalSeconds         int
+	VMActiveWaitRetryLimit              int
+	DefaultMigrationMethod              string
+	VCenterScanConcurrencyLimit         int
+	CleanupVolumesAfterConvertFailure   bool
+	CleanupPortsAfterMigrationFailure   bool
+	PopulateVMwareMachineFlavors        bool
+	VolumeAvailableWaitIntervalSeconds  int
+	VolumeAvailableWaitRetryLimit       int
+	VCenterLoginRetryLimit              int
+	OpenstackCredsRequeueAfterMinutes   int
+	VMwareCredsRequeueAfterMinutes      int
+	ValidateRDMOwnerVMs                 bool
+	PeriodicSyncMaxRetries              uint64
+	PeriodicSyncRetryCap                string
+	AutoFstabUpdate                     bool
+	AutoPXEBootOnConversion             bool
+	V2VHelperPodCPURequest              string
+	V2VHelperPodMemoryRequest           string
+	V2VHelperPodCPULimit                string
+	V2VHelperPodMemoryLimit             string
+	V2VHelperPodEphemeralStorageRequest string
+	V2VHelperPodEphemeralStorageLimit   string
 }
 
-func GetVMwareMachine(ctx context.Context, vmName string) (*vjailbreakv1alpha1.VMwareMachine, error) {
-	client, err := GetInclusterClient()
-	if err != nil {
-		return nil, err
-	}
-	vmwareMachine := &vjailbreakv1alpha1.VMwareMachine{}
-	vmK8sName, err := GetVMwareMachineName()
-	if err != nil {
-		return nil, err
-	}
-	err = client.Get(ctx, types.NamespacedName{
-		Name:      vmK8sName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, vmwareMachine)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get vmware machine")
-	}
-	return vmwareMachine, nil
-}
-
-func GetVMwareMachineName() (string, error) {
-	vmK8sName := os.Getenv("VMWARE_MACHINE_OBJECT_NAME")
-	if vmK8sName == "" {
-		return "", errors.New("VMWARE_MACHINE_OBJECT_NAME environment variable is not set")
-	}
-	return vmK8sName, nil
-}
-
-func GetRDMDisk(ctx context.Context, diskName string) (*vjailbreakv1alpha1.RDMDisk, error) {
-	client, err := GetInclusterClient()
-	if err != nil {
-		return nil, err
-	}
-	rdmDisk := &vjailbreakv1alpha1.RDMDisk{}
-	if err != nil {
-		return nil, err
-	}
-	err = client.Get(ctx, types.NamespacedName{
-		Name:      diskName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, rdmDisk)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get vmware machine")
-	}
-	return rdmDisk, nil
-}
-
-func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
-	settings, err := commonconfig.GetVjailbreakSettings(ctx, k8sClient)
-	if err != nil {
-		return nil, err
-	}
-	// Convert from common.VjailbreakSettings to k8sutils.VjailbreakSettings
-	return (*VjailbreakSettings)(settings), nil
-}
-
-// atoi is a helper function to convert string to int with a default value of 0
-func atoi(s string) int {
+// Atoi is a helper function to convert string to int with a default value of 0
+func Atoi(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
 		return 0
@@ -87,8 +50,9 @@ func atoi(s string) int {
 	return i
 }
 
-// GetVjailbreakSettingsOriginal is the original implementation kept for reference
-func GetVjailbreakSettingsOriginal(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+// GetVjailbreakSettings retrieves vjailbreak configuration settings from a ConfigMap
+// and applies default values for any missing settings.
+func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
 	vjailbreakSettingsCM := &corev1.ConfigMap{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
 		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
@@ -220,22 +184,22 @@ func GetVjailbreakSettingsOriginal(ctx context.Context, k8sClient client.Client)
 	}
 
 	return &VjailbreakSettings{
-		ChangedBlocksCopyIterationThreshold: commonconfig.Atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		ChangedBlocksCopyIterationThreshold: Atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
-		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
-		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
+		VMActiveWaitIntervalSeconds:         Atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
+		VMActiveWaitRetryLimit:              Atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),
 		DefaultMigrationMethod:              vjailbreakSettingsCM.Data["DEFAULT_MIGRATION_METHOD"],
-		VCenterScanConcurrencyLimit:         atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
+		VCenterScanConcurrencyLimit:         Atoi(vjailbreakSettingsCM.Data["VCENTER_SCAN_CONCURRENCY_LIMIT"]),
 		CleanupVolumesAfterConvertFailure:   vjailbreakSettingsCM.Data["CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE"] == "true",
 		CleanupPortsAfterMigrationFailure:   vjailbreakSettingsCM.Data["CLEANUP_PORTS_AFTER_MIGRATION_FAILURE"] == "true",
 		PopulateVMwareMachineFlavors:        vjailbreakSettingsCM.Data["POPULATE_VMWARE_MACHINE_FLAVORS"] == "true",
-		VolumeAvailableWaitIntervalSeconds:  atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
-		VolumeAvailableWaitRetryLimit:       atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
-		VCenterLoginRetryLimit:              atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
-		OpenstackCredsRequeueAfterMinutes:   atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
-		VMwareCredsRequeueAfterMinutes:      atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
+		VolumeAvailableWaitIntervalSeconds:  Atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS"]),
+		VolumeAvailableWaitRetryLimit:       Atoi(vjailbreakSettingsCM.Data["VOLUME_AVAILABLE_WAIT_RETRY_LIMIT"]),
+		VCenterLoginRetryLimit:              Atoi(vjailbreakSettingsCM.Data["VCENTER_LOGIN_RETRY_LIMIT"]),
+		OpenstackCredsRequeueAfterMinutes:   Atoi(vjailbreakSettingsCM.Data["OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES"]),
+		VMwareCredsRequeueAfterMinutes:      Atoi(vjailbreakSettingsCM.Data["VMWARE_CREDS_REQUEUE_AFTER_MINUTES"]),
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
-		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
+		PeriodicSyncMaxRetries:              uint64(Atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
 		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
 		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
 		AutoPXEBootOnConversion:             strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey])) == "true",
@@ -246,43 +210,4 @@ func GetVjailbreakSettingsOriginal(ctx context.Context, k8sClient client.Client)
 		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
 	}, nil
-}
-
-func GetArrayCredsMapping(ctx context.Context, k8sClient client.Client, arrayCredsMappingName string) (vjailbreakv1alpha1.ArrayCredsMapping, error) {
-	arrayCredsMapping := vjailbreakv1alpha1.ArrayCredsMapping{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsMappingName, Namespace: constants.NamespaceMigrationSystem}, &arrayCredsMapping); err != nil {
-		return vjailbreakv1alpha1.ArrayCredsMapping{}, errors.Wrap(err, "failed to get array creds mapping configmap")
-	}
-	return arrayCredsMapping, nil
-}
-
-func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName string) (vjailbreakv1alpha1.ArrayCreds, error) {
-	arrayCreds := vjailbreakv1alpha1.ArrayCreds{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: arrayCredsName, Namespace: constants.NamespaceMigrationSystem}, &arrayCreds); err != nil {
-		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds configmap")
-	}
-	return arrayCreds, nil
-}
-
-// GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret
-func GetESXiSSHPrivateKey(ctx context.Context, k8sClient client.Client, secretName string) ([]byte, error) {
-	secret := &corev1.Secret{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
-		Name:      secretName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, secret); err != nil {
-		return nil, errors.Wrapf(err, "failed to get ESXi SSH secret %s", secretName)
-	}
-
-	// The secret should contain a key named "ssh-privatekey"
-	privateKey, ok := secret.Data["ssh-privatekey"]
-	if !ok {
-		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
-	}
-
-	if len(privateKey) == 0 {
-		return nil, fmt.Errorf("ESXi SSH private key in secret %s is empty", secretName)
-	}
-
-	return privateKey, nil
 }

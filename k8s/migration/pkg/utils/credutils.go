@@ -31,9 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
+	openstackcommon "github.com/platform9/vjailbreak/pkg/common/openstack"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	vmwarecommon "github.com/platform9/vjailbreak/pkg/common/vmware"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
@@ -55,20 +57,12 @@ const (
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
 func GetVMwareCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
-	creds := vjailbreakv1alpha1.VMwareCreds{}
-	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get VMware credentials '%s'", credsName)
-	}
-	return GetVMwareCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+	return vmwarecommon.GetVMwareCredsInfo(ctx, k3sclient, credsName)
 }
 
 // GetOpenstackCredsInfo retrieves OpenStack credentials from a secret
 func GetOpenstackCredsInfo(ctx context.Context, k3sclient client.Client, credsName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
-	creds := vjailbreakv1alpha1.OpenstackCreds{}
-	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: credsName}, &creds); err != nil {
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrapf(err, "failed to get OpenStack credentials '%s'", credsName)
-	}
-	return GetOpenstackCredentialsFromSecret(ctx, k3sclient, creds.Spec.SecretRef.Name)
+	return openstackcommon.GetOpenstackCredsInfo(ctx, k3sclient, credsName)
 }
 
 // GetArrayCredsInfo retrieves storage array credentials from a secret
@@ -118,107 +112,12 @@ func GetArrayCredentialsFromSecret(ctx context.Context, k3sclient client.Client,
 
 // GetVMwareCredentialsFromSecret retrieves vCenter credentials from a secret
 func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.VMwareCredsInfo, error) {
-	secret := &corev1.Secret{}
-
-	// Get In cluster client
-	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Wrapf(err, "failed to get secret '%s'", secretName)
-	}
-
-	if secret.Data == nil {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, fmt.Errorf("no data in secret '%s'", secretName)
-	}
-
-	host := string(secret.Data["VCENTER_HOST"])
-	username := string(secret.Data["VCENTER_USERNAME"])
-	password := string(secret.Data["VCENTER_PASSWORD"])
-	insecureStr := string(secret.Data["VCENTER_INSECURE"])
-	datacenter := string(secret.Data["VCENTER_DATACENTER"])
-
-	if host == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_HOST is missing in secret '%s'", secretName)
-	}
-	if username == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_USERNAME is missing in secret '%s'", secretName)
-	}
-	if password == "" {
-		return vjailbreakv1alpha1.VMwareCredsInfo{}, errors.Errorf("VCENTER_PASSWORD is missing in secret '%s'", secretName)
-	}
-
-	insecure := strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
-
-	return vjailbreakv1alpha1.VMwareCredsInfo{
-		Host:       host,
-		Username:   username,
-		Password:   password,
-		Datacenter: datacenter,
-		Insecure:   insecure,
-	}, nil
+	return vmwarecommon.GetVMwareCredentialsFromSecret(ctx, k3sclient, secretName)
 }
 
 // GetOpenstackCredentialsFromSecret retrieves and checks the secret
 func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
-	secret := &corev1.Secret{}
-	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{Namespace: constants.NamespaceMigrationSystem, Name: secretName}, secret); err != nil {
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to get secret")
-	}
-
-	// Check which authentication method is being used
-	authToken := string(secret.Data["OS_AUTH_TOKEN"])
-	username := string(secret.Data["OS_USERNAME"])
-	password := string(secret.Data["OS_PASSWORD"])
-
-	// Common required fields for both auth methods
-	authURL := string(secret.Data["OS_AUTH_URL"])
-	tenantName := string(secret.Data["OS_TENANT_NAME"])
-	regionName := string(secret.Data["OS_REGION_NAME"])
-
-	// Validate common required fields
-	if authURL == "" {
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_AUTH_URL is missing in secret '%s'", secretName)
-	}
-	if tenantName == "" {
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_TENANT_NAME is missing in secret '%s'", secretName)
-	}
-	if regionName == "" {
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_REGION_NAME is missing in secret '%s'", secretName)
-	}
-
-	var openstackCredsInfo vjailbreakv1alpha1.OpenStackCredsInfo
-
-	// Determine authentication method and validate accordingly
-	//nolint:gocritic
-	if authToken != "" {
-		// Token-based authentication
-		openstackCredsInfo.AuthToken = authToken
-		openstackCredsInfo.AuthURL = authURL
-		openstackCredsInfo.TenantName = tenantName
-		openstackCredsInfo.RegionName = regionName
-		// DomainName is optional for token-based auth
-		openstackCredsInfo.DomainName = string(secret.Data["OS_DOMAIN_NAME"])
-	} else if username != "" && password != "" {
-		// Password-based authentication
-		domainName := string(secret.Data["OS_DOMAIN_NAME"])
-		if domainName == "" {
-			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("OS_DOMAIN_NAME is missing in secret '%s' for password-based auth", secretName)
-		}
-
-		openstackCredsInfo.AuthURL = authURL
-		openstackCredsInfo.Username = username
-		openstackCredsInfo.Password = password
-		openstackCredsInfo.DomainName = domainName
-		openstackCredsInfo.TenantName = tenantName
-		openstackCredsInfo.RegionName = regionName
-	} else {
-		// Neither authentication method has complete credentials
-		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Errorf("missing required fields in secret '%s': either OS_AUTH_TOKEN or (OS_USERNAME and OS_PASSWORD) must be provided", secretName)
-	}
-
-	// Parse insecure flag
-	insecureStr := string(secret.Data["OS_INSECURE"])
-	openstackCredsInfo.Insecure = strings.EqualFold(strings.TrimSpace(insecureStr), trueString)
-
-	return openstackCredsInfo, nil
+	return openstackcommon.GetOpenstackCredentialsFromSecret(ctx, k3sclient, secretName)
 }
 
 // VerifyNetworks verifies the existence of specified networks in OpenStack

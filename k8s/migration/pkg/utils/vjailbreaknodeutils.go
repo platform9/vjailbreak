@@ -17,17 +17,14 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
-	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -800,23 +797,7 @@ func GetActiveMigrations(ctx context.Context, nodeName string, k3sclient client.
 
 // GetInclusterClient creates and returns a Kubernetes in-cluster client
 func GetInclusterClient() (client.Client, error) {
-	// Create a direct Kubernetes client
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get in-cluster config")
-	}
-	scheme := runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
-	clientset, err := client.New(config, client.Options{
-		Scheme: scheme,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get in-cluster config")
-	}
-
-	return clientset, err
+	return k8scommon.GetInclusterClient()
 }
 
 // GetNodeByName returns the node object by name
