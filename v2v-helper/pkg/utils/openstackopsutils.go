@@ -587,7 +587,7 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
+	if len(network.Subnets) == 0 && mac != "" { // mac is not empty, so we should have a subnet, oktherwise it could be an L2 migration
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
