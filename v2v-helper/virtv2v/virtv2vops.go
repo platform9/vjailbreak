@@ -146,6 +146,7 @@ func scriptTargetAppliesToOS(target, ostype string) bool {
 
 func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 	userScriptPath := "/home/fedora/scripts/user_firstboot.sh"
+	userScriptWorkDir := "/tmp/vjailbreak-user-firstboot"
 	content, err := os.ReadFile(userScriptPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -160,12 +161,16 @@ func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 		return "", nil
 	}
 
+	if err := os.MkdirAll(userScriptWorkDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create Linux user script work dir: %w", err)
+	}
+
 	var wrapper strings.Builder
 	wrapper.WriteString("#!/bin/bash\n")
 	wrapper.WriteString("set +e\n")
 
 	for idx, script := range scripts {
-		partPath := fmt.Sprintf("/home/fedora/scripts/user_firstboot_part_%03d.sh", idx+1)
+		partPath := fmt.Sprintf("%s/user_firstboot_part_%03d.sh", userScriptWorkDir, idx+1)
 		if err := os.WriteFile(partPath, []byte(script+"\n"), 0755); err != nil {
 			return "", fmt.Errorf("failed to write Linux user script part %d: %w", idx+1, err)
 		}
@@ -178,7 +183,7 @@ func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 
 	wrapper.WriteString("exit 0\n")
 
-	wrapperPath := "/home/fedora/scripts/user_firstboot_wrapper.sh"
+	wrapperPath := fmt.Sprintf("%s/user_firstboot_wrapper.sh", userScriptWorkDir)
 	if err := os.WriteFile(wrapperPath, []byte(wrapper.String()), 0755); err != nil {
 		return "", fmt.Errorf("failed to write Linux user firstboot wrapper: %w", err)
 	}
@@ -413,7 +418,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	if strings.ToLower(ostype) == constants.OSFamilyLinux {
 		userWrapperPath, err := prepareLinuxUserFirstBootWrapper(ostype)
 		if err != nil {
-			return err
+			log.Printf("Warning: unable to prepare Linux user post-migration scripts; continuing without user scripts: %v", err)
 		}
 		if userWrapperPath != "" {
 			args = append(args, "--firstboot", userWrapperPath)
