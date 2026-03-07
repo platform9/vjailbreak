@@ -491,9 +491,7 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked
-                          ? true
-                          : selectedMigrationOptions.postMigrationAction?.suffix
+                        suffix: isChecked ? true : false
                       })
                       onChange('postMigrationAction')({
                         ...params.postMigrationAction,
@@ -536,9 +534,7 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked
-                          ? true
-                          : selectedMigrationOptions.postMigrationAction?.folderName
+                        folderName: isChecked ? true : false
                       })
                       onChange('postMigrationAction')({
                         ...params.postMigrationAction,
