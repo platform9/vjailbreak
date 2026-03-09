@@ -15,6 +15,36 @@ check_command() {
   fi
 }
 
+# Function to wait for network availability (default route + global IPv4 address)
+wait_for_network() {
+  local timeout=300
+  local start_time=$(date +%s)
+
+  log "Waiting for network availability..."
+
+  while true; do
+    # Check for default route
+    if ip route | grep -q default; then
+      # Check for global IPv4 address (non-loopback)
+      if ip -4 addr show scope global | grep -q inet; then
+        log "Network detected. Default route and global IPv4 address available."
+        return 0
+      fi
+    fi
+
+    local current_time=$(date +%s)
+    local elapsed_time=$((current_time - start_time))
+
+    if [ $elapsed_time -ge $timeout ]; then
+      log "ERROR: Timed out waiting for network availability."
+      exit 1
+    fi
+
+    log "Waiting for network (default route and global IPv4 address)..."
+    sleep 5
+  done
+}
+
 # Airgapped-friendly: no external package installs; we'll generate /etc/htpasswd using openssl
 
 # sleep for 20s for env variables to be reflected properly in the VM after startup. 
@@ -136,6 +166,9 @@ wait_for_k3s_worker() {
 if [ "$IS_MASTER" == "true" ]; then
   log "Setting up K3s Master..."
 
+  # Wait for network availability before installing K3s
+  wait_for_network
+
   # Install K3s master with the specific version
   INSTALL_K3S_SKIP_DOWNLOAD=true /etc/pf9/k3s-setup/k3s-install.sh --disable traefik
   check_command "Installing K3s master"
@@ -213,7 +246,9 @@ else
     log "ERROR: Missing MASTER_IP or K3S_TOKEN for worker. Exiting."
     exit 1
   fi
-  
+
+  # Wait for network availability before installing K3s
+  wait_for_network
   
   # Echo K3S_URL and K3S_TOKEN for debugging
   export K3S_URL="https://$MASTER_IP:6443"
