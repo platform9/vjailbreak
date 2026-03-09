@@ -586,11 +586,14 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
+	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 && mac != "" { // mac is not empty, so we should have a subnet, oktherwise it could be an L2 migration
+	if len(network.Subnets) == 0 && currentInstanceID == "" {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
+	// if currentInstanceID is not nill that means this is an L2 network, we should continue
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
