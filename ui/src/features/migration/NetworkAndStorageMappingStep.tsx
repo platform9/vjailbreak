@@ -31,6 +31,11 @@ export interface ResourceMap {
   target: string
 }
 
+export interface PCDNetworkInfo {
+  name: string
+  tags: string[]
+}
+
 // Storage copy method options
 export const STORAGE_COPY_METHOD_OPTIONS = [
   { value: 'normal', label: 'Standard Copy' },
@@ -42,7 +47,7 @@ export type StorageCopyMethod = (typeof STORAGE_COPY_METHOD_OPTIONS)[number]['va
 interface NetworkAndStorageMappingStepProps {
   vmwareNetworks: string[]
   vmWareStorage: string[]
-  openstackNetworks: string[]
+  openstackNetworks: PCDNetworkInfo[]
   openstackStorage: string[]
   params: {
     networkMappings?: ResourceMap[]
@@ -97,13 +102,19 @@ export default function NetworkAndStorageMappingStep({
   )
 
   // Filter out any mappings that don't match the available networks/storage
+  // Extract network names from PCDNetworkInfo for filtering
+  const openstackNetworkNames = useMemo(
+    () => openstackNetworks.map((net) => net.name),
+    [openstackNetworks]
+  )
+
   const filteredNetworkMappings = useMemo(
     () =>
       (params.networkMappings || []).filter(
         (mapping) =>
-          vmwareNetworks.includes(mapping.source) && openstackNetworks.includes(mapping.target)
+          vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
       ),
-    [params.networkMappings, vmwareNetworks, openstackNetworks]
+    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
   )
 
   const filteredStorageMappings = useMemo(
@@ -276,7 +287,7 @@ export default function NetworkAndStorageMappingStep({
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmwareNetworks}
-                targetItems={openstackNetworks}
+                targetItems={openstackNetworkNames}
                 sourceLabel="VMware Network"
                 targetLabel="PCD Network"
                 values={params.networkMappings || []}

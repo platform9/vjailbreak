@@ -992,7 +992,7 @@ export default function RollingMigrationFormDrawer({
     if (!openstackCredData) return []
 
     const networks = openstackCredData?.status?.openstack?.networks || []
-    return networks.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    return networks.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }, [openstackCredData])
 
   const openstackVolumeTypes = useMemo(() => {
