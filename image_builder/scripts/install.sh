@@ -17,30 +17,37 @@ check_command() {
 
 # Function to wait for network availability (default route + global IPv4 address)
 wait_for_network() {
-  local timeout=300
-  local start_time=$(date +%s)
-
   log "Waiting for network availability..."
 
   while true; do
+    local has_default_route=false
+    local has_global_ipv4=false
+
     # Check for default route
     if ip route | grep -q default; then
-      # Check for global IPv4 address (non-loopback)
-      if ip -4 addr show scope global | grep -q inet; then
-        log "Network detected. Default route and global IPv4 address available."
-        return 0
-      fi
+      has_default_route=true
     fi
 
-    local current_time=$(date +%s)
-    local elapsed_time=$((current_time - start_time))
-
-    if [ $elapsed_time -ge $timeout ]; then
-      log "ERROR: Timed out waiting for network availability."
-      exit 1
+    # Check for global IPv4 address (non-loopback)
+    if ip -4 addr show scope global | grep -q inet; then
+      has_global_ipv4=true
     fi
 
-    log "Waiting for network (default route and global IPv4 address)..."
+    # Both conditions met
+    if [ "$has_default_route" = true ] && [ "$has_global_ipv4" = true ]; then
+      log "Network detected. Default route and global IPv4 address available."
+      return 0
+    fi
+
+    # Log specific missing conditions
+    if [ "$has_default_route" = false ] && [ "$has_global_ipv4" = false ]; then
+      log "Waiting for network: missing default route and global IPv4 address..."
+    elif [ "$has_default_route" = false ]; then
+      log "Waiting for network: missing default route..."
+    else
+      log "Waiting for network: missing global IPv4 address..."
+    fi
+
     sleep 5
   done
 }
