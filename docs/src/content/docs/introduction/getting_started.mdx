@@ -62,6 +62,28 @@ openstack image create --os-interface admin --insecure --container-format bare -
 - Choose a network that can reach your VMware vCenter environment.
 - Assign a network security group that allows inbound and outbound traffic.
 
+### Network Initialization
+
+vJailbreak requires a valid IP address and network route to initialize properly. The installation behavior differs based on your network configuration:
+
+**Standard DHCP Networks**
+
+In most PCD deployments, the VM receives an IP address via DHCP immediately at boot. The vJailbreak installation proceeds automatically and the UI becomes accessible within a few minutes at `http://<vm-ip>/`.
+
+**L2-Only Networks**
+
+In environments where IP addresses are assigned manually after VM deployment (L2-only networks without DHCP), the vJailbreak installation script waits until:
+- A non-loopback IPv4 address is assigned to the VM
+- A default route is configured
+
+The script logs its status to `/var/log/pf9-install.log`. Once you assign an IP and configure routing, installation proceeds automatically. No manual restart is required.
+
+```bash
+# Example: Assign static IP and route
+sudo ip addr add 192.168.1.100/24 dev ens3
+sudo ip route add default via 192.168.1.1
+```
+
 ### Configure VM with cloud-init
 Cloud-init can be used during VM creation to automate initial configuration including setting passwords and configuring /etc/hosts entries for DNS resolution.
 - When creating the VM, use a cloud-init configuration script to:
