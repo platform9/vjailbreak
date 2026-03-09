@@ -18,6 +18,8 @@ type VjailbreakSettings struct {
 	ValidateRDMOwnerVMs                 bool
 	PeriodicSyncMaxRetries              uint64
 	PeriodicSyncRetryCap                string
+	PeriodicSyncCoolingEnabled          bool
+	PeriodicSyncCoolingMultiplier       int
 	AutoFstabUpdate                     bool
 	AutoPXEBootOnConversion             bool
 	// V2VHelperPod resource configuration

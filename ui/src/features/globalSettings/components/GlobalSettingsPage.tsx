@@ -67,6 +67,8 @@ const Footer = styled(Box)(({ theme }) => ({
 const DEFAULTS: SettingsForm = {
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 20,
   PERIODIC_SYNC_INTERVAL: '1h',
+  PERIODIC_SYNC_COOLING_ENABLED: true,
+  PERIODIC_SYNC_COOLING_MULTIPLIER: 2,
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 20,
   VM_ACTIVE_WAIT_RETRY_LIMIT: 15,
   DEFAULT_MIGRATION_METHOD: 'hot',
@@ -96,7 +98,7 @@ const helpers = getGlobalSettingsHelpers(DEFAULTS)
 type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
-  general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
+  general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL', 'PERIODIC_SYNC_COOLING_ENABLED', 'PERIODIC_SYNC_COOLING_MULTIPLIER'],
   retry: [
     'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
     'VM_ACTIVE_WAIT_RETRY_LIMIT',
@@ -211,6 +213,8 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 'Number of iterations to copy changed blocks.',
   PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
+  PERIODIC_SYNC_COOLING_ENABLED: 'Enable cooling period after persistent sync failures to let infrastructure heal.',
+  PERIODIC_SYNC_COOLING_MULTIPLIER: 'Cooling period duration = multiplier × sync interval (e.g., 2 means wait 2x the sync interval).',
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Interval to wait for VM to become active (in seconds).',
   VM_ACTIVE_WAIT_RETRY_LIMIT: 'Number of retries to wait for VM to become active.',
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS:
@@ -357,6 +361,11 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       e.PERIODIC_SYNC_INTERVAL = intervalError
     }
 
+    const coolingMultiplier = state.PERIODIC_SYNC_COOLING_MULTIPLIER
+    if (!Number.isInteger(coolingMultiplier) || coolingMultiplier < 1 || coolingMultiplier > 10) {
+      e.PERIODIC_SYNC_COOLING_MULTIPLIER = 'Enter an integer between 1 and 10.'
+    }
+
     if (state.DEFAULT_MIGRATION_METHOD !== 'hot' && state.DEFAULT_MIGRATION_METHOD !== 'cold') {
       e.DEFAULT_MIGRATION_METHOD = "Must be 'hot' or 'cold'."
     }
@@ -388,7 +397,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
       'VALIDATE_RDM_OWNER_VMS',
-      'AUTO_FSTAB_UPDATE'
+      'AUTO_FSTAB_UPDATE',
+      'PERIODIC_SYNC_COOLING_ENABLED'
     ]
     bools.forEach((k) => {
       const val = state[k]
@@ -1048,6 +1058,34 @@ export default function GlobalSettingsPage() {
                   error={errors.PERIODIC_SYNC_INTERVAL}
                 />
               </Box>
+
+              <ToggleField
+                label="Enable Cooling Period"
+                name="PERIODIC_SYNC_COOLING_ENABLED"
+                checked={form.PERIODIC_SYNC_COOLING_ENABLED}
+                onChange={onBool}
+                tooltip={FIELD_TOOLTIPS.PERIODIC_SYNC_COOLING_ENABLED}
+                description="Pause sync attempts after persistent failures to let infrastructure heal."
+                data-testid="global-settings-toggle-PERIODIC_SYNC_COOLING_ENABLED"
+              />
+
+              {form.PERIODIC_SYNC_COOLING_ENABLED && (
+                <RHFTextField
+                  name="PERIODIC_SYNC_COOLING_MULTIPLIER"
+                  label="Cooling Period Multiplier"
+                  type="number"
+                  labelProps={{ tooltip: FIELD_TOOLTIPS.PERIODIC_SYNC_COOLING_MULTIPLIER }}
+                  error={Boolean(errors.PERIODIC_SYNC_COOLING_MULTIPLIER)}
+                  helperText={errors.PERIODIC_SYNC_COOLING_MULTIPLIER || 'Cooling duration = multiplier × sync interval'}
+                  onValueChange={(value) => {
+                    rhfForm.setValue(
+                      'PERIODIC_SYNC_COOLING_MULTIPLIER',
+                      value === '' ? ('' as any) : Number(value),
+                      { shouldValidate: true }
+                    )
+                  }}
+                />
+              )}
             </FormGrid>
           </TabPanel>
 

@@ -358,6 +358,16 @@ const (
 	// PeriodicSyncRetryCap is the max retry interval for CBT sync
 	PeriodicSyncRetryCap = "3h"
 
+	// PeriodicSyncCoolingEnabled is the default value for enabling cooling period after persistent failures
+	PeriodicSyncCoolingEnabled = true
+	// PeriodicSyncCoolingEnabledKey is the configmap key for enabling cooling period
+	PeriodicSyncCoolingEnabledKey = "PERIODIC_SYNC_COOLING_ENABLED"
+
+	// PeriodicSyncCoolingMultiplier is the default multiplier for cooling period duration (e.g., 2x sync interval)
+	PeriodicSyncCoolingMultiplier = 2
+	// PeriodicSyncCoolingMultiplierKey is the configmap key for cooling period multiplier
+	PeriodicSyncCoolingMultiplierKey = "PERIODIC_SYNC_COOLING_MULTIPLIER"
+
 	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
 	ESXiSSHSecretName = "esxi-ssh-key"
 

@@ -120,6 +120,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			ValidateRDMOwnerVMs:                 constants.ValidateRDMOwnerVMs,
 			PeriodicSyncMaxRetries:              constants.PeriodicSyncMaxRetries,
 			PeriodicSyncRetryCap:                constants.PeriodicSyncRetryCap,
+			PeriodicSyncCoolingEnabled:          constants.PeriodicSyncCoolingEnabled,
+			PeriodicSyncCoolingMultiplier:       constants.PeriodicSyncCoolingMultiplier,
 			AutoFstabUpdate:                     constants.AutoFstabUpdate,
 			AutoPXEBootOnConversion:             constants.AutoPXEBootOnConversionDefault,
 			V2VHelperPodCPURequest:              constants.V2VHelperPodCPURequest,
@@ -226,6 +228,14 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey] = constants.V2VHelperPodEphemeralStorageLimit
 	}
 
+	if vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingEnabledKey] == "" {
+		vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingEnabledKey] = strconv.FormatBool(constants.PeriodicSyncCoolingEnabled)
+	}
+
+	if vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingMultiplierKey] == "" {
+		vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingMultiplierKey] = strconv.Itoa(constants.PeriodicSyncCoolingMultiplier)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -244,6 +254,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		ValidateRDMOwnerVMs:                 strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.ValidateRDMOwnerVMsKey])) == "true",
 		PeriodicSyncMaxRetries:              uint64(atoi(vjailbreakSettingsCM.Data["PERIODIC_SYNC_MAX_RETRIES"])),
 		PeriodicSyncRetryCap:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_RETRY_CAP"],
+		PeriodicSyncCoolingEnabled:          strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingEnabledKey])) == "true",
+		PeriodicSyncCoolingMultiplier:       atoi(vjailbreakSettingsCM.Data[constants.PeriodicSyncCoolingMultiplierKey]),
 		AutoFstabUpdate:                     strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoFstabUpdateKey])) == "true",
 		AutoPXEBootOnConversion:             strings.ToLower(strings.TrimSpace(vjailbreakSettingsCM.Data[constants.AutoPXEBootOnConversionKey])) == "true",
 		V2VHelperPodCPURequest:              vjailbreakSettingsCM.Data[constants.V2VHelperPodCPURequestKey],

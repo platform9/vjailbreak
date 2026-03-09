@@ -22,6 +22,8 @@ data:
   DEPLOYMENT_NAME: vJailbreak
   PERIODIC_SYNC_MAX_RETRIES: "3" # max number of retries for CBT sync
   PERIODIC_SYNC_RETRY_CAP: "3h" # max retry interval for CBT sync
+  PERIODIC_SYNC_COOLING_ENABLED: "true" # enable cooling period after persistent sync failures
+  PERIODIC_SYNC_COOLING_MULTIPLIER: "2" # cooling period = multiplier × sync interval
   AUTO_FSTAB_UPDATE: "true" # automatically update fstab
   AUTO_PXE_BOOT_ON_CONVERSION: "false" # automatically set machine to PXE boot during cluster conversion
   V2V_HELPER_POD_CPU_REQUEST: "1000m"
