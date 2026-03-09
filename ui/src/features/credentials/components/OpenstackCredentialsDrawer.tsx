@@ -434,7 +434,7 @@ export default function OpenstackCredentialsDrawer({
                   name="vjbInstanceId"
                   label="vJailbreak Instance ID (Optional)"
                   placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
-                  helperText="Specify the OpenStack instance ID where vJailbreak is running. Leave empty to auto-detect. Required if this vJailbreak VM is on L2 Network."
+                  helperText="Specify the PCD instance ID where vJailbreak is running. Leave empty to auto-detect. Required if this vJailbreak VM is on L2 Network."
                   fullWidth
                 />
               </FormGrid>

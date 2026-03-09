@@ -474,9 +474,13 @@ func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStack
 
 	// Extract security group names from server
 	securityGroups := []string{}
-	for _, sg := range server.SecurityGroups {
+	for i, sg := range server.SecurityGroups {
 		if sgName, ok := sg["name"].(string); ok {
 			securityGroups = append(securityGroups, sgName)
+		} else {
+			// Log when security group name extraction fails
+			fmt.Printf("Warning: failed to extract security group name at index %d for instance %s. Security group data: %+v\n",
+				i, instanceID, sg)
 		}
 	}
 
