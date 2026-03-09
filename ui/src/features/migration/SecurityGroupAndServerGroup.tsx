@@ -4,19 +4,11 @@ import { FormGrid } from 'src/components'
 import {
   OpenstackCreds,
   SecurityGroupOption,
-  ServerGroupOption
+  ServerGroupOption,
+  PCDNetworkInfo
 } from 'src/api/openstack-creds/model'
 import { useMemo } from 'react'
-
-export interface PCDNetworkInfo {
-  name: string
-  tags: string[]
-}
-
-export interface ResourceMap {
-  source: string
-  target: string
-}
+import { ResourceMap } from './NetworkAndStorageMappingStep'
 
 interface SecurityGroupAndServerGroupProps {
   params: {

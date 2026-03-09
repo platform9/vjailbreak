@@ -15,6 +15,7 @@ import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
+import { PCDNetworkInfo } from 'src/api/openstack-creds/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -29,11 +30,6 @@ const FieldsContainer = styled('div')(({ theme }) => ({
 export interface ResourceMap {
   source: string
   target: string
-}
-
-export interface PCDNetworkInfo {
-  name: string
-  tags: string[]
 }
 
 // Storage copy method options
