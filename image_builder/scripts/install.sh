@@ -48,7 +48,7 @@ wait_for_network() {
       log "Waiting for network: missing global IPv4 address..."
     fi
 
-    sleep 5
+    sleep 60
   done
 }
 
