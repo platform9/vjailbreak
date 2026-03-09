@@ -72,12 +72,18 @@ type ServerGroupInfo struct {
 	Members int    `json:"members,omitempty"`
 }
 
+// PCDNetworkInfo is struct to hold network information for PCD
+type PCDNetworkInfo struct {
+	Name string   `json:"name"`
+	Tags []string `json:"tags"`
+}
+
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
 	VolumeTypes          []string            `json:"volumeTypes,omitempty"`
 	VolumeBackends       []string            `json:"volumeBackends,omitempty"`
 	BackendVolumeTypeMap map[string]string   `json:"backendVolumeTypeMap,omitempty"`
-	Networks             []string            `json:"networks,omitempty"`
+	Networks             []PCDNetworkInfo    `json:"networks,omitempty"`
 	SecurityGroups       []SecurityGroupInfo `json:"securityGroups,omitempty"`
 	ServerGroups         []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }

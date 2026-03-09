@@ -227,7 +227,19 @@ spec:
                     type: object
                   networks:
                     items:
-                      type: string
+                      description: PCDNetworkInfo is struct to hold network information
+                        for PCD
+                      properties:
+                        name:
+                          type: string
+                        tags:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - name
+                      - tags
+                      type: object
                     type: array
                   securityGroups:
                     items:

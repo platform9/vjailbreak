@@ -50,9 +50,7 @@ import (
 )
 
 const (
-	trueString  = "true" // Define at package level
-	falseString = "false"
-	sdkPath     = "/sdk" // SDK path constant
+	trueString = "true" // Define at package level
 )
 
 // GetVMwareCredsInfo retrieves vCenter credentials from a secret
@@ -221,7 +219,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		return nil, errors.Wrap(err, "failed to get openstack clients")
 	}
 	var openstackvoltypes []string
-	var openstacknetworks []string
+	var openstacknetworks []vjailbreakv1alpha1.PCDNetworkInfo
 
 	allVolumeTypePages, err := volumetypes.List(openstackClients.BlockStorageClient, nil).AllPages(ctx)
 	if err != nil {
@@ -271,7 +269,10 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 	}
 
 	for i := 0; i < len(allNetworks); i++ {
-		openstacknetworks = append(openstacknetworks, allNetworks[i].Name)
+		openstacknetworks = append(openstacknetworks, vjailbreakv1alpha1.PCDNetworkInfo{
+			Name: allNetworks[i].Name,
+			Tags: allNetworks[i].Tags,
+		})
 	}
 
 	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
