@@ -97,9 +97,10 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 	return nil
 }
 
-// UpdateMasterNodeImageID updates the image ID of the master node
+// UpdateMasterNodeImageID updates the image ID and flavor ID of the master node
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
 	var imageID string
+	var flavorID string
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err := k3sclient.Get(ctx, types.NamespacedName{
@@ -118,15 +119,21 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 	if local {
 		// Local mode
 		imageID = "fake-image-id"
+		flavorID = "fake-flavor-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
 		}
+		flavorID, err = GetFlavorIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
+		if err != nil {
+			return errors.Wrap(err, "failed to get flavor id of master node")
+		}
 	}
 
 	vjNode.Spec.OpenstackImageID = imageID
+	vjNode.Spec.OpenstackFlavorID = flavorID
 	vjNode.Spec.OpenstackCreds = corev1.ObjectReference{
 		Name:      openstackcreds.Name,
 		Namespace: openstackcreds.Namespace,
@@ -578,6 +585,25 @@ func GetOpenstackVMStatus(ctx context.Context, k3sclient client.Client, vjNode *
 	}
 
 	return vmStatus, vmIP, nil
+}
+
+// GetFlavorIDFromVM retrieves the flavor ID from a virtual machine using its UUID
+func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+
+	if flavorID, ok := server.Flavor["id"].(string); ok {
+		return flavorID, nil
+	}
+	return "", fmt.Errorf("failed to get flavor ID from server")
 }
 
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID

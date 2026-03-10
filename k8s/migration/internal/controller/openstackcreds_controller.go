@@ -520,16 +520,15 @@ func setupMasterNode(ctx context.Context, r *OpenstackCredsReconciler, scope *sc
 		if err != nil {
 			return errors.Wrap(err, "failed to check and create master node entry")
 		}
-	} else {
-		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
-		if err != nil {
-			if strings.Contains(err.Error(), "404") {
-				ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-			} else {
-				return errors.Wrap(err, "failed to update master node image id")
-			}
-			ctxlog.Error(err, "Failed to update master node image ID and flavor list")
+	}
+	err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
+		} else {
+			return errors.Wrap(err, "failed to update master node image id")
 		}
+		ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 	}
 	return nil
 }
