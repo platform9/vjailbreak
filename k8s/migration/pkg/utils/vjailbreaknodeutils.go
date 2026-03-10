@@ -322,12 +322,14 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	}
 
 	// Handle L2-only networks by creating ports first
-	// For L2 networks, FixedIP will be set (even if empty string from detection)
+	// For L2 networks, FixedIP will be set to "L2_NETWORK" marker
 	var createdPorts []string
+	hasL2Network := false
 	for i, network := range networkIDs {
 		if network.FixedIP != "" {
 			// This is an L2-only network, create a port with just MAC (no IP)
 			log.Info("Detected L2-only network, creating port with MAC only", "networkID", network.UUID)
+			hasL2Network = true
 			port, err := createPortForL2Network(ctx, openstackClients, network.UUID, vjNode.Name)
 			if err != nil {
 				// Clean up any ports we created
@@ -359,6 +361,13 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 			token)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
 		AvailabilityZone: availabilityZone,
+	}
+
+	// For L2-only networks, enable config-drive since metadata service is unreachable
+	// (VM has no IP to reach 169.254.169.254)
+	if hasL2Network {
+		log.Info("Enabling config-drive for L2-only network (metadata service unreachable)")
+		serverCreateOpts.ConfigDrive = boolPtr(true)
 	}
 
 	// Create the VM
