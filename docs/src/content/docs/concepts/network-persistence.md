@@ -29,7 +29,7 @@ The Linux network persistence mechanism operates on the first boot post-migratio
 |   OpenSuse     | Supported | Yes |
 |   RHEL         | Supported | Yes |
 |   CentOS       | Supported | Yes |
-|   Rocky        | Supported | No |
+|   Rocky        | Supported | Yes |
 
 ## Windows Network Persistence
 
@@ -61,4 +61,23 @@ The Windows Virtual Machine (VM) will undergo multiple reboots during the instal
 
 :::caution
 **Crucial Action**: The user must wait for the virtio installation and subsequent reboots to complete before attempting to log in. Interrupting the installation process by logging in prematurely can lead to an inconsistent network configuration state.
+:::
+
+## Important Considerations
+
+:::caution
+**Important: Routing Considerations**
+
+If a VM has multiple interfaces on the same subnet and has asymmetric routing table, the destination openstack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing is having port-security enabled.
+
+**Recommendation:**
+- To avoid asymmetric routing, ensure each interface is on a unique subnet or consolidate multiple IPs onto a single port, as multiple interfaces on the same subnet will cause connectivity issues.
+:::
+
+:::note
+For DHCP-enabled ports, connectivity and DHCP functionality are preserved, but the interface name may be renamed if this feature is not selected.
+:::
+
+:::note
+For cross-network migration, network persistence is currently not supported and will be blocked.
 :::
