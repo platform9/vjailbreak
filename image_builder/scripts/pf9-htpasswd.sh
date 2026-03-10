@@ -142,7 +142,8 @@ change_password() {
     return 1
   fi
   local pw
-  prompt_new_password pw
+  local pw
+  prompt_new_password pw || return 1
   if [[ -z "${pw:-}" ]]; then
     echo "Failed to change password for user '$user'." >&2
     return 1
