@@ -27,4 +27,7 @@ type VjailbreakSettings struct {
 	V2VHelperPodMemoryLimit             string
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
+	// LibguestfsMemsizeMB is the memory size (in MB) for libguestfs appliance VM
+	// 0 means use virt-v2v default (let virt-v2v decide)
+	LibguestfsMemsizeMB int
 }

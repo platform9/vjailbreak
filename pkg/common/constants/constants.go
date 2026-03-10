@@ -405,6 +405,12 @@ const (
 	// V2VHelperPodEphemeralStorageLimitKey is the key for v2v-helper pod ephemeral storage limit
 	V2VHelperPodEphemeralStorageLimitKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
 
+	// LibguestfsMemsizeMB is the default memory size (in MB) for libguestfs appliance VM
+	// 0 means use virt-v2v default (let virt-v2v decide)
+	LibguestfsMemsizeMB = 0
+	// LibguestfsMemsizeMBKey is the key for libguestfs memsize setting
+	LibguestfsMemsizeMBKey = "LIBGUESTFS_MEMSIZE_MB"
+
 	RhelFirstBootScript = `#!/bin/bash
 set -e
 LOG_FILE="/var/log/network_fix.log"

@@ -34,7 +34,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string, memsizeMB int) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -237,7 +237,7 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string, memsizeMB int) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -271,6 +271,12 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Step 3: Prepare virt-v2v args
 	args := []string{"-v", "--no-fstrim"}
+
+	// Add memsize flag if configured (> 0 means use custom value, 0 means use virt-v2v default)
+	if memsizeMB > 0 {
+		args = append(args, fmt.Sprintf("--memsize=%d", memsizeMB))
+		log.Printf("Using custom libguestfs memsize: %d MB", memsizeMB)
+	}
 
 	if strings.ToLower(ostype) == constants.OSFamilyLinux {
 		args = append(args, "--firstboot", "/home/fedora/scripts/user_firstboot.sh")

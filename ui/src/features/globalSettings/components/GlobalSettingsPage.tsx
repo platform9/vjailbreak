@@ -82,6 +82,7 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
+  LIBGUESTFS_MEMSIZE_MB: 0,
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -123,7 +124,8 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
-    'AUTO_FSTAB_UPDATE'
+    'AUTO_FSTAB_UPDATE',
+    'LIBGUESTFS_MEMSIZE_MB'
   ],
   vddk: []
 }
@@ -244,7 +246,9 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
-    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).',
+  LIBGUESTFS_MEMSIZE_MB:
+    'Memory (in MB) allocated to the libguestfs appliance VM during virt-v2v conversion. Set to 0 to use virt-v2v default. Increase if conversions run out of memory (e.g., 1024, 2048).'
 }
 
 type ToggleKey = Extract<
@@ -1323,6 +1327,22 @@ export default function GlobalSettingsPage() {
                   <FormHelperText>{errors.DEFAULT_MIGRATION_METHOD}</FormHelperText>
                 )}
               </FormControl>
+
+              <RHFTextField
+                name="LIBGUESTFS_MEMSIZE_MB"
+                label="Libguestfs Memory Size (MB)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.LIBGUESTFS_MEMSIZE_MB }}
+                error={Boolean(errors.LIBGUESTFS_MEMSIZE_MB)}
+                helperText={errors.LIBGUESTFS_MEMSIZE_MB || 'Set to 0 to use virt-v2v default'}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'LIBGUESTFS_MEMSIZE_MB',
+                    value === '' ? 0 : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
             </FormGrid>
 
             <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>

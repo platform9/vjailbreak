@@ -1127,6 +1127,15 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
+	// Get vjailbreak settings for libguestfs memsize configuration
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to get vjailbreak settings: %v, using default memsize", err))
+	}
+	var memsizeMB int
+	if vjailbreakSettings != nil {
+		memsizeMB = vjailbreakSettings.LibguestfsMemsizeMB
+	}
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
@@ -1206,7 +1215,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, memsizeMB); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
