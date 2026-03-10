@@ -332,7 +332,9 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 			if err != nil {
 				// Clean up any ports we created
 				for _, portID := range createdPorts {
-					_ = ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr()
+					if delErr := ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr(); delErr != nil {
+						log.Error(delErr, "Failed to delete port during cleanup", "portID", portID)
+					}
 				}
 				return "", errors.Wrap(err, "failed to create port for L2 network")
 			}
@@ -364,7 +366,9 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	if err != nil {
 		// Clean up any ports we created on failure
 		for _, portID := range createdPorts {
-			_ = ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr()
+			if delErr := ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr(); delErr != nil {
+				log.Error(delErr, "Failed to delete port during cleanup", "portID", portID)
+			}
 		}
 		return "", errors.Wrap(err, "Failed to create server")
 	}
