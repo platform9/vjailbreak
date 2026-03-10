@@ -263,7 +263,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 			}
 			log.Println("Downloaded virtio windrivers")
 		}
-		// os.Setenv("VIRTIO_WIN", filePath)
+		os.Setenv("VIRTIO_WIN", filePath)
 	}
 
 	// Step 2: Set guestfs backend
