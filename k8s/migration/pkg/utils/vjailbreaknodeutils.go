@@ -11,9 +11,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
@@ -319,6 +321,30 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		rootDisk.VolumeType = volumeType
 	}
 
+	// Handle L2-only networks by creating ports first
+	// For L2 networks, FixedIP will be set (even if empty string from detection)
+	var createdPorts []string
+	for i, network := range networkIDs {
+		if network.FixedIP != "" {
+			// This is an L2-only network, create a port with just MAC (no IP)
+			log.Info("Detected L2-only network, creating port with MAC only", "networkID", network.UUID)
+			port, err := createPortForL2Network(ctx, openstackClients, network.UUID, vjNode.Name)
+			if err != nil {
+				// Clean up any ports we created
+				for _, portID := range createdPorts {
+					_ = ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr()
+				}
+				return "", errors.Wrap(err, "failed to create port for L2 network")
+			}
+			createdPorts = append(createdPorts, port.ID)
+			// Update the network to use the port instead of network UUID
+			networkIDs[i] = servers.Network{
+				Port: port.ID,
+			}
+			log.Info("Created port for L2 network", "portID", port.ID, "macAddress", port.MACAddress)
+		}
+	}
+
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
 		Name:           vjNode.Name,
@@ -336,11 +362,57 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	// Create the VM
 	server, err := servers.Create(ctx, openstackClients.ComputeClient, serverCreateOpts, nil).Extract()
 	if err != nil {
+		// Clean up any ports we created on failure
+		for _, portID := range createdPorts {
+			_ = ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr()
+		}
 		return "", errors.Wrap(err, "Failed to create server")
 	}
 
 	log.Info("Server created", "ID", server.ID)
 	return server.ID, nil
+}
+
+// createPortForL2Network creates a port on an L2-only network
+// L2-only ports have: no fixed IPs, port security disabled, no security groups
+// The user will assign a static IP manually later
+func createPortForL2Network(ctx context.Context, openstackClients *OpenStackClients, networkID, serverName string) (*ports.Port, error) {
+	// For L2 networks, create a port with:
+	// - No fixed IPs (--no-fixed-ip)
+	// - Port security disabled (--disable-port-security)
+	// - No security groups (not applicable for L2-only networks)
+	// OpenStack will auto-generate a MAC address
+	createOpts := portsecurity.PortCreateOptsExt{
+		CreateOptsBuilder: ports.CreateOpts{
+			NetworkID:    networkID,
+			Name:         fmt.Sprintf("%s-l2-port", serverName),
+			AdminStateUp: boolPtr(true),
+		},
+		PortSecurityEnabled: boolPtr(false),
+	}
+
+	port, err := ports.Create(ctx, openstackClients.NetworkingClient, createOpts).Extract()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create port")
+	}
+
+	return port, nil
+}
+
+// isSimpleNetwork checks if a network has the "simple_network" tag indicating it's an L2-only network
+func isSimpleNetwork(ctx context.Context, openstackClients *OpenStackClients, networkID string) (bool, error) {
+	network, err := networks.Get(ctx, openstackClients.NetworkingClient, networkID).Extract()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get network details")
+	}
+
+	// Check if the network has the "simple_network" tag
+	for _, tag := range network.Tags {
+		if tag == "simple_network" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // GetOpenstackCredsVjailbreakNode retrieves OpenStack credentials for the master node
@@ -455,6 +527,8 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
 }
 
 // GetInstanceNetworkInfoByID retrieves network and security group information for a given instance using OpenStack clients
+// For L2-only networks (networks without subnets), it marks the network by setting FixedIP to "L2_NETWORK"
+// so that a port can be created before VM creation
 func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStackClients, instanceID string) ([]servers.Network, []string, error) {
 	// Get server details from OpenStack
 	server, err := servers.Get(ctx, openstackClients.ComputeClient, instanceID).Extract()
@@ -478,12 +552,26 @@ func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStack
 	}
 
 	// Extract unique network IDs from ports
+	// For L2-only networks (tagged with "simple_network"), we mark them by setting FixedIP to a sentinel value
 	for _, port := range portList {
 		if !networkIDSet[port.NetworkID] {
 			networkIDSet[port.NetworkID] = true
-			networks = append(networks, servers.Network{
+			network := servers.Network{
 				UUID: port.NetworkID,
-			})
+			}
+			// Check if this is an L2-only network by looking for "simple_network" tag
+			isL2Network, err := isSimpleNetwork(ctx, openstackClients, port.NetworkID)
+			if err != nil {
+				// Log warning but continue - assume it's not L2 if we can't check
+				fmt.Printf("Warning: failed to check if network %s is L2: %v\n", port.NetworkID, err)
+				isL2Network = false
+			}
+			// For L2 networks, set a marker in FixedIP field to indicate this is L2
+			if isL2Network {
+				fmt.Printf("Network %s is L2-only, setting marker\n", port.NetworkID)
+				network.FixedIP = "L2_NETWORK"
+			}
+			networks = append(networks, network)
 		}
 	}
 
