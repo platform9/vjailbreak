@@ -48,12 +48,6 @@ type FirstBootWindows struct {
 	Async  bool
 }
 
-const (
-	nextScriptDelimiterLine = "### NEXT SCRIPT ###"
-	linuxTag                = "LINUX-SCRIPT:"
-	windowsTag              = "WINDOWS-SCRIPT:"
-)
-
 func splitAndFilterUserScripts(content, ostype string) []string {
 	if strings.TrimSpace(content) == "" {
 		return nil
@@ -89,7 +83,7 @@ func splitUserScriptBlocks(content string) []string {
 	}
 
 	for _, line := range lines {
-		if strings.TrimSpace(line) == nextScriptDelimiterLine {
+		if strings.TrimSpace(line) == constants.NextScriptDelimiterLine {
 			flush()
 			continue
 		}
@@ -117,10 +111,10 @@ func parseUserScriptBlock(block string) (string, string) {
 
 		tagLine := strings.ToUpper(trimmed)
 		switch {
-		case strings.HasPrefix(tagLine, "// "+linuxTag), strings.HasPrefix(tagLine, "# "+linuxTag):
-			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), linuxTag
-		case strings.HasPrefix(tagLine, "// "+windowsTag), strings.HasPrefix(tagLine, "# "+windowsTag):
-			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), windowsTag
+		case strings.HasPrefix(tagLine, "// "+constants.LinuxTag), strings.HasPrefix(tagLine, "# "+constants.LinuxTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.LinuxTag
+		case strings.HasPrefix(tagLine, "// "+constants.WindowsTag), strings.HasPrefix(tagLine, "# "+constants.WindowsTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.WindowsTag
 		default:
 			return strings.TrimSpace(block), ""
 		}
@@ -135,15 +129,17 @@ func scriptTargetAppliesToOS(target, ostype string) bool {
 	isLinux := normalizedOS == constants.OSFamilyLinux || strings.Contains(normalizedOS, "linux")
 
 	switch target {
-	case linuxTag:
+	case constants.LinuxTag:
 		return isLinux
-	case windowsTag:
+	case constants.WindowsTag:
 		return isWindows
 	default:
 		return true
 	}
 }
 
+// prepareLinuxUserFirstBootWrapper builds a single Bash wrapper script for Linux guests,
+// embedding filtered user post-migration script blocks inline via heredocs.
 func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
 	userScriptPath := "/home/fedora/scripts/user_firstboot.sh"
 	userScriptWorkDir := "/tmp/vjailbreak-user-firstboot"

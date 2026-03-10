@@ -846,9 +846,9 @@ export default function MigrationOptionsAlt({
 
                       <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
                       <Typography variant="caption" component="div">
-                        • Separate scripts with "{NEXT_SCRIPT_DELIMITER}" on its own line.<br />
-                        • Use tag "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" on line 1 to target an OS.<br />
-                        • Untagged blocks execute on all selected VMs irrespective of OS.
+                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.<br />
+                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" for respective OS execution.<br />
+                        • Untagged blocks will execute on all selected VMs irrespective of OS.
                       </Typography>
                     </Box>
                   }
