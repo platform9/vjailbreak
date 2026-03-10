@@ -1,20 +1,25 @@
-import { Box } from '@mui/material'
+import { Box, Alert } from '@mui/material'
 import { Step, RHFAutocomplete } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components'
 import {
   OpenstackCreds,
   SecurityGroupOption,
-  ServerGroupOption
+  ServerGroupOption,
+  PCDNetworkInfo
 } from 'src/api/openstack-creds/model'
+import { useMemo } from 'react'
+import { ResourceMap } from './NetworkAndStorageMappingStep'
 
 interface SecurityGroupAndServerGroupProps {
   params: {
     vms?: any[]
     securityGroups?: string[]
     serverGroup?: string
+    networkMappings?: ResourceMap[]
   }
   onChange: (key: string) => (value: any) => void
   openstackCredentials?: OpenstackCreds
+  openstackNetworks?: PCDNetworkInfo[]
   stepNumber?: string
   showHeader?: boolean
 }
@@ -23,6 +28,7 @@ export default function SecurityGroupAndServerGroup({
   params,
   onChange,
   openstackCredentials,
+  openstackNetworks = [],
   stepNumber = '4',
   showHeader = true
 }: SecurityGroupAndServerGroupProps) {
@@ -32,12 +38,36 @@ export default function SecurityGroupAndServerGroup({
   const serverGroupOptions: ServerGroupOption[] =
     openstackCredentials?.status?.openstack?.serverGroups || []
 
+  // Check if any selected network has the "simple_network" tag (L2 network)
+  const hasL2Network = useMemo(() => {
+    if (!params.networkMappings || params.networkMappings.length === 0) {
+      return false
+    }
+
+    // Get all target network names from mappings
+    const targetNetworkNames = params.networkMappings.map((mapping) => mapping.target)
+
+    // Check if any of these networks has the "simple_network" tag
+    return openstackNetworks.some(
+      (network) =>
+        targetNetworkNames.includes(network.name) &&
+        network.tags &&
+        network.tags.includes('simple_network')
+    )
+  }, [params.networkMappings, openstackNetworks])
+
   return (
     <Box>
       {showHeader ? (
         <Step stepNumber={stepNumber} label="Security Groups & Server Group (Optional)" />
       ) : null}
       <Box>
+        {hasL2Network && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Security Groups are not available when using L2 networks (networks with "simple_network" tag).
+            L2 networks do not support security group assignment.
+          </Alert>
+        )}
         <FormGrid minWidth={320} gap={3}>
           <Box>
             <RHFAutocomplete<SecurityGroupOption>
@@ -65,6 +95,7 @@ export default function SecurityGroupAndServerGroup({
               onValueChange={(value) => onChange('securityGroups')(value)}
               data-testid="security-groups-autocomplete"
               labelProps={{ tooltip: 'Assign security groups to the selected VMs.' }}
+              disabled={hasL2Network}
             />
           </Box>
 

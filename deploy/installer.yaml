@@ -1691,6 +1691,10 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vjbinstanceid:
+                description: VJBInstanceID is the ID of current vjailbreak instance
+                  (needed if metadata service is not available)
+                type: string
             type: object
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
@@ -1704,7 +1708,19 @@ spec:
                     type: object
                   networks:
                     items:
-                      type: string
+                      description: PCDNetworkInfo is struct to hold network information
+                        for PCD
+                      properties:
+                        name:
+                          type: string
+                        tags:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - name
+                      - tags
+                      type: object
                     type: array
                   securityGroups:
                     items:

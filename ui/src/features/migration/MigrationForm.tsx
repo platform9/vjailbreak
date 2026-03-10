@@ -1031,10 +1031,10 @@ export default function MigrationFormDrawer({
     // RDM validation - ensure RDM disks are properly configured
     rdmValidation.hasValidationError
 
-  const sortedOpenstackNetworks = useMemo(
-    () => (openstackCredentials?.status?.openstack?.networks || []).sort(stringsCompareFn),
-    [openstackCredentials?.status?.openstack?.networks]
-  )
+  const sortedOpenstackNetworks = useMemo(() => {
+    const networks = openstackCredentials?.status?.openstack?.networks || []
+    return networks.sort((a, b) => stringsCompareFn(a.name, b.name))
+  }, [openstackCredentials?.status?.openstack?.networks])
   const sortedOpenstackVolumeTypes = useMemo(
     () => (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(stringsCompareFn),
     [openstackCredentials?.status?.openstack?.volumeTypes]
@@ -1626,6 +1626,7 @@ export default function MigrationFormDrawer({
                   params={params}
                   onChange={getParamsUpdater}
                   openstackCredentials={openstackCredentials}
+                  openstackNetworks={sortedOpenstackNetworks}
                   stepNumber="4"
                   showHeader={false}
                 />

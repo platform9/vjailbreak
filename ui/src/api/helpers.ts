@@ -110,6 +110,7 @@ export const createOpenstackCredsWithSecretFlow = async (
   },
   isPcd: boolean = false,
   projectName: string,
+  vjbInstanceId?: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const secretName = `${credName}-openstack-secret`
@@ -118,7 +119,7 @@ export const createOpenstackCredsWithSecretFlow = async (
   await createOpenstackCredsSecret(secretName, credentials, namespace)
 
   // Then create the OpenStack credentials with the label
-  const credBody = {
+  const credBody: any = {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
     kind: 'OpenstackCreds',
     metadata: {
@@ -134,6 +135,11 @@ export const createOpenstackCredsWithSecretFlow = async (
       },
       projectName: projectName
     }
+  }
+
+  // Add vjbInstanceId to spec if provided
+  if (vjbInstanceId && vjbInstanceId.trim() !== '') {
+    credBody.spec.vjbinstanceid = vjbInstanceId.trim()
   }
 
   return postOpenstackCredentials(credBody, namespace)

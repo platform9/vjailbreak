@@ -19,8 +19,8 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +61,12 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
+	currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+	if currentInstanceUUID == "" {
+		PrintLog("CURRENT_INSTANCE_ID environment variable is not set")
+	} else {
+		return currentInstanceUUID, nil
+	}
 
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
@@ -580,11 +586,14 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
+	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
+	if len(network.Subnets) == 0 && currentInstanceID == "" {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
+	// if currentInstanceID is not nill that means this is an L2 network, we should continue
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
