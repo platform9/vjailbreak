@@ -100,6 +100,10 @@ create_user() {
   fi
   local pw
   prompt_new_password pw
+  if [[ -z "${pw:-}" ]]; then
+    echo "Failed to create user '$user'." >&2
+    return 1
+  fi
   local new_hash
   new_hash="$(openssl passwd -apr1 "$pw")"
   local tmpfile
@@ -138,6 +142,10 @@ change_password() {
   fi
   local pw
   prompt_new_password pw
+  if [[ -z "${pw:-}" ]]; then
+    echo "Failed to change password for user '$user'." >&2
+    return 1
+  fi
   local new_hash tmpfile
   new_hash="$(openssl passwd -apr1 "$pw")"
   tmpfile="$(mktemp "/tmp/htpasswd.${user}.XXXXXX")"
