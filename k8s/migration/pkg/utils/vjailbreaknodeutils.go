@@ -36,10 +36,15 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 		return errors.Wrap(err, "failed to get master node")
 	}
 
-	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjailbreakv1alpha1.VjailbreakNode{})
+	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	nodeExists := false
+	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjNode)
 	if err == nil {
-		// VjailbreakNode already exists
-		return nil
+		nodeExists = true
+		// VjailbreakNode already exists with OpenstackUUID set
+		if vjNode.Status.OpenstackUUID != "" {
+			return nil
+		}
 	}
 
 	if openstackuuid == "" {
@@ -54,27 +59,30 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 			}
 		}
 	}
-	vjNode := vjailbreakv1alpha1.VjailbreakNode{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.VjailbreakMasterNodeName,
+
+	if !nodeExists {
+		vjNode = vjailbreakv1alpha1.VjailbreakNode{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      constants.VjailbreakMasterNodeName,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+			Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+				NodeRole: constants.NodeRoleMaster,
+			},
+		}
+
+		err = k3sclient.Create(ctx, &vjNode)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return errors.Wrap(err, "failed to create vjailbreak node")
+		}
+
+		err = k3sclient.Get(ctx, types.NamespacedName{
 			Namespace: constants.NamespaceMigrationSystem,
-		},
-		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
-			NodeRole: constants.NodeRoleMaster,
-		},
-	}
-
-	err = k3sclient.Create(ctx, &vjNode)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "failed to create vjailbreak node")
-	}
-
-	err = k3sclient.Get(ctx, types.NamespacedName{
-		Namespace: constants.NamespaceMigrationSystem,
-		Name:      constants.VjailbreakMasterNodeName,
-	}, &vjNode)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak node")
+			Name:      constants.VjailbreakMasterNodeName,
+		}, &vjNode)
+		if err != nil {
+			return errors.Wrap(err, "failed to get vjailbreak node")
+		}
 	}
 
 	vjNode.Status.VMIP = GetNodeInternalIP(masterNode)
