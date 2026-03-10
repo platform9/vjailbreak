@@ -48,6 +48,146 @@ type FirstBootWindows struct {
 	Async  bool
 }
 
+func splitAndFilterUserScripts(content, ostype string) []string {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+
+	blocks := splitUserScriptBlocks(content)
+	filtered := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		script, target := parseUserScriptBlock(block)
+		if script == "" {
+			continue
+		}
+		if !scriptTargetAppliesToOS(target, ostype) {
+			continue
+		}
+		filtered = append(filtered, script)
+	}
+
+	return filtered
+}
+
+func splitUserScriptBlocks(content string) []string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	blocks := make([]string, 0)
+	current := make([]string, 0)
+
+	flush := func() {
+		block := strings.TrimSpace(strings.Join(current, "\n"))
+		if block != "" {
+			blocks = append(blocks, block)
+		}
+		current = current[:0]
+	}
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == constants.NextScriptDelimiterLine {
+			flush()
+			continue
+		}
+		current = append(current, line)
+	}
+	flush()
+
+	if len(blocks) == 0 {
+		only := strings.TrimSpace(content)
+		if only != "" {
+			return []string{only}
+		}
+	}
+
+	return blocks
+}
+
+func parseUserScriptBlock(block string) (string, string) {
+	lines := strings.Split(block, "\n")
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		tagLine := strings.ToUpper(trimmed)
+		switch {
+		case strings.HasPrefix(tagLine, "// "+constants.LinuxTag), strings.HasPrefix(tagLine, "# "+constants.LinuxTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.LinuxTag
+		case strings.HasPrefix(tagLine, "// "+constants.WindowsTag), strings.HasPrefix(tagLine, "# "+constants.WindowsTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.WindowsTag
+		default:
+			return strings.TrimSpace(block), ""
+		}
+	}
+
+	return "", ""
+}
+
+func scriptTargetAppliesToOS(target, ostype string) bool {
+	normalizedOS := strings.ToLower(strings.TrimSpace(ostype))
+	isWindows := normalizedOS == constants.OSFamilyWindows || strings.Contains(normalizedOS, "windows")
+	isLinux := normalizedOS == constants.OSFamilyLinux || strings.Contains(normalizedOS, "linux")
+
+	switch target {
+	case constants.LinuxTag:
+		return isLinux
+	case constants.WindowsTag:
+		return isWindows
+	default:
+		return true
+	}
+}
+
+// prepareLinuxUserFirstBootWrapper builds a single Bash wrapper script for Linux guests,
+// embedding filtered user post-migration script blocks inline via heredocs.
+func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
+	userScriptPath := "/home/fedora/scripts/user_firstboot.sh"
+	userScriptWorkDir := "/tmp/vjailbreak-user-firstboot"
+	content, err := os.ReadFile(userScriptPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read user firstboot script: %w", err)
+	}
+
+	scripts := splitAndFilterUserScripts(string(content), ostype)
+	if len(scripts) == 0 {
+		log.Printf("No user post-migration scripts applicable for OS '%s'", ostype)
+		return "", nil
+	}
+
+	if err := os.MkdirAll(userScriptWorkDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create Linux user script work dir: %w", err)
+	}
+
+	var wrapper strings.Builder
+	wrapper.WriteString("#!/bin/bash\n")
+	wrapper.WriteString("set +e\n")
+
+	for idx, script := range scripts {
+		wrapper.WriteString(fmt.Sprintf("echo \"-> running user script part %d\"\n", idx+1))
+		heredocMarker := fmt.Sprintf("VJ_USER_SCRIPT_PART_%03d", idx+1)
+		wrapper.WriteString(fmt.Sprintf("/bin/bash <<'%s'\n", heredocMarker))
+		wrapper.WriteString(script)
+		if !strings.HasSuffix(script, "\n") {
+			wrapper.WriteString("\n")
+		}
+		wrapper.WriteString(fmt.Sprintf("%s\n", heredocMarker))
+		wrapper.WriteString("rc=$?\n")
+		wrapper.WriteString(fmt.Sprintf("if [ $rc -ne 0 ]; then echo \"WARNING: user script part %d failed with exit code $rc, continuing\"; fi\n", idx+1))
+	}
+
+	wrapper.WriteString("exit 0\n")
+
+	wrapperPath := fmt.Sprintf("%s/user_firstboot_wrapper.sh", userScriptWorkDir)
+	if err := os.WriteFile(wrapperPath, []byte(wrapper.String()), 0755); err != nil {
+		return "", fmt.Errorf("failed to write Linux user firstboot wrapper: %w", err)
+	}
+
+	return wrapperPath, nil
+}
+
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
 func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, netplanYAML string) error {
 	// Create the netplan file locally
@@ -273,7 +413,13 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	args := []string{"-v", "--no-fstrim"}
 
 	if strings.ToLower(ostype) == constants.OSFamilyLinux {
-		args = append(args, "--firstboot", "/home/fedora/scripts/user_firstboot.sh")
+		userWrapperPath, err := prepareLinuxUserFirstBootWrapper(ostype)
+		if err != nil {
+			log.Printf("Warning: unable to prepare Linux user post-migration scripts; continuing without user scripts: %v", err)
+		}
+		if userWrapperPath != "" {
+			args = append(args, "--firstboot", userWrapperPath)
+		}
 	}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
@@ -1075,33 +1221,43 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 	return nil
 }
 
-// PushWindowsFirstBoot moves the user_firstboot script from scripts directory to store directory
-// and changes extension from .sh to .ps1 for Windows compatibility
-func PushWindowsFirstBoot() error {
+// PushWindowsFirstBoot creates OS-filtered user script parts in the store directory for Windows
+func PushWindowsFirstBoot(ostype string) ([]string, error) {
 	srcPath := "/home/fedora/scripts/user_firstboot.sh"
-	dstPath := "/home/fedora/store/user_firstboot.ps1"
 
 	// Check if source file exists
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("source file not found at %s: %w", srcPath, err)
+		return nil, fmt.Errorf("source file not found at %s: %w", srcPath, err)
 	}
 
 	// Read the source file content
 	content, err := os.ReadFile(srcPath)
 	if err != nil {
-		return fmt.Errorf("failed to read source file %s: %w", srcPath, err)
+		return nil, fmt.Errorf("failed to read source file %s: %w", srcPath, err)
+	}
+
+	scripts := splitAndFilterUserScripts(string(content), ostype)
+	if len(scripts) == 0 {
+		log.Printf("No Windows user post-migration scripts to inject for OS '%s'", ostype)
+		return nil, nil
 	}
 
 	// Ensure destination directory exists
 	if err := os.MkdirAll("/home/fedora/store", 0755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return nil, fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	// Write to destination with new extension
-	if err := os.WriteFile(dstPath, content, 0644); err != nil {
-		return fmt.Errorf("failed to write destination file %s: %w", dstPath, err)
+	scriptNames := make([]string, 0, len(scripts))
+	for idx, script := range scripts {
+		dstPath := fmt.Sprintf("/home/fedora/store/user_firstboot_part_%03d.ps1", idx+1)
+		if err := os.WriteFile(dstPath, []byte(script+"\n"), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write destination file %s: %w", dstPath, err)
+		}
+
+		scriptName := fmt.Sprintf("user_firstboot_part_%03d.ps1", idx+1)
+		scriptNames = append(scriptNames, scriptName)
+		log.Printf("Prepared Windows user firstboot script part %d at %s", idx+1, dstPath)
 	}
 
-	log.Printf("Successfully moved %s to %s", srcPath, dstPath)
-	return nil
+	return scriptNames, nil
 }
