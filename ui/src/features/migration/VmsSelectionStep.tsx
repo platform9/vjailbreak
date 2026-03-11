@@ -2142,7 +2142,7 @@ function VmsSelectionStep({
                         !isPoweredOff && bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
                       const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
                       const missingVmtoolsIp =
-                        preserveIp && !networkInterface?.ipAddress && !vm.ipAddress
+                        preserveIp && !networkInterface?.ipAddress && !vm.ipAddress && !ip.trim()
                       return (
                         <React.Fragment key={interfaceIndex}>
                         <Box
