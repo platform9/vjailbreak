@@ -543,9 +543,22 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	if mac != "" {
 		createOpts.MACAddress = mac
 	}
-	if len(ipEntries) > 0 {
+
+	localDeepCopyIpEntries := make([]vm.IpEntry, len(ipEntries))
+
+	// If the target network is L2 network pass empty ip address
+	// Check if the network is L2-only by looking for "simple_network" tag
+	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, network.ID)
+	if err != nil {
+		return ports.CreateOpts{}, errors.Wrap(err, "failed to check if network is L2")
+	}
+	if !isL2Network {
+		copy(localDeepCopyIpEntries, ipEntries)
+	}
+
+	if len(localDeepCopyIpEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
-		for _, ipEntry := range ipEntries {
+		for _, ipEntry := range localDeepCopyIpEntries {
 			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
@@ -559,7 +572,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if ipEntries != nil {
+	} else if localDeepCopyIpEntries != nil {
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
@@ -594,16 +607,6 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 
 	// if currentInstanceID is not nill that means this is an L2 network, we should continue
-	// If the target network is L2 network pass empty ip address
-	// Check if the network is L2-only by looking for "simple_network" tag
-	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, network.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to check if network is L2")
-	}
-
-	if currentInstanceID != "" || isL2Network {
-		ipPerMac[mac] = []vm.IpEntry{}
-	}
 
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
