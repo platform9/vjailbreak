@@ -226,8 +226,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           create_user "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         delete)
@@ -236,8 +236,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           delete_user "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         change-password)
@@ -246,8 +246,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           change_password "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         list)
