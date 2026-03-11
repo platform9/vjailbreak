@@ -594,6 +594,17 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 
 	// if currentInstanceID is not nill that means this is an L2 network, we should continue
+	// If the target network is L2 network pass empty ip address
+	// Check if the network is L2-only by looking for "simple_network" tag
+	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, network.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check if network is L2")
+	}
+
+	if currentInstanceID != "" || isL2Network {
+		ipPerMac[mac] = []vm.IpEntry{}
+	}
+
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {

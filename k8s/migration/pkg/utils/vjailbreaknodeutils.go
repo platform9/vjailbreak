@@ -11,18 +11,18 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/openstack/baremetal/v1/ports"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -412,22 +412,6 @@ func createPortForL2Network(ctx context.Context, openstackClients *OpenStackClie
 	return port, nil
 }
 
-// isSimpleNetwork checks if a network has the "simple_network" tag indicating it's an L2-only network
-func isSimpleNetwork(ctx context.Context, openstackClients *OpenStackClients, networkID string) (bool, error) {
-	network, err := networks.Get(ctx, openstackClients.NetworkingClient, networkID).Extract()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get network details")
-	}
-
-	// Check if the network has the "simple_network" tag
-	for _, tag := range network.Tags {
-		if tag == "simple_network" {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // GetOpenstackCredsVjailbreakNode retrieves OpenStack credentials for the master node
 func GetOpenstackCredsVjailbreakNode(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (*vjailbreakv1alpha1.OpenstackCreds, error) {
 	oscreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -573,7 +557,7 @@ func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStack
 				UUID: port.NetworkID,
 			}
 			// Check if this is an L2-only network by looking for "simple_network" tag
-			isL2Network, err := isSimpleNetwork(ctx, openstackClients, port.NetworkID)
+			isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, openstackClients.NetworkingClient, port.NetworkID)
 			if err != nil {
 				// Log warning but continue - assume it's not L2 if we can't check
 				fmt.Printf("Warning: failed to check if network %s is L2: %v\n", port.NetworkID, err)
