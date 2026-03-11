@@ -2369,6 +2369,10 @@ func validatePreserveIPConfig(vminfo *vjailbreakv1alpha1.VMInfo, assignedIP stri
 		assignedIPs = strings.Split(assignedIP, ",")
 	}
 
+	if len(vminfo.NetworkInterfaces) == 0 {
+		return nil
+	}
+
 	overrideMap := map[int]vjailbreakv1alpha1.NICOverride{}
 	for _, o := range overrides {
 		overrideMap[o.InterfaceIndex] = o

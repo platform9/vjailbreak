@@ -2026,8 +2026,8 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				}
 			}
 
-			// Preflight: if preserveIP is on but VMware Tools reported no IP and no manual IP was assigned, fail early.
-			if preserveIP && len(ippm) == 0 && migobj.AssignedIP == "" {
+			// Preflight: if preserveIP is on but no IP was detected or assigned for this NIC, fail early.
+			if preserveIP && len(ippm) == 0 {
 				return nil, nil, nil, fmt.Errorf(
 					"NIC[%d]: preserveIP is enabled but VMware Tools did not report an IP for MAC %s. "+
 						"Please assign an IP manually in the migration config or disable Preserve IP for this NIC",
