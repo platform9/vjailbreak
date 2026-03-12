@@ -29,7 +29,7 @@ variable "helm_version" {
 
 variable "ingress_nginx_version" {
   type    = string
-  default = "4.15.0"
+  default = "4.14.3"
 }
 
 source "qemu" "vjailbreak-image" {
