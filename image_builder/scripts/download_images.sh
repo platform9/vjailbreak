@@ -75,13 +75,19 @@ images=(
 
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  sudo ctr  i pull --platform linux/amd64 "$img"
+  if [[ "$img" == *kube-webhook-certgen* ]]; then
+    echo "[*] Special handling for multi-arch index issue: pulling --all-platforms"
+    sudo ctr i pull --all-platforms "$img"
+    sleep 5  # give content store time to settle
+  else
+    sudo ctr i pull --platform linux/amd64 "$img"
+  fi
+  # Extract the image name and tag for the filename
+  image_name_with_tag=$(echo "$img" | cut -d'@' -f1)
+  fname=$(echo "$image_name_with_tag" | tr '/:@' '_')
 
-  tag=$(echo "$img" | cut -d'@' -f1)
-  fname=$(echo "$tag" | tr '/:@' '_')
-
-  echo "[*] Exporting to $fname.tar"
-  sudo ctr  i export "image_builder/images/$fname.tar" "$img"
+  echo "[*] Exporting to image_builder/images/$fname.tar"
+  sudo ctr i export --platform linux/amd64 "image_builder/images/$fname.tar" "$img"
 done
 
 
