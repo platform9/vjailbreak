@@ -13,7 +13,11 @@ Determines how the data copy is done
 
 * **Copy live VMs, then power off** - This option copies the data from the live VMs to the OpenStack/PCD volumes. vJailbreak uses CBT (Change Block Tracking) to copy the data that is dirtied. Then, the VMs are powered off and the remaining changed blocks are copied to the OpenStack/PCD volumes (see cut over options below)
 
-* **Power off VMs, then copy** - This option powers off the VMs and then copies the data to the OpenStack/PCD volumes. There is no CBT involved in this case, it will be the faster option, but will impact the uptime of the application. Power off VMs are supported but may need user input to provide the IP address, Operating System type during migration.
+* **Power off VMs, then copy** - This option powers off the VMs and then copies data to OpenStack/PCD volumes. There is no CBT involved in this case, it will be a faster option, but will impact the uptime of the application. Power off VMs are supported but may need user input to provide IP address, Operating System type during migration.
+
+* **Do not turn off the source VM** - This is a testing and development mode that simulates the migration process without actually powering off the source VM. The migration workflow is executed but VM power operations are skipped, allowing for safe testing of migration procedures without affecting running workloads.
+
+> **Note:** Migration without shutting down the source VM may cause network conflicts. Please acknowledge the risks involved in migrating the VM to the same subnet without source VM shutdown.
 
 ### Storage copy method
 Determines the underlying mechanism used to transfer disk data.
