@@ -463,7 +463,8 @@ jobs:
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
           mkdir -p vjailbreak_base_qcow2
-          oras pull ${{ env.QCOW2_IMG }}:pre-bake-base-image -o vjailbreak_base_qcow2/
+          BASE_IMAGE_REPO="${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak"
+          oras pull ${BASE_IMAGE_REPO}:pre-bake-base-image -o vjailbreak_base_qcow2/
           ls -la vjailbreak_base_qcow2/
 
       - name: Generate Controller Manifests
