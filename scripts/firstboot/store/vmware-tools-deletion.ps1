@@ -10,6 +10,8 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 
+$PnPPath = if (Test-Path "$env:SystemRoot\Sysnative\pnputil.exe") { "$env:SystemRoot\Sysnative\pnputil.exe" } else { "pnputil.exe" }
+
 function Write-Log {
     param([string]$Message,[string]$Level="INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -112,11 +114,8 @@ function Remove-VMwareDrivers {
 }
 
 function Remove-DriverStore {
-
-    Write-Log "Cleaning DriverStore VMware entries"
-
-    $drivers=pnputil /enum-drivers
-
+    Write-Log "Cleaning DriverStore VMware INF Packages"
+    $drivers = & $PnPPath -e
     $published=""
     $provider=""
 
@@ -135,8 +134,7 @@ function Remove-DriverStore {
             if($provider -match "VMware"){
 
                 Write-Log "Removing driverstore $published"
-
-                pnputil /delete-driver $published /uninstall /force | Out-Null
+                & $PnPPath -d $published /force | Out-Null
             }
 
             $published=""
@@ -146,33 +144,15 @@ function Remove-DriverStore {
 }
 
 function Remove-VMwareDevices {
-
     Write-Log "Removing VMware hidden devices"
-
-    $devices = pnputil /enum-devices
-
-    foreach($line in $devices){
-
-        if($line -match "Instance ID:\s*(.+)"){
-            $id=$matches[1]
-        }
-
-        if($line -match "Driver Name:\s*(oem\d+\.inf)"){
-
-            if($line -match "vm"){
-
-                Write-Log "Removing device $id"
-
-                pnputil /remove-device "$id" | Out-Null
-            }
-        }
+    Get-PnpDevice | Where-Object {$_.FriendlyName -match "VMware"} | ForEach-Object {
+        Write-Log "Removing device: $($_.FriendlyName)"
+        & $PnPPath /remove-device $_.InstanceId | Out-Null
     }
 }
 
 function Remove-VMwareFolders {
-
     Write-Log "Removing VMware folders"
-
     $paths=@(
     "C:\Program Files\VMware",
     "C:\Program Files (x86)\VMware",
@@ -181,21 +161,35 @@ function Remove-VMwareFolders {
     "C:\ProgramData\VMware",
     "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware"
     )
-
     foreach($p in $paths){
-
         if(Test-Path $p){
-
             try{
-
-                takeown /F $p /R /D Y | Out-Null
-                icacls $p /grant Administrators:F /T | Out-Null
+                cmd /c "takeown /F ""$p"" /R /D Y" | Out-Null
+                cmd /c "icacls ""$p"" /grant Administrators:F /T" | Out-Null
                 Remove-Item $p -Recurse -Force
-
+                Write-Log "Deleted folder $p"
             }catch{
-
                 Schedule-DeleteOnReboot $p
+                Write-Log "Scheduled folder delete $p"
             }
+        }
+    }
+}
+
+function Remove-MSIGhostRecords {
+    Write-Log "Removing MSI Ghost Registration and SQUID keys"
+    
+    $ghost = Get-WmiObject -Class Win32_Product | Where-Object {$_.IdentifyingNumber -eq "{AF174E64-22CF-4386-A9EC-73F285739998}"}
+    if ($ghost) { $ghost.Uninstall() | Out-Null }
+
+    $squidPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\46E471FAFC2268349ACE372F58379989",
+        "HKLM:\SOFTWARE\Classes\Installer\Products\46E471FAFC2268349ACE372F58379989"
+    )
+    foreach ($path in $squidPaths) {
+        if (Test-Path $path) { 
+            Remove-Item -Path $path -Recurse -Force 
+            Write-Log "Removed SQUID key: $path"
         }
     }
 }
@@ -249,6 +243,7 @@ Write-Log "=== VMware Cleanup Start ==="
 Stop-VMwareProcesses
 Remove-VMwareServices
 Remove-VMwareDrivers
+Remove-MSIGhostRecords
 Remove-DriverStore
 Remove-VMwareDevices
 Remove-VMwareFolders
