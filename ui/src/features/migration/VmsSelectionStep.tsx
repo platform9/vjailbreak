@@ -599,6 +599,7 @@ function VmsSelectionStep({
       field: 'flavor',
       headerName: 'Flavor',
       flex: 1,
+      getApplyQuickFilterFn: () => null,
       valueGetter: (value) => value || 'auto-assign',
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
