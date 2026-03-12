@@ -971,6 +971,20 @@ function VmsSelectionStep({
           [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
         }))
       }
+    } else {
+      const currentIp = bulkCurrentIPs?.[vmName]?.[interfaceIndex] || ''
+      setBulkEditIPs((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
+      }))
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp.trim() ? 'valid' : 'empty' }
+      }))
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }))
     }
   }
 
