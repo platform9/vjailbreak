@@ -8,7 +8,7 @@ param(
     [string]$LogPath = "C:\VMware_Removal_Log.txt"
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $WarningPreference = 'Continue'
 
 function Write-Log {
@@ -46,15 +46,15 @@ function Stop-VMwareProcesses {
 }
 
 function Remove-VMwareServices {
-    Write-Log "Removing ALL VMware-related services (dynamic scan)..."
+    Write-Log "Removing ALL VMware-related services..."
     $temp = "$env:TEMP\services.txt"
-    sc query type= service state= all > $temp
+    sc.exe query type= service state= all > $temp
 
     $services = @()
     foreach ($line in (Get-Content $temp)) {
         if ($line -match '^SERVICE_NAME:\s*(.+)$') {
             $svc = $matches[1].Trim()
-            $qc = sc qc $svc 2>$null
+            $qc = sc.exe qc $svc 2>$null
             if ($qc -match 'VMware') { $services += $svc }
         }
     }
@@ -63,8 +63,8 @@ function Remove-VMwareServices {
     foreach ($svc in $services) {
         Write-Log "Processing service: $svc"
         Stop-Service $svc -Force -ErrorAction SilentlyContinue
-        sc config $svc start= disabled | Out-Null
-        sc delete $svc | Out-Null
+        sc.exe config $svc start= disabled | Out-Null
+        sc.exe delete $svc | Out-Null
         Write-Log "Service $svc removed"
     }
 }
@@ -198,18 +198,23 @@ function Remove-VMwareDriverStore {
 }
 
 function Remove-VMwareMSI {
-    Write-Log "Attempting MSI uninstall of VMware Tools (Programs & Features)..."
-    $uninstallKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
-    foreach ($key in $uninstallKeys) {
-        $name = (Get-ItemProperty -Path $key.PSPath -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
-        if ($name -like "*VMware Tools*") {
-            $uninstall = (Get-ItemProperty -Path $key.PSPath -Name UninstallString).UninstallString
-            if ($uninstall) {
-                $uninstall = $uninstall -replace "/I", "/X"
-                Start-Process -FilePath "msiexec.exe" -ArgumentList "$uninstall /quiet /norestart" -Wait
-                Write-Log "MSI uninstall executed for $name"
+    Write-Log "Attempting MSI uninstall of VMware Tools ..."
+    try {
+        $uninstallKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+        foreach ($key in $uninstallKeys) {
+            $name = (Get-ItemProperty -Path $key.PSPath -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
+            if ($name -like "*VMware Tools*") {
+                $uninstall = (Get-ItemProperty -Path $key.PSPath -Name UninstallString -ErrorAction SilentlyContinue).UninstallString
+                if ($uninstall) {
+                    $uninstall = $uninstall -replace "/I", "/X"
+                    $proc = Start-Process msiexec.exe -ArgumentList "$uninstall /quiet /norestart" -PassThru
+                    $proc.WaitForExit(30000) | Out-Null
+                    Write-Log "MSI uninstall attempted for $name (timed out if needed)"
+                }
             }
         }
+    } catch {
+        Write-Log "MSI uninstall had an issue - continuing anyway" "WARNING"
     }
 }
 
