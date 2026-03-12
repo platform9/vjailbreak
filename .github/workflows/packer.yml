@@ -467,6 +467,15 @@ jobs:
           oras pull ${BASE_IMAGE_REPO}:pre-bake-base-image -o vjailbreak_base_qcow2/
           ls -la vjailbreak_base_qcow2/
 
+      - name: Download cert-manager manifests
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          CERT_MANAGER_VERSION="v1.16.1"
+          CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+          mkdir -p image_builder/cert-manager-manifests
+          curl -L "${CERT_MANAGER_URL}" -o image_builder/cert-manager-manifests/cert-manager.yaml
+          sed -i 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' image_builder/cert-manager-manifests/cert-manager.yaml
+
       - name: Generate Controller Manifests
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
