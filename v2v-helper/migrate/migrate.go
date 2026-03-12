@@ -17,11 +17,11 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
@@ -1170,13 +1170,16 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 				Async:  true,
 			})
 		}
-		if err := virtv2v.PushWindowsFirstBoot(); err != nil {
+		userFirstBootScripts, err := virtv2v.PushWindowsFirstBoot(vminfo.OSType)
+		if err != nil {
 			return err
 		}
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "user_firstboot.ps1",
-			Async:  false,
-		})
+		for _, scriptName := range userFirstBootScripts {
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: scriptName,
+				Async:  true,
+			})
+		}
 	}
 
 	// Add first boot scripts for RHEL family

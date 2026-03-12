@@ -47,6 +47,7 @@ interface OpenstackCredentialsFormValues {
   rcFile?: File
   isPcd: boolean
   insecure: boolean
+  vjbInstanceId: string
 }
 
 export default function OpenstackCredentialsDrawer({
@@ -62,7 +63,8 @@ export default function OpenstackCredentialsDrawer({
       credentialName: '',
       rcFile: undefined,
       isPcd: true,
-      insecure: false
+      insecure: false,
+      vjbInstanceId: ''
     }
   })
 
@@ -97,7 +99,8 @@ export default function OpenstackCredentialsDrawer({
       credentialName: '',
       rcFile: undefined,
       isPcd: false,
-      insecure: false
+      insecure: false,
+      vjbInstanceId: ''
     })
     setRcFileValues(null)
     setCreatedCredentialName(null)
@@ -191,7 +194,8 @@ export default function OpenstackCredentialsDrawer({
             OS_INSECURE: values.insecure
           },
           values.isPcd,
-          projectName
+          projectName,
+          values.vjbInstanceId
         )
 
         setCreatedCredentialName(response.metadata.name)
@@ -424,6 +428,16 @@ export default function OpenstackCredentialsDrawer({
                 size="small"
                 required
               />
+
+              <FormGrid minWidth={360} gap={2}>
+                <RHFTextField
+                  name="vjbInstanceId"
+                  label="vJailbreak Instance ID (Optional)"
+                  placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
+                  helperText="Specify the PCD instance ID where vJailbreak is running. Leave empty to auto-detect. Required if this vJailbreak VM is on L2 Network."
+                  fullWidth
+                />
+              </FormGrid>
 
               <Row gap={3} flexWrap="wrap">
                 <Box sx={{ flex: 1, minWidth: 260 }}>

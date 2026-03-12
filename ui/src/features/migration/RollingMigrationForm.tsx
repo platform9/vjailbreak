@@ -100,6 +100,11 @@ interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   osFamily?: string
+  useGPU?: boolean
+  useFlavorless?: boolean
+  disconnectSourceNetwork?: boolean
+  fallbackToDHCP?: boolean
+  networkPersistence?: boolean
   storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
 }
 
@@ -119,6 +124,8 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -136,6 +143,8 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osFamily: false,
+  useGPU: false,
+  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -992,7 +1001,7 @@ export default function RollingMigrationFormDrawer({
     if (!openstackCredData) return []
 
     const networks = openstackCredData?.status?.openstack?.networks || []
-    return networks.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    return networks.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }, [openstackCredData])
 
   const openstackVolumeTypes = useMemo(() => {
@@ -1508,14 +1517,20 @@ export default function RollingMigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
 
     const dataCopyMethodOk =
       !selectedMigrationOptions.dataCopyMethod || Boolean(params.dataCopyMethod)
 
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
-      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
 
     const cutoverOk = !selectedMigrationOptions.cutoverOption
       ? true
@@ -1534,6 +1549,10 @@ export default function RollingMigrationFormDrawer({
       (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
+      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
 
     const postMigrationActionOk = !postMigrationActionSelected
       ? true
@@ -1555,6 +1574,7 @@ export default function RollingMigrationFormDrawer({
         cutoverOk &&
         postMigrationScriptOk &&
         osFamilyOk &&
+        pcdOptionsOk &&
         postMigrationActionOk)
 
     // PCD host config validation - not needed anymore since validation is handled by esxHostConfigValid
@@ -1747,6 +1767,8 @@ export default function RollingMigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
     )
   }, [selectedMigrationOptions])
@@ -1754,9 +1776,13 @@ export default function RollingMigrationFormDrawer({
   const areSelectedMigrationOptionsConfigured = useMemo(() => {
     if (!hasAnyMigrationOptionSelected) return false
 
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
-      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
 
     const cutoverOk = !selectedMigrationOptions.cutoverOption
       ? true
@@ -1775,6 +1801,10 @@ export default function RollingMigrationFormDrawer({
       (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
+      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -1801,6 +1831,7 @@ export default function RollingMigrationFormDrawer({
       cutoverOk &&
       postMigrationScriptOk &&
       osFamilyOk &&
+      pcdOptionsOk &&
       postMigrationActionOk
     )
   }, [
@@ -1812,6 +1843,8 @@ export default function RollingMigrationFormDrawer({
     params.cutoverEndTime,
     params.postMigrationScript,
     params.osFamily,
+    params.useGPU,
+    params.useFlavorless,
     params,
     fieldErrors
   ])
@@ -1883,7 +1916,14 @@ export default function RollingMigrationFormDrawer({
         description: 'Scheduling and advanced behavior',
         status: step6HasErrors
           ? 'attention'
-          : touchedSections.options && areSelectedMigrationOptionsConfigured && !step6HasErrors
+          : touchedSections.options &&
+              (areSelectedMigrationOptionsConfigured ||
+                Boolean(
+                  params.disconnectSourceNetwork ||
+                    params.fallbackToDHCP ||
+                    params.networkPersistence
+                )) &&
+              !step6HasErrors
             ? 'complete'
             : 'incomplete'
       }
@@ -1916,7 +1956,10 @@ export default function RollingMigrationFormDrawer({
       step6HasErrors,
       hasAnyMigrationOptionSelected,
       areSelectedMigrationOptionsConfigured,
-      touchedSections
+      touchedSections,
+      params.disconnectSourceNetwork,
+      params.fallbackToDHCP,
+      params.networkPersistence
     ]
   )
 

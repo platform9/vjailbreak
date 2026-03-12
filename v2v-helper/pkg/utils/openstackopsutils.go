@@ -19,8 +19,8 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +61,12 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
+	currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+	if currentInstanceUUID == "" {
+		PrintLog("CURRENT_INSTANCE_ID environment variable is not set")
+	} else {
+		return currentInstanceUUID, nil
+	}
 
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
@@ -537,9 +543,22 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	if mac != "" {
 		createOpts.MACAddress = mac
 	}
-	if len(ipEntries) > 0 {
+
+	localDeepCopyIpEntries := make([]vm.IpEntry, len(ipEntries))
+
+	// If the target network is L2 network pass empty ip address
+	// Check if the network is L2-only by looking for "simple_network" tag
+	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, network.ID)
+	if err != nil {
+		return ports.CreateOpts{}, errors.Wrap(err, "failed to check if network is L2")
+	}
+	if !isL2Network {
+		copy(localDeepCopyIpEntries, ipEntries)
+	}
+
+	if len(localDeepCopyIpEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
-		for _, ipEntry := range ipEntries {
+		for _, ipEntry := range localDeepCopyIpEntries {
 			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
@@ -553,7 +572,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if ipEntries != nil {
+	} else if localDeepCopyIpEntries != nil {
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
@@ -580,10 +599,14 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
+	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
+	if len(network.Subnets) == 0 && currentInstanceID == "" {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
+
+	// if currentInstanceID is not nill that means this is an L2 network, we should continue
 
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -81,6 +81,11 @@ func main() {
 	openstackProjectName := strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
 	if openstackProjectName == "" {
 		openstackProjectName = strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
+	}
+
+	err = os.Setenv("CURRENT_INSTANCE_ID", migrationparams.CurrentInstanceID)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Failed to set CURRENT_INSTANCE_ID environment variable: %v", err))
 	}
 
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
@@ -231,7 +236,8 @@ REMOVE_VMWARE_TOOLS=%s
 STORAGE_COPY_METHOD=%s
 VENDOR_TYPE=%s
 ARRAY_CREDS_MAPPING=%s
-ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
+ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s
+CURRENT_INSTANCE_ID=%s`,
 		migrationparams.SourceVMName,
 		migrationparams.OpenstackOSType,
 		migrationparams.MigrationType,
@@ -251,5 +257,6 @@ ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
 		migrationparams.VendorType,
 		migrationparams.ArrayCredsMapping,
 		migrationparams.AcknowledgeNetworkConflictRisk,
+		migrationparams.CurrentInstanceID,
 	))
 }

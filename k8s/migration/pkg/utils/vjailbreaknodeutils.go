@@ -11,15 +11,18 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,51 +32,59 @@ import (
 )
 
 // CheckAndCreateMasterNodeEntry ensures a master node entry exists and creates it if needed
-func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool) error {
-	var openstackuuid string
-
+func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client, local bool, openstackuuid string) error {
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return errors.Wrap(err, "failed to get master node")
 	}
 
-	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjailbreakv1alpha1.VjailbreakNode{})
+	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	nodeExists := false
+	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjNode)
 	if err == nil {
-		// VjailbreakNode already exists
-		return nil
-	}
-
-	if local {
-		// Local mode
-		openstackuuid = "fake-openstackuuid"
-	} else {
-		// Controller manager is always on the master node due to pod affinity
-		openstackuuid, err = utils.GetCurrentInstanceUUID()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current instance uuid")
+		nodeExists = true
+		// VjailbreakNode already exists with OpenstackUUID set
+		if vjNode.Status.OpenstackUUID != "" {
+			return nil
 		}
 	}
-	vjNode := vjailbreakv1alpha1.VjailbreakNode{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.VjailbreakMasterNodeName,
+
+	if openstackuuid == "" {
+		if local {
+			// Local mode
+			openstackuuid = "fake-openstackuuid"
+		} else {
+			// Controller manager is always on the master node due to pod affinity
+			openstackuuid, err = utils.GetCurrentInstanceUUID()
+			if err != nil {
+				return errors.Wrap(err, "failed to get current instance uuid")
+			}
+		}
+	}
+
+	if !nodeExists {
+		vjNode = vjailbreakv1alpha1.VjailbreakNode{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      constants.VjailbreakMasterNodeName,
+				Namespace: constants.NamespaceMigrationSystem,
+			},
+			Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+				NodeRole: constants.NodeRoleMaster,
+			},
+		}
+
+		err = k3sclient.Create(ctx, &vjNode)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return errors.Wrap(err, "failed to create vjailbreak node")
+		}
+
+		err = k3sclient.Get(ctx, types.NamespacedName{
 			Namespace: constants.NamespaceMigrationSystem,
-		},
-		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
-			NodeRole: constants.NodeRoleMaster,
-		},
-	}
-
-	err = k3sclient.Create(ctx, &vjNode)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "failed to create vjailbreak node")
-	}
-
-	err = k3sclient.Get(ctx, types.NamespacedName{
-		Namespace: constants.NamespaceMigrationSystem,
-		Name:      constants.VjailbreakMasterNodeName,
-	}, &vjNode)
-	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak node")
+			Name:      constants.VjailbreakMasterNodeName,
+		}, &vjNode)
+		if err != nil {
+			return errors.Wrap(err, "failed to get vjailbreak node")
+		}
 	}
 
 	vjNode.Status.VMIP = GetNodeInternalIP(masterNode)
@@ -88,9 +99,10 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 	return nil
 }
 
-// UpdateMasterNodeImageID updates the image ID of the master node
+// UpdateMasterNodeImageID updates the image ID and flavor ID of the master node
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
 	var imageID string
+	var flavorID string
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err := k3sclient.Get(ctx, types.NamespacedName{
@@ -109,15 +121,21 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 	if local {
 		// Local mode
 		imageID = "fake-image-id"
+		flavorID = "fake-flavor-id"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get image id of master node")
 		}
+		flavorID, err = GetFlavorIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
+		if err != nil {
+			return errors.Wrap(err, "failed to get flavor id of master node")
+		}
 	}
 
 	vjNode.Spec.OpenstackImageID = imageID
+	vjNode.Spec.OpenstackFlavorID = flavorID
 	vjNode.Spec.OpenstackCreds = corev1.ObjectReference{
 		Name:      openstackcreds.Name,
 		Namespace: openstackcreds.Namespace,
@@ -218,9 +236,18 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to get master vjailbreak node")
 	}
 
-	networkIDs, masterSecurityGroups, err := GetCurrentInstanceNetworkInfo()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get network info")
+	var networkIDs []servers.Network
+	var masterSecurityGroups []string
+	if creds.Spec.VJBInstanceID != "" {
+		networkIDs, masterSecurityGroups, err = GetInstanceNetworkInfoByID(ctx, openstackClients, creds.Spec.VJBInstanceID)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get network info")
+		}
+	} else {
+		networkIDs, masterSecurityGroups, err = GetCurrentInstanceNetworkInfo()
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get network info")
+		}
 	}
 
 	// Determine security groups: use spec value if provided, otherwise use master's
@@ -294,6 +321,34 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		rootDisk.VolumeType = volumeType
 	}
 
+	// Handle L2-only networks by creating ports first
+	// For L2 networks, FixedIP will be set to "L2_NETWORK" marker
+	var createdPorts []string
+	hasL2Network := false
+	for i, network := range networkIDs {
+		if network.FixedIP != "" {
+			// This is an L2-only network, create a port with just MAC (no IP)
+			log.Info("Detected L2-only network, creating port with MAC only", "networkID", network.UUID)
+			hasL2Network = true
+			port, err := createPortForL2Network(ctx, openstackClients, network.UUID, vjNode.Name)
+			if err != nil {
+				// Clean up any ports we created
+				for _, portID := range createdPorts {
+					if delErr := ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr(); delErr != nil {
+						log.Error(delErr, "Failed to delete port during cleanup", "portID", portID)
+					}
+				}
+				return "", errors.Wrap(err, "failed to create port for L2 network")
+			}
+			createdPorts = append(createdPorts, port.ID)
+			// Update the network to use the port instead of network UUID
+			networkIDs[i] = servers.Network{
+				Port: port.ID,
+			}
+			log.Info("Created port for L2 network", "portID", port.ID, "macAddress", port.MACAddress)
+		}
+	}
+
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
 		Name:           vjNode.Name,
@@ -308,14 +363,53 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		AvailabilityZone: availabilityZone,
 	}
 
+	// For L2-only networks, enable config-drive since metadata service is unreachable
+	// (VM has no IP to reach 169.254.169.254)
+	if hasL2Network {
+		log.Info("Enabling config-drive for L2-only network (metadata service unreachable)")
+		serverCreateOpts.ConfigDrive = boolPtr(true)
+	}
+
 	// Create the VM
 	server, err := servers.Create(ctx, openstackClients.ComputeClient, serverCreateOpts, nil).Extract()
 	if err != nil {
+		// Clean up any ports we created on failure
+		for _, portID := range createdPorts {
+			if delErr := ports.Delete(ctx, openstackClients.NetworkingClient, portID).ExtractErr(); delErr != nil {
+				log.Error(delErr, "Failed to delete port during cleanup", "portID", portID)
+			}
+		}
 		return "", errors.Wrap(err, "Failed to create server")
 	}
 
 	log.Info("Server created", "ID", server.ID)
 	return server.ID, nil
+}
+
+// createPortForL2Network creates a port on an L2-only network
+// L2-only ports have: no fixed IPs, port security disabled, no security groups
+// The user will assign a static IP manually later
+func createPortForL2Network(ctx context.Context, openstackClients *OpenStackClients, networkID, serverName string) (*ports.Port, error) {
+	// For L2 networks, create a port with:
+	// - No fixed IPs (--no-fixed-ip)
+	// - Port security disabled (--disable-port-security)
+	// - No security groups (not applicable for L2-only networks)
+	// OpenStack will auto-generate a MAC address
+	createOpts := portsecurity.PortCreateOptsExt{
+		CreateOptsBuilder: ports.CreateOpts{
+			NetworkID:    networkID,
+			Name:         fmt.Sprintf("%s-l2-port", serverName),
+			AdminStateUp: boolPtr(true),
+		},
+		PortSecurityEnabled: boolPtr(false),
+	}
+
+	port, err := ports.Create(ctx, openstackClients.NetworkingClient, createOpts).Extract()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create port")
+	}
+
+	return port, nil
 }
 
 // GetOpenstackCredsVjailbreakNode retrieves OpenStack credentials for the master node
@@ -429,6 +523,70 @@ func GetCurrentInstanceNetworkInfo() ([]servers.Network, []string, error) {
 	return networks, securityGroups, nil
 }
 
+// GetInstanceNetworkInfoByID retrieves network and security group information for a given instance using OpenStack clients
+// For L2-only networks (networks without subnets), it marks the network by setting FixedIP to "L2_NETWORK"
+// so that a port can be created before VM creation
+func GetInstanceNetworkInfoByID(ctx context.Context, openstackClients *OpenStackClients, instanceID string) ([]servers.Network, []string, error) {
+	// Get server details from OpenStack
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, instanceID).Extract()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get server details")
+	}
+
+	// Query ports attached to this instance to get network information
+	networks := []servers.Network{}
+	networkIDSet := make(map[string]bool)
+	allPages, err := ports.List(openstackClients.NetworkingClient, ports.ListOpts{
+		DeviceID: instanceID,
+	}).AllPages(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to list ports for instance")
+	}
+
+	portList, err := ports.ExtractPorts(allPages)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to extract ports")
+	}
+
+	// Extract unique network IDs from ports
+	// For L2-only networks (tagged with "simple_network"), we mark them by setting FixedIP to a sentinel value
+	for _, port := range portList {
+		if !networkIDSet[port.NetworkID] {
+			networkIDSet[port.NetworkID] = true
+			network := servers.Network{
+				UUID: port.NetworkID,
+			}
+			// Check if this is an L2-only network by looking for "simple_network" tag
+			isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, openstackClients.NetworkingClient, port.NetworkID)
+			if err != nil {
+				// Log warning but continue - assume it's not L2 if we can't check
+				fmt.Printf("Warning: failed to check if network %s is L2: %v\n", port.NetworkID, err)
+				isL2Network = false
+			}
+			// For L2 networks, set a marker in FixedIP field to indicate this is L2
+			if isL2Network {
+				fmt.Printf("Network %s is L2-only, setting marker\n", port.NetworkID)
+				network.FixedIP = "L2_NETWORK"
+			}
+			networks = append(networks, network)
+		}
+	}
+
+	// Extract security group names from server
+	securityGroups := []string{}
+	for i, sg := range server.SecurityGroups {
+		if sgName, ok := sg["name"].(string); ok {
+			securityGroups = append(securityGroups, sgName)
+		} else {
+			// Log when security group name extraction fails
+			fmt.Printf("Warning: failed to extract security group name at index %d for instance %s. Security group data: %+v\n",
+				i, instanceID, sg)
+		}
+	}
+
+	return networks, securityGroups, nil
+}
+
 // GetOpenstackVMIP retrieves the IP address of an OpenStack VM
 func GetOpenstackVMIP(ctx context.Context, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (string, error) {
 	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
@@ -512,6 +670,25 @@ func GetOpenstackVMStatus(ctx context.Context, k3sclient client.Client, vjNode *
 	}
 
 	return vmStatus, vmIP, nil
+}
+
+// GetFlavorIDFromVM retrieves the flavor ID from a virtual machine using its UUID
+func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+
+	if flavorID, ok := server.Flavor["id"].(string); ok {
+		return flavorID, nil
+	}
+	return "", fmt.Errorf("failed to get flavor ID from server")
 }
 
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID

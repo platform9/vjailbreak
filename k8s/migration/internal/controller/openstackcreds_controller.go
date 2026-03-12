@@ -22,11 +22,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -480,7 +481,46 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	if err := setupMasterNode(ctx, r, scope); err != nil {
+		return err
+	}
+
+	if err := createDummyPCDCluster(ctx, r, scope); err != nil {
+		return err
+	}
+
+	flavors, err := fetchAndUpdateFlavors(ctx, r, scope)
+	if err != nil {
+		return err
+	}
+
+	if err := syncProjectName(ctx, r, scope); err != nil {
+		return err
+	}
+
+	if err := updateOpenstackInfo(ctx, r, scope); err != nil {
+		return err
+	}
+
+	if err := populateVMwareMachineFlavors(ctx, r, scope, flavors); err != nil {
+		return err
+	}
+
+	if err := handlePCDSync(ctx, r, scope); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setupMasterNode(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
 	ctxlog := scope.Logger
+	if scope.OpenstackCreds.Spec.VJBInstanceID != "" {
+		err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client, false, scope.OpenstackCreds.Spec.VJBInstanceID)
+		if err != nil {
+			return errors.Wrap(err, "failed to check and create master node entry")
+		}
+	}
 	err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
@@ -490,20 +530,32 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		}
 		ctxlog.Error(err, "Failed to update master node image ID and flavor list")
 	}
+	return nil
+}
 
+func createDummyPCDCluster(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	ctxlog := scope.Logger
 	ctxlog.Info("Creating dummy PCD cluster", "openstackcreds", scope.OpenstackCreds.Name)
-	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, r.Client, scope.OpenstackCreds)
+	err := utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, r.Client, scope.OpenstackCreds)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create dummy PCD cluster")
 	}
+	return nil
+}
 
-	flavors, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
+func fetchAndUpdateFlavors(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) ([]flavors.Flavor, error) {
+	ctxlog := scope.Logger
+	flavorList, err := utils.ListAllFlavors(ctx, r.Client, scope.OpenstackCreds)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get flavors", "openstackcreds", scope.OpenstackCreds.Name)
-		return errors.Wrap(err, "failed to get flavors")
+		return nil, errors.Wrap(err, "failed to get flavors")
 	}
-	scope.OpenstackCreds.Spec.Flavors = flavors
+	scope.OpenstackCreds.Spec.Flavors = flavorList
+	return flavorList, nil
+}
 
+func syncProjectName(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	ctxlog := scope.Logger
 	openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
@@ -519,8 +571,11 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		ctxlog.Error(err, "Error updating spec of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		return errors.Wrap(err, "failed to update spec of OpenstackCreds")
 	}
+	return nil
+}
 
-	// update the status field openstackInfo
+func updateOpenstackInfo(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	ctxlog := scope.Logger
 	ctxlog.Info("Getting OpenStack info", "openstackcreds", scope.OpenstackCreds.Name)
 	openstackinfo, err := utils.GetOpenstackInfo(ctx, r.Client, scope.OpenstackCreds)
 	if err != nil {
@@ -533,112 +588,117 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		return errors.Wrap(err, "failed to update OpenstackCreds status")
 	}
+	return nil
+}
 
-	// Get vjailbreak settings to check if we should populate VMwareMachine flavors
+func populateVMwareMachineFlavors(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope, flavorList []flavors.Flavor) error {
+	ctxlog := scope.Logger
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get vjailbreak settings")
 		return errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
-	// Only populate flavors if the setting is enabled
-	if vjailbreakSettings.PopulateVMwareMachineFlavors {
-		ctxlog.Info("Populating VMwareMachine objects with OpenStack flavors", "openstackcreds", scope.OpenstackCreds.Name)
-		// Now with these creds we should populate the flavors as labels in vmwaremachine object.
-		// This will help us to create the vmwaremachine object with the correct flavor.
-		vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
-		if err := r.List(ctx, vmwaremachineList); err != nil {
-			return errors.Wrap(err, "failed to list vmwaremachine objects")
-		}
-
-		for i := range vmwaremachineList.Items {
-			vmwaremachine := &vmwaremachineList.Items[i]
-			// Get the cpu and memory of the vmwaremachine object
-			cpu := vmwaremachine.Spec.VMInfo.CPU
-			memory := vmwaremachine.Spec.VMInfo.Memory
-
-			// Get GPU requirements from VM
-			passthroughGPUCount := vmwaremachine.Spec.VMInfo.GPU.PassthroughCount
-			vgpuCount := vmwaremachine.Spec.VMInfo.GPU.VGPUCount
-
-			// Now get the closest flavor based on the cpu, memory, and GPU requirements
-			flavor, err := openstackpkg.GetClosestFlavour(cpu, memory, passthroughGPUCount, vgpuCount, flavors, false)
-			if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
-				ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
-				return errors.Wrap(err, "failed to get closest flavor")
-			}
-			// Now label the vmwaremachine object with the flavor name
-			if flavor == nil {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, "NOT_FOUND"); err != nil {
-					return errors.Wrap(err, "failed to update vmwaremachine object")
-				}
-			} else {
-				if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavor.ID); err != nil {
-					return errors.Wrap(err, "failed to update vmwaremachine object")
-				}
-			}
-		}
-	} else {
+	if !vjailbreakSettings.PopulateVMwareMachineFlavors {
 		ctxlog.Info("Skipping VMwareMachine flavor population as it is disabled", "openstackcreds", scope.OpenstackCreds.Name)
+		return nil
 	}
 
-	if utils.IsOpenstackPCD(*scope.OpenstackCreds) {
-		// Check if a sync is already in progress
-		if scope.OpenstackCreds.Annotations == nil {
-			scope.OpenstackCreds.Annotations = make(map[string]string)
+	ctxlog.Info("Populating VMwareMachine objects with OpenStack flavors", "openstackcreds", scope.OpenstackCreds.Name)
+	vmwaremachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := r.List(ctx, vmwaremachineList); err != nil {
+		return errors.Wrap(err, "failed to list vmwaremachine objects")
+	}
+
+	for i := range vmwaremachineList.Items {
+		if err := updateVMwareMachineWithFlavor(ctx, r, scope, &vmwaremachineList.Items[i], flavorList); err != nil {
+			return err
 		}
-
-		syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
-		if syncInProgress == constants.AnnotationValueTrue {
-			ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
-			return nil
-		}
-
-		// Mark sync as in progress
-		scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = constants.AnnotationValueTrue
-		if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Failed to mark PCD sync as in progress")
-			return nil
-		}
-
-		ctxlog.Info("Starting asynchronous PCD sync", "openstackcreds", scope.OpenstackCreds.Name)
-
-		// Run sync asynchronously to avoid blocking the controller
-		go func() {
-			// Create a new context for the background operation (not tied to reconciliation)
-			syncCtx := context.Background()
-
-			err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
-
-			// Get the latest version of the resource to update annotations
-			latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
-			if getErr := r.Get(syncCtx, client.ObjectKey{
-				Name:      scope.OpenstackCreds.Name,
-				Namespace: scope.OpenstackCreds.Namespace,
-			}, latestCreds); getErr != nil {
-				ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
-				return
-			}
-
-			if latestCreds.Annotations == nil {
-				latestCreds.Annotations = make(map[string]string)
-			}
-
-			// Clear the in-progress flag
-			delete(latestCreds.Annotations, "pcd-sync-in-progress")
-
-			if err != nil {
-				ctxlog.Error(err, "PCD sync failed")
-				latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
-			} else {
-				ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
-				delete(latestCreds.Annotations, "pcd-sync-last-error")
-			}
-
-			if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
-				ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
-			}
-		}()
 	}
 	return nil
+}
+
+func updateVMwareMachineWithFlavor(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope, vmwaremachine *vjailbreakv1alpha1.VMwareMachine, flavorList []flavors.Flavor) error {
+	ctxlog := scope.Logger
+	cpu := vmwaremachine.Spec.VMInfo.CPU
+	memory := vmwaremachine.Spec.VMInfo.Memory
+	passthroughGPUCount := vmwaremachine.Spec.VMInfo.GPU.PassthroughCount
+	vgpuCount := vmwaremachine.Spec.VMInfo.GPU.VGPUCount
+
+	flavor, err := openstackpkg.GetClosestFlavour(cpu, memory, passthroughGPUCount, vgpuCount, flavorList, false)
+	if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+		ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
+		return errors.Wrap(err, "failed to get closest flavor")
+	}
+
+	flavorID := "NOT_FOUND"
+	if flavor != nil {
+		flavorID = flavor.ID
+	}
+
+	if err := utils.CreateOrUpdateLabel(ctx, r.Client, vmwaremachine, scope.OpenstackCreds.Name, flavorID); err != nil {
+		return errors.Wrap(err, "failed to update vmwaremachine object")
+	}
+	return nil
+}
+
+func handlePCDSync(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
+	if !utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+		return nil
+	}
+
+	ctxlog := scope.Logger
+	if scope.OpenstackCreds.Annotations == nil {
+		scope.OpenstackCreds.Annotations = make(map[string]string)
+	}
+
+	syncInProgress := scope.OpenstackCreds.Annotations["pcd-sync-in-progress"]
+	if syncInProgress == constants.AnnotationValueTrue {
+		ctxlog.Info("PCD sync already in progress, skipping", "openstackcreds", scope.OpenstackCreds.Name)
+		return nil
+	}
+
+	scope.OpenstackCreds.Annotations["pcd-sync-in-progress"] = constants.AnnotationValueTrue
+	if err := r.Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Failed to mark PCD sync as in progress")
+		return nil
+	}
+
+	ctxlog.Info("Starting asynchronous PCD sync", "openstackcreds", scope.OpenstackCreds.Name)
+	go runPCDSyncAsync(r, scope)
+	return nil
+}
+
+func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) {
+	ctxlog := scope.Logger
+	syncCtx := context.Background()
+
+	err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
+
+	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if getErr := r.Get(syncCtx, client.ObjectKey{
+		Name:      scope.OpenstackCreds.Name,
+		Namespace: scope.OpenstackCreds.Namespace,
+	}, latestCreds); getErr != nil {
+		ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
+		return
+	}
+
+	if latestCreds.Annotations == nil {
+		latestCreds.Annotations = make(map[string]string)
+	}
+
+	delete(latestCreds.Annotations, "pcd-sync-in-progress")
+
+	if err != nil {
+		ctxlog.Error(err, "PCD sync failed")
+		latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
+	} else {
+		ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
+		delete(latestCreds.Annotations, "pcd-sync-last-error")
+	}
+
+	if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
+		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
+	}
 }

@@ -150,6 +150,8 @@ export interface SelectedMigrationOptionsType {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
   periodicSyncEnabled?: boolean
   postMigrationAction?: {
     suffix?: boolean
@@ -169,6 +171,8 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
+  useGPU: false,
+  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -934,6 +938,10 @@ export default function MigrationFormDrawer({
       if (key === 'periodicSyncEnabled' && selectedMigrationOptions.periodicSyncEnabled) {
         return params?.periodicSyncInterval !== '' && fieldErrors['periodicSyncInterval'] === ''
       }
+      if (key === 'dataCopyStartTime' && selectedMigrationOptions.dataCopyStartTime) {
+        const value = String(params?.dataCopyStartTime ?? '').trim()
+        return value !== '' && !fieldErrors['dataCopyStartTime']
+      }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
         return params?.[key as keyof typeof params] !== undefined && !fieldErrors[key]
       }
@@ -1031,10 +1039,10 @@ export default function MigrationFormDrawer({
     // RDM validation - ensure RDM disks are properly configured
     rdmValidation.hasValidationError
 
-  const sortedOpenstackNetworks = useMemo(
-    () => (openstackCredentials?.status?.openstack?.networks || []).sort(stringsCompareFn),
-    [openstackCredentials?.status?.openstack?.networks]
-  )
+  const sortedOpenstackNetworks = useMemo(() => {
+    const networks = openstackCredentials?.status?.openstack?.networks || []
+    return networks.sort((a, b) => stringsCompareFn(a.name, b.name))
+  }, [openstackCredentials?.status?.openstack?.networks])
   const sortedOpenstackVolumeTypes = useMemo(
     () => (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(stringsCompareFn),
     [openstackCredentials?.status?.openstack?.volumeTypes]
@@ -1226,6 +1234,8 @@ export default function MigrationFormDrawer({
       Boolean(selectedMigrationOptions.dataCopyStartTime) ||
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
       postMigrationActionSelected
     )
@@ -1273,6 +1283,10 @@ export default function MigrationFormDrawer({
       !selectedMigrationOptions.postMigrationScript ||
       (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
+      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
       postMigrationAction &&
@@ -1298,6 +1312,7 @@ export default function MigrationFormDrawer({
       cutoverOk &&
       periodicSyncOk &&
       postMigrationScriptOk &&
+      pcdOptionsOk &&
       postMigrationActionOk
     )
   }, [
@@ -1309,12 +1324,19 @@ export default function MigrationFormDrawer({
     params.cutoverEndTime,
     params.periodicSyncInterval,
     params.postMigrationScript,
+    params.useGPU,
+    params.useFlavorless,
     params.postMigrationAction,
     fieldErrors
   ])
 
   const step5Complete = Boolean(
-    touchedSections.options && areSelectedMigrationOptionsConfigured && !step5HasErrors
+    touchedSections.options &&
+      (areSelectedMigrationOptionsConfigured ||
+        Boolean(
+          params.disconnectSourceNetwork || params.fallbackToDHCP || params.networkPersistence
+        )) &&
+      !step5HasErrors
   )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
@@ -1626,6 +1648,7 @@ export default function MigrationFormDrawer({
                   params={params}
                   onChange={getParamsUpdater}
                   openstackCredentials={openstackCredentials}
+                  openstackNetworks={sortedOpenstackNetworks}
                   stepNumber="4"
                   showHeader={false}
                 />

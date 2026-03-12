@@ -53,6 +53,8 @@ type OpenStackCredsInfo struct {
 	Insecure bool
 	// DomainName is the OpenStack domain
 	DomainName string
+	// VJBInstanceID is the VJB instance ID (optional, used for VJB instances)
+	VJBInstanceID string
 }
 
 // SecurityGroupInfo holds the security group name and ID
@@ -70,12 +72,18 @@ type ServerGroupInfo struct {
 	Members int    `json:"members,omitempty"`
 }
 
+// PCDNetworkInfo is struct to hold network information for PCD
+type PCDNetworkInfo struct {
+	Name string   `json:"name"`
+	Tags []string `json:"tags"`
+}
+
 // OpenstackInfo contains information about OpenStack environment resources including available volume types and networks
 type OpenstackInfo struct {
 	VolumeTypes          []string            `json:"volumeTypes,omitempty"`
 	VolumeBackends       []string            `json:"volumeBackends,omitempty"`
 	BackendVolumeTypeMap map[string]string   `json:"backendVolumeTypeMap,omitempty"`
-	Networks             []string            `json:"networks,omitempty"`
+	Networks             []PCDNetworkInfo    `json:"networks,omitempty"`
 	SecurityGroups       []SecurityGroupInfo `json:"securityGroups,omitempty"`
 	ServerGroups         []ServerGroupInfo   `json:"serverGroups,omitempty"`
 }
@@ -114,6 +122,9 @@ type OpenstackCredsSpec struct {
 
 	// ProjectName is the name of the project in openstack
 	ProjectName string `json:"projectName,omitempty"`
+
+	// VJBInstanceID is the ID of current vjailbreak instance (needed if metadata service is not available)
+	VJBInstanceID string `json:"vjbinstanceid,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds

@@ -24,6 +24,13 @@ const (
 	OSFamilyLinux   = "linuxguest"
 )
 
+// Post-migration script constants
+const (
+	NextScriptDelimiterLine = "### NEXT SCRIPT ###"
+	LinuxTag                = "LINUX-SCRIPT:"
+	WindowsTag              = "WINDOWS-SCRIPT:"
+)
+
 // Max CPU/RAM Constants
 const (
 	MaxVCPUs = 9999999
