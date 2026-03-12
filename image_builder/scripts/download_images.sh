@@ -37,7 +37,7 @@ cert_manager_webhook="quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSI
 cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}"
 
 ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller@sha256:82917be97c0939f6ada1717bb39aa7e66c229d6cfb10dcfc8f1bd42f9efe0f81"
-kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.0@sha256:d7e8257f8d8bce64b6df55f81fba92011a6a77269b3350f8b997b152af348dba"
+kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen@sha256:7c74a715af2c94cb734785b4d3ea1357b4f02b88e1e123c622a9cb68b62f669c"
 
 # Download cert-manager manifests
 CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
@@ -75,19 +75,13 @@ images=(
 
 for img in "${images[@]}"; do
   echo "[*] Pulling $img"
-  if [[ "$img" == *kube-webhook-certgen* ]]; then
-    echo "[*] Special handling for multi-arch index issue: pulling --all-platforms"
-    sudo ctr i pull --all-platforms "$img"
-    sleep 5  # give content store time to settle
-  else
-    sudo ctr i pull --platform linux/amd64 "$img"
-  fi
-  # Extract the image name and tag for the filename
-  image_name_with_tag=$(echo "$img" | cut -d'@' -f1)
-  fname=$(echo "$image_name_with_tag" | tr '/:@' '_')
+  sudo ctr  i pull --platform linux/amd64 "$img"
 
-  echo "[*] Exporting to image_builder/images/$fname.tar"
-  sudo ctr i export --platform linux/amd64 "image_builder/images/$fname.tar" "$img"
+  tag=$(echo "$img" | cut -d'@' -f1)
+  fname=$(echo "$tag" | tr '/:@' '_')
+
+  echo "[*] Exporting to $fname.tar"
+  sudo ctr  i export "image_builder/images/$fname.tar" "$img"
 done
 
 
