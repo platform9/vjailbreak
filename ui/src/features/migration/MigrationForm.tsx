@@ -1041,7 +1041,12 @@ export default function MigrationFormDrawer({
 
   const sortedOpenstackNetworks = useMemo(() => {
     const networks = openstackCredentials?.status?.openstack?.networks || []
-    return networks.sort((a, b) => stringsCompareFn(a.name, b.name))
+    if (!Array.isArray(networks) || networks.length === 0) return []
+
+    return networks
+      .filter((n) => n && typeof n.name === 'string')
+      .slice()
+      .sort((a, b) => stringsCompareFn(a?.name, b?.name))
   }, [openstackCredentials?.status?.openstack?.networks])
   const sortedOpenstackVolumeTypes = useMemo(
     () => (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(stringsCompareFn),
