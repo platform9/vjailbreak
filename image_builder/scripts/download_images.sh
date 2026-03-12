@@ -36,7 +36,9 @@ cert_manager_controller="quay.io/jetstack/cert-manager-controller:${CERT_MANAGER
 cert_manager_webhook="quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}"
 cert_manager_cainjector="quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}"
 
-ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller@sha256:82917be97c0939f6ada1717bb39aa7e66c229d6cfb10dcfc8f1bd42f9efe0f81"
+INGRESS_VERSION="v4.15.0"
+# ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller@sha256:82917be97c0939f6ada1717bb39aa7e66c229d6cfb10dcfc8f1bd42f9efe0f81"
+ingress_nginx_controller="registry.k8s.io/ingress-nginx/controller:${INGRESS_VERSION}@sha256:4eea9a4cc2cb6ddb7d614d377aaf452e68bd0dbe87fe280755d225c4d5e7e4e"
 kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen@sha256:d7e8257f8d8bce64b6df55f81fba92011a6a77269b3350f8b997b152af348dba"
 # kube_webhook_certgen="registry.k8s.io/ingress-nginx/kube-webhook-certgen@sha256:7c74a715af2c94cb734785b4d3ea1357b4f02b88e1e123c622a9cb68b62f669c"
 
