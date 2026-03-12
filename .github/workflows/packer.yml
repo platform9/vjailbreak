@@ -450,10 +450,21 @@ jobs:
       - name: Download images and export as tar
         if: env.release_found == 'true' || env.is_nightly == 'true'
         run: |
-          sudo apt-get update && sudo apt-get install -y containerd.
+          sudo apt-get update && sudo apt-get install -y containerd
           sudo mkdir -p ./image_builder/images
           sudo chmod +x ./image_builder/scripts/download_images.sh
           sudo ./image_builder/scripts/download_images.sh ${{ env.TAG }}
+
+      - name: setup-oras
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        uses: oras-project/setup-oras@v1.2.1
+
+      - name: Download base image from quay.io
+        if: env.release_found == 'true' || env.is_nightly == 'true'
+        run: |
+          mkdir -p vjailbreak_base_qcow2
+          oras pull ${{ env.QCOW2_IMG }}:pre-bake-base-image -o vjailbreak_base_qcow2/
+          ls -la vjailbreak_base_qcow2/
 
       - name: Generate Controller Manifests
         if: env.release_found == 'true' || env.is_nightly == 'true'
@@ -496,10 +507,6 @@ jobs:
         if: env.release_found == 'true' || env.is_nightly == 'true'
         id: validate
         run: "packer validate ./image_builder/vjailbreak-image.pkr.hcl"
-
-      - name: setup-oras
-        if: env.release_found == 'true' || env.is_nightly == 'true'
-        uses: oras-project/setup-oras@v1.2.1
 
       - name: Run packer build for normal image
         if: env.release_found == 'true' || env.is_nightly == 'true'

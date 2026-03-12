@@ -7,31 +7,23 @@ packer {
   }
 }
 
-variable "ubuntu_cloud_url" {
-  type    = string
-  default = "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+variable "base_image_url" {
+  type        = string
+  description = "URL or local path to the vjailbreak base image. Build with vjailbreak-base-image.pkr.hcl first."
+  default     = "vjailbreak_base_qcow2/vjailbreak-base-image.qcow2"
 }
 
-variable "ubuntu_cloud_checksum" {
-  type    = string
-  default = "file:https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS"
-}
-
-variable "k3s_version" {
-  type    = string
-  default = "v1.31.4+k3s1"
-}
-
-variable "helm_version" {
-  type    = string
-  default = "v3.16.3"
+variable "base_image_checksum" {
+  type        = string
+  description = "Checksum of the base image. Set to 'none' to skip checksum verification for local files."
+  default     = "none"
 }
 
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = var.ubuntu_cloud_url
-  iso_checksum         = var.ubuntu_cloud_checksum
+  iso_url              = var.base_image_url
+  iso_checksum         = var.base_image_checksum
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
@@ -66,10 +58,6 @@ build {
   provisioner "file" {
     source      = "${path.root}/scripts/install.sh"
     destination = "/tmp/install.sh"
-  }
-  provisioner "file" {
-    source      = "${path.root}/scripts/setup-k3s.sh"
-    destination = "/tmp/setup-k3s.sh"
   }
   provisioner "file" {
     source      = "${path.root}/scripts/pf9-htpasswd.sh"
@@ -124,53 +112,42 @@ build {
     destination = "/tmp/opensource.txt"
   }
   provisioner "shell" {
-    environment_vars = [
-      "K3S_VERSION=${var.k3s_version}"
-    ]
     inline = [
-    "sudo mkdir -p /etc/pf9",
-    "chmod +x /tmp/setup-k3s.sh",
-    "sudo -E /tmp/setup-k3s.sh",
+    # Copy version-specific images to /etc/pf9/images (base images already there from base image)
+    "sudo cp /home/ubuntu/images/* /etc/pf9/images/",
+    "rm -rf /home/ubuntu/images",
+
+    # Move scripts and configs
     "sudo mv /tmp/install.sh /etc/pf9/install.sh",
     "sudo mv /tmp/pf9-htpasswd.sh /etc/pf9/pf9-htpasswd.sh",
     "sudo mv /tmp/log_collector.sh /etc/pf9/log_collector.sh",
     "sudo mv /tmp/k3s.env /etc/pf9/k3s.env",
-    "sudo mkdir -p /etc/pf9/images",
-    "sudo mv /home/ubuntu/images/* /etc/pf9/images",
-    "sudo mkdir -p /home/ubuntu/virtio-win",
-    "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
-    "sudo mv /etc/pf9/images/virtio-win.iso /home/ubuntu/virtio-win/virtio-win.iso",
-    "sudo mv /etc/pf9/images/virtio-win-server12.iso /home/ubuntu/virtio-win/virtio-win-server12.iso",
-    "sudo mv /tmp/yamls /etc/pf9/yamls",
+
+    # Move yamls (merge with existing /etc/pf9/yamls from base image)
+    "sudo cp -r /tmp/yamls/* /etc/pf9/yamls/",
+    "rm -rf /tmp/yamls",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/env /etc/pf9/env",
     "sudo mv /tmp/vjailbreak-settings.yaml /etc/pf9/yamls/vjailbreak-settings.yaml",
     "sudo mv /tmp/version-checker.yaml /etc/pf9/yamls/version-checker.yaml",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
+
+    # Set permissions
     "sudo chmod +x /etc/pf9/install.sh",
     "sudo chmod +r /etc/pf9/pf9-htpasswd.sh",
     "sudo chmod +x /etc/pf9/log_collector.sh",
     "sudo chown root:root /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/k3s.env",
     "sudo chmod 644 /etc/pf9/env",
+
+    # Run user setup daemon
     "sudo chmod +x /tmp/user_setup_daemon.sh",
     "sudo df -h",
     "sudo bash /tmp/user_setup_daemon.sh",
-    "sudo apt-get update",
-    "sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y",
-    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient netcat-openbsd vim telnet dnsutils net-tools iputils-ping traceroute tcpdump iproute2 bind9-dnsutils nmap htop iotop strace lsof",
-    "sudo systemctl enable cron",
+
+    # Setup cron job for install.sh on reboot
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
-    "curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
-    "chmod 700 /tmp/get_helm.sh",
-    "DESIRED_VERSION=${var.helm_version} /tmp/get_helm.sh",
-    "rm /tmp/get_helm.sh",
-    "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
-    "sudo helm repo update",
-    "sudo helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
-    "sudo apt-get clean",
-    "sudo rm -rf /var/lib/apt/lists/*",
     ]
   }
 }
