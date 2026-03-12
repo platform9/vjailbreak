@@ -35,7 +35,7 @@ source "qemu" "vjailbreak-base-image" {
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_base_qcow2"
   vm_name              = "vjailbreak-base-image.qcow2"
-  disk_size            = "2G"
+  disk_size            = "4G"
   format               = "qcow2"
   headless             = true
   accelerator          = "kvm"
