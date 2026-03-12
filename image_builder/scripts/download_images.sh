@@ -51,6 +51,8 @@ sed -i 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g' "${MANIFEST_P
 
 # Download and export images
 images=(
+  "$ingress_nginx_controller"
+  "$kube_webhook_certgen"
   "$kube_state_metrics"
   "$prometheus_adapter"
   "$prometheus"
@@ -70,8 +72,6 @@ images=(
   "$cert_manager_controller"
   "$cert_manager_webhook"
   "$cert_manager_cainjector"
-  "$ingress_nginx_controller"
-  "$kube_webhook_certgen"
 )
 
 for img in "${images[@]}"; do
