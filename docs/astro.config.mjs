@@ -62,6 +62,7 @@ export default defineConfig({
 					items: [
 						{ label: 'User Credential Management', slug: 'concepts/user-management' },
 						{ label: 'Credential Management', slug: 'concepts/credential-management' },
+						{ label: 'Network Persistence', slug: 'concepts/network-persistence' },
 						{ label: 'Network & Storage Mapping', slug: 'concepts/network-storage-mapping' },
 						{ label: 'Migration Options', slug: 'concepts/migration-options' },
 						{ label: 'Cluster Conversion', slug: 'concepts/cluster-conversion' },
