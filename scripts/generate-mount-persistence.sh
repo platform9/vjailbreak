@@ -175,6 +175,15 @@ fix_grub_config() {
 }
 
 # --- 1. Handle mounted filesystems ---
+# Detect if running in guestfish appliance (mountpoints under /sysroot)
+if mount | grep -q '/sysroot'; then
+  IN_GUESTFISH=true
+  FSTAB_PATH="/sysroot/etc/fstab"
+else
+  IN_GUESTFISH=false
+  FSTAB_PATH="/etc/fstab"
+fi
+
 awk '{ src=$1; tgt=$2; fstype=$3;
        gsub(/\\040/, " ", tgt);
        print src "\t" tgt "\t" fstype }' /proc/mounts | \
@@ -189,7 +198,15 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
 
   FSTAB_ID=$(get_fstab_id "$SRC")
 
-  SAFE_NAME="${TGT#/}"
+  # Strip /sysroot prefix if running in guestfish
+  if [ "$IN_GUESTFISH" = "true" ]; then
+    TGT_FSTAB="${TGT#/sysroot}"
+    [ -z "$TGT_FSTAB" ] && TGT_FSTAB="/"
+  else
+    TGT_FSTAB="$TGT"
+  fi
+
+  SAFE_NAME="${TGT_FSTAB#/}"
   [ -z "$SAFE_NAME" ] && SAFE_NAME="root"
   SAFE_NAME=$(echo "$SAFE_NAME" | sed 's/\//_/g; s/ /_/g')
 
@@ -208,8 +225,8 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
   echo "ACTION==\"add\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
   echo "ACTION==\"change\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
 
-  # Try to reuse options from existing /etc/fstab if present
-  OPTIONS=$(awk -v tgt="$TGT" '$2==tgt {print $4}' /etc/fstab | head -n1)
+  # Try to reuse options from existing fstab if present
+  OPTIONS=$(awk -v tgt="$TGT_FSTAB" '$2==tgt {print $4}' "$FSTAB_PATH" 2>/dev/null | head -n1)
 
   if [ -z "$OPTIONS" ]; then
     # Fallback: use /proc/mounts
@@ -228,14 +245,14 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
       DUMP_PASS="0 0"
       ;;
     ext*)
-      if [ "$TGT" = "/" ]; then
+      if [ "$TGT_FSTAB" = "/" ]; then
         DUMP_PASS="1 1"
       else
         DUMP_PASS="0 2"
       fi
       ;;
     *)
-      if [ "$TGT" = "/" ]; then
+      if [ "$TGT_FSTAB" = "/" ]; then
         DUMP_PASS="1 1"
       else
         DUMP_PASS="0 2"
@@ -243,7 +260,7 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
       ;;
   esac
 
-  echo "$FSTAB_ID  $TGT  $FST  $OPTIONS  $DUMP_PASS" >> "$FSTAB_LINES_FILE"
+  echo "$FSTAB_ID  $TGT_FSTAB  $FST  $OPTIONS  $DUMP_PASS" >> "$FSTAB_LINES_FILE"
 done
 
 # --- 2. Handle swap devices ---
@@ -264,7 +281,7 @@ if $APPLY; then
   cat "$UDEV_RULES_FILE" > "$RULE_FILE"
   udevadm control --reload-rules && udevadm trigger
 
-  cp /etc/fstab /etc/fstab.bak.$(date +%s)
+  cp "$FSTAB_PATH" "$FSTAB_PATH.bak.$(date +%s)"
 
   if $REPLACE_FSTAB; then
     echo "Replacing existing fstab entries for detected mounts and swap..."
@@ -274,17 +291,19 @@ if $APPLY; then
       skip=false
       while IFS= read -r entry; do
         mp=$(echo "$entry" | awk '{print $2}')
-        echo "$line" | grep -q "$mp[[:space:]]" && { skip=true; break; }
+        # Use exact field match instead of substring grep to avoid /boot matching /sysroot/boot
+        line_mp=$(echo "$line" | awk '{print $2}')
+        [ "$line_mp" = "$mp" ] && { skip=true; break; }
       done < "$FSTAB_LINES_FILE"
       $skip || echo "$line" >> "$tmp_fstab"
-    done < /etc/fstab
+    done < "$FSTAB_PATH"
 
     # Append new entries (already in UUID format from get_fstab_id)
     cat "$FSTAB_LINES_FILE" >> "$tmp_fstab"
 
-    mv "$tmp_fstab" /etc/fstab
+    mv "$tmp_fstab" "$FSTAB_PATH"
   else
-    cat "$FSTAB_LINES_FILE" >> /etc/fstab
+    cat "$FSTAB_LINES_FILE" >> "$FSTAB_PATH"
   fi
 
   echo " -> Done. Backups created in /etc/udev/rules.d and /etc/fstab.bak.*"
