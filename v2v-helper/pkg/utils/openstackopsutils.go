@@ -56,6 +56,15 @@ var (
 	metadataMutex  sync.RWMutex
 )
 
+func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error) {
+	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, networkID)
+	if err != nil {
+		PrintLog("failed to check if network is L2: " + err.Error())
+		return false, err
+	}
+	return isL2Network, nil
+}
+
 func GetCurrentInstanceUUID() (string, error) {
 
 	// Step 1. Path with a read lock
@@ -547,7 +556,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 
 	// If the target network is L2 network pass empty ip address
 	// Check if the network is L2-only by looking for "simple_network" tag
-	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, network.ID)
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
 	if err != nil {
 		return ports.CreateOpts{}, errors.Wrap(err, "failed to check if network is L2")
 	}
