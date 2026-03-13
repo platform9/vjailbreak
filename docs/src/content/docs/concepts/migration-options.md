@@ -80,7 +80,6 @@ An optional parameter. Renames the source VM in VMware to have a specific suffix
 
 ### Move to folder
 An optional parameter. Moves the source VM in VMware to a specific folder, good option to group migrated VMs and keep it out of the hands of the user.
-
 ## Network persistence
 
 ### Persist source network interfaces
@@ -90,30 +89,5 @@ For statically configured interfaces, vJailbreak also preserves routes defined i
 
 To enable this behavior, check **Persist source network interfaces** under **Migration Options** in the migration form.
 
-:::caution
-**Important: Routing Considerations**
 
-If a VM has multiple interfaces on the same subnet and has asymmetric routing table, the destination openstack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing is having port-security enabled.
-
-**Recommendation:**
-- To avoid asymmetric routing, ensure each interface is on a unique subnet or consolidate multiple IPs onto a single port, as multiple interfaces on the same subnet will cause connectivity issues.
-:::
-
-:::note
-For DHCP-enabled ports, connectivity and DHCP functionality are preserved, but the interface name may be renamed if this feature is not selected.
-:::
-
-:::note
-For cross-network migration, network persistence is currently not supported and will be blocked.
-:::
-
-#### Supported operating systems
-
-| Operating system | Supported |
-| --- | --- |
-| Red Hat Enterprise Linux (all versions) | Yes |
-| Rocky Linux (all versions) | Yes |
-| CentOS Linux (all versions) | Yes |
-| Ubuntu 17 and later | Yes |
-| Ubuntu less than 17 | No |
-| Windows | No |
+For more information, refer to the [Network Persistence](../network-persistence/) documentation.
