@@ -29,7 +29,7 @@ The Linux network persistence mechanism operates on the first boot post-migratio
 |   OpenSuse     | Supported | Yes |
 |   RHEL         | Supported | Yes |
 |   CentOS       | Supported | Yes |
-|   Rocky        | Supported | Yes |
+|   Rocky        | Supported | No |
 
 ## Windows Network Persistence
 
