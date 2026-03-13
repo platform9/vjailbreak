@@ -544,9 +544,6 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		createOpts.MACAddress = mac
 	}
 	var localDeepCopyIpEntries []vm.IpEntry
-	if ipEntries != nil {
-		localDeepCopyIpEntries = make([]vm.IpEntry, len(ipEntries))
-	}
 
 	// If the target network is L2 network pass empty ip address
 	// Check if the network is L2-only by looking for "simple_network" tag
@@ -554,26 +551,26 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	if err != nil {
 		return ports.CreateOpts{}, errors.Wrap(err, "failed to check if network is L2")
 	}
-	if !isL2Network {
+	if ipEntries != nil && !isL2Network {
+		localDeepCopyIpEntries = make([]vm.IpEntry, len(ipEntries))
 		copy(localDeepCopyIpEntries, ipEntries)
+	} else if ipEntries != nil && isL2Network {
+		localDeepCopyIpEntries = []vm.IpEntry{}
 	}
 
 	if len(localDeepCopyIpEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
-		if !isL2Network {
-
-			for _, ipEntry := range localDeepCopyIpEntries {
-				subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
-				if err != nil {
-					return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
-				} else {
-					gatewayIP[mac] = subnetId.GatewayIP
-					PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipEntry.IP, subnetId.ID))
-					fixedIPs = append(fixedIPs, ports.IP{
-						SubnetID:  subnetId.ID,
-						IPAddress: ipEntry.IP,
-					})
-				}
+		for _, ipEntry := range localDeepCopyIpEntries {
+			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
+			if err != nil {
+				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
+			} else {
+				gatewayIP[mac] = subnetId.GatewayIP
+				PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipEntry.IP, subnetId.ID))
+				fixedIPs = append(fixedIPs, ports.IP{
+					SubnetID:  subnetId.ID,
+					IPAddress: ipEntry.IP,
+				})
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
