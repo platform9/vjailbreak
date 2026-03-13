@@ -83,6 +83,7 @@ type Migrate struct {
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
+	isSimpleNetwork   bool
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -1282,8 +1283,15 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 
 	if isNetplanSupported(versionID) {
 		utils.PrintLog("Adding wildcard netplan")
-		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
-			return errors.Wrap(err, "failed to add wildcard netplan")
+		if migobj.isSimpleNetwork {
+			utils.PrintLog("L2 network detected adding l2 wildcard")
+			if err := virtv2v.AddWildcardNetplanForL2(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+				return errors.Wrap(err, "failed to add l2 wildcard netplan")
+			}
+		} else {
+			if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+				return errors.Wrap(err, "failed to add wildcard netplan")
+			}
 		}
 		utils.PrintLog("Wildcard netplan added successfully")
 		return nil
@@ -1937,7 +1945,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 	portids := []string{}
 	openstackops := migobj.Openstackclients
 	networknames := migobj.Networknames
-
+	migobj.isSimpleNetwork = false
 	// Get security group IDs
 	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
@@ -1979,7 +1987,12 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			if network == nil {
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
-
+			// determine simple network
+			isSimpleNetwork, err := openstackops.GetIsSimpleNetwork(ctx, network.ID)
+			if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
+			}
+			migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
 			// Check for per-NIC overrides. Default to true (preserve everything).
 			// Only override when explicitly set — nil means "not specified, keep default".
 			preserveIP := true
