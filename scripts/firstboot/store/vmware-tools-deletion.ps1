@@ -244,6 +244,106 @@ function Remove-ControlPanelEntry {
     }
 }
 
+function Remove-VMwareResiduals {
+
+    Write-Log "Running additional VMware residual cleanup"
+
+    # Ghost MSI uninstall
+    try{
+        $ghost = Get-WmiObject -Class Win32_Product | Where-Object {
+            $_.IdentifyingNumber -eq "{AF174E64-22CF-4386-A9EC-73F285739998}"
+        }
+
+        if($ghost){
+            Write-Log "Removing ghost VMware MSI registration"
+            $ghost.Uninstall() | Out-Null
+        }
+
+    }catch{
+        Write-Log "Ghost MSI uninstall failed"
+    }
+
+    # Remove installer registry leftovers
+    Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
+
+    Remove-Item -Path "HKLM:\SOFTWARE\Classes\Installer\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
+
+
+    # Force remove VMware folder if present
+    if(Test-Path "C:\Program Files\VMware"){
+
+        Write-Log "Force removing VMware program folder"
+
+        takeown /F "C:\Program Files\VMware" /R /D Y | Out-Null
+        icacls "C:\Program Files\VMware" /grant Administrators:F /T | Out-Null
+        Remove-Item "C:\Program Files\VMware" -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+
+    # Force remove vmmemctl driver file
+    $drv="C:\Windows\System32\drivers\vmmemctl.sys"
+
+    if(Test-Path $drv){
+
+        Write-Log "Removing vmmemctl driver"
+
+        takeown /F $drv | Out-Null
+        icacls $drv /grant Administrators:F | Out-Null
+        Remove-Item $drv -Force -ErrorAction SilentlyContinue
+    }
+
+
+    # Remove VMware devices via WMI fallback
+    try{
+
+        $devices = Get-WmiObject Win32_PnPEntity | Where-Object {$_.Name -match "VMware"}
+
+        foreach ($dev in $devices){
+
+            Write-Log "Removing device $($dev.Name)"
+
+            try{
+                $dev.Delete() | Out-Null
+            }catch{
+                Write-Log "Device removal failed for $($dev.Name)"
+            }
+        }
+
+    }catch{
+        Write-Log "Device enumeration failed"
+    }
+
+
+    # Force delete VMMemCtl registry key if still present
+    $key = "HKLM:\SYSTEM\CurrentControlSet\Services\VMMemCtl"
+
+    if(Test-Path $key){
+
+        Write-Log "Force removing VMMemCtl service key"
+
+        try{
+
+            $acl = Get-Acl $key
+            $owner = New-Object System.Security.Principal.NTAccount("Administrators")
+            $acl.SetOwner($owner)
+            Set-Acl $key $acl
+
+            $rule = New-Object System.Security.AccessControl.RegistryAccessRule(
+                "Administrators","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+
+            $acl = Get-Acl $key
+            $acl.SetAccessRule($rule)
+            Set-Acl $key $acl
+
+            Remove-Item $key -Recurse -Force
+
+        }catch{
+
+            Write-Log "Failed to remove VMMemCtl registry key"
+        }
+    }
+}
+
 Write-Log "=== VMware Cleanup Start ==="
 
 Stop-VMwareProcesses
@@ -254,6 +354,8 @@ Remove-VMwareDevices
 Remove-VMwareFolders
 Remove-VMwareRegistry
 Remove-ControlPanelEntry
+Remove-VMwareResiduals
+
 
 Write-Log "Cleanup completed"
 
