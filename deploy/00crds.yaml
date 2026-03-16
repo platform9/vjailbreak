@@ -3120,7 +3120,9 @@ spec:
                         machine.
                       properties:
                         ipAddress:
-                          type: string
+                          items:
+                            type: string
+                          type: array
                         mac:
                           type: string
                         network:
