@@ -1028,6 +1028,8 @@ func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string,
 }
 
 // ReconcileVMStatusAndIP handles VM status checking and IP population for a VjailbreakNode
+// Returns true if VM is ACTIVE (ready for K8s node check), false if still building or in error
+// Note: For L2 networks, vmIP may be empty even when VM is ACTIVE (IP is assigned manually)
 func ReconcileVMStatusAndIP(ctx context.Context, k8sClient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode, uuid string) (bool, error) {
 	// Get VM status and IP from OpenStack
 	vmStatus, vmIP, err := GetOpenstackVMStatus(ctx, k8sClient, vjNode, uuid)
@@ -1048,13 +1050,13 @@ func ReconcileVMStatusAndIP(ctx context.Context, k8sClient client.Client, vjNode
 		}
 		return false, errors.New("VM is in ERROR state in OpenStack")
 	case "ACTIVE":
-		// VM is active, proceed with IP assignment
+		// VM is active, proceed with IP assignment if available
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
-		if vmIP == "" {
-			// IP not yet available, caller should retry
-			return false, nil
+		// For L2 networks, vmIP may be empty (IP is assigned manually by user)
+		// We still return true to allow K8s node status check to proceed
+		if vmIP != "" {
+			vjNode.Status.VMIP = vmIP
 		}
-		vjNode.Status.VMIP = vmIP
 	default:
 		// VM is still building or in another transitional state
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreating
@@ -1075,8 +1077,8 @@ func ReconcileVMStatusAndIP(ctx context.Context, k8sClient client.Client, vjNode
 		return false, errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 
-	// Return true if IP was set
-	return vjNode.Status.VMIP != "", nil
+	// Return true when VM is ACTIVE - caller should proceed to check K8s node status
+	return true, nil
 }
 
 // ReconcileK8sNodeStatus checks Kubernetes node status and updates VjailbreakNode phase accordingly
@@ -1102,6 +1104,14 @@ func ReconcileK8sNodeStatus(ctx context.Context, k8sClient client.Client, vjNode
 	// Update phase based on node readiness
 	if nodeReady {
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+		// For L2 networks, VMIP may not be set from OpenStack (IP is assigned manually)
+		// Get the IP from the K8s node's internal IP annotation if not already set
+		if vjNode.Status.VMIP == "" {
+			nodeIP := GetNodeInternalIP(node)
+			if nodeIP != "" {
+				vjNode.Status.VMIP = nodeIP
+			}
+		}
 	} else if vjNode.Status.Phase != constants.VjailbreakNodePhaseVMCreated {
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseVMCreated
 	}

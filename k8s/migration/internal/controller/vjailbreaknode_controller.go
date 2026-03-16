@@ -29,9 +29,9 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
 // VjailbreakNodeReconciler reconciles a VjailbreakNode object
@@ -129,19 +129,20 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	if uuid != "" {
 		// VM exists, check if we need to update UUID and/or IP
 		if vjNode.Status.OpenstackUUID == "" || vjNode.Status.VMIP == "" {
-			ipSet, err := utils.ReconcileVMStatusAndIP(ctx, r.Client, vjNode, uuid)
+			vmActive, err := utils.ReconcileVMStatusAndIP(ctx, r.Client, vjNode, uuid)
 			if err != nil {
 				log.Error(err, "Failed to reconcile VM status and IP")
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 			}
-			if !ipSet {
-				// IP not yet available or VM still building, retry
+			if !vmActive {
+				// VM still building or in error state, retry
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
-			// IP was set, requeue quickly to check K8s node status
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			// VM is active - for L2 networks IP may be empty (assigned manually)
+			// Fall through to check K8s node status
 		}
-		// VM and UUID already set, check Kubernetes node status
+		// VM is active (UUID set), check Kubernetes node status
+		// For L2 networks, the node may join before IP is set in VjailbreakNode
 		nodeReady, err := utils.ReconcileK8sNodeStatus(ctx, r.Client, vjNode)
 		if err != nil {
 			log.Error(err, "Failed to reconcile K8s node status")
