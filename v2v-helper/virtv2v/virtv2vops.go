@@ -531,6 +531,25 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	return nil
 }
 
+func AddWildcardNetplanForL2(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	// Upload it to the disk
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
+	var err error
+	if useSingleDisk {
+		command := "upload /home/fedora/99-l2-Netplan.yaml /etc/netplan/99-l2-Netplan.yaml"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-l2-Netplan.yaml", "/etc/netplan/99-l2-Netplan.yaml")
+	}
+	if err != nil {
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
+	}
+	return nil
+
+}
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
