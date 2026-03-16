@@ -188,19 +188,18 @@ function VmsSelectionStep({
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
   const queryClient = useQueryClient()
 
+  const IPV4_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+
   const extractFirstIPv4 = (value: string): string => {
     if (!value) return ''
-    const matches = value.match(
-      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-    )
+    const matches = value.match(IPV4_REGEX)
     return matches?.[0] || ''
   }
 
   const hasMultipleIPv4 = (value: string): boolean => {
     if (!value) return false
-    const matches = value.match(
-      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-    )
+    const matches = value.match(IPV4_REGEX)
     return (matches?.length || 0) > 1
   }
 
@@ -1509,7 +1508,7 @@ function VmsSelectionStep({
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
     > = {}
 
-    ;(Array.from(selectedVMs) as string[]).forEach((vmName) => {
+    Array.from(selectedVMs).forEach((vmName) => {
       const vm = vmsWithFlavor.find((v) => v.name === vmName)
       if (!vm) {
         return

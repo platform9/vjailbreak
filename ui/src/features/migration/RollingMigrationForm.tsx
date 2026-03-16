@@ -796,26 +796,25 @@ export default function RollingMigrationFormDrawer({
   }
 
   // IP validation and editing functions
+  const IPV4_MATCH_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+  const IPV4_FULL_REGEX =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
   const extractFirstIPv4 = (value: string): string => {
     if (!value) return ''
-    const matches = value.match(
-      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-    )
+    const matches = value.match(IPV4_MATCH_REGEX)
     return matches?.[0] || ''
   }
 
   const hasMultipleIPv4 = (value: string): boolean => {
     if (!value) return false
-    const matches = value.match(
-      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-    )
+    const matches = value.match(IPV4_MATCH_REGEX)
     return (matches?.length || 0) > 1
   }
 
   const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-    return ipRegex.test(ip)
+    return IPV4_FULL_REGEX.test(ip)
   }
 
   // Modal functions for multi-NIC IP editing removed - using bulk assignment instead
