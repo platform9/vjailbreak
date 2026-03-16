@@ -37,9 +37,9 @@ Error signature:
 failed to run nbdcopy: exec: already started
 ```
 
-See: [Debug Logs](../../guides/Troubleshooting/debuglogs/).
+See: [Debug Logs](../../guides/troubleshooting/debuglogs/).
 
-See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/Troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
+See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
 
 ### What do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
 
