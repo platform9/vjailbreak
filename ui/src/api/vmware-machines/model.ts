@@ -18,7 +18,7 @@ export interface VMwareVM {
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
 }
 
 export interface VMwareMachine {

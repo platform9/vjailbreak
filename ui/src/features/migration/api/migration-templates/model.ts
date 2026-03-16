@@ -85,7 +85,7 @@ export interface VmData {
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
   preserveIP?: boolean
   preserveMAC?: boolean
 }
