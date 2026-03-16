@@ -35,7 +35,6 @@ import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
 import { Step } from 'src/shared/components/forms'
-import { useEffect, useState, useCallback, useRef } from 'react'
 import * as React from 'react'
 import { getMigrationPlans } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
@@ -57,6 +56,8 @@ import { RdmDiskConfigurationPanel } from './components'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
+
+const { useCallback, useEffect, useRef, useState } = React
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -186,6 +187,23 @@ function VmsSelectionStep({
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
   const queryClient = useQueryClient()
+
+  const extractFirstIPv4 = (value: string): string => {
+    if (!value) return ''
+    const matches = value.match(
+      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+    )
+    return matches?.[0] || ''
+  }
+
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(
+      /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+    )
+    return (matches?.length || 0) > 1
+  }
+
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
@@ -1491,7 +1509,7 @@ function VmsSelectionStep({
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
     > = {}
 
-    Array.from(selectedVMs).forEach((vmName) => {
+    ;(Array.from(selectedVMs) as string[]).forEach((vmName) => {
       const vm = vmsWithFlavor.find((v) => v.name === vmName)
       if (!vm) {
         return
@@ -1506,7 +1524,7 @@ function VmsSelectionStep({
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
-          const existingIp = nic.ipAddress || ''
+          const existingIp = extractFirstIPv4(nic.ipAddress) || ''
           initialBulkExistingIPs[vmName][index] = existingIp
           initialBulkEditIPs[vmName][index] = existingIp
 
@@ -1537,7 +1555,9 @@ function VmsSelectionStep({
           initialValidationStatus[vmName][index] = existingIp ? 'valid' : 'empty'
         })
       } else {
-        const existingIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        const existingIp = extractFirstIPv4(
+          vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        )
         initialBulkExistingIPs[vmName][0] = existingIp
         initialBulkEditIPs[vmName][0] = existingIp
         initialBulkPreserveIp[vmName][0] =
@@ -2178,7 +2198,11 @@ function VmsSelectionStep({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {networkInterface?.ipAddress || vm.ipAddress || '—'}
+                                {extractFirstIPv4(networkInterface?.ipAddress || '') ||
+                                  (interfaceIndex === 0 && !hasMultipleIPv4(vm.ipAddress || '')
+                                    ? extractFirstIPv4(vm.ipAddress || '')
+                                    : '') ||
+                                  '—'}
                               </Box>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
