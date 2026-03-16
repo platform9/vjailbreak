@@ -1283,7 +1283,7 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 
 	if isNetplanSupported(versionID) {
 		utils.PrintLog("Adding wildcard netplan")
-		if migobj.isSimpleNetwork {
+		if !migobj.isSimpleNetwork {
 			utils.PrintLog("L2 network detected adding l2 wildcard")
 			if err := virtv2v.AddWildcardNetplanForL2(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 				return errors.Wrap(err, "failed to add l2 wildcard netplan")
