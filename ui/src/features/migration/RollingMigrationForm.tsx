@@ -796,10 +796,25 @@ export default function RollingMigrationFormDrawer({
   }
 
   // IP validation and editing functions
+  const IPV4_MATCH_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+  const IPV4_FULL_REGEX =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+  const extractFirstIPv4 = (value: string): string => {
+    if (!value) return ''
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return matches?.[0] || ''
+  }
+
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return (matches?.length || 0) > 1
+  }
+
   const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-    return ipRegex.test(ip)
+    return IPV4_FULL_REGEX.test(ip)
   }
 
   // Modal functions for multi-NIC IP editing removed - using bulk assignment instead
@@ -2939,7 +2954,7 @@ export default function RollingMigrationFormDrawer({
           const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
           const fallbackIp =
             index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-          const existingIp = nic.ipAddress || fallbackIp || ''
+          const existingIp = extractFirstIPv4(nic.ipAddress) || extractFirstIPv4(fallbackIp) || ''
           initialBulkExistingIPs[vm.id][index] = existingIp
           initialBulkEditIPs[vm.id][index] = existingIp
 
@@ -2949,7 +2964,7 @@ export default function RollingMigrationFormDrawer({
           initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
         })
       } else {
-        const existingIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
+        const existingIp = extractFirstIPv4(vm.ip && vm.ip !== '—' ? vm.ip : '')
         initialBulkExistingIPs[vm.id][0] = existingIp
         initialBulkEditIPs[vm.id][0] = existingIp
         initialBulkPreserveIp[vm.id][0] = isPoweredOff ? false : vm.preserveIp?.[0] !== false
@@ -3913,7 +3928,11 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {networkInterface?.ipAddress || vm.ip || '—'}
+                                {extractFirstIPv4(networkInterface?.ipAddress || '') ||
+                                  (interfaceIndex === 0 && !hasMultipleIPv4(vm.ip || '')
+                                    ? extractFirstIPv4(vm.ip || '')
+                                    : '') ||
+                                  '—'}
                               </Box>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
