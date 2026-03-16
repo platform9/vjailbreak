@@ -204,10 +204,9 @@ function VmsSelectionStep({
   }
 
   const parseIpList = (value: string): string[] => {
-    return value
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v) => v !== '')
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
   }
 
   const isValidIPAddressList = (value: string): boolean => {

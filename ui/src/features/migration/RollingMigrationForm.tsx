@@ -808,10 +808,9 @@ export default function RollingMigrationFormDrawer({
   }
 
   const parseIpList = (value: string): string[] => {
-    return value
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v) => v !== '')
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
   }
 
   const isValidIPAddressList = (value: string): boolean => {
@@ -3960,9 +3959,9 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {(Array.isArray(networkInterface?.ipAddress)
-                                  ? networkInterface?.ipAddress
-                                      ?.filter((v) => v && v.trim() !== '')
+                                {(networkInterface && Array.isArray(networkInterface.ipAddress)
+                                  ? networkInterface.ipAddress
+                                      .filter((v) => v && v.trim() !== '')
                                       .join(', ')
                                   : '') ||
                                   (interfaceIndex === 0 ? vm.ip || '' : '') ||
