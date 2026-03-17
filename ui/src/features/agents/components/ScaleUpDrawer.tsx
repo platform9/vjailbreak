@@ -1,4 +1,4 @@
-import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText } from '@mui/material'
+import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Alert } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -23,6 +23,7 @@ import { NodeItem } from 'src/api/nodes/model'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
+import { hasAnyLayer2Network } from 'src/shared/utils/network'
 
 interface ScaleUpDrawerProps {
   open: boolean
@@ -82,6 +83,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const [securityGroups, setSecurityGroups] = useState<Array<{ name: string; id: string }>>([])
   const [selectedSecurityGroups, setSelectedSecurityGroups] = useState<string[]>([])
   const [useMasterSecurityGroups, setUseMasterSecurityGroups] = useState(true)
+  const hasL2Network = hasAnyLayer2Network(openstackCredentials?.status?.openstack?.networks)
 
   const flavorOptions = useMemo(() => {
     return flavors
@@ -203,6 +205,15 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       setUseMasterSecurityGroups(true)
     }
   }, [openstackCredsValidated, openstackCredentials])
+
+  useEffect(() => {
+    if (!hasL2Network) {
+      return
+    }
+
+    setUseMasterSecurityGroups(true)
+    setSelectedSecurityGroups([])
+  }, [hasL2Network])
 
   const handleSubmit: SubmitHandler<ScaleUpFormValues> = useCallback(
     async (values) => {
@@ -427,11 +438,19 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 fullWidth
                 size="small"
                 disabled={
-                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
+                  !openstackCredsValidated ||
+                  !openstackCredentials ||
+                  securityGroups.length === 0 ||
+                  hasL2Network
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <FieldLabel label="Security Groups" align="flex-start" />
+                  {hasL2Network && (
+                    <Alert severity="info" sx={{ mb: 0.5 }}>
+                      Security Groups are not available when using Layer 2 Networks.
+                    </Alert>
+                  )}
 
                   <Select
                     multiple
