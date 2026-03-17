@@ -70,13 +70,6 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
-	currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
-	if currentInstanceUUID == "" {
-		PrintLog("CURRENT_INSTANCE_ID environment variable is not set")
-	} else {
-		return currentInstanceUUID, nil
-	}
-
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
 		// If cached, return it immediately.
@@ -110,6 +103,11 @@ func GetCurrentInstanceUUID() (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+		if currentInstanceUUID != "" {
+			PrintLog("CURRENT_INSTANCE_ID environment variable is set to: " + currentInstanceUUID)
+			return currentInstanceUUID, nil
+		}
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
