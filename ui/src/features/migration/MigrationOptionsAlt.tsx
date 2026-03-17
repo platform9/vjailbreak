@@ -23,6 +23,7 @@ import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
 import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
+import { hasSelectedLayer2Network } from 'src/shared/utils/network'
 
 const SectionBlock = styled(Box)(({ theme }) => ({
   display: 'grid',
@@ -249,6 +250,10 @@ export default function MigrationOptionsAlt({
   }, [params, selectedMigrationOptions])
 
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+  const hasL2Network = hasSelectedLayer2Network(
+    params.networkMappings,
+    openstackCredentials?.status?.openstack?.networks
+  )
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -626,6 +631,12 @@ export default function MigrationOptionsAlt({
           </SectionHeaderRow>
           <Divider />
 
+          {hasL2Network && (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Fallback to DHCP is not available when using Layer 2 Networks.
+            </Alert>
+          )}
+
           <OptionRow>
             <OptionLeft>
               <FormControlLabel
@@ -653,6 +664,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
+                    disabled={hasL2Network}
                     onChange={(e) => {
                       onChange('fallbackToDHCP')(e.target.checked)
                     }}
