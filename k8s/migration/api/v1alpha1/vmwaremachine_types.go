@@ -86,10 +86,10 @@ type Disk struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network   string `json:"network,omitempty" `
-	MAC       string `json:"mac,omitempty"`
-	Index     int    `json:"order,omitempty"`
-	IPAddress string `json:"ipAddress,omitempty"`
+	Network   string   `json:"network,omitempty" `
+	MAC       string   `json:"mac,omitempty"`
+	Index     int      `json:"order,omitempty"`
+	IPAddress []string `json:"ipAddress,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.

@@ -203,10 +203,13 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
 							ipPerMac[networkInterface.MAC] = []IpEntry{}
 						}
-						if !strings.Contains(networkInterface.IPAddress, ":") {
-							ips = append(ips, networkInterface.IPAddress)
+						for _, ipAddress := range networkInterface.IPAddress {
+							if strings.Contains(ipAddress, ":") {
+								continue
+							}
+							ips = append(ips, ipAddress)
 							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
-								IP:     networkInterface.IPAddress,
+								IP:     ipAddress,
 								Prefix: 0,
 							})
 						}

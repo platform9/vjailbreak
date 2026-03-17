@@ -1787,7 +1787,10 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 				if nic.MAC == guestNet.MAC {
 					// Check if IP is ipv4
 					if !strings.Contains(guestNet.IP, ":") {
-						nicList[i].IPAddress = guestNet.IP
+						if nicList[i].IPAddress == nil {
+							nicList[i].IPAddress = []string{}
+						}
+						nicList[i].IPAddress = append(nicList[i].IPAddress, guestNet.IP)
 					}
 				}
 			}

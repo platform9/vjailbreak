@@ -203,7 +203,7 @@ interface VM {
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
 }
 
 // ESX columns will be defined inside the component
@@ -690,7 +690,7 @@ export default function RollingMigrationFormDrawer({
         const allIPs =
           vm.spec.vms.networkInterfaces && vm.spec.vms.networkInterfaces.length > 0
             ? vm.spec.vms.networkInterfaces
-                .map((nic) => nic.ipAddress)
+                .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
                 .filter((ip) => ip && ip.trim() !== '') // Filter out empty/null IPs
                 .join(', ')
             : vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || '—'
@@ -796,10 +796,27 @@ export default function RollingMigrationFormDrawer({
   }
 
   // IP validation and editing functions
-  const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-    return ipRegex.test(ip)
+  const IPV4_MATCH_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+  const IPV4_FULL_REGEX =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+  const extractFirstIPv4 = (value: string): string => {
+    if (!value) return ''
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return matches?.[0] || ''
+  }
+
+  const parseIpList = (value: string): string[] => {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
+  }
+
+  const isValidIPAddressList = (value: string): boolean => {
+    const ips = parseIpList(value)
+    if (ips.length === 0) return false
+    return ips.every((ip) => IPV4_FULL_REGEX.test(ip))
   }
 
   // Modal functions for multi-NIC IP editing removed - using bulk assignment instead
@@ -2472,7 +2489,7 @@ export default function RollingMigrationFormDrawer({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
       }))
-    } else if (!isValidIPAddress(value.trim())) {
+    } else if (!isValidIPAddressList(value.trim())) {
       setBulkValidationStatus((prev) => ({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
@@ -2630,7 +2647,19 @@ export default function RollingMigrationFormDrawer({
     try {
       // Batch validation before applying any changes
       if (openstackCredData) {
-        const ipList = ipsToApply.map((item) => item.ip)
+        const flattenedIps: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
+        ipsToApply.forEach((item) => {
+          const parsed = parseIpList(item.ip)
+          if (parsed.length === 0) {
+            flattenedIps.push({ ...item, ip: '' })
+            return
+          }
+          parsed.forEach((ip) =>
+            flattenedIps.push({ vmId: item.vmId, interfaceIndex: item.interfaceIndex, ip })
+          )
+        })
+
+        const ipList = flattenedIps.map((item) => item.ip)
 
         // Set validating status for all IPs
         setBulkValidationStatus((prev) => {
@@ -2657,11 +2686,24 @@ export default function RollingMigrationFormDrawer({
         const validIPs: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
         let hasInvalidIPs = false
 
-        ipsToApply.forEach((item, index) => {
+        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
+        flattenedIps.forEach((flatItem, index) => {
+          const key = `${flatItem.vmId}__${flatItem.interfaceIndex}`
           const isValid = validationResult.isValid[index]
           const reason = validationResult.reason[index]
+          const current = byInterfaceKey.get(key)
+          if (!current) {
+            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
+          } else if (current.ok && !isValid) {
+            byInterfaceKey.set(key, { ok: false, reason })
+          }
+        })
 
-          if (isValid) {
+        ipsToApply.forEach((item) => {
+          const key = `${item.vmId}__${item.interfaceIndex}`
+          const result = byInterfaceKey.get(key)
+          const ok = result?.ok !== false
+          if (ok) {
             validIPs.push(item)
             setBulkValidationStatus((prev) => ({
               ...prev,
@@ -2679,7 +2721,10 @@ export default function RollingMigrationFormDrawer({
             }))
             setBulkValidationMessages((prev) => ({
               ...prev,
-              [item.vmId]: { ...prev[item.vmId], [item.interfaceIndex]: reason }
+              [item.vmId]: {
+                ...prev[item.vmId],
+                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
+              }
             }))
           }
         })
@@ -2700,7 +2745,7 @@ export default function RollingMigrationFormDrawer({
               const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
-                ipAddress: ip
+                ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
               }
 
               await patchVMwareMachine(
@@ -2755,7 +2800,7 @@ export default function RollingMigrationFormDrawer({
               const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
-                ipAddress: ''
+                ipAddress: []
               }
 
               await patchVMwareMachine(
@@ -2848,7 +2893,7 @@ export default function RollingMigrationFormDrawer({
                 if (updatedInterfaces[interfaceIndex]) {
                   updatedInterfaces[interfaceIndex] = {
                     ...updatedInterfaces[interfaceIndex],
-                    ipAddress: ip
+                    ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
                   }
                 }
               })
@@ -2856,14 +2901,14 @@ export default function RollingMigrationFormDrawer({
                 if (updatedInterfaces[interfaceIndex]) {
                   updatedInterfaces[interfaceIndex] = {
                     ...updatedInterfaces[interfaceIndex],
-                    ipAddress: ''
+                    ipAddress: []
                   }
                 }
               })
               updatedVM.networkInterfaces = updatedInterfaces
 
               const allIPs = updatedInterfaces
-                .map((nic: any) => nic.ipAddress)
+                .flatMap((nic: any) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
                 .filter((ip: string) => ip && ip.trim() !== '')
                 .join(', ')
               updatedVM.ip = allIPs || '—'
@@ -2939,7 +2984,8 @@ export default function RollingMigrationFormDrawer({
           const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
           const fallbackIp =
             index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-          const existingIp = nic.ipAddress || fallbackIp || ''
+          const existingIp =
+            extractFirstIPv4((nic.ipAddress || []).join(',')) || extractFirstIPv4(fallbackIp) || ''
           initialBulkExistingIPs[vm.id][index] = existingIp
           initialBulkEditIPs[vm.id][index] = existingIp
 
@@ -2949,7 +2995,7 @@ export default function RollingMigrationFormDrawer({
           initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
         })
       } else {
-        const existingIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
+        const existingIp = extractFirstIPv4(vm.ip && vm.ip !== '—' ? vm.ip : '')
         initialBulkExistingIPs[vm.id][0] = existingIp
         initialBulkEditIPs[vm.id][0] = existingIp
         initialBulkPreserveIp[vm.id][0] = isPoweredOff ? false : vm.preserveIp?.[0] !== false
@@ -3913,7 +3959,13 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {networkInterface?.ipAddress || vm.ip || '—'}
+                                {(networkInterface && Array.isArray(networkInterface.ipAddress)
+                                  ? networkInterface.ipAddress
+                                      .filter((v) => v && v.trim() !== '')
+                                      .join(', ')
+                                  : '') ||
+                                  (interfaceIndex === 0 ? vm.ip || '' : '') ||
+                                  '—'}
                               </Box>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

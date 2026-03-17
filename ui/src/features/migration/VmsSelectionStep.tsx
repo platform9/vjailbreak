@@ -35,7 +35,6 @@ import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
 import { Step } from 'src/shared/components/forms'
-import { useEffect, useState, useCallback, useRef } from 'react'
 import * as React from 'react'
 import { getMigrationPlans } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
@@ -57,6 +56,8 @@ import { RdmDiskConfigurationPanel } from './components'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
+
+const { useCallback, useEffect, useRef, useState } = React
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -186,6 +187,55 @@ function VmsSelectionStep({
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
   const queryClient = useQueryClient()
+
+  const IPV4_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+
+  const normalizeNetworkInterfaces = (networkInterfaces?: VmData['networkInterfaces']) => {
+    if (!networkInterfaces || networkInterfaces.length === 0) return networkInterfaces
+    return networkInterfaces.map((nic) => ({
+      ...nic,
+      ipAddress: Array.isArray((nic as any).ipAddress)
+        ? (nic as any).ipAddress
+        : (nic as any).ipAddress
+          ? [(nic as any).ipAddress]
+          : []
+    }))
+  }
+
+  const parseIpList = (value: string): string[] => {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
+  }
+
+  const isValidIPAddressList = (value: string): boolean => {
+    const ips = parseIpList(value)
+    if (ips.length === 0) return false
+    return ips.every((ip) => isValidIPAddress(ip))
+  }
+
+  const flattenBulkIps = (items: BulkIpEdit[]) => {
+    const flattened: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
+    items.forEach((item) => {
+      const parsed = parseIpList(item.ip)
+      if (parsed.length === 0) {
+        flattened.push({ ...item, ip: '' })
+        return
+      }
+      parsed.forEach((ip) =>
+        flattened.push({ vmName: item.vmName, interfaceIndex: item.interfaceIndex, ip })
+      )
+    })
+    return flattened
+  }
+
+  const extractFirstIPv4 = (value: string): string => {
+    if (!value) return ''
+    const matches = value.match(IPV4_REGEX)
+    return matches?.[0] || ''
+  }
+
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
@@ -331,7 +381,9 @@ function VmsSelectionStep({
         if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
           vm.networkInterfaces.forEach((nic, index) => {
             if (next[vm.name][index] !== undefined) return
-            const discoveredIp = nic.ipAddress || ''
+            const discoveredIp = Array.isArray(nic.ipAddress)
+              ? nic.ipAddress.join(', ')
+              : nic.ipAddress || ''
             if (discoveredIp.trim() !== '') {
               next[vm.name][index] = discoveredIp
             }
@@ -443,9 +495,16 @@ function VmsSelectionStep({
         const isSelected = selectedVMs.has(vmId)
         const networkInterfaces = Array.isArray(vm.networkInterfaces) ? vm.networkInterfaces : []
         const hasMultipleInterfaces = networkInterfaces.length > 1
+        const formatNicIps = (ips?: string[]) => {
+          const cleaned = (Array.isArray(ips) ? ips : []).filter((ip) => ip && ip.trim() !== '')
+          return cleaned.length > 0 ? cleaned.join(', ') : '—'
+        }
+
         const ipDisplay = hasMultipleInterfaces
-          ? networkInterfaces.map((nic) => nic.ipAddress || '—').join(', ')
-          : networkInterfaces[0]?.ipAddress || vm.ipAddress || '—'
+          ? networkInterfaces.map((nic) => formatNicIps(nic.ipAddress)).join(', ')
+          : formatNicIps(networkInterfaces[0]?.ipAddress) !== '—'
+            ? formatNicIps(networkInterfaces[0]?.ipAddress)
+            : vm.ipAddress || '—'
 
         const tooltipMessage = hasMultipleInterfaces
           ? "Use 'Assign IP' button in toolbar to edit IP addresses for multiple network interfaces"
@@ -629,6 +688,7 @@ function VmsSelectionStep({
       field: 'flavor',
       headerName: 'Flavor',
       flex: 1,
+      getApplyQuickFilterFn: () => null,
       valueGetter: (value) => value || 'auto-assign',
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -758,7 +818,7 @@ function VmsSelectionStep({
 
       let allIPs = vm.networkInterfaces
         ? vm.networkInterfaces
-            .map((nic) => nic.ipAddress)
+            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
             .filter((ip) => ip && ip.trim() !== '')
             .join(', ')
         : vm.ipAddress || ''
@@ -774,6 +834,8 @@ function VmsSelectionStep({
       if (existingVm && existingVm.networkInterfaces && existingVm.networkInterfaces.length > 0) {
         preferredNetworkInterfaces = existingVm.networkInterfaces
       }
+
+      preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
 
       // If existingVm stored assignedIPs, keep them in the new object
       const assignedIPs = existingVm?.assignedIPs ?? undefined
@@ -996,7 +1058,7 @@ function VmsSelectionStep({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
       }))
-    } else if (!isValidIPAddress(value.trim())) {
+    } else if (!isValidIPAddressList(value.trim())) {
       setBulkValidationStatus((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
@@ -1291,10 +1353,11 @@ function VmsSelectionStep({
           const overrides = vmOverrides?.[index]
           const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
           const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
+          const parsed = assignedIP !== undefined ? parseIpList(assignedIP) : undefined
           return {
             ...nic,
             ...(assignedIP !== undefined
-              ? { ipAddress: assignedIP.trim() !== '' ? assignedIP : '' }
+              ? { ipAddress: parsed && parsed.length > 0 ? parsed : [] }
               : {}),
             ...(overrides
               ? {
@@ -1310,12 +1373,12 @@ function VmsSelectionStep({
 
       const displayIPs = updatedNetworkInterfaces
         ? updatedNetworkInterfaces
-            .map((nic) => nic.ipAddress)
+            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
             .filter((ip) => ip && ip.trim() !== '')
         : []
       const ipDisplay = displayIPs.join(', ')
       const assignedIPsCsv = updatedNetworkInterfaces
-        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress || '').join(',')
+        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress?.[0] ?? '').join(',')
         : assignedIPs
           ? assignedIPs.join(',')
           : undefined
@@ -1381,7 +1444,8 @@ function VmsSelectionStep({
     try {
       // Batch validation before applying any changes
       if (openstackCredentials) {
-        const ipList = ipsToApply.map((item) => item.ip)
+        const flattenedIps = flattenBulkIps(ipsToApply)
+        const ipList = flattenedIps.map((item) => item.ip)
 
         // Set validating status for all IPs
         setBulkStatusForIps(ipsToApply, 'validating')
@@ -1425,11 +1489,24 @@ function VmsSelectionStep({
         const validIPs: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
         let hasInvalidIPs = false
 
-        ipsToApply.forEach((item, index) => {
+        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
+        flattenedIps.forEach((flatItem, index) => {
+          const key = `${flatItem.vmName}__${flatItem.interfaceIndex}`
           const isValid = validationResult.isValid[index]
           const reason = validationResult.reason[index]
+          const current = byInterfaceKey.get(key)
+          if (!current) {
+            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
+          } else if (current.ok && !isValid) {
+            byInterfaceKey.set(key, { ok: false, reason })
+          }
+        })
 
-          if (isValid) {
+        ipsToApply.forEach((item) => {
+          const key = `${item.vmName}__${item.interfaceIndex}`
+          const result = byInterfaceKey.get(key)
+          const ok = result?.ok !== false
+          if (ok) {
             validIPs.push(item)
             setBulkValidationStatus((prev) => ({
               ...prev,
@@ -1447,7 +1524,10 @@ function VmsSelectionStep({
             }))
             setBulkValidationMessages((prev) => ({
               ...prev,
-              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: reason }
+              [item.vmName]: {
+                ...prev[item.vmName],
+                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
+              }
             }))
           }
         })
@@ -1550,13 +1630,11 @@ function VmsSelectionStep({
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
-          const originalIp =
-            originalIPsPerVM?.[vmName]?.[index] !== undefined
-              ? originalIPsPerVM[vmName][index]
-              : nic.ipAddress || ''
-          const currentIp = nic.ipAddress || ''
-          initialBulkExistingIPs[vmName][index] = originalIp
-          initialBulkCurrentIPs[vmName][index] = currentIp
+          const existingIp = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
+            .filter((ip) => ip && ip.trim() !== '')
+            .join(', ')
+          initialBulkExistingIPs[vmName][index] = existingIp
+          initialBulkEditIPs[vmName][index] = existingIp
 
           const initialPreserveIp =
             vm.preserveIp?.[index] !== undefined
@@ -1574,7 +1652,7 @@ function VmsSelectionStep({
           const isPoweredOff = vm.vmState !== 'running'
           const effectivePreserveIp = isPoweredOff ? false : initialPreserveIp
 
-          initialBulkEditIPs[vmName][index] = effectivePreserveIp ? originalIp : currentIp
+          initialBulkEditIPs[vmName][index] = effectivePreserveIp ? existingIp : existingIp
 
           initialBulkPreserveIp[vmName][index] = effectivePreserveIp
           initialBulkPreserveMac[vmName][index] = initialPreserveMac
@@ -1584,30 +1662,26 @@ function VmsSelectionStep({
             preserveMAC: initialPreserveMac
           }
 
-          initialValidationStatus[vmName][index] = (effectivePreserveIp ? originalIp : currentIp)
+          initialValidationStatus[vmName][index] = (effectivePreserveIp ? existingIp : existingIp)
             ? 'valid'
             : 'empty'
         })
       } else {
-        const originalIp =
-          originalIPsPerVM?.[vmName]?.[0] !== undefined
-            ? originalIPsPerVM[vmName][0]
-            : vm.ipAddress && vm.ipAddress !== '—'
-              ? vm.ipAddress
-              : ''
-        const currentIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-        initialBulkExistingIPs[vmName][0] = originalIp
-        initialBulkCurrentIPs[vmName][0] = currentIp
-
-        const effectivePreserveIp = vm.vmState !== 'running' ? false : vm.preserveIp?.[0] !== false
-        initialBulkEditIPs[vmName][0] = effectivePreserveIp ? originalIp : currentIp
-        initialBulkPreserveIp[vmName][0] = effectivePreserveIp
+        const existingIp = extractFirstIPv4(
+          vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        )
+        initialBulkExistingIPs[vmName][0] = existingIp
+        initialBulkEditIPs[vmName][0] = existingIp
+        initialBulkPreserveIp[vmName][0] =
+          vm.vmState !== 'running' ? false : vm.preserveIp?.[0] !== false
         initialBulkPreserveMac[vmName][0] = vm.preserveMac?.[0] !== false
         initialBulkEditOverrides[vmName][0] = {
           preserveIP: initialBulkPreserveIp[vmName][0],
           preserveMAC: initialBulkPreserveMac[vmName][0]
         }
-        initialValidationStatus[vmName][0] = (effectivePreserveIp ? originalIp : currentIp)
+        initialValidationStatus[vmName][0] = (
+          initialBulkPreserveIp[vmName][0] ? existingIp : existingIp
+        )
           ? 'valid'
           : 'empty'
       }
@@ -2241,7 +2315,13 @@ function VmsSelectionStep({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {networkInterface?.ipAddress || vm.ipAddress || '—'}
+                                {(Array.isArray(networkInterface?.ipAddress)
+                                  ? networkInterface?.ipAddress
+                                      ?.filter((v) => v && v.trim() !== '')
+                                      .join(', ')
+                                  : '') ||
+                                  (interfaceIndex === 0 ? vm.ipAddress || '' : '') ||
+                                  '—'}
                               </Box>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
