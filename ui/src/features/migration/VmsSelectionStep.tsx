@@ -1353,7 +1353,11 @@ function VmsSelectionStep({
             .filter((ip) => ip && ip.trim() !== '')
         : []
       const ipDisplay = displayIPs.join(', ')
-      const assignedIPsCsv = displayIPs.length > 0 ? displayIPs.join(',') : undefined
+      const assignedIPsCsv = updatedNetworkInterfaces
+        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress?.[0] ?? '').join(',')
+        : assignedIPs
+          ? assignedIPs.join(',')
+          : undefined
 
       return {
         ...vm,
