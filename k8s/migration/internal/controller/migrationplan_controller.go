@@ -1401,6 +1401,10 @@ func getCurrentInstanceID(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (st
 	}
 	currentInstanceID, err := v2vutils.GetCurrentInstanceUUID()
 	if err != nil {
+		// if metadata fails then only get from spec
+		if openstackcreds.Spec.VJBInstanceID != "" {
+			return openstackcreds.Spec.VJBInstanceID, nil
+		}
 		return "", errors.Wrap(err, "failed to get current instance uuid")
 	}
 	return currentInstanceID, nil
