@@ -72,16 +72,142 @@ In most PCD deployments, the VM receives an IP address via DHCP immediately at b
 
 **L2-Only Networks**
 
-In environments where IP addresses are assigned manually after VM deployment (L2-only networks without DHCP), the vJailbreak installation script waits until:
-- A non-loopback IPv4 address is assigned to the VM
-- A default route is configured
+In environments where IP addresses are assigned manually after VM deployment (L2-only networks without DHCP), the vJailbreak installation follows a specific sequence. This section provides a detailed walkthrough of what to expect and how to configure the VM.
 
-The script logs its status to `/var/log/pf9-install.log`. Once you assign an IP and configure routing, installation proceeds automatically. No manual restart is required.
+#### Step 1: VM Boot and Network Wait State
+
+When the vJailbreak VM starts in an L2-only network, the installation script detects that no IP address is available and enters a waiting state. You will see the following behavior in the console:
+
+1. The VM boots and initializes basic services
+2. The script sets a default password for the `ubuntu` user
+3. K3s master setup begins but pauses waiting for network availability
+4. The console displays repeated messages indicating it is waiting for network configuration
+
+**Console output during wait state:**
+```
+[2026-03-17 10:07:59] IS_MASTER: true
+[2026-03-17 10:07:59] MASTER_IP:
+[2026-03-17 10:07:59] K3S_TOKEN:
+[2026-03-17 10:07:59] INSTALL_K3S_EXEC: server --secrets-encryption
+[2026-03-17 10:07:59] Setting default password for ubuntu user...
+[2026-03-17 10:07:59] Default password set for ubuntu user. User will need to change it on first login
+[2026-03-17 10:07:59] Setting up K3s Master...
+[2026-03-17 10:07:59] Waiting for network availability...
+[2026-03-17 10:07:59] Waiting for network: missing default route and global IPv4 address...
+[2026-03-17 10:08:59] Waiting for network: missing default route and global IPv4 address...
+[2026-03-17 10:09:59] Waiting for network: missing default route and global IPv4 address...
+```
+
+The script checks every minute for:
+- A non-loopback IPv4 address assigned to a network interface
+- A default route configured in the routing table
+
+**Note:** The VM is fully accessible via console during this waiting period. You can log in and configure networking while the script waits.
+
+#### Step 2: Assign an IP Address
+
+You can assign an IP address using one of the following methods:
+
+**Option A: Using DHCP Client**
+
+If your network has a DHCP server available (but wasn't configured at boot), you can request an IP:
 
 ```bash
-# Example: Assign static IP and route
+# Check current network interface status
+ip a
+
+# Request IP via DHCP on the primary interface (commonly ens3 or enp0s3)
+dhclient ens3
+```
+
+After running `dhclient`, verify the IP assignment:
+```bash
+ip a
+```
+
+You should see output similar to:
+```
+2: ens3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether fa:16:3e:50:e9:85 brd ff:ff:ff:ff:ff:ff
+    altname enp0s3
+    inet 10.96.9.142/20 brd 10.96.15.255 scope global dynamic ens3
+       valid_lft 8631sec preferred_lft 8631sec
+```
+
+**Option B: Static IP Configuration**
+
+For environments without DHCP, configure a static IP address:
+
+```bash
+# Assign static IP (replace with your network details)
 sudo ip addr add 192.168.1.100/24 dev ens3
+
+# Configure default gateway
 sudo ip route add default via 192.168.1.1
+
+# Verify configuration
+ip a
+ip route
+```
+
+**Important:** Ensure the IP address and gateway are appropriate for your network. Contact your network administrator if you're unsure about the correct values.
+
+#### Step 3: Automatic Installation Proceeds
+
+Once the network is configured, the installation script automatically detects the change and proceeds with the setup. You can monitor progress by tailing the installation log:
+
+```bash
+tail -f /var/log/pf9-install.log
+```
+
+You will see the script transition from waiting to active installation:
+```
+[2026-03-17 11:08:00] Waiting for network: missing default route and global IPv4 address...
+[2026-03-17 11:09:01] Network detected. Default route and global IPv4 address available.
+[2026-03-17 11:09:09] K3s is ready.
+[2026-03-17 11:09:10] Loading all the images in /etc/pf9/images...
+[2026-03-17 11:10:38] Applying kube-prometheus manifests...
+[2026-03-17 11:10:50] K3s master setup completed
+[2026-03-17 11:10:51] Rsync daemon started successfully.
+[2026-03-17 11:10:51] Config map created successfully.
+[2026-03-17 11:10:51] Installing cert-manager
+[2026-03-17 11:10:53] Waiting for cert-manager deployments to become available
+[2026-03-17 11:11:04] removing the cron job
+```
+
+The installation performs the following steps automatically:
+1. **K3s Initialization** - Kubernetes cluster setup completes
+2. **Image Loading** - Container images are loaded from `/etc/pf9/images`
+3. **Prometheus Setup** - Monitoring stack is deployed
+4. **Rsync Daemon** - File synchronization service starts
+5. **Cert-Manager** - TLS certificate management is installed
+6. **Cleanup** - Temporary cron jobs are removed
+
+#### Step 4: Access vJailbreak
+
+Once installation completes (typically 2-5 minutes after network configuration), you can access vJailbreak:
+
+- **UI Access:** `http://<assigned-ip>/`
+- **SSH Access:** `ssh ubuntu@<assigned-ip>` (default password: `password`)
+
+#### Troubleshooting L2-Only Network Setup
+
+| Issue | Solution |
+|-------|----------|
+| Script not detecting IP | Ensure both IP address AND default route are configured |
+| Installation stuck after IP assignment | Check `/var/log/pf9-install.log` for errors |
+| Cannot reach UI after installation | Verify security groups allow inbound traffic on port 80 |
+| Network interface not visible | Check VM network attachment in OpenStack dashboard |
+
+**Verifying Network Readiness:**
+```bash
+# Check IP assignment
+ip addr show | grep "inet "
+
+# Check default route
+ip route | grep default
+
+# Both should return valid entries for installation to proceed
 ```
 
 ### Configure VM with cloud-init
