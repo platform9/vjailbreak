@@ -2223,9 +2223,11 @@ function VmsSelectionStep({
                       const preserveIp =
                         !isPoweredOff && bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
                       const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
+                      const missingVmtoolsIp =
+                        preserveIp && !networkInterface?.ipAddress && !vm.ipAddress
                       return (
+                        <React.Fragment key={interfaceIndex}>
                         <Box
-                          key={interfaceIndex}
                           sx={{
                             display: 'grid',
                             gridTemplateColumns: { xs: '1fr', sm: '240px 150px 1fr' },
@@ -2371,6 +2373,13 @@ function VmsSelectionStep({
                             />
                           </Box>
                         </Box>
+                        {missingVmtoolsIp && (
+                          <Alert severity="error" sx={{ mt: 0.5 }}>
+                            VMware Tools did not report an IP for this interface. Enter one manually
+                            or disable Preserve IP.
+                          </Alert>
+                        )}
+                        </React.Fragment>
                       )
                     })}
                   </Box>

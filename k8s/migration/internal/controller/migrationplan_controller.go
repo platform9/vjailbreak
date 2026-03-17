@@ -946,6 +946,12 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		}
 	}
 
+	// Preflight: if preserveIP is on for any NIC but VMware Tools reported no IP and no manual IP
+	// was assigned, fail before creating the Migration object.
+	if err := validatePreserveIPConfig(vminfo, assignedIP, migrationplan.Spec.NetworkOverridesPerVM[vm]); err != nil {
+		return nil, err
+	}
+
 	migrationobj := &vjailbreakv1alpha1.Migration{}
 	err = r.Get(ctx, types.NamespacedName{Name: utils.MigrationNameFromVMName(vmk8sname), Namespace: migrationplan.Namespace}, migrationobj)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -2352,6 +2358,60 @@ func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Cont
 	if err := r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed, condition, vmName); err != nil {
 		r.ctxlog.Error(err, "Failed to mark migration as ValidationFailed", "vm", vmName)
 	}
+}
+
+// validatePreserveIPConfig checks that every NIC with preserveIP=true (the default) has a
+// detectable IP from VMware Tools or a manually assigned IP. Returns an error if any NIC would
+// proceed with an empty IP, which causes a confusing "subnet not found" failure later.
+func validatePreserveIPConfig(vminfo *vjailbreakv1alpha1.VMInfo, assignedIP string, overrides []vjailbreakv1alpha1.NICOverride) error {
+	assignedIPs := []string{}
+	if assignedIP != "" {
+		assignedIPs = strings.Split(assignedIP, ",")
+	}
+
+	if len(vminfo.NetworkInterfaces) == 0 {
+		return nil
+	}
+
+	overrideMap := map[int]vjailbreakv1alpha1.NICOverride{}
+	for _, o := range overrides {
+		overrideMap[o.InterfaceIndex] = o
+	}
+
+	detectedIPs := map[string]bool{}
+	if len(vminfo.GuestNetworks) > 0 {
+		for _, gn := range vminfo.GuestNetworks {
+			if gn.IP != "" && !strings.Contains(gn.IP, ":") {
+				detectedIPs[strings.ToLower(gn.MAC)] = true
+			}
+		}
+	} else {
+		for _, nic := range vminfo.NetworkInterfaces {
+			if nic.IPAddress != "" && !strings.Contains(nic.IPAddress, ":") {
+				detectedIPs[strings.ToLower(nic.MAC)] = true
+			}
+		}
+	}
+
+	for i, nic := range vminfo.NetworkInterfaces {
+		preserveIP := true
+		if o, ok := overrideMap[i]; ok && o.PreserveIP != nil {
+			preserveIP = *o.PreserveIP
+		}
+		if !preserveIP {
+			continue
+		}
+
+		hasDetectedIP := detectedIPs[strings.ToLower(nic.MAC)]
+		hasAssignedIP := i < len(assignedIPs) && strings.TrimSpace(assignedIPs[i]) != ""
+		if !hasDetectedIP && !hasAssignedIP {
+			return fmt.Errorf(
+				"NIC[%d] (MAC %s): preserveIP is enabled but VMware Tools did not report an IP. "+
+					"Please assign an IP manually in the migration config or disable Preserve IP for this NIC",
+				i, nic.MAC)
+		}
+	}
+	return nil
 }
 
 // markMigrationFailed updates a Migration status to Failed
