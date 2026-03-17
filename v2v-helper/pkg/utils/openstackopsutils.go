@@ -483,6 +483,10 @@ func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []st
 
 func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
 
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check if network is L2")
+	}
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -499,6 +503,14 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 		if port.MACAddress == mac {
 			if port.DeviceID != "" {
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
+			}
+			if isL2Network && port.Status == "ACTIVE" {
+				PrintLog(fmt.Sprintf("Port %s (MAC %s) is already exists and is L2 network but already in use", port.ID, mac))
+				return nil, fmt.Errorf("port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
+			} else if isL2Network {
+				PrintLog(fmt.Sprintf("Port %s (MAC %s) is already exists and is L2 network", port.ID, mac))
+				// for l2 network, we can reuse the port if it's not active
+				return &port, nil
 			}
 			if len(port.FixedIPs) > 0 {
 				fixedIps := []string{}
