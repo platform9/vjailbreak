@@ -807,6 +807,12 @@ export default function RollingMigrationFormDrawer({
     return matches?.[0] || ''
   }
 
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return (matches?.length || 0) > 1
+  }
+
   const parseIpList = (value: string): string[] => {
     const trimmed = value.trim()
     if (!trimmed) return []
@@ -2460,9 +2466,22 @@ export default function RollingMigrationFormDrawer({
 
     if (!value) {
       // Preserve IP disabled: keep the current value so the user can edit/override it.
+      const current = bulkEditIPs?.[vmId]?.[interfaceIndex] ?? ''
+      const trimmed = current.trim()
+
+      const { status, message } = !trimmed
+        ? { status: 'empty' as const, message: '' }
+        : !isValidIPAddressList(trimmed)
+          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
+          : ({ status: 'valid' as const, message: '' } as const)
+
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: status }
+      }))
       setBulkValidationMessages((prev) => ({
         ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+        [vmId]: { ...prev[vmId], [interfaceIndex]: message }
       }))
     }
   }
@@ -2749,7 +2768,7 @@ export default function RollingMigrationFormDrawer({
               }
 
               await patchVMwareMachine(
-                vmId,
+                vm.id,
                 {
                   spec: {
                     vms: {
@@ -2797,14 +2816,16 @@ export default function RollingMigrationFormDrawer({
             if (!vm) throw new Error('VM not found')
 
             if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
+              const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+              const parsedExisting = existingIp.trim() !== '' ? parseIpList(existingIp) : []
               const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
-                ipAddress: []
+                ipAddress: parsedExisting
               }
 
               await patchVMwareMachine(
-                vmId,
+                vm.id,
                 {
                   spec: {
                     vms: {
@@ -2981,11 +3002,9 @@ export default function RollingMigrationFormDrawer({
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
-          const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
-          const fallbackIp =
-            index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-          const existingIp =
-            extractFirstIPv4((nic.ipAddress || []).join(',')) || extractFirstIPv4(fallbackIp) || ''
+          const existingIp = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
+            .filter((ip) => ip && ip.trim() !== '')
+            .join(', ')
           initialBulkExistingIPs[vm.id][index] = existingIp
           initialBulkEditIPs[vm.id][index] = existingIp
 
@@ -3959,12 +3978,16 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {(networkInterface && Array.isArray(networkInterface.ipAddress)
+                                {(Array.isArray(networkInterface?.ipAddress)
                                   ? networkInterface.ipAddress
                                       .filter((v) => v && v.trim() !== '')
                                       .join(', ')
                                   : '') ||
-                                  (interfaceIndex === 0 ? vm.ip || '' : '') ||
+                                  (!networkInterface &&
+                                  interfaceIndex === 0 &&
+                                  !hasMultipleIPv4(vm.ip || '')
+                                    ? extractFirstIPv4(vm.ip || '')
+                                    : '') ||
                                   '—'}
                               </Box>
                             </Box>
