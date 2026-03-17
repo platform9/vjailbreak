@@ -807,6 +807,12 @@ export default function RollingMigrationFormDrawer({
     return matches?.[0] || ''
   }
 
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return (matches?.length || 0) > 1
+  }
+
   const parseIpList = (value: string): string[] => {
     const trimmed = value.trim()
     if (!trimmed) return []
@@ -2501,7 +2507,7 @@ export default function RollingMigrationFormDrawer({
     } else {
       setBulkValidationStatus((prev) => ({
         ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'empty' }
+        [vmId]: { ...prev[vmId], [interfaceIndex]: 'valid' }
       }))
       setBulkValidationMessages((prev) => ({
         ...prev,
@@ -2981,11 +2987,9 @@ export default function RollingMigrationFormDrawer({
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
-          const tableIp = vm.ip && vm.ip !== '—' ? vm.ip : ''
-          const fallbackIp =
-            index === 0 && tableIp && !tableIp.includes(',') && !nic.ipAddress ? tableIp : ''
-          const existingIp =
-            extractFirstIPv4((nic.ipAddress || []).join(',')) || extractFirstIPv4(fallbackIp) || ''
+          const existingIp = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
+            .filter((ip) => ip && ip.trim() !== '')
+            .join(', ')
           initialBulkExistingIPs[vm.id][index] = existingIp
           initialBulkEditIPs[vm.id][index] = existingIp
 
@@ -3959,12 +3963,15 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {(networkInterface && Array.isArray(networkInterface.ipAddress)
-                                  ? networkInterface.ipAddress
-                                      .filter((v) => v && v.trim() !== '')
-                                      .join(', ')
-                                  : '') ||
-                                  (interfaceIndex === 0 ? vm.ip || '' : '') ||
+                                {extractFirstIPv4(
+                                  (networkInterface && Array.isArray(networkInterface.ipAddress)
+                                    ? networkInterface.ipAddress.filter((v) => v && v.trim() !== '')
+                                    : []
+                                  ).join(',')
+                                ) ||
+                                  (interfaceIndex === 0 && !hasMultipleIPv4(vm.ip || '')
+                                    ? extractFirstIPv4(vm.ip || '')
+                                    : '') ||
                                   '—'}
                               </Box>
                             </Box>

@@ -236,6 +236,12 @@ function VmsSelectionStep({
     return matches?.[0] || ''
   }
 
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(IPV4_REGEX)
+    return (matches?.length || 0) > 1
+  }
+
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
@@ -1040,7 +1046,7 @@ function VmsSelectionStep({
     } else {
       setBulkValidationStatus((prev) => ({
         ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
       }))
       setBulkValidationMessages((prev) => ({
         ...prev,
@@ -2264,7 +2270,9 @@ function VmsSelectionStep({
                                       ?.filter((v) => v && v.trim() !== '')
                                       .join(', ')
                                   : '') ||
-                                  (interfaceIndex === 0 ? vm.ipAddress || '' : '') ||
+                                  (interfaceIndex === 0 && !hasMultipleIPv4(vm.ipAddress || '')
+                                    ? extractFirstIPv4(vm.ipAddress || '')
+                                    : '') ||
                                   '—'}
                               </Box>
                             </Box>
