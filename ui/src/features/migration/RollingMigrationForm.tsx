@@ -2507,7 +2507,7 @@ export default function RollingMigrationFormDrawer({
     } else {
       setBulkValidationStatus((prev) => ({
         ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'valid' }
+        [vmId]: { ...prev[vmId], [interfaceIndex]: 'empty' }
       }))
       setBulkValidationMessages((prev) => ({
         ...prev,
