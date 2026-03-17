@@ -625,8 +625,7 @@ export default function RollingMigrationFormDrawer({
 
       const hostsResponse = await getVMwareHosts(
         VJAILBREAK_DEFAULT_NAMESPACE,
-        // credName,
-        '',
+        credName,
         clusterName
       )
 
