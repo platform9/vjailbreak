@@ -2466,9 +2466,22 @@ export default function RollingMigrationFormDrawer({
 
     if (!value) {
       // Preserve IP disabled: keep the current value so the user can edit/override it.
+      const current = bulkEditIPs?.[vmId]?.[interfaceIndex] ?? ''
+      const trimmed = current.trim()
+
+      const { status, message } = !trimmed
+        ? { status: 'empty' as const, message: '' }
+        : !isValidIPAddressList(trimmed)
+          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
+          : ({ status: 'valid' as const, message: '' } as const)
+
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: status }
+      }))
       setBulkValidationMessages((prev) => ({
         ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+        [vmId]: { ...prev[vmId], [interfaceIndex]: message }
       }))
     }
   }
@@ -2755,7 +2768,7 @@ export default function RollingMigrationFormDrawer({
               }
 
               await patchVMwareMachine(
-                vmId,
+                vm.id,
                 {
                   spec: {
                     vms: {
@@ -2803,14 +2816,16 @@ export default function RollingMigrationFormDrawer({
             if (!vm) throw new Error('VM not found')
 
             if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
+              const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+              const parsedExisting = existingIp.trim() !== '' ? parseIpList(existingIp) : []
               const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
-                ipAddress: []
+                ipAddress: parsedExisting
               }
 
               await patchVMwareMachine(
-                vmId,
+                vm.id,
                 {
                   spec: {
                     vms: {
@@ -3963,13 +3978,14 @@ export default function RollingMigrationFormDrawer({
                                   fontFamily: 'monospace'
                                 }}
                               >
-                                {extractFirstIPv4(
-                                  (networkInterface && Array.isArray(networkInterface.ipAddress)
-                                    ? networkInterface.ipAddress.filter((v) => v && v.trim() !== '')
-                                    : []
-                                  ).join(',')
-                                ) ||
-                                  (interfaceIndex === 0 && !hasMultipleIPv4(vm.ip || '')
+                                {(Array.isArray(networkInterface?.ipAddress)
+                                  ? networkInterface.ipAddress
+                                      .filter((v) => v && v.trim() !== '')
+                                      .join(', ')
+                                  : '') ||
+                                  (!networkInterface &&
+                                  interfaceIndex === 0 &&
+                                  !hasMultipleIPv4(vm.ip || '')
                                     ? extractFirstIPv4(vm.ip || '')
                                     : '') ||
                                   '—'}
