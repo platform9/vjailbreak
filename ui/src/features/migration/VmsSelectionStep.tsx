@@ -1210,17 +1210,6 @@ function VmsSelectionStep({
   const getExistingIp = (vmName: string, interfaceIndex: number) =>
     bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
 
-  const markIpFieldInvalid = (vmName: string, interfaceIndex: number, message: string) => {
-    setBulkValidationStatus((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-    }))
-    setBulkValidationMessages((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: message }
-    }))
-  }
-
   const validateRequiredIpsForPreserveEnabled = () => {
     let missingRequiredIp = false
     Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
@@ -1229,9 +1218,17 @@ function VmsSelectionStep({
         const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
         const existingIp = getExistingIp(vmName, interfaceIndex)
 
+        // Preserve IP can be enabled even when the discovered/original IP is empty.
+        // In that case, we should not block Apply Changes or show a validation error.
         if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
-          missingRequiredIp = true
-          markIpFieldInvalid(vmName, interfaceIndex, 'IP is required when Preserve IP is enabled')
+          setBulkValidationStatus((prev) => ({
+            ...prev,
+            [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
+          }))
+          setBulkValidationMessages((prev) => ({
+            ...prev,
+            [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+          }))
         }
       })
     })
