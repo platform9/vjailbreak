@@ -218,6 +218,7 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
     # Detect if options are equivalent to defaults
     # defaults generally == rw,suid,dev,exec,auto,nouser,async (varies per FS)
     # We'll use a conservative match: rw,relatime + no special flags
+    echo "DEBUG $OPTIONS"
     case "$OPTIONS" in
       rw|rw,relatime) OPTIONS="defaults" ;;
     esac
