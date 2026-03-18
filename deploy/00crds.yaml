@@ -985,6 +985,8 @@ spec:
                     description: NICOverride defines per-NIC overrides for IP and
                       MAC preservation during migration
                     properties:
+                      UserAssignedIP:
+                        type: string
                       interfaceIndex:
                         description: InterfaceIndex is the zero-based index of the
                           NIC
