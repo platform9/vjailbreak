@@ -191,5 +191,6 @@ This log contains:
 - Errors encountered during execution
 - Warnings for failed script blocks
 
-> **Note:**  
-> Linux user script blocks are executed through a generated wrapper, so individual script files will not appear inside the guest filesystem.
+## Link to Readily Available Firstboot Scripts
+1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers from Windows VMs
+2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1
