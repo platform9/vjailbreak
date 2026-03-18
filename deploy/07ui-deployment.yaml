@@ -24,7 +24,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:main
+          image: quay.io/platform9/vjailbreak-ui:042rc-2160c2ad
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
