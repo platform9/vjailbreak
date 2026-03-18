@@ -1017,6 +1017,12 @@ function VmsSelectionStep({
     interfaceIndex: number,
     preserveIp: boolean
   ) => {
+    const currentIpValue =
+      bulkEditIPs?.[vmName]?.[interfaceIndex] ?? bulkExistingIPs?.[vmName]?.[interfaceIndex] ?? ''
+    if (!preserveIp && parseIpList(currentIpValue).length > 1) {
+      return
+    }
+
     setBulkPreserveIp((prev) => ({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: preserveIp }
@@ -1104,6 +1110,13 @@ function VmsSelectionStep({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: value }
     }))
+
+    if (parseIpList(value).length > 1) {
+      setBulkPreserveIp((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: true }
+      }))
+    }
 
     // Track latest user-entered value as "current" when Preserve IP is disabled.
     if (bulkPreserveIp?.[vmName]?.[interfaceIndex] === false) {
@@ -1698,7 +1711,8 @@ function VmsSelectionStep({
           const initialPreserveMac = vm.preserveMac?.[index] !== false
 
           const isPoweredOff = vm.vmState !== 'running'
-          const effectivePreserveIp = isPoweredOff ? false : initialPreserveIp
+          const hasMultipleIps = parseIpList(originalIp).length > 1
+          const effectivePreserveIp = isPoweredOff ? false : hasMultipleIps ? true : initialPreserveIp
           initialBulkPreserveIp[vmName][index] = effectivePreserveIp
           initialBulkPreserveMac[vmName][index] = initialPreserveMac
 
@@ -1721,7 +1735,9 @@ function VmsSelectionStep({
         initialBulkCurrentIPs[vmName][0] = currentIp
 
         const isPoweredOff = vm.vmState !== 'running'
-        const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[0] !== false
+        const hasMultipleIps = parseIpList(originalIp).length > 1
+        const effectivePreserveIp =
+          isPoweredOff ? false : hasMultipleIps ? true : vm.preserveIp?.[0] !== false
         const initialPreserveMac = vm.preserveMac?.[0] !== false
 
         initialBulkPreserveIp[vmName][0] = effectivePreserveIp
@@ -2326,8 +2342,10 @@ function VmsSelectionStep({
                       const status = bulkValidationStatus[vmName]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmName]?.[interfaceIndex]
                       const isPoweredOff = vm.vmState !== 'running'
+                      const hasMultipleIps = parseIpList(ip).length > 1
                       const preserveIp =
-                        !isPoweredOff && bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
+                        !isPoweredOff &&
+                        (hasMultipleIps || bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false)
                       const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
                       const discoveredIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
                       const currentIp =
@@ -2435,7 +2453,7 @@ function VmsSelectionStep({
                               <Switch
                                 size="small"
                                 checked={preserveIp}
-                                disabled={isPoweredOff}
+                                disabled={isPoweredOff || hasMultipleIps}
                                 onChange={(e) =>
                                   handleBulkPreserveIpChange(
                                     vmName,
