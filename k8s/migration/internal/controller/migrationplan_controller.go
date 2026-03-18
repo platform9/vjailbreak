@@ -1396,9 +1396,6 @@ func resolveVirtioDriverURL(migrationtemplate *vjailbreakv1alpha1.MigrationTempl
 }
 
 func getCurrentInstanceID(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
-	if openstackcreds.Spec.VJBInstanceID != "" {
-		return openstackcreds.Spec.VJBInstanceID, nil
-	}
 	currentInstanceID, err := v2vutils.GetCurrentInstanceUUID()
 	if err != nil {
 		// if metadata fails then only get from spec
