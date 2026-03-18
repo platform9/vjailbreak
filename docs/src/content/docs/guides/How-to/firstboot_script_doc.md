@@ -91,4 +91,4 @@ After migration, check execution logs at: `/root/virt-sysprep-firstboot.log` wit
 
 ## Link to Readily Available Firstboot Scripts
 1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers from Windows VMs
-2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/how-to/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1
+2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1
