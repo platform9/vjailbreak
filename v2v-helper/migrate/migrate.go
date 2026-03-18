@@ -2019,22 +2019,25 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
 
-			// User-assigned IP from ConfigMap
-			if migobj.AssignedIP != "" {
-				assignedIPs := strings.Split(migobj.AssignedIP, ",")
-				if idx < len(assignedIPs) {
-					ip := strings.TrimSpace(assignedIPs[idx])
-					if ip != "" {
-						ippm = []string{ip}
-						vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
-							vm.IpEntry{
-								IP:     ip,
-								Prefix: 0,
-							},
+			if !preserveIP {
+
+				// User-assigned IP from ConfigMap
+				if migobj.AssignedIP != "" {
+					assignedIPs := strings.Split(migobj.AssignedIP, ",")
+					if idx < len(assignedIPs) {
+						ip := strings.TrimSpace(assignedIPs[idx])
+						if ip != "" {
+							ippm = []string{ip}
+							vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
+								vm.IpEntry{
+									IP:     ip,
+									Prefix: 0,
+								},
+							}
+							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+						} else {
+							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 						}
-						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-					} else {
-						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 					}
 				}
 			}
