@@ -67,6 +67,14 @@ Agent nodes require a **minimum of 60 GiB disk storage**. Flavors with less than
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
+## L2-Only Network Limitations
+
+:::caution
+Agent scale-up is **not currently supported** in L2-only network environments (networks without DHCP). In these environments, only the primary vJailbreak VM can be used for migrations.
+
+If you require additional migration capacity in an L2-only network, consider using a larger flavor for the primary vJailbreak VM.
+:::
+
 ## Logging into Agent VMs
 
 Agent VMs use the same login process as the primary vJailbreak VM:
@@ -77,10 +85,3 @@ Agent VMs use the same login process as the primary vJailbreak VM:
 :::note
 VDDK libraries are automatically synced from the primary vJailbreak VM to all agent nodes. You only need to upload VDDK to the primary vJailbreak VM.
 :::
-
-:::note 
-The following instructions apply to versions of vJailbreak older than v0.1.7
-:::
-
-Each agent must also have a copy of the VMware VDDK libraries in their `/home/ubuntu` directories.
-- Copy the latest version of the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the new agents. Untar it to a folder name `vmware-vix-disklib-distrib` in `/home/ubuntu` directory.
