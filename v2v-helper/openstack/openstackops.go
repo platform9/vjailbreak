@@ -10,7 +10,7 @@ import (
 	"time"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -53,6 +53,7 @@ type OpenstackOperations interface {
 	FindDevice(volumeID string) (string, error)
 	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error)
 	// GetCinderVolumeServices returns Cinder volume services (Host, Status, State)
 	// Returns a slice of structs with these fields - defined in implementation package to avoid import cycles
 	GetCinderVolumeServices(ctx context.Context) (interface{}, error)

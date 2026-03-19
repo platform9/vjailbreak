@@ -23,7 +23,7 @@ import (
 	"unicode"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -34,7 +34,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -45,6 +45,147 @@ type VirtV2VOperations interface {
 }
 type FirstBootWindows struct {
 	Script string
+	Async  bool
+}
+
+func splitAndFilterUserScripts(content, ostype string) []string {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+
+	blocks := splitUserScriptBlocks(content)
+	filtered := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		script, target := parseUserScriptBlock(block)
+		if script == "" {
+			continue
+		}
+		if !scriptTargetAppliesToOS(target, ostype) {
+			continue
+		}
+		filtered = append(filtered, script)
+	}
+
+	return filtered
+}
+
+func splitUserScriptBlocks(content string) []string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	blocks := make([]string, 0)
+	current := make([]string, 0)
+
+	flush := func() {
+		block := strings.TrimSpace(strings.Join(current, "\n"))
+		if block != "" {
+			blocks = append(blocks, block)
+		}
+		current = current[:0]
+	}
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == constants.NextScriptDelimiterLine {
+			flush()
+			continue
+		}
+		current = append(current, line)
+	}
+	flush()
+
+	if len(blocks) == 0 {
+		only := strings.TrimSpace(content)
+		if only != "" {
+			return []string{only}
+		}
+	}
+
+	return blocks
+}
+
+func parseUserScriptBlock(block string) (string, string) {
+	lines := strings.Split(block, "\n")
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		tagLine := strings.ToUpper(trimmed)
+		switch {
+		case strings.HasPrefix(tagLine, "// "+constants.LinuxTag), strings.HasPrefix(tagLine, "# "+constants.LinuxTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.LinuxTag
+		case strings.HasPrefix(tagLine, "// "+constants.WindowsTag), strings.HasPrefix(tagLine, "# "+constants.WindowsTag):
+			return strings.TrimSpace(strings.Join(append(lines[:idx], lines[idx+1:]...), "\n")), constants.WindowsTag
+		default:
+			return strings.TrimSpace(block), ""
+		}
+	}
+
+	return "", ""
+}
+
+func scriptTargetAppliesToOS(target, ostype string) bool {
+	normalizedOS := strings.ToLower(strings.TrimSpace(ostype))
+	isWindows := normalizedOS == constants.OSFamilyWindows || strings.Contains(normalizedOS, "windows")
+	isLinux := normalizedOS == constants.OSFamilyLinux || strings.Contains(normalizedOS, "linux")
+
+	switch target {
+	case constants.LinuxTag:
+		return isLinux
+	case constants.WindowsTag:
+		return isWindows
+	default:
+		return true
+	}
+}
+
+// prepareLinuxUserFirstBootWrapper builds a single Bash wrapper script for Linux guests,
+// embedding filtered user post-migration script blocks inline via heredocs.
+func prepareLinuxUserFirstBootWrapper(ostype string) (string, error) {
+	userScriptPath := "/home/fedora/scripts/user_firstboot.sh"
+	userScriptWorkDir := "/tmp/vjailbreak-user-firstboot"
+	content, err := os.ReadFile(userScriptPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read user firstboot script: %w", err)
+	}
+
+	scripts := splitAndFilterUserScripts(string(content), ostype)
+	if len(scripts) == 0 {
+		log.Printf("No user post-migration scripts applicable for OS '%s'", ostype)
+		return "", nil
+	}
+
+	if err := os.MkdirAll(userScriptWorkDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create Linux user script work dir: %w", err)
+	}
+
+	var wrapper strings.Builder
+	wrapper.WriteString("#!/bin/bash\n")
+	wrapper.WriteString("set +e\n")
+
+	for idx, script := range scripts {
+		wrapper.WriteString(fmt.Sprintf("echo \"-> running user script part %d\"\n", idx+1))
+		heredocMarker := fmt.Sprintf("VJ_USER_SCRIPT_PART_%03d", idx+1)
+		wrapper.WriteString(fmt.Sprintf("/bin/bash <<'%s'\n", heredocMarker))
+		wrapper.WriteString(script)
+		if !strings.HasSuffix(script, "\n") {
+			wrapper.WriteString("\n")
+		}
+		wrapper.WriteString(fmt.Sprintf("%s\n", heredocMarker))
+		wrapper.WriteString("rc=$?\n")
+		wrapper.WriteString(fmt.Sprintf("if [ $rc -ne 0 ]; then echo \"WARNING: user script part %d failed with exit code $rc, continuing\"; fi\n", idx+1))
+	}
+
+	wrapper.WriteString("exit 0\n")
+
+	wrapperPath := fmt.Sprintf("%s/user_firstboot_wrapper.sh", userScriptWorkDir)
+	if err := os.WriteFile(wrapperPath, []byte(wrapper.String()), 0755); err != nil {
+		return "", fmt.Errorf("failed to write Linux user firstboot wrapper: %w", err)
+	}
+
+	return wrapperPath, nil
 }
 
 // AddNetplanConfig uploads a provided netplan YAML into the guest at /etc/netplan/50-vj.yaml
@@ -72,6 +213,46 @@ func AddNetplanConfig(disks []vm.VMDisk, useSingleDisk bool, diskPath string, ne
 		fmt.Printf("failed to run command (%s): %v: %s\n", "upload", err, strings.TrimSpace(ans))
 		return err
 	}
+	return nil
+}
+
+// UploadVirtIOScripts uploads the VirtIO installation scripts into the guest
+func UploadVirtIOScripts(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	log.Println("Uploading VirtIO installation scripts to guest")
+
+	// Verify the PowerShell script exists in the container
+	scriptPath := "/home/fedora/install-virtio-win12.ps1"
+	if _, err := os.Stat(scriptPath); err != nil {
+		return fmt.Errorf("PowerShell script not found at %s: %w", scriptPath, err)
+	}
+	log.Printf("Found PowerShell script at %s", scriptPath)
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var (
+		ans string
+		err error
+	)
+
+	// Upload PowerShell script to Windows\Temp which always exists
+	log.Println("Executing guestfs upload command...")
+	if useSingleDisk {
+		command := `upload /home/fedora/install-virtio-win12.ps1 C:\Windows\Temp\install-virtio-win12.ps1`
+		log.Printf("Upload command: %s", command)
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		log.Printf("Upload command: %s /home/fedora/install-virtio-win12.ps1 C:\\Windows\\Temp\\install-virtio-win12.ps1", command)
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/install-virtio-win12.ps1", "C:\\Windows\\Temp\\install-virtio-win12.ps1")
+	}
+	if err != nil {
+		log.Printf("Upload command failed: %v", err)
+		log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload PowerShell script: %w: %s", err, strings.TrimSpace(ans))
+	}
+	log.Printf("Upload command output: %s", strings.TrimSpace(ans))
+
+	log.Println("Successfully uploaded VirtIO installation scripts")
 	return nil
 }
 
@@ -196,10 +377,16 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, useSingleDisk bool, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
+
+		// Use Windows Server 2012-specific ISO if detected
+		if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+			filePath = "/home/fedora/virtio-win/virtio-win-server12.iso"
+			log.Printf("Detected Windows Server 2012, using virtio-win-server12.iso")
+		}
 
 		found, err := CheckForVirtioDrivers()
 		if err != nil {
@@ -223,7 +410,17 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim", "--firstboot", "/home/fedora/scripts/user_firstboot.sh"}
+	args := []string{"-v", "--no-fstrim"}
+
+	if strings.ToLower(ostype) == constants.OSFamilyLinux {
+		userWrapperPath, err := prepareLinuxUserFirstBootWrapper(ostype)
+		if err != nil {
+			log.Printf("Warning: unable to prepare Linux user post-migration scripts; continuing without user scripts: %v", err)
+		}
+		if userWrapperPath != "" {
+			args = append(args, "--firstboot", userWrapperPath)
+		}
+	}
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
@@ -334,6 +531,25 @@ func InjectMacToIps(disks []vm.VMDisk, useSingleDisk bool, diskPath string, gues
 	return nil
 }
 
+func AddWildcardNetplanForL2(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
+	// Upload it to the disk
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	var ans string
+	var err error
+	if useSingleDisk {
+		command := "upload /home/fedora/99-l2-Netplan.yaml /etc/netplan/99-l2-Netplan.yaml"
+		ans, err = RunCommandInGuest(diskPath, command, true)
+	} else {
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-l2-Netplan.yaml", "/etc/netplan/99-l2-Netplan.yaml")
+	}
+	if err != nil {
+		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
+		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
+	}
+	return nil
+
+}
 func AddWildcardNetplan(disks []vm.VMDisk, useSingleDisk bool, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
@@ -469,7 +685,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"-i")
 	cmd.Stdin = strings.NewReader(command)
 	log.Printf("Executing %s", cmd.String()+" "+command)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
@@ -704,6 +920,49 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	return "", err
 }
 
+// GetWindowsVersion detects the Windows version using guestfish inspect commands
+func GetWindowsVersion(disks []vm.VMDisk, useSingleDisk bool, diskPath string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	var osPath string
+	var err error
+
+	if useSingleDisk {
+		osPath, err = RunCommandInGuest(diskPath, "inspect-os", false)
+	} else {
+		osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect OS: %v", err)
+	}
+
+	osPath = strings.TrimSpace(osPath)
+	if osPath == "" {
+		return "", fmt.Errorf("empty OS path from inspect-os")
+	}
+
+	var productName string
+	if useSingleDisk {
+		productName, err = RunCommandInGuest(diskPath, fmt.Sprintf("inspect-get-product-name %s", osPath), false)
+	} else {
+		productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
+	}
+
+	if err != nil {
+		log.Printf("Failed to get Windows product name: %v", err)
+		return "Windows (version unknown)", nil
+	}
+
+	productName = strings.TrimSpace(productName)
+	if productName == "" {
+		return "Windows (version unknown)", nil
+	}
+
+	log.Printf("Detected Windows version: %s", productName)
+	return strings.ToLower(productName), nil
+}
+
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
 // during guest inspection phase for Linux migrations
 func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath string) error {
@@ -760,7 +1019,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, useSingleDisk bool, diskPath s
 	var runOutput string
 
 	if useSingleDisk {
-		command := "sh /tmp/generate-mount-persistence.sh --force-uuid"
+		command := "sh \"/tmp/generate-mount-persistence.sh --force-uuid\""
 		runOutput, runErr = RunCommandInGuest(diskPath, command, true)
 	} else {
 		command := "sh"
@@ -940,14 +1199,14 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 			return fmt.Errorf("failed to create directory %s: %v", scriptDir, err)
 		}
 	}
-	scriptsMetadata := []string{}
+	scriptsMetadata := []FirstBootWindows{}
 	for idx, script := range firstbootwinscripts {
 		log.Printf("Injecting Firstboot Script: %s", script.Script)
 
 		srcPath := fmt.Sprintf("/home/fedora/store/%s", script.Script)
 		dstPath := fmt.Sprintf("/home/fedora/firstboot/%d-%s", idx, script.Script)
 		if idx > 0 {
-			scriptsMetadata = append(scriptsMetadata, fmt.Sprintf("%d-%s", idx, script.Script))
+			scriptsMetadata = append(scriptsMetadata, FirstBootWindows{Script: fmt.Sprintf("%d-%s", idx, script.Script), Async: script.Async})
 		}
 		cpCmd := exec.Command("cp", srcPath, dstPath)
 		if err := cpCmd.Run(); err != nil {
@@ -957,6 +1216,7 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 	// Write scripts metadata to JSON file
 	metadataPath := "/home/fedora/firstboot/scripts.json"
 	metadataJSON, err := json.Marshal(scriptsMetadata)
+	log.Printf("Writing scripts metadata to %v", metadataJSON)
 	if err != nil {
 		return fmt.Errorf("failed to marshal scripts metadata: %v", err)
 	}
@@ -978,4 +1238,45 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, useSingleDisk bool, disk
 		return err
 	}
 	return nil
+}
+
+// PushWindowsFirstBoot creates OS-filtered user script parts in the store directory for Windows
+func PushWindowsFirstBoot(ostype string) ([]string, error) {
+	srcPath := "/home/fedora/scripts/user_firstboot.sh"
+
+	// Check if source file exists
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("source file not found at %s: %w", srcPath, err)
+	}
+
+	// Read the source file content
+	content, err := os.ReadFile(srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read source file %s: %w", srcPath, err)
+	}
+
+	scripts := splitAndFilterUserScripts(string(content), ostype)
+	if len(scripts) == 0 {
+		log.Printf("No Windows user post-migration scripts to inject for OS '%s'", ostype)
+		return nil, nil
+	}
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll("/home/fedora/store", 0755); err != nil {
+		return nil, fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	scriptNames := make([]string, 0, len(scripts))
+	for idx, script := range scripts {
+		dstPath := fmt.Sprintf("/home/fedora/store/user_firstboot_part_%03d.ps1", idx+1)
+		if err := os.WriteFile(dstPath, []byte(script+"\n"), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write destination file %s: %w", dstPath, err)
+		}
+
+		scriptName := fmt.Sprintf("user_firstboot_part_%03d.ps1", idx+1)
+		scriptNames = append(scriptNames, scriptName)
+		log.Printf("Prepared Windows user firstboot script part %d at %s", idx+1, dstPath)
+	}
+
+	return scriptNames, nil
 }

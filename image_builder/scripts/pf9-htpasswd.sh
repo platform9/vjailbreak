@@ -99,7 +99,12 @@ create_user() {
     return 1
   fi
   local pw
-  prompt_new_password pw
+  local pw
+  prompt_new_password pw || return 1
+  if [[ -z "${pw:-}" ]]; then
+    echo "Failed to create user '$user'." >&2
+    return 1
+  fi
   local new_hash
   new_hash="$(openssl passwd -apr1 "$pw")"
   local tmpfile
@@ -137,7 +142,12 @@ change_password() {
     return 1
   fi
   local pw
-  prompt_new_password pw
+  local pw
+  prompt_new_password pw || return 1
+  if [[ -z "${pw:-}" ]]; then
+    echo "Failed to change password for user '$user'." >&2
+    return 1
+  fi
   local new_hash tmpfile
   new_hash="$(openssl passwd -apr1 "$pw")"
   tmpfile="$(mktemp "/tmp/htpasswd.${user}.XXXXXX")"
@@ -145,6 +155,11 @@ change_password() {
   awk -F: -v u="$user" -v h="$new_hash" 'BEGIN{OFS=":"} $1==u{$2=h} {print}' "$HTPASSWD_FILE" > "$tmpfile"
   sudo install -m 0644 -o root -g root "$tmpfile" "$HTPASSWD_FILE"
   echo "Password for '$user' updated successfully in $HTPASSWD_FILE."
+}
+
+restart_vjailbreak_ui() {
+  echo "Restarting vjailbreak-ui deployment..."
+  sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
 }
 
 delete_user() {
@@ -216,8 +231,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           create_user "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         delete)
@@ -226,8 +241,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           delete_user "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         change-password)
@@ -236,8 +251,8 @@ _pf9_ht_main() {
             prompt_user "$DEFAULT_USER" user
           fi
           change_password "$user"
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+          if [[ $? -eq 0 && $no_restart -eq 0 ]]; then
+            restart_vjailbreak_ui
           fi
           ;;
         list)

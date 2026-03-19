@@ -1,20 +1,25 @@
-import { Box } from '@mui/material'
+import { Box, Alert } from '@mui/material'
 import { Step, RHFAutocomplete } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components'
 import {
   OpenstackCreds,
   SecurityGroupOption,
-  ServerGroupOption
+  ServerGroupOption,
+  PCDNetworkInfo
 } from 'src/api/openstack-creds/model'
+import { ResourceMap } from './NetworkAndStorageMappingStep'
+import { hasSelectedLayer2Network } from 'src/shared/utils/network'
 
 interface SecurityGroupAndServerGroupProps {
   params: {
     vms?: any[]
     securityGroups?: string[]
     serverGroup?: string
+    networkMappings?: ResourceMap[]
   }
   onChange: (key: string) => (value: any) => void
   openstackCredentials?: OpenstackCreds
+  openstackNetworks?: PCDNetworkInfo[]
   stepNumber?: string
   showHeader?: boolean
 }
@@ -23,6 +28,7 @@ export default function SecurityGroupAndServerGroup({
   params,
   onChange,
   openstackCredentials,
+  openstackNetworks = [],
   stepNumber = '4',
   showHeader = true
 }: SecurityGroupAndServerGroupProps) {
@@ -32,12 +38,19 @@ export default function SecurityGroupAndServerGroup({
   const serverGroupOptions: ServerGroupOption[] =
     openstackCredentials?.status?.openstack?.serverGroups || []
 
+  const hasL2Network = hasSelectedLayer2Network(params.networkMappings, openstackNetworks)
+
   return (
     <Box>
       {showHeader ? (
         <Step stepNumber={stepNumber} label="Security Groups & Server Group (Optional)" />
       ) : null}
       <Box>
+        {hasL2Network && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Security Groups are not available when using Layer 2 Networks.
+          </Alert>
+        )}
         <FormGrid minWidth={320} gap={3}>
           <Box>
             <RHFAutocomplete<SecurityGroupOption>
@@ -65,6 +78,7 @@ export default function SecurityGroupAndServerGroup({
               onValueChange={(value) => onChange('securityGroups')(value)}
               data-testid="security-groups-autocomplete"
               labelProps={{ tooltip: 'Assign security groups to the selected VMs.' }}
+              disabled={hasL2Network}
             />
           </Box>
 

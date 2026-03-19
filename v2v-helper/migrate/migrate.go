@@ -17,11 +17,11 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
@@ -82,6 +82,15 @@ type Migrate struct {
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
+	NetworkOverrides  []NICOverride
+	isSimpleNetwork   bool
+}
+
+// NICOverride defines per-NIC overrides for IP and MAC preservation during migration
+type NICOverride struct {
+	InterfaceIndex int   `json:"interfaceIndex"`
+	PreserveIP     *bool `json:"preserveIP,omitempty"`
+	PreserveMAC    *bool `json:"preserveMAC,omitempty"`
 }
 
 type MigrationTimes struct {
@@ -93,11 +102,38 @@ type MigrationTimes struct {
 type PeriodicSyncStates int
 
 const (
-	initial PeriodicSyncStates = iota
-	cleanedSnapshot
-	TookSnapshot
-	SyncCompleted
+	// StateIdle is the initial state, ready to start a new sync cycle
+	StateIdle PeriodicSyncStates = iota
+	// StateCleaningSnapshots indicates we are cleaning up old snapshots
+	StateCleaningSnapshots
+	// StateTakingSnapshot indicates we are taking a new migration snapshot
+	StateTakingSnapshot
+	// StateSyncingCBT indicates we are syncing changed blocks
+	StateSyncingCBT
 )
+
+// String returns a human-readable name for the state
+func (s PeriodicSyncStates) String() string {
+	switch s {
+	case StateIdle:
+		return "Idle"
+	case StateCleaningSnapshots:
+		return "CleaningSnapshots"
+	case StateTakingSnapshot:
+		return "TakingSnapshot"
+	case StateSyncingCBT:
+		return "SyncingCBT"
+	default:
+		return "Unknown"
+	}
+}
+
+// PeriodicSyncContext holds the state machine context for periodic sync operations
+type PeriodicSyncContext struct {
+	CurrentState   PeriodicSyncStates
+	LastError      error
+	WarningMessage string // Non-empty indicates sync is in warning state (failed but will retry)
+}
 
 // disconnects the source VM's network interfaces
 func (migobj *Migrate) DisconnectSourceNetworkIfRequested() error {
@@ -461,79 +497,118 @@ func (migobj *Migrate) getSyncDuration() time.Duration {
 }
 
 func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo) error {
-	var syncInterval time.Duration
-	var maxRetries uint64
-	var capInterval time.Duration
-	currentState := initial
 	vmops := migobj.VMops
-	maxRetries, capInterval = utils.GetRetryLimits()
+	maxRetries, capInterval := utils.GetRetryLimits()
 	migobj.logMessage(constants.EventMessageWaitingForAdminCutOver)
+
+	// Initialize state machine context
+	syncCtx := &PeriodicSyncContext{
+		CurrentState: StateIdle,
+	}
+
 	elapsed := time.Duration(0)
+
 	for {
 		syncEnabled := migobj.getSyncEnabled()
+		var syncInterval time.Duration
 		if syncEnabled {
 			syncInterval = migobj.getSyncDuration()
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case label := <-migobj.PodLabelWatcher:
-			if label == "yes" && currentState == initial {
+			if label == "yes" && syncCtx.CurrentState == StateIdle {
 				migobj.logMessage("Admin cutover triggered")
 				return nil
 			}
 		default:
 			if !syncEnabled {
+				// Small sleep to prevent busy-waiting when sync is disabled
+				time.Sleep(1 * time.Second)
 				continue
 			}
+
+			// Calculate wait time based on elapsed time
 			if elapsed >= syncInterval {
 				migobj.logMessage("Periodic Sync: Previous sync took longer than interval, starting next cycle immediately")
 				elapsed = syncInterval
 			}
-			// Otherwise wait remaining time
+
 			waitTime := syncInterval - elapsed
-			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle", waitTime))
+			stateInfo := syncCtx.CurrentState.String()
+			if syncCtx.WarningMessage != "" {
+				stateInfo = fmt.Sprintf("%s (WARNING: %s)", stateInfo, syncCtx.WarningMessage)
+			}
+			migobj.logMessage(fmt.Sprintf("Periodic Sync: Waiting %s before next sync cycle (state: %s)", waitTime, stateInfo))
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-migobj.PodLabelWatcher:
-				return nil // admin triggered cutover during wait
+			case label := <-migobj.PodLabelWatcher:
+				if label == "yes" {
+					migobj.logMessage("Admin cutover triggered during wait")
+					return nil
+				}
 			case <-time.After(waitTime):
-				// wait completed → loop and sync again
+				// wait completed → proceed to sync
 			}
-			// Perform sync
+
+			// Execute state machine - always start fresh from Idle each cycle
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting sync cycle (interval: %s)", syncInterval))
 			start := time.Now()
-			if currentState == initial {
-				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					return vmops.CleanUpSnapshots(false)
-				}, maxRetries, capInterval)
-				if err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to clean up snapshots after %d retries: %v", maxRetries, err))
-					continue
-				} else {
-					currentState = cleanedSnapshot
-				}
+
+			// Reset state to start fresh each cycle
+			syncCtx.CurrentState = StateCleaningSnapshots
+
+			// State: CleaningSnapshots
+			err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return vmops.CleanUpSnapshots(false)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("Snapshot cleanup failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
-			if currentState == cleanedSnapshot {
-				err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-					return vmops.TakeSnapshot(constants.MigrationSnapshotName)
-				}, maxRetries, capInterval)
-				if err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to take snapshot '%s' after %d retries: %v", constants.MigrationSnapshotName, maxRetries, err))
-					continue
-				} else {
-					currentState = TookSnapshot
-				}
+
+			// State: TakingSnapshot
+			syncCtx.CurrentState = StateTakingSnapshot
+			err = utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return vmops.TakeSnapshot(constants.MigrationSnapshotName)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("Snapshot creation '%s' failed after %d retries: %v. Will retry on next sync interval.", constants.MigrationSnapshotName, maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
-			if currentState == TookSnapshot {
-				if err := migobj.SyncCBT(ctx, vminfo); err != nil {
-					migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to sync Changed Block Tracking (CBT): %v", err))
-					currentState = initial // Reset state on failure so we retry from start next loop
-					continue
-				}
-				currentState = initial // Reset on success as well.
+
+			// State: SyncingCBT
+			syncCtx.CurrentState = StateSyncingCBT
+			err = utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				return migobj.SyncCBT(ctx, vminfo)
+			}, maxRetries, capInterval)
+			if err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("CBT sync failed after %d retries: %v. Will retry on next sync interval.", maxRetries, err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
 			}
+
+			// Sync completed successfully - clear warning state
+			syncCtx.CurrentState = StateIdle
+			syncCtx.WarningMessage = ""
+			syncCtx.LastError = nil
+			migobj.logMessage("Periodic Sync: Sync cycle completed successfully")
+
 			elapsed = time.Since(start)
 		}
 	}
@@ -777,15 +852,18 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					changedBlockCopySuccess := true
 					migobj.logMessage("Copying changed blocks")
 
-					// incremental block copy
-
 					startTime := time.Now()
 					migobj.logMessage(fmt.Sprintf("Starting incremental block copy for disk %d at %s", idx, startTime))
 
-					err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
-					if err != nil {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %v", err))
+					// Use exponential backoff for retry logic (3 retries, 30 second cap)
+					copyErr := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+						return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+					}, 3, 30*time.Second)
+
+					if copyErr != nil {
 						changedBlockCopySuccess = false
+						// Fail the migration if copy fails after 3 retries
+						return vminfo, errors.Wrap(copyErr, fmt.Sprintf("failed to copy changed blocks for disk %d after 3 attempts", idx))
 					}
 
 					duration := time.Since(startTime)
@@ -795,10 +873,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					err = vmops.UpdateDiskInfo(&vminfo, vminfo.VMDisks[idx], changedBlockCopySuccess)
 					if err != nil {
 						return vminfo, errors.Wrap(err, "failed to update disk info")
-					}
-					if !changedBlockCopySuccess {
-						migobj.logMessage(fmt.Sprintf("Failed to copy changed blocks: %s", err))
-						migobj.logMessage(fmt.Sprintf("Since full copy has completed, Retrying copy of changed blocks for disk: %d", idx))
 					}
 					migobj.logMessage(fmt.Sprintf("Finished copying and syncing changed blocks for disk %d in %s [Progress: %d/20]", idx, duration, incrementalCopyCount))
 				}
@@ -1025,25 +1099,38 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 }
 
 // handleWindowsBootDetection handles boot volume detection for Windows systems
-func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, error) {
+func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, string, error) {
 	utils.PrintLog("operating system compatibility check passed")
+
+	var finalBootIndex int
+	var err error
 
 	if !useSingleDisk {
 		utils.PrintLog("checking for bootable volume in case of LDM")
-		finalBootIndex, err := virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+		finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
 		if err != nil {
-			return -1, errors.Wrap(err, "Failed to get bootable volume index")
+			return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
 		}
-		return finalBootIndex, nil
+	} else {
+		finalBootIndex = bootVolumeIndex
 	}
 
-	return bootVolumeIndex, nil
+	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to detect Windows version: %v", err))
+		osRelease = "Windows (version unknown)"
+	}
+
+	utils.PrintLog(fmt.Sprintf("Windows OS detected: %s", osRelease))
+
+	return finalBootIndex, osRelease, nil
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
+	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
 
 	if !migobj.Convert {
 		return nil
@@ -1059,15 +1146,40 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
 		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 			Script: "Firstboot-Scheduler.ps1",
+			Async:  false,
 		})
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "install-virtio-win12.ps1",
+				Async:  false,
+			})
+		}
 		if persisNetwork {
-			firstbootscriptname := "windows-persist-network"
-			firstbootscript := constants.WindowsPersistFirstBootScript
-			firstbootscripts = append(firstbootscripts, firstbootscriptname)
-			if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
-				return errors.Wrap(err, "failed to add first boot script")
-			}
-			utils.PrintLog("First boot script added successfully")
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "Orchestrate-NICRecovery.ps1",
+				Async:  true,
+			})
+		}
+		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+			Script: "disk-online-fix.ps1",
+			Async:  true,
+		})
+		if removeVMwareTools {
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: "vmware-tools-deletion.ps1",
+				Async:  true,
+			})
+		}
+		userFirstBootScripts, err := virtv2v.PushWindowsFirstBoot(vminfo.OSType)
+		if err != nil {
+			return err
+		}
+		for _, scriptName := range userFirstBootScripts {
+			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
+				Script: scriptName,
+				Async:  true,
+			})
 		}
 	}
 
@@ -1098,11 +1210,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
 		}
@@ -1170,8 +1283,15 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 
 	if isNetplanSupported(versionID) {
 		utils.PrintLog("Adding wildcard netplan")
-		if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
-			return errors.Wrap(err, "failed to add wildcard netplan")
+		if migobj.isSimpleNetwork {
+			utils.PrintLog("L2 network detected adding l2 wildcard")
+			if err := virtv2v.AddWildcardNetplanForL2(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+				return errors.Wrap(err, "failed to add l2 wildcard netplan")
+			}
+		} else {
+			if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+				return errors.Wrap(err, "failed to add wildcard netplan")
+			}
 		}
 		utils.PrintLog("Wildcard netplan added successfully")
 		return nil
@@ -1271,7 +1391,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 		}
 
 	case constants.OSFamilyWindows:
-		bootVolumeIndex, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
+		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
 		if err != nil {
 			return err
 		}
@@ -1825,7 +1945,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 	portids := []string{}
 	openstackops := migobj.Openstackclients
 	networknames := migobj.Networknames
-
+	migobj.isSimpleNetwork = false
 	// Get security group IDs
 	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
@@ -1867,6 +1987,27 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			if network == nil {
 				return nil, nil, nil, errors.Errorf("network not found")
 			}
+			// determine simple network
+			isSimpleNetwork, err := openstackops.GetIsSimpleNetwork(ctx, network.ID)
+			if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
+			}
+			migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
+			// Check for per-NIC overrides. Default to true (preserve everything).
+			// Only override when explicitly set — nil means "not specified, keep default".
+			preserveIP := true
+			preserveMAC := true
+			for _, override := range migobj.NetworkOverrides {
+				if override.InterfaceIndex == idx {
+					if override.PreserveIP != nil {
+						preserveIP = *override.PreserveIP
+					}
+					if override.PreserveMAC != nil {
+						preserveMAC = *override.PreserveMAC
+					}
+					break
+				}
+			}
 
 			var ippm []string
 
@@ -1878,28 +2019,58 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
 
-			// User-assigned IP from ConfigMap
-			if migobj.AssignedIP != "" {
-				assignedIPs := strings.Split(migobj.AssignedIP, ",")
-				if idx < len(assignedIPs) {
-					ip := strings.TrimSpace(assignedIPs[idx])
-					if ip != "" {
-						ippm = []string{ip}
-						vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
-							vm.IpEntry{
-								IP:     ip,
-								Prefix: 0,
-							},
+			if !preserveIP {
+
+				// User-assigned IP from ConfigMap
+				if migobj.AssignedIP != "" {
+					assignedIPs := strings.Split(migobj.AssignedIP, ",")
+					if idx < len(assignedIPs) {
+						ip := strings.TrimSpace(assignedIPs[idx])
+						if ip != "" {
+							ippm = []string{ip}
+							vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
+								vm.IpEntry{
+									IP:     ip,
+									Prefix: 0,
+								},
+							}
+							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
+						} else {
+							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 						}
-						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-					} else {
-						utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
 					}
 				}
 			}
 
+			// Apply per-NIC overrides
+			mac := vminfo.Mac[idx]
+			if !preserveIP {
+				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
+				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
+				hasUserAssignedIP := false
+				if migobj.AssignedIP != "" {
+					assignedIPs := strings.Split(migobj.AssignedIP, ",")
+					if idx < len(assignedIPs) && strings.TrimSpace(assignedIPs[idx]) != "" {
+						hasUserAssignedIP = true
+					}
+				}
+				if !hasUserAssignedIP {
+					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
+					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
+				} else {
+					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
+				}
+			}
+			if !preserveMAC {
+				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
+				// Always copy IPs (preserved, custom, or empty-non-nil) to the "" key so
+				// GetCreateOpts uses them when no MAC is specified (OpenStack generates one).
+				vminfo.IPperMac[""] = vminfo.IPperMac[mac]
+				mac = ""
+			}
+
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx, network, vminfo.Mac[idx], vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}

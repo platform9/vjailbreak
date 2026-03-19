@@ -63,9 +63,8 @@ export const patchVMwareMachine = async (
 
 export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
   return machines.map((machine) => ({
-    id: machine.spec.vms.vmid || machine.spec.vms.name,
+    id: machine.spec.vms.name,
     name: machine.spec.vms.name,
-    vmid: machine.spec.vms.vmid,
     vmState: machine.status.powerState === 'running' ? 'running' : 'stopped',
     ipAddress: machine.spec.vms.ipAddress,
     networks: machine.spec.vms.networks || [],

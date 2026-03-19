@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	openstackconst "github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -43,7 +42,7 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	migrationmetrics "github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
@@ -204,6 +203,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Extract current disk being copied from events
 	r.ExtractCurrentDisk(migration, filteredEvents)
+
+	// Extract sync warning state from events
+	r.ExtractSyncWarning(migration, filteredEvents)
 
 	if migration.Status.TotalDisks == 0 {
 		if v, ok := migration.Labels[constants.NumberOfDisksLabel]; ok {
@@ -376,14 +378,14 @@ loop:
 	for i := range events.Items {
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageMigrationSucessful) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageMigrationSucessful) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
 			if err := r.markMigrationSuccessful(ctx, scope); err != nil {
 				return err
 			}
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForAdminCutOver) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForAdminCutOver) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver]:
 			// Only stay in AwaitingAdminCutOver if cutover hasn't been triggered yet
 			if pod.Labels["startCutover"] != "yes" {
@@ -396,52 +398,52 @@ loop:
 			// If startCutover is "yes", don't set phase here - let it progress to next phase
 			// by continuing to check other events
 			continue
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForCutOverStart) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageConvertingDisk) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageConvertingDisk) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingChangedBlocksWithIteration) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageCopyingChangedBlocksWithIteration) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageCopyingDisk) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageCopyingDisk) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCopying]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCopying
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyRescanStorage) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageStorageAcceleratedCopyRescanStorage) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyMappingVolume) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageStorageAcceleratedCopyMappingVolume) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseMappingVolume]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseMappingVolume
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCinderManage) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageStorageAcceleratedCopyCinderManage) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageStorageAcceleratedCopyCreatingVolume) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageStorageAcceleratedCopyCreatingVolume) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingVolume
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageInitiatorGroup) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageInitiatorGroup) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseCreatingInitiatorGroup
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageEsxiSSHConnect) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageEsxiSSHConnect) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseConnectingToESXi
 			break loop
-		case strings.Contains(events.Items[i].Message, openstackconst.EventMessageWaitingForDataCopyStart) &&
+		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForDataCopyStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart
 			break loop
-		case strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageMigrationFailed) ||
-			strings.Contains(strings.TrimSpace(events.Items[i].Message), openstackconst.EventMessageFailed):
+		case strings.Contains(strings.TrimSpace(events.Items[i].Message), constants.EventMessageMigrationFailed) ||
+			strings.Contains(strings.TrimSpace(events.Items[i].Message), constants.EventMessageFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):
@@ -561,6 +563,53 @@ func (r *MigrationReconciler) ExtractCurrentDisk(migration *vjailbreakv1alpha1.M
 	for _, condition := range migration.Status.Conditions {
 		if diskNum, ok := parseCurrentDisk(condition.Message); ok {
 			migration.Status.CurrentDisk = diskNum
+			return
+		}
+	}
+}
+
+// ExtractSyncWarning extracts the periodic sync warning state from pod events
+// It looks for "WARNING" messages which indicate the sync failed but will auto-retry
+func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
+	// Events are sorted by timestamp (newest first)
+	// Look for the most recent warning or resolution
+
+	for i := range events.Items {
+		msg := events.Items[i].Message
+
+		// Check if sync completed successfully (warning resolved)
+		if strings.Contains(msg, "Sync cycle completed successfully") {
+			migration.Status.SyncWarningMessage = ""
+			return
+		}
+
+		// Check if sync warning is active - two possible formats:
+		// 1. Direct warning: "Periodic Sync: WARNING - <message>"
+		// 2. State info with warning: "Periodic Sync: Waiting ... (state: Idle (WARNING: <message>))"
+		if strings.Contains(msg, "Periodic Sync: WARNING -") {
+			// Extract the warning message after "WARNING - "
+			if idx := strings.Index(msg, "WARNING - "); idx != -1 {
+				migration.Status.SyncWarningMessage = strings.TrimSpace(msg[idx+len("WARNING - "):])
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
+			return
+		}
+
+		// Check for warning embedded in state info
+		if strings.Contains(msg, "Periodic Sync:") && strings.Contains(msg, "(WARNING:") {
+			// Extract the warning message between "(WARNING: " and the closing ")"
+			if idx := strings.Index(msg, "(WARNING: "); idx != -1 {
+				warningStart := idx + len("(WARNING: ")
+				// Find the closing parenthesis, accounting for nested parens
+				remaining := msg[warningStart:]
+				// Remove trailing "))" if present (one for WARNING, one for state)
+				remaining = strings.TrimSuffix(remaining, "))")
+				remaining = strings.TrimSuffix(remaining, ")")
+				migration.Status.SyncWarningMessage = strings.TrimSpace(remaining)
+			} else {
+				migration.Status.SyncWarningMessage = "Periodic sync failed, will retry on next interval"
+			}
 			return
 		}
 	}

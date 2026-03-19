@@ -37,6 +37,8 @@ import { getESXHosts } from 'src/api/esximigrations/helper'
 import MigrationsTable from 'src/features/migration/components/MigrationsTable'
 import { calculateTimeElapsed } from 'src/utils'
 import { useMigrationFormActions } from 'src/features/migration/context/MigrationFormContext'
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
 
@@ -326,19 +328,23 @@ function ClusterDetailsDrawer({
 }
 
 interface CustomToolbarProps {
-  refetchClusterMigrations?: (
+  refetchClusterMigrations: (
     options?: RefetchOptions
   ) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>
   selectedCount: number
   onDeleteSelected: () => void
   onStartConversion: () => void
+  startConversionDisabled: boolean
+  startConversionDisabledReason: string
 }
 
 const CustomToolbar = ({
   refetchClusterMigrations,
   selectedCount,
   onDeleteSelected,
-  onStartConversion
+  onStartConversion,
+  startConversionDisabled,
+  startConversionDisabledReason
 }: CustomToolbarProps) => {
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -361,15 +367,20 @@ const CustomToolbar = ({
   )
 
   const actions = (
-    <Button
-      variant="contained"
-      color="primary"
-      startIcon={<AddIcon />}
-      onClick={onStartConversion}
-      sx={{ height: 40 }}
-    >
-      Start Cluster Conversion
-    </Button>
+    <Tooltip title={startConversionDisabled ? startConversionDisabledReason : ''} arrow>
+      <div>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={onStartConversion}
+          disabled={startConversionDisabled}
+          sx={{ height: 40 }}
+        >
+          Start Cluster Conversion
+        </Button>
+      </div>
+    </Tooltip>
   )
 
   return (
@@ -393,24 +404,47 @@ interface RollingMigrationsTableProps {
   rollingMigrationPlans: RollingMigrationPlan[]
   esxiMigrations: ESXIMigration[]
   migrations: Migration[]
-  refetchRollingMigrationPlans?: (
+  refetchRollingMigrationPlans: (
     options?: RefetchOptions
   ) => Promise<QueryObserverResult<RollingMigrationPlan[], Error>>
-  refetchESXIMigrations?: (
+  refetchESXIMigrations: (
     options?: RefetchOptions
   ) => Promise<QueryObserverResult<ESXIMigration[], Error>>
-  refetchMigrations?: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
+  refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
 }
 
 export default function RollingMigrationsTable({
-  refetchRollingMigrationPlans,
-  esxiMigrations,
   rollingMigrationPlans,
+  esxiMigrations,
   migrations,
+  refetchRollingMigrationPlans,
   refetchESXIMigrations,
   refetchMigrations
 }: RollingMigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
+
+  const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+  const { data: openstackCreds } = useOpenstackCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
+
+  const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
+  const hasPcdCredentials = useMemo(() => {
+    const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
+    return (
+      openstack.filter(
+        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+      ).length > 0
+    )
+  }, [openstackCreds])
+
+  const startConversionDisabled = !hasVmwareCredentials || !hasPcdCredentials
+  const startConversionDisabledReason =
+    'Add VMware and PCD credentials before starting a cluster conversion.'
   const queryClient = useQueryClient()
   const [selectedPlan, setSelectedPlan] = useState<RollingMigrationPlan | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -682,6 +716,8 @@ export default function RollingMigrationsTable({
               selectedCount={selectedRows.length}
               onDeleteSelected={handleDeleteSelected}
               onStartConversion={() => openMigrationForm('rolling')}
+              startConversionDisabled={startConversionDisabled}
+              startConversionDisabledReason={startConversionDisabledReason}
             />
           )
         }}

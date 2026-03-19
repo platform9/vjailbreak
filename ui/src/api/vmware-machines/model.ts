@@ -4,7 +4,6 @@ export interface VMwareVM {
   disks: string[]
   memory: number
   name: string
-  vmid?: string
   networks?: string[]
   vmState: string
   ipAddress?: string
@@ -19,7 +18,7 @@ export interface VMwareVM {
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
 }
 
 export interface VMwareMachine {

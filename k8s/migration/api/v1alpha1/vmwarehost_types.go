@@ -30,10 +30,29 @@ type VMwareHostSpec struct {
 	HostConfigID string `json:"hostConfigId,omitempty"`
 	// Cluster name of the host
 	ClusterName string `json:"clusterName,omitempty"`
+	// VMCount is the number of VMs on the host
+	VMCount int `json:"vmCount,omitempty"`
+	// State is the connection state of the host
+	State string `json:"state,omitempty"`
 }
 
 // VMwareHostStatus defines the observed state of VMwareHost
 type VMwareHostStatus struct {
+	// SSHStatus is the SSH validation status for this host (Succeeded, Failed, Pending)
+	// +optional
+	SSHStatus string `json:"sshStatus,omitempty"`
+
+	// SSHMessage contains details about the SSH validation result or error
+	// +optional
+	SSHMessage string `json:"sshMessage,omitempty"`
+
+	// SSHLastChecked is the timestamp of the last SSH validation attempt
+	// +optional
+	SSHLastChecked metav1.Time `json:"sshLastChecked,omitempty"`
+
+	// ESXiVersion is the ESXi version retrieved via SSH if connection succeeded
+	// +optional
+	ESXiVersion string `json:"esxiVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true

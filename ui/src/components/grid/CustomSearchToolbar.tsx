@@ -16,6 +16,7 @@ interface CustomSearchToolbarProps {
   maxSearchWidth?: number | string
   onStatusFilterChange?: (filter: string) => void
   currentStatusFilter?: string
+  statusFilterOptions?: string[]
   onDateFilterChange?: (filter: string) => void
   currentDateFilter?: string
 }
@@ -28,6 +29,7 @@ const CustomSearchToolbar = ({
   maxSearchWidth = 360,
   onStatusFilterChange,
   currentStatusFilter = 'All',
+  statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'],
   onDateFilterChange,
   currentDateFilter = 'All Time'
 }: CustomSearchToolbarProps) => {
@@ -37,7 +39,6 @@ const CustomSearchToolbar = ({
   const statusMenuOpen = Boolean(statusAnchorEl)
   const dateMenuOpen = Boolean(dateAnchorEl)
 
-  const statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed']
   const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days']
 
   const isDateFilterActive = currentDateFilter !== 'All Time'

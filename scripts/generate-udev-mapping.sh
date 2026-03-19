@@ -19,6 +19,8 @@ UDEV_OUTPUT_TARGET="${UDEV_OUTPUT_TARGET:-/etc/udev/rules.d/70-persistent-net.ru
 NETPLAN_BASE_DIR="${NETPLAN_BASE_DIR:-/}"
 NETPLAN_EXT_CONF="${NETPLAN_EXT_CONF:-/etc/netplan/99-netcfg.yaml}"
 USE_NETPLAN_LOGIC="${USE_NETPLAN_LOGIC:-true}"
+SYS_LINK="${SYS_LINK:-/etc/systemd/network}"
+USR_SYS_LINK="${USR_SYS_LINK:-/usr/lib/systemd/network}"
 
 # Setup custom file descriptor for logging to stdout
 exec 3>&1
@@ -82,106 +84,6 @@ resolve_device_via_ifcfg() {
     echo ""
 }
 
-# Processes ifcfg scripts for RHEL/SUSE style distributions
-process_ifcfg_infrastructure() {
-    local TARGET_DIR=""
-
-    # Determine distribution type by directory presence
-    if [[ -d "$RHEL_NET_DIR" ]]; then
-        TARGET_DIR="$RHEL_NET_DIR"
-    elif [[ -d "$SUSE_NET_DIR" ]]; then
-        TARGET_DIR="$SUSE_NET_DIR"
-    else
-        display_msg "Notice: No standard ifcfg directory found."
-        return 0
-    fi
-
-    local VJB_INDEX=1
-    cat "$NET_MAPPING_DATA" | while read -r line_entry; do
-        parse_address_pair "$line_entry"
-
-        if [[ -z "$FOUND_MAC" ]]; then
-            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
-            continue
-        fi
-        
-        if [[ -z "$FOUND_IP" ]]; then
-            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
-            continue
-        fi
-
-        # Locate script matching the IP
-        local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null)
-        
-        if [[ -z "$CFG_FILE" ]]; then
-            display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
-            
-            # Create a virtual bridge/dhcp interface if none exists
-            {
-                echo "TYPE=Ethernet"
-                echo "BOOTPROTO=dhcp"
-                echo "NAME=vjb$VJB_INDEX"                
-                echo "DEVICE=vjb$VJB_INDEX"                
-                echo "ONBOOT=yes"
-                echo "HWADDR=$FOUND_MAC"
-                echo "PEERDNS=yes"                 
-                echo "PEERROUTES=yes"              
-                echo "DHCP_HOSTNAME=myhost" 
-            } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
-            VJB_INDEX=$((VJB_INDEX+1))
-        fi
-
-        local IF_NAME=$(resolve_device_via_ifcfg "$CFG_FILE" "$FOUND_MAC")
-        if [[ -z "$IF_NAME" ]]; then
-            # Suse fallback: parse name from the file string itself
-            IF_NAME=$(basename "$CFG_FILE" | sed 's/^ifcfg-//')
-        fi
-
-        if [[ -z "$IF_NAME" || "$IF_NAME" == "lo" ]]; then
-            display_msg "Notice: Could not determine valid interface for $CFG_FILE"
-            continue
-        fi
-
-        echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
-    done
-}
-
-# Processes NetworkManager .nmconnection files
-process_network_manager_files() {
-    if [[ ! -d "$NM_CONN_PATH" ]]; then
-        display_msg "Notice: NetworkManager path $NM_CONN_PATH not found."
-        return 0
-    fi
-
-    cat "$NET_MAPPING_DATA" | while read -r line_entry; do
-        parse_address_pair "$line_entry"
-
-        if [[ -z "$FOUND_MAC" ]]; then
-            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
-            continue
-        fi
-        
-        if [[ -z "$FOUND_IP" ]]; then
-            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
-            continue
-        fi
-
-        # Search connection files for the matching IP address
-        local NM_SPECIFIC_FILE=$(grep -El "address[0-9]*=.*$FOUND_IP.*$" "$NM_CONN_PATH"/*)
-        if [[ -z "$NM_SPECIFIC_FILE" ]]; then
-            display_msg "Notice: No NM profile found for $FOUND_IP."
-            continue
-        fi
-
-        local IF_NAME=$(grep '^interface-name=' "$NM_SPECIFIC_FILE" | cut -d'=' -f2)
-        if [[ -z "$IF_NAME" ]]; then
-            display_msg "Notice: Missing interface-name entry for $FOUND_IP."
-            continue
-        fi
-
-        echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
-    done
-}
 
 # Extracts specific time metadata for NetworkManager UUIDs
 fetch_uuid_time_marker() {
@@ -205,58 +107,206 @@ fetch_uuid_time_marker() {
     done < "$STAMP_DB"
 }
 
-# Cross-references NM DHCP leases to find interface names
-process_nm_leases() {
-    if [[ ! -d "$NM_RUNTIME_DATA" ]]; then
-        display_msg "Notice: $NM_RUNTIME_DATA does not exist."
-        return 0
+
+process_rhel(){
+  local TARGET_DIR=""
+  # Determine distribution type by directory presence
+  if [[ -d "$RHEL_NET_DIR" ]]; then
+    TARGET_DIR="$RHEL_NET_DIR"
+  elif [[ -d "$SUSE_NET_DIR" ]]; then
+    TARGET_DIR="$SUSE_NET_DIR"
+  else
+    display_msg "Notice: No standard ifcfg directory found."
+  fi
+
+  if [[ ! -d "$SYS_LINK" ]]; then
+    # create syslink dir 
+    display_msg "creating sys directory"
+    mkdir -p "$SYS_LINK"
+  fi
+  
+  local VJB_INDEX=1
+  cat "$NET_MAPPING_DATA" | while read -r line_entry; do
+    local found=0
+    parse_address_pair "$line_entry"
+    if [[ -z "$FOUND_MAC" ]]; then
+      display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
+      continue
+    fi
+    
+    if [[ -z "$FOUND_IP" ]]; then
+      display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
+      continue
     fi
 
-    while read -r line_entry; do
-        parse_address_pair "$line_entry"
-
-        if [[ -z "$FOUND_MAC" ]]; then
-            display_msg "Skipping malformed mapping entry (missing MAC): $line_entry"
-            continue
-        fi
-        
-        if [[ -z "$FOUND_IP" ]]; then
-            display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
-            continue
-        fi
-
+    display_msg "Processing RHEL entry: $line_entry"
+    # check for nm lease 
+    if [[ ! -d "$NM_RUNTIME_DATA" ]]; then
+        display_msg "Notice: $NM_RUNTIME_DATA does not exist."
+    else
         local LEASE_MATCHES=$(grep -El "ADDRESS=$FOUND_IP$" "$NM_RUNTIME_DATA"/*.lease)
         if [[ -z "$LEASE_MATCHES" ]]; then
             display_msg "Notice: No NM leases found for $FOUND_IP"
-            continue
-        fi
-
-        # Logic to find the most recent lease based on UUID/Timestamp
-        local IF_NAME=$(for L_FILE in $LEASE_MATCHES; do
-            display_msg "Analyzing lease: $L_FILE"
-            # Format: ...-UUID-INTERFACE.lease
-            local PARTS=$(echo "$L_FILE" | sed -n 's|^.*-\([0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}\)-\(.*\)\.lease$|\1 \2|p')
-            if [[ -n "$PARTS" ]]; then
-                local UUID_STR=$(echo "$PARTS" | cut -d' ' -f1)
-                local INT_STR=$(echo "$PARTS" | cut -d' ' -f2)
-                local T_STAMP=$(fetch_uuid_time_marker "$UUID_STR")
-                
-                if [[ -n "$T_STAMP" ]]; then
-                    echo "$T_STAMP $INT_STR"
-                else
-                    echo "0 $INT_STR"
+        else
+            # Logic to find the most recent lease based on UUID/Timestamp
+            local IF_NAME=$(for L_FILE in $LEASE_MATCHES; do
+                display_msg "Analyzing lease: $L_FILE"
+                # Format: ...-UUID-INTERFACE.lease
+                local PARTS=$(echo "$L_FILE" | sed -n 's|^.*-\([0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}\)-\(.*\)\.lease$|\1 \2|p')
+                if [[ -n "$PARTS" ]]; then
+                    local UUID_STR=$(echo "$PARTS" | cut -d' ' -f1)
+                    local INT_STR=$(echo "$PARTS" | cut -d' ' -f2)
+                    local T_STAMP=$(fetch_uuid_time_marker "$UUID_STR")
+                    
+                    if [[ -n "$T_STAMP" ]]; then
+                        echo "$T_STAMP $INT_STR"
+                    else
+                        echo "0 $INT_STR"
+                    fi
                 fi
+            done | sort -nr | head -1 | cut -d' ' -f2)
+
+            if [[ -z "$IF_NAME" ]]; then
+                display_msg "Notice: No interface name found for MAC $FOUND_MAC"
+            else
+                found=1
+                local LINK_FILE=""
+                if [[ -d "$SYS_LINK" ]]; then
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                    display_msg "creating sys link"
+                elif [[ -d "$USR_SYS_LINK" ]]; then
+                    display_msg "creating usr sys link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                fi
+                if [[ -n "$LINK_FILE" ]]; then
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
+
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
+                echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
             fi
-        done | sort -nr | head -1 | cut -d' ' -f2)
-
-        if [[ -z "$IF_NAME" ]]; then
-            continue
         fi
+    fi
+    # NETWORK MANAGER
+    if [[ ! -d "$NM_CONN_PATH" ]]; then
+        display_msg "Notice: NetworkManager path $NM_CONN_PATH not found."
+    else
+        # Search connection files for the matching IP address
+        local NM_SPECIFIC_FILE=$(grep -El "address[0-9]*=.*$FOUND_IP.*$" "$NM_CONN_PATH"/*)
+        if [[ -z "$NM_SPECIFIC_FILE" ]]; then
+            display_msg "Notice: No NM profile found for $FOUND_IP."
+        else
+            local IF_NAME=$(grep '^interface-name=' "$NM_SPECIFIC_FILE" | cut -d'=' -f2)
+            if [[ -z "$IF_NAME" ]]; then
+                display_msg "Notice: Missing interface-name entry for $FOUND_IP."
+            else
+                found=1
+                local LINK_FILE=""
+                if [[ -d "$SYS_LINK" ]]; then
+                    display_msg "creating sys link"
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                elif [[ -d "$USR_SYS_LINK" ]]; then
+                    display_msg "creating usr sys link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                fi
+                if [[ -n "$LINK_FILE" ]]; then
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
 
-        echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
-    done < "$NET_MAPPING_DATA"
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
+                echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
+            fi
+        fi
+    fi
+    # IFCFG 
+    if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
+        # Locate script matching the IP
+        local CFG_FILE=$(grep -l "IPADDR=.*$FOUND_IP" "$TARGET_DIR"/ifcfg-* 2>/dev/null)
+        
+        if [[ -z "$CFG_FILE" ]]; then
+            display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
+        else 
+            local IF_NAME=$(resolve_device_via_ifcfg "$CFG_FILE" "$FOUND_MAC")
+            if [[ -z "$IF_NAME" ]]; then
+                # Suse fallback: parse name from the file string itself
+                IF_NAME=$(basename "$CFG_FILE" | sed 's/^ifcfg-//')
+            fi
+
+            if [[ -z "$IF_NAME" || "$IF_NAME" == "lo" ]]; then
+                display_msg "Notice: Could not determine valid interface for $CFG_FILE"
+            else 
+                found=1
+                local LINK_FILE=""
+                if [[ -d "$SYS_LINK" ]]; then
+                    display_msg "creating sys link"
+                    LINK_FILE="$SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                elif [[ -d "$USR_SYS_LINK" ]]; then
+                    display_msg "creating usr sys link"
+                    LINK_FILE="$USR_SYS_LINK/${VJB_INDEX}-${IF_NAME}.link"
+                fi
+                if [[ -n "$LINK_FILE" ]]; then
+                    {
+                        echo "[Match]"
+                        echo "MACAddress=$(clean_string_input "$FOUND_MAC")"
+                        echo ""
+                        echo "[Link]"
+                        echo "Name=$(clean_string_input "$IF_NAME")"
+                    } > "$LINK_FILE"
+
+                    VJB_INDEX=$((VJB_INDEX + 1))
+                fi
+                echo "SUBSYSTEM==\"net\",ACTION==\"add\",ATTR{address}==\"$(clean_string_input "$FOUND_MAC")\",NAME=\"$(clean_string_input "$IF_NAME")\""
+            fi
+        fi
+    fi
+  if [[ $found -eq 0 ]]; then
+    display_msg "Notice: No matching interface found for MAC $FOUND_MAC in the mapping files. Injecting own configuration"
+    # IFCFG
+                if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
+                        display_msg "Notice: No existing config for $FOUND_IP. Generating fallback."
+                        
+                        # Create a virtual bridge/dhcp interface if none exists
+                        {
+                            echo "TYPE=Ethernet"
+                            echo "BOOTPROTO=dhcp"
+                            echo "NAME=vjb$VJB_INDEX"                
+                            echo "DEVICE=vjb$VJB_INDEX"                
+                            echo "ONBOOT=yes"
+                            echo "HWADDR=$FOUND_MAC"
+                            echo "PEERDNS=yes"                 
+                            echo "PEERROUTES=yes"              
+                            echo "DHCP_HOSTNAME=myhost" 
+                        } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
+                        VJB_INDEX=$((VJB_INDEX+1))
+                elif [[ -d "$NM_CONN_PATH" ]]; then
+                    display_msg "NM System Connection Path found Generating vjb interface"
+                    {
+                        echo "[connection]"
+                        echo "id=vjb$VJB_INDEX"
+                        echo "type=ethernet"
+                        echo "interface-name=vjb$VJB_INDEX"
+                        echo "mac-address=$FOUND_MAC"
+                        echo "[ipv4]"
+                        echo "method=auto"
+                    } > "$NM_CONN_PATH/vjb$VJB_INDEX.nmconnection"
+                else 
+                    display_msg "Notice: No valid interface configuration path found. Skipping vjb interface generation."
+                fi
+  fi
+  done
 }
-
 # Processes traditional dhclient lease files by parsing block syntax
 process_dhclient_history() {
     if [[ ! -d "$DHCP_LEASE_PATH" ]]; then
@@ -487,7 +537,7 @@ process_ifquery_infrastructure() {
             echo ""
             echo "auto vjb$ID_INDEX"
             echo "allow-hotplug vjb$ID_INDEX"
-            echo "iface vjb$ID_INDEX inet manual"
+            echo "iface vjb$ID_INDEX inet dhcp"
             echo ""
             } >> "$DEBIAN_IF_DIR"
             ID_INDEX=$((ID_INDEX + 1))
@@ -503,24 +553,42 @@ process_ifquery_infrastructure() {
 }
 # Filters out any duplicate hardware addresses before writing
 validate_hardware_uniqueness() {
-    local RAW_CONTENT=$(cat)
-    # Isolate MACs, standardize casing, and look for repeats
-    local DUPLICATE_LIST=$(echo "$RAW_CONTENT" | grep -ioE "[0-9A-F:]{17}" | tr 'a-f' 'A-F' | sort | uniq -d)
+    local RAW_CONTENT
+    RAW_CONTENT=$(cat)
 
-    if [[ -n "$DUPLICATE_LIST" ]]; then
-        display_msg "Warning: Detected redundant MAC addresses: $DUPLICATE_LIST"
-        return 0
-    fi
+    echo "$RAW_CONTENT" | awk '
+    BEGIN { IGNORECASE=1 }
+    {
+        mac = ""
+        if (match($0, /[0-9A-F:]{17}/)) {
+            mac = toupper(substr($0, RSTART, RLENGTH))
+        }
 
-    echo "$RAW_CONTENT"
+        if (mac != "") {
+            line[NR] = $0
+            last_seen[mac] = NR
+            mac_for_line[NR] = mac
+        } else {
+            line[NR] = $0
+        }
+    }
+    END {
+        for (i = 1; i <= NR; i++) {
+            if (mac_for_line[i] != "") {
+                if (last_seen[mac_for_line[i]] == i)
+                    print line[i]
+            } else {
+                print line[i]
+            }
+        }
+    }'
 }
+
 
 # Orchestrates the discovery modules and finalizes udev rules
 execute_main_workflow() {
     {
-        process_ifcfg_infrastructure
-        process_network_manager_files
-        process_nm_leases
+        process_rhel
         process_dhclient_history
         process_netplan_logic
         process_ifquery_infrastructure

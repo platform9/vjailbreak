@@ -44,7 +44,7 @@ export default function GettingStartedDialog({
   const credsStep = {
     key: 'creds' as const,
     title: 'Add credentials',
-    body: 'Add PCD and VMware credentials from the Credentials page.',
+    body: 'Add your VMware credentials first, then add your PCD credentials from the PCD Credentials page.',
     action: (
       <Button variant="contained" onClick={goToCredentials}>
         Go to Credentials

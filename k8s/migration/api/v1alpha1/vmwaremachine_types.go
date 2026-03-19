@@ -44,8 +44,6 @@ func (g GPUInfo) TotalCount() int {
 type VMInfo struct {
 	// Name is the name of the virtual machine
 	Name string `json:"name"`
-	// VMID is the vCenter Managed Object ID (MOID) of the virtual machine
-	VMID string `json:"vmid,omitempty"`
 	// Datastores is the list of datastores for the virtual machine
 	Datastores []string `json:"datastores,omitempty"`
 	// Disks is the list of disks for the virtual machine
@@ -88,10 +86,10 @@ type Disk struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network   string `json:"network,omitempty" `
-	MAC       string `json:"mac,omitempty"`
-	Index     int    `json:"order,omitempty"`
-	IPAddress string `json:"ipAddress,omitempty"`
+	Network   string   `json:"network,omitempty" `
+	MAC       string   `json:"mac,omitempty"`
+	Index     int      `json:"order,omitempty"`
+	IPAddress []string `json:"ipAddress,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.

@@ -42,6 +42,7 @@ import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
 import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
+import axios from 'axios'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
 
@@ -49,7 +50,7 @@ const StyledPaper = styled(Box)(({ theme }) => ({
   width: '100%',
   height: '100%',
   minHeight: 0,
-  padding: theme.spacing(4),
+  padding: theme.spacing(2),
   boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column'
@@ -269,8 +270,8 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
   },
   {
     key: 'POPULATE_VMWARE_MACHINE_FLAVORS',
-    label: 'Populate VMware Machine Flavors',
-    description: 'Sync VMware flavor data to pre-fill CPU, memory, and disk sizing hints.'
+    label: 'Pre-calculate Target VM Flavors',
+    description: 'Pre-calculate Target VM Flavor instead of runtime (resource intensive operation).'
   },
   {
     key: 'VALIDATE_RDM_OWNER_VMS',
@@ -766,7 +767,6 @@ export default function GlobalSettingsPage() {
     tabHasError,
     handleTabChange,
     onResetDefaults,
-    onCancel,
     onSave,
     handleNotificationClose
   } = useGlobalSettingsController()
@@ -803,6 +803,8 @@ export default function GlobalSettingsPage() {
   const vddkMessageRef = useRef('')
   const [vddkExtractedPath, setVddkExtractedPath] = useState('')
 
+  const vddkUploadAbortControllerRef = useRef<AbortController | null>(null)
+
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const existingVddkPath = vddkStatusQuery.data?.uploaded ? vddkStatusQuery.data?.path || '' : ''
   const existingVddkVersion = vddkStatusQuery.data?.version || ''
@@ -832,6 +834,8 @@ export default function GlobalSettingsPage() {
   }, [])
 
   const handleVddkClear = useCallback(() => {
+    vddkUploadAbortControllerRef.current?.abort()
+    vddkUploadAbortControllerRef.current = null
     setVddkFile(null)
     setVddkStatus('idle')
     setVddkProgress(0)
@@ -840,6 +844,13 @@ export default function GlobalSettingsPage() {
     vddkMessageRef.current = ''
     setVddkExtractedPath('')
   }, [])
+
+  const cancelVddkUpload = useCallback(() => {
+    if (vddkStatusRef.current !== 'uploading') return
+    vddkUploadAbortControllerRef.current?.abort()
+    vddkUploadAbortControllerRef.current = null
+    handleVddkClear()
+  }, [handleVddkClear])
 
   const handleSave = useCallback(
     async (e: React.FormEvent) => {
@@ -862,7 +873,11 @@ export default function GlobalSettingsPage() {
           setVddkMessage('Uploading VDDK file...')
           vddkMessageRef.current = 'Uploading VDDK file...'
 
+          const abortController = new AbortController()
+          vddkUploadAbortControllerRef.current = abortController
+
           const response = await uploadVddkFile(vddkFile, {
+            signal: abortController.signal,
             onProgress: (next) => {
               vddkProgressRef.current = next
               if (activeTabRef.current === 'vddk') {
@@ -870,6 +885,8 @@ export default function GlobalSettingsPage() {
               }
             }
           })
+
+          vddkUploadAbortControllerRef.current = null
 
           setVddkExtractedPath(response.extracted_path || '')
           localStorage.setItem(VDDK_UPLOADED_KEY, 'true')
@@ -894,6 +911,17 @@ export default function GlobalSettingsPage() {
             vddkMessageRef.current = nextMessage
           }
         } catch (err) {
+          vddkUploadAbortControllerRef.current = null
+
+          if (axios.isAxiosError(err) && err.code === 'ERR_CANCELED') {
+            setVddkStatus('idle')
+            setVddkProgress(0)
+            vddkProgressRef.current = 0
+            setVddkMessage('Upload cancelled.')
+            vddkMessageRef.current = 'Upload cancelled.'
+            return
+          }
+
           setVddkStatus('error')
           const nextMessage = err instanceof Error ? err.message : 'Upload failed'
           setVddkMessage(nextMessage)
@@ -908,6 +936,13 @@ export default function GlobalSettingsPage() {
     },
     [onSave, validateVddkFile, vddkFile, vddkStatus]
   )
+
+  useEffect(() => {
+    return () => {
+      vddkUploadAbortControllerRef.current?.abort()
+      vddkUploadAbortControllerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (activeTab !== 'vddk') return
@@ -1355,6 +1390,7 @@ export default function GlobalSettingsPage() {
               existingVddkVersion={existingVddkVersion}
               onFileSelected={handleVddkFileSelected}
               onClear={handleVddkClear}
+              onCancelUpload={cancelVddkUpload}
             />
           </TabPanel>
 
@@ -1369,9 +1405,6 @@ export default function GlobalSettingsPage() {
               data-testid="global-settings-reset-defaults"
             >
               Reset to Defaults
-            </Button>
-            <Button variant="outlined" onClick={onCancel} data-testid="global-settings-cancel">
-              Cancel
             </Button>
             <Button
               variant="contained"

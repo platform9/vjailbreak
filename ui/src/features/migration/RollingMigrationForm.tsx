@@ -1,21 +1,25 @@
 import {
   Box,
-  Typography,
-  styled,
+  Button,
+  CircularProgress,
+  Dialog,
   Paper,
   Tooltip,
-  Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
   Select,
   MenuItem,
+  TextField,
   GlobalStyles,
   FormLabel,
+  Switch,
   Snackbar,
+  InputAdornment,
   useMediaQuery,
-  Divider
+  Divider,
+  Typography
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
@@ -75,7 +79,6 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
-import { TextField, CircularProgress } from '@mui/material'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -85,7 +88,7 @@ import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 import { DrawerShell, DrawerHeader, DrawerFooter, SectionNav, SurfaceCard } from 'src/components'
 import type { SectionNavItem } from 'src/components'
-import { useTheme } from '@mui/material/styles'
+import { styled, useTheme } from '@mui/material/styles'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
 
 // Define types for MigrationOptions
@@ -97,6 +100,11 @@ interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   osFamily?: string
+  useGPU?: boolean
+  useFlavorless?: boolean
+  disconnectSourceNetwork?: boolean
+  fallbackToDHCP?: boolean
+  networkPersistence?: boolean
   storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
 }
 
@@ -116,6 +124,8 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   osFamily: boolean
+  useGPU?: boolean
+  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -133,6 +143,8 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   cutoverEndTime: false,
   postMigrationScript: false,
   osFamily: false,
+  useGPU: false,
+  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -165,6 +177,7 @@ interface ESXHost {
   vms: number
   state: string
   pcdHostConfigName?: string
+  pcdHostConfigId?: string
 }
 
 interface VM {
@@ -183,12 +196,14 @@ interface VM {
   ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
   ipValidationMessage?: string
   networkInterfaces?: VmNetworkInterface[]
+  preserveIp?: Record<number, boolean>
+  preserveMac?: Record<number, boolean>
 }
 
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
 }
 
 // ESX columns will be defined inside the component
@@ -399,6 +414,11 @@ export default function RollingMigrationFormDrawer({
   // Bulk IP editing state - updated for multiple interfaces
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
   const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
+  const [bulkPreserveIp, setBulkPreserveIp] = useState<Record<string, Record<number, boolean>>>({})
+  const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
+    {}
+  )
+  const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
   const [bulkValidationStatus, setBulkValidationStatus] = useState<
     Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
   >({})
@@ -413,10 +433,17 @@ export default function RollingMigrationFormDrawer({
   }, [bulkValidationStatus])
 
   const hasBulkIpsToApply = useMemo(() => {
-    return Object.values(bulkEditIPs).some((interfaces) =>
+    const anyTypedIp = Object.values(bulkEditIPs).some((interfaces) =>
       Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
     )
-  }, [bulkEditIPs])
+    const anyPreserveIpOff = Object.values(bulkPreserveIp).some((interfaces) =>
+      Object.values(interfaces || {}).some((flag) => flag === false)
+    )
+    const anyPreserveMacOff = Object.values(bulkPreserveMac).some((interfaces) =>
+      Object.values(interfaces || {}).some((flag) => flag === false)
+    )
+    return anyTypedIp || anyPreserveIpOff || anyPreserveMacOff
+  }, [bulkEditIPs, bulkPreserveIp, bulkPreserveMac])
 
   // Flavor assignment state
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
@@ -609,8 +636,9 @@ export default function RollingMigrationFormDrawer({
         ip: '',
         bmcIp: '',
         maasState: 'Unknown',
-        vms: 0,
-        state: 'Active'
+        vms: host.status?.vmCount || 0,
+        state: host.status?.state || 'Active',
+        pcdHostConfigId: host.spec.hostConfigId
       }))
 
       setOrderedESXHosts(mappedHosts)
@@ -662,7 +690,7 @@ export default function RollingMigrationFormDrawer({
         const allIPs =
           vm.spec.vms.networkInterfaces && vm.spec.vms.networkInterfaces.length > 0
             ? vm.spec.vms.networkInterfaces
-                .map((nic) => nic.ipAddress)
+                .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
                 .filter((ip) => ip && ip.trim() !== '') // Filter out empty/null IPs
                 .join(', ')
             : vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || '—'
@@ -768,10 +796,33 @@ export default function RollingMigrationFormDrawer({
   }
 
   // IP validation and editing functions
-  const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-    return ipRegex.test(ip)
+  const IPV4_MATCH_REGEX =
+    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
+  const IPV4_FULL_REGEX =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+  const extractFirstIPv4 = (value: string): string => {
+    if (!value) return ''
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return matches?.[0] || ''
+  }
+
+  const hasMultipleIPv4 = (value: string): boolean => {
+    if (!value) return false
+    const matches = value.match(IPV4_MATCH_REGEX)
+    return (matches?.length || 0) > 1
+  }
+
+  const parseIpList = (value: string): string[] => {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
+  }
+
+  const isValidIPAddressList = (value: string): boolean => {
+    const ips = parseIpList(value)
+    if (ips.length === 0) return false
+    return ips.every((ip) => IPV4_FULL_REGEX.test(ip))
   }
 
   // Modal functions for multi-NIC IP editing removed - using bulk assignment instead
@@ -864,6 +915,36 @@ export default function RollingMigrationFormDrawer({
       )
     },
     {
+      field: 'vms',
+      headerName: 'VM Count',
+      flex: 0.5,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <Typography variant="body2">{params.value}</Typography>
+        </Box>
+      )
+    },
+    {
+      field: 'state',
+      headerName: 'State',
+      flex: 0.8,
+      renderCell: (params) => {
+        const state = params.value || 'Unknown'
+        let color = 'text.secondary'
+        if (state === 'connected') color = 'success.main'
+        if (state === 'disconnected' || state === 'notResponding') color = 'error.main'
+        if (state === 'maintenance') color = 'warning.main'
+
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Typography variant="body2" sx={{ color, textTransform: 'capitalize' }}>
+              {state}
+            </Typography>
+          </Box>
+        )
+      }
+    },
+    {
       field: 'pcdHostConfigName',
       headerName: 'Host Config',
       flex: 1,
@@ -943,7 +1024,7 @@ export default function RollingMigrationFormDrawer({
     if (!openstackCredData) return []
 
     const networks = openstackCredData?.status?.openstack?.networks || []
-    return networks.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    return networks.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }, [openstackCredData])
 
   const openstackVolumeTypes = useMemo(() => {
@@ -982,6 +1063,46 @@ export default function RollingMigrationFormDrawer({
       }
     }
   }, [openstackFlavors, vmsWithAssignments])
+
+  // Update ESXi host config names when OpenStack host configs become available
+  useEffect(() => {
+    const pcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
+    if (pcdHostConfigs.length === 0) return
+
+    if (orderedESXHosts.length === 0) return
+
+    const needsUpdate = orderedESXHosts.some((host) => {
+      if (!host.pcdHostConfigId) return false
+      const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
+      if (!configObj) return false
+      return host.pcdHostConfigName !== configObj.name
+    })
+
+    if (!needsUpdate) return
+
+    setOrderedESXHosts((prevHosts) => {
+      if (prevHosts.length === 0) return prevHosts
+
+      const updatedHosts = prevHosts.map((host) => {
+        if (!host.pcdHostConfigId) return host
+
+        const configObj = pcdHostConfigs.find((c) => c.id === host.pcdHostConfigId)
+        if (!configObj) return host
+
+        if (host.pcdHostConfigName !== configObj.name) {
+          return { ...host, pcdHostConfigName: configObj.name }
+        }
+
+        return host
+      })
+
+      const hasChanges = updatedHosts.some(
+        (host, index) => host.pcdHostConfigName !== prevHosts[index]?.pcdHostConfigName
+      )
+
+      return hasChanges ? updatedHosts : prevHosts
+    })
+  }, [openstackCredData, orderedESXHosts])
 
   const handleMappingsChange = (key: string) => (value: unknown) => {
     markTouched('mapResources')
@@ -1144,6 +1265,34 @@ export default function RollingMigrationFormDrawer({
           vmName: vm.name
         })) as VMSequence[]
 
+      const networkOverridesPerVM: Record<
+        string,
+        Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+      > = {}
+      vmsWithAssignments
+        .filter((vm) => selectedVMs.includes(vm.id))
+        .forEach((vm) => {
+          const preserveIp = vm.preserveIp || {}
+          const preserveMac = vm.preserveMac || {}
+
+          const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+
+          if (indices.size === 0) return
+
+          networkOverridesPerVM[vm.name] = Array.from(indices)
+            .map((indexStr) => {
+              const interfaceIndex = Number(indexStr)
+              const ipFlag = preserveIp[interfaceIndex]
+              const macFlag = preserveMac[interfaceIndex]
+              return {
+                interfaceIndex,
+                preserveIP: ipFlag !== false,
+                preserveMAC: macFlag !== false
+              }
+            })
+            .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
+        })
+
       // Create cluster mapping between VMware cluster and PCD cluster
       const selectedPCD = pcdData.find((p) => p.id === destinationPCD)
       const pcdClusterName = selectedPCD?.name || ''
@@ -1256,6 +1405,7 @@ export default function RollingMigrationFormDrawer({
         bmConfigRef: {
           name: selectedMaasConfig?.metadata.name || ''
         },
+        ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
         migrationStrategy: {
           adminInitiatedCutOver:
             selectedMigrationOptions.cutoverOption &&
@@ -1390,14 +1540,20 @@ export default function RollingMigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
 
     const dataCopyMethodOk =
       !selectedMigrationOptions.dataCopyMethod || Boolean(params.dataCopyMethod)
 
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
-      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
 
     const cutoverOk = !selectedMigrationOptions.cutoverOption
       ? true
@@ -1416,6 +1572,10 @@ export default function RollingMigrationFormDrawer({
       (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
+      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
 
     const postMigrationActionOk = !postMigrationActionSelected
       ? true
@@ -1437,6 +1597,7 @@ export default function RollingMigrationFormDrawer({
         cutoverOk &&
         postMigrationScriptOk &&
         osFamilyOk &&
+        pcdOptionsOk &&
         postMigrationActionOk)
 
     // PCD host config validation - not needed anymore since validation is handled by esxHostConfigValid
@@ -1629,6 +1790,8 @@ export default function RollingMigrationFormDrawer({
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
+      Boolean(selectedMigrationOptions.useGPU) ||
+      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
     )
   }, [selectedMigrationOptions])
@@ -1636,9 +1799,13 @@ export default function RollingMigrationFormDrawer({
   const areSelectedMigrationOptionsConfigured = useMemo(() => {
     if (!hasAnyMigrationOptionSelected) return false
 
+    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
-      (Boolean(params.dataCopyStartTime) && !fieldErrors['dataCopyStartTime'])
+      (Boolean(dataCopyStartTimeValue) &&
+        dataCopyStartTimeValue !== 'undefined' &&
+        dataCopyStartTimeValue !== 'null' &&
+        !fieldErrors['dataCopyStartTime'])
 
     const cutoverOk = !selectedMigrationOptions.cutoverOption
       ? true
@@ -1657,6 +1824,10 @@ export default function RollingMigrationFormDrawer({
       (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
+
+    const pcdOptionsOk =
+      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
+      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -1683,6 +1854,7 @@ export default function RollingMigrationFormDrawer({
       cutoverOk &&
       postMigrationScriptOk &&
       osFamilyOk &&
+      pcdOptionsOk &&
       postMigrationActionOk
     )
   }, [
@@ -1694,6 +1866,8 @@ export default function RollingMigrationFormDrawer({
     params.cutoverEndTime,
     params.postMigrationScript,
     params.osFamily,
+    params.useGPU,
+    params.useFlavorless,
     params,
     fieldErrors
   ])
@@ -1765,7 +1939,14 @@ export default function RollingMigrationFormDrawer({
         description: 'Scheduling and advanced behavior',
         status: step6HasErrors
           ? 'attention'
-          : touchedSections.options && areSelectedMigrationOptionsConfigured && !step6HasErrors
+          : touchedSections.options &&
+              (areSelectedMigrationOptionsConfigured ||
+                Boolean(
+                  params.disconnectSourceNetwork ||
+                    params.fallbackToDHCP ||
+                    params.networkPersistence
+                )) &&
+              !step6HasErrors
             ? 'complete'
             : 'incomplete'
       }
@@ -1798,7 +1979,10 @@ export default function RollingMigrationFormDrawer({
       step6HasErrors,
       hasAnyMigrationOptionSelected,
       areSelectedMigrationOptionsConfigured,
-      touchedSections
+      touchedSections,
+      params.disconnectSourceNetwork,
+      params.fallbackToDHCP,
+      params.networkPersistence
     ]
   )
 
@@ -1965,13 +2149,17 @@ export default function RollingMigrationFormDrawer({
                 display: 'flex',
                 alignItems: 'center',
                 width: '100%',
-                height: '100%'
+                height: '100%',
+                gap: 1,
+                minWidth: 0
               }}
             >
               <Typography
                 variant="body2"
                 sx={{
                   fontSize: '0.875rem',
+                  flex: 1,
+                  minWidth: 0,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
@@ -2006,7 +2194,18 @@ export default function RollingMigrationFormDrawer({
                   height: '100%'
                 }}
               >
-                <Typography variant="body2">{currentIp}</Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {currentIp}
+                </Typography>
               </Box>
             </Tooltip>
           )
@@ -2234,8 +2433,64 @@ export default function RollingMigrationFormDrawer({
   const handleCloseBulkEditDialog = () => {
     setBulkEditDialogOpen(false)
     setBulkEditIPs({})
+    setBulkPreserveIp({})
+    setBulkPreserveMac({})
+    setBulkExistingIPs({})
     setBulkValidationStatus({})
     setBulkValidationMessages({})
+  }
+
+  const handleBulkPreserveIpChange = (vmId: string, interfaceIndex: number, value: boolean) => {
+    setBulkPreserveIp((prev) => ({
+      ...prev,
+      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
+    }))
+
+    if (value) {
+      const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+      if (existingIp.trim() !== '') {
+        setBulkEditIPs((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: existingIp }
+        }))
+        setBulkValidationStatus((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: 'valid' }
+        }))
+        setBulkValidationMessages((prev) => ({
+          ...prev,
+          [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+        }))
+      }
+    }
+
+    if (!value) {
+      // Preserve IP disabled: keep the current value so the user can edit/override it.
+      const current = bulkEditIPs?.[vmId]?.[interfaceIndex] ?? ''
+      const trimmed = current.trim()
+
+      const { status, message } = !trimmed
+        ? { status: 'empty' as const, message: '' }
+        : !isValidIPAddressList(trimmed)
+          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
+          : ({ status: 'valid' as const, message: '' } as const)
+
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: status }
+      }))
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: message }
+      }))
+    }
+  }
+
+  const handleBulkPreserveMacChange = (vmId: string, interfaceIndex: number, value: boolean) => {
+    setBulkPreserveMac((prev) => ({
+      ...prev,
+      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
+    }))
   }
 
   const handleBulkIpChange = (vmId: string, interfaceIndex: number, value: string) => {
@@ -2253,7 +2508,7 @@ export default function RollingMigrationFormDrawer({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
       }))
-    } else if (!isValidIPAddress(value.trim())) {
+    } else if (!isValidIPAddressList(value.trim())) {
       setBulkValidationStatus((prev) => ({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
@@ -2297,30 +2552,133 @@ export default function RollingMigrationFormDrawer({
     setBulkValidationMessages({})
   }
 
+  const renderValidationAdornment = (status?: 'empty' | 'valid' | 'invalid' | 'validating') => {
+    if (!status || status === 'empty') return null
+
+    if (status === 'validating') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <CircularProgress size={16} />
+        </InputAdornment>
+      )
+    }
+
+    if (status === 'valid') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <CheckCircleIcon color="success" fontSize="small" />
+        </InputAdornment>
+      )
+    }
+
+    if (status === 'invalid') {
+      return (
+        <InputAdornment position="end" sx={{ alignItems: 'center' }}>
+          <ErrorIcon color="error" fontSize="small" />
+        </InputAdornment>
+      )
+    }
+
+    return null
+  }
+
   const handleApplyBulkIPs = async () => {
     // Collect all IPs to apply with their VM and interface info
     const ipsToApply: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
+    const clearIpsToApply: Array<{ vmId: string; interfaceIndex: number }> = []
 
+    let missingRequiredIp = false
     Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
       Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        if (ip.trim() !== '') {
-          ipsToApply.push({
-            vmId,
-            interfaceIndex: parseInt(interfaceIndexStr),
-            ip: ip.trim()
-          })
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+
+        if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
+          missingRequiredIp = true
+          setBulkValidationStatus((prev) => ({
+            ...prev,
+            [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
+          }))
+          setBulkValidationMessages((prev) => ({
+            ...prev,
+            [vmId]: {
+              ...prev[vmId],
+              [interfaceIndex]: 'IP is required when Preserve IP is enabled'
+            }
+          }))
         }
       })
     })
 
-    if (ipsToApply.length === 0) return
+    if (missingRequiredIp) {
+      return
+    }
+
+    Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
+      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
+        const interfaceIndex = parseInt(interfaceIndexStr)
+        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+        const typedIp = ip.trim()
+
+        // When Preserve IP is disabled, allow clearing the IP (empty value)
+        if (!preserveIp && typedIp === '') {
+          if (existingIp.trim() !== '') {
+            clearIpsToApply.push({ vmId, interfaceIndex })
+          }
+          return
+        }
+
+        if (typedIp === '') return
+
+        // If Preserve IP is enabled and an existing IP is present, we keep it as-is.
+        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
+          return
+        }
+
+        ipsToApply.push({
+          vmId,
+          interfaceIndex,
+          ip: typedIp
+        })
+      })
+    })
+
+    if (ipsToApply.length === 0 && clearIpsToApply.length === 0) {
+      const updatedVMs = vmsWithAssignments.map((vm) => {
+        const preserveIp = bulkPreserveIp[vm.id]
+        const preserveMac = bulkPreserveMac[vm.id]
+        if (!preserveIp && !preserveMac) return vm
+        return {
+          ...vm,
+          ...(preserveIp && { preserveIp }),
+          ...(preserveMac && { preserveMac })
+        }
+      })
+      setVmsWithAssignments(updatedVMs)
+      handleCloseBulkEditDialog()
+      return
+    }
 
     setAssigningIPs(true)
 
     try {
       // Batch validation before applying any changes
       if (openstackCredData) {
-        const ipList = ipsToApply.map((item) => item.ip)
+        const flattenedIps: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
+        ipsToApply.forEach((item) => {
+          const parsed = parseIpList(item.ip)
+          if (parsed.length === 0) {
+            flattenedIps.push({ ...item, ip: '' })
+            return
+          }
+          parsed.forEach((ip) =>
+            flattenedIps.push({ vmId: item.vmId, interfaceIndex: item.interfaceIndex, ip })
+          )
+        })
+
+        const ipList = flattenedIps.map((item) => item.ip)
 
         // Set validating status for all IPs
         setBulkValidationStatus((prev) => {
@@ -2332,23 +2690,39 @@ export default function RollingMigrationFormDrawer({
           return newStatus
         })
 
-        const validationResult = await validateOpenstackIPs({
-          ip: ipList,
-          accessInfo: {
-            secret_name: `${openstackCredData.metadata.name}-openstack-secret`,
-            secret_namespace: openstackCredData.metadata.namespace
-          }
-        })
+        const validationResult =
+          ipList.length > 0
+            ? await validateOpenstackIPs({
+                ip: ipList,
+                accessInfo: {
+                  secret_name: `${openstackCredData.metadata.name}-openstack-secret`,
+                  secret_namespace: openstackCredData.metadata.namespace
+                }
+              })
+            : { isValid: [], reason: [] }
 
         // Process validation results
         const validIPs: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
         let hasInvalidIPs = false
 
-        ipsToApply.forEach((item, index) => {
+        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
+        flattenedIps.forEach((flatItem, index) => {
+          const key = `${flatItem.vmId}__${flatItem.interfaceIndex}`
           const isValid = validationResult.isValid[index]
           const reason = validationResult.reason[index]
+          const current = byInterfaceKey.get(key)
+          if (!current) {
+            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
+          } else if (current.ok && !isValid) {
+            byInterfaceKey.set(key, { ok: false, reason })
+          }
+        })
 
-          if (isValid) {
+        ipsToApply.forEach((item) => {
+          const key = `${item.vmId}__${item.interfaceIndex}`
+          const result = byInterfaceKey.get(key)
+          const ok = result?.ok !== false
+          if (ok) {
             validIPs.push(item)
             setBulkValidationStatus((prev) => ({
               ...prev,
@@ -2366,7 +2740,10 @@ export default function RollingMigrationFormDrawer({
             }))
             setBulkValidationMessages((prev) => ({
               ...prev,
-              [item.vmId]: { ...prev[item.vmId], [item.interfaceIndex]: reason }
+              [item.vmId]: {
+                ...prev[item.vmId],
+                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
+              }
             }))
           }
         })
@@ -2377,7 +2754,6 @@ export default function RollingMigrationFormDrawer({
           return
         }
 
-        // Apply the valid IPs to VMs
         const updatePromises = validIPs.map(async ({ vmId, interfaceIndex, ip }) => {
           try {
             const vm = vmsWithAssignments.find((v) => v.id === vmId)
@@ -2388,11 +2764,11 @@ export default function RollingMigrationFormDrawer({
               const updatedInterfaces = [...vm.networkInterfaces]
               updatedInterfaces[interfaceIndex] = {
                 ...updatedInterfaces[interfaceIndex],
-                ipAddress: ip
+                ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
               }
 
               await patchVMwareMachine(
-                vmId,
+                vm.id,
                 {
                   spec: {
                     vms: {
@@ -2434,7 +2810,63 @@ export default function RollingMigrationFormDrawer({
           }
         })
 
-        const results = await Promise.all(updatePromises)
+        const clearPromises = clearIpsToApply.map(async ({ vmId, interfaceIndex }) => {
+          try {
+            const vm = vmsWithAssignments.find((v) => v.id === vmId)
+            if (!vm) throw new Error('VM not found')
+
+            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
+              const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
+              const parsedExisting = existingIp.trim() !== '' ? parseIpList(existingIp) : []
+              const updatedInterfaces = [...vm.networkInterfaces]
+              updatedInterfaces[interfaceIndex] = {
+                ...updatedInterfaces[interfaceIndex],
+                ipAddress: parsedExisting
+              }
+
+              await patchVMwareMachine(
+                vm.id,
+                {
+                  spec: {
+                    vms: {
+                      networkInterfaces: updatedInterfaces
+                    }
+                  }
+                },
+                VJAILBREAK_DEFAULT_NAMESPACE
+              )
+            } else {
+              await patchVMwareMachine(
+                vmId,
+                {
+                  spec: {
+                    vms: {
+                      assignedIp: ''
+                    }
+                  }
+                },
+                VJAILBREAK_DEFAULT_NAMESPACE
+              )
+            }
+
+            return { success: true, vmId, interfaceIndex }
+          } catch (error) {
+            setBulkValidationStatus((prev) => ({
+              ...prev,
+              [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
+            }))
+            setBulkValidationMessages((prev) => ({
+              ...prev,
+              [vmId]: {
+                ...prev[vmId],
+                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to clear IP'
+              }
+            }))
+            return { success: false, vmId, interfaceIndex, error }
+          }
+        })
+
+        const results = await Promise.all([...updatePromises, ...clearPromises])
 
         // Check if any updates failed
         const failedUpdates = results.filter((result) => !result.success)
@@ -2442,43 +2874,6 @@ export default function RollingMigrationFormDrawer({
           setAssigningIPs(false)
           return // Don't close modal if any updates failed
         }
-
-        // Update local VM state
-        const updatedVMs = vmsWithAssignments.map((vm) => {
-          const vmUpdates = validIPs.filter((item) => item.vmId === vm.id)
-          if (vmUpdates.length === 0) return vm
-
-          const updatedVM = { ...vm }
-
-          if (vm.networkInterfaces) {
-            const updatedInterfaces = [...vm.networkInterfaces]
-            vmUpdates.forEach(({ interfaceIndex, ip }) => {
-              if (updatedInterfaces[interfaceIndex]) {
-                updatedInterfaces[interfaceIndex] = {
-                  ...updatedInterfaces[interfaceIndex],
-                  ipAddress: ip
-                }
-              }
-            })
-            updatedVM.networkInterfaces = updatedInterfaces
-
-            // Recalculate comma-separated IP string
-            const allIPs = updatedInterfaces
-              .map((nic) => nic.ipAddress)
-              .filter((ip) => ip && ip.trim() !== '')
-              .join(', ')
-            updatedVM.ip = allIPs || '—'
-          } else {
-            // Fallback for single IP
-            const firstUpdate = vmUpdates[0]
-            if (firstUpdate) {
-              updatedVM.ip = firstUpdate.ip
-            }
-          }
-
-          return updatedVM
-        })
-        setVmsWithAssignments(updatedVMs)
 
         // Update bulk validation status
         const newBulkValidationStatus = { ...bulkValidationStatus }
@@ -2494,6 +2889,64 @@ export default function RollingMigrationFormDrawer({
 
         setBulkValidationStatus(newBulkValidationStatus)
         setBulkValidationMessages(newBulkValidationMessages)
+
+        // Update local VM state so the table immediately reflects Auto IP/Auto MAC chips
+        setVmsWithAssignments((prev) =>
+          prev.map((vm) => {
+            const preserveIp = bulkPreserveIp[vm.id]
+            const preserveMac = bulkPreserveMac[vm.id]
+            const vmUpdates = validIPs.filter((item) => item.vmId === vm.id)
+            const vmClears = clearIpsToApply.filter((item) => item.vmId === vm.id)
+
+            if (vmUpdates.length === 0 && vmClears.length === 0 && !preserveIp && !preserveMac) {
+              return vm
+            }
+
+            const updatedVM: any = {
+              ...vm,
+              ...(preserveIp && { preserveIp }),
+              ...(preserveMac && { preserveMac })
+            }
+
+            if (vm.networkInterfaces) {
+              const updatedInterfaces = [...vm.networkInterfaces]
+              vmUpdates.forEach(({ interfaceIndex, ip }) => {
+                if (updatedInterfaces[interfaceIndex]) {
+                  updatedInterfaces[interfaceIndex] = {
+                    ...updatedInterfaces[interfaceIndex],
+                    ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
+                  }
+                }
+              })
+              vmClears.forEach(({ interfaceIndex }) => {
+                if (updatedInterfaces[interfaceIndex]) {
+                  updatedInterfaces[interfaceIndex] = {
+                    ...updatedInterfaces[interfaceIndex],
+                    ipAddress: []
+                  }
+                }
+              })
+              updatedVM.networkInterfaces = updatedInterfaces
+
+              const allIPs = updatedInterfaces
+                .flatMap((nic: any) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
+                .filter((ip: string) => ip && ip.trim() !== '')
+                .join(', ')
+              updatedVM.ip = allIPs || '—'
+            } else {
+              const firstUpdate = vmUpdates[0]
+              if (firstUpdate) {
+                updatedVM.ip = firstUpdate.ip
+              }
+              const hasClear = vmClears.some((c) => c.interfaceIndex === 0)
+              if (hasClear) {
+                updatedVM.ip = '—'
+              }
+            }
+
+            return updatedVM
+          })
+        )
 
         handleCloseBulkEditDialog()
       }
@@ -2527,6 +2980,9 @@ export default function RollingMigrationFormDrawer({
 
     // Initialize bulk edit IPs for selected VMs
     const initialBulkEditIPs: Record<string, Record<number, string>> = {}
+    const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
+    const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
+    const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
     const initialValidationStatus: Record<
       string,
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
@@ -2534,25 +2990,43 @@ export default function RollingMigrationFormDrawer({
 
     selectedVMs.forEach((vmId) => {
       const vm = vmsWithAssignments.find((v) => v.id === vmId)
-      if (vm && vm.powerState === 'powered-off') {
-        initialBulkEditIPs[vm.id] = {}
-        initialValidationStatus[vm.id] = {}
+      if (!vm) return
 
-        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-          // Multiple network interfaces
-          vm.networkInterfaces.forEach((nic, index) => {
-            initialBulkEditIPs[vm.id][index] = nic.ipAddress || ''
-            initialValidationStatus[vm.id][index] = nic.ipAddress ? 'valid' : 'empty'
-          })
-        } else {
-          // Single interface (treat as interface 0)
-          initialBulkEditIPs[vm.id][0] = vm.ip && vm.ip !== '—' ? vm.ip : ''
-          initialValidationStatus[vm.id][0] = vm.ip && vm.ip !== '—' ? 'valid' : 'empty'
-        }
+      initialBulkEditIPs[vm.id] = {}
+      initialBulkPreserveIp[vm.id] = {}
+      initialBulkPreserveMac[vm.id] = {}
+      initialBulkExistingIPs[vm.id] = {}
+      initialValidationStatus[vm.id] = {}
+
+      const isPoweredOff = vm.powerState !== 'powered-on'
+
+      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+        vm.networkInterfaces.forEach((nic, index) => {
+          const existingIp = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
+            .filter((ip) => ip && ip.trim() !== '')
+            .join(', ')
+          initialBulkExistingIPs[vm.id][index] = existingIp
+          initialBulkEditIPs[vm.id][index] = existingIp
+
+          const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[index] !== false
+          initialBulkPreserveIp[vm.id][index] = effectivePreserveIp
+          initialBulkPreserveMac[vm.id][index] = vm.preserveMac?.[index] !== false
+          initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
+        })
+      } else {
+        const existingIp = extractFirstIPv4(vm.ip && vm.ip !== '—' ? vm.ip : '')
+        initialBulkExistingIPs[vm.id][0] = existingIp
+        initialBulkEditIPs[vm.id][0] = existingIp
+        initialBulkPreserveIp[vm.id][0] = isPoweredOff ? false : vm.preserveIp?.[0] !== false
+        initialBulkPreserveMac[vm.id][0] = vm.preserveMac?.[0] !== false
+        initialValidationStatus[vm.id][0] = existingIp ? 'valid' : 'empty'
       }
     })
 
     setBulkEditIPs(initialBulkEditIPs)
+    setBulkPreserveIp(initialBulkPreserveIp)
+    setBulkPreserveMac(initialBulkPreserveMac)
+    setBulkExistingIPs(initialBulkExistingIPs)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
     setBulkEditDialogOpen(true)
@@ -3389,26 +3863,30 @@ export default function RollingMigrationFormDrawer({
       </Dialog>
 
       {/* Bulk IP Editor Dialog */}
-      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="lg">
+      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           Edit IP Addresses for {selectedVMs.length} {selectedVMs.length === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ my: 2 }}>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* Quick Actions */}
-            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
-              <ActionButton
-                size="small"
-                tone="secondary"
-                onClick={handleClearAllIPs}
-                data-testid="rolling-migration-form-bulk-ip-clear"
-              >
+            <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+              <Button size="small" variant="outlined" onClick={handleClearAllIPs}>
                 Clear All
-              </ActionButton>
+              </Button>
             </Box>
 
             {/* IP Editor Fields */}
-            <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+            <Box
+              sx={{
+                maxHeight: 420,
+                overflowY: 'auto',
+                pr: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2
+              }}
+            >
               {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
                 const vm = vmsWithAssignments.find((v) => v.id === vmId)
                 if (!vm) return null
@@ -3416,50 +3894,204 @@ export default function RollingMigrationFormDrawer({
                 return (
                   <Box
                     key={vmId}
-                    sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}
+                    sx={{
+                      p: 2,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      bgcolor: 'background.paper',
+                      boxShadow: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2
+                    }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
-                      {vm.name}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Tooltip title={vm.powerState === 'powered-on' ? 'Running' : 'Stopped'}>
+                        <CdsIconWrapper>
+                          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                          {/* @ts-ignore */}
+                          <cds-icon
+                            shape="vm"
+                            size="md"
+                            badge={vm.powerState === 'powered-on' ? 'success' : 'danger'}
+                          >
+                            {/* @ts-ignore */}
+                          </cds-icon>
+                        </CdsIconWrapper>
+                      </Tooltip>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {vm.name}
+                      </Typography>
+                    </Box>
 
                     {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
                       const interfaceIndex = parseInt(interfaceIndexStr)
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
                       const status = bulkValidationStatus[vmId]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmId]?.[interfaceIndex]
+                      const isPoweredOff = vm.powerState !== 'powered-on'
+                      const preserveIp =
+                        !isPoweredOff && bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+                      const preserveMac = bulkPreserveMac?.[vmId]?.[interfaceIndex] !== false
 
                       return (
                         <Box
                           key={interfaceIndex}
-                          sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: '240px 150px 1fr' },
+                            columnGap: { xs: 1.5, sm: 2 },
+                            rowGap: 1,
+                            alignItems: 'flex-start'
+                          }}
                         >
-                          <Box sx={{ width: 120, flexShrink: 0 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              {networkInterface?.network || `Interface ${interfaceIndex + 1}`}:
-                            </Typography>
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              Current: {networkInterface?.ipAddress || vm.ip || '—'}
-                            </Typography>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 0.75,
+                              minWidth: 0
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ minWidth: 36 }}
+                              >
+                                IP:
+                              </Typography>
+                              <Box
+                                component="span"
+                                sx={{
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  bgcolor: (theme) =>
+                                    theme.palette.mode === 'dark'
+                                      ? 'rgba(255, 255, 255, 0.08)'
+                                      : theme.palette.grey[100],
+                                  border: '1px solid',
+                                  borderColor: 'divider',
+                                  color: 'text.primary',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {(Array.isArray(networkInterface?.ipAddress)
+                                  ? networkInterface.ipAddress
+                                      .filter((v) => v && v.trim() !== '')
+                                      .join(', ')
+                                  : '') ||
+                                  (!networkInterface &&
+                                  interfaceIndex === 0 &&
+                                  !hasMultipleIPv4(vm.ip || '')
+                                    ? extractFirstIPv4(vm.ip || '')
+                                    : '') ||
+                                  '—'}
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ minWidth: 36 }}
+                              >
+                                MAC:
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.75,
+                                  minWidth: 0
+                                }}
+                              >
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    px: 1,
+                                    py: 0.25,
+                                    borderRadius: 1,
+                                    bgcolor: (theme) =>
+                                      theme.palette.mode === 'dark'
+                                        ? 'rgba(255, 255, 255, 0.08)'
+                                        : theme.palette.grey[100],
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    color: 'text.primary',
+                                    fontFamily: 'monospace'
+                                  }}
+                                >
+                                  {networkInterface?.mac || '—'}
+                                </Box>
+                                {!preserveMac ? (
+                                  <Tooltip
+                                    title="A new MAC address will be assigned in the destination"
+                                    placement="right"
+                                  >
+                                    <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                                  </Tooltip>
+                                ) : null}
+                              </Box>
+                            </Box>
                           </Box>
-                          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Switch
+                                size="small"
+                                checked={preserveIp}
+                                disabled={isPoweredOff}
+                                onChange={(e) =>
+                                  handleBulkPreserveIpChange(vmId, interfaceIndex, e.target.checked)
+                                }
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                Preserve IP
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Switch
+                                size="small"
+                                checked={preserveMac}
+                                onChange={(e) =>
+                                  handleBulkPreserveMacChange(
+                                    vmId,
+                                    interfaceIndex,
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                Preserve MAC
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TextField
                               value={ip}
                               onChange={(e) =>
                                 handleBulkIpChange(vmId, interfaceIndex, e.target.value)
                               }
-                              placeholder="Enter IP address"
+                              placeholder={
+                                preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
+                              }
                               size="small"
-                              sx={{ flex: 1 }}
+                              fullWidth
+                              disabled={
+                                preserveIp &&
+                                Boolean(bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim())
+                              }
                               error={status === 'invalid'}
-                              helperText={message}
+                              InputProps={{
+                                endAdornment: renderValidationAdornment(status)
+                              }}
+                              helperText={
+                                preserveIp && !bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim()
+                                  ? message
+                                  : ''
+                              }
                             />
-                            <Box sx={{ width: 24, display: 'flex' }}>
-                              {status === 'validating' && <CircularProgress size={20} />}
-                              {status === 'valid' && (
-                                <CheckCircleIcon color="success" fontSize="small" />
-                              )}
-                              {status === 'invalid' && <ErrorIcon color="error" fontSize="small" />}
-                            </Box>
                           </Box>
                         </Box>
                       )
@@ -3470,10 +4102,13 @@ export default function RollingMigrationFormDrawer({
             </Box>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ gap: 1, p: 2 }}>
+        <DialogActions
+          sx={{ justifyContent: 'flex-end', alignItems: 'center', gap: 1, px: 3, py: 2 }}
+        >
           <ActionButton
             tone="secondary"
             onClick={handleCloseBulkEditDialog}
+            disabled={assigningIPs}
             data-testid="rolling-migration-form-bulk-ip-cancel"
           >
             Cancel
