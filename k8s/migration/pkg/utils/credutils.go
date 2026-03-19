@@ -814,21 +814,25 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 		}
 
 		if nic != nil && nic.Backing != nil {
-			var network string
+			var network, networkType string
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
+				networkType = "Network"
 				if backing.Network != nil {
 					network = backing.Network.Value
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+				networkType = "DistributedVirtualPortgroup"
 				network = backing.Port.PortgroupKey
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
+				networkType = "OpaqueNetwork"
 				network = backing.OpaqueNetworkId
 			}
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:     strings.ToLower(nic.MacAddress),
-				Index:   nicsIndex,
-				Network: network,
+				MAC:         strings.ToLower(nic.MacAddress),
+				Index:       nicsIndex,
+				Network:     network,
+				NetworkType: networkType,
 			})
 			nicsIndex++
 		}
@@ -1725,7 +1729,11 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
 		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		networkType := nic.NetworkType
+		if networkType == "" {
+			networkType = "Network"
+		}
+		netRef := types.ManagedObjectReference{Type: networkType, Value: nic.Network}
 		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
 		if err != nil {
 			// Network is orphaned/deleted - log error but continue VM discovery
