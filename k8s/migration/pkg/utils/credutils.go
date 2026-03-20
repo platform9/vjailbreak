@@ -42,6 +42,7 @@ import (
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -587,15 +588,12 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
 	}
 
-	pc := property.DefaultCollector(c)
 	for _, nic := range nicList {
-		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		name, err := resolveNetworkName(ctx, c, nic)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
+			return nil, err
 		}
-		networks = append(networks, netObj.Name)
+		networks = append(networks, name)
 	}
 	return networks, nil
 }
@@ -838,6 +836,59 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 		}
 	}
 	return nicList, nil
+}
+
+// resolveNetworkName returns the human-readable name for a NIC's backing network.
+// Each VMware network type requires a different resolution strategy:
+//   - Network: direct MOR lookup
+//   - DistributedVirtualPortgroup: direct MOR lookup with the correct MOR type
+//   - OpaqueNetwork: OpaqueNetworkId is not a MOR value so the inventory
+//     must be scanned to find the object with a matching OpaqueNetworkId
+//   - empty: nil backing reference, meaning the port group was deleted, surfaced as error
+func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1alpha1.NIC) (string, error) {
+	switch nic.NetworkType {
+	case "":
+		return "", fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
+
+	case "Network":
+		var netObj mo.Network
+		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
+			return "", fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
+		}
+		return netObj.Name, nil
+
+	case "DistributedVirtualPortgroup":
+		var netObj mo.DistributedVirtualPortgroup
+		netRef := types.ManagedObjectReference{Type: "DistributedVirtualPortgroup", Value: nic.Network}
+		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
+			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
+		}
+		return netObj.Name, nil
+
+	case "OpaqueNetwork":
+		m := view.NewManager(c)
+		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"OpaqueNetwork"}, true)
+		if err != nil {
+			return "", fmt.Errorf("failed to create container view for opaque networks: %w", err)
+		}
+		defer v.Destroy(ctx) //nolint:errcheck
+		var nets []mo.OpaqueNetwork
+		if err := v.Retrieve(ctx, []string{"OpaqueNetwork"}, []string{"name", "summary"}, &nets); err != nil {
+			return "", fmt.Errorf("failed to retrieve opaque networks: %w", err)
+		}
+		for _, n := range nets {
+			if summary, ok := n.Summary.(*types.OpaqueNetworkSummary); ok {
+				if summary.OpaqueNetworkId == nic.Network {
+					return n.Name, nil
+				}
+			}
+		}
+		return "", fmt.Errorf("opaque network with ID %s not found", nic.Network)
+
+	default:
+		return "", fmt.Errorf("unknown network type %q for NIC %s", nic.NetworkType, nic.MAC)
+	}
 }
 
 // ExtractGuestNetworkInfo retrieves the runtime guest network configuration (guest.net)
@@ -1728,16 +1779,14 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
-		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
-		err := pc.RetrieveOne(ctx, netRef, []string{"name"}, &netObj)
+		name, err := resolveNetworkName(ctx, c, nic)
 		if err != nil {
-			// Network is orphaned/deleted - log error but continue VM discovery
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err))
+			// Network is orphaned/deleted or has no backing — log but continue VM discovery
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), err)
 			networks = append(networks, "Orphaned Network")
 			continue
 		}
-		networks = append(networks, netObj.Name)
+		networks = append(networks, name)
 	}
 
 	// Get the guest network info
