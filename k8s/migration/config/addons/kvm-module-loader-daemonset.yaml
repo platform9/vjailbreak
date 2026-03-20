@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kvm-module-loader
+  namespace: migration-system
+  labels:
+    app: kvm-module-loader
+spec:
+  selector:
+    matchLabels:
+      app: kvm-module-loader
+  template:
+    metadata:
+      labels:
+        app: kvm-module-loader
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: kvm-module-loader
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - modprobe kvm-intel || modprobe kvm-amd || true; sleep infinity
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+      volumes:
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+          type: Directory
