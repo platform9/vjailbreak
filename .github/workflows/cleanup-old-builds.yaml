@@ -1,0 +1,167 @@
+name: Cleanup Old Images (Quay + S3)
+
+on:
+  # We can set a schedule to run this workflow automatically
+  # schedule:
+  #   - cron: "0 4 * * *"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ vars.REGISTRY || 'quay.io' }}
+  ORG: ${{ vars.REPO || 'platform9' }}
+  REPOS: "vjailbreak vjailbreak-ui vjailbreak-v2v-helper vjailbreak-controller vjailbreak-vpwned"
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
+  DAYS_TO_KEEP: 30
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      ###########################################
+      # Login to Quay
+      ###########################################
+      - name: Login to Quay
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+
+      ###########################################
+      # List old Quay tags (>30 days)
+      ###########################################
+      - name: List Quay tags older than 30 days
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_API_TOKEN }}
+        run: |
+          set -e
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          echo "Listing tags older than ${DAYS_TO_KEEP} days"
+          echo ""
+
+          for REPO in $REPOS; do
+            echo "=== Repository: $REPO ==="
+            OLD_TAGS_FILE=$(mktemp)
+
+            PAGE=1
+            while : ; do
+              RESPONSE=$(curl -s -H "Authorization: Bearer $QUAY_TOKEN" \
+                "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/?limit=200&page=${PAGE}")
+
+              TAG_COUNT=$(echo "$RESPONSE" | jq '.tags | length')
+              HAS_MORE=$(echo "$RESPONSE" | jq -r '.has_additional')
+
+              if [[ "$TAG_COUNT" == "0" ]]; then
+                break
+              fi
+
+              echo "$RESPONSE" | jq -c '.tags[]' | while read tag; do
+                TAG_NAME=$(echo $tag | jq -r '.name')
+                LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
+
+                # Skip protected tags
+                if [[ "$TAG_NAME" == "latest" || \
+                      "$TAG_NAME" =~ "^alpine" || \
+                      "$TAG_NAME" == "ubuntu-base-prebaked" || \
+                      "$TAG_NAME" == "base-v0.1.6" || \
+                      "$TAG_NAME" == "base-v0.1.4" || \
+                      "$TAG_NAME" == "base" || \
+                      "$TAG_NAME" =~ "^ubuntu" || \
+                      "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                      echo "Skipping protected tag: $TAG_NAME"
+                  continue
+                fi
+
+                TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                  TAG_DATE=$(date -d "$LAST_MODIFIED" +%Y-%m-%d)
+                  echo "Old tag: [$TAG_NAME] (last modified: $TAG_DATE)" | tee -a "$OLD_TAGS_FILE"
+                fi
+              done
+
+              if [[ "$HAS_MORE" != "true" ]]; then
+                break
+              fi
+
+              PAGE=$((PAGE+1))
+            done
+            OLD_TAG_COUNT=$(wc -l < "$OLD_TAGS_FILE")
+            echo "Total old tags in $REPO: $OLD_TAG_COUNT"
+            rm -f "$OLD_TAGS_FILE"
+            echo ""
+          done
+
+      ###########################################
+      # Configure AWS
+      ###########################################
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: ${{ env.S3_REGION }}
+
+      ###########################################
+      # List old S3 folders (>30 days)
+      ###########################################
+      - name: List S3 folders older than 30 days
+        run: |
+          set -e
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          list_old_folders() {
+            local BUCKET=$1
+            local PREFIX=$2
+            local TOKEN=""
+
+            echo "Scanning s3://$BUCKET/${PREFIX}"
+
+            while : ; do
+              if [[ -z "$TOKEN" ]]; then
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "${PREFIX}" \
+                  --delimiter "/")
+              else
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "${PREFIX}" \
+                  --delimiter "/" \
+                  --continuation-token "$TOKEN")
+              fi
+
+              echo "$RESPONSE" | jq -r '.CommonPrefixes[].Prefix' | while read -r folder; do
+                if [[ -z "$folder" ]]; then
+                  continue
+                fi
+
+                if [[ $folder =~ ${PREFIX}([0-9]{4}-[0-9]{2}-[0-9]{2})/ ]]; then
+                  BUILD_DATE="${BASH_REMATCH[1]}"
+                  BUILD_TIMESTAMP=$(date -u -d "$BUILD_DATE" +%s 2>/dev/null || echo 0)
+
+                  if [[ $BUILD_TIMESTAMP -gt 0 && $BUILD_TIMESTAMP -lt $THRESHOLD ]]; then
+                    echo "Old folder: s3://$BUCKET/${folder} (date: $BUILD_DATE)"
+                  fi
+                fi
+              done
+
+              TOKEN=$(echo "$RESPONSE" | jq -r '.NextContinuationToken // empty')
+
+              if [[ -z "$TOKEN" ]]; then
+                break
+              fi
+            done
+          }
+
+          if [ -n "$S3_BUCKET_DEV" ]; then
+            echo "=== DEV Bucket: $S3_BUCKET_DEV ==="
+            list_old_folders "$S3_BUCKET_DEV" "dev/"
+            list_old_folders "$S3_BUCKET_DEV" "nightly/"
+          fi

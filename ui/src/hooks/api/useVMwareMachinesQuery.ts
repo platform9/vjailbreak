@@ -56,22 +56,8 @@ export const useVMwareMachinesQuery = ({
       if (clusterName && datacenterName) {
         const isNoCluster = clusterName.startsWith('no-cluster-')
         if (isNoCluster) {
-          const datacenterClusterNames = new Set<string>()
-
-          clustersResponse.items.forEach((cluster) => {
-            const annotations = (cluster.metadata as any)?.annotations || {}
-            const clusterDC =
-              annotations['vjailbreak.k8s.pf9.io/datacenter'] || datacenterName || ''
-            if (clusterDC === datacenterName) {
-              datacenterClusterNames.add(cluster.metadata.name)
-            }
-          })
-
-          filteredItems = vmResponse.items.filter((vm) => {
-            const vmClusterLabel =
-              vm.metadata?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] || ''
-            return datacenterClusterNames.has(vmClusterLabel)
-          })
+          // When NO CLUSTER is selected, show all VMs without any cluster filtering
+          filteredItems = vmResponse.items
         } else {
           const selectedClusterResource = clustersResponse.items.find((cluster) => {
             const annotations = (cluster.metadata as any)?.annotations || {}

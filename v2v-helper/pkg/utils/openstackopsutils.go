@@ -632,7 +632,7 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		} else {
 			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
 			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
@@ -687,7 +687,7 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ip)
 		}
 		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
 		// Create with DHCP by removing fixed IPs
