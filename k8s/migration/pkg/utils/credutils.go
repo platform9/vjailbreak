@@ -814,21 +814,25 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 		}
 
 		if nic != nil && nic.Backing != nil {
-			var network string
+			var network, networkType string
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
 				if backing.Network != nil {
 					network = backing.Network.Value
+					networkType = backing.Network.Type
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
 				network = backing.Port.PortgroupKey
+				networkType = "DistributedVirtualPortgroup"
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
 				network = backing.OpaqueNetworkId
+				networkType = "OpaqueNetwork"
 			}
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:     strings.ToLower(nic.MacAddress),
-				Index:   nicsIndex,
-				Network: network,
+				MAC:         strings.ToLower(nic.MacAddress),
+				Index:       nicsIndex,
+				Network:     network,
+				NetworkType: networkType,
 			})
 			nicsIndex++
 		}
