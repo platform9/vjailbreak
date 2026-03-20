@@ -942,6 +942,10 @@ export default function MigrationFormDrawer({
         const value = String(params?.dataCopyStartTime ?? '').trim()
         return value !== '' && !fieldErrors['dataCopyStartTime']
       }
+      if (key === 'postMigrationScript' && selectedMigrationOptions.postMigrationScript) {
+        const value = String(params?.postMigrationScript ?? '').trim()
+        return value !== '' && !fieldErrors['postMigrationScript']
+      }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
         return params?.[key as keyof typeof params] !== undefined && !fieldErrors[key]
       }
@@ -1239,18 +1243,20 @@ export default function MigrationFormDrawer({
       Boolean(selectedMigrationOptions.dataCopyStartTime) ||
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
+      Boolean(params.removeVMwareTools) ||
       Boolean(selectedMigrationOptions.useGPU) ||
       Boolean(selectedMigrationOptions.useFlavorless) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
       postMigrationActionSelected
     )
-  }, [selectedMigrationOptions])
+  }, [selectedMigrationOptions, params.removeVMwareTools])
 
   const areSelectedMigrationOptionsConfigured = useMemo(() => {
     if (!hasAnyMigrationOptionSelected) return false
 
     const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const periodicSyncIntervalValue = String(params.periodicSyncInterval ?? '').trim()
+    const postMigrationScriptValue = String(params.postMigrationScript ?? '').trim()
 
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
@@ -1286,7 +1292,7 @@ export default function MigrationFormDrawer({
 
     const postMigrationScriptOk =
       !selectedMigrationOptions.postMigrationScript ||
-      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
+      (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
 
     const pcdOptionsOk =
       (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
@@ -1339,7 +1345,10 @@ export default function MigrationFormDrawer({
     touchedSections.options &&
       (areSelectedMigrationOptionsConfigured ||
         Boolean(
-          params.disconnectSourceNetwork || params.fallbackToDHCP || params.networkPersistence
+          params.disconnectSourceNetwork ||
+            params.fallbackToDHCP ||
+            params.networkPersistence ||
+            params.removeVMwareTools
         )) &&
       !step5HasErrors
   )

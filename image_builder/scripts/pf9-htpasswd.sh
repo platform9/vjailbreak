@@ -157,6 +157,11 @@ change_password() {
   echo "Password for '$user' updated successfully in $HTPASSWD_FILE."
 }
 
+restart_vjailbreak_ui() {
+  echo "Restarting vjailbreak-ui deployment..."
+  sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
+}
+
 delete_user() {
   local user="$1"
   ensure_file

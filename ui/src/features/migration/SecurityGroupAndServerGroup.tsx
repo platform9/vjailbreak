@@ -7,8 +7,8 @@ import {
   ServerGroupOption,
   PCDNetworkInfo
 } from 'src/api/openstack-creds/model'
-import { useMemo } from 'react'
 import { ResourceMap } from './NetworkAndStorageMappingStep'
+import { hasSelectedLayer2Network } from 'src/shared/utils/network'
 
 interface SecurityGroupAndServerGroupProps {
   params: {
@@ -38,23 +38,7 @@ export default function SecurityGroupAndServerGroup({
   const serverGroupOptions: ServerGroupOption[] =
     openstackCredentials?.status?.openstack?.serverGroups || []
 
-  // Check if any selected network has the "simple_network" tag (L2 network)
-  const hasL2Network = useMemo(() => {
-    if (!params.networkMappings || params.networkMappings.length === 0) {
-      return false
-    }
-
-    // Get all target network names from mappings
-    const targetNetworkNames = params.networkMappings.map((mapping) => mapping.target)
-
-    // Check if any of these networks has the "simple_network" tag
-    return openstackNetworks.some(
-      (network) =>
-        targetNetworkNames.includes(network.name) &&
-        network.tags &&
-        network.tags.includes('simple_network')
-    )
-  }, [params.networkMappings, openstackNetworks])
+  const hasL2Network = hasSelectedLayer2Network(params.networkMappings, openstackNetworks)
 
   return (
     <Box>
@@ -64,8 +48,7 @@ export default function SecurityGroupAndServerGroup({
       <Box>
         {hasL2Network && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            Security Groups are not available when using L2 networks (networks with "simple_network" tag).
-            L2 networks do not support security group assignment.
+            Security Groups are not available when using Layer 2 Networks.
           </Alert>
         )}
         <FormGrid minWidth={320} gap={3}>
