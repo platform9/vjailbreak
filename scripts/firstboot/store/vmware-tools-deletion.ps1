@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 
+$ProgressPreference = 'SilentlyContinue'
+$VerbosePreference  = 'SilentlyContinue'
+$InformationPreference = 'SilentlyContinue'
+
 function Write-Log {
     param([string]$Message,[string]$Level="INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -58,11 +62,11 @@ function Remove-VMwareServices {
 
     foreach($svc in $services){
 
-        sc.exe query $svc | Out-Null
+        sc.exe query $svc *> $null
 
         if($LASTEXITCODE -eq 0){
             try {
-                sc.exe delete $svc | Out-Null
+                sc.exe delete $svc *> $null
                 Write-Log "Deleted service $svc"
             }
             catch {
@@ -75,6 +79,9 @@ function Remove-VMwareServices {
 function Remove-VMwareDrivers {
 
     Write-Log "Removing VMware drivers"
+
+    sc stop VMMemCtl *> $null
+    sc delete VMMemCtl *> $null
 
     $drivers=@(
     "vmci.sys","vm3dmp.sys","vm3dmp_loader.sys",
@@ -115,7 +122,7 @@ function Remove-DriverStore {
 
     Write-Log "Cleaning DriverStore VMware entries"
 
-    $drivers=pnputil /enum-drivers
+    $drivers = pnputil /enum-drivers *> $null
 
     $published=""
     $provider=""
@@ -136,7 +143,7 @@ function Remove-DriverStore {
 
                 Write-Log "Removing driverstore $published"
 
-                pnputil /delete-driver $published /uninstall /force | Out-Null
+                pnputil /delete-driver $published /force *> $null
             }
 
             $published=""
@@ -274,59 +281,79 @@ function Remove-VMwareResiduals {
 
     if(Test-Path $vmwarePath){
 
-        Write-Host "VMware folder detected, attempting cleanup..."
+        Write-Log "VMware folder detected, forcing cleanup..."
 
         $devices = Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match "VMware" }
 
         foreach ($dev in $devices) {
             $instanceId = $dev.DeviceID
-            Write-Host "Final remove device:" $dev.Name
-            pnputil /remove-device "$instanceId" /force 2>$null
+            Write-Log "Removing device: $($dev.Name)"
+            pnputil /remove-device "$instanceId" /force *> $null
         }
 
         try{
-            takeown /F "$vmwarePath" /R /D Y | Out-Null
-            icacls "$vmwarePath" /grant Administrators:F /T | Out-Null
-            Remove-Item "$vmwarePath" -Recurse -Force -ErrorAction Stop
-            Write-Host "VMware folder removed immediately"
+
+            cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
+            cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
+
+            Remove-Item $vmwarePath -Recurse -Force -ErrorAction Stop
+
+            Write-Log "VMware folder removed successfully"
+
+        }catch{
+
+            Write-Log "Initial folder delete failed, retrying..."
+
+            Start-Sleep -Seconds 2
+
+            cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
+            cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
+
+            Remove-Item $vmwarePath -Recurse -Force -ErrorAction SilentlyContinue
+
+            if(!(Test-Path $vmwarePath)){
+                Write-Log "VMware folder removed on retry"
+            }else{
+                Write-Log "VMware folder still present"
+            }
         }
-        catch{
 
-            Write-Host "Folder locked, scheduling delete on reboot..."
+    }else{
+        Write-Log "VMware folder not present"
+    }
 
-            $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
 
-            reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager" /v PendingFileRenameOperations /f 2>$null
+    # VMware driver files
+    $vmDrivers = @(
+        "C:\Windows\System32\drivers\vmmemctl.sys",
+        "C:\Windows\System32\drivers\vmmouse.sys"
+    )
 
-            $dll = "\??\C:\Program Files\VMware\VMware Tools\vmStatsProvider\win64\vmStatsProvider.dll"
+    foreach($drv in $vmDrivers){
 
-            $folder = "\??\C:\Program Files\VMware"
+        if(Test-Path $drv){
 
-            Set-ItemProperty `
-                -Path $regPath `
-                -Name PendingFileRenameOperations `
-                -Value @($dll,"",$folder,"") `
-                -Type MultiString `
-                -Force
+            Write-Log "Removing driver file $drv"
 
-            Write-Host "VMware folder scheduled for deletion at reboot"
+            try{
+
+                cmd /c "takeown /F `"$drv`"" *> $null
+                cmd /c "icacls `"$drv`" /grant Administrators:F" *> $null
+                cmd /c "del /F /Q `"$drv`"" *> $null
+
+                if(!(Test-Path $drv)){
+                    Write-Log "Driver removed successfully: $drv"
+                }else{
+                    Write-Log "Driver removal failed: $drv"
+                }
+
+            }catch{
+                Write-Log "Error removing driver $drv"
+            }
+
+        }else{
+            Write-Log "$drv not present"
         }
-    }
-    else{
-        Write-Host "VMware folder not present"
-    }
-
-
-    # Force remove vmmemctl driver file
-    $drv="C:\Windows\System32\drivers\vmmemctl.sys"
-
-    if(Test-Path $drv){
-
-        Write-Log "Removing vmmemctl driver"
-
-        takeown /F $drv | Out-Null
-        icacls $drv /grant Administrators:F | Out-Null
-        Remove-Item $drv -Force -ErrorAction SilentlyContinue
     }
 
 
@@ -351,12 +378,12 @@ function Remove-VMwareResiduals {
     }
 
 
-    # Force delete VMMemCtl registry key if still present
+    # Remove VMMemCtl registry key
     $key = "HKLM:\SYSTEM\CurrentControlSet\Services\VMMemCtl"
 
     if(Test-Path $key){
 
-        Write-Log "Force removing VMMemCtl service key"
+        Write-Log "Removing VMMemCtl registry key"
 
         try{
 
@@ -373,6 +400,8 @@ function Remove-VMwareResiduals {
             Set-Acl $key $acl
 
             Remove-Item $key -Recurse -Force
+
+            Write-Log "VMMemCtl registry removed"
 
         }catch{
 
