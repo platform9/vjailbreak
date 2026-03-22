@@ -1,6 +1,7 @@
 import React, { SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { useLocation } from 'react-router-dom'
+import { POPULAR_TIMEZONES, type TimezoneOption } from '../timezones'
 import {
   Alert,
   Box,
@@ -30,7 +31,11 @@ import InlineHelp from 'src/components/design-system/ui/InlineHelp'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
 import VDDKUploadTab from './VDDKUploadTab'
 import type { VddkUploadStatus } from './VDDKUploadTab'
-import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
+import {
+  IntervalField as SharedIntervalField,
+  RHFAutocomplete,
+  RHFTextField
+} from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
   getSettingsConfigMap,
@@ -83,6 +88,7 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
+  TIMEZONE: '',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -97,7 +103,12 @@ const helpers = getGlobalSettingsHelpers(DEFAULTS)
 type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
-  general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
+  general: [
+    'DEPLOYMENT_NAME',
+    'TIMEZONE',
+    'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD',
+    'PERIODIC_SYNC_INTERVAL'
+  ],
   retry: [
     'VM_ACTIVE_WAIT_INTERVAL_SECONDS',
     'VM_ACTIVE_WAIT_RETRY_LIMIT',
@@ -210,6 +221,8 @@ const TabPanel = ({
 
 const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
+  TIMEZONE:
+    'Select a timezone for the vJailbreak VM. Leaving this empty disables time synchronization; selecting a timezone enables time synchronization and updates the timezone.',
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 'Number of iterations to copy changed blocks.',
   PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Interval to wait for VM to become active (in seconds).',
@@ -405,6 +418,12 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
     }
 
+    const tz = (state.TIMEZONE ?? '').trim()
+    if (tz) {
+      const tzOk = POPULAR_TIMEZONES.some((opt) => opt.value === tz)
+      if (!tzOk) e.TIMEZONE = 'Select a timezone from the list.'
+    }
+
     const proxyEnabled = state.PROXY_ENABLED
     const httpScheme = state.PROXY_HTTP_SCHEME
     const httpHost = (state.PROXY_HTTP_HOST ?? '').trim()
@@ -558,8 +577,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       const base = fromConfigMapData(
         settingsCm?.data as Record<string, string | number | undefined> | undefined
       )
+      const tz = (base.TIMEZONE ?? '').trim()
+      const normalizedBase =
+        !tz || POPULAR_TIMEZONES.some((opt) => opt.value === tz)
+          ? base
+          : { ...base, TIMEZONE: '' }
       const proxyState = deriveProxyState(base, pf9Env?.data)
-      const merged = applyProxyState(base, proxyState)
+      const merged = applyProxyState(normalizedBase, proxyState)
 
       rhfForm.reset(merged)
       setInitial(merged)
@@ -648,6 +672,14 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         const existingCm = await getSettingsConfigMap()
         const updatedData = toConfigMapData(form)
 
+        const mergedData: Record<string, any> = {
+          ...(existingCm?.data as any),
+          ...updatedData
+        }
+
+        delete mergedData.NTP_ENABLED
+        delete mergedData.NTP_SERVERS
+
         await updateSettingsConfigMap({
           apiVersion: existingCm?.apiVersion || 'v1',
           kind: existingCm?.kind || 'ConfigMap',
@@ -657,8 +689,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
             namespace: VERSION_NAMESPACE
           },
           data: {
-            ...(existingCm?.data as any),
-            ...updatedData
+            ...mergedData
           }
         } as any)
 
@@ -1055,6 +1086,20 @@ export default function GlobalSettingsPage() {
                 labelProps={{ tooltip: FIELD_TOOLTIPS.DEPLOYMENT_NAME }}
                 error={Boolean(errors.DEPLOYMENT_NAME)}
                 helperText={errors.DEPLOYMENT_NAME}
+              />
+
+              <RHFAutocomplete<TimezoneOption>
+                name="TIMEZONE"
+                options={POPULAR_TIMEZONES}
+                label="Timezone"
+                placeholder="Default (NTP disabled)"
+                getOptionLabel={(option) => option.label}
+                getOptionValue={(option) => option.value}
+                renderOptionLabel={(option) => option.label}
+                error={Boolean(errors.TIMEZONE)}
+                helperText={errors.TIMEZONE}
+                data-testid="global-settings-field-TIMEZONE"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.TIMEZONE }}
               />
 
               <RHFTextField

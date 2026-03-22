@@ -8,6 +8,7 @@ export interface VjailbreakSettings {
     CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: string
     DEFAULT_MIGRATION_METHOD: string
     DEPLOYMENT_NAME: string
+    TIMEZONE?: string
     PROXY?: string
     POPULATE_VMWARE_MACHINE_FLAVORS: string
     VCENTER_LOGIN_RETRY_LIMIT: number

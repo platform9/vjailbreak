@@ -105,6 +105,132 @@ set_default_password() {
 set_default_password
 check_command "Setting default password for ubuntu user"
 
+install_time_settings_applier() {
+  log "Installing vJailbreak time settings applier (NTP/timezone)..."
+
+  sudo mkdir -p /etc/pf9
+
+  sudo tee /etc/pf9/apply-time-settings.sh > /dev/null <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+LOG_DIR="/var/log/pf9"
+STATE_DIR="/var/lib/pf9"
+LOG_FILE="${LOG_DIR}/time-settings.log"
+STATE_FILE="${STATE_DIR}/time-settings.state"
+
+mkdir -p "$LOG_DIR" "$STATE_DIR"
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+if [ -f "/etc/pf9/k3s.env" ]; then
+  source "/etc/pf9/k3s.env" || true
+fi
+
+if [ "${IS_MASTER:-}" != "true" ]; then
+  exit 0
+fi
+
+if ! command -v kubectl >/dev/null 2>&1; then
+  log "kubectl not found; skipping time settings apply"
+  exit 0
+fi
+
+if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
+  log "vjailbreak-settings ConfigMap not available yet; skipping time settings apply"
+  exit 0
+fi
+
+get_cm_val() {
+  local key="$1"
+  kubectl -n migration-system get configmap vjailbreak-settings -o jsonpath="{.data.${key}}" 2>/dev/null || true
+}
+
+timezone="$(get_cm_val TIMEZONE)"
+
+timezone="$(echo "${timezone:-}" | xargs || true)"
+
+desired_fingerprint="$(printf '%s\n' "${timezone}" | sha256sum | awk '{print $1}')"
+current_fingerprint=""
+if [ -f "$STATE_FILE" ]; then
+  current_fingerprint="$(cat "$STATE_FILE" 2>/dev/null || true)"
+fi
+
+if [ "$desired_fingerprint" = "$current_fingerprint" ]; then
+  exit 0
+fi
+
+log "Applying time settings: TIMEZONE=${timezone}"
+
+timezone_valid="false"
+
+if [ -n "$timezone" ]; then
+  if [ -f "/usr/share/zoneinfo/${timezone}" ]; then
+    timezone_valid="true"
+    current_tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+    if [ "$current_tz" != "$timezone" ]; then
+      if timedatectl set-timezone "$timezone"; then
+        log "Timezone updated to ${timezone}"
+      else
+        log "Failed to set timezone to ${timezone}"
+      fi
+    fi
+  else
+    log "Invalid timezone '${timezone}' (missing /usr/share/zoneinfo/${timezone}); skipping"
+  fi
+fi
+
+if [ "$timezone_valid" = "true" ]; then
+  timedatectl set-ntp true >/dev/null 2>&1 || true
+  systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+  systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+else
+  timedatectl set-ntp false >/dev/null 2>&1 || true
+  systemctl disable --now systemd-timesyncd >/dev/null 2>&1 || true
+fi
+
+echo "$desired_fingerprint" > "$STATE_FILE"
+log "Time settings applied"
+EOF
+
+  sudo chmod +x /etc/pf9/apply-time-settings.sh
+
+  sudo tee /etc/systemd/system/vjailbreak-time-settings.service > /dev/null <<'EOF'
+[Unit]
+Description=Apply vJailbreak NTP/timezone settings from Kubernetes ConfigMap
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/pf9/apply-time-settings.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/vjailbreak-time-settings.timer > /dev/null <<'EOF'
+[Unit]
+Description=Periodically apply vJailbreak NTP/timezone settings
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=vjailbreak-time-settings.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now vjailbreak-time-settings.timer || true
+  log "Installed vjailbreak-time-settings.timer"
+}
+
+install_time_settings_applier
+
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
 sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
 sudo chmod 644 /etc/htpasswd

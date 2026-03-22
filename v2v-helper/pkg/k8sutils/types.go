@@ -27,4 +27,5 @@ type VjailbreakSettings struct {
 	V2VHelperPodMemoryLimit             string
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
+	Timezone                            string
 }
