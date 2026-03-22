@@ -216,10 +216,10 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 					}
 				}
 			}
-			if len(ips) == 0 {
-				return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off, 
-				please make sure to provide IP address in the vmwaremachine CR`)
-			}
+			// if len(ips) == 0 {
+			// return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off,
+			// please make sure to provide IP address in the vmwaremachine CR`)
+			// }
 		}
 	}
 
