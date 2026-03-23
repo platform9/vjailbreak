@@ -5,6 +5,19 @@ on:
   # schedule:
   #   - cron: "0 4 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (true = list only, false = actually delete)"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      days_to_keep:
+        description: "Delete tags/folders older than this many days"
+        required: true
+        type: string
 
 env:
   REGISTRY: ${{ vars.REGISTRY || 'quay.io' }}
@@ -12,7 +25,8 @@ env:
   REPOS: "vjailbreak vjailbreak-ui vjailbreak-v2v-helper vjailbreak-controller vjailbreak-vpwned"
   S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
   S3_REGION: ${{ vars.S3_REGION }}
-  DAYS_TO_KEEP: 30
+  DAYS_TO_KEEP: ${{ github.event.inputs.days_to_keep }}
+  DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
 
 jobs:
   cleanup:
@@ -65,20 +79,21 @@ jobs:
                 TAG_NAME=$(echo $tag | jq -r '.name')
                 LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
 
+                TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
                 # Skip protected tags
                 if [[ "$TAG_NAME" == "latest" || \
-                      "$TAG_NAME" =~ "^alpine" || \
-                      "$TAG_NAME" == "ubuntu-base-prebaked" || \
+                      "$TAG_NAME" =~ ^alpine || \
                       "$TAG_NAME" == "base-v0.1.6" || \
                       "$TAG_NAME" == "base-v0.1.4" || \
                       "$TAG_NAME" == "base" || \
-                      "$TAG_NAME" =~ "^ubuntu" || \
+                      "$TAG_NAME" =~ ^ubuntu || \
                       "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                      echo "Skipping protected tag: $TAG_NAME"
-                  continue
-                fi
-
-                TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+                      if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                        echo "Skipping protected tag: $TAG_NAME"
+                      fi
+                      continue
+                    fi
 
                 if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
                   TAG_DATE=$(date -d "$LAST_MODIFIED" +%Y-%m-%d)
@@ -99,6 +114,83 @@ jobs:
           done
 
       ###########################################
+      # Delete old Quay tags
+      ###########################################
+      - name: Delete old Quay tags
+        if: env.DRY_RUN == 'false'
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_API_TOKEN }}
+        run: |
+          set -e
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          echo "Deleting tags older than ${DAYS_TO_KEEP} days"
+          echo ""
+
+          for REPO in $REPOS; do
+            echo "=== Repository: $REPO ==="
+            DELETED=0
+
+            PAGE=1
+            while : ; do
+              RESPONSE=$(curl -s -H "Authorization: Bearer $QUAY_TOKEN" \
+                "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/?limit=200&page=${PAGE}")
+
+              TAG_COUNT=$(echo "$RESPONSE" | jq '.tags | length')
+              HAS_MORE=$(echo "$RESPONSE" | jq -r '.has_additional')
+
+              if [[ "$TAG_COUNT" == "0" ]]; then
+                break
+              fi
+
+              TAGS_TO_DELETE=$(echo "$RESPONSE" | jq -c '.tags[]' | while read tag; do
+                TAG_NAME=$(echo $tag | jq -r '.name')
+                LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
+
+                # Skip protected tags
+                if [[ "$TAG_NAME" == "latest" || \
+                      "$TAG_NAME" =~ ^alpine || \
+                      "$TAG_NAME" == "base-v0.1.6" || \
+                      "$TAG_NAME" == "base-v0.1.4" || \
+                      "$TAG_NAME" == "base" || \
+                      "$TAG_NAME" =~ ^ubuntu || \
+                      "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  continue
+                fi
+
+                TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                  echo "$TAG_NAME"
+                fi
+              done)
+
+              for TAG_NAME in $TAGS_TO_DELETE; do
+                echo "Deleting tag: $TAG_NAME from $REPO"
+                sleep 60
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+                  -H "Authorization: Bearer $QUAY_TOKEN" \
+                  "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/${TAG_NAME}")
+
+                if [[ "$HTTP_CODE" == "204" || "$HTTP_CODE" == "200" ]]; then
+                  echo "  Deleted $TAG_NAME"
+                  DELETED=$((DELETED+1))
+                else
+                  echo "  Failed to delete $TAG_NAME (HTTP $HTTP_CODE)"
+                fi
+              done
+
+              if [[ "$HAS_MORE" != "true" ]]; then
+                break
+              fi
+
+              PAGE=$((PAGE+1))
+            done
+            echo "Deleted $DELETED tags from $REPO"
+            echo ""
+          done
+
+      ###########################################
       # Configure AWS
       ###########################################
       - name: Configure AWS credentials
@@ -113,55 +205,226 @@ jobs:
       ###########################################
       - name: List S3 folders older than 30 days
         run: |
-          set -e
+          set -euo pipefail
+
           THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          get_latest_object_time() {
+            local BUCKET=$1
+            local PREFIX=$2
+            local TOKEN=""
+            local LATEST=""
+
+            while : ; do
+              if [[ -z "$TOKEN" ]]; then
+                RESP=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --query 'Contents[].LastModified' \
+                  --output json)
+              else
+                RESP=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --continuation-token "$TOKEN" \
+                  --query 'Contents[].LastModified' \
+                  --output json)
+              fi
+
+              TIMES=$(echo "$RESP" | jq -r '.[]?')
+
+              for t in $TIMES; do
+                if [[ -z "$LATEST" || "$t" > "$LATEST" ]]; then
+                  LATEST="$t"
+                fi
+              done
+
+              TOKEN=$(aws s3api list-objects-v2 \
+                --bucket "$BUCKET" \
+                --prefix "$PREFIX" \
+                --query 'NextContinuationToken' \
+                --output text 2>/dev/null)
+
+              [[ "$TOKEN" == "None" || -z "$TOKEN" ]] && break
+            done
+
+            echo "$LATEST"
+          }
 
           list_old_folders() {
             local BUCKET=$1
             local PREFIX=$2
             local TOKEN=""
 
-            echo "Scanning s3://$BUCKET/${PREFIX}"
+            echo "Scanning s3://$BUCKET/$PREFIX"
 
             while : ; do
               if [[ -z "$TOKEN" ]]; then
                 RESPONSE=$(aws s3api list-objects-v2 \
                   --bucket "$BUCKET" \
-                  --prefix "${PREFIX}" \
-                  --delimiter "/")
+                  --prefix "$PREFIX" \
+                  --delimiter "/" \
+                  --output json)
               else
                 RESPONSE=$(aws s3api list-objects-v2 \
                   --bucket "$BUCKET" \
-                  --prefix "${PREFIX}" \
+                  --prefix "$PREFIX" \
                   --delimiter "/" \
-                  --continuation-token "$TOKEN")
+                  --continuation-token "$TOKEN" \
+                  --output json)
               fi
 
-              echo "$RESPONSE" | jq -r '.CommonPrefixes[].Prefix' | while read -r folder; do
-                if [[ -z "$folder" ]]; then
+              mapfile -t FOLDERS < <(echo "$RESPONSE" | jq -r '.CommonPrefixes[]?.Prefix')
+
+              for folder in "${FOLDERS[@]}"; do
+                [[ -z "$folder" ]] && continue
+
+                TAG_NAME="${folder#${PREFIX}}"
+                TAG_NAME="${TAG_NAME%/}"
+
+                # Skip protected
+                if [[ "$TAG_NAME" == "latest" || "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  echo "Skipping protected: s3://$BUCKET/$folder"
                   continue
                 fi
 
-                if [[ $folder =~ ${PREFIX}([0-9]{4}-[0-9]{2}-[0-9]{2})/ ]]; then
-                  BUILD_DATE="${BASH_REMATCH[1]}"
-                  BUILD_TIMESTAMP=$(date -u -d "$BUILD_DATE" +%s 2>/dev/null || echo 0)
+                LAST_MODIFIED=$(get_latest_object_time "$BUCKET" "$folder")
 
-                  if [[ $BUILD_TIMESTAMP -gt 0 && $BUILD_TIMESTAMP -lt $THRESHOLD ]]; then
-                    echo "Old folder: s3://$BUCKET/${folder} (date: $BUILD_DATE)"
-                  fi
+                [[ -z "$LAST_MODIFIED" || "$LAST_MODIFIED" == "None" ]] && continue
+
+                TS=$(date -u -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if [[ $TS -gt 0 && $TS -lt $THRESHOLD ]]; then
+                  DATE=$(date -u -d "$LAST_MODIFIED" +%Y-%m-%d)
+                  echo "Old folder: s3://$BUCKET/$folder (last modified: $DATE)"
                 fi
               done
 
               TOKEN=$(echo "$RESPONSE" | jq -r '.NextContinuationToken // empty')
-
-              if [[ -z "$TOKEN" ]]; then
-                break
-              fi
+              [[ -z "$TOKEN" ]] && break
             done
           }
 
-          if [ -n "$S3_BUCKET_DEV" ]; then
+          if [[ -n "${S3_BUCKET_DEV:-}" ]]; then
             echo "=== DEV Bucket: $S3_BUCKET_DEV ==="
             list_old_folders "$S3_BUCKET_DEV" "dev/"
             list_old_folders "$S3_BUCKET_DEV" "nightly/"
+          fi
+
+      ###########################################
+      # Delete old S3 folders
+      ###########################################
+      - name: Delete old S3 folders
+        if: env.DRY_RUN == 'false'
+        run: |
+          set -euo pipefail
+
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          get_latest_object_time() {
+            local BUCKET=$1
+            local PREFIX=$2
+            local TOKEN=""
+            local LATEST=""
+
+            while : ; do
+              if [[ -z "$TOKEN" ]]; then
+                RESP=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --query 'Contents[].LastModified' \
+                  --output json)
+              else
+                RESP=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --continuation-token "$TOKEN" \
+                  --query 'Contents[].LastModified' \
+                  --output json)
+              fi
+
+              TIMES=$(echo "$RESP" | jq -r '.[]?')
+
+              for t in $TIMES; do
+                if [[ -z "$LATEST" || "$t" > "$LATEST" ]]; then
+                  LATEST="$t"
+                fi
+              done
+
+              TOKEN=$(aws s3api list-objects-v2 \
+                --bucket "$BUCKET" \
+                --prefix "$PREFIX" \
+                --query 'NextContinuationToken' \
+                --output text 2>/dev/null)
+
+              [[ "$TOKEN" == "None" || -z "$TOKEN" ]] && break
+            done
+
+            echo "$LATEST"
+          }
+
+          delete_old_folders() {
+            local BUCKET=$1
+            local PREFIX=$2
+            local TOKEN=""
+            local DELETED=0
+
+            echo "Scanning s3://$BUCKET/$PREFIX for deletion"
+
+            while : ; do
+              if [[ -z "$TOKEN" ]]; then
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --delimiter "/" \
+                  --output json)
+              else
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --delimiter "/" \
+                  --continuation-token "$TOKEN" \
+                  --output json)
+              fi
+
+              mapfile -t FOLDERS < <(echo "$RESPONSE" | jq -r '.CommonPrefixes[]?.Prefix')
+
+              for folder in "${FOLDERS[@]}"; do
+                [[ -z "$folder" ]] && continue
+
+                TAG_NAME="${folder#${PREFIX}}"
+                TAG_NAME="${TAG_NAME%/}"
+
+                # Skip protected
+                if [[ "$TAG_NAME" == "latest" || "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  echo "Skipping protected: s3://$BUCKET/$folder"
+                  continue
+                fi
+
+                LAST_MODIFIED=$(get_latest_object_time "$BUCKET" "$folder")
+
+                [[ -z "$LAST_MODIFIED" || "$LAST_MODIFIED" == "None" ]] && continue
+
+                TS=$(date -u -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if [[ $TS -gt 0 && $TS -lt $THRESHOLD ]]; then
+                  DATE=$(date -u -d "$LAST_MODIFIED" +%Y-%m-%d)
+                  echo "Deleting: s3://$BUCKET/$folder (last modified: $DATE)"
+                  sleep 60
+                  aws s3 rm "s3://$BUCKET/$folder" --recursive
+                  echo "  Deleted s3://$BUCKET/$folder"
+                  DELETED=$((DELETED+1))
+                fi
+              done
+
+              TOKEN=$(echo "$RESPONSE" | jq -r '.NextContinuationToken // empty')
+              [[ -z "$TOKEN" ]] && break
+            done
+            echo "Deleted $DELETED folders from s3://$BUCKET/$PREFIX"
+          }
+
+          if [[ -n "${S3_BUCKET_DEV:-}" ]]; then
+            echo "=== DEV Bucket: $S3_BUCKET_DEV ==="
+            delete_old_folders "$S3_BUCKET_DEV" "dev/"
+            delete_old_folders "$S3_BUCKET_DEV" "nightly/"
           fi
