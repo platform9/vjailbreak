@@ -118,11 +118,70 @@ LOG_DIR="/var/log/pf9"
 STATE_DIR="/var/lib/pf9"
 LOG_FILE="${LOG_DIR}/time-settings.log"
 STATE_FILE="${STATE_DIR}/time-settings.state"
+TIMESYNCD_CONF_DIR="/etc/systemd/timesyncd.conf.d"
+TIMESYNCD_CONF_FILE="${TIMESYNCD_CONF_DIR}/99-vjailbreak.conf"
 
 mkdir -p "$LOG_DIR" "$STATE_DIR"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+normalize_servers() {
+  printf '%s' "${1:-}" | tr ',\n' '  ' | xargs || true
+}
+
+write_timesyncd_conf() {
+  local servers="$1"
+  mkdir -p "$TIMESYNCD_CONF_DIR"
+  cat <<CONF | tee "$TIMESYNCD_CONF_FILE" >/dev/null
+[Time]
+NTP=${servers}
+CONF
+}
+
+clear_timesyncd_conf() {
+  rm -f "$TIMESYNCD_CONF_FILE"
+}
+
+restart_v2v_helper_pods() {
+  local pods
+  pods="$(kubectl -n migration-system get pods --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | awk '/^v2v-helper-/{print $1}' || true)"
+
+  if [ -z "$pods" ]; then
+    return 0
+  fi
+
+  while IFS= read -r pod; do
+    [ -n "$pod" ] || continue
+    kubectl -n migration-system delete pod "$pod" --grace-period=0 --force >/dev/null 2>&1 || true
+  done <<EOF
+$pods
+EOF
+}
+
+update_pf9_env_timezone() {
+  local tz="$1"
+  if [ -z "$tz" ]; then
+    return 0
+  fi
+
+  if [ -f /etc/pf9/env ]; then
+    if grep -q '^TZ=' /etc/pf9/env; then
+      sudo sed -i "s/^TZ=.*/TZ=${tz}/" /etc/pf9/env || true
+    else
+      printf '\nTZ=%s\n' "$tz" | sudo tee -a /etc/pf9/env >/dev/null
+    fi
+  fi
+
+  if kubectl -n migration-system get configmap pf9-env >/dev/null 2>&1; then
+    kubectl -n migration-system patch configmap pf9-env --type merge -p "{\"data\":{\"TZ\":\"${tz}\"}}" >/dev/null 2>&1 || true
+    for deployment in migration-controller-manager migration-vpwned-sdk vjailbreak-ui; do
+      kubectl -n migration-system rollout restart deployment "$deployment" >/dev/null 2>&1 || true
+    done
+    kubectl -n migration-system rollout restart deployment v2v-helper >/dev/null 2>&1 || true
+    restart_v2v_helper_pods
+  fi
 }
 
 if [ -f "/etc/pf9/k3s.env" ]; then
@@ -149,10 +208,12 @@ get_cm_val() {
 }
 
 timezone="$(get_cm_val TIMEZONE)"
+ntp_servers_raw="$(get_cm_val NTP_SERVERS)"
 
 timezone="$(echo "${timezone:-}" | xargs || true)"
+ntp_servers="$(normalize_servers "${ntp_servers_raw:-}")"
 
-desired_fingerprint="$(printf '%s\n' "${timezone}" | sha256sum | awk '{print $1}')"
+desired_fingerprint="$(printf '%s\n%s\n' "${timezone}" "${ntp_servers}" | sha256sum | awk '{print $1}')"
 current_fingerprint=""
 if [ -f "$STATE_FILE" ]; then
   current_fingerprint="$(cat "$STATE_FILE" 2>/dev/null || true)"
@@ -162,27 +223,43 @@ if [ "$desired_fingerprint" = "$current_fingerprint" ]; then
   exit 0
 fi
 
-log "Applying time settings: TIMEZONE=${timezone}"
+log "Applying time settings: TIMEZONE=${timezone} NTP_SERVERS=${ntp_servers}"
 
-timezone_valid="false"
+sync_enabled="false"
+target_timezone=""
 
-if [ -n "$timezone" ]; then
-  if [ -f "/usr/share/zoneinfo/${timezone}" ]; then
-    timezone_valid="true"
-    current_tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
-    if [ "$current_tz" != "$timezone" ]; then
-      if timedatectl set-timezone "$timezone"; then
-        log "Timezone updated to ${timezone}"
-      else
-        log "Failed to set timezone to ${timezone}"
-      fi
-    fi
+if [ -n "$ntp_servers" ]; then
+  sync_enabled="true"
+  write_timesyncd_conf "$ntp_servers"
+  if [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
+    target_timezone="$timezone"
   else
-    log "Invalid timezone '${timezone}' (missing /usr/share/zoneinfo/${timezone}); skipping"
+    target_timezone="UTC"
+    log "No valid timezone selected with custom NTP servers; defaulting timezone to UTC"
+  fi
+elif [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
+  sync_enabled="true"
+  target_timezone="$timezone"
+  clear_timesyncd_conf
+else
+  clear_timesyncd_conf
+  target_timezone="UTC"
+fi
+
+if [ -n "$target_timezone" ]; then
+  current_tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  if [ "$current_tz" != "$target_timezone" ]; then
+    if timedatectl set-timezone "$target_timezone"; then
+      log "Timezone updated to ${target_timezone}"
+    else
+      log "Failed to set timezone to ${target_timezone}"
+    fi
   fi
 fi
 
-if [ "$timezone_valid" = "true" ]; then
+update_pf9_env_timezone "$target_timezone"
+
+if [ "$sync_enabled" = "true" ]; then
   timedatectl set-ntp true >/dev/null 2>&1 || true
   systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
   systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
@@ -211,22 +288,88 @@ ExecStart=/etc/pf9/apply-time-settings.sh
 WantedBy=multi-user.target
 EOF
 
-  sudo tee /etc/systemd/system/vjailbreak-time-settings.timer > /dev/null <<'EOF'
-[Unit]
-Description=Periodically apply vJailbreak NTP/timezone settings
+  sudo tee /etc/pf9/watch-time-settings.sh > /dev/null <<'EOF'
+#!/bin/bash
+set -euo pipefail
 
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=1min
-Unit=vjailbreak-time-settings.service
+LOG_DIR="/var/log/pf9"
+LOG_FILE="${LOG_DIR}/time-settings-watch.log"
 
-[Install]
-WantedBy=timers.target
+mkdir -p "$LOG_DIR"
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+if [ -f "/etc/pf9/k3s.env" ]; then
+  source "/etc/pf9/k3s.env" || true
+fi
+
+if [ "${IS_MASTER:-}" != "true" ]; then
+  exit 0
+fi
+
+if ! command -v kubectl >/dev/null 2>&1; then
+  log "kubectl not found; watcher exiting"
+  exit 0
+fi
+
+log "vJailbreak time watcher started (watching vjailbreak-settings ConfigMap)"
+
+while true; do
+  if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
+    log "vjailbreak-settings ConfigMap not available yet; retrying"
+    sleep 10
+    continue
+  fi
+
+  /etc/pf9/apply-time-settings.sh || true
+  log "Watching vjailbreak-settings ConfigMap for time setting changes"
+
+  if kubectl -n migration-system get configmap vjailbreak-settings --watch --request-timeout=0 -o name 2>/dev/null | while read -r _; do
+    /etc/pf9/apply-time-settings.sh || true
+  done; then
+    :
+  fi
+
+  log "ConfigMap watch ended; restarting watcher loop"
+  sleep 5
+done
 EOF
 
+  sudo chmod +x /etc/pf9/watch-time-settings.sh
+
+  sudo tee /etc/logrotate.d/pf9-time-settings > /dev/null <<'EOF'
+/var/log/pf9/time-settings*.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+}
+EOF
+
+  sudo tee /etc/systemd/system/vjailbreak-time-settings-watcher.service > /dev/null <<'EOF'
+[Unit]
+Description=Watch vJailbreak NTP/timezone settings from Kubernetes ConfigMap
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/etc/pf9/watch-time-settings.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.timer
   sudo systemctl daemon-reload
-  sudo systemctl enable --now vjailbreak-time-settings.timer || true
-  log "Installed vjailbreak-time-settings.timer"
+  sudo systemctl disable --now vjailbreak-time-settings.timer >/dev/null 2>&1 || true
+  sudo systemctl enable --now vjailbreak-time-settings-watcher.service || true
+  log "Installed vjailbreak-time-settings-watcher.service"
 }
 
 install_time_settings_applier
@@ -352,7 +495,7 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Rsync daemon started successfully."
 
   # Create a config map from env file. 
-  kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
+  kubectl create configmap pf9-env -n migration-system --from-env-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
 

@@ -89,6 +89,7 @@ const DEFAULTS: SettingsForm = {
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
   TIMEZONE: '',
+  NTP_SERVERS: '',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -131,6 +132,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
     'DEFAULT_MIGRATION_METHOD',
+    'NTP_SERVERS',
     'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
@@ -222,7 +224,9 @@ const TabPanel = ({
 const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
   TIMEZONE:
-    'Select a timezone for the vJailbreak VM. Leaving this empty disables time synchronization; selecting a timezone enables time synchronization and updates the timezone.',
+    'Select a timezone for the vJailbreak VM. If NTP Servers is empty, leaving this blank disables time synchronization; selecting a timezone enables time synchronization and updates the timezone.',
+  NTP_SERVERS:
+    'Optional comma or newline separated NTP servers. When set, these override default public pools. Time sync remains enabled even if Timezone is blank (defaults to UTC).',
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 'Number of iterations to copy changed blocks.',
   PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Interval to wait for VM to become active (in seconds).',
@@ -320,6 +324,17 @@ const EMPTY_ERRORS: FieldErrorMap = {}
 const { parseInterval, validateProxyUrl, deriveProxyState, applyProxyState } = helpers
 const { toConfigMapData, fromConfigMapData, buildEnvPayload } = helpers
 
+const isValidTimezone = (value: string): boolean => {
+  const tz = value.trim()
+  if (!tz) return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
 type UseGlobalSettingsControllerReturn = {
   form: SettingsForm
   errors: FieldErrorMap
@@ -330,13 +345,13 @@ type UseGlobalSettingsControllerReturn = {
   setActiveTab: React.Dispatch<React.SetStateAction<TabKey>>
   notification: NotificationState
   proxyUpdateSuccess: boolean
+  timezoneOptions: TimezoneOption[]
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
   onBool: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSelect: (e: SelectChangeEvent<string>) => void
   tabHasError: (tab: TabKey) => boolean
   handleTabChange: (_: SyntheticEvent, value: string | number) => void
   onResetDefaults: () => void
-  onCancel: () => void
   onSave: (e: React.FormEvent) => Promise<void>
   handleNotificationClose: (_: SyntheticEvent | Event, reason?: SnackbarCloseReason) => void
 }
@@ -356,6 +371,25 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   })
 
   const form = rhfForm.watch() as SettingsForm
+  const timezoneOptions = useMemo(() => {
+    const tz = (form.TIMEZONE ?? '').trim()
+    if (!tz || POPULAR_TIMEZONES.some((opt) => opt.value === tz)) {
+      return POPULAR_TIMEZONES
+    }
+
+    if (!isValidTimezone(tz)) {
+      return POPULAR_TIMEZONES
+    }
+
+    return [
+      {
+        value: tz,
+        offset: '',
+        label: `(Legacy) ${tz}`
+      },
+      ...POPULAR_TIMEZONES
+    ]
+  }, [form.TIMEZONE])
 
   const buildErrors = useCallback((state: SettingsForm): FieldErrorMap => {
     const e: FieldErrorMap = {}
@@ -420,7 +454,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
 
     const tz = (state.TIMEZONE ?? '').trim()
     if (tz) {
-      const tzOk = POPULAR_TIMEZONES.some((opt) => opt.value === tz)
+      const tzOk = POPULAR_TIMEZONES.some((opt) => opt.value === tz) || isValidTimezone(tz)
       if (!tzOk) e.TIMEZONE = 'Select a timezone from the list.'
     }
 
@@ -459,7 +493,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       if (!hostname) return false
 
       // permissive hostname / domain check (supports internal hostnames and FQDNs)
-      if (!/^[a-zA-Z0-9-\.]+$/.test(hostname)) return false
+      if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) return false
       if (hostname.startsWith('-') || hostname.endsWith('-')) return false
       if (hostname.includes('..')) return false
 
@@ -579,7 +613,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       )
       const tz = (base.TIMEZONE ?? '').trim()
       const normalizedBase =
-        !tz || POPULAR_TIMEZONES.some((opt) => opt.value === tz)
+        !tz || POPULAR_TIMEZONES.some((opt) => opt.value === tz) || isValidTimezone(tz)
           ? base
           : { ...base, TIMEZONE: '' }
       const proxyState = deriveProxyState(base, pf9Env?.data)
@@ -643,10 +677,6 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     rhfForm.reset({ ...DEFAULTS })
   }, [rhfForm])
 
-  const onCancel = useCallback(() => {
-    rhfForm.reset({ ...initial })
-  }, [initial, rhfForm])
-
   const onSave = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
@@ -667,6 +697,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         form.PROXY_HTTPS_PORT !== initial.PROXY_HTTPS_PORT ||
         form.NO_PROXY !== initial.NO_PROXY
 
+      const timeSettingsChanged =
+        form.TIMEZONE !== initial.TIMEZONE || form.NTP_SERVERS !== initial.NTP_SERVERS
+
+      if (timeSettingsChanged) {
+        show('Applying time settings...', 'info')
+      }
+
       setSaving(true)
       try {
         const existingCm = await getSettingsConfigMap()
@@ -678,8 +715,6 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         }
 
         delete mergedData.NTP_ENABLED
-        delete mergedData.NTP_SERVERS
-
         await updateSettingsConfigMap({
           apiVersion: existingCm?.apiVersion || 'v1',
           kind: existingCm?.kind || 'ConfigMap',
@@ -727,7 +762,12 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           if (proxyChanged) {
             setProxyUpdateSuccess(true)
           }
-          show('Global Settings saved successfully.', 'success')
+          show(
+            timeSettingsChanged
+              ? 'Time settings applied successfully (including all pods).'
+              : 'Global Settings saved successfully.',
+            'success'
+          )
         }
       } catch (err) {
         console.error('Failed to save Global Settings ConfigMap:', err)
@@ -767,13 +807,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     setActiveTab,
     notification,
     proxyUpdateSuccess,
+    timezoneOptions,
     onText,
     onBool,
     onSelect,
     tabHasError,
     handleTabChange,
     onResetDefaults,
-    onCancel,
     onSave,
     handleNotificationClose
   }
@@ -799,7 +839,8 @@ export default function GlobalSettingsPage() {
     handleTabChange,
     onResetDefaults,
     onSave,
-    handleNotificationClose
+    handleNotificationClose,
+    timezoneOptions,
   } = useGlobalSettingsController()
 
   const activeTabRef = useRef(activeTab)
@@ -1090,9 +1131,11 @@ export default function GlobalSettingsPage() {
 
               <RHFAutocomplete<TimezoneOption>
                 name="TIMEZONE"
-                options={POPULAR_TIMEZONES}
+                options={timezoneOptions}
                 label="Timezone"
-                placeholder="Default (NTP disabled)"
+                placeholder="Search or select a timezone"
+                disableClearable={false}
+                clearOnEscape={true}
                 getOptionLabel={(option) => option.label}
                 getOptionValue={(option) => option.value}
                 renderOptionLabel={(option) => option.label}
@@ -1378,6 +1421,17 @@ export default function GlobalSettingsPage() {
                     { shouldValidate: true }
                   )
                 }}
+              />
+
+              <RHFTextField
+                name="NTP_SERVERS"
+                label="NTP Servers"
+                multiline
+                minRows={4}
+                labelProps={{ tooltip: FIELD_TOOLTIPS.NTP_SERVERS }}
+                helperText={errors.NTP_SERVERS || 'Leave blank to use default public pools (enabled automatically when Timezone is set)'}
+                error={Boolean(errors.NTP_SERVERS)}
+                placeholder="0.pool.ntp.org, 1.pool.ntp.org or one per line"
               />
 
               <FormControl

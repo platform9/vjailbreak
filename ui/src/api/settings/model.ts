@@ -9,6 +9,7 @@ export interface VjailbreakSettings {
     DEFAULT_MIGRATION_METHOD: string
     DEPLOYMENT_NAME: string
     TIMEZONE?: string
+    NTP_SERVERS?: string
     PROXY?: string
     POPULATE_VMWARE_MACHINE_FLAVORS: string
     VCENTER_LOGIN_RETRY_LIMIT: number
