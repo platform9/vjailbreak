@@ -165,6 +165,7 @@ jobs:
                 fi
               done)
 
+              DELETED_THIS_PAGE=0
               for TAG_NAME in $TAGS_TO_DELETE; do
                 echo "Deleting tag: $TAG_NAME from $REPO"
                 sleep 60
@@ -175,6 +176,7 @@ jobs:
                 if [[ "$HTTP_CODE" == "204" || "$HTTP_CODE" == "200" ]]; then
                   echo "  Deleted $TAG_NAME"
                   DELETED=$((DELETED+1))
+                  DELETED_THIS_PAGE=$((DELETED_THIS_PAGE+1))
                 else
                   echo "  Failed to delete $TAG_NAME (HTTP $HTTP_CODE)"
                 fi
@@ -184,7 +186,9 @@ jobs:
                 break
               fi
 
-              PAGE=$((PAGE+1))
+              if [[ $DELETED_THIS_PAGE -eq 0 ]]; then
+                PAGE=$((PAGE+1))
+              fi
             done
             echo "Deleted $DELETED tags from $REPO"
             echo ""
@@ -200,15 +204,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
           aws-region: ${{ env.S3_REGION }}
 
-      ###########################################
-      # List old S3 folders (>30 days)
-      ###########################################
-      - name: List S3 folders older than 30 days
+      - name: Prepare S3 helper functions
         run: |
-          set -euo pipefail
-
-          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
-
+          cat > "$RUNNER_TEMP/s3_cleanup_helpers.sh" <<'EOF'
           get_latest_object_time() {
             local BUCKET=$1
             local PREFIX=$2
@@ -217,21 +215,19 @@ jobs:
 
             while : ; do
               if [[ -z "$TOKEN" ]]; then
-                RESP=$(aws s3api list-objects-v2 \
+                RESPONSE=$(aws s3api list-objects-v2 \
                   --bucket "$BUCKET" \
                   --prefix "$PREFIX" \
-                  --query 'Contents[].LastModified' \
                   --output json)
               else
-                RESP=$(aws s3api list-objects-v2 \
+                RESPONSE=$(aws s3api list-objects-v2 \
                   --bucket "$BUCKET" \
                   --prefix "$PREFIX" \
                   --continuation-token "$TOKEN" \
-                  --query 'Contents[].LastModified' \
                   --output json)
               fi
 
-              TIMES=$(echo "$RESP" | jq -r '.[]?')
+              TIMES=$(echo "$RESPONSE" | jq -r '.Contents[]?.LastModified')
 
               for t in $TIMES; do
                 if [[ -z "$LATEST" || "$t" > "$LATEST" ]]; then
@@ -239,17 +235,23 @@ jobs:
                 fi
               done
 
-              TOKEN=$(aws s3api list-objects-v2 \
-                --bucket "$BUCKET" \
-                --prefix "$PREFIX" \
-                --query 'NextContinuationToken' \
-                --output text 2>/dev/null)
-
-              [[ "$TOKEN" == "None" || -z "$TOKEN" ]] && break
+              TOKEN=$(echo "$RESPONSE" | jq -r '.NextContinuationToken // empty')
+              [[ -z "$TOKEN" ]] && break
             done
 
             echo "$LATEST"
           }
+          EOF
+
+      ###########################################
+      # List old S3 folders (>30 days)
+      ###########################################
+      - name: List S3 folders older than 30 days
+        run: |
+          set -euo pipefail
+
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+          source "$RUNNER_TEMP/s3_cleanup_helpers.sh"
 
           list_old_folders() {
             local BUCKET=$1
@@ -320,48 +322,7 @@ jobs:
           set -euo pipefail
 
           THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
-
-          get_latest_object_time() {
-            local BUCKET=$1
-            local PREFIX=$2
-            local TOKEN=""
-            local LATEST=""
-
-            while : ; do
-              if [[ -z "$TOKEN" ]]; then
-                RESP=$(aws s3api list-objects-v2 \
-                  --bucket "$BUCKET" \
-                  --prefix "$PREFIX" \
-                  --query 'Contents[].LastModified' \
-                  --output json)
-              else
-                RESP=$(aws s3api list-objects-v2 \
-                  --bucket "$BUCKET" \
-                  --prefix "$PREFIX" \
-                  --continuation-token "$TOKEN" \
-                  --query 'Contents[].LastModified' \
-                  --output json)
-              fi
-
-              TIMES=$(echo "$RESP" | jq -r '.[]?')
-
-              for t in $TIMES; do
-                if [[ -z "$LATEST" || "$t" > "$LATEST" ]]; then
-                  LATEST="$t"
-                fi
-              done
-
-              TOKEN=$(aws s3api list-objects-v2 \
-                --bucket "$BUCKET" \
-                --prefix "$PREFIX" \
-                --query 'NextContinuationToken' \
-                --output text 2>/dev/null)
-
-              [[ "$TOKEN" == "None" || -z "$TOKEN" ]] && break
-            done
-
-            echo "$LATEST"
-          }
+          source "$RUNNER_TEMP/s3_cleanup_helpers.sh"
 
           delete_old_folders() {
             local BUCKET=$1
