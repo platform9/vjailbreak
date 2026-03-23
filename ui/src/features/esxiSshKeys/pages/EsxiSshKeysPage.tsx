@@ -165,7 +165,15 @@ export default function EsxiSshKeysPage() {
 
   const rows: HostRow[] = useMemo(() => {
     const items = Array.isArray(vmwareHosts) ? vmwareHosts : []
-    return items.map((host: VMwareHost) => ({
+    const byUuid = items.reduce((acc, host) => {
+      const key = host.spec.hardwareUuid || host.spec.name
+      const existing = acc.get(key)
+      if (!existing || (existing.status?.sshStatus?.toLowerCase() !== 'succeeded' && host.status?.sshStatus?.toLowerCase() === 'succeeded')) {
+        acc.set(key, host)
+      }
+      return acc
+    }, new Map<string, VMwareHost>())
+    return Array.from(byUuid.values()).map((host: VMwareHost) => ({
       id: host.metadata.name,
       hostname: host.spec.name,
       clusterName: host.spec.clusterName || '-',
