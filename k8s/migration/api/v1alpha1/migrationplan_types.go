@@ -86,8 +86,6 @@ type NICOverride struct {
 	// PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC.
 	// When nil the migration default (preserve) is used.
 	PreserveMAC *bool `json:"preserveMAC,omitempty"`
-
-	UserAssignedIP string `json:"UserAssignedIP,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan including
