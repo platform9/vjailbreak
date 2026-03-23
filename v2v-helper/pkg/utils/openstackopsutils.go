@@ -70,13 +70,6 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
-	currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
-	if currentInstanceUUID == "" {
-		PrintLog("CURRENT_INSTANCE_ID environment variable is not set")
-	} else {
-		return currentInstanceUUID, nil
-	}
-
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
 		// If cached, return it immediately.
@@ -110,6 +103,11 @@ func GetCurrentInstanceUUID() (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+		if currentInstanceUUID != "" {
+			PrintLog("CURRENT_INSTANCE_ID environment variable is set to: " + currentInstanceUUID)
+			return currentInstanceUUID, nil
+		}
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
@@ -634,7 +632,7 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		} else {
 			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
 			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
@@ -689,7 +687,7 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ip)
 		}
 		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
 		// Create with DHCP by removing fixed IPs
