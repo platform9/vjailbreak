@@ -1403,6 +1403,7 @@ export default function GlobalSettingsPage() {
               onClick={onResetDefaults}
               startIcon={<RefreshIcon />}
               data-testid="global-settings-reset-defaults"
+              disabled={activeTab === 'vddk'}
             >
               Reset to Defaults
             </Button>
