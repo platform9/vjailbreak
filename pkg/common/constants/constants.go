@@ -96,6 +96,15 @@ const (
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
+	// VMwareNetworkTypeNetwork is the VMware network type for standard port groups
+	VMwareNetworkTypeNetwork = "Network"
+
+	// VMwareNetworkTypeDistributedVirtualPortgroup is the VMware network type for dvPort groups
+	VMwareNetworkTypeDistributedVirtualPortgroup = "DistributedVirtualPortgroup"
+
+	// VMwareNetworkTypeOpaqueNetwork is the VMware network type for NSX-T opaque networks
+	VMwareNetworkTypeOpaqueNetwork = "OpaqueNetwork"
+
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
 

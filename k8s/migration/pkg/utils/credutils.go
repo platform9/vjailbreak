@@ -821,10 +821,10 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
 				network = backing.Port.PortgroupKey
-				networkType = "DistributedVirtualPortgroup"
+				networkType = constants.VMwareNetworkTypeDistributedVirtualPortgroup
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
 				network = backing.OpaqueNetworkId
-				networkType = "OpaqueNetwork"
+				networkType = constants.VMwareNetworkTypeOpaqueNetwork
 			}
 			nicList = append(nicList, vjailbreakv1alpha1.NIC{
 				MAC:         strings.ToLower(nic.MacAddress),
@@ -850,31 +850,31 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 	case "":
 		return "", fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
 
-	case "Network":
+	case constants.VMwareNetworkTypeNetwork:
 		var netObj mo.Network
-		netRef := types.ManagedObjectReference{Type: "Network", Value: nic.Network}
+		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeNetwork, Value: nic.Network}
 		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
 			return "", fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
 		}
 		return netObj.Name, nil
 
-	case "DistributedVirtualPortgroup":
+	case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
 		var netObj mo.DistributedVirtualPortgroup
-		netRef := types.ManagedObjectReference{Type: "DistributedVirtualPortgroup", Value: nic.Network}
+		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
 		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
 			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
 		}
 		return netObj.Name, nil
 
-	case "OpaqueNetwork":
+	case constants.VMwareNetworkTypeOpaqueNetwork:
 		m := view.NewManager(c)
-		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"OpaqueNetwork"}, true)
+		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{constants.VMwareNetworkTypeOpaqueNetwork}, true)
 		if err != nil {
 			return "", fmt.Errorf("failed to create container view for opaque networks: %w", err)
 		}
 		defer v.Destroy(ctx) //nolint:errcheck
 		var nets []mo.OpaqueNetwork
-		if err := v.Retrieve(ctx, []string{"OpaqueNetwork"}, []string{"name", "summary"}, &nets); err != nil {
+		if err := v.Retrieve(ctx, []string{constants.VMwareNetworkTypeOpaqueNetwork}, []string{"name", "summary"}, &nets); err != nil {
 			return "", fmt.Errorf("failed to retrieve opaque networks: %w", err)
 		}
 		for _, n := range nets {
