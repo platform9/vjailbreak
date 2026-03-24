@@ -54,6 +54,10 @@ type MigrationTemplateSpec struct {
 	// +kubebuilder:default:=normal
 	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
+	// ProxyVMName is the name of the VM in vCenter that will receive the source disk
+	// via SCSI HotAdd. Required when StorageCopyMethod is HotAddCopy.
+	// +optional
+	ProxyVMName string `json:"proxyVMName,omitempty"`
 	// Source is the source details for the virtual machine
 	Source MigrationTemplateSource `json:"source"`
 	// Destination is the destination details for the virtual machine

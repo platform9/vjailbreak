@@ -72,6 +72,9 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // StorageCopyMethod is the storage copy method value for Storage Accelerated copy
 const StorageCopyMethod = "StorageAcceleratedCopy"
 
+// HotAddCopyMethod is the storage copy method value for VMware HotAdd SCSI transport
+const HotAddCopyMethod = "HotAddCopy"
+
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
@@ -465,7 +468,8 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 //nolint:gocyclo
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	scope *scope.MigrationPlanScope,
+) (ctrl.Result, error) {
 	totalVMs := 0
 	for _, group := range migrationplan.Spec.VirtualMachines {
 		totalVMs += len(group)
@@ -531,7 +535,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				latest.Status.MigrationMessage = ""
 				return r.Status().Update(ctx, latest)
 			})
-
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
 			}
@@ -1323,6 +1326,112 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
 		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds)
+		r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
+		configMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: migrationplan.Namespace,
+			},
+			Data: map[string]string{
+				"SOURCE_VM_NAME":                    vm,
+				"CONVERT":                           "true", // Assume that the vm always has to be converted
+				"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
+				"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
+				"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
+				"CUTOVEREND":                        migrationplan.Spec.MigrationStrategy.VMCutoverEnd.Format(time.RFC3339),
+				"NEUTRON_NETWORK_NAMES":             strings.Join(openstacknws, ","),
+				"NEUTRON_PORT_IDS":                  strings.Join(openstackports, ","),
+				"CINDER_VOLUME_TYPES":               strings.Join(openstackvolumetypes, ","),
+				"VIRTIO_WIN_DRIVER":                 virtiodrivers,
+				"PERFORM_HEALTH_CHECKS":             strconv.FormatBool(migrationplan.Spec.MigrationStrategy.PerformHealthChecks),
+				"HEALTH_CHECK_PORT":                 migrationplan.Spec.MigrationStrategy.HealthCheckPort,
+				"VMWARE_MACHINE_OBJECT_NAME":        vmMachine.Name,
+				"SECURITY_GROUPS":                   strings.Join(migrationplan.Spec.SecurityGroups, ","),
+				"SERVER_GROUP":                      migrationplan.Spec.ServerGroup,
+				"RDM_DISK_NAMES":                    strings.Join(vmMachine.Spec.VMInfo.RDMDisks, ","),
+				"FALLBACK_TO_DHCP":                  strconv.FormatBool(migrationplan.Spec.FallbackToDHCP),
+				"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
+				"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
+				"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
+				"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
+				"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
+			},
+		}
+		if utils.IsOpenstackPCD(*openstackcreds) {
+			configMap.Data["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
+		}
+
+		// Check if assigned IP is set from Migration spec
+		if migrationobj.Spec.AssignedIP != "" {
+			configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
+		} else {
+			configMap.Data["ASSIGNED_IP"] = ""
+		}
+
+		// Pass network overrides if set
+		if migrationobj.Spec.NetworkOverrides != "" {
+			configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
+		}
+
+		// Check if target flavor is set
+		if vmMachine.Spec.TargetFlavorID != "" {
+			configMap.Data["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
+		} else {
+			// If target flavor is not set, use the closest matching flavor
+			allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to list all flavors")
+			}
+
+			// UseGPUFlavor is only applicable for PCD credentials
+			useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
+
+			// Get GPU requirements from VM
+			passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
+			vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
+
+			var flavor *flavors.Flavor
+			flavor, err = openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get closest flavor")
+			}
+			if flavor == nil {
+				gpuInfo := ""
+				if passthroughGPUCount > 0 || vgpuCount > 0 {
+					gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
+				} else {
+					gpuInfo = " without GPU"
+				}
+				return nil, errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
+			}
+			configMap.Data["TARGET_FLAVOR_ID"] = flavor.ID
+		}
+
+		if vmMachine.Spec.VMInfo.OSFamily == "" {
+			return nil, errors.Errorf(
+				"OSFamily is not available for the VM '%s', "+
+					"cannot perform the migration. Please set OSFamily explicitly in the VMwareMachine CR",
+				vmMachine.Name)
+		}
+
+		configMap.Data["OS_FAMILY"] = vmMachine.Spec.VMInfo.OSFamily
+		configMap.Data["DISCONNECT_SOURCE_NETWORK"] = strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork)
+
+		if migrationtemplate.Spec.OSFamily != "" {
+			configMap.Data["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
+		}
+
+		switch migrationtemplate.Spec.StorageCopyMethod {
+		case StorageCopyMethod:
+			configMap.Data["STORAGE_COPY_METHOD"] = StorageCopyMethod
+			configMap.Data["VENDOR_TYPE"] = arraycreds.Spec.VendorType
+			configMap.Data["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+		case HotAddCopyMethod:
+			configMap.Data["STORAGE_COPY_METHOD"] = HotAddCopyMethod
+			configMap.Data["PROXY_VM_NAME"] = migrationtemplate.Spec.ProxyVMName
+		}
+
+		err = r.createResource(ctx, migrationobj, configMap)
 		if err != nil {
 			return nil, err
 		}
