@@ -366,6 +366,15 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 							Image:           vpwnedImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"./vpwctl", "upgrade-job"},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "pf9-env",
+										},
+									},
+								},
+							},
 							Env: []corev1.EnvVar{
 								{
 									Name:  "UPGRADE_TARGET_VERSION",
@@ -471,6 +480,15 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 							Image:           vpwnedImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"./vpwctl", "upgrade-job"},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "pf9-env",
+										},
+									},
+								},
+							},
 							Env: []corev1.EnvVar{
 								{
 									Name:  "UPGRADE_TARGET_VERSION",

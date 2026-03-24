@@ -372,8 +372,6 @@ EOF
   log "Installed vjailbreak-time-settings-watcher.service"
 }
 
-install_time_settings_applier
-
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
 sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
 sudo chmod 644 /etc/htpasswd
@@ -513,6 +511,8 @@ if [ "$IS_MASTER" == "true" ]; then
     else
       log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
   fi
+
+  install_time_settings_applier
 
 else
   log "Setting up K3s Worker..."

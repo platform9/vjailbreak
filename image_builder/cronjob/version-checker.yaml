@@ -47,6 +47,9 @@ spec:
           containers:
             - name: version-checker
               image: quay.io/platform9/vjailbreak:alpine
+              envFrom:
+                - configMapRef:
+                    name: pf9-env
               command:
                 - /bin/sh
                 - -c
