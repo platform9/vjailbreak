@@ -155,6 +155,7 @@ rules:
   verbs:
   - create
   - get
+  - delete
 - apiGroups:
   - ""
   resources:

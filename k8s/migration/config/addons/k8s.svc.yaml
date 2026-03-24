@@ -41,6 +41,10 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler

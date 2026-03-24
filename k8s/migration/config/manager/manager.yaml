@@ -57,6 +57,10 @@ spec:
         #   type: RuntimeDefault
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       containers:
       - command:
         - /manager

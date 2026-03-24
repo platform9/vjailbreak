@@ -47,6 +47,10 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       hostNetwork: true
       restartPolicy: Always
