@@ -8,7 +8,8 @@ import {
   FormControlLabel,
   Radio,
   Alert,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material'
 import { useEffect, useMemo, useCallback, useRef } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
@@ -35,7 +36,8 @@ export interface ResourceMap {
 // Storage copy method options
 export const STORAGE_COPY_METHOD_OPTIONS = [
   { value: 'normal', label: 'Standard Copy' },
-  { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' }
+  { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' },
+  { value: 'HotAddCopy', label: 'HotAdd Copy' }
 ] as const
 
 export type StorageCopyMethod = (typeof STORAGE_COPY_METHOD_OPTIONS)[number]['value']
@@ -50,6 +52,7 @@ interface NetworkAndStorageMappingStepProps {
     storageMappings?: ResourceMap[]
     arrayCredsMappings?: ResourceMap[]
     storageCopyMethod?: StorageCopyMethod
+    proxyVMName?: string
   }
   onChange: (key: string) => (value: any) => void
   networkMappingError?: string
@@ -330,7 +333,7 @@ export default function NetworkAndStorageMappingStep({
                       value={option.value}
                       control={<Radio />}
                       label={
-                        option.value === 'StorageAcceleratedCopy' ? (
+                        option.value === 'StorageAcceleratedCopy' || option.value === 'HotAddCopy' ? (
                           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                             <Box component="span">{option.label}</Box>
                             <Chip
@@ -360,24 +363,7 @@ export default function NetworkAndStorageMappingStep({
                 </RadioGroup>
               </Box>
 
-              {storageCopyMethod === 'normal' ? (
-                <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select source and target storage to automatically create mappings. All storage
-                    devices must be mapped in order to proceed.
-                  </Typography>
-                  <ResourceMappingTable
-                    sourceItems={vmWareStorage}
-                    targetItems={openstackStorage}
-                    sourceLabel="VMware Datastore"
-                    targetLabel="PCD Volume Type"
-                    values={params.storageMappings || []}
-                    onChange={(value) => onChange('storageMappings')(value)}
-                    oneToManyMapping
-                    fieldPrefix="storageMapping"
-                  />
-                </>
-              ) : (
+              {storageCopyMethod === 'StorageAcceleratedCopy' ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Map datastores to storage array credentials for storage array data copy.
@@ -412,6 +398,53 @@ export default function NetworkAndStorageMappingStep({
                       />
                     </>
                   )}
+                </>
+              ) : storageCopyMethod === 'HotAddCopy' ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    HotAdd attaches the source disk directly to a proxy VM on the same ESXi host,
+                    bypassing the management network. SCSI disks only. Cold migration only (Beta).
+                  </Typography>
+                  <TextField
+                    label="Proxy VM Name"
+                    placeholder="e.g. vjailbreak-proxy"
+                    value={params.proxyVMName || ''}
+                    onChange={(e) => onChange('proxyVMName')(e.target.value)}
+                    fullWidth
+                    size="small"
+                    helperText="Name of the VM in vCenter that will receive the source disk via SCSI HotAdd"
+                    sx={{ mb: 2 }}
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Select source and target storage for Cinder volume creation:
+                  </Typography>
+                  <ResourceMappingTable
+                    sourceItems={vmWareStorage}
+                    targetItems={openstackStorage}
+                    sourceLabel="VMware Datastore"
+                    targetLabel="PCD Volume Type"
+                    values={params.storageMappings || []}
+                    onChange={(value) => onChange('storageMappings')(value)}
+                    oneToManyMapping
+                    fieldPrefix="storageMapping"
+                  />
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Select source and target storage to automatically create mappings. All storage
+                    devices must be mapped in order to proceed.
+                  </Typography>
+                  <ResourceMappingTable
+                    sourceItems={vmWareStorage}
+                    targetItems={openstackStorage}
+                    sourceLabel="VMware Datastore"
+                    targetLabel="PCD Volume Type"
+                    values={params.storageMappings || []}
+                    onChange={(value) => onChange('storageMappings')(value)}
+                    oneToManyMapping
+                    fieldPrefix="storageMapping"
+                  />
                 </>
               )}
 
