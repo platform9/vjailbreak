@@ -46,6 +46,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
+            optional: true
       dnsPolicy: ClusterFirst
       hostNetwork: true
       restartPolicy: Always

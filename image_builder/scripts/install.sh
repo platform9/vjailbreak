@@ -105,8 +105,8 @@ set_default_password() {
 set_default_password
 check_command "Setting default password for ubuntu user"
 
-install_time_settings_applier() {
-  log "Installing vJailbreak time settings applier (NTP/timezone)..."
+install_time_settings_watcher() {
+  log "Installing vJailbreak time settings watcher (NTP/timezone)..."
 
   sudo mkdir -p /etc/pf9
 
@@ -129,6 +129,63 @@ log() {
 
 normalize_servers() {
   printf '%s' "${1:-}" | tr ',\n' '  ' | xargs || true
+}
+
+is_valid_ntp_server() {
+  local server="$1"
+
+  [ -n "$server" ] || return 1
+
+  if [[ "$server" == *"://"* ]] || [[ "$server" == */* ]]; then
+    return 1
+  fi
+
+  if [[ "$server" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    local o1 o2 o3 o4
+    IFS='.' read -r o1 o2 o3 o4 <<< "$server"
+    for octet in "$o1" "$o2" "$o3" "$o4"; do
+      if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
+        return 1
+      fi
+    done
+    return 0
+  fi
+
+  if [[ "$server" =~ ^[a-zA-Z0-9.-]+$ ]] && [[ "$server" != .* ]] && [[ "$server" != *..* ]]; then
+    IFS='.' read -r -a labels <<< "$server"
+    for label in "${labels[@]}"; do
+      if [ -z "$label" ] || [ "${#label}" -gt 63 ] || [[ ! "$label" =~ ^[a-zA-Z0-9-]+$ ]] || [[ "$label" == -* ]] || [[ "$label" == *- ]]; then
+        return 1
+      fi
+    done
+    return 0
+  fi
+
+  return 1
+}
+
+filter_valid_ntp_servers() {
+  local raw="$1"
+  local valid=""
+  local invalid=""
+  local server
+
+  for server in $raw; do
+    if is_valid_ntp_server "$server"; then
+      valid+=" $server"
+    else
+      invalid+=" $server"
+    fi
+  done
+
+  valid="$(echo "$valid" | xargs || true)"
+  invalid="$(echo "$invalid" | xargs || true)"
+
+  if [ -n "$invalid" ]; then
+    log "Ignoring invalid NTP server entries: $invalid"
+  fi
+
+  printf '%s' "$valid"
 }
 
 write_timesyncd_conf() {
@@ -154,10 +211,10 @@ restart_v2v_helper_pods() {
 
   while IFS= read -r pod; do
     [ -n "$pod" ] || continue
-    kubectl -n migration-system delete pod "$pod" --grace-period=0 --force >/dev/null 2>&1 || true
-  done <<EOF
+    kubectl -n migration-system delete pod "$pod" >/dev/null 2>&1 || true
+  done <<PODS_EOF
 $pods
-EOF
+PODS_EOF
 }
 
 update_pf9_env_timezone() {
@@ -193,12 +250,12 @@ if [ "${IS_MASTER:-}" != "true" ]; then
 fi
 
 if ! command -v kubectl >/dev/null 2>&1; then
-  log "kubectl not found; skipping time settings apply"
+  log "kubectl not found yet; time settings will be applied by watcher when ready"
   exit 0
 fi
 
 if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
-  log "vjailbreak-settings ConfigMap not available yet; skipping time settings apply"
+  log "vjailbreak-settings ConfigMap not available yet; watcher will handle it"
   exit 0
 fi
 
@@ -211,7 +268,7 @@ timezone="$(get_cm_val TIMEZONE)"
 ntp_servers_raw="$(get_cm_val NTP_SERVERS)"
 
 timezone="$(echo "${timezone:-}" | xargs || true)"
-ntp_servers="$(normalize_servers "${ntp_servers_raw:-}")"
+ntp_servers="$(filter_valid_ntp_servers "$(normalize_servers "${ntp_servers_raw:-}")")"
 
 desired_fingerprint="$(printf '%s\n%s\n' "${timezone}" "${ntp_servers}" | sha256sum | awk '{print $1}')"
 current_fingerprint=""
@@ -223,7 +280,7 @@ if [ "$desired_fingerprint" = "$current_fingerprint" ]; then
   exit 0
 fi
 
-log "Applying time settings: TIMEZONE=${timezone} NTP_SERVERS=${ntp_servers}"
+log "Applying time settings: TIMEZONE=${timezone:-<none>} NTP_SERVERS=${ntp_servers:-<default pools>}"
 
 sync_enabled="false"
 target_timezone=""
@@ -274,20 +331,6 @@ EOF
 
   sudo chmod +x /etc/pf9/apply-time-settings.sh
 
-  sudo tee /etc/systemd/system/vjailbreak-time-settings.service > /dev/null <<'EOF'
-[Unit]
-Description=Apply vJailbreak NTP/timezone settings from Kubernetes ConfigMap
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/etc/pf9/apply-time-settings.sh
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
   sudo tee /etc/pf9/watch-time-settings.sh > /dev/null <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -310,7 +353,7 @@ if [ "${IS_MASTER:-}" != "true" ]; then
 fi
 
 if ! command -v kubectl >/dev/null 2>&1; then
-  log "kubectl not found; watcher exiting"
+  log "kubectl not found yet; watcher exiting and will be retried by systemd"
   exit 0
 fi
 
@@ -352,7 +395,7 @@ EOF
   sudo tee /etc/systemd/system/vjailbreak-time-settings-watcher.service > /dev/null <<'EOF'
 [Unit]
 Description=Watch vJailbreak NTP/timezone settings from Kubernetes ConfigMap
-After=network-online.target
+After=k3s.service network-online.target
 Wants=network-online.target
 
 [Service]
@@ -366,9 +409,12 @@ WantedBy=multi-user.target
 EOF
 
   sudo rm -f /etc/systemd/system/vjailbreak-time-settings.timer
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.service
   sudo systemctl daemon-reload
   sudo systemctl disable --now vjailbreak-time-settings.timer >/dev/null 2>&1 || true
+  sudo systemctl disable --now vjailbreak-time-settings.service >/dev/null 2>&1 || true
   sudo systemctl enable --now vjailbreak-time-settings-watcher.service || true
+  sleep 3
   log "Installed vjailbreak-time-settings-watcher.service"
 }
 
@@ -512,7 +558,7 @@ if [ "$IS_MASTER" == "true" ]; then
       log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
   fi
 
-  install_time_settings_applier
+  install_time_settings_watcher
 
 else
   log "Setting up K3s Worker..."

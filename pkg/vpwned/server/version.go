@@ -330,6 +330,7 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 	backoffLimit := int32(0)
 	ttlSeconds := int32(86400)
 	activeDeadlineSeconds := int64(3600)
+	optionalConfigMap := true
 
 	autoCleanupStr := "false"
 	if autoCleanup {
@@ -372,6 +373,7 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: "pf9-env",
 										},
+										Optional: &optionalConfigMap,
 									},
 								},
 							},
@@ -449,6 +451,7 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 	backoffLimit := int32(0)
 	ttlSeconds := int32(86400)
 	activeDeadlineSeconds := int64(3600)
+	optionalConfigMap := true
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -486,6 +489,7 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: "pf9-env",
 										},
+										Optional: &optionalConfigMap,
 									},
 								},
 							},
