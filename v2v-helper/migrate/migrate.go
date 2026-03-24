@@ -72,6 +72,8 @@ type Migrate struct {
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
 	StorageCopyMethod       string
+	// ProxyVMName is the name of the proxy VM used for HotAdd transport
+	ProxyVMName       string
 	// Array credentials for StorageAcceleratedCopy storage migration
 	ArrayHost         string
 	ArrayUser         string
