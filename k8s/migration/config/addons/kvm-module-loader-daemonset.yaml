@@ -15,8 +15,12 @@ spec:
         app: kvm-module-loader
     spec:
       automountServiceAccountToken: false
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
+      # No nodeSelector: the DaemonSet runs on every node in the cluster.
+      # This is intentional — when a new migration agent node joins, Kubernetes
+      # automatically schedules this pod on it before any v2v-helper job can
+      # land there, ensuring KVM is loaded regardless of when nodes are added.
+      # modprobe is a no-op if the module is already loaded or the CPU vendor
+      # does not support KVM, so running on non-migration nodes is harmless.
       tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
