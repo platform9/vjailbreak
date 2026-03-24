@@ -49,8 +49,8 @@ type MigrationTemplateSpec struct {
 	// +optional
 	ArrayCredsMapping string `json:"arrayCredsMapping,omitempty"`
 	// StorageCopyMethod indicates the method to use for storage migration
-	// Valid values: "normal" (default), "StorageAcceleratedCopy"
-	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy
+	// Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAddCopy"
+	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy;HotAddCopy
 	// +kubebuilder:default:=normal
 	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`

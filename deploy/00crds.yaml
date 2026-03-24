@@ -1351,10 +1351,11 @@ spec:
                 default: normal
                 description: |-
                   StorageCopyMethod indicates the method to use for storage migration
-                  Valid values: "normal" (default), "StorageAcceleratedCopy"
+                  Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAddCopy"
                 enum:
                 - normal
                 - StorageAcceleratedCopy
+                - HotAddCopy
                 type: string
               storageMapping:
                 description: |-
