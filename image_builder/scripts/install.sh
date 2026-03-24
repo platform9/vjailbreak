@@ -337,6 +337,11 @@ set -euo pipefail
 
 LOG_DIR="/var/log/pf9"
 LOG_FILE="${LOG_DIR}/time-settings-watch.log"
+WATCH_TIMEOUT="10m"
+BACKOFF=5
+MAX_BACKOFF=60
+JITTER_MAX=3
+DEBOUNCE_SECONDS=2
 
 mkdir -p "$LOG_DIR"
 
@@ -361,21 +366,35 @@ log "vJailbreak time watcher started (watching vjailbreak-settings ConfigMap)"
 
 while true; do
   if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
-    log "vjailbreak-settings ConfigMap not available yet; retrying"
-    sleep 10
+    jitter=$(( RANDOM % JITTER_MAX ))
+    wait_seconds=$(( BACKOFF + jitter ))
+    log "ConfigMap not available; retrying in ${wait_seconds}s (base=${BACKOFF}s, jitter=${jitter}s)"
+    sleep "$wait_seconds"
+    BACKOFF=$(( BACKOFF * 2 ))
+    [ "$BACKOFF" -gt "$MAX_BACKOFF" ] && BACKOFF="$MAX_BACKOFF"
     continue
   fi
 
+  BACKOFF=5
+
   /etc/pf9/apply-time-settings.sh || true
-  log "Watching vjailbreak-settings ConfigMap for time setting changes"
+  log "Watching ConfigMap (timeout=${WATCH_TIMEOUT}, backoff reset; API server may end watch earlier)"
 
-  if kubectl -n migration-system get configmap vjailbreak-settings --watch --request-timeout=0 -o name 2>/dev/null | while read -r _; do
+  kubectl -n migration-system get configmap vjailbreak-settings \
+    --watch --request-timeout="${WATCH_TIMEOUT}" -o name 2>/dev/null | \
+  {
+    last_apply_epoch=0
+  while read -r _; do
+    now_epoch="$(date +%s)"
+    if [ "$last_apply_epoch" -ne 0 ] && [ $(( now_epoch - last_apply_epoch )) -lt "$DEBOUNCE_SECONDS" ]; then
+      continue
+    fi
+    last_apply_epoch="$now_epoch"
     /etc/pf9/apply-time-settings.sh || true
-  done; then
-    :
-  fi
+  done
+  }
 
-  log "ConfigMap watch ended; restarting watcher loop"
+  log "Watch ended; restarting in 5s"
   sleep 5
 done
 EOF
