@@ -1119,7 +1119,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						ServiceAccountName:            "migration-controller-manager",
 						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 						HostNetwork:                   true,
-						DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
+						DNSPolicy: corev1.DNSClusterFirstWithHostNet,
+						DNSConfig: &corev1.PodDNSConfig{
+							Options: []corev1.PodDNSConfigOption{
+								{
+									Name:  "ndots",
+									Value: ptr.To("1"),
+								},
+							},
+						},
 						Containers: []corev1.Container{
 							{
 								Name:            "fedora",
