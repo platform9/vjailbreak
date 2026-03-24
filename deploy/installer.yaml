@@ -4480,6 +4480,10 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
@@ -4544,6 +4548,10 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -4782,6 +4790,7 @@ rules:
   verbs:
   - create
   - get
+  - delete
 - apiGroups:
   - ""
   resources:

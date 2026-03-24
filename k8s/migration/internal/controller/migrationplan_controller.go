@@ -1119,7 +1119,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						ServiceAccountName:            "migration-controller-manager",
 						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 						HostNetwork:                   true,
-						DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
+						DNSPolicy: corev1.DNSClusterFirstWithHostNet,
+						DNSConfig: &corev1.PodDNSConfig{
+							Options: []corev1.PodDNSConfigOption{
+								{
+									Name:  "ndots",
+									Value: ptr.To("1"),
+								},
+							},
+						},
 						Containers: []corev1.Container{
 							{
 								Name:            "fedora",
@@ -1396,11 +1404,12 @@ func resolveVirtioDriverURL(migrationtemplate *vjailbreakv1alpha1.MigrationTempl
 }
 
 func getCurrentInstanceID(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
-	if openstackcreds.Spec.VJBInstanceID != "" {
-		return openstackcreds.Spec.VJBInstanceID, nil
-	}
 	currentInstanceID, err := v2vutils.GetCurrentInstanceUUID()
 	if err != nil {
+		// if metadata fails then only get from spec
+		if openstackcreds.Spec.VJBInstanceID != "" {
+			return openstackcreds.Spec.VJBInstanceID, nil
+		}
 		return "", errors.Wrap(err, "failed to get current instance uuid")
 	}
 	return currentInstanceID, nil
