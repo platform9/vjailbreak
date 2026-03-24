@@ -75,6 +75,10 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
