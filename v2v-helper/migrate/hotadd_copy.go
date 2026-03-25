@@ -74,3 +74,32 @@ func hotAddCreateLinkedClone(
 	clone := object.NewVirtualMachine(vcClient.VCClient, ref)
 	return clone, nil
 }
+
+// hotAddDestroyVM deletes a VM and all of its disk files. Used to clean up the
+// linked clone after the migration copy is complete (or on failure).
+func hotAddDestroyVM(ctx context.Context, vm *object.VirtualMachine) error {
+	task, err := vm.Destroy(ctx)
+	if err != nil {
+		return fmt.Errorf("Destroy_Task failed: %w", err)
+	}
+	if err := task.Wait(ctx); err != nil {
+		return fmt.Errorf("destroy task failed: %w", err)
+	}
+	return nil
+}
+
+// hotAddGetVMDisks returns all VirtualDisk devices attached to a VM.
+func hotAddGetVMDisks(ctx context.Context, vm *object.VirtualMachine) ([]*types.VirtualDisk, error) {
+	var vmMo mo.VirtualMachine
+	if err := vm.Properties(ctx, vm.Reference(), []string{"config.hardware.device"}, &vmMo); err != nil {
+		return nil, fmt.Errorf("failed to get VM device list: %w", err)
+	}
+
+	var disks []*types.VirtualDisk
+	for _, device := range vmMo.Config.Hardware.Device {
+		if d, ok := device.(*types.VirtualDisk); ok {
+			disks = append(disks, d)
+		}
+	}
+	return disks, nil
+}
