@@ -5,6 +5,7 @@ import ComputerIcon from '@mui/icons-material/Computer'
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getSecret } from 'src/api/secrets/secrets'
+import { getESXiSSHCreds, updateESXiSSHCreds } from 'src/api/esxi-ssh-creds/esxiSshCreds'
 import { getVMwareHosts } from 'src/api/vmware-hosts/vmwareHosts'
 import { VMwareHost } from 'src/api/vmware-hosts/model'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
@@ -165,7 +166,15 @@ export default function EsxiSshKeysPage() {
 
   const rows: HostRow[] = useMemo(() => {
     const items = Array.isArray(vmwareHosts) ? vmwareHosts : []
-    return items.map((host: VMwareHost) => ({
+    const byUuid = items.reduce((acc, host) => {
+      const key = host.spec.hardwareUuid || host.spec.name
+      const existing = acc.get(key)
+      if (!existing || (existing.status?.sshStatus?.toLowerCase() !== 'succeeded' && host.status?.sshStatus?.toLowerCase() === 'succeeded')) {
+        acc.set(key, host)
+      }
+      return acc
+    }, new Map<string, VMwareHost>())
+    return Array.from(byUuid.values()).map((host: VMwareHost) => ({
       id: host.metadata.name,
       hostname: host.spec.name,
       clusterName: host.spec.clusterName || '-',
@@ -193,10 +202,27 @@ export default function EsxiSshKeysPage() {
     }
   }, [rows, statusFilter])
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
+    try {
+      const credsList = await getESXiSSHCreds(SECRET_NAMESPACE)
+      await Promise.all(
+        (credsList.items || []).map((creds) =>
+          updateESXiSSHCreds(
+            creds.metadata.name,
+            creds.spec.secretRef.name,
+            creds.spec.username || 'root',
+            SECRET_NAMESPACE,
+            new Date().toISOString(),
+            creds.metadata.resourceVersion
+          )
+        )
+      )
+    } catch (e) {
+      reportError(e as Error, { context: 'force-revalidate-esxi-ssh' })
+    }
     refetch()
     refetchEsxiSshKey()
-  }, [refetch, refetchEsxiSshKey])
+  }, [refetch, refetchEsxiSshKey, reportError])
 
   const isKeyConfigured = !!esxiSshKeySecret?.metadata?.name
 
