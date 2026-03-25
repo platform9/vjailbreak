@@ -42,6 +42,10 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
