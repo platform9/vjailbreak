@@ -679,6 +679,16 @@ func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string
 		return "", errors.Wrap(err, "failed to get openstack clients")
 	}
 
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack credentials from secret")
+	}
+
+	if uuid == "" {
+		// if uuid is not provided, assume this is L2 network and use the VJB instance ID from the secret
+		uuid = openstackCredential.VJBInstanceID
+	}
+
 	// Fetch the VM details
 	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
 	if err != nil {
@@ -696,6 +706,16 @@ func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string,
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack credentials from secret")
+	}
+
+	if uuid == "" {
+		// if uuid is not provided, assume this is L2 network and use the VJB instance ID from the secret
+		uuid = openstackCredential.VJBInstanceID
 	}
 
 	// Fetch the VM details
