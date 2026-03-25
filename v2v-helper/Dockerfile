@@ -31,39 +31,43 @@ COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
 # Install runtime dependencies with size optimizations:
 # - --nodocs: Skip documentation files
 # - --setopt=install_weak_deps=False: Skip weak dependencies
-# - Clean up aggressively after install
-RUN dnf install -y \
-    --nodocs \
-    --setopt=install_weak_deps=False \
-    ./libnbd-1.22.2-1.fc42.x86_64.rpm \
-    ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./virt-v2v-2.7.17-1.fc42.x86_64.rpm \
-    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
-    guestfs-tools \
-    netplan && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
-    rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
-    find /var/log -type f -delete
+# - Individual installs for better layer caching and debugging
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./libnbd-1.22.2-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./virt-v2v-2.7.17-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False guestfs-tools
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False netplan
+RUN dnf clean all
+RUN rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/
+RUN rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale
+RUN find /var/log -type f -delete
 
 # Version lock to prevent accidental upgrades
 # Install versionlock plugin without docs to save space
-RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-versionlock && \
-    dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
-    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
-    nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
-    nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
-    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.17-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf /var/cache/yum
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-versionlock
+RUN dnf versionlock add nbdkit-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-vddk-plugin-1.42.4-1.fc42
+RUN dnf versionlock add libnbd-1.22.2-1.fc42
+RUN dnf versionlock add nbdkit-server-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-basic-plugins-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-basic-filters-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-curl-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-ssh-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-python-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-nbd-plugin-1.42.4-1.fc42
+RUN dnf versionlock add virt-v2v-2.7.17-1.fc42.x86_64
+RUN dnf versionlock add nbdkit-selinux-1.42.4-1.fc42.noarch
+RUN dnf clean all
+RUN rm -rf /var/cache/dnf /var/cache/yum
 
 # Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
