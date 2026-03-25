@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
@@ -273,6 +275,10 @@ func (r *ESXiSSHCredsReconciler) getSSHCredentialsFromSecret(ctx context.Context
 		username = "root"
 	}
 
+	if _, err := ssh.ParsePrivateKey(privateKey); err != nil {
+		return nil, fmt.Errorf("invalid SSH private key in secret %s/%s: %v", secretNamespace, secretName, err)
+	}
+
 	return &vjailbreakv1alpha1.ESXiSSHCredsInfo{
 		Username:   username,
 		PrivateKey: privateKey,
@@ -289,15 +295,28 @@ func (r *ESXiSSHCredsReconciler) getVMwareHosts(ctx context.Context) ([]*vjailbr
 		return nil, errors.Wrap(err, "failed to list VMwareHosts")
 	}
 
-	hosts := make([]*vjailbreakv1alpha1.VMwareHost, 0, len(vmwareHostList.Items))
+	seen := make(map[string]*vjailbreakv1alpha1.VMwareHost)
 	for i := range vmwareHostList.Items {
 		vmwareHost := &vmwareHostList.Items[i]
-		// VMwareHost.Spec.Name contains the ESXi hostname (IP or FQDN)
-		if vmwareHost.Spec.Name != "" {
-			hosts = append(hosts, vmwareHost)
-		} else {
+		if vmwareHost.Spec.Name == "" {
 			ctxlog.Info("VMwareHost has no hostname, skipping", "vmwareHost", vmwareHost.Name)
+			continue
 		}
+		key := vmwareHost.Spec.HardwareUUID
+		if key == "" {
+			key = vmwareHost.Spec.Name
+		}
+		existing, exists := seen[key]
+		if !exists || (existing.Status.SSHStatus != constants.ESXiSSHCredsStatusSucceeded && vmwareHost.Status.SSHStatus == constants.ESXiSSHCredsStatusSucceeded) {
+			if exists {
+				ctxlog.Info("Preferring duplicate VMwareHost with Succeeded status", "vmwareHost", vmwareHost.Name, "key", key)
+			}
+			seen[key] = vmwareHost
+		}
+	}
+	hosts := make([]*vjailbreakv1alpha1.VMwareHost, 0, len(seen))
+	for _, h := range seen {
+		hosts = append(hosts, h)
 	}
 
 	ctxlog.Info("Discovered VMwareHosts", "hostCount", len(hosts))
