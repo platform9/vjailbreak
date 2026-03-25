@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import axios from 'axios'
-import { useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
   DrawerShell,
@@ -47,6 +47,7 @@ interface OpenstackCredentialsFormValues {
   rcFile?: File
   isPcd: boolean
   insecure: boolean
+  passVjbInstanceId: boolean
   vjbInstanceId: string
 }
 
@@ -64,6 +65,7 @@ export default function OpenstackCredentialsDrawer({
       rcFile: undefined,
       isPcd: true,
       insecure: false,
+      passVjbInstanceId: false,
       vjbInstanceId: ''
     }
   })
@@ -87,6 +89,8 @@ export default function OpenstackCredentialsDrawer({
   const watchedValues = watch()
   const credentialName = watchedValues.credentialName
   const rcFile = watchedValues.rcFile
+  const passVjbInstanceId = watchedValues.passVjbInstanceId
+  const vjbInstanceId = watchedValues.vjbInstanceId
 
   const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery()
   const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery(undefined, {
@@ -100,6 +104,7 @@ export default function OpenstackCredentialsDrawer({
       rcFile: undefined,
       isPcd: false,
       insecure: false,
+      passVjbInstanceId: false,
       vjbInstanceId: ''
     })
     setRcFileValues(null)
@@ -135,6 +140,12 @@ export default function OpenstackCredentialsDrawer({
   }, [createdCredentialName, resetDrawerState])
 
   const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null)
+
+  useEffect(() => {
+    if (!passVjbInstanceId && vjbInstanceId) {
+      setValue('vjbInstanceId', '')
+    }
+  }, [passVjbInstanceId, setValue, vjbInstanceId])
 
   const handleRCFileParsed = useCallback(
     (values: Record<string, string>) => {
@@ -195,7 +206,7 @@ export default function OpenstackCredentialsDrawer({
           },
           values.isPcd,
           projectName,
-          values.vjbInstanceId
+          values.passVjbInstanceId ? values.vjbInstanceId : undefined
         )
 
         setCreatedCredentialName(response.metadata.name)
@@ -244,7 +255,8 @@ export default function OpenstackCredentialsDrawer({
     !!errors.rcFile ||
     !credentialName ||
     !rcFile ||
-    !rcFileValues
+    !rcFileValues ||
+    (passVjbInstanceId && !vjbInstanceId?.trim())
 
   const handleValidationStatus = (status: string, message?: string) => {
     if (status === 'Succeeded') {
@@ -429,15 +441,34 @@ export default function OpenstackCredentialsDrawer({
                 required
               />
 
-              <FormGrid minWidth={360} gap={2}>
-                <RHFTextField
-                  name="vjbInstanceId"
-                  label="vJailbreak Instance ID (Optional)"
-                  placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
-                  helperText="Specify the PCD instance ID where vJailbreak is running. Leave empty to auto-detect. Required if this vJailbreak VM is on L2 Network."
-                  fullWidth
-                />
-              </FormGrid>
+              <Row gap={3} flexWrap="wrap">
+                <Box sx={{ flex: 1, minWidth: 260 }}>
+                  <RHFToggleField
+                    name="passVjbInstanceId"
+                    label="vJailbreak VM is on Layer 2 Network"
+                    description="Turn on to pass the vJailbreak instance ID when creating PCD credentials. Required when vJailbreak is running on an L2 network."
+                  />
+                </Box>
+              </Row>
+
+              {passVjbInstanceId && (
+                <FormGrid minWidth={360} gap={2}>
+                  <RHFTextField
+                    name="vjbInstanceId"
+                    label="vJailbreak Instance ID"
+                    placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
+                    helperText="Specify the PCD instance ID where vJailbreak is running."
+                    rules={{
+                      validate: (value: string) =>
+                        !passVjbInstanceId ||
+                        Boolean(value?.trim()) ||
+                        'Instance ID is required when vJailbreak is on an L2 network'
+                    }}
+                    fullWidth
+                    required
+                  />
+                </FormGrid>
+              )}
 
               <Row gap={3} flexWrap="wrap">
                 <Box sx={{ flex: 1, minWidth: 260 }}>
