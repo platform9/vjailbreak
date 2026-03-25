@@ -281,6 +281,48 @@ func hotAddAddDiskToVM(
 	return 0, fmt.Errorf("disk was hot-added but could not find its device key (backing: %s)", backingPath)
 }
 
+// hotAddRemoveDiskFromVM hot-removes a disk from a VM by its device key.
+// The disk file is NOT deleted — only the device attachment is removed.
+func hotAddRemoveDiskFromVM(
+	ctx context.Context,
+	targetVM *object.VirtualMachine,
+	deviceKey int32,
+) error {
+	var vmMo mo.VirtualMachine
+	if err := targetVM.Properties(ctx, targetVM.Reference(), []string{"config.hardware.device"}, &vmMo); err != nil {
+		return fmt.Errorf("failed to get proxy VM devices: %w", err)
+	}
+
+	var diskToRemove types.BaseVirtualDevice
+	for _, dev := range vmMo.Config.Hardware.Device {
+		if dev.GetVirtualDevice().Key == deviceKey {
+			diskToRemove = dev
+			break
+		}
+	}
+	if diskToRemove == nil {
+		return fmt.Errorf("device key %d not found on VM %s", deviceKey, targetVM.Reference().Value)
+	}
+
+	spec := types.VirtualMachineConfigSpec{
+		DeviceChange: []types.BaseVirtualDeviceConfigSpec{
+			&types.VirtualDeviceConfigSpec{
+				Operation: types.VirtualDeviceConfigSpecOperationRemove,
+				Device:    diskToRemove,
+			},
+		},
+	}
+
+	task, err := targetVM.Reconfigure(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("ReconfigVM hot-remove failed: %w", err)
+	}
+	if err := task.Wait(ctx); err != nil {
+		return fmt.Errorf("hot-remove task failed: %w", err)
+	}
+	return nil
+}
+
 // HotAddCopyDisks orchestrates the full HotAdd disk copy for all VM disks.
 // It is called from StartMigration after CreateVolumes has already created
 // and set vminfo.VMDisks[idx].OpenstackVol for each disk.
