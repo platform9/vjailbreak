@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -218,6 +219,43 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) e
 		migobj.logMessage(fmt.Sprintf("[HotAdd]   disk[%d] %s: backing=%s", i, d.Name, d.SnapBackingDisk))
 	}
 
+	// Step 3: Get snapshot reference for linked clone creation.
+	snapRef, err := migobj.VMops.GetSnapshot(constants.MigrationSnapshotName)
+	if err != nil {
+		fmt.Sprintf("vjailbreak-hotadd-%s-%d", vminfo.Name, time.Now().Unix())
+		return errors.Wrap(err, "failed to get snapshot reference")
+	}
+
+	// Step 4: Locate proxy VM and get its IP.
+	proxyVM, err := vcClient.GetVMByName(ctx, migobj.ProxyVMName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to find proxy VM %q", migobj.ProxyVMName)
+	}
+	proxyIP, err := hotAddGetVMIP(ctx, proxyVM)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get IP of proxy VM %q", migobj.ProxyVMName)
+	}
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Proxy VM %q found at %s", migobj.ProxyVMName, proxyIP))
+
+	// Step 5: Create linked clone — instant, shares parent disk, never powered on.
+	cloneName := fmt.Sprintf("vjailbreak-hotadd-%s-%d", vminfo.Name, time.Now().Unix())
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Creating linked clone %q", cloneName))
+	linkedClone, err := hotAddCreateLinkedClone(ctx, vcClient, migobj.VMops.GetVMObj(), *snapRef, cloneName)
+	if err != nil {
+		return errors.Wrap(err, "failed to create linked clone")
+	}
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Linked clone %q created", cloneName))
+
+	defer func() {
+		migobj.logMessage(fmt.Sprintf("[HotAdd] Destroying linked clone %q", cloneName))
+		if err := hotAddDestroyVM(ctx, linkedClone); err != nil {
+			migobj.logMessage(fmt.Sprintf("[HotAdd] WARNING: failed to destroy linked clone: %v", err))
+		}
+		migobj.logMessage("[HotAdd] Cleaning up snapshot")
+		if err := migobj.VMops.CleanUpSnapshots(true); err != nil {
+			migobj.logMessage(fmt.Sprintf("[HotAdd] WARNING: failed to clean up snapshot: %v", err))
+		}
+	}()
 	migobj.logMessage("[HotAdd] All disks copied successfully")
 	return nil
 }
