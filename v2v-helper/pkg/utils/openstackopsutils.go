@@ -751,9 +751,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	PrintLog("=== OPENSTACK VM CREATION - BLOCK DEVICE MAPPING ===")
-	PrintLog(fmt.Sprintf("VM Name: %s, UEFI: %t", vminfo.Name, vminfo.UEFI))
-	PrintLog(fmt.Sprintf("Total VMDisks: %d", len(vminfo.VMDisks)))
+	PrintLog(fmt.Sprintf("Creating VM %s (UEFI: %t, Total Disks: %d)", vminfo.Name, vminfo.UEFI, len(vminfo.VMDisks)))
 
 	// For UEFI VMs, check if ESP is on a separate disk
 	espDiskIndex := -1
@@ -796,8 +794,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		disksAttachedAtCreate = append(disksAttachedAtCreate,
 			fmt.Sprintf("%s (BootIndex=1) - ROOT DISK", vminfo.VMDisks[bootableDiskIndex].Name))
 
-		PrintLog(fmt.Sprintf("UEFI MULTI-DISK LAYOUT: Attaching ESP disk (Disk %d) and Root disk (Disk %d) at CREATE time",
-			espDiskIndex, bootableDiskIndex))
+		PrintLog(fmt.Sprintf("UEFI multi-disk layout: ESP (Disk %d) + Root (Disk %d) attached at create time", espDiskIndex, bootableDiskIndex))
 	} else {
 		// Standard layout: single boot disk or ESP on same disk as root
 		bootBlockDevice := servers.BlockDevice{
@@ -811,15 +808,10 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		disksAttachedAtCreate = append(disksAttachedAtCreate,
 			fmt.Sprintf("%s (BootIndex=0) - BOOT VOLUME", vminfo.VMDisks[bootableDiskIndex].Name))
 
-		PrintLog(fmt.Sprintf("Boot Volume (BootIndex=0): Disk %d, Volume ID: %s, Name: %s",
-			bootableDiskIndex, uuid, vminfo.VMDisks[bootableDiskIndex].Name))
+		PrintLog(fmt.Sprintf("Boot volume attached at create: Disk %d (%s)", bootableDiskIndex, vminfo.VMDisks[bootableDiskIndex].Name))
 	}
 
 	serverCreateOpts.BlockDevice = blockDevices
-	PrintLog("Volumes attached at CREATE time (will be available at first boot):")
-	for idx, diskInfo := range disksAttachedAtCreate {
-		PrintLog(fmt.Sprintf("  [%d] %s", idx, diskInfo))
-	}
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -891,9 +883,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		additionalDisks = append(additionalDisks, disk)
 	}
 
-	PrintLog(fmt.Sprintf("Volumes to be HOT-ATTACHED after server is ACTIVE: %d disks", len(additionalDisks)))
-	for idx, disk := range additionalDisks {
-		PrintLog(fmt.Sprintf("  [%d] %s (Volume ID: %s) - WILL BE HOT-ATTACHED", idx+1, disk.Name, disk.OpenstackVol.ID))
+	if len(additionalDisks) > 0 {
+		PrintLog(fmt.Sprintf("Hot-attaching %d additional disk(s) after server is active", len(additionalDisks)))
 	}
 
 	if vminfo.UEFI && len(additionalDisks) > 0 {
