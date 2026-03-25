@@ -1045,25 +1045,18 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
-	// Add ESP detection for UEFI VMs
+	// Detect ESP for UEFI VMs
 	espDiskIndex := -1
 	if vminfo.UEFI {
-		migobj.logMessage("=== UEFI ESP DETECTION ===")
-		migobj.logMessage("VM is UEFI - checking for EFI System Partition")
-
-		// Detect which disk contains the ESP using all disks together
 		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
 		if espErr != nil {
 			migobj.logMessage(fmt.Sprintf("Error detecting ESP disk: %v", espErr))
 		} else if detectedESPIndex >= 0 {
 			espDiskIndex = detectedESPIndex
-			migobj.logMessage(fmt.Sprintf("ESP FOUND on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
-			migobj.logMessage(fmt.Sprintf("ESP Volume ID: %s", vminfo.VMDisks[espDiskIndex].OpenstackVol.ID))
+			migobj.logMessage(fmt.Sprintf("ESP detected on Disk %d: %s (Volume: %s)", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name, vminfo.VMDisks[espDiskIndex].OpenstackVol.ID))
 		} else {
 			migobj.logMessage("WARNING: No ESP detected - this may cause boot failure!")
 		}
-
-		migobj.logMessage("=== END ESP DETECTION ===")
 	}
 
 	lvm, lvmErr := virtv2v.CheckForLVM(vminfo.VMDisks)
@@ -1266,6 +1259,20 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to set volume as bootable")
 	}
 
+	// For UEFI multi-disk layouts, also mark the ESP disk as bootable
+	// This is required because OpenStack won't allow attaching a non-bootable volume with BootIndex=0
+	if vminfo.UEFI {
+		for idx, disk := range vminfo.VMDisks {
+			if disk.ESP && idx != bootVolumeIndex {
+				migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", idx, disk.Name))
+				if err := migobj.Openstackclients.SetVolumeBootable(ctx, disk.OpenstackVol); err != nil {
+					return errors.Wrap(err, "failed to set ESP volume as bootable")
+				}
+				break
+			}
+		}
+	}
+
 	return nil
 }
 func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
@@ -1446,18 +1453,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	}
 
 	// Step 7: Mark boot volume
-	utils.PrintLog("=== FINAL BOOT DISK SELECTION ===")
-	utils.PrintLog(fmt.Sprintf("Boot disk index: %d", bootVolumeIndex))
-	utils.PrintLog(fmt.Sprintf("Boot disk name: %s", vminfo.VMDisks[bootVolumeIndex].Name))
-	utils.PrintLog(fmt.Sprintf("Boot disk volume ID: %s", vminfo.VMDisks[bootVolumeIndex].OpenstackVol.ID))
-	utils.PrintLog(fmt.Sprintf("VM UEFI: %t", vminfo.UEFI))
-	if vminfo.UEFI {
-		utils.PrintLog("WARNING: For UEFI VMs, ensure the boot disk contains the EFI System Partition!")
-		utils.PrintLog("         If ESP is on a different disk, the VM will drop into UEFI shell!")
-	}
-	utils.PrintLog(fmt.Sprintf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name))
+	utils.PrintLog(fmt.Sprintf("Boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
-	utils.PrintLog("=== END BOOT DISK SELECTION ===")
 
 	// Step 8: Perform disk conversion
 	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease); err != nil {

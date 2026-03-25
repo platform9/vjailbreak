@@ -304,20 +304,12 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		GatewayIP:         make(map[string]string),
 	}
 
-	// Log detailed source VM information for debugging
-	log.Printf("=== SOURCE VM INFORMATION ===")
-	log.Printf("VM Name: %s", vminfo.Name)
-	log.Printf("UEFI Firmware: %t (Firmware type: %s)", vminfo.UEFI, o.Config.Firmware)
-	log.Printf("OS Type: %s", vminfo.OSType)
-	log.Printf("CPU: %d, Memory: %d MB", vminfo.CPU, vminfo.Memory)
-	log.Printf("Number of Disks: %d", len(vminfo.VMDisks))
+	// Log source VM information
+	log.Printf("Source VM: %s (UEFI: %t, OS: %s, CPU: %d, Memory: %d MB, Disks: %d)",
+		vminfo.Name, vminfo.UEFI, vminfo.OSType, vminfo.CPU, vminfo.Memory, len(vminfo.VMDisks))
 	for idx, disk := range vminfo.VMDisks {
-		log.Printf("  [Disk %d] Name: %s, Size: %d bytes (%.2f GB), DeviceKey: %d",
-			idx, disk.Name, disk.Size, float64(disk.Size)/(1024*1024*1024), disk.Disk.Key)
-		log.Printf("           Path: %s", disk.Path)
-		log.Printf("           Datastore: %s (ID: %s)", disk.Datastore, disk.DatastoreID)
+		log.Printf("  Disk %d: %s (%.2f GB)", idx, disk.Name, float64(disk.Size)/(1024*1024*1024))
 	}
-	log.Printf("=== END SOURCE VM INFO ===")
 
 	return vminfo, nil
 }
