@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -203,6 +204,18 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) e
 	migobj.logMessage("[HotAdd] Cleaning up existing snapshots")
 	if err := migobj.VMops.CleanUpSnapshots(false); err != nil {
 		return errors.Wrap(err, "failed to clean up snapshots")
+	}
+
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Taking snapshot %q", constants.MigrationSnapshotName))
+	if err := migobj.VMops.TakeSnapshot(constants.MigrationSnapshotName); err != nil {
+		return errors.Wrap(err, "failed to take snapshot")
+	}
+	if err := migobj.VMops.UpdateDisksInfo(vminfo); err != nil {
+		return errors.Wrap(err, "failed to update disk info after snapshot")
+	}
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Snapshot taken, %d disk(s) found", len(vminfo.VMDisks)))
+	for i, d := range vminfo.VMDisks {
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   disk[%d] %s: backing=%s", i, d.Name, d.SnapBackingDisk))
 	}
 
 	migobj.logMessage("[HotAdd] All disks copied successfully")
