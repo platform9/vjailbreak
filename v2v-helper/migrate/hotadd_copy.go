@@ -5,9 +5,11 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
+	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -105,6 +107,77 @@ func hotAddGetVMDisks(ctx context.Context, vm *object.VirtualMachine) ([]*types.
 		}
 	}
 	return disks, nil
+}
+
+// hotAddGetVMIP returns the first non-link-local IPv4 address reported by
+// VMware Tools for the given VM.
+func hotAddGetVMIP(ctx context.Context, targetVM *object.VirtualMachine) (string, error) {
+	var vmMo mo.VirtualMachine
+	if err := targetVM.Properties(ctx, targetVM.Reference(), []string{"guest.net"}, &vmMo); err != nil {
+		return "", fmt.Errorf("failed to get VM guest info: %w", err)
+	}
+
+	for _, nic := range vmMo.Guest.Net {
+		for _, ip := range nic.IpAddress {
+			if strings.Contains(ip, ":") || strings.HasPrefix(ip, "169.254.") {
+				continue
+			}
+			return ip, nil
+		}
+	}
+
+	return "", fmt.Errorf("no IPv4 address found for VM (is VMware Tools running?)")
+}
+
+// ValidateHotAddPrerequisites checks that all requirements for HotAdd copy are
+// met before the migration starts, failing fast with a clear error message.
+func (migobj *Migrate) ValidateHotAddPrerequisites(ctx context.Context) error {
+	migobj.logMessage("[HotAdd] Validating prerequisites")
+
+	if migobj.ProxyVMName == "" {
+		return fmt.Errorf("PROXY_VM_NAME is required for HotAdd copy method")
+	}
+
+	if len(migobj.ESXiSSHPrivateKey) == 0 {
+		if err := migobj.LoadESXiSSHKey(ctx); err != nil {
+			return errors.Wrap(err, "failed to load SSH private key")
+		}
+	}
+
+	vcClient := migobj.hotAddGetVCenterClient()
+	if vcClient == nil {
+		return fmt.Errorf("cannot access vCenter client from VMops")
+	}
+
+	proxyVM, err := vcClient.GetVMByName(ctx, migobj.ProxyVMName)
+	if err != nil {
+		return errors.Wrapf(err, "proxy VM %q not found in vCenter", migobj.ProxyVMName)
+	}
+
+	state, err := proxyVM.PowerState(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get proxy VM power state")
+	}
+	if state != types.VirtualMachinePowerStatePoweredOn {
+		return fmt.Errorf("proxy VM %q must be powered on (current state: %s)", migobj.ProxyVMName, state)
+	}
+
+	proxyIP, err := hotAddGetVMIP(ctx, proxyVM)
+	if err != nil {
+		return errors.Wrapf(err, "cannot determine IP of proxy VM %q (is VMware Tools running?)", migobj.ProxyVMName)
+	}
+
+	sshClient := esxissh.NewClient()
+	defer sshClient.Disconnect()
+	if err := sshClient.Connect(ctx, proxyIP, "root", migobj.ESXiSSHPrivateKey); err != nil {
+		return errors.Wrapf(err, "cannot SSH to proxy VM %q at %s", migobj.ProxyVMName, proxyIP)
+	}
+	if err := sshClient.TestConnectionGeneric(); err != nil {
+		return errors.Wrapf(err, "SSH test failed for proxy VM %q", migobj.ProxyVMName)
+	}
+
+	migobj.logMessage(fmt.Sprintf("[HotAdd] Proxy VM %q validated (IP: %s)", migobj.ProxyVMName, proxyIP))
+	return nil
 }
 
 // HotAddCopyDisks orchestrates the full HotAdd disk copy for all VM disks.
