@@ -43,7 +43,7 @@ RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-curl-plugin
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-python-plugin
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-nbd-plugin
 # RUN dnf install -y --nodocs --setopt=install_weak_deps=False  guestfs-tools
-RUN dnf install -y --nodocs --setopt=install_weak_deps=False  libguestfs-tools qemu-img virt-v2v
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False  libguestfs-tools qemu-img ./virt-v2v-2.11.3-2.fc45.x86_64.rpm
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-selinux
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False  netplan
 RUN dnf clean all
