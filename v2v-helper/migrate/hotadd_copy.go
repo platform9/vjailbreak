@@ -182,6 +182,105 @@ func (migobj *Migrate) ValidateHotAddPrerequisites(ctx context.Context) error {
 	return nil
 }
 
+// hotAddAddDiskToVM hot-adds a disk (identified by its VMDK backing path) to a
+// running VM. It finds an existing SCSI controller and a free unit number, then
+// issues a ReconfigVM_Task. Returns the device key assigned by vCenter so the
+// disk can be removed later with hotAddRemoveDiskFromVM.
+func hotAddAddDiskToVM(
+	ctx context.Context,
+	targetVM *object.VirtualMachine,
+	backingPath string,
+) (int32, error) {
+	var vmMo mo.VirtualMachine
+	if err := targetVM.Properties(ctx, targetVM.Reference(), []string{"config.hardware.device"}, &vmMo); err != nil {
+		return 0, fmt.Errorf("failed to get proxy VM devices: %w", err)
+	}
+
+	// Find the first SCSI controller on the proxy VM.
+	var controllerKey int32
+	usedUnits := map[int32]bool{7: true} // unit 7 is reserved for the controller itself
+
+	for _, dev := range vmMo.Config.Hardware.Device {
+		switch sc := dev.(type) {
+		case *types.VirtualLsiLogicController,
+			*types.VirtualLsiLogicSASController,
+			*types.ParaVirtualSCSIController,
+			*types.VirtualBusLogicController:
+			vc := sc.(types.BaseVirtualDevice).GetVirtualDevice()
+			if controllerKey == 0 {
+				controllerKey = vc.Key
+			}
+		}
+		// Track used unit numbers on the chosen controller.
+		vd := dev.GetVirtualDevice()
+		if controllerKey != 0 && vd.ControllerKey == controllerKey {
+			if vd.UnitNumber != nil {
+				usedUnits[*vd.UnitNumber] = true
+			}
+		}
+	}
+
+	if controllerKey == 0 {
+		return 0, fmt.Errorf("no SCSI controller found on proxy VM %s", targetVM.Reference().Value)
+	}
+
+	// Find the lowest free unit number (0-15, skip 7).
+	var unitNumber int32
+	for usedUnits[unitNumber] {
+		unitNumber++
+		if unitNumber > 15 {
+			return 0, fmt.Errorf("no free SCSI slots on proxy VM (controller key=%d)", controllerKey)
+		}
+	}
+
+	disk := &types.VirtualDisk{
+		VirtualDevice: types.VirtualDevice{
+			Backing: &types.VirtualDiskFlatVer2BackingInfo{
+				VirtualDeviceFileBackingInfo: types.VirtualDeviceFileBackingInfo{
+					FileName: backingPath,
+				},
+				DiskMode: string(types.VirtualDiskModePersistent),
+			},
+			ControllerKey: controllerKey,
+			UnitNumber:    &unitNumber,
+		},
+	}
+
+	spec := types.VirtualMachineConfigSpec{
+		DeviceChange: []types.BaseVirtualDeviceConfigSpec{
+			&types.VirtualDeviceConfigSpec{
+				Operation: types.VirtualDeviceConfigSpecOperationAdd,
+				Device:    disk,
+			},
+		},
+	}
+
+	task, err := targetVM.Reconfigure(ctx, spec)
+	if err != nil {
+		return 0, fmt.Errorf("ReconfigVM hot-add failed: %w", err)
+	}
+	if err := task.Wait(ctx); err != nil {
+		return 0, fmt.Errorf("hot-add task failed: %w", err)
+	}
+
+	// Re-read devices to find the key vCenter assigned to the new disk.
+	var after mo.VirtualMachine
+	if err := targetVM.Properties(ctx, targetVM.Reference(), []string{"config.hardware.device"}, &after); err != nil {
+		return 0, fmt.Errorf("failed to read devices after hot-add: %w", err)
+	}
+	for _, dev := range after.Config.Hardware.Device {
+		if d, ok := dev.(*types.VirtualDisk); ok {
+			if b, ok := d.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+				if b.FileName == backingPath {
+					return d.Key, nil
+				}
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("disk was hot-added but could not find its device key (backing: %s)", backingPath)
+}
+
 // HotAddCopyDisks orchestrates the full HotAdd disk copy for all VM disks.
 // It is called from StartMigration after CreateVolumes has already created
 // and set vminfo.VMDisks[idx].OpenstackVol for each disk.
