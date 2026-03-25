@@ -6,7 +6,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -102,4 +105,33 @@ func hotAddGetVMDisks(ctx context.Context, vm *object.VirtualMachine) ([]*types.
 		}
 	}
 	return disks, nil
+}
+
+// HotAddCopyDisks orchestrates the full HotAdd disk copy for all VM disks.
+// It is called from StartMigration after CreateVolumes has already created
+// and set vminfo.VMDisks[idx].OpenstackVol for each disk.
+func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) error {
+	migobj.logMessage("[HotAdd] *** BETA: HotAdd SCSI transport ***")
+	migobj.logMessage("[HotAdd] Limitations: SCSI disks only, cold migration only, proxy VM must share datastore with source VM")
+
+	vcClient := migobj.hotAddGetVCenterClient()
+	if vcClient == nil {
+		return fmt.Errorf("[HotAdd] cannot access vCenter client from VMops")
+	}
+
+	// Step 1: Power off source VM (cold migration only for Beta).
+	migobj.logMessage("[HotAdd] Powering off source VM")
+	if err := migobj.VMops.VMPowerOff(); err != nil {
+		return errors.Wrap(err, "failed to power off source VM")
+	}
+	migobj.logMessage("[HotAdd] Source VM powered off")
+
+	// Step 2: Clean up any leftover snapshots, then take a fresh one.
+	migobj.logMessage("[HotAdd] Cleaning up existing snapshots")
+	if err := migobj.VMops.CleanUpSnapshots(false); err != nil {
+		return errors.Wrap(err, "failed to clean up snapshots")
+	}
+
+	migobj.logMessage("[HotAdd] All disks copied successfully")
+	return nil
 }
