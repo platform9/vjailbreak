@@ -5,6 +5,7 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -363,7 +365,6 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) e
 	// Step 3: Get snapshot reference for linked clone creation.
 	snapRef, err := migobj.VMops.GetSnapshot(constants.MigrationSnapshotName)
 	if err != nil {
-		fmt.Sprintf("vjailbreak-hotadd-%s-%d", vminfo.Name, time.Now().Unix())
 		return errors.Wrap(err, "failed to get snapshot reference")
 	}
 
@@ -423,6 +424,78 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) e
 			}
 		}
 	}()
+	for idx := range vminfo.VMDisks {
+		disk := &vminfo.VMDisks[idx]
+		cloneDisk := cloneDisks[idx]
+
+		backing, ok := cloneDisk.Backing.(*types.VirtualDiskFlatVer2BackingInfo)
+		if !ok {
+			return fmt.Errorf("[HotAdd] disk %s has unsupported backing type — only flat SCSI disks are supported", disk.Name)
+		}
+		migobj.logMessage(fmt.Sprintf("[HotAdd] === Disk %d/%d: %s ===", idx+1, len(vminfo.VMDisks), disk.Name))
+
+		// Attach the Cinder volume to this pod to get its device path.
+		cinderDevPath, err := migobj.AttachVolume(ctx, *disk)
+		if err != nil {
+			return errors.Wrapf(err, "failed to attach Cinder volume for disk %s", disk.Name)
+		}
+
+		disk.Path = cinderDevPath
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Cinder volume attached at %s", cinderDevPath))
+
+		// Hot-add the linked clone's disk to the proxy VM.
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Hot-adding disk to proxy VM (backing: %s)", backing.FileName))
+		deviceKey, err := hotAddAddDiskToVM(ctx, proxyVM, backing.FileName)
+		if err != nil {
+			return errors.Wrapf(err, "failed to hot-add disk %s to proxy VM", disk.Name)
+		}
+		hotAddedKeys = append(hotAddedKeys, deviceKey)
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Disk hot-added (device key=%d)", deviceKey))
+
+		// Give the proxy VM OS a moment to register the new SCSI device.
+		time.Sleep(3 * time.Second)
+
+		// SSH to proxy VM and detect the block device by size.
+		sshClient := esxissh.NewClientWithTimeout(2 * time.Hour)
+		if err := sshClient.Connect(ctx, proxyIP, "root", migobj.ESXiSSHPrivateKey); err != nil {
+			return errors.Wrapf(err, "failed to SSH to proxy VM at %s", proxyIP)
+		}
+
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Detecting block device for %s (size %d bytes)", disk.Name, disk.Size))
+		remoteDevice, err := hotAddDetectBlockDevice(sshClient, disk.Size)
+		if err != nil {
+			sshClient.Disconnect()
+			return errors.Wrapf(err, "failed to detect block device on proxy VM for disk %s", disk.Name)
+		}
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Block device detected: %s", remoteDevice))
+
+		// Open local Cinder device for writing.
+		destFile, err := os.OpenFile(cinderDevPath, os.O_WRONLY, 0)
+		if err != nil {
+			sshClient.Disconnect()
+			return errors.Wrapf(err, "failed to open Cinder device %s for writing", cinderDevPath)
+		}
+
+		// Stream: proxy VM dd → SSH pipe → local Cinder device.
+		copyCmd := fmt.Sprintf("dd if=%s bs=4M 2>/dev/null", remoteDevice)
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Starting copy: %s (proxy) -> %s (Cinder)", remoteDevice, cinderDevPath))
+		startTime := time.Now()
+
+		copyErr := sshClient.RunCommandToWriter(ctx, copyCmd, destFile)
+		destFile.Close()
+		sshClient.Disconnect()
+
+		if copyErr != nil {
+			return errors.Wrapf(copyErr, "disk copy failed for %s", disk.Name)
+		}
+
+		duration := time.Since(startTime).Round(time.Second)
+		throughputMBps := float64(disk.Size) / duration.Seconds() / 1024 / 1024
+		migobj.logMessage(fmt.Sprintf("[HotAdd]   Disk %s copied in %s (%.1f MB/s)", disk.Name, duration, throughputMBps))
+
+		utils.PrintLog(fmt.Sprintf("[HotAdd] disk %d/%d done: %s in %s (%.1f MB/s)",
+			idx+1, len(vminfo.VMDisks), disk.Name, duration, throughputMBps))
+	}
 
 	migobj.logMessage("[HotAdd] All disks copied successfully")
 	return nil
