@@ -70,7 +70,7 @@ const DEFAULTS: SettingsForm = {
   PERIODIC_SYNC_INTERVAL: '1h',
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 20,
   VM_ACTIVE_WAIT_RETRY_LIMIT: 15,
-  DEFAULT_MIGRATION_METHOD: 'hot',
+  DEFAULT_MIGRATION_METHOD: 'cold',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 10,
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: false,
   CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: false,
@@ -81,7 +81,7 @@ const DEFAULTS: SettingsForm = {
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
-  AUTO_FSTAB_UPDATE: false,
+  AUTO_FSTAB_UPDATE: true,
   DEPLOYMENT_NAME: 'vJailbreak',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
@@ -1403,6 +1403,7 @@ export default function GlobalSettingsPage() {
               onClick={onResetDefaults}
               startIcon={<RefreshIcon />}
               data-testid="global-settings-reset-defaults"
+              disabled={activeTab === 'vddk'}
             >
               Reset to Defaults
             </Button>
