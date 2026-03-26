@@ -31,7 +31,7 @@ import ToggleField from 'src/components/design-system/ui/ToggleField'
 import VDDKUploadTab from './VDDKUploadTab'
 import type { VddkUploadStatus } from './VDDKUploadTab'
 import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
-import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
+import { getGlobalSettingsHelpers, parseMemoryMiB, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
   getSettingsConfigMap,
   updateSettingsConfigMap,
@@ -83,6 +83,9 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
+  V2V_HELPER_VIRTV2V_MEMSIZE_MB: 0,
+  V2V_HELPER_POD_MEMORY_REQUEST: '2Gi',
+  V2V_HELPER_POD_MEMORY_LIMIT: '6Gi',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -124,7 +127,10 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
-    'AUTO_FSTAB_UPDATE'
+    'AUTO_FSTAB_UPDATE',
+    'V2V_HELPER_VIRTV2V_MEMSIZE_MB',
+    'V2V_HELPER_POD_MEMORY_REQUEST',
+    'V2V_HELPER_POD_MEMORY_LIMIT'
   ],
   vddk: []
 }
@@ -233,6 +239,12 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
+  V2V_HELPER_VIRTV2V_MEMSIZE_MB:
+    'Memory (MiB) for the virt-v2v appliance. Set to 0 to use the default — virt-v2v falls back to 2 × guestfs_get_memsize() (typically ~1536 MiB). If set, pod memory limit must be at least 1 GiB greater than this value.',
+  V2V_HELPER_POD_MEMORY_REQUEST:
+    'Kubernetes memory request for the v2v-helper pod (e.g. 2Gi). This is the minimum guaranteed memory for scheduling.',
+  V2V_HELPER_POD_MEMORY_LIMIT:
+    'Kubernetes memory limit for the v2v-helper pod (e.g. 6Gi). Must be at least 1 GiB greater than the virt-v2v memsize when set.',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
   PROXY_HTTP_SCHEME:
     "Protocol to use when constructing the HTTP proxy URL (default: 'http'). Many proxies expect http://.",
@@ -403,6 +415,26 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       e.DEPLOYMENT_NAME = 'Required.'
     } else if (dn.length > 63) {
       e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
+    }
+
+    const memsize = state.V2V_HELPER_VIRTV2V_MEMSIZE_MB
+    if (!Number.isFinite(memsize) || !Number.isInteger(memsize) || memsize < 0) {
+      e.V2V_HELPER_VIRTV2V_MEMSIZE_MB = 'Enter a non-negative integer (0 = use virt-v2v default).'
+    }
+
+    const memLimitStr = (state.V2V_HELPER_POD_MEMORY_LIMIT ?? '').trim()
+    const memRequestStr = (state.V2V_HELPER_POD_MEMORY_REQUEST ?? '').trim()
+    const memoryQuantityRegex = /^\d+(Gi|Mi|G|M)$/
+    if (!memoryQuantityRegex.test(memLimitStr)) {
+      e.V2V_HELPER_POD_MEMORY_LIMIT = 'Use a valid Kubernetes memory quantity (e.g. 6Gi, 4096Mi).'
+    } else if (!e.V2V_HELPER_VIRTV2V_MEMSIZE_MB && memsize > 0) {
+      const limitMiB = parseMemoryMiB(memLimitStr)
+      if (limitMiB > 0 && memsize > limitMiB - 1024) {
+        e.V2V_HELPER_POD_MEMORY_LIMIT = `Pod memory limit must be at least 1 GiB greater than memsize (${memsize} MiB). Increase limit to at least ${memsize + 1024} MiB (e.g. ${Math.ceil((memsize + 1024) / 1024)}Gi).`
+      }
+    }
+    if (!memoryQuantityRegex.test(memRequestStr)) {
+      e.V2V_HELPER_POD_MEMORY_REQUEST = 'Use a valid Kubernetes memory quantity (e.g. 2Gi, 2048Mi).'
     }
 
     const proxyEnabled = state.PROXY_ENABLED
@@ -1361,6 +1393,44 @@ export default function GlobalSettingsPage() {
             </FormGrid>
 
             <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              Conversion Resources
+            </Typography>
+            <FormGrid minWidth={320} gap={2} sx={{ mb: 2 }}>
+              <RHFTextField
+                name="V2V_HELPER_VIRTV2V_MEMSIZE_MB"
+                label="virt-v2v Appliance Memory (MiB)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_VIRTV2V_MEMSIZE_MB }}
+                error={Boolean(errors.V2V_HELPER_VIRTV2V_MEMSIZE_MB)}
+                helperText={
+                  errors.V2V_HELPER_VIRTV2V_MEMSIZE_MB ||
+                  'Set to 0 to use default (virt-v2v falls back to 2 × guestfs_get_memsize())'
+                }
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'V2V_HELPER_VIRTV2V_MEMSIZE_MB',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_REQUEST"
+                label="v2v-helper Pod Memory Request"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_REQUEST}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_LIMIT"
+                label="v2v-helper Pod Memory Limit"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_LIMIT}
+              />
+            </FormGrid>
+
+            <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>
               Automation Flags
             </Typography>
             <FormGrid minWidth={260} gap={2}>
