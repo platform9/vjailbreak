@@ -194,7 +194,9 @@ export default function MigrationDetailModal({
   }, [vmSpec?.networkInterfaces, vmSpec?.networks])
 
   const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
-  const destinationTenant = (data?.openstackCreds?.spec as any)?.projectName || 'N/A'
+  const destinationTenant =
+    ((data?.openstackCreds?.spec as any)?.projectName as string) ||
+    (data?.openstackCredsMissing ? 'Credentials deleted' : 'N/A')
 
   const rawNetworkMappings = useMemo(
     () =>
@@ -501,6 +503,25 @@ export default function MigrationDetailModal({
                   title="Migration Environment"
                   subtitle="Source and destination overview"
                 >
+                  {data?.vmwareCredsMissing || data?.openstackCredsMissing ? (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {data?.vmwareCredsMissing && data?.openstackCredsMissing
+                        ? `VMware and PCD credentials were deleted or are not accessible.${
+                            data?.vmwareCredsRef || data?.openstackCredsRef
+                              ? ` (VMware: ${data?.vmwareCredsRef || 'unknown'}, PCD: ${
+                                  data?.openstackCredsRef || 'unknown'
+                                })`
+                              : ''
+                          }`
+                        : data?.vmwareCredsMissing
+                          ? `VMware credentials were deleted or are not accessible.${
+                              data?.vmwareCredsRef ? ` (${data.vmwareCredsRef})` : ''
+                            }`
+                          : `PCD credentials were deleted or are not accessible.${
+                              data?.openstackCredsRef ? ` (${data.openstackCredsRef})` : ''
+                            }`}
+                    </Alert>
+                  ) : null}
                   <KeyValueGrid items={migrationEnvironmentItems} />
                 </SurfaceCard>
 
