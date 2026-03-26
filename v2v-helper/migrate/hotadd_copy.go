@@ -397,6 +397,33 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo *vm.VMInfo) e
 			migobj.logMessage(fmt.Sprintf("[HotAdd] WARNING: failed to clean up snapshot: %v", err))
 		}
 	}()
+
+	// Step 6: Get disk backing paths from the linked clone.
+	cloneDisks, err := hotAddGetVMDisks(ctx, linkedClone)
+	if err != nil {
+		return errors.Wrap(err, "failed to get linked clone disk list")
+	}
+
+	if len(cloneDisks) != len(vminfo.VMDisks) {
+		return fmt.Errorf("[HotAdd] disk count mismatch: source has %d, clone has %d", len(vminfo.VMDisks), len(cloneDisks))
+	}
+	for i, d := range cloneDisks {
+		if b, ok := d.Backing.(*types.VirtualDiskFlatVer2BackingInfo); ok {
+			migobj.logMessage(fmt.Sprintf("[HotAdd]   clone disk[%d]: key=%d backing=%s", i, d.Key, b.FileName))
+		}
+	}
+
+	// Step 7: Per-disk: attach Cinder volume, hot-add, detect device, copy, hot-remove.
+	hotAddedKeys := []int32{}
+	defer func() {
+		for _, key := range hotAddedKeys {
+			migobj.logMessage(fmt.Sprintf("[HotAdd] Hot-removing disk key=%d from proxy VM", key))
+			if err := hotAddRemoveDiskFromVM(ctx, proxyVM, key); err != nil {
+				migobj.logMessage(fmt.Sprintf("[HotAdd] WARNING: hot-remove key=%d failed: %v", key, err))
+			}
+		}
+	}()
+
 	migobj.logMessage("[HotAdd] All disks copied successfully")
 	return nil
 }
