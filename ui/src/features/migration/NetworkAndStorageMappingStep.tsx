@@ -240,22 +240,27 @@ export default function NetworkAndStorageMappingStep({
     (sourceNetwork: string): string[] => {
       const ips: string[] = []
       for (const vm of selectedVMs) {
+        // Use vm.networks as authoritative check for whether VM is on this network
+        const isOnNetwork = vm.networks?.includes(sourceNetwork) ?? false
+        if (!isOnNetwork) continue
+
         if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-          for (const nic of vm.networkInterfaces) {
-            if (nic.network !== sourceNetwork) continue
-            // Only check IPs when preserveIP is enabled (default true) or IPs exist
+          // Try to match NICs by network name first
+          const matchingNics = vm.networkInterfaces.filter((nic) => nic.network === sourceNetwork)
+          const nicsToUse = matchingNics.length > 0 ? matchingNics : vm.networkInterfaces
+
+          for (const nic of nicsToUse) {
             const shouldPreserve = nic.preserveIP !== false
             if (shouldPreserve && Array.isArray(nic.ipAddress)) {
-              const validIPs = nic.ipAddress.filter((ip) => ip && ip.trim() !== '')
-              ips.push(...validIPs)
+              ips.push(...nic.ipAddress.filter((ip) => ip && ip.trim() !== ''))
             }
           }
-        } else {
-          // Fallback: single ipAddress field + networks array
-          const onThisNetwork = vm.networks?.includes(sourceNetwork) ?? false
-          if (onThisNetwork && vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
-            ips.push(vm.ipAddress.trim())
-          }
+        }
+
+        // Also collect from vm.ipAddress (comma-separated string) as fallback
+        if (vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
+          const ipStrings = vm.ipAddress.split(',').map((ip) => ip.trim()).filter((ip) => ip !== '')
+          ips.push(...ipStrings)
         }
       }
       return [...new Set(ips)] // deduplicate
@@ -286,7 +291,10 @@ export default function NetworkAndStorageMappingStep({
       await Promise.all(
         completeMappings.map(async (mapping) => {
           const ips = collectIPsForNetwork(mapping.source)
-          if (ips.length === 0) return
+          
+          if (ips.length === 0) {
+            return
+          }
 
           try {
             const result = await checkNetworkSubnetCompatibility({
@@ -310,7 +318,7 @@ export default function NetworkAndStorageMappingStep({
                 `${incompatibleIPs.length} VM IP(s) [${incompatibleIPs.join(', ')}] are not within the subnets of destination network "${mapping.target}"${cidrList}. ` +
                 `Ensure fallback to DHCP is enabled, otherwise migration may fail.`
             }
-          } catch {
+          } catch (error) {
             // Silently ignore errors (e.g., API unavailable) - do not block migration
           }
         })
