@@ -325,6 +325,37 @@ func hotAddRemoveDiskFromVM(
 	return nil
 }
 
+// hotAddDetectBlockDevice polls lsblk on the proxy VM until a block device
+// matching the expected size appears. Returns the device path (e.g. /dev/sdb).
+// Polls every 2 seconds for up to 30 seconds.
+func hotAddDetectBlockDevice(sshClient *esxissh.Client, diskSizeBytes int64) (string, error) {
+	diskSizeKiB := diskSizeBytes / 1024
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		out, err := sshClient.ExecuteCommand(
+			fmt.Sprintf("lsblk -bdn -o NAME,SIZE | awk '$2==%d {print \"/dev/\" $1}' | head -1", diskSizeBytes),
+		)
+		if err == nil {
+			dev := strings.TrimSpace(out)
+			if dev != "" {
+				return dev, nil
+			}
+		}
+		// Fallback: match by size in KiB (lsblk -bn reports bytes but some versions differ).
+		out, err = sshClient.ExecuteCommand(
+			fmt.Sprintf("lsblk -dn -o NAME,SIZE | awk '$2==\"%dK\" {print \"/dev/\" $1}' | head -1", diskSizeKiB),
+		)
+		if err == nil {
+			dev := strings.TrimSpace(out)
+			if dev != "" {
+				return dev, nil
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return "", fmt.Errorf("block device with size %d bytes not found on proxy VM after 30s", diskSizeBytes)
+}
+
 // HotAddCopyDisks orchestrates the full HotAdd disk copy for all VM disks.
 // It is called from StartMigration after CreateVolumes has already created
 // and set vminfo.VMDisks[idx].OpenstackVol for each disk.
