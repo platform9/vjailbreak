@@ -2,13 +2,18 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"strings"
 	"time"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
 	openstack "github.com/gophercloud/gophercloud/v2/openstack"
+	networks "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	ports "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	subnets "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	errors "github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
@@ -766,4 +771,224 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		Success: true,
 		Message: successMsg,
 	}, nil
+}
+
+// subnetCheckAccessInfo holds the OpenStack secret reference for the subnet check request.
+type subnetCheckAccessInfo struct {
+	SecretName      string `json:"secret_name"`
+	SecretNamespace string `json:"secret_namespace"`
+}
+
+// checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility.
+type checkNetworkSubnetCompatibilityRequest struct {
+	Ips         []string               `json:"ips"`
+	NetworkName string                 `json:"network_name"`
+	AccessInfo  *subnetCheckAccessInfo `json:"access_info"`
+}
+
+// subnetCompatibilityResult holds the result for a single IP.
+type subnetCompatibilityResult struct {
+	IP           string `json:"ip"`
+	IsCompatible bool   `json:"is_compatible"`
+	Reason       string `json:"reason"`
+}
+
+// checkNetworkSubnetCompatibilityResponse is the response for CheckNetworkSubnetCompatibility.
+type checkNetworkSubnetCompatibilityResponse struct {
+	Results       []subnetCompatibilityResult `json:"results"`
+	SubnetCidrs   []string                    `json:"subnet_cidrs"`
+	AllCompatible bool                        `json:"all_compatible"`
+}
+
+// HandleCheckNetworkSubnetCompatibility is an HTTP handler that checks whether a list of VM IPs
+// fall within the subnets of the specified OpenStack destination network.
+// POST /vpw/v1/check_network_subnet_compatibility
+func HandleCheckNetworkSubnetCompatibility(w http.ResponseWriter, r *http.Request) {
+	const fn = "HandleCheckNetworkSubnetCompatibility"
+	logrus.WithField("func", fn).Info("Starting CheckNetworkSubnetCompatibility request")
+	defer logrus.WithField("func", fn).Info("Completed CheckNetworkSubnetCompatibility request")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req checkNetworkSubnetCompatibilityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to decode request body")
+		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.NetworkName == "" {
+		http.Error(w, "network_name is required", http.StatusBadRequest)
+		return
+	}
+	if req.AccessInfo == nil {
+		http.Error(w, "access_info is required", http.StatusBadRequest)
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"func":         fn,
+		"network_name": req.NetworkName,
+		"ip_count":     len(req.Ips),
+	}).Info("Checking network subnet compatibility")
+
+	accessInfo := &api.OpenstackAccessInfo{
+		SecretName:      req.AccessInfo.SecretName,
+		SecretNamespace: req.AccessInfo.SecretNamespace,
+	}
+	openstackClients, err := GetOpenStackClients(r.Context(), accessInfo)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to create OpenStack clients")
+		http.Error(w, fmt.Sprintf("failed to connect to OpenStack: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Find network by name
+	netPages, err := networks.List(openstackClients.NetworkingClient, networks.ListOpts{Name: req.NetworkName}).AllPages(r.Context())
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"func": fn, "network_name": req.NetworkName}).WithError(err).Error("Failed to list networks")
+		http.Error(w, fmt.Sprintf("failed to list OpenStack networks: %v", err), http.StatusInternalServerError)
+		return
+	}
+	allNetworks, err := networks.ExtractNetworks(netPages)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to extract networks")
+		http.Error(w, fmt.Sprintf("failed to extract networks: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if len(allNetworks) == 0 {
+		logrus.WithFields(logrus.Fields{"func": fn, "network_name": req.NetworkName}).Warn("Network not found")
+		resp := checkNetworkSubnetCompatibilityResponse{
+			Results:       makeNotFoundResults(req.Ips, fmt.Sprintf("Network '%s' not found in OpenStack", req.NetworkName)),
+			SubnetCidrs:   nil,
+			AllCompatible: false,
+		}
+		writeJSONResponse(w, resp)
+		return
+	}
+
+	networkID := allNetworks[0].ID
+	logrus.WithFields(logrus.Fields{"func": fn, "network_name": req.NetworkName, "network_id": networkID}).Info("Found OpenStack network")
+
+	// Get all subnets for the network
+	subnetPages, err := subnets.List(openstackClients.NetworkingClient, subnets.ListOpts{NetworkID: networkID}).AllPages(r.Context())
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"func": fn, "network_id": networkID}).WithError(err).Error("Failed to list subnets")
+		http.Error(w, fmt.Sprintf("failed to list subnets: %v", err), http.StatusInternalServerError)
+		return
+	}
+	allSubnets, err := subnets.ExtractSubnets(subnetPages)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to extract subnets")
+		http.Error(w, fmt.Sprintf("failed to extract subnets: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Parse subnet CIDRs
+	subnetCidrs := make([]string, 0, len(allSubnets))
+	ipNets := make([]*net.IPNet, 0, len(allSubnets))
+	for _, s := range allSubnets {
+		if s.CIDR == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(s.CIDR)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"func": fn, "cidr": s.CIDR}).WithError(err).Warn("Failed to parse subnet CIDR, skipping")
+			continue
+		}
+		subnetCidrs = append(subnetCidrs, s.CIDR)
+		ipNets = append(ipNets, ipNet)
+	}
+
+	logrus.WithFields(logrus.Fields{"func": fn, "subnet_count": len(subnetCidrs), "cidrs": subnetCidrs}).Info("Found subnets for network")
+
+	// Check each IP against all subnet CIDRs
+	results := make([]subnetCompatibilityResult, 0, len(req.Ips))
+	allCompatible := true
+
+	for _, ipStr := range req.Ips {
+		ipStr = strings.TrimSpace(ipStr)
+		if ipStr == "" {
+			continue
+		}
+		parsedIP := net.ParseIP(ipStr)
+		if parsedIP == nil {
+			results = append(results, subnetCompatibilityResult{
+				IP:           ipStr,
+				IsCompatible: false,
+				Reason:       "Invalid IP address format",
+			})
+			allCompatible = false
+			continue
+		}
+
+		if len(ipNets) == 0 {
+			results = append(results, subnetCompatibilityResult{
+				IP:           ipStr,
+				IsCompatible: false,
+				Reason:       fmt.Sprintf("Network '%s' has no subnets configured", req.NetworkName),
+			})
+			allCompatible = false
+			continue
+		}
+
+		compatible := false
+		matchedCIDR := ""
+		for _, ipNet := range ipNets {
+			if ipNet.Contains(parsedIP) {
+				compatible = true
+				matchedCIDR = ipNet.String()
+				break
+			}
+		}
+
+		if compatible {
+			results = append(results, subnetCompatibilityResult{
+				IP:           ipStr,
+				IsCompatible: true,
+				Reason:       fmt.Sprintf("IP is within subnet %s", matchedCIDR),
+			})
+		} else {
+			results = append(results, subnetCompatibilityResult{
+				IP:           ipStr,
+				IsCompatible: false,
+				Reason:       fmt.Sprintf("IP is not within any subnet of network '%s' (subnets: %s)", req.NetworkName, strings.Join(subnetCidrs, ", ")),
+			})
+			allCompatible = false
+		}
+	}
+
+	resp := checkNetworkSubnetCompatibilityResponse{
+		Results:       results,
+		SubnetCidrs:   subnetCidrs,
+		AllCompatible: allCompatible,
+	}
+	logrus.WithFields(logrus.Fields{
+		"func":           fn,
+		"all_compatible": allCompatible,
+		"result_count":   len(results),
+	}).Info("Completed subnet compatibility check")
+	writeJSONResponse(w, resp)
+}
+
+func makeNotFoundResults(ips []string, reason string) []subnetCompatibilityResult {
+	results := make([]subnetCompatibilityResult, 0, len(ips))
+	for _, ip := range ips {
+		results = append(results, subnetCompatibilityResult{
+			IP:           ip,
+			IsCompatible: false,
+			Reason:       reason,
+		})
+	}
+	return results
+}
+
+func writeJSONResponse(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		logrus.WithError(err).Error("Failed to encode JSON response")
+	}
 }

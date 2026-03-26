@@ -10,12 +10,14 @@ import {
   Alert,
   Chip
 } from '@mui/material'
-import { useEffect, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
-import { PCDNetworkInfo } from 'src/api/openstack-creds/model'
+import { PCDNetworkInfo, OpenstackCreds } from 'src/api/openstack-creds/model'
+import { checkNetworkSubnetCompatibility } from 'src/api/openstack-creds/openstackCreds'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -57,6 +59,8 @@ interface NetworkAndStorageMappingStepProps {
   stepNumber?: string
   loading?: boolean
   showHeader?: boolean
+  selectedVMs?: VmData[]
+  openstackCredentials?: OpenstackCreds
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -70,11 +74,19 @@ export default function NetworkAndStorageMappingStep({
   storageMappingError,
   stepNumber = '3',
   loading = false,
-  showHeader = true
+  showHeader = true,
+  selectedVMs = [],
+  openstackCredentials
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
+  // subnet compatibility warnings keyed by source VMware network name
+  const [subnetWarnings, setSubnetWarnings] = useState<Record<string, string>>({})
+
   const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
+
+  // Track previous mappings JSON to avoid redundant API calls
+  const prevMappingsRef = useRef<string>('')
 
   // Fetch validated array credentials for StorageAcceleratedCopy
   const { data: arrayCredentials, isLoading: arrayCredsLoading } = useArrayCredentialsQuery(
@@ -223,6 +235,93 @@ export default function NetworkAndStorageMappingStep({
     [onChange, params.arrayCredsMappings]
   )
 
+  // Collect IPs for VMs on a given source VMware network
+  const collectIPsForNetwork = useCallback(
+    (sourceNetwork: string): string[] => {
+      const ips: string[] = []
+      for (const vm of selectedVMs) {
+        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+          for (const nic of vm.networkInterfaces) {
+            if (nic.network !== sourceNetwork) continue
+            // Only check IPs when preserveIP is enabled (default true) or IPs exist
+            const shouldPreserve = nic.preserveIP !== false
+            if (shouldPreserve && Array.isArray(nic.ipAddress)) {
+              const validIPs = nic.ipAddress.filter((ip) => ip && ip.trim() !== '')
+              ips.push(...validIPs)
+            }
+          }
+        } else {
+          // Fallback: single ipAddress field + networks array
+          const onThisNetwork = vm.networks?.includes(sourceNetwork) ?? false
+          if (onThisNetwork && vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
+            ips.push(vm.ipAddress.trim())
+          }
+        }
+      }
+      return [...new Set(ips)] // deduplicate
+    },
+    [selectedVMs]
+  )
+
+  // Run subnet compatibility check whenever network mappings change
+  useEffect(() => {
+    const completeMappings = (params.networkMappings || []).filter(
+      (m) => m.source && m.target
+    )
+    const mappingsKey = JSON.stringify(completeMappings)
+    if (mappingsKey === prevMappingsRef.current) return
+    prevMappingsRef.current = mappingsKey
+
+    if (!openstackCredentials || completeMappings.length === 0 || selectedVMs.length === 0) {
+      setSubnetWarnings({})
+      return
+    }
+
+    const secretName = `${openstackCredentials.metadata.name}-openstack-secret`
+    const secretNamespace = openstackCredentials.metadata.namespace
+
+    const runChecks = async () => {
+      const nextWarnings: Record<string, string> = {}
+
+      await Promise.all(
+        completeMappings.map(async (mapping) => {
+          const ips = collectIPsForNetwork(mapping.source)
+          if (ips.length === 0) return
+
+          try {
+            const result = await checkNetworkSubnetCompatibility({
+              ips,
+              network_name: mapping.target,
+              access_info: {
+                secret_name: secretName,
+                secret_namespace: secretNamespace
+              }
+            })
+
+            if (!result.all_compatible) {
+              const incompatibleIPs = result.results
+                .filter((r) => !r.is_compatible)
+                .map((r) => r.ip)
+              const cidrList =
+                result.subnet_cidrs?.length > 0
+                  ? ` (destination subnets: ${result.subnet_cidrs.join(', ')})`
+                  : ''
+              nextWarnings[mapping.source] =
+                `${incompatibleIPs.length} VM IP(s) [${incompatibleIPs.join(', ')}] are not within the subnets of destination network "${mapping.target}"${cidrList}. ` +
+                `Ensure fallback to DHCP is enabled, otherwise migration may fail.`
+            }
+          } catch {
+            // Silently ignore errors (e.g., API unavailable) - do not block migration
+          }
+        })
+      )
+
+      setSubnetWarnings(nextWarnings)
+    }
+
+    runChecks()
+  }, [params.networkMappings, openstackCredentials, selectedVMs, collectIPsForNetwork])
+
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
     () =>
@@ -291,6 +390,11 @@ export default function NetworkAndStorageMappingStep({
                 oneToManyMapping
                 fieldPrefix="networkMapping"
               />
+              {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
+                <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
+                  <strong>{sourceNetwork}:</strong> {warning}
+                </Alert>
+              ))}
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
             <FormControl error={!!storageMappingError}>

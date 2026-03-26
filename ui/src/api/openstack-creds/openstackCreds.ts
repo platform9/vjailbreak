@@ -110,3 +110,36 @@ export const validateOpenstackIPs = async (
 
   return response
 }
+
+// Network subnet compatibility interfaces and function
+export interface SubnetCompatibilityResult {
+  ip: string
+  is_compatible: boolean
+  reason: string
+}
+
+export interface CheckNetworkSubnetCompatibilityRequest {
+  ips: string[]
+  network_name: string
+  access_info: {
+    secret_name: string
+    secret_namespace: string
+  }
+}
+
+export interface CheckNetworkSubnetCompatibilityResponse {
+  results: SubnetCompatibilityResult[]
+  subnet_cidrs: string[]
+  all_compatible: boolean
+}
+
+export const checkNetworkSubnetCompatibility = async (
+  request: CheckNetworkSubnetCompatibilityRequest
+): Promise<CheckNetworkSubnetCompatibilityResponse> => {
+  const endpoint = '/dev-api/sdk/vpw/v1/check_network_subnet_compatibility'
+  const response = await axios.post<CheckNetworkSubnetCompatibilityResponse>({
+    endpoint,
+    data: request
+  })
+  return response
+}
