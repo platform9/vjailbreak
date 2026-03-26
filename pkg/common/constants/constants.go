@@ -388,7 +388,7 @@ const (
 	V2VHelperPodCPURequestKey = "V2V_HELPER_POD_CPU_REQUEST"
 
 	// V2VHelperPodMemoryRequest is the default memory request for v2v-helper pod
-	V2VHelperPodMemoryRequest = "1Gi"
+	V2VHelperPodMemoryRequest = "2Gi"
 	// V2VHelperPodMemoryRequestKey is the key for v2v-helper pod memory request
 	V2VHelperPodMemoryRequestKey = "V2V_HELPER_POD_MEMORY_REQUEST"
 
@@ -398,7 +398,7 @@ const (
 	V2VHelperPodCPULimitKey = "V2V_HELPER_POD_CPU_LIMIT"
 
 	// V2VHelperPodMemoryLimit is the default memory limit for v2v-helper pod
-	V2VHelperPodMemoryLimit = "3Gi"
+	V2VHelperPodMemoryLimit = "6Gi"
 	// V2VHelperPodMemoryLimitKey is the key for v2v-helper pod memory limit
 	V2VHelperPodMemoryLimitKey = "V2V_HELPER_POD_MEMORY_LIMIT"
 
@@ -411,6 +411,11 @@ const (
 	V2VHelperPodEphemeralStorageLimit = "3Gi"
 	// V2VHelperPodEphemeralStorageLimitKey is the key for v2v-helper pod ephemeral storage limit
 	V2VHelperPodEphemeralStorageLimitKey = "V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT"
+
+	// VirtV2VMemsizeMB is the default memsize for virt-v2v-in-place (0 = use virt-v2v built-in default of ~768 MB)
+	VirtV2VMemsizeMB = 0
+	// VirtV2VMemsizeMBKey is the ConfigMap key for virt-v2v appliance memory size in MiB
+	VirtV2VMemsizeMBKey = "V2V_HELPER_VIRTV2V_MEMSIZE_MB"
 
 	RhelFirstBootScript = `#!/bin/bash
 set -e
