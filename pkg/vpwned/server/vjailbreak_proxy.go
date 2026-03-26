@@ -773,27 +773,27 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, nil
 }
 
-// subnetCheckAccessInfo holds the OpenStack secret reference for the subnet check request.
+// subnetCheckAccessInfo holds the OpenStack secret reference for the subnet check request
 type subnetCheckAccessInfo struct {
 	SecretName      string `json:"secret_name"`
 	SecretNamespace string `json:"secret_namespace"`
 }
 
-// checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility.
+// checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility
 type checkNetworkSubnetCompatibilityRequest struct {
 	Ips         []string               `json:"ips"`
 	NetworkName string                 `json:"network_name"`
 	AccessInfo  *subnetCheckAccessInfo `json:"access_info"`
 }
 
-// subnetCompatibilityResult holds the result for a single IP.
+// subnetCompatibilityResult holds the result for a single IP
 type subnetCompatibilityResult struct {
 	IP           string `json:"ip"`
 	IsCompatible bool   `json:"is_compatible"`
 	Reason       string `json:"reason"`
 }
 
-// checkNetworkSubnetCompatibilityResponse is the response for CheckNetworkSubnetCompatibility.
+// checkNetworkSubnetCompatibilityResponse is the response for CheckNetworkSubnetCompatibility
 type checkNetworkSubnetCompatibilityResponse struct {
 	Results       []subnetCompatibilityResult `json:"results"`
 	SubnetCidrs   []string                    `json:"subnet_cidrs"`
@@ -801,8 +801,7 @@ type checkNetworkSubnetCompatibilityResponse struct {
 }
 
 // HandleCheckNetworkSubnetCompatibility is an HTTP handler that checks whether a list of VM IPs
-// fall within the subnets of the specified OpenStack destination network.
-// POST /vpw/v1/check_network_subnet_compatibility
+// fall within the subnets of the specified destination network
 func HandleCheckNetworkSubnetCompatibility(w http.ResponseWriter, r *http.Request) {
 	const fn = "HandleCheckNetworkSubnetCompatibility"
 	logrus.WithField("func", fn).Info("Starting CheckNetworkSubnetCompatibility request")
