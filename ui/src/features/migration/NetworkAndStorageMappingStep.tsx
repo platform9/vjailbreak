@@ -257,13 +257,13 @@ export default function NetworkAndStorageMappingStep({
           }
         }
 
-        // Also collect from vm.ipAddress (comma-separated string) as fallback
+        // Also collect from vm.ipAddress as fallback
         if (vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
           const ipStrings = vm.ipAddress.split(',').map((ip) => ip.trim()).filter((ip) => ip !== '')
           ips.push(...ipStrings)
         }
       }
-      return [...new Set(ips)] // deduplicate
+      return [...new Set(ips)]
     },
     [selectedVMs]
   )
@@ -296,6 +296,11 @@ export default function NetworkAndStorageMappingStep({
             return
           }
 
+          const isL2Network = openstackNetworks.some(
+            (n) => n.name === mapping.target && Array.isArray(n.tags) && n.tags.includes('simple_network')
+          )
+          if (isL2Network) return
+
           try {
             const result = await checkNetworkSubnetCompatibility({
               ips,
@@ -312,14 +317,13 @@ export default function NetworkAndStorageMappingStep({
                 .map((r) => r.ip)
               const cidrList =
                 result.subnet_cidrs?.length > 0
-                  ? ` (destination subnets: ${result.subnet_cidrs.join(', ')})`
+                  ? ` (${result.subnet_cidrs.join(', ')})`
                   : ''
               nextWarnings[mapping.source] =
-                `${incompatibleIPs.length} VM IP(s) [${incompatibleIPs.join(', ')}] are not within the subnets of destination network "${mapping.target}"${cidrList}. ` +
-                `Ensure fallback to DHCP is enabled, otherwise migration may fail.`
+                `${incompatibleIPs.length} VM IP address(es) [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
+                `Ensure fallback to DHCP is enabled, otherwise it may lead to migration failures`
             }
           } catch (error) {
-            // Silently ignore errors (e.g., API unavailable) - do not block migration
           }
         })
       )
@@ -328,7 +332,7 @@ export default function NetworkAndStorageMappingStep({
     }
 
     runChecks()
-  }, [params.networkMappings, openstackCredentials, selectedVMs, collectIPsForNetwork])
+  }, [params.networkMappings, openstackCredentials, selectedVMs, collectIPsForNetwork, openstackNetworks])
 
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
