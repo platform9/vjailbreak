@@ -446,7 +446,7 @@ export default function OpenstackCredentialsDrawer({
                   <RHFToggleField
                     name="passVjbInstanceId"
                     label="vJailbreak VM is on Layer 2 Network (PCD)"
-                    description="Turn on if this vJailbreak VM is on a Layer 2 network within PCD. VJailbreak on a Layer 2 network requires passing the vJailbreak instance ID when creating PCD credentials."
+                    description="Enable this if the vJailbreak VM is deployed on a PCD Layer 2 network. When enabled, you'll need to provide the vJailbreak instance ID to establish connectivity."
                   />
                 </Box>
               </Row>
