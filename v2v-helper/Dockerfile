@@ -1,161 +1,82 @@
-# # Stage 1: Build environment
-# # Using Fedora 42 which includes Go 1.24 required by our go.mod
-# FROM fedora:45 AS builder
+# Stage 1: Build environment
+# Using Fedora 42 which includes Go 1.24 required by our go.mod
+FROM fedora:42 AS builder
 
-# # Build arguments for multi-platform support and versioning
-# ARG TARGETOS
-# ARG TARGETARCH
-# ARG RELEASE_VERSION
-# ENV RELEASE_VERSION=$RELEASE_VERSION
-
-# # Install build dependencies
-# # - golang: Required for building the application (Go 1.24.1 from Fedora 42)
-# # - libnbd-devel: Development files for NBD (Network Block Device) support
-# RUN dnf install -y golang libnbd-devel
-
-# # Set up build workspace
-# WORKDIR /workspace
-
-# # Copy pre-built binary from local build
-# # Note: The binary is built by 'make -C v2v-helper build' before docker build
-# # This is part of the VM migration toolchain for converting between different platforms
-# COPY v2v-helper/manager manager
-
-# # Stage 2: Runtime environment
-# # Using same Fedora version for consistency and required runtime dependencies
-# FROM fedora:45
-
-# WORKDIR /tmp/rpms
-# COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
-
-# # Install runtime dependencies with size optimizations:
-# # - --nodocs: Skip documentation files
-# # - --setopt=install_weak_deps=False: Skip weak dependencies
-# # - Individual installs for better layer caching and debugging
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  libnbd
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-server
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-basic-plugins
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-basic-filters
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-vddk-plugin
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-ssh-plugin
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-curl-plugin
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-python-plugin
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-nbd-plugin
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  ./virt-v2v-2.11.3-2.fc45.x86_64.rpm
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  libguestfs-tools 
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  nbdkit-selinux
-# RUN dnf install -y --nodocs --setopt=install_weak_deps=False  netplan
-# RUN dnf clean all
-# RUN rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/
-# RUN rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale
-# RUN find /var/log -type f -delete
-
-# # Version lock to prevent accidental upgrades
-# # Install versionlock plugin without docs to save space
-# # RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-versionlock
-# # RUN dnf versionlock add nbdkit-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-vddk-plugin-1.42.4-1.fc42
-# # RUN dnf versionlock add libnbd-1.22.2-1.fc42
-# # RUN dnf versionlock add nbdkit-server-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-basic-plugins-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-basic-filters-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-curl-plugin-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-ssh-plugin-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-python-plugin-1.42.4-1.fc42
-# # RUN dnf versionlock add nbdkit-nbd-plugin-1.42.4-1.fc42
-# # RUN dnf versionlock add virt-v2v-2.7.17-1.fc42.x86_64
-# # RUN dnf versionlock add nbdkit-selinux-1.42.4-1.fc42.noarch
-# # RUN dnf clean all
-# # RUN rm -rf /var/cache/dnf /var/cache/yum
-
-# # Copy the binary from builder stage to the runtime environment
-# COPY --from=builder /workspace/manager /home/fedora/manager
-
-# # Copy scripts directory for migration utilities
-# COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
-# COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
-# COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
-# COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
-# COPY scripts/firstboot/store /home/fedora/store
-# COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
-# COPY scripts/99-l2-Netplan.yaml /home/fedora/99-l2-Netplan.yaml
-
-# ---------------------------
-# Stage 1: Builder
-# ---------------------------
-FROM fedora:45 AS builder
-
+# Build arguments for multi-platform support and versioning
 ARG TARGETOS
 ARG TARGETARCH
 ARG RELEASE_VERSION
 ENV RELEASE_VERSION=$RELEASE_VERSION
 
-RUN dnf install -y golang libnbd-devel && dnf clean all
+# Install build dependencies
+# - golang: Required for building the application (Go 1.24.1 from Fedora 42)
+# - libnbd-devel: Development files for NBD (Network Block Device) support
+RUN dnf install -y golang libnbd-devel
 
+# Set up build workspace
 WORKDIR /workspace
 
+# Copy pre-built binary from local build
+# Note: The binary is built by 'make -C v2v-helper build' before docker build
+# This is part of the VM migration toolchain for converting between different platforms
 COPY v2v-helper/manager manager
 
+# Stage 2: Runtime environment
+# Using same Fedora version for consistency and required runtime dependencies
+FROM fedora:42
 
-# ---------------------------
-# Stage 2: Runtime
-# ---------------------------
-FROM fedora:45
+WORKDIR /tmp/rpms
+COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
 
-ENV LIBGUESTFS_BACKEND=direct
+# Install runtime dependencies with size optimizations:
+# - --nodocs: Skip documentation files
+# - --setopt=install_weak_deps=False: Skip weak dependencies
+# - Individual installs for better layer caching and debugging
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./libnbd-1.22.2-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./virt-v2v-2.7.17-1.fc42.x86_64.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False guestfs-tools
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False netplan
+RUN dnf clean all
+RUN rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/
+RUN rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale
+RUN find /var/log -type f -delete
 
-WORKDIR /home/fedora
+# Version lock to prevent accidental upgrades
+# Install versionlock plugin without docs to save space
+RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-versionlock
+RUN dnf versionlock add nbdkit-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-vddk-plugin-1.42.4-1.fc42
+RUN dnf versionlock add libnbd-1.22.2-1.fc42
+RUN dnf versionlock add nbdkit-server-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-basic-plugins-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-basic-filters-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-curl-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-ssh-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-python-plugin-1.42.4-1.fc42
+RUN dnf versionlock add nbdkit-nbd-plugin-1.42.4-1.fc42
+RUN dnf versionlock add virt-v2v-2.7.17-1.fc42.x86_64
+RUN dnf versionlock add nbdkit-selinux-1.42.4-1.fc42.noarch
+RUN dnf clean all
+RUN rm -rf /var/cache/dnf /var/cache/yum
 
-# Install FULL virt-v2v stack (IMPORTANT)
-RUN dnf install -y --nodocs --setopt=install_weak_deps=False \
-    virt-v2v \
-    libguestfs \
-    libguestfs-tools-c \
-    guestfs-tools \
-    supermin \
-    qemu-img \
-    qemu-kvm \
-    qemu-system-x86 \
-    nbdkit \
-    nbdkit-server \
-    nbdkit-basic-plugins \
-    nbdkit-basic-filters \
-    nbdkit-nbd-plugin \
-    nbdkit-ssh-plugin \
-    nbdkit-curl-plugin \
-    nbdkit-python-plugin \
-    nbdkit-vddk-plugin \
-    nbdkit-selinux \
-    libnbd \
-    netplan \
-    && dnf clean all
-
-# Optional: verify libguestfs works at build time (VERY useful)
-# Comment out if build environment doesn't allow it
-RUN libguestfs-test-tool || true
-
-# Cleanup (safe)
-RUN rm -rf /var/cache/dnf /var/cache/yum \
-    /usr/share/doc \
-    /usr/share/man \
-    /usr/share/info
-
-# Copy your binary
+# Copy the binary from builder stage to the runtime environment
 COPY --from=builder /workspace/manager /home/fedora/manager
 
-# Copy scripts
-COPY scripts/generate-mount-persistence.sh .
-COPY scripts/get-bootable-partition.sh .
-COPY scripts/generate-udev-mapping.sh .
-COPY scripts/firstboot/windows/NIC-Recovery ./NIC-Recovery
-COPY scripts/firstboot/store ./store
-COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat ./Firstboot-Init-Windows.sh
-COPY scripts/99-l2-Netplan.yaml .
-
-# Make scripts executable
-RUN chmod +x /home/fedora/*
-
-WORKDIR /home/fedora
-
-ENTRYPOINT ["/home/fedora/manager"]
+# Copy scripts directory for migration utilities
+COPY scripts/generate-mount-persistence.sh /home/fedora/generate-mount-persistence.sh
+COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
+COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
+COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
+COPY scripts/firstboot/store /home/fedora/store
+COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
+COPY scripts/99-l2-Netplan.yaml /home/fedora/99-l2-Netplan.yaml
