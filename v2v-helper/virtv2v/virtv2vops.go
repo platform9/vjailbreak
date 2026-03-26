@@ -410,7 +410,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Step 3: Prepare virt-v2v args
-	args := []string{"-v", "--no-fstrim"}
+	args := []string{"-v"}
 
 	if strings.ToLower(ostype) == constants.OSFamilyLinux {
 		userWrapperPath, err := prepareLinuxUserFirstBootWrapper(ostype)
