@@ -936,9 +936,10 @@ var BMProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	VailbreakProxy_ValidateOpenstackIp_FullMethodName   = "/api.VailbreakProxy/ValidateOpenstackIp"
-	VailbreakProxy_RevalidateCredentials_FullMethodName = "/api.VailbreakProxy/RevalidateCredentials"
-	VailbreakProxy_InjectEnvVariables_FullMethodName    = "/api.VailbreakProxy/InjectEnvVariables"
+	VailbreakProxy_ValidateOpenstackIp_FullMethodName             = "/api.VailbreakProxy/ValidateOpenstackIp"
+	VailbreakProxy_RevalidateCredentials_FullMethodName           = "/api.VailbreakProxy/RevalidateCredentials"
+	VailbreakProxy_InjectEnvVariables_FullMethodName              = "/api.VailbreakProxy/InjectEnvVariables"
+	VailbreakProxy_CheckNetworkSubnetCompatibility_FullMethodName = "/api.VailbreakProxy/CheckNetworkSubnetCompatibility"
 )
 
 // VailbreakProxyClient is the client API for VailbreakProxy service.
@@ -948,6 +949,7 @@ type VailbreakProxyClient interface {
 	ValidateOpenstackIp(ctx context.Context, in *ValidateOpenstackIpRequest, opts ...grpc.CallOption) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(ctx context.Context, in *RevalidateCredentialsRequest, opts ...grpc.CallOption) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(ctx context.Context, in *InjectEnvVariablesRequest, opts ...grpc.CallOption) (*InjectEnvVariablesResponse, error)
+	CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error)
 }
 
 type vailbreakProxyClient struct {
@@ -988,6 +990,16 @@ func (c *vailbreakProxyClient) InjectEnvVariables(ctx context.Context, in *Injec
 	return out, nil
 }
 
+func (c *vailbreakProxyClient) CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckNetworkSubnetCompatibilityResponse)
+	err := c.cc.Invoke(ctx, VailbreakProxy_CheckNetworkSubnetCompatibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VailbreakProxyServer is the server API for VailbreakProxy service.
 // All implementations must embed UnimplementedVailbreakProxyServer
 // for forward compatibility.
@@ -995,6 +1007,7 @@ type VailbreakProxyServer interface {
 	ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(context.Context, *RevalidateCredentialsRequest) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error)
+	CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error)
 	mustEmbedUnimplementedVailbreakProxyServer()
 }
 
@@ -1013,6 +1026,9 @@ func (UnimplementedVailbreakProxyServer) RevalidateCredentials(context.Context, 
 }
 func (UnimplementedVailbreakProxyServer) InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InjectEnvVariables not implemented")
+}
+func (UnimplementedVailbreakProxyServer) CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckNetworkSubnetCompatibility not implemented")
 }
 func (UnimplementedVailbreakProxyServer) mustEmbedUnimplementedVailbreakProxyServer() {}
 func (UnimplementedVailbreakProxyServer) testEmbeddedByValue()                        {}
@@ -1089,6 +1105,24 @@ func _VailbreakProxy_InjectEnvVariables_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckNetworkSubnetCompatibilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VailbreakProxyServer).CheckNetworkSubnetCompatibility(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VailbreakProxy_CheckNetworkSubnetCompatibility_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VailbreakProxyServer).CheckNetworkSubnetCompatibility(ctx, req.(*CheckNetworkSubnetCompatibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VailbreakProxy_ServiceDesc is the grpc.ServiceDesc for VailbreakProxy service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1107,6 +1141,10 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InjectEnvVariables",
 			Handler:    _VailbreakProxy_InjectEnvVariables_Handler,
+		},
+		{
+			MethodName: "CheckNetworkSubnetCompatibility",
+			Handler:    _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

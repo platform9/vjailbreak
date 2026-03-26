@@ -114,6 +114,9 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	mux.HandleFunc("/vpw/v1/vddk/upload", HandleVDDKUpload)
 	mux.HandleFunc("/vpw/v1/vddk/status", HandleVDDKStatus)
 
+	// Register subnet compatibility check handler
+	mux.HandleFunc("/vpw/v1/check_network_subnet_compatibility", HandleCheckNetworkSubnetCompatibility)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{

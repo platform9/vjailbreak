@@ -95,6 +95,38 @@
         ]
       }
     },
+    "/vpw/v1/check_network_subnet_compatibility": {
+      "post": {
+        "operationId": "VailbreakProxy_CheckNetworkSubnetCompatibility",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCheckNetworkSubnetCompatibilityResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiCheckNetworkSubnetCompatibilityRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/cleanup": {
       "post": {
         "operationId": "Version_Cleanup",
@@ -1241,6 +1273,44 @@
         }
       }
     },
+    "apiCheckNetworkSubnetCompatibilityRequest": {
+      "type": "object",
+      "properties": {
+        "ips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "networkName": {
+          "type": "string"
+        },
+        "accessInfo": {
+          "$ref": "#/definitions/apiOpenstackAccessInfo"
+        }
+      }
+    },
+    "apiCheckNetworkSubnetCompatibilityResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiNetworkSubnetCompatibilityEntry"
+          }
+        },
+        "subnetCidrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allCompatible": {
+          "type": "boolean"
+        }
+      }
+    },
     "apiCleanupRequest": {
       "type": "object"
     },
@@ -1618,6 +1688,20 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "apiNetworkSubnetCompatibilityEntry": {
+      "type": "object",
+      "properties": {
+        "ip": {
+          "type": "string"
+        },
+        "isCompatible": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
         }
       }
     },

@@ -3946,6 +3946,186 @@ func (x *InjectEnvVariablesResponse) GetMessage() string {
 	return ""
 }
 
+type NetworkSubnetCompatibilityEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	IsCompatible  bool                   `protobuf:"varint,2,opt,name=is_compatible,json=isCompatible,proto3" json:"is_compatible,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkSubnetCompatibilityEntry) Reset() {
+	*x = NetworkSubnetCompatibilityEntry{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkSubnetCompatibilityEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkSubnetCompatibilityEntry) ProtoMessage() {}
+
+func (x *NetworkSubnetCompatibilityEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkSubnetCompatibilityEntry.ProtoReflect.Descriptor instead.
+func (*NetworkSubnetCompatibilityEntry) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *NetworkSubnetCompatibilityEntry) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *NetworkSubnetCompatibilityEntry) GetIsCompatible() bool {
+	if x != nil {
+		return x.IsCompatible
+	}
+	return false
+}
+
+func (x *NetworkSubnetCompatibilityEntry) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type CheckNetworkSubnetCompatibilityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ips           []string               `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+	NetworkName   string                 `protobuf:"bytes,2,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
+	AccessInfo    *OpenstackAccessInfo   `protobuf:"bytes,3,opt,name=access_info,json=accessInfo,proto3" json:"access_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) Reset() {
+	*x = CheckNetworkSubnetCompatibilityRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckNetworkSubnetCompatibilityRequest) ProtoMessage() {}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckNetworkSubnetCompatibilityRequest.ProtoReflect.Descriptor instead.
+func (*CheckNetworkSubnetCompatibilityRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) GetIps() []string {
+	if x != nil {
+		return x.Ips
+	}
+	return nil
+}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) GetNetworkName() string {
+	if x != nil {
+		return x.NetworkName
+	}
+	return ""
+}
+
+func (x *CheckNetworkSubnetCompatibilityRequest) GetAccessInfo() *OpenstackAccessInfo {
+	if x != nil {
+		return x.AccessInfo
+	}
+	return nil
+}
+
+type CheckNetworkSubnetCompatibilityResponse struct {
+	state         protoimpl.MessageState             `protogen:"open.v1"`
+	Results       []*NetworkSubnetCompatibilityEntry `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	SubnetCidrs   []string                           `protobuf:"bytes,2,rep,name=subnet_cidrs,json=subnetCidrs,proto3" json:"subnet_cidrs,omitempty"`
+	AllCompatible bool                               `protobuf:"varint,3,opt,name=all_compatible,json=allCompatible,proto3" json:"all_compatible,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) Reset() {
+	*x = CheckNetworkSubnetCompatibilityResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckNetworkSubnetCompatibilityResponse) ProtoMessage() {}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckNetworkSubnetCompatibilityResponse.ProtoReflect.Descriptor instead.
+func (*CheckNetworkSubnetCompatibilityResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) GetResults() []*NetworkSubnetCompatibilityEntry {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) GetSubnetCidrs() []string {
+	if x != nil {
+		return x.SubnetCidrs
+	}
+	return nil
+}
+
+func (x *CheckNetworkSubnetCompatibilityResponse) GetAllCompatible() bool {
+	if x != nil {
+		return x.AllCompatible
+	}
+	return false
+}
+
 type CleanupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -3954,7 +4134,7 @@ type CleanupRequest struct {
 
 func (x *CleanupRequest) Reset() {
 	*x = CleanupRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3966,7 +4146,7 @@ func (x *CleanupRequest) String() string {
 func (*CleanupRequest) ProtoMessage() {}
 
 func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[60]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3979,7 +4159,7 @@ func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupRequest.ProtoReflect.Descriptor instead.
 func (*CleanupRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{60}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{63}
 }
 
 type CleanupResponse struct {
@@ -3992,7 +4172,7 @@ type CleanupResponse struct {
 
 func (x *CleanupResponse) Reset() {
 	*x = CleanupResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4004,7 +4184,7 @@ func (x *CleanupResponse) String() string {
 func (*CleanupResponse) ProtoMessage() {}
 
 func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[61]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4017,7 +4197,7 @@ func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupResponse.ProtoReflect.Descriptor instead.
 func (*CleanupResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{61}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *CleanupResponse) GetSuccess() bool {
@@ -4048,7 +4228,7 @@ type StorageAccessInfo struct {
 
 func (x *StorageAccessInfo) Reset() {
 	*x = StorageAccessInfo{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4060,7 +4240,7 @@ func (x *StorageAccessInfo) String() string {
 func (*StorageAccessInfo) ProtoMessage() {}
 
 func (x *StorageAccessInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[62]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4073,7 +4253,7 @@ func (x *StorageAccessInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageAccessInfo.ProtoReflect.Descriptor instead.
 func (*StorageAccessInfo) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{62}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *StorageAccessInfo) GetHostname() string {
@@ -4124,7 +4304,7 @@ type VolumeInfo struct {
 
 func (x *VolumeInfo) Reset() {
 	*x = VolumeInfo{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4136,7 +4316,7 @@ func (x *VolumeInfo) String() string {
 func (*VolumeInfo) ProtoMessage() {}
 
 func (x *VolumeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4149,7 +4329,7 @@ func (x *VolumeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeInfo.ProtoReflect.Descriptor instead.
 func (*VolumeInfo) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{63}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *VolumeInfo) GetName() string {
@@ -4197,7 +4377,7 @@ type MappingContextEntry struct {
 
 func (x *MappingContextEntry) Reset() {
 	*x = MappingContextEntry{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4209,7 +4389,7 @@ func (x *MappingContextEntry) String() string {
 func (*MappingContextEntry) ProtoMessage() {}
 
 func (x *MappingContextEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4222,7 +4402,7 @@ func (x *MappingContextEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MappingContextEntry.ProtoReflect.Descriptor instead.
 func (*MappingContextEntry) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{64}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *MappingContextEntry) GetKey() string {
@@ -4248,7 +4428,7 @@ type ValidateStorageCredsRequest struct {
 
 func (x *ValidateStorageCredsRequest) Reset() {
 	*x = ValidateStorageCredsRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4260,7 +4440,7 @@ func (x *ValidateStorageCredsRequest) String() string {
 func (*ValidateStorageCredsRequest) ProtoMessage() {}
 
 func (x *ValidateStorageCredsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4273,7 +4453,7 @@ func (x *ValidateStorageCredsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateStorageCredsRequest.ProtoReflect.Descriptor instead.
 func (*ValidateStorageCredsRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{65}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ValidateStorageCredsRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4293,7 +4473,7 @@ type ValidateStorageCredsResponse struct {
 
 func (x *ValidateStorageCredsResponse) Reset() {
 	*x = ValidateStorageCredsResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4305,7 +4485,7 @@ func (x *ValidateStorageCredsResponse) String() string {
 func (*ValidateStorageCredsResponse) ProtoMessage() {}
 
 func (x *ValidateStorageCredsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4318,7 +4498,7 @@ func (x *ValidateStorageCredsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateStorageCredsResponse.ProtoReflect.Descriptor instead.
 func (*ValidateStorageCredsResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{66}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ValidateStorageCredsResponse) GetSuccess() bool {
@@ -4346,7 +4526,7 @@ type CreateInitiatorGroupRequest struct {
 
 func (x *CreateInitiatorGroupRequest) Reset() {
 	*x = CreateInitiatorGroupRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4358,7 +4538,7 @@ func (x *CreateInitiatorGroupRequest) String() string {
 func (*CreateInitiatorGroupRequest) ProtoMessage() {}
 
 func (x *CreateInitiatorGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4371,7 +4551,7 @@ func (x *CreateInitiatorGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInitiatorGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateInitiatorGroupRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{67}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *CreateInitiatorGroupRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4406,7 +4586,7 @@ type CreateInitiatorGroupResponse struct {
 
 func (x *CreateInitiatorGroupResponse) Reset() {
 	*x = CreateInitiatorGroupResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4418,7 +4598,7 @@ func (x *CreateInitiatorGroupResponse) String() string {
 func (*CreateInitiatorGroupResponse) ProtoMessage() {}
 
 func (x *CreateInitiatorGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4431,7 +4611,7 @@ func (x *CreateInitiatorGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInitiatorGroupResponse.ProtoReflect.Descriptor instead.
 func (*CreateInitiatorGroupResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{68}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CreateInitiatorGroupResponse) GetSuccess() bool {
@@ -4467,7 +4647,7 @@ type MapVolumeRequest struct {
 
 func (x *MapVolumeRequest) Reset() {
 	*x = MapVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4479,7 +4659,7 @@ func (x *MapVolumeRequest) String() string {
 func (*MapVolumeRequest) ProtoMessage() {}
 
 func (x *MapVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4492,7 +4672,7 @@ func (x *MapVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MapVolumeRequest.ProtoReflect.Descriptor instead.
 func (*MapVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{69}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *MapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4534,7 +4714,7 @@ type MapVolumeResponse struct {
 
 func (x *MapVolumeResponse) Reset() {
 	*x = MapVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4546,7 +4726,7 @@ func (x *MapVolumeResponse) String() string {
 func (*MapVolumeResponse) ProtoMessage() {}
 
 func (x *MapVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4559,7 +4739,7 @@ func (x *MapVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MapVolumeResponse.ProtoReflect.Descriptor instead.
 func (*MapVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{70}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *MapVolumeResponse) GetSuccess() bool {
@@ -4595,7 +4775,7 @@ type UnmapVolumeRequest struct {
 
 func (x *UnmapVolumeRequest) Reset() {
 	*x = UnmapVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4607,7 +4787,7 @@ func (x *UnmapVolumeRequest) String() string {
 func (*UnmapVolumeRequest) ProtoMessage() {}
 
 func (x *UnmapVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4620,7 +4800,7 @@ func (x *UnmapVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmapVolumeRequest.ProtoReflect.Descriptor instead.
 func (*UnmapVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{71}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *UnmapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4661,7 +4841,7 @@ type UnmapVolumeResponse struct {
 
 func (x *UnmapVolumeResponse) Reset() {
 	*x = UnmapVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4673,7 +4853,7 @@ func (x *UnmapVolumeResponse) String() string {
 func (*UnmapVolumeResponse) ProtoMessage() {}
 
 func (x *UnmapVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4686,7 +4866,7 @@ func (x *UnmapVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmapVolumeResponse.ProtoReflect.Descriptor instead.
 func (*UnmapVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{72}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *UnmapVolumeResponse) GetSuccess() bool {
@@ -4714,7 +4894,7 @@ type GetMappedGroupsRequest struct {
 
 func (x *GetMappedGroupsRequest) Reset() {
 	*x = GetMappedGroupsRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4726,7 +4906,7 @@ func (x *GetMappedGroupsRequest) String() string {
 func (*GetMappedGroupsRequest) ProtoMessage() {}
 
 func (x *GetMappedGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4739,7 +4919,7 @@ func (x *GetMappedGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMappedGroupsRequest.ProtoReflect.Descriptor instead.
 func (*GetMappedGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{73}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetMappedGroupsRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4772,7 +4952,7 @@ type GetMappedGroupsResponse struct {
 
 func (x *GetMappedGroupsResponse) Reset() {
 	*x = GetMappedGroupsResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4784,7 +4964,7 @@ func (x *GetMappedGroupsResponse) String() string {
 func (*GetMappedGroupsResponse) ProtoMessage() {}
 
 func (x *GetMappedGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4797,7 +4977,7 @@ func (x *GetMappedGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMappedGroupsResponse.ProtoReflect.Descriptor instead.
 func (*GetMappedGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{74}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetMappedGroupsResponse) GetGroups() []string {
@@ -4817,7 +4997,7 @@ type ResolveCinderVolumeRequest struct {
 
 func (x *ResolveCinderVolumeRequest) Reset() {
 	*x = ResolveCinderVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4829,7 +5009,7 @@ func (x *ResolveCinderVolumeRequest) String() string {
 func (*ResolveCinderVolumeRequest) ProtoMessage() {}
 
 func (x *ResolveCinderVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4842,7 +5022,7 @@ func (x *ResolveCinderVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveCinderVolumeRequest.ProtoReflect.Descriptor instead.
 func (*ResolveCinderVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{75}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ResolveCinderVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4870,7 +5050,7 @@ type ResolveCinderVolumeResponse struct {
 
 func (x *ResolveCinderVolumeResponse) Reset() {
 	*x = ResolveCinderVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4882,7 +5062,7 @@ func (x *ResolveCinderVolumeResponse) String() string {
 func (*ResolveCinderVolumeResponse) ProtoMessage() {}
 
 func (x *ResolveCinderVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4895,7 +5075,7 @@ func (x *ResolveCinderVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveCinderVolumeResponse.ProtoReflect.Descriptor instead.
 func (*ResolveCinderVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{76}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ResolveCinderVolumeResponse) GetSuccess() bool {
@@ -5219,7 +5399,20 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\bno_proxy\x18\x03 \x01(\tR\anoProxy\"P\n" +
 	"\x1aInjectEnvVariablesResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x10\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"n\n" +
+	"\x1fNetworkSubnetCompatibilityEntry\x12\x0e\n" +
+	"\x02ip\x18\x01 \x01(\tR\x02ip\x12#\n" +
+	"\ris_compatible\x18\x02 \x01(\bR\fisCompatible\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x98\x01\n" +
+	"&CheckNetworkSubnetCompatibilityRequest\x12\x10\n" +
+	"\x03ips\x18\x01 \x03(\tR\x03ips\x12!\n" +
+	"\fnetwork_name\x18\x02 \x01(\tR\vnetworkName\x129\n" +
+	"\vaccess_info\x18\x03 \x01(\v2\x18.api.OpenstackAccessInfoR\n" +
+	"accessInfo\"\xb3\x01\n" +
+	"'CheckNetworkSubnetCompatibilityResponse\x12>\n" +
+	"\aresults\x18\x01 \x03(\v2$.api.NetworkSubnetCompatibilityEntryR\aresults\x12!\n" +
+	"\fsubnet_cidrs\x18\x02 \x03(\tR\vsubnetCidrs\x12%\n" +
+	"\x0eall_compatible\x18\x03 \x01(\bR\rallCompatible\"\x10\n" +
 	"\x0eCleanupRequest\"E\n" +
 	"\x0fCleanupResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
@@ -5328,11 +5521,12 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x06WhoAmI\x12\x12.api.WhoAmIRequest\x1a\x13.api.WhoAmIResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/vpw/v1/who_am_i\x12k\n" +
 	"\x0eListBootSource\x12\x1a.api.ListBootSourceRequest\x1a\x1b.api.ListBootSourceResponse\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/vpw/v1/list_boot_source\x12b\n" +
 	"\rReclaimBMHost\x12\x15.api.ReclaimBMRequest\x1a\x16.api.ReclaimBMResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/vpw/v1/reclaim_bm_host\x12i\n" +
-	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\xa1\x03\n" +
+	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\xd7\x04\n" +
 	"\x0eVailbreakProxy\x12\x82\x01\n" +
 	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ip\x12\x89\x01\n" +
 	"\x15RevalidateCredentials\x12!.api.RevalidateCredentialsRequest\x1a\".api.RevalidateCredentialsResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/vpw/v1/revalidate_credentials\x12~\n" +
-	"\x12InjectEnvVariables\x12\x1e.api.InjectEnvVariablesRequest\x1a\x1f.api.InjectEnvVariablesResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/vpw/v1/inject_env_variables2\xfd\x05\n" +
+	"\x12InjectEnvVariables\x12\x1e.api.InjectEnvVariablesRequest\x1a\x1f.api.InjectEnvVariablesResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/vpw/v1/inject_env_variables\x12\xb3\x01\n" +
+	"\x1fCheckNetworkSubnetCompatibility\x12+.api.CheckNetworkSubnetCompatibilityRequest\x1a,.api.CheckNetworkSubnetCompatibilityResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/vpw/v1/check_network_subnet_compatibility2\xfd\x05\n" +
 	"\fStorageArray\x12\x7f\n" +
 	"\x13ValidateCredentials\x12 .api.ValidateStorageCredsRequest\x1a!.api.ValidateStorageCredsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/vpw/v1/storage/validate\x12\x8f\x01\n" +
 	"\x1cCreateOrUpdateInitiatorGroup\x12 .api.CreateInitiatorGroupRequest\x1a!.api.CreateInitiatorGroupResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/vpw/v1/storage/initiator_group\x12h\n" +
@@ -5356,87 +5550,90 @@ func file_sdk_proto_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_sdk_proto_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
+var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
 var file_sdk_proto_v1_api_proto_goTypes = []any{
-	(PowerStatus)(0),                      // 0: api.PowerStatus
-	(BootDevice)(0),                       // 1: api.BootDevice
-	(*MachineInfo)(nil),                   // 2: api.MachineInfo
-	(*VersionRequest)(nil),                // 3: api.VersionRequest
-	(*VersionResponse)(nil),               // 4: api.VersionResponse
-	(*ReleaseInfo)(nil),                   // 5: api.ReleaseInfo
-	(*AvailableUpdatesResponse)(nil),      // 6: api.AvailableUpdatesResponse
-	(*ValidationResult)(nil),              // 7: api.ValidationResult
-	(*UpgradeRequest)(nil),                // 8: api.UpgradeRequest
-	(*UpgradeResponse)(nil),               // 9: api.UpgradeResponse
-	(*UpgradeProgressResponse)(nil),       // 10: api.UpgradeProgressResponse
-	(*TargetAccessInfo)(nil),              // 11: api.TargetAccessInfo
-	(*Targets)(nil),                       // 12: api.Targets
-	(*VMInfo)(nil),                        // 13: api.VMInfo
-	(*ListHostsRequest)(nil),              // 14: api.ListHostsRequest
-	(*ListHostsResponse)(nil),             // 15: api.ListHostsResponse
-	(*ListHostsResponseItem)(nil),         // 16: api.ListHostsResponseItem
-	(*UnCordonHostRequest)(nil),           // 17: api.UnCordonHostRequest
-	(*UnCordonHostResponse)(nil),          // 18: api.UnCordonHostResponse
-	(*ListVMsRequest)(nil),                // 19: api.ListVMsRequest
-	(*ListVMsResponse)(nil),               // 20: api.ListVMsResponse
-	(*GetVMRequest)(nil),                  // 21: api.GetVMRequest
-	(*GetVMResponse)(nil),                 // 22: api.GetVMResponse
-	(*ReclaimVMRequest)(nil),              // 23: api.ReclaimVMRequest
-	(*ReclaimVMResponse)(nil),             // 24: api.ReclaimVMResponse
-	(*CordonHostRequest)(nil),             // 25: api.CordonHostRequest
-	(*CordonHostResponse)(nil),            // 26: api.CordonHostResponse
-	(*BMProvisionerAccessInfo)(nil),       // 27: api.BMProvisionerAccessInfo
-	(*BaseBMGetRequest)(nil),              // 28: api.BaseBMGetRequest
-	(*BMListMachinesRequest)(nil),         // 29: api.BMListMachinesRequest
-	(*BMListMachinesResponse)(nil),        // 30: api.BMListMachinesResponse
-	(*GetResourceInfoRequest)(nil),        // 31: api.GetResourceInfoRequest
-	(*GetResourceInfoResponse)(nil),       // 32: api.GetResourceInfoResponse
-	(*SetResourcePowerRequest)(nil),       // 33: api.SetResourcePowerRequest
-	(*SetResourcePowerResponse)(nil),      // 34: api.SetResourcePowerResponse
-	(*SetResourceBM2PXEBootRequest)(nil),  // 35: api.SetResourceBM2PXEBootRequest
-	(*SetResourceBM2PXEBootResponse)(nil), // 36: api.SetResourceBM2PXEBootResponse
-	(*WhoAmIRequest)(nil),                 // 37: api.WhoAmIRequest
-	(*WhoAmIResponse)(nil),                // 38: api.WhoAmIResponse
-	(*BootsourceSelections)(nil),          // 39: api.BootsourceSelections
-	(*ListBootSourceRequest)(nil),         // 40: api.ListBootSourceRequest
-	(*ListBootSourceResponse)(nil),        // 41: api.ListBootSourceResponse
-	(*IpmiType)(nil),                      // 42: api.ipmi_type
-	(*ReclaimBMRequest)(nil),              // 43: api.ReclaimBMRequest
-	(*ReclaimBMResponse)(nil),             // 44: api.ReclaimBMResponse
-	(*DeployMachineRequest)(nil),          // 45: api.DeployMachineRequest
-	(*DeployMachineResponse)(nil),         // 46: api.DeployMachineResponse
-	(*StartBMRequest)(nil),                // 47: api.StartBMRequest
-	(*StartBMResponse)(nil),               // 48: api.StartBMResponse
-	(*StopBMRequest)(nil),                 // 49: api.StopBMRequest
-	(*StopBMResponse)(nil),                // 50: api.StopBMResponse
-	(*IsBMReadyRequest)(nil),              // 51: api.IsBMReadyRequest
-	(*IsBMReadyResponse)(nil),             // 52: api.IsBMReadyResponse
-	(*IsBMRunningRequest)(nil),            // 53: api.IsBMRunningRequest
-	(*IsBMRunningResponse)(nil),           // 54: api.IsBMRunningResponse
-	(*OpenstackAccessInfo)(nil),           // 55: api.OpenstackAccessInfo
-	(*ValidateOpenstackIpRequest)(nil),    // 56: api.ValidateOpenstackIpRequest
-	(*ValidateOpenstackIpResponse)(nil),   // 57: api.ValidateOpenstackIpResponse
-	(*RevalidateCredentialsRequest)(nil),  // 58: api.RevalidateCredentialsRequest
-	(*RevalidateCredentialsResponse)(nil), // 59: api.RevalidateCredentialsResponse
-	(*InjectEnvVariablesRequest)(nil),     // 60: api.InjectEnvVariablesRequest
-	(*InjectEnvVariablesResponse)(nil),    // 61: api.InjectEnvVariablesResponse
-	(*CleanupRequest)(nil),                // 62: api.CleanupRequest
-	(*CleanupResponse)(nil),               // 63: api.CleanupResponse
-	(*StorageAccessInfo)(nil),             // 64: api.StorageAccessInfo
-	(*VolumeInfo)(nil),                    // 65: api.VolumeInfo
-	(*MappingContextEntry)(nil),           // 66: api.MappingContextEntry
-	(*ValidateStorageCredsRequest)(nil),   // 67: api.ValidateStorageCredsRequest
-	(*ValidateStorageCredsResponse)(nil),  // 68: api.ValidateStorageCredsResponse
-	(*CreateInitiatorGroupRequest)(nil),   // 69: api.CreateInitiatorGroupRequest
-	(*CreateInitiatorGroupResponse)(nil),  // 70: api.CreateInitiatorGroupResponse
-	(*MapVolumeRequest)(nil),              // 71: api.MapVolumeRequest
-	(*MapVolumeResponse)(nil),             // 72: api.MapVolumeResponse
-	(*UnmapVolumeRequest)(nil),            // 73: api.UnmapVolumeRequest
-	(*UnmapVolumeResponse)(nil),           // 74: api.UnmapVolumeResponse
-	(*GetMappedGroupsRequest)(nil),        // 75: api.GetMappedGroupsRequest
-	(*GetMappedGroupsResponse)(nil),       // 76: api.GetMappedGroupsResponse
-	(*ResolveCinderVolumeRequest)(nil),    // 77: api.ResolveCinderVolumeRequest
-	(*ResolveCinderVolumeResponse)(nil),   // 78: api.ResolveCinderVolumeResponse
+	(PowerStatus)(0),                                // 0: api.PowerStatus
+	(BootDevice)(0),                                 // 1: api.BootDevice
+	(*MachineInfo)(nil),                             // 2: api.MachineInfo
+	(*VersionRequest)(nil),                          // 3: api.VersionRequest
+	(*VersionResponse)(nil),                         // 4: api.VersionResponse
+	(*ReleaseInfo)(nil),                             // 5: api.ReleaseInfo
+	(*AvailableUpdatesResponse)(nil),                // 6: api.AvailableUpdatesResponse
+	(*ValidationResult)(nil),                        // 7: api.ValidationResult
+	(*UpgradeRequest)(nil),                          // 8: api.UpgradeRequest
+	(*UpgradeResponse)(nil),                         // 9: api.UpgradeResponse
+	(*UpgradeProgressResponse)(nil),                 // 10: api.UpgradeProgressResponse
+	(*TargetAccessInfo)(nil),                        // 11: api.TargetAccessInfo
+	(*Targets)(nil),                                 // 12: api.Targets
+	(*VMInfo)(nil),                                  // 13: api.VMInfo
+	(*ListHostsRequest)(nil),                        // 14: api.ListHostsRequest
+	(*ListHostsResponse)(nil),                       // 15: api.ListHostsResponse
+	(*ListHostsResponseItem)(nil),                   // 16: api.ListHostsResponseItem
+	(*UnCordonHostRequest)(nil),                     // 17: api.UnCordonHostRequest
+	(*UnCordonHostResponse)(nil),                    // 18: api.UnCordonHostResponse
+	(*ListVMsRequest)(nil),                          // 19: api.ListVMsRequest
+	(*ListVMsResponse)(nil),                         // 20: api.ListVMsResponse
+	(*GetVMRequest)(nil),                            // 21: api.GetVMRequest
+	(*GetVMResponse)(nil),                           // 22: api.GetVMResponse
+	(*ReclaimVMRequest)(nil),                        // 23: api.ReclaimVMRequest
+	(*ReclaimVMResponse)(nil),                       // 24: api.ReclaimVMResponse
+	(*CordonHostRequest)(nil),                       // 25: api.CordonHostRequest
+	(*CordonHostResponse)(nil),                      // 26: api.CordonHostResponse
+	(*BMProvisionerAccessInfo)(nil),                 // 27: api.BMProvisionerAccessInfo
+	(*BaseBMGetRequest)(nil),                        // 28: api.BaseBMGetRequest
+	(*BMListMachinesRequest)(nil),                   // 29: api.BMListMachinesRequest
+	(*BMListMachinesResponse)(nil),                  // 30: api.BMListMachinesResponse
+	(*GetResourceInfoRequest)(nil),                  // 31: api.GetResourceInfoRequest
+	(*GetResourceInfoResponse)(nil),                 // 32: api.GetResourceInfoResponse
+	(*SetResourcePowerRequest)(nil),                 // 33: api.SetResourcePowerRequest
+	(*SetResourcePowerResponse)(nil),                // 34: api.SetResourcePowerResponse
+	(*SetResourceBM2PXEBootRequest)(nil),            // 35: api.SetResourceBM2PXEBootRequest
+	(*SetResourceBM2PXEBootResponse)(nil),           // 36: api.SetResourceBM2PXEBootResponse
+	(*WhoAmIRequest)(nil),                           // 37: api.WhoAmIRequest
+	(*WhoAmIResponse)(nil),                          // 38: api.WhoAmIResponse
+	(*BootsourceSelections)(nil),                    // 39: api.BootsourceSelections
+	(*ListBootSourceRequest)(nil),                   // 40: api.ListBootSourceRequest
+	(*ListBootSourceResponse)(nil),                  // 41: api.ListBootSourceResponse
+	(*IpmiType)(nil),                                // 42: api.ipmi_type
+	(*ReclaimBMRequest)(nil),                        // 43: api.ReclaimBMRequest
+	(*ReclaimBMResponse)(nil),                       // 44: api.ReclaimBMResponse
+	(*DeployMachineRequest)(nil),                    // 45: api.DeployMachineRequest
+	(*DeployMachineResponse)(nil),                   // 46: api.DeployMachineResponse
+	(*StartBMRequest)(nil),                          // 47: api.StartBMRequest
+	(*StartBMResponse)(nil),                         // 48: api.StartBMResponse
+	(*StopBMRequest)(nil),                           // 49: api.StopBMRequest
+	(*StopBMResponse)(nil),                          // 50: api.StopBMResponse
+	(*IsBMReadyRequest)(nil),                        // 51: api.IsBMReadyRequest
+	(*IsBMReadyResponse)(nil),                       // 52: api.IsBMReadyResponse
+	(*IsBMRunningRequest)(nil),                      // 53: api.IsBMRunningRequest
+	(*IsBMRunningResponse)(nil),                     // 54: api.IsBMRunningResponse
+	(*OpenstackAccessInfo)(nil),                     // 55: api.OpenstackAccessInfo
+	(*ValidateOpenstackIpRequest)(nil),              // 56: api.ValidateOpenstackIpRequest
+	(*ValidateOpenstackIpResponse)(nil),             // 57: api.ValidateOpenstackIpResponse
+	(*RevalidateCredentialsRequest)(nil),            // 58: api.RevalidateCredentialsRequest
+	(*RevalidateCredentialsResponse)(nil),           // 59: api.RevalidateCredentialsResponse
+	(*InjectEnvVariablesRequest)(nil),               // 60: api.InjectEnvVariablesRequest
+	(*InjectEnvVariablesResponse)(nil),              // 61: api.InjectEnvVariablesResponse
+	(*NetworkSubnetCompatibilityEntry)(nil),         // 62: api.NetworkSubnetCompatibilityEntry
+	(*CheckNetworkSubnetCompatibilityRequest)(nil),  // 63: api.CheckNetworkSubnetCompatibilityRequest
+	(*CheckNetworkSubnetCompatibilityResponse)(nil), // 64: api.CheckNetworkSubnetCompatibilityResponse
+	(*CleanupRequest)(nil),                          // 65: api.CleanupRequest
+	(*CleanupResponse)(nil),                         // 66: api.CleanupResponse
+	(*StorageAccessInfo)(nil),                       // 67: api.StorageAccessInfo
+	(*VolumeInfo)(nil),                              // 68: api.VolumeInfo
+	(*MappingContextEntry)(nil),                     // 69: api.MappingContextEntry
+	(*ValidateStorageCredsRequest)(nil),             // 70: api.ValidateStorageCredsRequest
+	(*ValidateStorageCredsResponse)(nil),            // 71: api.ValidateStorageCredsResponse
+	(*CreateInitiatorGroupRequest)(nil),             // 72: api.CreateInitiatorGroupRequest
+	(*CreateInitiatorGroupResponse)(nil),            // 73: api.CreateInitiatorGroupResponse
+	(*MapVolumeRequest)(nil),                        // 74: api.MapVolumeRequest
+	(*MapVolumeResponse)(nil),                       // 75: api.MapVolumeResponse
+	(*UnmapVolumeRequest)(nil),                      // 76: api.UnmapVolumeRequest
+	(*UnmapVolumeResponse)(nil),                     // 77: api.UnmapVolumeResponse
+	(*GetMappedGroupsRequest)(nil),                  // 78: api.GetMappedGroupsRequest
+	(*GetMappedGroupsResponse)(nil),                 // 79: api.GetMappedGroupsResponse
+	(*ResolveCinderVolumeRequest)(nil),              // 80: api.ResolveCinderVolumeRequest
+	(*ResolveCinderVolumeResponse)(nil),             // 81: api.ResolveCinderVolumeResponse
 }
 var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	5,  // 0: api.AvailableUpdatesResponse.updates:type_name -> api.ReleaseInfo
@@ -5478,82 +5675,86 @@ var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	27, // 36: api.IsBMReadyRequest.access_info:type_name -> api.BMProvisionerAccessInfo
 	27, // 37: api.IsBMRunningRequest.access_info:type_name -> api.BMProvisionerAccessInfo
 	55, // 38: api.ValidateOpenstackIpRequest.access_info:type_name -> api.OpenstackAccessInfo
-	64, // 39: api.ValidateStorageCredsRequest.access_info:type_name -> api.StorageAccessInfo
-	64, // 40: api.CreateInitiatorGroupRequest.access_info:type_name -> api.StorageAccessInfo
-	66, // 41: api.CreateInitiatorGroupResponse.mapping_context:type_name -> api.MappingContextEntry
-	64, // 42: api.MapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	65, // 43: api.MapVolumeRequest.volume:type_name -> api.VolumeInfo
-	66, // 44: api.MapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
-	65, // 45: api.MapVolumeResponse.volume:type_name -> api.VolumeInfo
-	64, // 46: api.UnmapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	65, // 47: api.UnmapVolumeRequest.volume:type_name -> api.VolumeInfo
-	66, // 48: api.UnmapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
-	64, // 49: api.GetMappedGroupsRequest.access_info:type_name -> api.StorageAccessInfo
-	65, // 50: api.GetMappedGroupsRequest.volume:type_name -> api.VolumeInfo
-	66, // 51: api.GetMappedGroupsRequest.mapping_context:type_name -> api.MappingContextEntry
-	64, // 52: api.ResolveCinderVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	65, // 53: api.ResolveCinderVolumeResponse.volume:type_name -> api.VolumeInfo
-	3,  // 54: api.Version.Version:input_type -> api.VersionRequest
-	8,  // 55: api.Version.InitiateUpgrade:input_type -> api.UpgradeRequest
-	3,  // 56: api.Version.GetUpgradeProgress:input_type -> api.VersionRequest
-	3,  // 57: api.Version.GetAvailableTags:input_type -> api.VersionRequest
-	62, // 58: api.Version.Cleanup:input_type -> api.CleanupRequest
-	19, // 59: api.VCenter.ListVMs:input_type -> api.ListVMsRequest
-	21, // 60: api.VCenter.GetVM:input_type -> api.GetVMRequest
-	23, // 61: api.VCenter.ReclaimVM:input_type -> api.ReclaimVMRequest
-	25, // 62: api.VCenter.CordonHost:input_type -> api.CordonHostRequest
-	17, // 63: api.VCenter.UnCordonHost:input_type -> api.UnCordonHostRequest
-	14, // 64: api.VCenter.ListHosts:input_type -> api.ListHostsRequest
-	29, // 65: api.BMProvider.ListMachines:input_type -> api.BMListMachinesRequest
-	31, // 66: api.BMProvider.GetResourceInfo:input_type -> api.GetResourceInfoRequest
-	33, // 67: api.BMProvider.SetResourcePower:input_type -> api.SetResourcePowerRequest
-	35, // 68: api.BMProvider.SetResourceBM2PXEBoot:input_type -> api.SetResourceBM2PXEBootRequest
-	37, // 69: api.BMProvider.WhoAmI:input_type -> api.WhoAmIRequest
-	40, // 70: api.BMProvider.ListBootSource:input_type -> api.ListBootSourceRequest
-	43, // 71: api.BMProvider.ReclaimBMHost:input_type -> api.ReclaimBMRequest
-	45, // 72: api.BMProvider.DeployMachine:input_type -> api.DeployMachineRequest
-	56, // 73: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
-	58, // 74: api.VailbreakProxy.RevalidateCredentials:input_type -> api.RevalidateCredentialsRequest
-	60, // 75: api.VailbreakProxy.InjectEnvVariables:input_type -> api.InjectEnvVariablesRequest
-	67, // 76: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
-	69, // 77: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
-	71, // 78: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
-	73, // 79: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
-	75, // 80: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
-	77, // 81: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
-	4,  // 82: api.Version.Version:output_type -> api.VersionResponse
-	9,  // 83: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
-	10, // 84: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
-	6,  // 85: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
-	63, // 86: api.Version.Cleanup:output_type -> api.CleanupResponse
-	20, // 87: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
-	22, // 88: api.VCenter.GetVM:output_type -> api.GetVMResponse
-	24, // 89: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
-	26, // 90: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
-	18, // 91: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
-	15, // 92: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
-	30, // 93: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
-	32, // 94: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
-	34, // 95: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
-	36, // 96: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
-	38, // 97: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
-	41, // 98: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
-	44, // 99: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
-	46, // 100: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
-	57, // 101: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
-	59, // 102: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
-	61, // 103: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
-	68, // 104: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
-	70, // 105: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
-	72, // 106: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
-	74, // 107: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
-	76, // 108: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
-	78, // 109: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
-	82, // [82:110] is the sub-list for method output_type
-	54, // [54:82] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	55, // 39: api.CheckNetworkSubnetCompatibilityRequest.access_info:type_name -> api.OpenstackAccessInfo
+	62, // 40: api.CheckNetworkSubnetCompatibilityResponse.results:type_name -> api.NetworkSubnetCompatibilityEntry
+	67, // 41: api.ValidateStorageCredsRequest.access_info:type_name -> api.StorageAccessInfo
+	67, // 42: api.CreateInitiatorGroupRequest.access_info:type_name -> api.StorageAccessInfo
+	69, // 43: api.CreateInitiatorGroupResponse.mapping_context:type_name -> api.MappingContextEntry
+	67, // 44: api.MapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	68, // 45: api.MapVolumeRequest.volume:type_name -> api.VolumeInfo
+	69, // 46: api.MapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
+	68, // 47: api.MapVolumeResponse.volume:type_name -> api.VolumeInfo
+	67, // 48: api.UnmapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	68, // 49: api.UnmapVolumeRequest.volume:type_name -> api.VolumeInfo
+	69, // 50: api.UnmapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
+	67, // 51: api.GetMappedGroupsRequest.access_info:type_name -> api.StorageAccessInfo
+	68, // 52: api.GetMappedGroupsRequest.volume:type_name -> api.VolumeInfo
+	69, // 53: api.GetMappedGroupsRequest.mapping_context:type_name -> api.MappingContextEntry
+	67, // 54: api.ResolveCinderVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	68, // 55: api.ResolveCinderVolumeResponse.volume:type_name -> api.VolumeInfo
+	3,  // 56: api.Version.Version:input_type -> api.VersionRequest
+	8,  // 57: api.Version.InitiateUpgrade:input_type -> api.UpgradeRequest
+	3,  // 58: api.Version.GetUpgradeProgress:input_type -> api.VersionRequest
+	3,  // 59: api.Version.GetAvailableTags:input_type -> api.VersionRequest
+	65, // 60: api.Version.Cleanup:input_type -> api.CleanupRequest
+	19, // 61: api.VCenter.ListVMs:input_type -> api.ListVMsRequest
+	21, // 62: api.VCenter.GetVM:input_type -> api.GetVMRequest
+	23, // 63: api.VCenter.ReclaimVM:input_type -> api.ReclaimVMRequest
+	25, // 64: api.VCenter.CordonHost:input_type -> api.CordonHostRequest
+	17, // 65: api.VCenter.UnCordonHost:input_type -> api.UnCordonHostRequest
+	14, // 66: api.VCenter.ListHosts:input_type -> api.ListHostsRequest
+	29, // 67: api.BMProvider.ListMachines:input_type -> api.BMListMachinesRequest
+	31, // 68: api.BMProvider.GetResourceInfo:input_type -> api.GetResourceInfoRequest
+	33, // 69: api.BMProvider.SetResourcePower:input_type -> api.SetResourcePowerRequest
+	35, // 70: api.BMProvider.SetResourceBM2PXEBoot:input_type -> api.SetResourceBM2PXEBootRequest
+	37, // 71: api.BMProvider.WhoAmI:input_type -> api.WhoAmIRequest
+	40, // 72: api.BMProvider.ListBootSource:input_type -> api.ListBootSourceRequest
+	43, // 73: api.BMProvider.ReclaimBMHost:input_type -> api.ReclaimBMRequest
+	45, // 74: api.BMProvider.DeployMachine:input_type -> api.DeployMachineRequest
+	56, // 75: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
+	58, // 76: api.VailbreakProxy.RevalidateCredentials:input_type -> api.RevalidateCredentialsRequest
+	60, // 77: api.VailbreakProxy.InjectEnvVariables:input_type -> api.InjectEnvVariablesRequest
+	63, // 78: api.VailbreakProxy.CheckNetworkSubnetCompatibility:input_type -> api.CheckNetworkSubnetCompatibilityRequest
+	70, // 79: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
+	72, // 80: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
+	74, // 81: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
+	76, // 82: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
+	78, // 83: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
+	80, // 84: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
+	4,  // 85: api.Version.Version:output_type -> api.VersionResponse
+	9,  // 86: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
+	10, // 87: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
+	6,  // 88: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
+	66, // 89: api.Version.Cleanup:output_type -> api.CleanupResponse
+	20, // 90: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
+	22, // 91: api.VCenter.GetVM:output_type -> api.GetVMResponse
+	24, // 92: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
+	26, // 93: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
+	18, // 94: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
+	15, // 95: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
+	30, // 96: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
+	32, // 97: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
+	34, // 98: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
+	36, // 99: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
+	38, // 100: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
+	41, // 101: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
+	44, // 102: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
+	46, // 103: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
+	57, // 104: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
+	59, // 105: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
+	61, // 106: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
+	64, // 107: api.VailbreakProxy.CheckNetworkSubnetCompatibility:output_type -> api.CheckNetworkSubnetCompatibilityResponse
+	71, // 108: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
+	73, // 109: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
+	75, // 110: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
+	77, // 111: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
+	79, // 112: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
+	81, // 113: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
+	85, // [85:114] is the sub-list for method output_type
+	56, // [56:85] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_sdk_proto_v1_api_proto_init() }
@@ -5588,7 +5789,7 @@ func file_sdk_proto_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sdk_proto_v1_api_proto_rawDesc), len(file_sdk_proto_v1_api_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   77,
+			NumMessages:   80,
 			NumExtensions: 0,
 			NumServices:   5,
 		},

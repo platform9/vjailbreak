@@ -1645,6 +1645,8 @@ export default function MigrationFormDrawer({
                   networkMappingError={fieldErrors['networksMapping']}
                   storageMappingError={fieldErrors['storageMapping']}
                   showHeader={false}
+                  selectedVMs={params.vms}
+                  openstackCredentials={openstackCredentials}
                 />
               </SurfaceCard>
             </Box>
