@@ -1,6 +1,7 @@
 import axios from '../axios'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 import { Secret, SecretList } from './model'
+import { encodeUtf8ToBase64, decodeBase64ToUtf8 } from '../../utils/base64encoding'
 
 // Interface for secret data
 export interface SecretData {
@@ -9,7 +10,7 @@ export interface SecretData {
 
 const toBase64SecretData = (data: SecretData): SecretData => {
   return Object.entries(data).reduce((acc, [key, value]) => {
-    acc[key] = btoa(value)
+    acc[key] = encodeUtf8ToBase64(value)
     return acc
   }, {} as SecretData)
 }
@@ -235,7 +236,7 @@ export const getSecret = async (
       const decodedData = Object.entries(secretData).reduce((acc, [key, value]) => {
         try {
           // Try to decode base64 values
-          acc[key] = typeof value === 'string' ? atob(value) : value
+          acc[key] = typeof value === 'string' ? decodeBase64ToUtf8(value) : value
         } catch (error) {
           console.error(`Error decoding secret data for key ${key}:`, error)
           // If it's not base64 encoded, use the original value
@@ -277,7 +278,7 @@ export const listSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE): Pro
     if (!secret?.data) return secret
     const decodedData = Object.entries(secret.data).reduce((acc, [key, value]) => {
       try {
-        acc[key] = typeof value === 'string' ? atob(value) : (value as any)
+        acc[key] = typeof value === 'string' ? decodeBase64ToUtf8(value) : (value as any)
       } catch (error) {
         console.error(`Error decoding secret data for key ${key}:`, error)
         acc[key] = value as any
