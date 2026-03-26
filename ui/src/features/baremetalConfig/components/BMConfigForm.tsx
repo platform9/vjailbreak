@@ -424,10 +424,6 @@ runcmd:
     }
   }
 
-  const handleCancel = () => {
-    // Reset form or navigate away
-  }
-
   const handleResetCloudInit = () => {
     setFormData((prev) => ({
       ...prev,
@@ -443,9 +439,6 @@ runcmd:
       sx={{ borderRadius: 'none' }}
       footer={
         <Row justifyContent="flex-end" gap={2}>
-          <ActionButton tone="secondary" onClick={handleCancel} data-testid="bm-config-cancel">
-            Cancel
-          </ActionButton>
           <ActionButton
             tone="primary"
             type="submit"
