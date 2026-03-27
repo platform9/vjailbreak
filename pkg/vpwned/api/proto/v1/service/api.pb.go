@@ -4919,6 +4919,86 @@ func (x *ResolveCinderVolumeResponse) GetVolume() *VolumeInfo {
 	return nil
 }
 
+type ApplyTimeSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyTimeSettingsRequest) Reset() {
+	*x = ApplyTimeSettingsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyTimeSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyTimeSettingsRequest) ProtoMessage() {}
+
+func (x *ApplyTimeSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyTimeSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ApplyTimeSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{77}
+}
+
+type ApplyTimeSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyTimeSettingsResponse) Reset() {
+	*x = ApplyTimeSettingsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyTimeSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyTimeSettingsResponse) ProtoMessage() {}
+
+func (x *ApplyTimeSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyTimeSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ApplyTimeSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *ApplyTimeSettingsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_sdk_proto_v1_api_proto protoreflect.FileDescriptor
 
 const file_sdk_proto_v1_api_proto_rawDesc = "" +
@@ -5290,7 +5370,10 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x1bResolveCinderVolumeResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12'\n" +
-	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume*j\n" +
+	"\x06volume\x18\x03 \x01(\v2\x0f.api.VolumeInfoR\x06volume\"\x1a\n" +
+	"\x18ApplyTimeSettingsRequest\"5\n" +
+	"\x19ApplyTimeSettingsResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage*j\n" +
 	"\vPowerStatus\x12\x0f\n" +
 	"\vPOWERED_OFF\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -5328,11 +5411,12 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x06WhoAmI\x12\x12.api.WhoAmIRequest\x1a\x13.api.WhoAmIResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/vpw/v1/who_am_i\x12k\n" +
 	"\x0eListBootSource\x12\x1a.api.ListBootSourceRequest\x1a\x1b.api.ListBootSourceResponse\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/vpw/v1/list_boot_source\x12b\n" +
 	"\rReclaimBMHost\x12\x15.api.ReclaimBMRequest\x1a\x16.api.ReclaimBMResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/vpw/v1/reclaim_bm_host\x12i\n" +
-	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\xa1\x03\n" +
+	"\rDeployMachine\x12\x19.api.DeployMachineRequest\x1a\x1a.api.DeployMachineResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/vpw/v1/deploy_machine2\xa7\x04\n" +
 	"\x0eVailbreakProxy\x12\x82\x01\n" +
 	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ip\x12\x89\x01\n" +
 	"\x15RevalidateCredentials\x12!.api.RevalidateCredentialsRequest\x1a\".api.RevalidateCredentialsResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/vpw/v1/revalidate_credentials\x12~\n" +
-	"\x12InjectEnvVariables\x12\x1e.api.InjectEnvVariablesRequest\x1a\x1f.api.InjectEnvVariablesResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/vpw/v1/inject_env_variables2\xfd\x05\n" +
+	"\x12InjectEnvVariables\x12\x1e.api.InjectEnvVariablesRequest\x1a\x1f.api.InjectEnvVariablesResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/vpw/v1/inject_env_variables\x12\x83\x01\n" +
+	"\x11ApplyTimeSettings\x12\x1d.api.ApplyTimeSettingsRequest\x1a\x1e.api.ApplyTimeSettingsResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/vpw/v1/settings/apply-time-settings2\xfd\x05\n" +
 	"\fStorageArray\x12\x7f\n" +
 	"\x13ValidateCredentials\x12 .api.ValidateStorageCredsRequest\x1a!.api.ValidateStorageCredsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/vpw/v1/storage/validate\x12\x8f\x01\n" +
 	"\x1cCreateOrUpdateInitiatorGroup\x12 .api.CreateInitiatorGroupRequest\x1a!.api.CreateInitiatorGroupResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/vpw/v1/storage/initiator_group\x12h\n" +
@@ -5356,7 +5440,7 @@ func file_sdk_proto_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_sdk_proto_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
+var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 79)
 var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(PowerStatus)(0),                      // 0: api.PowerStatus
 	(BootDevice)(0),                       // 1: api.BootDevice
@@ -5437,6 +5521,8 @@ var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(*GetMappedGroupsResponse)(nil),       // 76: api.GetMappedGroupsResponse
 	(*ResolveCinderVolumeRequest)(nil),    // 77: api.ResolveCinderVolumeRequest
 	(*ResolveCinderVolumeResponse)(nil),   // 78: api.ResolveCinderVolumeResponse
+	(*ApplyTimeSettingsRequest)(nil),      // 79: api.ApplyTimeSettingsRequest
+	(*ApplyTimeSettingsResponse)(nil),     // 80: api.ApplyTimeSettingsResponse
 }
 var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	5,  // 0: api.AvailableUpdatesResponse.updates:type_name -> api.ReleaseInfo
@@ -5515,42 +5601,44 @@ var file_sdk_proto_v1_api_proto_depIdxs = []int32{
 	56, // 73: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
 	58, // 74: api.VailbreakProxy.RevalidateCredentials:input_type -> api.RevalidateCredentialsRequest
 	60, // 75: api.VailbreakProxy.InjectEnvVariables:input_type -> api.InjectEnvVariablesRequest
-	67, // 76: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
-	69, // 77: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
-	71, // 78: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
-	73, // 79: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
-	75, // 80: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
-	77, // 81: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
-	4,  // 82: api.Version.Version:output_type -> api.VersionResponse
-	9,  // 83: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
-	10, // 84: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
-	6,  // 85: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
-	63, // 86: api.Version.Cleanup:output_type -> api.CleanupResponse
-	20, // 87: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
-	22, // 88: api.VCenter.GetVM:output_type -> api.GetVMResponse
-	24, // 89: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
-	26, // 90: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
-	18, // 91: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
-	15, // 92: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
-	30, // 93: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
-	32, // 94: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
-	34, // 95: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
-	36, // 96: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
-	38, // 97: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
-	41, // 98: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
-	44, // 99: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
-	46, // 100: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
-	57, // 101: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
-	59, // 102: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
-	61, // 103: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
-	68, // 104: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
-	70, // 105: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
-	72, // 106: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
-	74, // 107: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
-	76, // 108: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
-	78, // 109: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
-	82, // [82:110] is the sub-list for method output_type
-	54, // [54:82] is the sub-list for method input_type
+	79, // 76: api.VailbreakProxy.ApplyTimeSettings:input_type -> api.ApplyTimeSettingsRequest
+	67, // 77: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
+	69, // 78: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
+	71, // 79: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
+	73, // 80: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
+	75, // 81: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
+	77, // 82: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
+	4,  // 83: api.Version.Version:output_type -> api.VersionResponse
+	9,  // 84: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
+	10, // 85: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
+	6,  // 86: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
+	63, // 87: api.Version.Cleanup:output_type -> api.CleanupResponse
+	20, // 88: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
+	22, // 89: api.VCenter.GetVM:output_type -> api.GetVMResponse
+	24, // 90: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
+	26, // 91: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
+	18, // 92: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
+	15, // 93: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
+	30, // 94: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
+	32, // 95: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
+	34, // 96: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
+	36, // 97: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
+	38, // 98: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
+	41, // 99: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
+	44, // 100: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
+	46, // 101: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
+	57, // 102: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
+	59, // 103: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
+	61, // 104: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
+	80, // 105: api.VailbreakProxy.ApplyTimeSettings:output_type -> api.ApplyTimeSettingsResponse
+	68, // 106: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
+	70, // 107: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
+	72, // 108: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
+	74, // 109: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
+	76, // 110: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
+	78, // 111: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
+	83, // [83:112] is the sub-list for method output_type
+	54, // [54:83] is the sub-list for method input_type
 	54, // [54:54] is the sub-list for extension type_name
 	54, // [54:54] is the sub-list for extension extendee
 	0,  // [0:54] is the sub-list for field type_name
@@ -5588,7 +5676,7 @@ func file_sdk_proto_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sdk_proto_v1_api_proto_rawDesc), len(file_sdk_proto_v1_api_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   77,
+			NumMessages:   79,
 			NumExtensions: 0,
 			NumServices:   5,
 		},

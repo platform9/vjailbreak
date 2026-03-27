@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -29,6 +30,8 @@ import (
 	ctrlLog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+const applyTimeSettingsScript = "/etc/pf9/apply-time-settings.sh"
 
 type vjailbreakProxy struct {
 	api.UnimplementedVailbreakProxyServer
@@ -765,5 +768,25 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	return &api.InjectEnvVariablesResponse{
 		Success: true,
 		Message: successMsg,
+	}, nil
+}
+
+// ApplyTimeSettings triggers the script via nsenter.
+func (p *vjailbreakProxy) ApplyTimeSettings(_ context.Context, _ *api.ApplyTimeSettingsRequest) (*api.ApplyTimeSettingsResponse, error) {
+	const fn = "ApplyTimeSettings"
+	logrus.WithField("func", fn).Info("Triggering apply-time-settings.sh on host via nsenter")
+
+	go func() {
+		cmd := exec.Command("nsenter", "--target", "1", "--mount", "--", applyTimeSettingsScript)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			logrus.WithField("func", fn).WithError(err).Errorf("apply-time-settings.sh failed: %s", string(out))
+			return
+		}
+		logrus.WithField("func", fn).Infof("apply-time-settings.sh completed: %s", string(out))
+	}()
+
+	return &api.ApplyTimeSettingsResponse{
+		Message: "Time settings apply triggered on host",
 	}, nil
 }

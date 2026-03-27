@@ -105,6 +105,226 @@ set_default_password() {
 set_default_password
 check_command "Setting default password for ubuntu user"
 
+install_time_settings_apply_script() {
+  log "Installing vJailbreak time settings apply script (NTP/timezone)..."
+
+  sudo mkdir -p /etc/pf9
+
+  sudo tee /etc/pf9/apply-time-settings.sh > /dev/null <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+LOG_DIR="/var/log/pf9"
+STATE_DIR="/var/lib/pf9"
+LOG_FILE="${LOG_DIR}/time-settings.log"
+STATE_FILE="${STATE_DIR}/time-settings.state"
+TIMESYNCD_CONF_DIR="/etc/systemd/timesyncd.conf.d"
+TIMESYNCD_CONF_FILE="${TIMESYNCD_CONF_DIR}/99-vjailbreak.conf"
+
+mkdir -p "$LOG_DIR" "$STATE_DIR"
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+normalize_servers() {
+  printf '%s' "${1:-}" | tr ',\n' '  ' | xargs || true
+}
+
+is_valid_ntp_server() {
+  local server="$1"
+
+  [ -n "$server" ] || return 1
+
+  if [[ "$server" == *"://"* ]] || [[ "$server" == */* ]]; then
+    return 1
+  fi
+
+  if [[ "$server" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    local o1 o2 o3 o4
+    IFS='.' read -r o1 o2 o3 o4 <<< "$server"
+    for octet in "$o1" "$o2" "$o3" "$o4"; do
+      if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
+        return 1
+      fi
+    done
+    return 0
+  fi
+
+  if [[ "$server" =~ ^[a-zA-Z0-9.-]+$ ]] && [[ "$server" != .* ]] && [[ "$server" != *..* ]]; then
+    IFS='.' read -r -a labels <<< "$server"
+    for label in "${labels[@]}"; do
+      if [ -z "$label" ] || [ "${#label}" -gt 63 ] || [[ ! "$label" =~ ^[a-zA-Z0-9-]+$ ]] || [[ "$label" == -* ]] || [[ "$label" == *- ]]; then
+        return 1
+      fi
+    done
+    return 0
+  fi
+
+  return 1
+}
+
+filter_valid_ntp_servers() {
+  local raw="$1"
+  local valid=""
+  local invalid=""
+  local server
+
+  for server in $raw; do
+    if is_valid_ntp_server "$server"; then
+      valid+=" $server"
+    else
+      invalid+=" $server"
+    fi
+  done
+
+  valid="$(echo "$valid" | xargs || true)"
+  invalid="$(echo "$invalid" | xargs || true)"
+
+  if [ -n "$invalid" ]; then
+    log "Ignoring invalid NTP server entries: $invalid"
+  fi
+
+  printf '%s' "$valid"
+}
+
+write_timesyncd_conf() {
+  local servers="$1"
+  mkdir -p "$TIMESYNCD_CONF_DIR"
+  cat <<CONF | tee "$TIMESYNCD_CONF_FILE" >/dev/null
+[Time]
+NTP=${servers}
+CONF
+}
+
+clear_timesyncd_conf() {
+  rm -f "$TIMESYNCD_CONF_FILE"
+}
+
+update_pf9_env_timezone() {
+  local tz="$1"
+  if [ -z "$tz" ]; then
+    return 0
+  fi
+
+  if [ -f /etc/pf9/env ]; then
+    if grep -q '^TZ=' /etc/pf9/env; then
+      sudo sed -i "s#^TZ=.*#TZ=${tz}#" /etc/pf9/env || true
+    else
+      printf '\nTZ=%s\n' "$tz" | sudo tee -a /etc/pf9/env >/dev/null
+    fi
+  fi
+
+  if kubectl -n migration-system get configmap pf9-env >/dev/null 2>&1; then
+    kubectl -n migration-system patch configmap pf9-env --type merge -p "{\"data\":{\"TZ\":\"${tz}\"}}" >/dev/null 2>&1 || true
+    for deployment in migration-controller-manager migration-vpwned-sdk vjailbreak-ui; do
+      kubectl -n migration-system rollout restart deployment "$deployment" >/dev/null 2>&1 || true
+    done
+  fi
+}
+
+if [ -f "/etc/pf9/k3s.env" ]; then
+  source "/etc/pf9/k3s.env" || true
+fi
+
+if [ "${IS_MASTER:-}" != "true" ]; then
+  exit 0
+fi
+
+if ! command -v kubectl >/dev/null 2>&1; then
+  log "kubectl not found yet; time settings will be applied by watcher when ready"
+  exit 0
+fi
+
+if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
+  log "vjailbreak-settings ConfigMap not available yet; watcher will handle it"
+  exit 0
+fi
+
+get_cm_val() {
+  local key="$1"
+  kubectl -n migration-system get configmap vjailbreak-settings -o jsonpath="{.data.${key}}" 2>/dev/null || true
+}
+
+timezone="$(get_cm_val TIMEZONE)"
+ntp_servers_raw="$(get_cm_val NTP_SERVERS)"
+
+timezone="$(echo "${timezone:-}" | xargs || true)"
+ntp_servers="$(filter_valid_ntp_servers "$(normalize_servers "${ntp_servers_raw:-}")")"
+
+desired_fingerprint="$(printf '%s\n%s\n' "${timezone}" "${ntp_servers}" | sha256sum | awk '{print $1}')"
+current_fingerprint=""
+if [ -f "$STATE_FILE" ]; then
+  current_fingerprint="$(cat "$STATE_FILE" 2>/dev/null || true)"
+fi
+
+if [ "$desired_fingerprint" = "$current_fingerprint" ]; then
+  exit 0
+fi
+
+log "Applying time settings: TIMEZONE=${timezone:-<none>} NTP_SERVERS=${ntp_servers:-<default pools>}"
+
+sync_enabled="false"
+target_timezone=""
+
+if [ -n "$ntp_servers" ]; then
+  sync_enabled="true"
+  write_timesyncd_conf "$ntp_servers"
+  if [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
+    target_timezone="$timezone"
+  else
+    target_timezone="UTC"
+    log "No valid timezone selected with custom NTP servers; defaulting timezone to UTC"
+  fi
+elif [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
+  sync_enabled="true"
+  target_timezone="$timezone"
+  clear_timesyncd_conf
+else
+  clear_timesyncd_conf
+  target_timezone="UTC"
+fi
+
+if [ -n "$target_timezone" ]; then
+  current_tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  if [ "$current_tz" != "$target_timezone" ]; then
+    if timedatectl set-timezone "$target_timezone"; then
+      log "Timezone updated to ${target_timezone}"
+    else
+      log "Failed to set timezone to ${target_timezone}"
+    fi
+  fi
+fi
+
+update_pf9_env_timezone "$target_timezone"
+
+if [ "$sync_enabled" = "true" ]; then
+  timedatectl set-ntp true >/dev/null 2>&1 || true
+  systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+  systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+else
+  timedatectl set-ntp false >/dev/null 2>&1 || true
+  systemctl disable --now systemd-timesyncd >/dev/null 2>&1 || true
+fi
+
+echo "$desired_fingerprint" > "$STATE_FILE"
+log "Time settings applied"
+EOF
+
+  sudo chmod +x /etc/pf9/apply-time-settings.sh
+
+  sudo rm -f /etc/pf9/watch-time-settings.sh
+  sudo rm -f /etc/logrotate.d/pf9-time-settings
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings-watcher.service
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.timer
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.service
+  sudo systemctl daemon-reload
+  sudo systemctl disable --now vjailbreak-time-settings-watcher.service >/dev/null 2>&1 || true
+  sudo systemctl disable --now vjailbreak-time-settings.timer >/dev/null 2>&1 || true
+  sudo systemctl disable --now vjailbreak-time-settings.service >/dev/null 2>&1 || true
+  log "Time settings apply script installed. Watcher service removed."
+}
+
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
 sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
 sudo chmod 644 /etc/htpasswd
@@ -226,7 +446,7 @@ if [ "$IS_MASTER" == "true" ]; then
   log "Rsync daemon started successfully."
 
   # Create a config map from env file. 
-  kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
+  kubectl create configmap pf9-env -n migration-system --from-env-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
 
@@ -244,6 +464,8 @@ if [ "$IS_MASTER" == "true" ]; then
     else
       log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
   fi
+
+  install_time_settings_apply_script
 
 else
   log "Setting up K3s Worker..."

@@ -761,6 +761,38 @@
         ]
       }
     },
+    "/vpw/v1/settings/apply-time-settings": {
+      "post": {
+        "operationId": "VailbreakProxy_ApplyTimeSettings",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiApplyTimeSettingsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiApplyTimeSettingsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "VailbreakProxy"
+        ]
+      }
+    },
     "/vpw/v1/storage/initiator_group": {
       "post": {
         "operationId": "StorageArray_CreateOrUpdateInitiatorGroup",
@@ -1139,6 +1171,17 @@
     }
   },
   "definitions": {
+    "apiApplyTimeSettingsRequest": {
+      "type": "object"
+    },
+    "apiApplyTimeSettingsResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiAvailableUpdatesResponse": {
       "type": "object",
       "properties": {
