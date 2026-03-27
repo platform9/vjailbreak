@@ -94,3 +94,21 @@ See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolu
 vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment.
 
 If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (We always try to find the exact match if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
+
+### Can vJailbreak migrate VMs running Docker Engine?
+Yes, vJailbreak can migrate VMs running Docker Engine without any issues. vJailbreak performs VM-level migration and is agnostic to the workloads running inside the VM. Docker Engine is simply software running on the guest operating system, and the migration process handles it like any other application.
+
+### Can vJailbreak migrate VMs that are part of a Kubernetes cluster?
+Yes, you can migrate VMs that are part of a Kubernetes cluster. However, it's important to understand that vJailbreak operates purely as a VM migration tool and has no awareness of Kubernetes components or distributed applications running on the VM.
+
+Users are responsible for taking necessary steps to ensure no disruption to applications and the distributed architecture of Kubernetes. This may include draining nodes, managing pod scheduling, and coordinating the migration with cluster operations. vJailbreak is not responsible for managing any workload-specific concerns.
+
+### Can vJailbreak migrate Kubernetes Persistent Volume Claims (PVCs)?
+No, vJailbreak does not migrate PVCs. PVCs are Kubernetes constructs managed by CSI drivers and storage backends. vJailbreak has no visibility into these workload-level abstractions.
+
+vJailbreak migrates virtual machines along with the disks that are **currently attached** to those VMs at the time of migration. Any storage managed by Kubernetes (such as PVCs) must be handled separately using Kubernetes-native tools or storage migration solutions.
+
+### Can vJailbreak migrate VMs running Docker Swarm clusters?
+Yes, vJailbreak can migrate VMs that are part of a Docker Swarm cluster. However, the same principles apply as with any distributed workload: vJailbreak performs VM-level migration and does not manage workload-specific concerns.
+
+Users must take appropriate precautions for Docker Swarm, such as draining nodes, managing service placement, and ensuring cluster quorum is maintained during migration. vJailbreak does not inspect or manage what is running inside the VM.
