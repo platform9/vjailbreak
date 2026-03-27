@@ -1127,7 +1127,7 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
-func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool, memsizeMB int) error {
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
@@ -1210,7 +1210,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, memsizeMB); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
@@ -1410,7 +1410,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 
 	// Step 8: Perform disk conversion
-	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, useSingleDisk); err != nil {
+	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, useSingleDisk, vjailbreakSettings.VirtV2VMemsizeMB); err != nil {
 		return err
 	}
 
