@@ -10,6 +10,8 @@ import type { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import type { ArrayCredsMapping } from 'src/api/arraycreds-mapping/model'
 import { getArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
+import type { VMwareCreds } from 'src/api/vmware-creds/model'
+import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import type { RdmDisk } from 'src/api/rdm-disks/model'
 import { getRdmDisksList } from 'src/api/rdm-disks/rdmDisks'
 import type { StorageMapping } from 'src/api/storage-mappings/model'
@@ -21,6 +23,11 @@ import type { Migration } from 'src/features/migration/api/migrations'
 export interface MigrationDetailResources {
   migrationPlan: MigrationPlan | null
   migrationTemplate: MigrationTemplate | null
+  vmwareCredsRef: string | null
+  openstackCredsRef: string | null
+  vmwareCredsMissing: boolean
+  openstackCredsMissing: boolean
+  vmwareCreds: VMwareCreds | null
   openstackCreds: OpenstackCreds | null
   networkMapping: NetworkMapping | null
   storageMapping: StorageMapping | null
@@ -46,6 +53,11 @@ export const useMigrationDetailResourcesQuery = ({
         return {
           migrationPlan: null,
           migrationTemplate: null,
+          vmwareCredsRef: null,
+          openstackCredsRef: null,
+          vmwareCredsMissing: false,
+          openstackCredsMissing: false,
+          vmwareCreds: null,
           openstackCreds: null,
           networkMapping: null,
           storageMapping: null,
@@ -96,8 +108,11 @@ export const useMigrationDetailResourcesQuery = ({
       const arrayCredsMappingName = templateSpec?.arrayCredsMapping as string | undefined
       const vmwareRef = templateSpec?.source?.vmwareRef as string | undefined
 
-      const [openstackCreds, networkMapping, storageMapping, arrayCredsMapping] = await Promise.all(
-        [
+      const [vmwareCreds, openstackCreds, networkMapping, storageMapping, arrayCredsMapping] =
+        await Promise.all([
+          vmwareRef
+            ? safeGet(() => getVmwareCredentials(vmwareRef, namespace))
+            : Promise.resolve(null),
           openstackRef
             ? safeGet(() => getOpenstackCredentials(openstackRef, namespace))
             : Promise.resolve(null),
@@ -110,8 +125,10 @@ export const useMigrationDetailResourcesQuery = ({
           arrayCredsMappingName
             ? safeGet(() => getArrayCredsMapping(arrayCredsMappingName, namespace))
             : Promise.resolve(null)
-        ]
-      )
+        ])
+
+      const vmwareCredsMissing = Boolean(vmwareRef) && !vmwareCreds
+      const openstackCredsMissing = Boolean(openstackRef) && !openstackCreds
 
       const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace, vmwareRef))
       const vmwareMachines = vmwareMachinesList?.items || []
@@ -139,6 +156,11 @@ export const useMigrationDetailResourcesQuery = ({
       return {
         migrationPlan,
         migrationTemplate,
+        vmwareCredsRef: vmwareRef || null,
+        openstackCredsRef: openstackRef || null,
+        vmwareCredsMissing,
+        openstackCredsMissing,
+        vmwareCreds,
         openstackCreds,
         networkMapping,
         storageMapping,
