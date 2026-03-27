@@ -58,6 +58,7 @@ export interface OpenstackCredsSpec {
   cinderBackendPools?: string[]
   dataCopyMethods?: string[]
   projectName?: string
+  vjbinstanceid?: string
 }
 
 export interface GetOpenstackCredsListMetadata {

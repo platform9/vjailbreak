@@ -85,10 +85,12 @@ export default function ArrayCredentialsFormFields({
             name="vendorType"
             label="Vendor Type"
             rules={{ required: 'Vendor type is required' }}
-            options={ARRAY_VENDOR_TYPES.map((vendor) => ({
-              label: vendor.label,
-              value: vendor.value
-            }))}
+            options={ARRAY_VENDOR_TYPES.filter((vendor) => vendor.value !== 'unsupported').map(
+              (vendor) => ({
+                label: vendor.label,
+                value: vendor.value
+              })
+            )}
           />
         </FormGrid>
       </Box>
