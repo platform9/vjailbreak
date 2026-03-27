@@ -4798,6 +4798,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds
+  - arraycredsmappings
   - bmconfigs
   - esxisshcreds
   - clustermigrations
@@ -4829,6 +4830,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/finalizers
+  - arraycredsmappings/finalizers
   - bmconfigs/finalizers
   - esxisshcreds/finalizers
   - clustermigrations/finalizers
@@ -4850,6 +4852,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/status
+  - arraycredsmappings/status
   - bmconfigs/status
   - esxisshcreds/status
   - clustermigrations/status
