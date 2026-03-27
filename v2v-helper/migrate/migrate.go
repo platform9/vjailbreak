@@ -1355,7 +1355,7 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 	return nil
 }
 
-func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
+func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
 	// Step 1: Determine boot command based on OS type
@@ -1363,24 +1363,24 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	// Step 2: Attach all volumes
 	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
-		return err
+		return -1, err
 	}
 
 	// Step 3: Generate XML configuration for conversion
 	if err := vmutils.GenerateXMLConfig(vminfo); err != nil {
-		return errors.Wrap(err, "failed to generate XML")
+		return -1, errors.Wrap(err, "failed to generate XML")
 	}
 
 	// Step 3.5: Get vjailbreak settings
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
+		return -1, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
 	// Step 4: Detect boot volume
 	bootVolumeIndex, osPath, err := migobj.detectBootVolume(vminfo, getBootCommand)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
 	// Step 5: Handle OS-specific detection and validation
@@ -1392,22 +1392,22 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	case constants.OSFamilyLinux:
 		bootVolumeIndex, osPath, osRelease, espDiskIndex, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, osPath, vjailbreakSettings.AutoFstabUpdate)
 		if err != nil {
-			return err
+			return -1, err
 		}
 
 	case constants.OSFamilyWindows:
 		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex)
 		if err != nil {
-			return err
+			return -1, err
 		}
 
 	default:
-		return errors.Errorf("unsupported OS type: %s", vminfo.OSType)
+		return -1, errors.Errorf("unsupported OS type: %s", vminfo.OSType)
 	}
 
 	// Step 6: Validate boot volume was found
 	if bootVolumeIndex == -1 {
-		return errors.Errorf("boot volume not found, cannot create target VM")
+		return -1, errors.Errorf("boot volume not found, cannot create target VM")
 	}
 
 	// Step 7: Mark boot volume
@@ -1416,27 +1416,27 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	// Step 8: Perform disk conversion
 	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, espDiskIndex); err != nil {
-		return err
+		return -1, err
 	}
 
 	// Step 9: Configure network for Linux systems
 	if osType == constants.OSFamilyLinux {
 		if err := migobj.configureLinuxNetwork(ctx, vminfo, bootVolumeIndex, osRelease); err != nil {
-			return err
+			return -1, err
 		}
 	} else if osType == constants.OSFamilyWindows {
 		if err := migobj.configureWindowsNetwork(ctx, vminfo, bootVolumeIndex, osRelease); err != nil {
-			return err
+			return -1, err
 		}
 	}
 
 	// Step 10: Detach all volumes
 	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
-		return errors.Wrap(err, "Failed to detach all volumes from VM")
+		return -1, errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 
 	migobj.logMessage("Successfully converted disk")
-	return nil
+	return espDiskIndex, nil
 }
 
 // DetectAndHandleNetwork: Checks if RHEL family, then detects NM presence offline.
@@ -1845,7 +1845,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 	}
 	// Convert the Boot Disk to raw format
-	err = migobj.ConvertVolumes(ctx, vminfo)
+	espDiskIndex, err := migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
 		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
 			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
