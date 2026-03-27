@@ -1483,7 +1483,7 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string) error {
+func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string, espDiskIndex int) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	var flavor *flavors.Flavor
@@ -1868,7 +1868,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
+	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
 			// combine both errors
