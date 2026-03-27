@@ -100,7 +100,6 @@ type VMDisk struct {
 	SnapBackingDisk string
 	ChangeID        string
 	Boot            bool
-	ESP             bool // True if this disk contains the EFI System Partition
 	Datastore       string
 	DatastoreID     string
 }
@@ -204,18 +203,19 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
 							ipPerMac[networkInterface.MAC] = []IpEntry{}
 						}
-						for _, ipAddress := range networkInterface.IPAddress {
-							if strings.Contains(ipAddress, ":") {
-								continue
-							}
-							ips = append(ips, ipAddress)
+						if !strings.Contains(networkInterface.IPAddress, ":") {
+							ips = append(ips, networkInterface.IPAddress)
 							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
-								IP:     ipAddress,
+								IP:     networkInterface.IPAddress,
 								Prefix: 0,
 							})
 						}
 					}
 				}
+			}
+			if len(ips) == 0 {
+				return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off, 
+				please make sure to provide IP address in the vmwaremachine CR`)
 			}
 		}
 	}
@@ -303,14 +303,6 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		GuestNetworks:     vmwareMachine.Spec.VMInfo.GuestNetworks,
 		GatewayIP:         make(map[string]string),
 	}
-
-	// Log source VM information
-	log.Printf("Source VM: %s (UEFI: %t, OS: %s, CPU: %d, Memory: %d MB, Disks: %d)",
-		vminfo.Name, vminfo.UEFI, vminfo.OSType, vminfo.CPU, vminfo.Memory, len(vminfo.VMDisks))
-	for idx, disk := range vminfo.VMDisks {
-		log.Printf("  Disk %d: %s (%.2f GB)", idx, disk.Name, float64(disk.Size)/(1024*1024*1024))
-	}
-
 	return vminfo, nil
 }
 

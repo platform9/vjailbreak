@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -651,32 +650,6 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
 	}
 	return strings.ToLower(strings.TrimSpace(string(out))), nil
-}
-
-// Runs command inside temporary qemu-kvm that virt-v2v creates
-func CheckForLVM(disks []vm.VMDisk) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-
-	// Get the installed os info
-	command := "inspect-os"
-	osPath, err := RunCommandInGuestAllVolumes(disks, command, false)
-	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(osPath))
-	}
-
-	// Get the lvs list
-	command = "lvs"
-	lvsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
-	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(lvsStr))
-	}
-
-	lvs := strings.Split(string(lvsStr), "\n")
-	if slices.Contains(lvs, strings.TrimSpace(string(osPath))) {
-		return string(strings.TrimSpace(string(osPath))), nil
-	}
-
-	return "", fmt.Errorf("LVM not found: %v, %d", lvs, len(lvs))
 }
 
 func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args ...string) *exec.Cmd {
