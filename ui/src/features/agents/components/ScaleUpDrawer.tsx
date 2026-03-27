@@ -76,6 +76,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
 
+  const isL2Credential = Boolean(openstackCredentials?.spec?.vjbinstanceid?.trim())
+
   const [volumeTypes, setVolumeTypes] = useState<Array<string>>([])
   const [selectedVolumeType, setSelectedVolumeType] = useState('')
 
@@ -427,7 +429,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 fullWidth
                 size="small"
                 disabled={
-                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
+                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0 || isL2Credential
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -437,6 +439,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     multiple
                     value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
                     label=""
+                    disabled={isL2Credential}
                     onChange={(e) => {
                       const value = e.target.value as string[]
                       if (value.includes('USE_MASTER')) {
