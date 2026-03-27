@@ -1,4 +1,4 @@
-import { get, put } from '../axios'
+import { get, post, put } from '../axios'
 import { VjailbreakSettings } from './model'
 
 export const VERSION_CONFIG_MAP_NAME = 'vjailbreak-settings'
@@ -35,4 +35,12 @@ export const updateSettingsConfigMap = async (
     config: { mock: false }
   })
   return response
+}
+
+export const applyTimeSettings = async (): Promise<void> => {
+  await post({
+    endpoint: '/dev-api/sdk/vpw/v1/settings/apply-time-settings',
+    data: {},
+    config: { mock: false }
+  })
 }

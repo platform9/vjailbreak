@@ -539,6 +539,13 @@ service VailbreakProxy {
         body: "*"
       };
     }
+
+    rpc ApplyTimeSettings(ApplyTimeSettingsRequest) returns (ApplyTimeSettingsResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/settings/apply-time-settings"
+        body: "*"
+      };
+    }
 }
 
 message CleanupRequest {
@@ -680,4 +687,11 @@ message ResolveCinderVolumeResponse {
     bool success = 1;
     string message = 2;
     VolumeInfo volume = 3;
+}
+
+message ApplyTimeSettingsRequest {
+}
+
+message ApplyTimeSettingsResponse {
+    string message = 1;
 }

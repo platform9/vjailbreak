@@ -105,8 +105,8 @@ set_default_password() {
 set_default_password
 check_command "Setting default password for ubuntu user"
 
-install_time_settings_watcher() {
-  log "Installing vJailbreak time settings watcher (NTP/timezone)..."
+install_time_settings_apply_script() {
+  log "Installing vJailbreak time settings apply script (NTP/timezone)..."
 
   sudo mkdir -p /etc/pf9
 
@@ -201,22 +201,6 @@ clear_timesyncd_conf() {
   rm -f "$TIMESYNCD_CONF_FILE"
 }
 
-restart_v2v_helper_pods() {
-  local pods
-  pods="$(kubectl -n migration-system get pods --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | awk '/^v2v-helper-/{print $1}' || true)"
-
-  if [ -z "$pods" ]; then
-    return 0
-  fi
-
-  while IFS= read -r pod; do
-    [ -n "$pod" ] || continue
-    kubectl -n migration-system delete pod "$pod" >/dev/null 2>&1 || true
-  done <<PODS_EOF
-$pods
-PODS_EOF
-}
-
 update_pf9_env_timezone() {
   local tz="$1"
   if [ -z "$tz" ]; then
@@ -225,7 +209,7 @@ update_pf9_env_timezone() {
 
   if [ -f /etc/pf9/env ]; then
     if grep -q '^TZ=' /etc/pf9/env; then
-      sudo sed -i "s/^TZ=.*/TZ=${tz}/" /etc/pf9/env || true
+      sudo sed -i "s#^TZ=.*#TZ=${tz}#" /etc/pf9/env || true
     else
       printf '\nTZ=%s\n' "$tz" | sudo tee -a /etc/pf9/env >/dev/null
     fi
@@ -236,8 +220,6 @@ update_pf9_env_timezone() {
     for deployment in migration-controller-manager migration-vpwned-sdk vjailbreak-ui; do
       kubectl -n migration-system rollout restart deployment "$deployment" >/dev/null 2>&1 || true
     done
-    kubectl -n migration-system rollout restart deployment v2v-helper >/dev/null 2>&1 || true
-    restart_v2v_helper_pods
   fi
 }
 
@@ -331,110 +313,16 @@ EOF
 
   sudo chmod +x /etc/pf9/apply-time-settings.sh
 
-  sudo tee /etc/pf9/watch-time-settings.sh > /dev/null <<'EOF'
-#!/bin/bash
-set -euo pipefail
-
-LOG_DIR="/var/log/pf9"
-LOG_FILE="${LOG_DIR}/time-settings-watch.log"
-WATCH_TIMEOUT="10m"
-BACKOFF=5
-MAX_BACKOFF=60
-JITTER_MAX=3
-DEBOUNCE_SECONDS=2
-
-mkdir -p "$LOG_DIR"
-
-log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
-}
-
-if [ -f "/etc/pf9/k3s.env" ]; then
-  source "/etc/pf9/k3s.env" || true
-fi
-
-if [ "${IS_MASTER:-}" != "true" ]; then
-  exit 0
-fi
-
-if ! command -v kubectl >/dev/null 2>&1; then
-  log "kubectl not found yet; watcher exiting and will be retried by systemd"
-  exit 0
-fi
-
-log "vJailbreak time watcher started (watching vjailbreak-settings ConfigMap)"
-
-while true; do
-  if ! kubectl -n migration-system get configmap vjailbreak-settings >/dev/null 2>&1; then
-    jitter=$(( RANDOM % JITTER_MAX ))
-    wait_seconds=$(( BACKOFF + jitter ))
-    log "ConfigMap not available; retrying in ${wait_seconds}s (base=${BACKOFF}s, jitter=${jitter}s)"
-    sleep "$wait_seconds"
-    BACKOFF=$(( BACKOFF * 2 ))
-    [ "$BACKOFF" -gt "$MAX_BACKOFF" ] && BACKOFF="$MAX_BACKOFF"
-    continue
-  fi
-
-  BACKOFF=5
-
-  /etc/pf9/apply-time-settings.sh || true
-  log "Watching ConfigMap (timeout=${WATCH_TIMEOUT}, backoff reset; API server may end watch earlier)"
-
-  kubectl -n migration-system get configmap vjailbreak-settings \
-    --watch --request-timeout="${WATCH_TIMEOUT}" -o name 2>/dev/null | \
-  {
-    last_apply_epoch=0
-  while read -r _; do
-    now_epoch="$(date +%s)"
-    if [ "$last_apply_epoch" -ne 0 ] && [ $(( now_epoch - last_apply_epoch )) -lt "$DEBOUNCE_SECONDS" ]; then
-      continue
-    fi
-    last_apply_epoch="$now_epoch"
-    /etc/pf9/apply-time-settings.sh || true
-  done
-  }
-
-  log "Watch ended; restarting in 5s"
-  sleep 5
-done
-EOF
-
-  sudo chmod +x /etc/pf9/watch-time-settings.sh
-
-  sudo tee /etc/logrotate.d/pf9-time-settings > /dev/null <<'EOF'
-/var/log/pf9/time-settings*.log {
-    daily
-    rotate 7
-    compress
-    missingok
-    notifempty
-}
-EOF
-
-  sudo tee /etc/systemd/system/vjailbreak-time-settings-watcher.service > /dev/null <<'EOF'
-[Unit]
-Description=Watch vJailbreak NTP/timezone settings from Kubernetes ConfigMap
-After=k3s.service network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/etc/pf9/watch-time-settings.sh
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
+  sudo rm -f /etc/pf9/watch-time-settings.sh
+  sudo rm -f /etc/logrotate.d/pf9-time-settings
+  sudo rm -f /etc/systemd/system/vjailbreak-time-settings-watcher.service
   sudo rm -f /etc/systemd/system/vjailbreak-time-settings.timer
   sudo rm -f /etc/systemd/system/vjailbreak-time-settings.service
   sudo systemctl daemon-reload
+  sudo systemctl disable --now vjailbreak-time-settings-watcher.service >/dev/null 2>&1 || true
   sudo systemctl disable --now vjailbreak-time-settings.timer >/dev/null 2>&1 || true
   sudo systemctl disable --now vjailbreak-time-settings.service >/dev/null 2>&1 || true
-  sudo systemctl enable --now vjailbreak-time-settings-watcher.service || true
-  sleep 3
-  log "Installed vjailbreak-time-settings-watcher.service"
+  log "Time settings apply script installed. Watcher service removed."
 }
 
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
@@ -577,7 +465,7 @@ if [ "$IS_MASTER" == "true" ]; then
       log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
   fi
 
-  install_time_settings_watcher
+  install_time_settings_apply_script
 
 else
   log "Setting up K3s Worker..."

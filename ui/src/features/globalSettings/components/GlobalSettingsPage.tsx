@@ -38,6 +38,7 @@ import {
 } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
+  applyTimeSettings,
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
@@ -47,6 +48,8 @@ import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
 import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
+import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
+import { Phase } from 'src/api/migrations/model'
 import axios from 'axios'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
@@ -369,6 +372,7 @@ type UseGlobalSettingsControllerReturn = {
   notification: NotificationState
   proxyUpdateSuccess: boolean
   timezoneOptions: TimezoneOption[]
+  isTimeSettingsDisabled: boolean
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
   onBool: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSelect: (e: SelectChangeEvent<string>) => void
@@ -394,6 +398,16 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   })
 
   const form = rhfForm.watch() as SettingsForm
+  const TERMINAL_PHASES = useMemo(
+    () => new Set<string>([Phase.Succeeded, Phase.Failed, Phase.ValidationFailed, Phase.Unknown]),
+    []
+  )
+  const { data: migrations } = useMigrationsQuery(undefined, { refetchInterval: 30000 })
+  const isTimeSettingsDisabled = useMemo(
+    () => (migrations ?? []).some((m) => !TERMINAL_PHASES.has(m.status?.phase as string)),
+    [migrations, TERMINAL_PHASES]
+  )
+
   const timezoneOptions = useMemo(() => {
     const tz = (form.TIMEZONE ?? '').trim()
     if (!tz || POPULAR_TIMEZONES.some((opt) => opt.value === tz)) {
@@ -765,6 +779,14 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           }
         } as any)
 
+        if (timeSettingsChanged) {
+          try {
+            await applyTimeSettings()
+          } catch (tsErr) {
+            console.warn('apply-time-settings endpoint unavailable:', tsErr)
+          }
+        }
+
         let envInjectionFailed = false
 
         try {
@@ -801,7 +823,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           }
           show(
             timeSettingsChanged
-              ? 'Time settings applied successfully (including all pods).'
+              ? 'Time settings applied successfully.'
               : 'Global Settings saved successfully.',
             'success'
           )
@@ -845,6 +867,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     notification,
     proxyUpdateSuccess,
     timezoneOptions,
+    isTimeSettingsDisabled,
     onText,
     onBool,
     onSelect,
@@ -878,6 +901,7 @@ export default function GlobalSettingsPage() {
     onSave,
     handleNotificationClose,
     timezoneOptions,
+    isTimeSettingsDisabled,
   } = useGlobalSettingsController()
 
   const activeTabRef = useRef(activeTab)
@@ -1178,8 +1202,13 @@ export default function GlobalSettingsPage() {
                 renderOptionLabel={(option) => option.label}
                 error={Boolean(errors.TIMEZONE)}
                 helperText={errors.TIMEZONE}
+                disabled={isTimeSettingsDisabled}
                 data-testid="global-settings-field-TIMEZONE"
-                labelProps={{ tooltip: FIELD_TOOLTIPS.TIMEZONE }}
+                labelProps={{
+                  tooltip: isTimeSettingsDisabled
+                    ? 'Cannot change timezone while migrations are in progress.'
+                    : FIELD_TOOLTIPS.TIMEZONE
+                }}
               />
 
               <RHFTextField
@@ -1465,7 +1494,12 @@ export default function GlobalSettingsPage() {
                 label="NTP Servers"
                 multiline
                 minRows={4}
-                labelProps={{ tooltip: FIELD_TOOLTIPS.NTP_SERVERS }}
+                disabled={isTimeSettingsDisabled}
+                labelProps={{
+                  tooltip: isTimeSettingsDisabled
+                    ? 'Cannot change NTP servers while migrations are in progress.'
+                    : FIELD_TOOLTIPS.NTP_SERVERS
+                }}
                 helperText={errors.NTP_SERVERS || 'Leave blank to use default public pools (enabled automatically when Timezone is set)'}
                 error={Boolean(errors.NTP_SERVERS)}
                 placeholder="0.pool.ntp.org, 1.pool.ntp.org or one per line"

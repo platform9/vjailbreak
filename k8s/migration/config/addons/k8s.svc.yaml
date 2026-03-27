@@ -29,6 +29,8 @@ spec:
         - containerPort: 3001
           protocol: TCP
         resources: {}
+        securityContext:
+          privileged: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -48,6 +50,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
+      hostPID: true
       securityContext: {}
       serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 30
