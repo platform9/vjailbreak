@@ -100,12 +100,8 @@ interface FormValues extends Record<string, unknown> {
   cutoverEndTime?: string
   postMigrationScript?: string
   osFamily?: string
-  useGPU?: boolean
-  useFlavorless?: boolean
-  disconnectSourceNetwork?: boolean
-  fallbackToDHCP?: boolean
-  networkPersistence?: boolean
-  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
+  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy' | 'HotAddCopy'
+  proxyVMName?: string
 }
 
 type RollingMigrationRHFValues = {
@@ -1107,7 +1103,7 @@ export default function RollingMigrationFormDrawer({
   const handleMappingsChange = (key: string) => (value: unknown) => {
     markTouched('mapResources')
 
-    if (!Array.isArray(value) && key !== 'storageCopyMethod') {
+    if (!Array.isArray(value) && key !== 'storageCopyMethod' && key !== 'proxyVMName') {
       return
     }
 
@@ -1136,6 +1132,11 @@ export default function RollingMigrationFormDrawer({
       case 'storageCopyMethod':
         if (typeof value === 'string') {
           getParamsUpdater('storageCopyMethod')(value)
+        }
+        break
+      case 'proxyVMName':
+        if (typeof value === 'string') {
+          getParamsUpdater('proxyVMName')(value)
         }
         break
       default:
@@ -1212,6 +1213,7 @@ export default function RollingMigrationFormDrawer({
     const storageCopyMethod = (params.storageCopyMethod || 'normal') as
       | 'normal'
       | 'StorageAcceleratedCopy'
+      | 'HotAddCopy'
 
     if (selectedVMs.length > 0) {
       if (
@@ -1392,6 +1394,10 @@ export default function RollingMigrationFormDrawer({
             ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
               storageMappingResponse?.metadata?.name && {
                 storageMapping: storageMappingResponse.metadata.name
+              }),
+            ...(storageCopyMethod === 'HotAddCopy' &&
+              params.proxyVMName && {
+                proxyVMName: params.proxyVMName
               })
           }
         })
@@ -3560,7 +3566,8 @@ export default function RollingMigrationFormDrawer({
                         networkMappings: networkMappings,
                         storageMappings: storageMappings,
                         arrayCredsMappings: arrayCredsMappings,
-                        storageCopyMethod: params.storageCopyMethod as any
+                        storageCopyMethod: params.storageCopyMethod as any,
+                        proxyVMName: params.proxyVMName
                       }}
                       onChange={handleMappingsChange}
                       networkMappingError={networkMappingError}

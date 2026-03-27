@@ -115,7 +115,7 @@ export interface FormValues extends Record<string, unknown> {
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
   arrayCredsMappings?: { source: string; target: string }[]
-  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
+  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy' | 'HotAddCopy'
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   pcdCluster?: string // PCD cluster ID

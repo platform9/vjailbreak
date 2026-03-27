@@ -376,6 +376,15 @@ const (
 	// StorageCopyMethod is the default value for storage copy method
 	StorageCopyMethod = "StorageAcceleratedCopy"
 
+	// HotAddCopy is the storage copy method that uses VMware HotAdd SCSI transport.
+	// A proxy VM on the same ESXi host or shared datastore receives the source disk
+	// directly via the SCSI fabric, bypassing the ESXi NFC management-network path.
+	// Beta: cold migration only, SCSI disks only.
+	HotAddCopy = "HotAddCopy"
+
+	// ProxyVMNameKey is the ConfigMap key for the proxy VM name used in HotAdd copy
+	ProxyVMNameKey = "PROXY_VM_NAME"
+
 	// MaxPowerOffRetryLimit is the max number of retries for power off status check
 	MaxPowerOffRetryLimit = 3
 

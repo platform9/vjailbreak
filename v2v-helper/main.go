@@ -172,6 +172,7 @@ func main() {
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
 		StorageCopyMethod:      migrationparams.StorageCopyMethod,
+		ProxyVMName:            migrationparams.ProxyVMName,
 		ArrayHost:              arrayHost,
 		ArrayUser:              arrayUser,
 		ArrayPassword:          arrayPassword,

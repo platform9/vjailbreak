@@ -71,6 +71,11 @@ spec:
                 - windowsGuest
                 - linuxGuest
                 type: string
+              proxyVMName:
+                description: |-
+                  ProxyVMName is the name of the VM in vCenter that will receive the source disk
+                  via SCSI HotAdd. Required when StorageCopyMethod is HotAddCopy.
+                type: string
               source:
                 description: Source is the source details for the virtual machine
                 properties:
@@ -85,10 +90,11 @@ spec:
                 default: normal
                 description: |-
                   StorageCopyMethod indicates the method to use for storage migration
-                  Valid values: "normal" (default), "StorageAcceleratedCopy"
+                  Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAddCopy"
                 enum:
                 - normal
                 - StorageAcceleratedCopy
+                - HotAddCopy
                 type: string
               storageMapping:
                 description: |-

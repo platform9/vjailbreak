@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -197,6 +198,64 @@ func (c *Client) TestConnection() error {
 
 	if output == "" {
 		return fmt.Errorf("connection test returned no output")
+	}
+
+	return nil
+}
+
+// TestConnectionGeneric tests SSH connectivity using a command that works on any Linux host.
+// Use this instead of TestConnection() when connecting to a proxy VM (not an ESXi host).
+func (c *Client) TestConnectionGeneric() error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	output, err := c.ExecuteCommand("hostname")
+	if err != nil {
+		return fmt.Errorf("connection test failed: %w", err)
+	}
+
+	if output == "" {
+		return fmt.Errorf("connection test returned no output")
+	}
+
+	utils.PrintLog(fmt.Sprintf("SSH connection verified, remote hostname: %s", strings.TrimSpace(output)))
+	return nil
+}
+
+// RunCommandToWriter runs a command on the remote host and streams its stdout
+// directly into dest without buffering the entire output in memory.
+// Used to stream large disk data (e.g. dd if=/dev/sdb bs=4M) to a local writer.
+func (c *Client) RunCommandToWriter(ctx context.Context, command string, dest io.Writer) error {
+	if c.sshClient == nil {
+		return fmt.Errorf("not connected to SSH host")
+	}
+
+	session, err := c.sshClient.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	session.Stdout = dest
+
+	// Capture stderr separately so errors are visible in logs
+	var stderrBuf strings.Builder
+	session.Stderr = &stderrBuf
+
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Run(command)
+	}()
+
+	select {
+	case <-ctx.Done():
+		_ = session.Signal(ssh.SIGKILL)
+		return fmt.Errorf("command cancelled: %w", ctx.Err())
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("command %q failed: %w (stderr: %s)", command, err, strings.TrimSpace(stderrBuf.String()))
+		}
 	}
 
 	return nil

@@ -49,11 +49,15 @@ type MigrationTemplateSpec struct {
 	// +optional
 	ArrayCredsMapping string `json:"arrayCredsMapping,omitempty"`
 	// StorageCopyMethod indicates the method to use for storage migration
-	// Valid values: "normal" (default), "StorageAcceleratedCopy"
-	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy
+	// Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAddCopy"
+	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy;HotAddCopy
 	// +kubebuilder:default:=normal
 	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
+	// ProxyVMName is the name of the VM in vCenter that will receive the source disk
+	// via SCSI HotAdd. Required when StorageCopyMethod is HotAddCopy.
+	// +optional
+	ProxyVMName string `json:"proxyVMName,omitempty"`
 	// Source is the source details for the virtual machine
 	Source MigrationTemplateSource `json:"source"`
 	// Destination is the destination details for the virtual machine

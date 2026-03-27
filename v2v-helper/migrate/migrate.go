@@ -72,6 +72,8 @@ type Migrate struct {
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
 	StorageCopyMethod       string
+	// ProxyVMName is the name of the proxy VM used for HotAdd transport
+	ProxyVMName       string
 	// Array credentials for StorageAcceleratedCopy storage migration
 	ArrayHost         string
 	ArrayUser         string
@@ -1791,7 +1793,8 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to get vcenter settings")
 	}
 
-	if migobj.StorageCopyMethod == constants.StorageCopyMethod {
+	switch migobj.StorageCopyMethod {
+	case constants.StorageCopyMethod: // StorageAcceleratedCopy
 		// Initialize storage provider if using StorageAcceleratedCopy migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
 			return errors.Wrap(err, "failed to initialize storage provider")
@@ -1804,13 +1807,26 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		if err := migobj.ValidateStorageAcceleratedCopyPrerequisites(ctx); err != nil {
 			return errors.Wrap(err, "StorageAcceleratedCopy prerequisites validation failed")
 		}
-
-		// Perform the copy here.
 		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
 			return errors.Wrap(err, "failed to perform StorageAcceleratedCopy copy")
 		}
 
-	} else {
+	case constants.HotAddCopy:
+		if err := migobj.ValidateHotAddPrerequisites(ctx); err != nil {
+			return errors.Wrap(err, "HotAdd prerequisites validation failed")
+		}
+		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to create Cinder volumes for HotAdd")
+		}
+		if err := migobj.HotAddCopyDisks(ctx, &vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("HotAdd copy failed: %s", err), portids, nil); cleanuperror != nil {
+				return errors.Wrapf(err, "HotAdd copy failed, also cleanup failed: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "HotAdd copy failed")
+		}
+
+	default: // NBD
 
 		// Create and Add Volumes to Host
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)

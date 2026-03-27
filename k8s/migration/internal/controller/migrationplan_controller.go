@@ -72,6 +72,9 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // StorageCopyMethod is the storage copy method value for Storage Accelerated copy
 const StorageCopyMethod = "StorageAcceleratedCopy"
 
+// HotAddCopyMethod is the storage copy method value for VMware HotAdd SCSI transport
+const HotAddCopyMethod = "HotAddCopy"
+
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
@@ -465,7 +468,8 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 //nolint:gocyclo
 func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	scope *scope.MigrationPlanScope) (ctrl.Result, error) {
+	scope *scope.MigrationPlanScope,
+) (ctrl.Result, error) {
 	totalVMs := 0
 	for _, group := range migrationplan.Spec.VirtualMachines {
 		totalVMs += len(group)
@@ -531,7 +535,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				latest.Status.MigrationMessage = ""
 				return r.Status().Update(ctx, latest)
 			})
-
 			if err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
 			}
@@ -1555,10 +1558,14 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 		configMapData["OS_FAMILY"] = migrationtemplate.Spec.OSFamily
 	}
 
-	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
+	switch migrationtemplate.Spec.StorageCopyMethod {
+	case StorageCopyMethod:
 		configMapData["STORAGE_COPY_METHOD"] = StorageCopyMethod
 		configMapData["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 		configMapData["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+	case HotAddCopyMethod:
+		configMapData["STORAGE_COPY_METHOD"] = HotAddCopyMethod
+		configMapData["PROXY_VM_NAME"] = migrationtemplate.Spec.ProxyVMName
 	}
 
 	return nil
