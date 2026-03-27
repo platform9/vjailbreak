@@ -975,38 +975,6 @@
         ]
       }
     },
-    "/vpw/v1/time-settings/apply": {
-      "post": {
-        "operationId": "VailbreakProxy_ApplyTimeSettings",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/apiApplyTimeSettingsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/apiApplyTimeSettingsRequest"
-            }
-          }
-        ],
-        "tags": [
-          "VailbreakProxy"
-        ]
-      }
-    },
     "/vpw/v1/un_cordon_host": {
       "post": {
         "operationId": "VCenter_UnCordonHost",
@@ -1171,31 +1139,6 @@
     }
   },
   "definitions": {
-    "apiApplyTimeSettingsRequest": {
-      "type": "object",
-      "properties": {
-        "timezone": {
-          "type": "string"
-        }
-      }
-    },
-    "apiApplyTimeSettingsResponse": {
-      "type": "object",
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "message": {
-          "type": "string"
-        },
-        "restartedDeployments": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "apiAvailableUpdatesResponse": {
       "type": "object",
       "properties": {

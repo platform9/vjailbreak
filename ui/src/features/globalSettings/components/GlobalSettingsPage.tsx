@@ -15,7 +15,6 @@ import {
   Snackbar,
   Tab,
   Tabs,
-  Tooltip,
   Typography,
   styled,
   useTheme
@@ -39,16 +38,11 @@ import {
 } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
 import {
-  applyTimeSettings,
-  checkDeploymentsReady,
   getSettingsConfigMap,
   updateSettingsConfigMap,
   VERSION_CONFIG_MAP_NAME,
   VERSION_NAMESPACE
 } from 'src/api/settings/settings'
-import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
-import { Phase } from 'src/api/migrations/model'
-import { ACTIVE_MIGRATION_PHASES } from 'src/components/layout/Sidenav/Sidenav.constants'
 import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
 import { uploadVddkFile } from 'src/api/vddk'
@@ -252,8 +246,10 @@ const TabPanel = ({
 
 const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   DEPLOYMENT_NAME: 'Display name shown across dashboards and exported workflows.',
-  TIMEZONE: 'Select a timezone for the vJailbreak VM. NTP server will get priority if configured',
-  NTP_SERVERS: 'Enter one or more comma separated NTP servers. These will be used for time synchronization.',
+  TIMEZONE:
+    'Select a timezone for the vJailbreak VM. If NTP Servers is empty, leaving this blank disables time synchronization; selecting a timezone enables time synchronization and updates the timezone.',
+  NTP_SERVERS:
+    'Optional comma or newline separated NTP servers. When set, these override default public pools. Time sync remains enabled even if Timezone is blank (defaults to UTC).',
   CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: 'Number of iterations to copy changed blocks.',
   PERIODIC_SYNC_INTERVAL: 'Frequency for background periodic sync jobs (minimum 5 minutes).',
   VM_ACTIVE_WAIT_INTERVAL_SECONDS: 'Interval to wait for VM to become active (in seconds).',
@@ -381,7 +377,6 @@ type UseGlobalSettingsControllerReturn = {
   onResetDefaults: () => void
   onSave: (e: React.FormEvent) => Promise<void>
   handleNotificationClose: (_: SyntheticEvent | Event, reason?: SnackbarCloseReason) => void
-  podsRestarting: boolean
 }
 
 const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
@@ -392,14 +387,6 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   const [activeTab, setActiveTab] = useState<TabKey>('general')
   const [notification, setNotification] = useState<NotificationState>(DEFAULT_NOTIFICATION)
   const [proxyUpdateSuccess, setProxyUpdateSuccess] = useState(false)
-  const [podsRestarting, setPodsRestarting] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current !== null) clearInterval(pollRef.current)
-    }
-  }, [])
 
   const rhfForm = useForm<SettingsForm>({
     defaultValues: DEFAULTS,
@@ -751,7 +738,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         form.TIMEZONE !== initial.TIMEZONE || form.NTP_SERVERS !== initial.NTP_SERVERS
 
       if (timeSettingsChanged) {
-        show('Applying time settings', 'info')
+        show('Applying time settings...', 'info')
       }
 
       setSaving(true)
@@ -780,49 +767,11 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
 
         let envInjectionFailed = false
 
-        if (proxyChanged) {
-          try {
-            await injectEnvVariables(buildEnvPayload(form))
-          } catch (envErr) {
-            envInjectionFailed = true
-            console.error('Failed to inject proxy env variables:', envErr)
-          }
-        }
-
-        if (timeSettingsChanged && form.TIMEZONE) {
-          try {
-            await applyTimeSettings(form.TIMEZONE)
-            setPodsRestarting(true)
-            const triggeredAt = Date.now()
-            const POLL_MS = 5_000
-            const MIN_WAIT_MS = 15_000
-            const TIMEOUT_MS = 3 * 60 * 1000
-            if (pollRef.current !== null) clearInterval(pollRef.current)
-            pollRef.current = setInterval(async () => {
-              if (Date.now() - triggeredAt > TIMEOUT_MS) {
-                clearInterval(pollRef.current!)
-                pollRef.current = null
-                setPodsRestarting(false)
-                show('Pod restart timed out. Please refresh the page manually.', 'warning')
-                return
-              }
-              if (Date.now() - triggeredAt < MIN_WAIT_MS) return
-              try {
-                const ready = await checkDeploymentsReady()
-                if (ready) {
-                  clearInterval(pollRef.current!)
-                  pollRef.current = null
-                  setPodsRestarting(false)
-                  show('Pods are ready. Refreshing...', 'success')
-                  setTimeout(() => window.location.reload(), 2_000)
-                }
-              } catch {
-                // connection may drop briefly during vjailbreak-ui restart — keep polling
-              }
-            }, POLL_MS)
-          } catch (tsErr) {
-            console.error('Failed to apply time settings to pods:', tsErr)
-          }
+        try {
+          await injectEnvVariables(buildEnvPayload(form))
+        } catch (envErr) {
+          envInjectionFailed = true
+          console.error('Failed to inject proxy env variables:', envErr)
         }
 
         let nextState = form
@@ -852,7 +801,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           }
           show(
             timeSettingsChanged
-              ? 'Time settings applied successfully.'
+              ? 'Time settings applied successfully (including all pods).'
               : 'Global Settings saved successfully.',
             'success'
           )
@@ -903,23 +852,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     handleTabChange,
     onResetDefaults,
     onSave,
-    handleNotificationClose,
-    podsRestarting
+    handleNotificationClose
   }
 }
 
 export default function GlobalSettingsPage() {
   const theme = useTheme()
   const location = useLocation()
-
-  const { data: migrations } = useMigrationsQuery(undefined, { refetchInterval: 30_000 })
-  const hasActiveMigrations = useMemo(
-    () =>
-      Array.isArray(migrations)
-        ? migrations.some((m) => ACTIVE_MIGRATION_PHASES.has(m.status?.phase as Phase))
-        : false,
-    [migrations]
-  )
   const {
     form,
     errors,
@@ -939,7 +878,6 @@ export default function GlobalSettingsPage() {
     onSave,
     handleNotificationClose,
     timezoneOptions,
-    podsRestarting,
   } = useGlobalSettingsController()
 
   const activeTabRef = useRef(activeTab)
@@ -1228,35 +1166,21 @@ export default function GlobalSettingsPage() {
                 helperText={errors.DEPLOYMENT_NAME}
               />
 
-              <Tooltip
-                title={
-                  hasActiveMigrations
-                    ? "Can't change timezone while migrations are in progress"
-                    : ''
-                }
-                placement="top"
-                arrow
-                disableHoverListener={!hasActiveMigrations}
-              >
-                <span>
-                  <RHFAutocomplete<TimezoneOption>
-                    name="TIMEZONE"
-                    options={timezoneOptions}
-                    label="Timezone"
-                    placeholder="Search or select a timezone"
-                    disableClearable={false}
-                    clearOnEscape={true}
-                    getOptionLabel={(option) => option.label}
-                    getOptionValue={(option) => option.value}
-                    renderOptionLabel={(option) => option.label}
-                    error={Boolean(errors.TIMEZONE)}
-                    helperText={errors.TIMEZONE}
-                    data-testid="global-settings-field-TIMEZONE"
-                    labelProps={{ tooltip: FIELD_TOOLTIPS.TIMEZONE }}
-                    disabled={hasActiveMigrations}
-                  />
-                </span>
-              </Tooltip>
+              <RHFAutocomplete<TimezoneOption>
+                name="TIMEZONE"
+                options={timezoneOptions}
+                label="Timezone"
+                placeholder="Search or select a timezone"
+                disableClearable={false}
+                clearOnEscape={true}
+                getOptionLabel={(option) => option.label}
+                getOptionValue={(option) => option.value}
+                renderOptionLabel={(option) => option.label}
+                error={Boolean(errors.TIMEZONE)}
+                helperText={errors.TIMEZONE}
+                data-testid="global-settings-field-TIMEZONE"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.TIMEZONE }}
+              />
 
               <RHFTextField
                 name="CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"
@@ -1536,28 +1460,16 @@ export default function GlobalSettingsPage() {
                 }}
               />
 
-              <Tooltip
-                title={
-                  hasActiveMigrations
-                    ? "Can't change NTP servers while migrations are in progress"
-                    : ''
-                }
-                placement="top"
-                arrow
-                disableHoverListener={!hasActiveMigrations}
-              >
-                <span>
-                  <RHFTextField
-                    name="NTP_SERVERS"
-                    label="NTP Servers"
-                    multiline
-                    labelProps={{ tooltip: FIELD_TOOLTIPS.NTP_SERVERS }}
-                    error={Boolean(errors.NTP_SERVERS)}
-                    placeholder="e.g., 0.pool.ntp.org or your.custom.ntp.server"
-                    disabled={hasActiveMigrations}
-                  />
-                </span>
-              </Tooltip>
+              <RHFTextField
+                name="NTP_SERVERS"
+                label="NTP Servers"
+                multiline
+                minRows={4}
+                labelProps={{ tooltip: FIELD_TOOLTIPS.NTP_SERVERS }}
+                helperText={errors.NTP_SERVERS || 'Leave blank to use default public pools (enabled automatically when Timezone is set)'}
+                error={Boolean(errors.NTP_SERVERS)}
+                placeholder="0.pool.ntp.org, 1.pool.ntp.org or one per line"
+              />
 
               <FormControl
                 fullWidth
@@ -1620,16 +1532,6 @@ export default function GlobalSettingsPage() {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {podsRestarting && (
-            <InlineHelp
-              tone="warning"
-              icon="warning"
-              sx={{ mx: 3, mb: 2 }}
-            >
-              Pods are restarting with new time settings. The page will refresh automatically when ready...
-            </InlineHelp>
-          )}
-
           <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
             <Button
               variant="outlined"
@@ -1647,23 +1549,18 @@ export default function GlobalSettingsPage() {
               color="primary"
               disabled={
                 saving ||
-                podsRestarting ||
                 vddkStatus === 'uploading' ||
                 (activeTab === 'vddk' && !vddkFile && !existingVddkPath)
               }
               data-tour="global-settings-save"
               startIcon={
-                saving || vddkStatus === 'uploading' || podsRestarting ? (
+                saving || vddkStatus === 'uploading' ? (
                   <CircularProgress size={20} color="inherit" />
                 ) : null
               }
               data-testid="global-settings-save"
             >
-              {podsRestarting
-                ? 'Restarting pods...'
-                : saving || vddkStatus === 'uploading'
-                ? 'Saving...'
-                : 'Save'}
+              {saving || vddkStatus === 'uploading' ? 'Saving...' : 'Save'}
             </Button>
           </Footer>
         </Box>

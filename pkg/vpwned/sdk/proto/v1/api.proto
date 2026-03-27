@@ -539,22 +539,6 @@ service VailbreakProxy {
         body: "*"
       };
     }
-
-    rpc ApplyTimeSettings(ApplyTimeSettingsRequest) returns (ApplyTimeSettingsResponse) {
-      option (google.api.http) = {
-        post: "/vpw/v1/time-settings/apply"
-        body: "*"
-      };
-    }
-}
-
-message ApplyTimeSettingsRequest {
-  string timezone = 1;
-}
-
-message ApplyTimeSettingsResponse {
-  bool success = 1;
-  string message = 2;
 }
 
 message CleanupRequest {
