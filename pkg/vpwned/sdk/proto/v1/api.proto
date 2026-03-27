@@ -518,6 +518,24 @@ message InjectEnvVariablesResponse {
   string message = 2;
 }
 
+message NetworkSubnetCompatibilityEntry {
+    string ip = 1;
+    bool is_compatible = 2;
+    string reason = 3;
+}
+
+message CheckNetworkSubnetCompatibilityRequest {
+    repeated string ips = 1;
+    string network_name = 2;
+    OpenstackAccessInfo access_info = 3;
+}
+
+message CheckNetworkSubnetCompatibilityResponse {
+    repeated NetworkSubnetCompatibilityEntry results = 1;
+    repeated string subnet_cidrs = 2;
+    bool all_compatible = 3;
+}
+
 service VailbreakProxy {
     rpc ValidateOpenstackIp (ValidateOpenstackIpRequest) returns (ValidateOpenstackIpResponse) {
         option (google.api.http) = {
@@ -536,6 +554,13 @@ service VailbreakProxy {
     rpc InjectEnvVariables(InjectEnvVariablesRequest) returns (InjectEnvVariablesResponse) {
       option (google.api.http) = {
         post: "/vpw/v1/inject_env_variables"
+        body: "*"
+      };
+    }
+
+    rpc CheckNetworkSubnetCompatibility(CheckNetworkSubnetCompatibilityRequest) returns (CheckNetworkSubnetCompatibilityResponse) {
+      option (google.api.http) = {
+        post: "/vpw/v1/check_network_subnet_compatibility"
         body: "*"
       };
     }
