@@ -155,6 +155,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 			HandleVDDKStatus(w, r)
 			return
 		}
+		// Skip subnet compatibility check - handled by plain HTTP handler
+		if r.URL.Path == "/vpw/v1/check_network_subnet_compatibility" {
+			HandleCheckNetworkSubnetCompatibility(w, r)
+			return
+		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)
 	})
 
