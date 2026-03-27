@@ -46,7 +46,7 @@ type OpenstackOperations interface {
 	DeletePort(ctx context.Context, portID string) error
 	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
 	CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
-	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error)
 	GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(ctx context.Context, volumeID string) error

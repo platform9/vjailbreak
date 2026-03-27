@@ -996,7 +996,7 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
-func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, err error) {
+func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, espDiskIndex int, err error) {
 	finalBootIndex = bootVolumeIndex
 	finalOsPath = osPath
 
@@ -1011,23 +1011,23 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	}
 
 	if ans == "" {
-		return -1, "", "", errors.New("empty bootable partition from the script")
+		return -1, "", "", -1, errors.New("empty bootable partition from the script")
 	}
 
 	index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-		return -1, "", "", err
+		return -1, "", "", -1, err
 	}
 
 	finalBootIndex, err = strconv.Atoi(strings.TrimSpace(index))
 	if err != nil {
-		return -1, "", "", errors.Wrap(err, "failed to convert bootable partition index to int")
+		return -1, "", "", -1, errors.Wrap(err, "failed to convert bootable partition index to int")
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
 	// Detect ESP for UEFI VMs
-	espDiskIndex := -1
+	espDiskIndex = -1
 	if vminfo.UEFI {
 		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
 		if espErr != nil {
@@ -1048,11 +1048,11 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 
 	osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
 	if err != nil {
-		return -1, "", "", errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
+		return -1, "", "", -1, errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
 	}
 
 	if err := migobj.validateLinuxOS(osRelease); err != nil {
-		return -1, "", "", err
+		return -1, "", "", -1, err
 	}
 
 	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
@@ -1068,14 +1068,11 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		migobj.logMessage("Skipping generate-mount-persistence.sh script (AUTO_FSTAB_UPDATE is disabled)")
 	}
 
-	if vminfo.UEFI && espDiskIndex >= 0 {
-		vminfo.VMDisks[espDiskIndex].ESP = true
-		if espDiskIndex != finalBootIndex {
-			migobj.logMessage(fmt.Sprintf("UEFI multi-disk: ESP on Disk %d, Root on Disk %d", espDiskIndex, finalBootIndex))
-		}
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != finalBootIndex {
+		migobj.logMessage(fmt.Sprintf("UEFI multi-disk: ESP on Disk %d, Root on Disk %d", espDiskIndex, finalBootIndex))
 	}
 
-	return finalBootIndex, finalOsPath, osRelease, nil
+	return finalBootIndex, finalOsPath, osRelease, espDiskIndex, nil
 }
 
 // validateLinuxOS checks if the detected Linux OS is supported
@@ -1125,7 +1122,7 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
-func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string) error {
+func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, espDiskIndex int) error {
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
@@ -1226,15 +1223,10 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 
 	// For UEFI multi-disk layouts, also mark the ESP disk as bootable
 	// This is required because OpenStack won't allow attaching a non-bootable volume with BootIndex=0
-	if vminfo.UEFI {
-		for idx, disk := range vminfo.VMDisks {
-			if disk.ESP && idx != bootVolumeIndex {
-				migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", idx, disk.Name))
-				if err := migobj.Openstackclients.SetVolumeBootable(ctx, disk.OpenstackVol); err != nil {
-					return errors.Wrap(err, "failed to set ESP volume as bootable")
-				}
-				break
-			}
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootVolumeIndex {
+		migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+		if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[espDiskIndex].OpenstackVol); err != nil {
+			return errors.Wrap(err, "failed to set ESP volume as bootable")
 		}
 	}
 
@@ -1393,11 +1385,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	// Step 5: Handle OS-specific detection and validation
 	var osRelease string
+	var espDiskIndex int = -1
 	osType := strings.ToLower(vminfo.OSType)
 
 	switch osType {
 	case constants.OSFamilyLinux:
-		bootVolumeIndex, osPath, osRelease, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, osPath, vjailbreakSettings.AutoFstabUpdate)
+		bootVolumeIndex, osPath, osRelease, espDiskIndex, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, osPath, vjailbreakSettings.AutoFstabUpdate)
 		if err != nil {
 			return err
 		}
@@ -1422,7 +1415,7 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 
 	// Step 8: Perform disk conversion
-	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease); err != nil {
+	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, espDiskIndex); err != nil {
 		return err
 	}
 
@@ -1539,7 +1532,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless)
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}

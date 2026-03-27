@@ -700,7 +700,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -751,22 +751,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	PrintLog(fmt.Sprintf("Creating VM %s (UEFI: %t, Total Disks: %d)", vminfo.Name, vminfo.UEFI, len(vminfo.VMDisks)))
-
-	// For UEFI VMs, check if ESP is on a separate disk
-	espDiskIndex := -1
-	if vminfo.UEFI {
-		for idx, disk := range vminfo.VMDisks {
-			if disk.ESP {
-				espDiskIndex = idx
-				break
-			}
-		}
-	}
-
 	// Set up block devices for VM creation
 	var blockDevices []servers.BlockDevice
-	disksAttachedAtCreate := []string{}
 
 	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootableDiskIndex {
 		// UEFI multi-disk layout: ESP on separate disk
@@ -779,8 +765,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			BootIndex:           0,
 		}
 		blockDevices = append(blockDevices, espBlockDevice)
-		disksAttachedAtCreate = append(disksAttachedAtCreate,
-			fmt.Sprintf("%s (BootIndex=0) - ESP DISK", vminfo.VMDisks[espDiskIndex].Name))
 
 		// Attach root/boot disk with BootIndex=1
 		rootBlockDevice := servers.BlockDevice{
@@ -791,9 +775,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			BootIndex:           1,
 		}
 		blockDevices = append(blockDevices, rootBlockDevice)
-		disksAttachedAtCreate = append(disksAttachedAtCreate,
-			fmt.Sprintf("%s (BootIndex=1) - ROOT DISK", vminfo.VMDisks[bootableDiskIndex].Name))
-
 		PrintLog(fmt.Sprintf("UEFI multi-disk layout: ESP (Disk %d) + Root (Disk %d) attached at create time", espDiskIndex, bootableDiskIndex))
 	} else {
 		// Standard layout: single boot disk or ESP on same disk as root
@@ -805,10 +786,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			BootIndex:           0,
 		}
 		blockDevices = append(blockDevices, bootBlockDevice)
-		disksAttachedAtCreate = append(disksAttachedAtCreate,
-			fmt.Sprintf("%s (BootIndex=0) - BOOT VOLUME", vminfo.VMDisks[bootableDiskIndex].Name))
-
-		PrintLog(fmt.Sprintf("Boot volume attached at create: Disk %d (%s)", bootableDiskIndex, vminfo.VMDisks[bootableDiskIndex].Name))
 	}
 
 	serverCreateOpts.BlockDevice = blockDevices
@@ -870,7 +847,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
 	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
-	var additionalDisks []vm.VMDisk
 	for idx, disk := range vminfo.VMDisks {
 		// Skip boot disk
 		if idx == bootableDiskIndex {
@@ -880,39 +856,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
 			continue
 		}
-		additionalDisks = append(additionalDisks, disk)
-	}
 
-	if len(additionalDisks) > 0 {
-		PrintLog(fmt.Sprintf("Hot-attaching %d additional disk(s) after server is active", len(additionalDisks)))
-	}
-
-	if vminfo.UEFI && len(additionalDisks) > 0 {
-		// Check if any of the hot-attached disks contain ESP
-		hasESPInHotAttach := false
-		for _, disk := range additionalDisks {
-			if disk.ESP {
-				hasESPInHotAttach = true
-				break
-			}
-		}
-		if hasESPInHotAttach {
-			PrintLog("WARNING: UEFI VM with ESP disk being hot-attached - VM will fail to boot!")
-		}
-	}
-
-	for idx, disk := range additionalDisks {
-		PrintLog(fmt.Sprintf("Hot-attaching disk %d/%d: %s (Volume ID: %s)", idx+1, len(additionalDisks), disk.Name, disk.OpenstackVol.ID))
 		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
 		}).Extract()
 		if err != nil {
-			return nil, fmt.Errorf("failed to attach volume %s to VM: %s", disk.Name, err)
+			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
 		}
-		PrintLog(fmt.Sprintf("Successfully attached: %s", disk.Name))
 	}
-	PrintLog("=== END BLOCK DEVICE MAPPING ===")
 
 	return server, nil
 }
