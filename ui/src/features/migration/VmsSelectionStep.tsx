@@ -2298,13 +2298,13 @@ function VmsSelectionStep({
                 gap: 2
               }}
             >
-              {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
-                const vm = vmsWithFlavor.find((v) => v.name === vmName)
+              {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
+                const vm = vmsWithFlavor.find((v) => v.id === vmId)
                 if (!vm) return null
 
                 return (
                   <Box
-                    key={vmName}
+                    key={vmId}
                     sx={{
                       p: 2,
                       border: '1px solid',

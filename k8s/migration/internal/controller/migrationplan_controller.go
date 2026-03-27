@@ -417,25 +417,40 @@ func extractVCenterCredentials(secret *corev1.Secret) (username, password, host 
 	return
 }
 
-// GetVMwareMachineForVM fetches the VMwareMachine corresponding to a given VM name
+// GetVMwareMachineForVM fetches the VMwareMachine corresponding to a given VM identifier.
+// The vm parameter can be either:
+// - A VMwareMachine K8s resource name (e.g., "centos-7-new-vj-test-vm-2132-68004" for duplicate VMs)
+// - A VM display name (e.g., "centos-7-new-vj-test" for backward compatibility)
 func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm string, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachine, error) {
-	// Generate the expected VMwareMachine name
-	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get k8s compatible name for VM %s", vm)
-	}
-
-	// Fetch individual VMwareMachine
 	vmMachine := &vjailbreakv1alpha1.VMwareMachine{}
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      vmk8sname,
+
+	// First, try direct lookup assuming vm is already a K8s resource name
+	// This handles the new behavior where UI sends vmWareMachineName for duplicate VMs
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      vm,
 		Namespace: migrationtemplate.Namespace,
 	}, vmMachine)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, errors.Errorf("VMwareMachine %s not found for VM %s", vmk8sname, vm)
+
+	if err != nil && apierrors.IsNotFound(err) {
+		// Fallback: Generate the expected VMwareMachine name from VM display name
+		// This provides backward compatibility for migrations created before duplicate VM support
+		vmk8sname, nameErr := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+		if nameErr != nil {
+			return nil, errors.Wrapf(nameErr, "failed to get k8s compatible name for VM %s", vm)
 		}
-		return nil, errors.Wrapf(err, "failed to get VMwareMachine %s for VM %s", vmk8sname, vm)
+
+		err = r.Get(ctx, types.NamespacedName{
+			Name:      vmk8sname,
+			Namespace: migrationtemplate.Namespace,
+		}, vmMachine)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, errors.Errorf("VMwareMachine not found for VM %s (tried both %s and %s)", vm, vm, vmk8sname)
+			}
+			return nil, errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
+		}
+	} else if err != nil {
+		return nil, errors.Wrapf(err, "failed to get VMwareMachine %s", vm)
 	}
 
 	// Verify VMwareMachine has correct VMwareCreds label
@@ -453,10 +468,6 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
 	}
 
-	// Verify VM name matches
-	if vmMachine.Spec.VMInfo.Name != vm {
-		return nil, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
-	}
 	return vmMachine, nil
 }
 
@@ -632,7 +643,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name == vmName {
+			// Compare using K8s resource name since vmName now contains vmWareMachineName
+			if v.Name == vmName {
 				isValid = true
 				break
 			}
@@ -1632,9 +1644,10 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 ) (openstacknws, openstackvolumetypes []string, err error) {
-	// Get datacenter from VM's cluster annotation
-	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
+	// Get datacenter from VM's VMwareMachine annotation directly
+	datacenter, err := getDatacenterFromVMwareMachine(vmMachine)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get datacenter for VM")
 	}
@@ -2279,13 +2292,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	return validVMs, skippedVMs, nil
 }
 
-// getDatacenterForVM retrieves the datacenter for a given VM from its VMwareMachine annotation
-func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm string, vmwcreds *vjailbreakv1alpha1.VMwareCreds, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) (string, error) {
-	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
-	}
-
+// getDatacenterFromVMwareMachine extracts the datacenter from an already-fetched VMwareMachine
+func getDatacenterFromVMwareMachine(vmMachine *vjailbreakv1alpha1.VMwareMachine) (string, error) {
 	if vmMachine.Annotations == nil {
 		return "", fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
 	}
