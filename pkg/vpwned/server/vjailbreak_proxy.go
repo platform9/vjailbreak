@@ -767,3 +767,37 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		Message: successMsg,
 	}, nil
 }
+
+func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, in *api.ApplyTimeSettingsRequest) (*api.ApplyTimeSettingsResponse, error) {
+	const fn = "ApplyTimeSettings"
+	tz := in.GetTimezone()
+	logrus.WithFields(logrus.Fields{"func": fn, "timezone": tz}).Info("Applying time settings to k8s resources")
+
+	if tz == "" {
+		return &api.ApplyTimeSettingsResponse{Success: false, Message: "timezone is required"}, nil
+	}
+
+	k8sClient, err := CreateInClusterClient()
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to create k8s client")
+		return &api.ApplyTimeSettingsResponse{Success: false, Message: fmt.Sprintf("failed to create k8s client: %v", err)}, err
+	}
+
+	if err := patchPf9EnvTZ(ctx, k8sClient, tz); err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("Failed to patch pf9-env ConfigMap")
+		return &api.ApplyTimeSettingsResponse{Success: false, Message: fmt.Sprintf("failed to patch pf9-env: %v", err)}, err
+	}
+	logrus.WithFields(logrus.Fields{"func": fn, "tz": tz}).Info("Patched pf9-env ConfigMap with TZ")
+
+	for _, name := range timeSettingsDeployments {
+		if err := rolloutRestartDeployment(ctx, k8sClient, name, timeSettingsNamespace); err != nil {
+			logrus.WithFields(logrus.Fields{"func": fn, "deployment": name}).WithError(err).Error("Failed to restart deployment")
+			return &api.ApplyTimeSettingsResponse{Success: false, Message: fmt.Sprintf("failed to restart %s: %v", name, err)}, err
+		}
+		logrus.WithFields(logrus.Fields{"func": fn, "deployment": name}).Info("Triggered rollout restart")
+	}
+
+	msg := fmt.Sprintf("TZ=%s applied to pf9-env; restarted %v", tz, timeSettingsDeployments)
+	logrus.WithField("func", fn).Info(msg)
+	return &api.ApplyTimeSettingsResponse{Success: true, Message: msg}, nil
+}
