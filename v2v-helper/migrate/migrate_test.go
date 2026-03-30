@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/golang/mock/gomock"
@@ -549,7 +549,7 @@ func TestCreateTargetInstance(t *testing.T) {
 		TargetFlavorId:   "flavor-id",
 		K8sClient:        fakeCtrlClient,
 	}
-	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
 	assert.NoError(t, err)
 }
 
@@ -604,7 +604,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		TargetFlavorId:   "flavor-id",
 		K8sClient:        fakeCtrlClient,
 	}
-	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
 	assert.NoError(t, err)
 }
 
@@ -647,7 +647,7 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		TargetFlavorId:   "flavor-id",
 		K8sClient:        fakeCtrlClient,
 	}
-	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"})
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
 	// The test passes port IDs directly, so the validation in the port creation code path is not triggered
 	// This test now just verifies that CreateTargetInstance can handle mismatched Networkports config
 	assert.NoError(t, err)
