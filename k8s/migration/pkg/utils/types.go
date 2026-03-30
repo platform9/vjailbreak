@@ -48,6 +48,12 @@ type VMwareHostInfo struct {
 	Name string
 	// HardwareUUID is the unique identifier of the host
 	HardwareUUID string
+	// VMCount is the number of VMs on the host
+	VMCount int
+	// State is the connection state of the host
+	State string
+	// HostConfig is the host config assigned to the host
+	HostConfig string
 }
 
 // VMwareClusterInfo represents a cluster in a VMware environment.
@@ -69,8 +75,8 @@ type RollingMigartionValidationConfig struct {
 	CheckDRSIsFullyAutomated bool `json:"checkDRSIsFullyAutomated"` // Check if DRS is in fully automated mode
 	// CheckIfThereAreMoreThanOneHostInCluster checks if there are more than one host in the cluster
 	CheckIfThereAreMoreThanOneHostInCluster bool `json:"checkIfThereAreMoreThanOneHostInCluster"` // Check if there are more than one host in the cluster
-	// CheckClusterRemainingHostCapacity checks if the cluster has enough remaining capacity
-	CheckClusterRemainingHostCapacity bool `json:"checkClusterRemainingHostCapacity"` // Check if the cluster has enough remaining capacity
+	// CheckClusterRemainingHostCapacity checks if the cluster has enough remaining capacity using per-host capacity calculation
+	CheckClusterRemainingHostCapacity bool `json:"checkClusterRemainingHostCapacity"` // Check if the cluster has enough remaining capacity using per-host capacity calculation
 	// CheckVMsAreNotBlockedForMigration checks if the VMs are not blocked for migration
 	CheckVMsAreNotBlockedForMigration bool `json:"checkVMsAreNotBlockedForMigration"` // Check if the VMs are not blocked for migration
 	// CheckESXiInMAAS checks if the ESXi host is in MAAS

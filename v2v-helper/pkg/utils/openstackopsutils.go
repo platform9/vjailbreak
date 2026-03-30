@@ -19,8 +19,8 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,12 +56,20 @@ var (
 	metadataMutex  sync.RWMutex
 )
 
+func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error) {
+	isL2Network, err := openstackpkg.IsSimpleNetwork(ctx, osclient.NetworkingClient, networkID)
+	if err != nil {
+		PrintLog("failed to check if network is L2: " + err.Error())
+		return false, err
+	}
+	return isL2Network, nil
+}
+
 func GetCurrentInstanceUUID() (string, error) {
 
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
-
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
 		// If cached, return it immediately.
@@ -95,6 +103,11 @@ func GetCurrentInstanceUUID() (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
+		if currentInstanceUUID != "" {
+			PrintLog("CURRENT_INSTANCE_ID environment variable is set to: " + currentInstanceUUID)
+			return currentInstanceUUID, nil
+		}
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
@@ -468,6 +481,10 @@ func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []st
 
 func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntries []vm.IpEntry, mac string, network *networks.Network, gatewayIP map[string]string) (*ports.Port, error) {
 
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check if network is L2")
+	}
 	pages, err := ports.List(osclient.NetworkingClient, ports.ListOpts{
 		NetworkID:  network.ID,
 		MACAddress: mac,
@@ -484,6 +501,14 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 		if port.MACAddress == mac {
 			if port.DeviceID != "" {
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
+			}
+			if isL2Network && port.Status == "ACTIVE" {
+				PrintLog(fmt.Sprintf("Port %s (MAC %s) is already exists and is L2 network but already in use", port.ID, mac))
+				return nil, fmt.Errorf("port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
+			} else if isL2Network {
+				PrintLog(fmt.Sprintf("Port %s (MAC %s) is already exists and is L2 network", port.ID, mac))
+				// for l2 network, we can reuse the port if it's not active
+				return &port, nil
 			}
 			if len(port.FixedIPs) > 0 {
 				fixedIps := []string{}
@@ -532,12 +557,29 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 	createOpts := ports.CreateOpts{
 		Name:           "port-" + vmname,
 		NetworkID:      network.ID,
-		MACAddress:     mac,
 		SecurityGroups: &securityGroups,
 	}
-	if len(ipEntries) > 0 {
+	if mac != "" {
+		createOpts.MACAddress = mac
+	}
+	var localDeepCopyIpEntries []vm.IpEntry
+
+	// If the target network is L2 network pass empty ip address
+	// Check if the network is L2-only by looking for "simple_network" tag
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
+	if err != nil {
+		return ports.CreateOpts{}, errors.Wrap(err, "failed to check if network is L2")
+	}
+	if ipEntries != nil && !isL2Network {
+		localDeepCopyIpEntries = make([]vm.IpEntry, len(ipEntries))
+		copy(localDeepCopyIpEntries, ipEntries)
+	} else if ipEntries != nil && isL2Network {
+		localDeepCopyIpEntries = []vm.IpEntry{}
+	}
+
+	if len(localDeepCopyIpEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
-		for _, ipEntry := range ipEntries {
+		for _, ipEntry := range localDeepCopyIpEntries {
 			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
@@ -551,7 +593,12 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			}
 		}
 		createOpts.FixedIPs = fixedIPs
-	} else if len(ipEntries) == 0 {
+	} else if localDeepCopyIpEntries != nil {
+		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
+		PrintLog("Creating port with no fixed IPs for mac " + mac)
+		createOpts.FixedIPs = []ports.IP{}
+	} else {
+		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
 		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
 		if err != nil {
@@ -573,15 +620,19 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
 
+	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 {
+	if len(network.Subnets) == 0 && currentInstanceID == "" {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
+
+	// if currentInstanceID is not nill that means this is an L2 network, we should continue
 
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		} else {
 			PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
 			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
@@ -636,7 +687,7 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 	createOpts, err := osclient.GetCreateOpts(ctx, networkid, mac, ipEntries, vmname, securityGroups, gatewayIP)
 	if err != nil {
 		if !fallbackToDHCP {
-			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ip)
+			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ip)
 		}
 		PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ip))
 		// Create with DHCP by removing fixed IPs
@@ -649,7 +700,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -700,15 +751,44 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	// Set up boot block device with BootIndex 0
-	bootBlockDevice := servers.BlockDevice{
-		DeleteOnTermination: false,
-		DestinationType:     servers.DestinationVolume,
-		SourceType:          servers.SourceVolume,
-		UUID:                uuid,
-		BootIndex:           0,
+	// Set up block devices for VM creation
+	var blockDevices []servers.BlockDevice
+
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootableDiskIndex {
+		// UEFI multi-disk layout: ESP on separate disk
+		// Attach ESP disk with BootIndex=0 (UEFI firmware needs this first)
+		espBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.VMDisks[espDiskIndex].OpenstackVol.ID,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, espBlockDevice)
+
+		// Attach root/boot disk with BootIndex=1
+		rootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           1,
+		}
+		blockDevices = append(blockDevices, rootBlockDevice)
+		PrintLog(fmt.Sprintf("UEFI multi-disk layout: ESP (Disk %d) + Root (Disk %d) attached at create time", espDiskIndex, bootableDiskIndex))
+	} else {
+		// Standard layout: single boot disk or ESP on same disk as root
+		bootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, bootBlockDevice)
 	}
-	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
+
+	serverCreateOpts.BlockDevice = blockDevices
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -766,7 +846,17 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 
 	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
-	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
+	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
+	for idx, disk := range vminfo.VMDisks {
+		// Skip boot disk
+		if idx == bootableDiskIndex {
+			continue
+		}
+		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
+		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
+			continue
+		}
+
 		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
@@ -775,6 +865,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
 		}
 	}
+
 	return server, nil
 }
 

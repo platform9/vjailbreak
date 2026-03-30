@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/k8s/migration/pkg/constants"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 

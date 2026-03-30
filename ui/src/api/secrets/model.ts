@@ -8,6 +8,12 @@ export interface Secret {
   type: 'Opaque'
 }
 
+export interface SecretList {
+  apiVersion: string
+  kind: 'SecretList'
+  items: Secret[]
+}
+
 export interface Metadata {
   name: string
   namespace: string

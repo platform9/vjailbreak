@@ -49,7 +49,7 @@ spec:
   networkMapping: nwmap1
   storageMapping: stmap1
   osFamily: windowsGuest  # Changed from ostype to osFamily with correct enum value
-  virtioWinDriver: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso
+  virtioWinDriver: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.185-1/virtio-win-0.1.185.iso
   source:
     vmwareRef: pnapbmc1
   destination:

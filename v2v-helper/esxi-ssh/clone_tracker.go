@@ -5,10 +5,9 @@ package esxissh
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
-
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
 
 // ProgressLogger is an interface for logging clone progress messages.
@@ -187,7 +186,7 @@ func (ct *CloneTracker) determineIfRunning(logContent string, percentDone float6
 
 	// If we have progress but it's stalled (no change for stallTimeout), clone likely failed
 	if percentDone > 0 && percentDone < 100 && timeSinceProgress > ct.stallTimeout {
-		utils.PrintLog(fmt.Sprintf("WARNING: Clone appears stalled: no progress change for %v (stuck at %.0f%%)", timeSinceProgress.Round(time.Second), percentDone))
+		log.Printf("WARNING: Clone appears stalled: no progress change for %v (stuck at %.0f%%)", timeSinceProgress.Round(time.Second), percentDone)
 		return false
 	}
 
@@ -210,7 +209,7 @@ func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 	currentBucket := (int(percentDone) / 5) * 5
 	if currentBucket > ct.lastLoggedPercent {
 		msg := fmt.Sprintf("Copying disk %d, Completed: %d%%", ct.diskIndex, currentBucket)
-		utils.PrintLog(msg)
+		log.Printf("%s", msg)
 		if ct.logger != nil {
 			ct.logger.LogMessage(msg)
 		}
@@ -221,7 +220,7 @@ func (ct *CloneTracker) logProgressIfNeeded(percentDone float64) {
 // WaitForCompletion blocks until the clone completes, fails, or context is cancelled
 func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 	msg := fmt.Sprintf("Starting clone monitor for disk %d (PID %d)", ct.diskIndex, ct.task.Pid)
-	utils.PrintLog(msg)
+	log.Printf("%s", msg)
 	if ct.logger != nil {
 		ct.logger.LogMessage(msg)
 	}
@@ -232,7 +231,7 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			utils.PrintLog("Clone monitoring cancelled")
+			log.Printf("Clone monitoring cancelled")
 			return ctx.Err()
 
 		case <-ticker.C:
@@ -246,7 +245,7 @@ func (ct *CloneTracker) WaitForCompletion(ctx context.Context) error {
 					return fmt.Errorf("clone failed: %s", status.Error)
 				}
 				msg := fmt.Sprintf("Disk %d clone completed successfully in %v", ct.diskIndex, status.ElapsedTime.Round(time.Second))
-				utils.PrintLog(msg)
+				log.Printf("%s", msg)
 				return nil
 			}
 		}

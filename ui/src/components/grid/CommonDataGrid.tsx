@@ -60,10 +60,10 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
   }
 
   const baseSx = (theme) => ({
-    border: `1px solid ${theme.palette.divider}`,
-    borderRadius: 2,
-    backgroundColor: theme.palette.background.paper,
-    boxShadow: theme.palette.mode === 'dark' ? 'none' : theme.shadows[1],
+    border: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    boxShadow: 'none',
 
     '& .MuiDataGrid-columnHeaders': {
       borderBottom: `1px solid ${theme.palette.divider}`
@@ -111,10 +111,12 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
       borderTop: `1px solid ${theme.palette.divider}`
     },
     '& .MuiDataGrid-virtualScroller': {
-      backgroundColor: theme.palette.background.paper
+      backgroundColor: theme.palette.background.paper,
+      overflowX: 'hidden !important',
+      overflowY: 'auto'
     },
     '& .MuiDataGrid-main': {
-      overflow: 'auto'
+      overflow: 'hidden'
     }
   })
 

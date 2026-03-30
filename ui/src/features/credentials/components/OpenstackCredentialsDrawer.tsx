@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import axios from 'axios'
-import { useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
   DrawerShell,
@@ -33,6 +33,9 @@ import {
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import ConfirmationDialog from 'src/components/dialogs/ConfirmationDialog'
+import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { useNavigate } from 'react-router-dom'
 
 interface OpenstackCredentialsDrawerProps {
   open: boolean
@@ -44,6 +47,8 @@ interface OpenstackCredentialsFormValues {
   rcFile?: File
   isPcd: boolean
   insecure: boolean
+  passVjbInstanceId: boolean
+  vjbInstanceId: string
 }
 
 export default function OpenstackCredentialsDrawer({
@@ -52,13 +57,16 @@ export default function OpenstackCredentialsDrawer({
 }: OpenstackCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'OpenstackCredentialsDrawer' })
   const { track } = useAmplitude({ component: 'OpenstackCredentialsDrawer' })
+  const navigate = useNavigate()
 
   const form = useForm<OpenstackCredentialsFormValues>({
     defaultValues: {
       credentialName: '',
       rcFile: undefined,
       isPcd: true,
-      insecure: false
+      insecure: false,
+      passVjbInstanceId: false,
+      vjbInstanceId: ''
     }
   })
 
@@ -76,19 +84,28 @@ export default function OpenstackCredentialsDrawer({
   const [submitting, setSubmitting] = useState(false)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
   const [createdCredentialIsPcd, setCreatedCredentialIsPcd] = useState(false)
+  const [promptAddVmwareOpen, setPromptAddVmwareOpen] = useState(false)
 
   const watchedValues = watch()
   const credentialName = watchedValues.credentialName
   const rcFile = watchedValues.rcFile
+  const passVjbInstanceId = watchedValues.passVjbInstanceId
+  const vjbInstanceId = watchedValues.vjbInstanceId
 
   const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery()
+  const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: true
+  })
 
   const resetDrawerState = useCallback(() => {
     reset({
       credentialName: '',
       rcFile: undefined,
       isPcd: false,
-      insecure: false
+      insecure: false,
+      passVjbInstanceId: false,
+      vjbInstanceId: ''
     })
     setRcFileValues(null)
     setCreatedCredentialName(null)
@@ -123,6 +140,12 @@ export default function OpenstackCredentialsDrawer({
   }, [createdCredentialName, resetDrawerState])
 
   const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null)
+
+  useEffect(() => {
+    if (!passVjbInstanceId && vjbInstanceId) {
+      setValue('vjbInstanceId', '')
+    }
+  }, [passVjbInstanceId, setValue, vjbInstanceId])
 
   const handleRCFileParsed = useCallback(
     (values: Record<string, string>) => {
@@ -182,7 +205,8 @@ export default function OpenstackCredentialsDrawer({
             OS_INSECURE: values.insecure
           },
           values.isPcd,
-          projectName
+          projectName,
+          values.passVjbInstanceId ? values.vjbInstanceId : undefined
         )
 
         setCreatedCredentialName(response.metadata.name)
@@ -231,7 +255,8 @@ export default function OpenstackCredentialsDrawer({
     !!errors.rcFile ||
     !credentialName ||
     !rcFile ||
-    !rcFileValues
+    !rcFileValues ||
+    (passVjbInstanceId && !vjbInstanceId?.trim())
 
   const handleValidationStatus = (status: string, message?: string) => {
     if (status === 'Succeeded') {
@@ -245,8 +270,24 @@ export default function OpenstackCredentialsDrawer({
         stage: 'validation_success'
       })
 
-      setTimeout(() => {
+      setTimeout(async () => {
         refetchOpenstackCreds()
+
+        if (createdCredentialIsPcd) {
+          try {
+            const vmware = await refetchVmwareCreds()
+            const hasVmwareCreds = (vmware.data || []).length > 0
+
+            if (!hasVmwareCreds) {
+              setPromptAddVmwareOpen(true)
+              return
+            }
+          } catch (error) {
+            console.error('Error checking VMware credentials:', error)
+            // If we cannot determine VMware creds state, fall back to existing behavior.
+          }
+        }
+
         resetDrawerState()
       }, 1500)
     } else if (status === 'Failed') {
@@ -327,106 +368,158 @@ export default function OpenstackCredentialsDrawer({
   )
 
   return (
-    <DrawerShell
-      open={open}
-      onClose={closeDrawer}
-      header={
-        <DrawerHeader
-          title="Add PCD Credentials"
-          subtitle="Upload an RC file and validate access to your PCD environment"
-          onClose={closeDrawer}
-        />
-      }
-      footer={
-        <DrawerFooter>
-          <ActionButton tone="secondary" onClick={closeDrawer} data-testid="openstack-cred-cancel">
-            Cancel
-          </ActionButton>
-          <ActionButton
-            tone="primary"
-            type="submit"
-            form="openstack-cred-form"
-            loading={submitting}
-            disabled={isSubmitDisabled}
-            data-testid="openstack-cred-submit"
-          >
-            Save Credential
-          </ActionButton>
-        </DrawerFooter>
-      }
-    >
-      <DesignSystemForm
-        form={form}
-        id="openstack-cred-form"
-        onSubmit={handleSubmit}
-        keyboardSubmitProps={{
-          open,
-          onClose: closeDrawer,
-          isSubmitDisabled
-        }}
+    <>
+      <DrawerShell
+        open={open}
+        onClose={closeDrawer}
+        header={
+          <DrawerHeader
+            title="Add PCD Credentials"
+            subtitle="Upload an RC file and validate access to your PCD environment"
+            onClose={closeDrawer}
+          />
+        }
+        footer={
+          <DrawerFooter>
+            <ActionButton
+              tone="secondary"
+              onClick={closeDrawer}
+              data-testid="openstack-cred-cancel"
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              type="submit"
+              form="openstack-cred-form"
+              loading={submitting}
+              disabled={isSubmitDisabled}
+              data-testid="openstack-cred-submit"
+            >
+              Save Credential
+            </ActionButton>
+          </DrawerFooter>
+        }
       >
-        <SurfaceCard>
-          <Section>
-            <SectionHeader
-              title="PCD Credential Details"
-              subtitle="Give your credential a clear name and upload the RC file from your PCD environment."
-            />
+        <DesignSystemForm
+          form={form}
+          id="openstack-cred-form"
+          onSubmit={handleSubmit}
+          keyboardSubmitProps={{
+            open,
+            onClose: closeDrawer,
+            isSubmitDisabled
+          }}
+        >
+          <SurfaceCard>
+            <Section>
+              <SectionHeader
+                title="PCD Credential Details"
+                subtitle="Give your credential a clear name and upload the RC file from your PCD environment."
+              />
 
-            <FormGrid minWidth={360} gap={2}>
-              <RHFTextField
-                name="credentialName"
-                label="PCD Credential Name"
-                placeholder="e.g. prod-pcd"
-                rules={{
-                  required: 'Credential name is required',
-                  validate: (value: string) =>
-                    isValidName(value) ||
-                    'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
-                }}
-                fullWidth
+              <FormGrid minWidth={360} gap={2}>
+                <RHFTextField
+                  name="credentialName"
+                  label="PCD Credential Name"
+                  placeholder="e.g. prod-pcd"
+                  rules={{
+                    required: 'Credential name is required',
+                    validate: (value: string) =>
+                      isValidName(value) ||
+                      'Credential name must start with a letter or number, followed by letters, numbers or hyphens, with a maximum length of 253 characters'
+                  }}
+                  fullWidth
+                  required
+                />
+              </FormGrid>
+
+              <RHFOpenstackRCFileField
+                name="rcFile"
+                onParsed={handleRCFileParsed}
+                size="small"
                 required
               />
-            </FormGrid>
 
-            <RHFOpenstackRCFileField
-              name="rcFile"
-              onParsed={handleRCFileParsed}
-              size="small"
-              required
-            />
+              <Row gap={3} flexWrap="wrap">
+                <Box sx={{ flex: 1, minWidth: 260 }}>
+                  <RHFToggleField
+                    name="passVjbInstanceId"
+                    label="vJailbreak VM is on Layer 2 Network (PCD)"
+                    description="Enable this if the vJailbreak VM is deployed on a PCD Layer 2 network. When enabled, you'll need to provide the vJailbreak instance ID to establish connectivity."
+                  />
+                </Box>
+              </Row>
 
-            <Row gap={3} flexWrap="wrap">
-              <Box sx={{ flex: 1, minWidth: 260 }}>
-                <RHFToggleField
-                  name="isPcd"
-                  label="Is PCD credential"
-                  description="Mark this if the credential is for a Private Cloud Director (PCD)."
-                />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 260 }}>
-                <RHFToggleField
-                  name="insecure"
-                  label="Allow insecure TLS (skip SSL verification)"
-                  description="Use only for testing or environments with self-signed certificates."
-                />
-              </Box>
-            </Row>
+              {passVjbInstanceId && (
+                <FormGrid minWidth={360} gap={2}>
+                  <RHFTextField
+                    name="vjbInstanceId"
+                    label="vJailbreak Instance ID"
+                    placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
+                    helperText="Specify the PCD instance ID where vJailbreak is running."
+                    rules={{
+                      validate: (value: string) =>
+                        !passVjbInstanceId ||
+                        Boolean(value?.trim()) ||
+                        'Instance ID is required when vJailbreak is on an L2 network'
+                    }}
+                    fullWidth
+                    required
+                  />
+                </FormGrid>
+              )}
 
-            <OperationStatus
-              mt={3}
-              display="flex"
-              flexDirection="column"
-              gap={2}
-              loading={validatingOpenstackCreds}
-              loadingMessage="Validating PCD credentials…"
-              success={openstackCredsValidated === true && Boolean(credentialName)}
-              successMessage="PCD credentials created and validated."
-              successIcon={<CheckIcon color="success" fontSize="small" />}
-              error={operationError}
-            />
-          </Section>
-        </SurfaceCard>
-      </DesignSystemForm>
-    </DrawerShell>
+              <Row gap={3} flexWrap="wrap">
+                <Box sx={{ flex: 1, minWidth: 260 }}>
+                  <RHFToggleField
+                    name="isPcd"
+                    label="Is PCD credential"
+                    description="Mark this if the credential is for a Private Cloud Director (PCD)."
+                  />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 260 }}>
+                  <RHFToggleField
+                    name="insecure"
+                    label="Allow insecure TLS (skip SSL verification)"
+                    description="Use only for testing or environments with self-signed certificates."
+                  />
+                </Box>
+              </Row>
+
+              <OperationStatus
+                mt={3}
+                display="flex"
+                flexDirection="column"
+                gap={2}
+                loading={validatingOpenstackCreds}
+                loadingMessage="Validating PCD credentials…"
+                success={openstackCredsValidated === true && Boolean(credentialName)}
+                successMessage="PCD credentials created and validated."
+                successIcon={<CheckIcon color="success" fontSize="small" />}
+                error={operationError}
+              />
+            </Section>
+          </SurfaceCard>
+        </DesignSystemForm>
+      </DrawerShell>
+
+      <ConfirmationDialog
+        open={promptAddVmwareOpen}
+        onClose={() => {
+          setPromptAddVmwareOpen(false)
+          resetDrawerState()
+        }}
+        title="Add VMware Credentials"
+        message="Your PCD credentials are ready. Add your VMware credentials next to start migrations."
+        actionLabel="Go to VMware Credentials"
+        actionVariant="contained"
+        onConfirm={async () => {
+          navigate('/dashboard/credentials/vm')
+          resetDrawerState()
+        }}
+        cancelLabel="Later"
+      />
+    </>
   )
 }

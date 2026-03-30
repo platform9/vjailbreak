@@ -77,13 +77,17 @@ export interface VmData {
   networkInterfaces?: VmNetworkInterface[]
   osFamily?: string
   assignedIPs?: string
+  preserveIp?: Record<number, boolean>
+  preserveMac?: Record<number, boolean>
   hasSharedRdm?: boolean
 }
 
 export interface VmNetworkInterface {
   mac: string
   network: string
-  ipAddress: string
+  ipAddress: string[]
+  preserveIP?: boolean
+  preserveMAC?: boolean
 }
 
 export interface GetMigrationTemplatesMetadata {

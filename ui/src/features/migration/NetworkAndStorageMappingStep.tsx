@@ -10,11 +10,12 @@ import {
   Alert,
   Chip
 } from '@mui/material'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useCallback, useRef } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
+import { PCDNetworkInfo } from 'src/api/openstack-creds/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -42,7 +43,7 @@ export type StorageCopyMethod = (typeof STORAGE_COPY_METHOD_OPTIONS)[number]['va
 interface NetworkAndStorageMappingStepProps {
   vmwareNetworks: string[]
   vmWareStorage: string[]
-  openstackNetworks: string[]
+  openstackNetworks: PCDNetworkInfo[]
   openstackStorage: string[]
   params: {
     networkMappings?: ResourceMap[]
@@ -73,6 +74,8 @@ export default function NetworkAndStorageMappingStep({
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
+  const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
+
   // Fetch validated array credentials for StorageAcceleratedCopy
   const { data: arrayCredentials, isLoading: arrayCredsLoading } = useArrayCredentialsQuery(
     undefined,
@@ -95,13 +98,19 @@ export default function NetworkAndStorageMappingStep({
   )
 
   // Filter out any mappings that don't match the available networks/storage
+  // Extract network names from PCDNetworkInfo for filtering
+  const openstackNetworkNames = useMemo(
+    () => openstackNetworks.map((net) => net.name),
+    [openstackNetworks]
+  )
+
   const filteredNetworkMappings = useMemo(
     () =>
       (params.networkMappings || []).filter(
         (mapping) =>
-          vmwareNetworks.includes(mapping.source) && openstackNetworks.includes(mapping.target)
+          vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
       ),
-    [params.networkMappings, vmwareNetworks, openstackNetworks]
+    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
   )
 
   const filteredStorageMappings = useMemo(
@@ -173,6 +182,9 @@ export default function NetworkAndStorageMappingStep({
     // Find datastores that can be auto-mapped but aren't already mapped
     const autoMappings: ResourceMap[] = []
     vmWareStorage.forEach((datastore) => {
+      if (removedAutoArrayCredsSourcesRef.current.has(datastore)) {
+        return
+      }
       if (!currentMappedSources.has(datastore) && datastoreToArrayCredsMap.has(datastore)) {
         autoMappings.push({
           source: datastore,
@@ -186,6 +198,30 @@ export default function NetworkAndStorageMappingStep({
       onChange('arrayCredsMappings')([...currentMappings, ...autoMappings])
     }
   }, [storageCopyMethod, validatedArrayCreds, vmWareStorage, params.arrayCredsMappings, onChange])
+
+  const handleArrayCredsMappingsChange = useCallback(
+    (nextMappings: ResourceMap[]) => {
+      const prevMappings = params.arrayCredsMappings || []
+
+      const prevSources = new Set(prevMappings.map((m) => m.source))
+      const nextSources = new Set(nextMappings.map((m) => m.source))
+
+      for (const source of prevSources) {
+        if (!nextSources.has(source)) {
+          removedAutoArrayCredsSourcesRef.current.add(source)
+        }
+      }
+
+      for (const source of nextSources) {
+        if (removedAutoArrayCredsSourcesRef.current.has(source)) {
+          removedAutoArrayCredsSourcesRef.current.delete(source)
+        }
+      }
+
+      onChange('arrayCredsMappings')(nextMappings)
+    },
+    [onChange, params.arrayCredsMappings]
+  )
 
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
@@ -247,7 +283,7 @@ export default function NetworkAndStorageMappingStep({
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmwareNetworks}
-                targetItems={openstackNetworks}
+                targetItems={openstackNetworkNames}
                 sourceLabel="VMware Network"
                 targetLabel="PCD Network"
                 values={params.networkMappings || []}
@@ -370,7 +406,7 @@ export default function NetworkAndStorageMappingStep({
                         sourceLabel="VMware Datastore"
                         targetLabel="Array Credentials"
                         values={params.arrayCredsMappings || []}
-                        onChange={(value) => onChange('arrayCredsMappings')(value)}
+                        onChange={handleArrayCredsMappingsChange}
                         oneToManyMapping
                         fieldPrefix="arrayCredsMapping"
                       />

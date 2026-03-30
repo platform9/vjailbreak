@@ -15,6 +15,8 @@ assignees: ''
 * Format of the checklist below is a template that can be used as a starting point[role] [action]
 
 * [ ] [Release Lead] [Finalize release schedule]
+* [ ] [Release Lead] [Run pre-release github action]
+* [ ] [Release Lead] [Merge generated PR from github action]
 * [ ] [Release Lead] [Create release notes]
 * [ ] [Release Lead] [Prepare main branch for the new release]
 * [ ] [Release Lead] [Update documentation and website]

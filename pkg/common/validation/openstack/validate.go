@@ -59,6 +59,12 @@ func authErrorMessage(err error, isTokenAuth bool) string {
 func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ValidationResult {
 	// Ensure logger exists
 	ctx = ensureLogger(ctx)
+
+	successfulValidationObject := ValidationResult{
+		Valid:   true,
+		Message: "Successfully authenticated to Openstack",
+		Error:   nil,
+	}
 	// Get credentials from secret
 	openstackCredential, err := getCredentialsFromSecret(ctx, k8sClient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
@@ -68,6 +74,7 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 			Error:   err,
 		}
 	}
+	openstackCredential.VJBInstanceID = openstackcreds.Spec.VJBInstanceID
 
 	// Create provider client
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
@@ -141,6 +148,10 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 	}
 
+	if openstackCredential.VJBInstanceID != "" {
+		return successfulValidationObject
+	}
+
 	// Verify credentials match current environment
 	_, err = verifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
 	if err != nil {
@@ -158,11 +169,7 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		}
 	}
 
-	return ValidationResult{
-		Valid:   true,
-		Message: "Successfully authenticated to Openstack",
-		Error:   nil,
-	}
+	return successfulValidationObject
 }
 
 // getCredentialsFromSecret retrieves OpenStack credentials from a Kubernetes secret

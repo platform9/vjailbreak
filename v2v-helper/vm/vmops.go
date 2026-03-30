@@ -12,7 +12,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/vmware/govmomi/object"
@@ -203,19 +203,18 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
 							ipPerMac[networkInterface.MAC] = []IpEntry{}
 						}
-						if !strings.Contains(networkInterface.IPAddress, ":") {
-							ips = append(ips, networkInterface.IPAddress)
+						for _, ipAddress := range networkInterface.IPAddress {
+							if strings.Contains(ipAddress, ":") {
+								continue
+							}
+							ips = append(ips, ipAddress)
 							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
-								IP:     networkInterface.IPAddress,
+								IP:     ipAddress,
 								Prefix: 0,
 							})
 						}
 					}
 				}
-			}
-			if len(ips) == 0 {
-				return VMInfo{}, errors.New(`No IP address found for the VM, if VM is powered off, 
-				please make sure to provide IP address in the vmwaremachine CR`)
 			}
 		}
 	}

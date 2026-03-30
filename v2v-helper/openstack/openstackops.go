@@ -10,7 +10,7 @@ import (
 	"time"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -46,13 +46,14 @@ type OpenstackOperations interface {
 	DeletePort(ctx context.Context, portID string) error
 	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
 	CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
-	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error)
+	CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error)
 	GetServerGroups(ctx context.Context, projectName string) ([]vjailbreakv1alpha1.ServerGroupInfo, error)
 	GetSecurityGroupIDs(ctx context.Context, groupNames []string, projectName string) ([]string, error)
 	DeleteVolume(ctx context.Context, volumeID string) error
 	FindDevice(volumeID string) (string, error)
 	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error)
 	// GetCinderVolumeServices returns Cinder volume services (Host, Status, State)
 	// Returns a slice of structs with these fields - defined in implementation package to avoid import cycles
 	GetCinderVolumeServices(ctx context.Context) (interface{}, error)

@@ -86,10 +86,10 @@ type Disk struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
-	Network   string `json:"network,omitempty" `
-	MAC       string `json:"mac,omitempty"`
-	Index     int    `json:"order,omitempty"`
-	IPAddress string `json:"ipAddress,omitempty"`
+	Network   string   `json:"network,omitempty" `
+	MAC       string   `json:"mac,omitempty"`
+	Index     int      `json:"order,omitempty"`
+	IPAddress []string `json:"ipAddress,omitempty"`
 }
 
 // GuestNetwork represents a network interface as reported by the guest.
@@ -124,6 +124,9 @@ type VMwareMachineStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=`.status.powerState`,name=PowerState,type=string
+// +kubebuilder:printcolumn:name="Migrated",type="boolean",JSONPath=".spec.migrated"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // VMwareMachine is the Schema for the vmwaremachines API that represents a virtual machine
 // in the VMware source environment targeted for migration. It tracks VM configuration,

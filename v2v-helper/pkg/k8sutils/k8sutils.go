@@ -9,34 +9,17 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
+	commonconfig "github.com/platform9/vjailbreak/pkg/common/config"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
+	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func GetInclusterClient() (client.Client, error) {
-	// Create a direct Kubernetes client
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get in-cluster config")
-	}
-	scheme := runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(vjailbreakv1alpha1.AddToScheme(scheme))
-	clientset, err := client.New(config, client.Options{
-		Scheme: scheme,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get in-cluster config")
-	}
-
-	return clientset, err
+	return k8scommon.GetInclusterClient()
 }
 
 func GetVMwareMachine(ctx context.Context, vmName string) (*vjailbreakv1alpha1.VMwareMachine, error) {
@@ -86,6 +69,15 @@ func GetRDMDisk(ctx context.Context, diskName string) (*vjailbreakv1alpha1.RDMDi
 	return rdmDisk, nil
 }
 
+func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+	settings, err := commonconfig.GetVjailbreakSettings(ctx, k8sClient)
+	if err != nil {
+		return nil, err
+	}
+	// Convert from common.VjailbreakSettings to k8sutils.VjailbreakSettings
+	return (*VjailbreakSettings)(settings), nil
+}
+
 // atoi is a helper function to convert string to int with a default value of 0
 func atoi(s string) int {
 	i, err := strconv.Atoi(s)
@@ -95,7 +87,8 @@ func atoi(s string) int {
 	return i
 }
 
-func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
+// GetVjailbreakSettingsOriginal is the original implementation kept for reference
+func GetVjailbreakSettingsOriginal(ctx context.Context, k8sClient client.Client) (*VjailbreakSettings, error) {
 	vjailbreakSettingsCM := &corev1.ConfigMap{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: constants.VjailbreakSettingsConfigMapName, Namespace: constants.NamespaceMigrationSystem}, vjailbreakSettingsCM); err != nil {
 		return nil, errors.Wrap(err, "failed to get vjailbreak settings configmap")
@@ -227,7 +220,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	}
 
 	return &VjailbreakSettings{
-		ChangedBlocksCopyIterationThreshold: atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
+		ChangedBlocksCopyIterationThreshold: commonconfig.Atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
 		VMActiveWaitIntervalSeconds:         atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_INTERVAL_SECONDS"]),
 		VMActiveWaitRetryLimit:              atoi(vjailbreakSettingsCM.Data["VM_ACTIVE_WAIT_RETRY_LIMIT"]),

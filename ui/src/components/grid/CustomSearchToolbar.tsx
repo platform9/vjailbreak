@@ -13,8 +13,10 @@ interface CustomSearchToolbarProps {
   onRefresh?: () => void
   disableRefresh?: boolean
   placeholder?: string
+  maxSearchWidth?: number | string
   onStatusFilterChange?: (filter: string) => void
   currentStatusFilter?: string
+  statusFilterOptions?: string[]
   onDateFilterChange?: (filter: string) => void
   currentDateFilter?: string
 }
@@ -24,8 +26,10 @@ const CustomSearchToolbar = ({
   onRefresh,
   disableRefresh = false,
   placeholder = 'Search',
+  maxSearchWidth = 360,
   onStatusFilterChange,
   currentStatusFilter = 'All',
+  statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'],
   onDateFilterChange,
   currentDateFilter = 'All Time'
 }: CustomSearchToolbarProps) => {
@@ -35,7 +39,6 @@ const CustomSearchToolbar = ({
   const statusMenuOpen = Boolean(statusAnchorEl)
   const dateMenuOpen = Boolean(dateAnchorEl)
 
-  const statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed']
   const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days']
 
   const isDateFilterActive = currentDateFilter !== 'All Time'
@@ -62,13 +65,23 @@ const CustomSearchToolbar = ({
       sx={{
         p: 1,
         display: 'flex',
-        alignItems: 'center',
-        marginLeft: 2,
-        marginRight: 2
+        alignItems: 'center'
       }}
     >
       {title && <Typography variant="h6">{title}</Typography>}
       <Box sx={{ marginLeft: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ maxWidth: maxSearchWidth, width: '100%' }}>
+          <div>
+            <GridToolbarQuickFilter
+              placeholder={placeholder}
+              sx={{
+                '& .MuiInputBase-input': {
+                  textOverflow: 'ellipsis'
+                }
+              }}
+            />
+          </div>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {onRefresh && (
             <Tooltip title="Refresh">
@@ -134,18 +147,6 @@ const CustomSearchToolbar = ({
               </Menu>
             </>
           )}
-        </Box>
-        <Box sx={{ maxWidth: '300px' }}>
-          <div>
-            <GridToolbarQuickFilter
-              placeholder={placeholder}
-              sx={{
-                '& .MuiInputBase-input': {
-                  textOverflow: 'ellipsis'
-                }
-              }}
-            />
-          </div>
         </Box>
       </Box>
     </Box>

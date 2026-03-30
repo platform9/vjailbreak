@@ -17,6 +17,7 @@ export type VDDKUploadTabProps = {
   existingVddkMessage?: string
   onFileSelected: (file: File | null) => void
   onClear: () => void
+  onCancelUpload?: () => void
 }
 
 export default function VDDKUploadTab({
@@ -28,7 +29,8 @@ export default function VDDKUploadTab({
   existingVddkPath,
   existingVddkVersion,
   onFileSelected,
-  onClear
+  onClear,
+  onCancelUpload
 }: VDDKUploadTabProps) {
   const existingFileName = existingVddkPath ? existingVddkPath.split('/').filter(Boolean).pop() : ''
 
@@ -153,6 +155,14 @@ export default function VDDKUploadTab({
                 >
                   {Math.round(progress)}% complete
                 </Typography>
+
+                {onCancelUpload ? (
+                  <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button variant="outlined" size="small" onClick={onCancelUpload}>
+                      Cancel Upload
+                    </Button>
+                  </Box>
+                ) : null}
               </Box>
             ) : null}
 

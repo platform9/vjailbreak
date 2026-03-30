@@ -35,6 +35,8 @@ Options:
                     same mountpoints before writing new ones (safe deduplication).
   --force-uuid      Same as --replace-fstab, but converts all device references to
                     UUID=, LABEL=, or PARTUUID= format for consistent naming.
+                    Also fixes grub configuration (GRUB Legacy, GRUB2, YaST2) to use
+                    UUID-based root device references. Creates backups of all modified files.
   --help            Show this help message and exit.
 
 Examples:
@@ -77,7 +79,111 @@ get_fstab_id() {
   fi
 }
 
+fix_grub_config() {
+  echo "Fixing grub configuration..."
+  
+  # Detect if running in guestfish appliance (mountpoints under /sysroot)
+  if mount | grep -q '/sysroot'; then
+    ROOT_PREFIX="/sysroot"
+  else
+    ROOT_PREFIX=""
+  fi
+  
+  # Build device-to-UUID mapping for all block devices
+  DEVICE_UUID_MAP=$(mktemp)
+  for dev in /dev/vd[a-z]* /dev/sd[a-z]* /dev/hd[a-z]* /dev/xvd[a-z]*; do
+    [ -b "$dev" ] || continue
+    UUID=$(blkid -s UUID -o value "$dev" 2>/dev/null || true)
+    [ -n "$UUID" ] && echo "$dev UUID=$UUID" >> "$DEVICE_UUID_MAP"
+  done
+  
+  # Fix GRUB Legacy (menu.lst or grub.conf)
+  for grub_cfg in "${ROOT_PREFIX}/boot/grub/menu.lst" "${ROOT_PREFIX}/boot/grub/grub.conf"; do
+    if [ -f "$grub_cfg" ]; then
+      echo " -> Fixing GRUB Legacy config: $grub_cfg"
+      cp "$grub_cfg" "$grub_cfg.bak.$(date +%s)"
+      
+      # Replace root=/dev/sdXN and root=/dev/vdXN with UUID
+      while read -r dev uuid; do
+        sed -i "s|root=${dev}|root=${uuid}|g" "$grub_cfg"
+        sed -i "s|resume=${dev}|resume=${uuid}|g" "$grub_cfg"
+      done < "$DEVICE_UUID_MAP"
+      
+      # Update device.map if it exists
+      if [ -f "${ROOT_PREFIX}/boot/grub/device.map" ]; then
+        cp "${ROOT_PREFIX}/boot/grub/device.map" "${ROOT_PREFIX}/boot/grub/device.map.bak.$(date +%s)"
+        sed -i 's|/dev/sda|/dev/vda|g; s|/dev/sdb|/dev/vdb|g; s|/dev/sdc|/dev/vdc|g' "${ROOT_PREFIX}/boot/grub/device.map"
+      fi
+    fi
+  done
+  
+  # Fix GRUB2 /etc/default/grub
+  if [ -f "${ROOT_PREFIX}/etc/default/grub" ]; then
+    echo " -> Fixing /etc/default/grub"
+    cp "${ROOT_PREFIX}/etc/default/grub" "${ROOT_PREFIX}/etc/default/grub.bak.$(date +%s)"
+    
+    while read -r dev uuid; do
+      sed -i "s|root=${dev}|root=${uuid}|g" "${ROOT_PREFIX}/etc/default/grub"
+      sed -i "s|resume=${dev}|resume=${uuid}|g" "${ROOT_PREFIX}/etc/default/grub"
+    done < "$DEVICE_UUID_MAP"
+  fi
+  
+  # Fix SUSE YaST2 bootloader config
+  if [ -f "${ROOT_PREFIX}/etc/sysconfig/bootloader" ]; then
+    echo " -> Fixing SUSE /etc/sysconfig/bootloader"
+    cp "${ROOT_PREFIX}/etc/sysconfig/bootloader" "${ROOT_PREFIX}/etc/sysconfig/bootloader.bak.$(date +%s)"
+    
+    while read -r dev uuid; do
+      sed -i "s|root=${dev}|root=${uuid}|g" "${ROOT_PREFIX}/etc/sysconfig/bootloader"
+      sed -i "s|resume=${dev}|resume=${uuid}|g" "${ROOT_PREFIX}/etc/sysconfig/bootloader"
+    done < "$DEVICE_UUID_MAP"
+  fi
+  
+  # Regenerate GRUB2 config if not in guestfish
+  if [ -z "$ROOT_PREFIX" ]; then
+    if command -v grub2-mkconfig >/dev/null 2>&1; then
+      echo " -> Regenerating GRUB2 config..."
+      
+      # Detect UEFI vs BIOS
+      if [ -d /sys/firmware/efi ]; then
+        # UEFI mode - find the EFI grub config
+        for efi_cfg in /boot/efi/EFI/*/grub.cfg; do
+          [ -f "$efi_cfg" ] && grub2-mkconfig -o "$efi_cfg" 2>/dev/null || true
+        done
+      else
+        # BIOS mode
+        if [ -f /boot/grub2/grub.cfg ]; then
+          grub2-mkconfig -o /boot/grub2/grub.cfg 2>/dev/null || true
+        elif [ -f /boot/grub/grub.cfg ]; then
+          grub2-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+        fi
+      fi
+    elif command -v update-grub >/dev/null 2>&1; then
+      echo " -> Regenerating GRUB config with update-grub..."
+      update-grub 2>/dev/null || true
+    fi
+    
+    # Regenerate SUSE bootloader if YaST2 tools available
+    if [ -f /etc/sysconfig/bootloader ] && command -v pbl >/dev/null 2>&1; then
+      echo " -> Regenerating SUSE bootloader with pbl..."
+      pbl --install 2>/dev/null || true
+    fi
+  fi
+  
+  rm -f "$DEVICE_UUID_MAP"
+  echo " -> Grub configuration fixed. Backups created with .bak.* extension"
+}
+
 # --- 1. Handle mounted filesystems ---
+# Detect if running in guestfish appliance (mountpoints under /sysroot)
+if mount | grep -q '/sysroot'; then
+  IN_GUESTFISH=true
+  FSTAB_PATH="/sysroot/etc/fstab"
+else
+  IN_GUESTFISH=false
+  FSTAB_PATH="/etc/fstab"
+fi
+
 awk '{ src=$1; tgt=$2; fstype=$3;
        gsub(/\\040/, " ", tgt);
        print src "\t" tgt "\t" fstype }' /proc/mounts | \
@@ -92,7 +198,15 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
 
   FSTAB_ID=$(get_fstab_id "$SRC")
 
-  SAFE_NAME="${TGT#/}"
+  # Strip /sysroot prefix if running in guestfish
+  if [ "$IN_GUESTFISH" = "true" ]; then
+    TGT_FSTAB="${TGT#/sysroot}"
+    [ -z "$TGT_FSTAB" ] && TGT_FSTAB="/"
+  else
+    TGT_FSTAB="$TGT"
+  fi
+
+  SAFE_NAME="${TGT_FSTAB#/}"
   [ -z "$SAFE_NAME" ] && SAFE_NAME="root"
   SAFE_NAME=$(echo "$SAFE_NAME" | sed 's/\//_/g; s/ /_/g')
 
@@ -111,8 +225,8 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
   echo "ACTION==\"add\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
   echo "ACTION==\"change\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
 
-  # Try to reuse options from existing /etc/fstab if present
-  OPTIONS=$(awk -v tgt="$TGT" '$2==tgt {print $4}' /etc/fstab | head -n1)
+  # Try to reuse options from existing fstab if present
+  OPTIONS=$(awk -v tgt="$TGT_FSTAB" '$2==tgt {print $4}' "$FSTAB_PATH" 2>/dev/null | head -n1)
 
   if [ -z "$OPTIONS" ]; then
     # Fallback: use /proc/mounts
@@ -121,24 +235,24 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
     # Detect if options are equivalent to defaults
     # defaults generally == rw,suid,dev,exec,auto,nouser,async (varies per FS)
     # We'll use a conservative match: rw,relatime + no special flags
-    case "$OPTIONS" in
-      rw|rw,relatime) OPTIONS="defaults" ;;
-    esac
   fi
-
+  case "$OPTIONS" in
+    rw|rw,relatime) OPTIONS="defaults" ;;
+    on) OPTIONS="defaults" ;;
+  esac
   case "$FST" in
     xfs)
       DUMP_PASS="0 0"
       ;;
     ext*)
-      if [ "$TGT" = "/" ]; then
+      if [ "$TGT_FSTAB" = "/" ]; then
         DUMP_PASS="1 1"
       else
         DUMP_PASS="0 2"
       fi
       ;;
     *)
-      if [ "$TGT" = "/" ]; then
+      if [ "$TGT_FSTAB" = "/" ]; then
         DUMP_PASS="1 1"
       else
         DUMP_PASS="0 2"
@@ -146,7 +260,7 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
       ;;
   esac
 
-  echo "$FSTAB_ID  $TGT  $FST  $OPTIONS  $DUMP_PASS" >> "$FSTAB_LINES_FILE"
+  echo "$FSTAB_ID  $TGT_FSTAB  $FST  $OPTIONS  $DUMP_PASS" >> "$FSTAB_LINES_FILE"
 done
 
 # --- 2. Handle swap devices ---
@@ -167,7 +281,7 @@ if $APPLY; then
   cat "$UDEV_RULES_FILE" > "$RULE_FILE"
   udevadm control --reload-rules && udevadm trigger
 
-  cp /etc/fstab /etc/fstab.bak.$(date +%s)
+  cp "$FSTAB_PATH" "$FSTAB_PATH.bak.$(date +%s)"
 
   if $REPLACE_FSTAB; then
     echo "Replacing existing fstab entries for detected mounts and swap..."
@@ -177,20 +291,27 @@ if $APPLY; then
       skip=false
       while IFS= read -r entry; do
         mp=$(echo "$entry" | awk '{print $2}')
-        echo "$line" | grep -q "$mp[[:space:]]" && { skip=true; break; }
+        # Use exact field match instead of substring grep to avoid /boot matching /sysroot/boot
+        line_mp=$(echo "$line" | awk '{print $2}')
+        [ "$line_mp" = "$mp" ] && { skip=true; break; }
       done < "$FSTAB_LINES_FILE"
       $skip || echo "$line" >> "$tmp_fstab"
-    done < /etc/fstab
+    done < "$FSTAB_PATH"
 
     # Append new entries (already in UUID format from get_fstab_id)
     cat "$FSTAB_LINES_FILE" >> "$tmp_fstab"
 
-    mv "$tmp_fstab" /etc/fstab
+    mv "$tmp_fstab" "$FSTAB_PATH"
   else
-    cat "$FSTAB_LINES_FILE" >> /etc/fstab
+    cat "$FSTAB_LINES_FILE" >> "$FSTAB_PATH"
   fi
 
   echo " -> Done. Backups created in /etc/udev/rules.d and /etc/fstab.bak.*"
+  
+  # Fix grub configuration if --force-uuid was specified
+  if $FORCE_UUID; then
+    fix_grub_config
+  fi
 else
   echo "# === UDEV RULES (save to /etc/udev/rules.d/99-by-mountpoint.rules) ==="
   cat "$UDEV_RULES_FILE"

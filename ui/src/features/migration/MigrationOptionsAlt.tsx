@@ -7,13 +7,15 @@ import {
   MenuItem,
   Select,
   styled,
+  Tooltip,
   Typography
 } from '@mui/material'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import customTypography from '../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
 import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
@@ -21,6 +23,7 @@ import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
 import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
+import { hasSelectedLayer2Network } from 'src/shared/utils/network'
 
 const SectionBlock = styled(Box)(({ theme }) => ({
   display: 'grid',
@@ -61,6 +64,8 @@ const CustomTextField = styled(TextField)(() => ({
     ...customTypography.monospace
   }
 }))
+
+const NEXT_SCRIPT_DELIMITER = '### NEXT SCRIPT ###'
 
 // Interfaces
 export interface MigrationOptionsPropsInterface {
@@ -104,6 +109,68 @@ export default function MigrationOptionsAlt({
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
 
   const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
+
+  const hasWindowsVMSelected = useMemo(() => {
+    if (!params?.vms || params.vms.length === 0) return false
+    return params.vms.some(
+      (vm) =>
+        vm.osFamily &&
+        (vm.osFamily.toLowerCase() === 'windows' || vm.osFamily.toLowerCase() === 'windowsguest')
+    )
+  }, [params?.vms])
+
+  const hasLinuxVMSelected = useMemo(() => {
+    if (!params?.vms || params.vms.length === 0) return false
+    return params.vms.some(
+      (vm) =>
+        vm.osFamily &&
+        (vm.osFamily.toLowerCase() === 'linux' || vm.osFamily.toLowerCase() === 'linuxguest')
+    )
+  }, [params?.vms])
+
+  const postMigrationScriptValue = String(params?.postMigrationScript || '')
+  const hasBashShebang = /(^|\n)\s*#!\/bin\/(ba)?sh/i.test(postMigrationScriptValue)
+  const hasPowerShellSyntax = /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
+    postMigrationScriptValue
+  )
+  const hasLinuxTag = /(^|\n)\s*(\/\/|#)\s*LINUX-SCRIPT:/i.test(postMigrationScriptValue)
+  const hasWindowsTag = /(^|\n)\s*(\/\/|#)\s*WINDOWS-SCRIPT:/i.test(postMigrationScriptValue)
+
+  const postMigrationScriptWarning = useMemo(() => {
+    if (!selectedMigrationOptions.postMigrationScript) return ''
+    if (
+      hasWindowsVMSelected &&
+      hasLinuxVMSelected &&
+      postMigrationScriptValue.trim() !== '' &&
+      !hasLinuxTag &&
+      !hasWindowsTag
+    ) {
+      return 'Mixed OS plan detected. Use // WINDOWS-SCRIPT: or // LINUX-SCRIPT: on the first line of blocks that should run only on that OS.'
+    }
+    if (hasWindowsVMSelected && !hasLinuxVMSelected && hasBashShebang) {
+      return 'Detected bash shebang in a Windows-Script plan. Use PowerShell script blocks for Windows VMs.'
+    }
+    if (!hasWindowsVMSelected && hasLinuxVMSelected && hasPowerShellSyntax) {
+      return 'Detected PowerShell-like syntax in a Linux-Script plan. Use bash script blocks for Linux VMs.'
+    }
+    return ''
+  }, [
+    hasLinuxVMSelected,
+    hasPowerShellSyntax,
+    hasWindowsVMSelected,
+    hasBashShebang,
+    hasLinuxTag,
+    hasWindowsTag,
+    postMigrationScriptValue,
+    selectedMigrationOptions.postMigrationScript
+  ])
+
+  const postMigrationScriptPlaceholder =
+    hasWindowsVMSelected && hasLinuxVMSelected
+      ? `// LINUX-SCRIPT:\n#!/bin/bash\necho "Linux script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Windows script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Windows script 2 fails"\nthrow "Intentional failure"\n${NEXT_SCRIPT_DELIMITER}\n// LINUX-SCRIPT:\necho "Linux script 2 still runs"`
+      : hasWindowsVMSelected
+        ? `// WINDOWS-SCRIPT:\nWrite-Host "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Script 2"\nthrow "Intentional failure"\n${NEXT_SCRIPT_DELIMITER}\nWrite-Host "Script 3 runs even if script 2 fails"`
+        : `#!/bin/bash\necho "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 2 will fail"\nfalse\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 3 runs even if script 2 fails"`
 
   // Iniitialize fields
   useEffect(() => {
@@ -183,6 +250,10 @@ export default function MigrationOptionsAlt({
   }, [params, selectedMigrationOptions])
 
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
+  const hasL2Network = hasSelectedLayer2Network(
+    params.networkMappings,
+    openstackCredentials?.status?.openstack?.networks
+  )
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -211,7 +282,12 @@ export default function MigrationOptionsAlt({
                       <Checkbox
                         checked={selectedMigrationOptions.dataCopyMethod}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('dataCopyMethod')(e.target.checked)
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyMethod')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyMethod')('cold')
+                            onChange('acknowledgeNetworkConflictRisk')(false)
+                          }
                         }}
                       />
                     }
@@ -282,7 +358,12 @@ export default function MigrationOptionsAlt({
                       <Checkbox
                         checked={selectedMigrationOptions?.dataCopyStartTime}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('dataCopyStartTime')(e.target.checked)
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('dataCopyStartTime')(isChecked)
+                          if (!isChecked) {
+                            onChange('dataCopyStartTime')('')
+                            setValue('dataCopyStartTime', '')
+                          }
                         }}
                       />
                     }
@@ -330,9 +411,18 @@ export default function MigrationOptionsAlt({
                         checked={selectedMigrationOptions.cutoverOption}
                         disabled={isPowerOffThenCopy}
                         onChange={(e) => {
-                          updateSelectedMigrationOptions('cutoverOption')(e.target.checked)
-                          updateSelectedMigrationOptions('periodicSyncEnabled')(false)
-                          onChange('periodicSyncInterval')('')
+                          const isChecked = e.target.checked
+                          updateSelectedMigrationOptions('cutoverOption')(isChecked)
+                          if (!isChecked) {
+                            onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
+                            onChange('cutoverStartTime')('')
+                            onChange('cutoverEndTime')('')
+                            setValue('cutoverStartTime', '')
+                            setValue('cutoverEndTime', '')
+                            updateSelectedMigrationOptions('periodicSyncEnabled')(false)
+                            onChange('periodicSyncInterval')('')
+                            setValue('periodicSyncInterval', '')
+                          }
                         }}
                       />
                     }
@@ -397,12 +487,16 @@ export default function MigrationOptionsAlt({
                             <Checkbox
                               checked={selectedMigrationOptions.periodicSyncEnabled}
                               onChange={(e) => {
-                                onChange('periodicSyncInterval')(
-                                  globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
-                                )
-                                updateSelectedMigrationOptions('periodicSyncEnabled')(
-                                  e.target.checked
-                                )
+                                const isChecked = e.target.checked
+                                updateSelectedMigrationOptions('periodicSyncEnabled')(isChecked)
+                                if (isChecked) {
+                                  onChange('periodicSyncInterval')(
+                                    globalConfigMap?.data.PERIODIC_SYNC_INTERVAL
+                                  )
+                                } else {
+                                  onChange('periodicSyncInterval')('')
+                                  setValue('periodicSyncInterval', '')
+                                }
                               }}
                             />
                           }
@@ -459,9 +553,7 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         renameVm: isChecked,
-                        suffix: isChecked
-                          ? true
-                          : selectedMigrationOptions.postMigrationAction?.suffix
+                        suffix: isChecked ? true : false
                       })
                       onChange('postMigrationAction')({
                         ...params.postMigrationAction,
@@ -504,9 +596,7 @@ export default function MigrationOptionsAlt({
                       updateSelectedMigrationOptions('postMigrationAction')({
                         ...selectedMigrationOptions.postMigrationAction,
                         moveToFolder: isChecked,
-                        folderName: isChecked
-                          ? true
-                          : selectedMigrationOptions.postMigrationAction?.folderName
+                        folderName: isChecked ? true : false
                       })
                       onChange('postMigrationAction')({
                         ...params.postMigrationAction,
@@ -541,6 +631,12 @@ export default function MigrationOptionsAlt({
           </SectionHeaderRow>
           <Divider />
 
+          {hasL2Network && (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Fallback to DHCP is not available when using Layer 2 Networks.
+            </Alert>
+          )}
+
           <OptionRow>
             <OptionLeft>
               <FormControlLabel
@@ -568,6 +664,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
+                    disabled={hasL2Network}
                     onChange={(e) => {
                       onChange('fallbackToDHCP')(e.target.checked)
                     }}
@@ -669,29 +766,117 @@ export default function MigrationOptionsAlt({
           <OptionRow>
             <OptionLeft>
               <FormControlLabel
+                label="Remove VMware Tools"
+                control={
+                  <Checkbox
+                    checked={params?.removeVMwareTools || false}
+                    disabled={!hasWindowsVMSelected}
+                    onChange={(e) => {
+                      onChange('removeVMwareTools')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Remove VMware Tools from the Windows VM post-migration
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
                 label="Enable script"
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
                     onChange={(e) => {
-                      updateSelectedMigrationOptions('postMigrationScript')(e.target.checked)
+                      const isChecked = e.target.checked
+                      updateSelectedMigrationOptions('postMigrationScript')(isChecked)
+                      if (!isChecked) {
+                        onChange('postMigrationScript')('')
+                      }
                     }}
                   />
                 }
               />
-              <OptionHelp variant="caption">Provide a script to run after migration.</OptionHelp>
+              <OptionHelp variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <span>Supports PowerShell for Windows and Bash for Linux.</span>
+                <Tooltip
+                  arrow
+                  placement="top"
+                  slotProps={{
+                    tooltip: {
+                      sx: {
+                        maxWidth: 500,
+                        bgcolor: 'background.paper',
+                        color: 'text.primary',
+                        boxShadow: 3,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        p: 1.5
+                      }
+                    },
+                    arrow: {
+                      sx: {
+                        color: 'background.paper',
+                        '&::before': {
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }
+                      }
+                    }
+                  }}
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Post-Migration Script Guide
+                      </Typography>
+                      
+                      <Box sx={{ 
+                        bgcolor: 'action.hover', 
+                        p: 1, 
+                        borderRadius: 1, 
+                        fontFamily: 'monospace',
+                        mb: 1.5,
+                        border: '1px solid',
+                        borderColor: 'divider'
+                      }}>
+                        <Typography variant="caption" component="div">
+                          <Box component="span" sx={{ color: 'primary.main' }}>// WINDOWS-SCRIPT:</Box><br />
+                          Write-Host "Hello Windows"<br />
+                          <Box component="span" sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}>{NEXT_SCRIPT_DELIMITER}</Box>
+                          <Box component="span" sx={{ color: 'success.main' }}>// LINUX-SCRIPT:</Box><br />
+                          echo "Hello Linux"
+                        </Typography>
+                      </Box>
+
+                      <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
+                      <Typography variant="caption" component="div">
+                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.<br />
+                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" for respective OS execution.<br />
+                        • Untagged blocks will execute on all selected VMs irrespective of OS.
+                      </Typography>
+                    </Box>
+                  }
+                >
+                  <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', ml: 0.5 }} />
+                </Tooltip>
+              </OptionHelp>
             </OptionLeft>
             <CustomTextField
               // label="Script"
               size="small"
               multiline
               rows={4}
-              value={params?.postMigrationScript || ''}
+              value={postMigrationScriptValue}
               onChange={(e) => onChange('postMigrationScript')(String(e.target.value))}
               disabled={!selectedMigrationOptions.postMigrationScript}
               error={!!errors['postMigrationScript']}
               required={selectedMigrationOptions.postMigrationScript}
-              placeholder="Enter your post-migration script here..."
+              placeholder={postMigrationScriptPlaceholder}
+              helperText={postMigrationScriptWarning}
             />
           </OptionRow>
         </SectionBlock>

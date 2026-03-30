@@ -209,9 +209,13 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	// - Pure: volume-<cinder-id>-cinder
 	// - NetApp: /vol/<volume_path>/volume-<cinder-id> (includes the full LUN path)
 	// We use wildcard search with volume-<cinder-id> prefix which matches both patterns
-	cinderVolumeName := fmt.Sprintf("volume-%s", cinderVolumeId)
-	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to pattern: *%s*", cinderVolumeName))
-
+	// Use ResolveCinderVolumeToLUN to get the actual renamed volume from the storage array
+	resolvedVol, err := migobj.StorageProvider.ResolveCinderVolumeToLUN(cinderVolumeId)
+	if err != nil {
+		return storage.Volume{}, errors.Wrapf(err, "failed to resolve Cinder volume %s on storage array", cinderVolumeId)
+	}
+	cinderVolumeName := resolvedVol.Name
+	migobj.logMessage(fmt.Sprintf("Volume renamed by Cinder to: %s", cinderVolumeName))
 	// Step 6: Map target volume to ESXi host using the NEW Cinder volume name
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
 	targetVol := storage.Volume{

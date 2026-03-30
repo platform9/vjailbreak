@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 const LEGACY_TAB_MAPPING = {
   migrations: '/dashboard/migrations',
   agents: '/dashboard/agents',
-  credentials: '/dashboard/credentials',
+  credentials: '/dashboard/credentials/vm',
   clusterconversions: '/dashboard/cluster-conversions',
   clustermigrations: '/dashboard/cluster-conversions',
   maasconfig: '/dashboard/baremetal-config'
