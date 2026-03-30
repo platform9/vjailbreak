@@ -293,8 +293,7 @@ export default function NetworkAndStorageMappingStep({
       prevCredNameRef.current = credName
     }
 
-    const secretName = `${credName}-openstack-secret`
-    const secretNamespace = openstackCredentials.metadata.namespace
+    const credsNamespace = openstackCredentials.metadata.namespace
 
     // Clear any pending debounced run
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -321,7 +320,8 @@ export default function NetworkAndStorageMappingStep({
               (await checkNetworkSubnetCompatibility({
                 ips,
                 network_name: mapping.target,
-                access_info: { secret_name: secretName, secret_namespace: secretNamespace }
+                creds_name: credName,
+                creds_namespace: credsNamespace
               }))
 
             if (!cached) apiCacheRef.current.set(cacheKey, result)

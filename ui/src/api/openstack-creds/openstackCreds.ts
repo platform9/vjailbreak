@@ -121,10 +121,8 @@ export interface SubnetCompatibilityResult {
 export interface CheckNetworkSubnetCompatibilityRequest {
   ips: string[]
   network_name: string
-  access_info: {
-    secret_name: string
-    secret_namespace: string
-  }
+  creds_name: string
+  creds_namespace: string
 }
 
 export interface CheckNetworkSubnetCompatibilityResponse {

@@ -773,17 +773,12 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, nil
 }
 
-// subnetCheckAccessInfo holds the OpenStack secret reference for the subnet check request
-type subnetCheckAccessInfo struct {
-	SecretName      string `json:"secret_name"`
-	SecretNamespace string `json:"secret_namespace"`
-}
-
 // checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility
 type checkNetworkSubnetCompatibilityRequest struct {
-	Ips         []string               `json:"ips"`
-	NetworkName string                 `json:"network_name"`
-	AccessInfo  *subnetCheckAccessInfo `json:"access_info"`
+	Ips            []string `json:"ips"`
+	NetworkName    string   `json:"network_name"`
+	CredsName      string   `json:"creds_name"`
+	CredsNamespace string   `json:"creds_namespace"`
 }
 
 // subnetCompatibilityResult holds the result for a single IP
@@ -823,8 +818,8 @@ func HandleCheckNetworkSubnetCompatibility(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "network_name is required", http.StatusBadRequest)
 		return
 	}
-	if req.AccessInfo == nil {
-		http.Error(w, "access_info is required", http.StatusBadRequest)
+	if req.CredsName == "" {
+		http.Error(w, "creds_name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -832,11 +827,12 @@ func HandleCheckNetworkSubnetCompatibility(w http.ResponseWriter, r *http.Reques
 		"func":         fn,
 		"network_name": req.NetworkName,
 		"ip_count":     len(req.Ips),
+		"creds_name":   req.CredsName,
 	}).Info("Checking network subnet compatibility")
 
 	accessInfo := &api.OpenstackAccessInfo{
-		SecretName:      req.AccessInfo.SecretName,
-		SecretNamespace: req.AccessInfo.SecretNamespace,
+		SecretName:      req.CredsName + "-openstack-secret",
+		SecretNamespace: req.CredsNamespace,
 	}
 	openstackClients, err := GetOpenStackClients(r.Context(), accessInfo)
 	if err != nil {
