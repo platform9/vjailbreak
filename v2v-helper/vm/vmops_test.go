@@ -126,7 +126,7 @@ func TestGetVMInfo(t *testing.T) {
 		OSType: "linux",
 	}
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	vminfo, err := vmops.GetVMInfo("linux", []string{""})
 	assert.NoError(t, err)
@@ -140,7 +140,7 @@ func TestEnableCBT(t *testing.T) {
 
 	vmName := "DC0_H0_VM0"
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	err = vmops.EnableCBT()
 	assert.NoError(t, err)
@@ -153,7 +153,7 @@ func TestIsCBTEnabled(t *testing.T) {
 
 	vmName := "DC0_H0_VM0"
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	_ = vmops.EnableCBT()
 	enabled, err := vmops.IsCBTEnabled()
@@ -168,7 +168,7 @@ func TestTakeSnapshot(t *testing.T) {
 
 	vmName := "DC0_H0_VM0"
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	snapshotName := "snapshot-1"
 	err = vmops.TakeSnapshot(snapshotName)
@@ -182,7 +182,7 @@ func TestDeleteSnapshot(t *testing.T) {
 
 	vmName := "DC0_H0_VM0"
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	snapshotName := "snapshot-1"
 	_ = vmops.TakeSnapshot(snapshotName)
@@ -197,7 +197,7 @@ func TestGetSnapshot(t *testing.T) {
 
 	vmName := "DC0_H0_VM0"
 	// TODO: Add client  to VMOpsBuilder
-	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, nil)
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
 
 	snapshotName := "snapshot-1"
 	_ = vmops.TakeSnapshot(snapshotName)

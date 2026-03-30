@@ -166,6 +166,15 @@ func (vcclient *VCenterClient) GetVMByName(ctx context.Context, name string) (*o
 	return vm, err
 }
 
+// GetVMByMOID returns a VM object using its vCenter Managed Object ID (e.g. "vm-31090")
+func (vcclient *VCenterClient) GetVMByMOID(moid string) *object.VirtualMachine {
+	ref := types.ManagedObjectReference{
+		Type:  "VirtualMachine",
+		Value: moid,
+	}
+	return object.NewVirtualMachine(vcclient.VCClient, ref)
+}
+
 // GetVMWithDatacenter finds a VM by name and returns both the VM and its parent datacenter.
 func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name string) (*object.VirtualMachine, *object.Datacenter, error) {
 	datacenters, err := vcclient.getDatacenters(ctx)

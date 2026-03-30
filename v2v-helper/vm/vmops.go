@@ -109,15 +109,21 @@ type VMOps struct {
 	VMObj     *object.VirtualMachine
 	ctx       context.Context
 	k8sClient k8sclient.Client
+	vmid      string
 }
 
-func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name string, k8sClient k8sclient.Client) (*VMOps, error) {
-	vm, err := vcclient.GetVMByName(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VM: %s", err)
+func VMOpsBuilder(ctx context.Context, vcclient vcenter.VCenterClient, name, vmid string, k8sClient k8sclient.Client) (*VMOps, error) {
+	var vm *object.VirtualMachine
+	if vmid != "" {
+		vm = vcclient.GetVMByMOID(vmid)
+	} else {
+		var err error
+		vm, err = vcclient.GetVMByName(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get VM: %s", err)
+		}
 	}
-	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx, k8sClient: k8sClient}, nil
-
+	return &VMOps{vcclient: &vcclient, VMObj: vm, ctx: ctx, k8sClient: k8sClient, vmid: vmid}, nil
 }
 func (vmops *VMOps) GetVmPowerState() (types.VirtualMachinePowerState, error) {
 	return vmops.VMObj.PowerState(vmops.ctx)
@@ -131,6 +137,10 @@ func (vmops *VMOps) GetVCenterClient() *vcenter.VCenterClient {
 }
 
 func (vmops *VMOps) RefreshVM() error {
+	if vmops.vmid != "" {
+		vmops.VMObj = vmops.vcclient.GetVMByMOID(vmops.vmid)
+		return nil
+	}
 	vmobj, err := vmops.vcclient.GetVMByName(vmops.ctx, vmops.VMObj.Name())
 	if err != nil {
 		return fmt.Errorf("failed to refresh VM reference: %s", err)

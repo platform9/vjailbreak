@@ -808,7 +808,7 @@ function VmsSelectionStep({
 
   useEffect(() => {
     // Create a map of existing VM data (including assigned IPs) for quick lookup
-    const existingVmsMap = new Map(vmsWithFlavor.map((vm) => [vm.name, vm]))
+    const existingVmsMap = new Map(vmsWithFlavor.map((vm) => [vm.id, vm]))
 
     const initialVmsWithFlavor = vmList.map((vm) => {
       let flavor = ''
@@ -831,7 +831,7 @@ function VmsSelectionStep({
 
       // FIX: Use existing IP data from vmsWithFlavor if the VM exists,
       // otherwise, use the fresh data from vmList.
-      const existingVm = existingVmsMap.get(vm.name)
+      const existingVm = existingVmsMap.get(vm.id)
 
       let allIPs = vm.networkInterfaces
         ? vm.networkInterfaces

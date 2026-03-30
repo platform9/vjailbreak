@@ -1377,7 +1377,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, vm, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
+	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
 
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
@@ -1469,12 +1469,13 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
-	vm, virtiodrivers string,
+	virtiodrivers string,
 	openstacknws, openstackports, openstackvolumetypes []string,
 	currentInstanceID string,
 ) map[string]string {
 	return map[string]string{
-		"SOURCE_VM_NAME":                    vm,
+		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
+		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
 		"CONVERT":                           "true",
 		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
 		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
@@ -1647,20 +1648,27 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vm string,
 ) (openstacknws, openstackvolumetypes []string, err error) {
-	// Get datacenter from VM's cluster annotation
-	datacenter, err := r.getDatacenterForVM(ctx, vm, vmwcreds, migrationtemplate)
+	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get datacenter for VM")
+		return nil, nil, errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
 	}
+	if vmMachine.Annotations == nil {
+		return nil, nil, fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
+	}
+	datacenter, exists := vmMachine.Annotations[constants.VMwareDatacenterLabel]
+	if !exists || datacenter == "" {
+		return nil, nil, fmt.Errorf("VMwareMachine %s has no datacenter annotation", vmMachine.Name)
+	}
+	vcenterVMName := vmMachine.Spec.VMInfo.Name
 
-	openstacknws, err = r.reconcileNetwork(ctx, migrationtemplate, openstackcreds, vmwcreds, vm, datacenter)
+	openstacknws, err = r.reconcileNetwork(ctx, migrationtemplate, openstackcreds, vmwcreds, vcenterVMName, datacenter)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to reconcile network")
 	}
 	// Skip storage mapping reconciliation for StorageCopyMethod storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
 	if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
-		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vm, datacenter)
+		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, vmwcreds, openstackcreds, vcenterVMName, datacenter)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
 		}
@@ -1814,6 +1822,16 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 	}
 
+	vmKeyForMachine := make(map[string]string)
+	for _, group := range migrationplan.Spec.VirtualMachines {
+		for _, planVMKey := range group {
+			k8sName, k8sErr := utils.GetK8sCompatibleVMWareObjectName(planVMKey, vmwcreds.Name)
+			if k8sErr == nil {
+				vmKeyForMachine[k8sName] = planVMKey
+			}
+		}
+	}
+
 	nodeList := &corev1.NodeList{}
 	err := r.List(ctx, nodeList)
 	if err != nil {
@@ -1824,7 +1842,10 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if vmMachineObj == nil {
 			return errors.Wrapf(err, "VM not found in VMwareMachine")
 		}
-		vm := vmMachineObj.Spec.VMInfo.Name
+		vm, ok := vmKeyForMachine[vmMachineObj.Name]
+		if !ok {
+			vm = vmMachineObj.Spec.VMInfo.Name
+		}
 
 		if migrationtemplate.Spec.UseFlavorless && !hotplugFlavorMissing {
 			if vmMachineObj.Spec.TargetFlavorID != baseFlavor.ID {
@@ -2291,25 +2312,6 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	}
 
 	return validVMs, skippedVMs, nil
-}
-
-// getDatacenterForVM retrieves the datacenter for a given VM from its VMwareMachine annotation
-func (r *MigrationPlanReconciler) getDatacenterForVM(ctx context.Context, vm string, vmwcreds *vjailbreakv1alpha1.VMwareCreds, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) (string, error) {
-	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
-	}
-
-	if vmMachine.Annotations == nil {
-		return "", fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
-	}
-
-	datacenter, exists := vmMachine.Annotations[constants.VMwareDatacenterLabel]
-	if !exists || datacenter == "" {
-		return "", fmt.Errorf("VMwareMachine %s has no datacenter annotation", vmMachine.Name)
-	}
-
-	return datacenter, nil
 }
 
 // updateMigrationPhaseWithRetry updates a Migration's phase and condition with retry logic
