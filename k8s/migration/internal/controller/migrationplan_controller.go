@@ -249,9 +249,21 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		"folderName", migrationplan.Spec.PostMigrationAction.FolderName)
 
 	// Get required resources
-	_, vmwcreds, secret, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
+	migrationtemplate, vmwcreds, secret, err := r.getMigrationTemplateAndCreds(ctx, migrationplan)
 	if err != nil {
 		return errors.Wrap(err, "failed to get migration resources")
+	}
+
+	// Resolve actual vCenter VM name. For duplicate VM names the plan stores a
+	// "name-vmid" composite key, but vCenter only knows the original "name".
+	// Look up the VMwareMachine and use its VMInfo.Name as the authoritative vCenter name.
+	vcenterVMName := vm
+	vmMachine, vmMachineErr := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+	if vmMachineErr == nil && vmMachine.Spec.VMInfo.Name != "" {
+		vcenterVMName = vmMachine.Spec.VMInfo.Name
+		ctxlog.Info("Resolved actual vCenter VM name for post-migration", "vmKey", vm, "vcenterName", vcenterVMName)
+	} else if vmMachineErr != nil {
+		ctxlog.Info("Could not resolve VMwareMachine for post-migration, using vm key as name", "vm", vm, "error", vmMachineErr)
 	}
 
 	// Extract and validate credentials
@@ -276,14 +288,14 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}()
 
 	if migrationplan.Spec.PostMigrationAction.RenameVM != nil && *migrationplan.Spec.PostMigrationAction.RenameVM {
-		if err := r.renameVM(ctx, vcClient, migrationplan, vm); err != nil {
+		if err := r.renameVM(ctx, vcClient, migrationplan, vcenterVMName); err != nil {
 			return errors.Wrap(err, "failed to rename VM")
 		}
-		vm += migrationplan.Spec.PostMigrationAction.Suffix
+		vcenterVMName += migrationplan.Spec.PostMigrationAction.Suffix
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vm); err != nil {
+		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vcenterVMName); err != nil {
 			return errors.Wrap(err, "failed to move VM to folder")
 		}
 	}
@@ -453,8 +465,10 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
 	}
 
-	// Verify VM name matches
-	if vmMachine.Spec.VMInfo.Name != vm {
+	// Verify VM name matches. For duplicate VM names the plan stores "name-vmid",
+	// so accept both the plain name and the name-vmid composite.
+	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + vmMachine.Spec.VMInfo.VMID
+	if vmMachine.Spec.VMInfo.Name != vm && vmidSuffixed != vm {
 		return nil, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
 	}
 	return vmMachine, nil
@@ -1119,7 +1133,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 						ServiceAccountName:            "migration-controller-manager",
 						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 						HostNetwork:                   true,
-						DNSPolicy: corev1.DNSClusterFirstWithHostNet,
+						DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 						DNSConfig: &corev1.PodDNSConfig{
 							Options: []corev1.PodDNSConfigOption{
 								{

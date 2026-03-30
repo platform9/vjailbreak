@@ -64,14 +64,25 @@ export const mapToVmDataWithRdm = (
   machines: VMwareMachine[],
   rdmDisksMap: Map<string, RdmDisk>
 ): VmData[] => {
+  const nameCounts: Record<string, number> = {}
+  machines.forEach((m) => {
+    nameCounts[m.spec.vms.name] = (nameCounts[m.spec.vms.name] || 0) + 1
+  })
   return machines.map((machine) => {
     const hasSharedRdm = hasSharedRdmDisks(machine)
     const rdmDisks = machine.spec.vms.rdmDisks || []
     const rdmDependencies = getRdmDependencies(machine, rdmDisksMap)
+    const isDuplicate = nameCounts[machine.spec.vms.name] > 1
+    const vmKey =
+      isDuplicate && machine.spec.vms.vmid
+        ? `${machine.spec.vms.name}-${machine.spec.vms.vmid}`
+        : machine.spec.vms.name
 
     return {
-      id: machine.spec.vms.name,
+      id: machine.spec.vms.vmid || machine.spec.vms.name,
       name: machine.spec.vms.name,
+      vmid: machine.spec.vms.vmid,
+      vmKey,
       vmState: machine.status.powerState === 'running' ? 'running' : 'stopped',
       ipAddress: machine.spec.vms.ipAddress,
       networks: machine.spec.vms.networks || [],
