@@ -10,12 +10,14 @@ import {
   Alert,
   Chip
 } from '@mui/material'
-import { useEffect, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react'
 import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
-import { PCDNetworkInfo } from 'src/api/openstack-creds/model'
+import { PCDNetworkInfo, OpenstackCreds } from 'src/api/openstack-creds/model'
+import { checkNetworkSubnetCompatibility, CheckNetworkSubnetCompatibilityResponse } from 'src/api/openstack-creds/openstackCreds'
+import { VmData } from 'src/features/migration/api/migration-templates/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -57,6 +59,8 @@ interface NetworkAndStorageMappingStepProps {
   stepNumber?: string
   loading?: boolean
   showHeader?: boolean
+  selectedVMs?: VmData[]
+  openstackCredentials?: OpenstackCreds
 }
 
 export default function NetworkAndStorageMappingStep({
@@ -70,11 +74,28 @@ export default function NetworkAndStorageMappingStep({
   storageMappingError,
   stepNumber = '3',
   loading = false,
-  showHeader = true
+  showHeader = true,
+  selectedVMs = [],
+  openstackCredentials
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
+  // subnet compatibility warnings keyed by source VMware network name
+  const [subnetWarnings, setSubnetWarnings] = useState<Record<string, string>>({})
+
   const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
+
+  // Track previous mappings key to avoid redundant API calls
+  const prevMappingsRef = useRef<string>('')
+
+  // Debounce timer for subnet compatibility checks
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cache API results by key to avoid redundant calls
+  const apiCacheRef = useRef<Map<string, CheckNetworkSubnetCompatibilityResponse>>(new Map())
+
+  // Track last credential name to invalidate cache on credential change
+  const prevCredNameRef = useRef<string | undefined>(undefined)
 
   // Fetch validated array credentials for StorageAcceleratedCopy
   const { data: arrayCredentials, isLoading: arrayCredsLoading } = useArrayCredentialsQuery(
@@ -223,6 +244,111 @@ export default function NetworkAndStorageMappingStep({
     [onChange, params.arrayCredsMappings]
   )
 
+  // deduped IPs map once per selectedVMs change
+  const networkIPsMap = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const vm of selectedVMs) {
+      for (const network of vm.networks || []) {
+        const ips = map.get(network) ?? []
+
+        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+          const matchingNics = vm.networkInterfaces.filter((nic) => nic.network === network)
+          const nicsToUse = matchingNics.length > 0 ? matchingNics : vm.networkInterfaces
+          for (const nic of nicsToUse) {
+            if (nic.preserveIP !== false && Array.isArray(nic.ipAddress)) {
+              ips.push(...nic.ipAddress.filter((ip) => ip && ip.trim() !== ''))
+            }
+          }
+        }
+
+        if (vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
+          ips.push(...vm.ipAddress.split(',').map((ip) => ip.trim()).filter(Boolean))
+        }
+
+        if (ips.length > 0) map.set(network, ips)
+      }
+    }
+    for (const [network, ips] of map) {
+      map.set(network, [...new Set(ips)])
+    }
+    return map
+  }, [selectedVMs])
+
+  // Run subnet compatibility check whenever network mappings or VM IPs change
+  useEffect(() => {
+    const completeMappings = (params.networkMappings || []).filter((m) => m.source && m.target)
+
+    const mappingsKey = completeMappings.map((m) => `${m.source}|${m.target}`).join(',')
+    if (mappingsKey === prevMappingsRef.current) return
+    prevMappingsRef.current = mappingsKey
+
+    if (!openstackCredentials || completeMappings.length === 0 || selectedVMs.length === 0) {
+      setSubnetWarnings({})
+      return
+    }
+
+    const credName = openstackCredentials.metadata.name
+    if (credName !== prevCredNameRef.current) {
+      apiCacheRef.current.clear()
+      prevCredNameRef.current = credName
+    }
+
+    const credsNamespace = openstackCredentials.metadata.namespace
+
+    // Clear any pending debounced run
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+
+    debounceTimerRef.current = setTimeout(async () => {
+      const nextWarnings: Record<string, string> = {}
+
+      await Promise.all(
+        completeMappings.map(async (mapping) => {
+          const ips = networkIPsMap.get(mapping.source) ?? []
+          if (ips.length === 0) return
+
+          const isL2Network = openstackNetworks.some(
+            (n) => n.name === mapping.target && Array.isArray(n.tags) && n.tags.includes('simple_network')
+          )
+          if (isL2Network) return
+
+          const cacheKey = `${mapping.target}|${[...ips].sort().join(',')}`
+          const cached = apiCacheRef.current.get(cacheKey)
+
+          try {
+            const result =
+              cached ??
+              (await checkNetworkSubnetCompatibility({
+                ips,
+                network_name: mapping.target,
+                creds_name: credName,
+                creds_namespace: credsNamespace
+              }))
+
+            if (!cached) apiCacheRef.current.set(cacheKey, result)
+
+            if (!result.all_compatible) {
+              const incompatibleIPs = result.results
+                .filter((r) => !r.is_compatible)
+                .map((r) => r.ip)
+              const cidrList =
+                result.subnet_cidrs?.length > 0 ? ` (${result.subnet_cidrs.join(', ')})` : ''
+              nextWarnings[mapping.source] =
+                `${incompatibleIPs.length} VM IP address(es) [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
+                `Ensure fallback to DHCP is enabled, otherwise it may lead to migration failures`
+            }
+          } catch {
+          }
+        })
+      )
+
+      setSubnetWarnings(nextWarnings)
+    }, 350)
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [params.networkMappings, openstackCredentials, selectedVMs, networkIPsMap, openstackNetworks])
+
   // Calculate unmapped networks and storage
   const unmappedNetworks = useMemo(
     () =>
@@ -291,6 +417,11 @@ export default function NetworkAndStorageMappingStep({
                 oneToManyMapping
                 fieldPrefix="networkMapping"
               />
+              {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
+                <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
+                  <strong>{sourceNetwork}:</strong> {warning}
+                </Alert>
+              ))}
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
             <FormControl error={!!storageMappingError}>

@@ -3567,6 +3567,8 @@ export default function RollingMigrationFormDrawer({
                       storageMappingError={storageMappingError}
                       loading={loadingOpenstackDetails}
                       showHeader={false}
+                      selectedVMs={vmsWithAssignments as any}
+                      openstackCredentials={openstackCredData || undefined}
                     />
                   ) : (
                     <Typography variant="body2" color="text.secondary">
