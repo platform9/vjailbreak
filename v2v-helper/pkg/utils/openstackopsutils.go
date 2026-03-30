@@ -700,7 +700,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -751,15 +751,44 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	// Set up boot block device with BootIndex 0
-	bootBlockDevice := servers.BlockDevice{
-		DeleteOnTermination: false,
-		DestinationType:     servers.DestinationVolume,
-		SourceType:          servers.SourceVolume,
-		UUID:                uuid,
-		BootIndex:           0,
+	// Set up block devices for VM creation
+	var blockDevices []servers.BlockDevice
+
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootableDiskIndex {
+		// UEFI multi-disk layout: ESP on separate disk
+		// Attach ESP disk with BootIndex=0 (UEFI firmware needs this first)
+		espBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.VMDisks[espDiskIndex].OpenstackVol.ID,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, espBlockDevice)
+
+		// Attach root/boot disk with BootIndex=1
+		rootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           1,
+		}
+		blockDevices = append(blockDevices, rootBlockDevice)
+		PrintLog(fmt.Sprintf("UEFI multi-disk layout: ESP (Disk %d) + Root (Disk %d) attached at create time", espDiskIndex, bootableDiskIndex))
+	} else {
+		// Standard layout: single boot disk or ESP on same disk as root
+		bootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, bootBlockDevice)
 	}
-	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
+
+	serverCreateOpts.BlockDevice = blockDevices
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -817,7 +846,17 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 
 	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
-	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
+	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
+	for idx, disk := range vminfo.VMDisks {
+		// Skip boot disk
+		if idx == bootableDiskIndex {
+			continue
+		}
+		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
+		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
+			continue
+		}
+
 		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
@@ -826,6 +865,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
 		}
 	}
+
 	return server, nil
 }
 
