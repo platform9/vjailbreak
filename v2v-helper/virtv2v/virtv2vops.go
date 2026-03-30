@@ -830,23 +830,33 @@ func extractKeyValue(content, key string) string {
 }
 
 func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
-	// Attempt /etc/os-release first
-	osRelease, err := RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/os-release")
-	if err == nil {
-		return osRelease, nil
-	}
-	log.Printf("Failed to get /etc/os-release: %v", err)
-	// Fallback if file is missing
-	if strings.Contains(err.Error(), "No such file or directory") {
-		fallbackOutput, fallbackErr := RunCommandInGuestAllVolumes(disks, "cat", false, "/etc/redhat-release")
-		if fallbackErr != nil {
-			return "", fmt.Errorf("failed to get OS release: primary (/etc/os-release): %v, fallback (/etc/redhat-release): %v", err, fallbackErr)
-		}
-		return fallbackOutput, nil
+	// Try multiple OS release files in order of preference
+	releaseFiles := []string{
+		"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
+		"/etc/redhat-release", // RHEL/CentOS legacy
+		"/etc/SuSE-release",   // SUSE 11 and older
 	}
 
-	// Return original error if not a missing file issue
-	return "", err
+	var errors []string
+	for _, file := range releaseFiles {
+		output, err := RunCommandInGuestAllVolumes(disks, "cat", false, file)
+		if err == nil {
+			log.Printf("Successfully read OS release from %s", file)
+			return output, nil
+		}
+
+		// Log the failure and continue to next file
+		log.Printf("Failed to get %s: %v", file, err)
+		errors = append(errors, fmt.Sprintf("%s: %v", file, err))
+
+		// If it's not a "file not found" error, stop trying
+		if !strings.Contains(err.Error(), "No such file or directory") {
+			break
+		}
+	}
+
+	// All attempts failed
+	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(errors, "; "))
 }
 
 // GetWindowsVersion detects the Windows version using guestfish inspect commands
