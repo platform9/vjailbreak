@@ -199,19 +199,8 @@ func (r *Reporter) UpdatePodEvents(ctx context.Context, ch <-chan string, ackCha
 				if err := r.UpdateProgress(msg); err != nil {
 					utils.PrintLog(err.Error())
 				}
-				// Skip creating events for progress updates and most periodic sync messages
-				// But allow periodic sync warning messages and success messages through
-				shouldCreateEvent := !strings.Contains(msg, "Progress:")
-				if strings.Contains(msg, "Periodic") {
-					// Only create events for warning messages and sync completion
-					shouldCreateEvent = strings.Contains(msg, "WARNING") || strings.Contains(msg, "completed successfully")
-				}
-				if shouldCreateEvent {
-					eventType := corev1.EventTypeNormal
-					if strings.Contains(msg, "WARNING") {
-						eventType = corev1.EventTypeWarning
-					}
-					if err := r.CreateKubernetesEvent(ctx, eventType, "Migration", msg); err != nil {
+				if !strings.Contains(msg, "Progress:") && !strings.Contains(msg, "Periodic") {
+					if err := r.CreateKubernetesEvent(ctx, corev1.EventTypeNormal, "Migration", msg); err != nil {
 						utils.PrintLog(err.Error())
 					}
 				}

@@ -7,14 +7,14 @@ packer {
   }
 }
 
-variable "ubuntu_cloud_url" {
+variable "ubuntu_minimal_url" {
   type    = string
-  default = "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+  default = "https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"
 }
 
-variable "ubuntu_cloud_checksum" {
+variable "ubuntu_minimal_checksum" {
   type    = string
-  default = "file:https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS"
+  default = "file:https://cloud-images.ubuntu.com/minimal/releases/jammy/release/SHA256SUMS"
 }
 
 variable "k3s_version" {
@@ -27,16 +27,11 @@ variable "helm_version" {
   default = "v3.16.3"
 }
 
-variable "ingress_nginx_version" {
-  type    = string
-  default = "4.14.3"
-}
-
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
-  iso_url              = var.ubuntu_cloud_url
-  iso_checksum         = var.ubuntu_cloud_checksum
+  iso_url              = var.ubuntu_minimal_url
+  iso_checksum         = var.ubuntu_minimal_checksum
   iso_target_extension = "qcow2"
   output_directory     = "vjailbreak_qcow2"
   vm_name              = "vjailbreak-image.qcow2"
@@ -145,7 +140,6 @@ build {
     "sudo mkdir -p /home/ubuntu/virtio-win",
     "sudo chown -R ubuntu:ubuntu /home/ubuntu/virtio-win",
     "sudo mv /etc/pf9/images/virtio-win.iso /home/ubuntu/virtio-win/virtio-win.iso",
-    "sudo mv /etc/pf9/images/virtio-win-server12.iso /home/ubuntu/virtio-win/virtio-win-server12.iso",
     "sudo mv /tmp/yamls /etc/pf9/yamls",
     "sudo mv /tmp/rsyncd.conf /etc/pf9/rsyncd.conf",
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
@@ -163,8 +157,7 @@ build {
     "sudo df -h",
     "sudo bash /tmp/user_setup_daemon.sh",
     "sudo apt-get update",
-    "sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y",
-    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient netcat-openbsd vim telnet dnsutils net-tools iputils-ping traceroute tcpdump iproute2 bind9-dnsutils nmap htop iotop strace lsof",
+    "sudo apt-get install -y --no-install-recommends cron curl ca-certificates python3-openstackclient",
     "sudo systemctl enable cron",
     "echo '@reboot root /etc/pf9/install.sh' | sudo tee -a /etc/crontab",
     "curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3",
@@ -173,7 +166,7 @@ build {
     "rm /tmp/get_helm.sh",
     "sudo helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx",
     "sudo helm repo update",
-    "sudo helm pull ingress-nginx/ingress-nginx --version ${var.ingress_nginx_version} --untar --untardir /etc/pf9/",
+    "sudo helm pull ingress-nginx/ingress-nginx --untar --untardir /etc/pf9/",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
     ]

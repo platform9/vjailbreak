@@ -10,7 +10,7 @@ make -C k8s/migration lint
 
 echo "[pre-commit] running make build-installer"
 before_status="$(git status --porcelain)"
-TAG=main make build-installer
+make build-installer
 
 after_status="$(git status --porcelain)"
 

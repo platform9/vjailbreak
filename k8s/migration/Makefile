@@ -136,13 +136,13 @@ build-installer: setup-hooks manifests generate kustomize ## Generate a consolid
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTROLLER_IMG}
 	cd config/addons && $(KUSTOMIZE) edit set image vpwned=${VPWNED_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
-	printf '\n---\n' >> dist/install.yaml
-	sed 's|$${UI_IMG}|$(UI_IMG)|g' ../../ui/deploy/ui.yaml >> dist/install.yaml
 	cp dist/install.yaml ../../deploy/installer.yaml
+	printf '\n---\n' >> ../../deploy/installer.yaml
+	sed 's|$${UI_IMG}|$(UI_IMG)|g' ../../ui/deploy/ui.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ui/ {print}' >> ../../deploy/installer.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/' > ../../deploy/00crds.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-controller-manager/ {print}' > ../../deploy/05controller-deployment.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-vpwned-sdk/ {print}' > ../../deploy/06vpwned-deployment.yaml
-	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ui/ {print}' > ../../deploy/07ui-deployment.yaml
+	sed 's|$${UI_IMG}|$(UI_IMG)|g' ../../ui/deploy/ui.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ui/ {print}' > ../../deploy/07ui-deployment.yaml
 
 ##@ Deployment
 

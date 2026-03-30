@@ -5,10 +5,7 @@ import { RdmDisk } from 'src/api/rdm-disks/model'
 interface RdmConfigValidationProps {
   selectedVMs: VmData[]
   rdmDisks: RdmDisk[]
-  backendVolumeTypeMap?: { [key: string]: string }
 }
-
-const emptyBackendVolumeTypeMap: { [key: string]: string } = {}
 
 interface RdmConfigValidationResult {
   hasValidationError: boolean
@@ -18,8 +15,6 @@ interface RdmConfigValidationResult {
   powerStateErrorMessage: string
   hasConfigError: boolean
   configErrorMessage: string
-  hasVolumeTypeError: boolean
-  volumeTypeErrorMessage: string
   hasSelectionError: boolean
   selectionErrorMessage: string
   missingVMs: string[]
@@ -31,41 +26,31 @@ interface RdmConfigValidationResult {
     missingFields: string[]
     hasPoweredOnVMs: boolean
     poweredOnVMs: string[]
-    incompatibleVolumeType?: {
-      selectedType: string
-      expectedType: string
-      backendPool: string
-    }
   }>
-}
-
-const emptyResult: RdmConfigValidationResult = {
-  hasValidationError: false,
-  errorMessage: '',
-  hasRdmVMs: false,
-  hasPowerStateError: false,
-  powerStateErrorMessage: '',
-  hasConfigError: false,
-  configErrorMessage: '',
-  hasVolumeTypeError: false,
-  volumeTypeErrorMessage: '',
-  hasSelectionError: false,
-  selectionErrorMessage: '',
-  missingVMs: [],
-  rdmGroups: {},
-  requiredVMs: [],
-  invalidRdmDisks: []
 }
 
 export const useRdmConfigValidation = ({
   selectedVMs,
-  rdmDisks,
-  backendVolumeTypeMap = emptyBackendVolumeTypeMap
+  rdmDisks
 }: RdmConfigValidationProps): RdmConfigValidationResult => {
   const validationResult = useMemo(() => {
     // If no VMs are selected or no RDM disks exist, no validation errors
     if (selectedVMs.length === 0 || rdmDisks.length === 0) {
-      return emptyResult
+      return {
+        hasValidationError: false,
+        errorMessage: '',
+        hasRdmVMs: false,
+        hasPowerStateError: false,
+        powerStateErrorMessage: '',
+        hasConfigError: false,
+        configErrorMessage: '',
+        hasSelectionError: false,
+        selectionErrorMessage: '',
+        missingVMs: [],
+        rdmGroups: {},
+        requiredVMs: [],
+        invalidRdmDisks: []
+      }
     }
 
     // Get selected VM names
@@ -76,7 +61,21 @@ export const useRdmConfigValidation = ({
     const hasRdmVMs = vmsWithRdm.length > 0
 
     if (!hasRdmVMs) {
-      return emptyResult
+      return {
+        hasValidationError: false,
+        errorMessage: '',
+        hasRdmVMs: false,
+        hasPowerStateError: false,
+        powerStateErrorMessage: '',
+        hasConfigError: false,
+        configErrorMessage: '',
+        hasSelectionError: false,
+        selectionErrorMessage: '',
+        missingVMs: [],
+        rdmGroups: {},
+        requiredVMs: [],
+        invalidRdmDisks: []
+      }
     }
 
     // Power state validation
@@ -95,7 +94,13 @@ export const useRdmConfigValidation = ({
     }
 
     // Check each RDM disk that has selected VMs as owners for configuration issues
-    const invalidRdmDisks: RdmConfigValidationResult['invalidRdmDisks'] = []
+    const invalidRdmDisks: Array<{
+      diskName: string
+      ownerVMs: string[]
+      missingFields: string[]
+      hasPoweredOnVMs: boolean
+      poweredOnVMs: string[]
+    }> = []
 
     rdmDisks.forEach((rdmDisk) => {
       // Check if this RDM disk has any selected VMs as owners
@@ -136,85 +141,36 @@ export const useRdmConfigValidation = ({
         return powerState === 'running' || powerState === 'poweredon' || powerState === 'on'
       })
 
-      // Check volume type compatibility with selected backend
-      let incompatibleVolumeType:
-        | { selectedType: string; expectedType: string; backendPool: string }
-        | undefined
-      const backendPool = rdmDisk.spec.openstackVolumeRef?.cinderBackendPool
-      const volumeType = rdmDisk.spec.openstackVolumeRef?.volumeType
-
-      if (backendPool && backendVolumeTypeMap[backendPool]) {
-        const expectedType = backendVolumeTypeMap[backendPool]
-        // Check if volume type is set and doesn't match expected type
-        if (volumeType && expectedType !== volumeType) {
-          incompatibleVolumeType = {
-            selectedType: volumeType,
-            expectedType,
-            backendPool
-          }
-        } else if (!volumeType) {
-          // Volume type is empty but backend pool expects a specific type
-          incompatibleVolumeType = {
-            selectedType: '(not set)',
-            expectedType,
-            backendPool
-          }
-        }
-      }
-
-      // If there are missing fields or incompatible volume type, add to validation results
-      if (missingFields.length > 0 || incompatibleVolumeType) {
+      // If there are missing fields, add to validation results
+      if (missingFields.length > 0) {
         invalidRdmDisks.push({
           diskName: rdmDisk.spec.diskName,
           ownerVMs: relevantOwnerVMs,
           missingFields,
           hasPoweredOnVMs: poweredOnVMs.length > 0,
-          poweredOnVMs,
-          incompatibleVolumeType
+          poweredOnVMs
         })
       }
     })
 
     // Generate configuration error message if there are validation errors
     let configErrorMessage = ''
-    const disksWithMissingFields = invalidRdmDisks.filter((d) => d.missingFields.length > 0)
-    const hasConfigError = disksWithMissingFields.length > 0
+    const hasConfigError = invalidRdmDisks.length > 0
 
     if (hasConfigError) {
       const allMissingFields = Array.from(
-        new Set(disksWithMissingFields.flatMap((disk) => disk.missingFields))
+        new Set(invalidRdmDisks.flatMap((disk) => disk.missingFields))
       )
 
-      const allDiskNames = disksWithMissingFields.map((disk) => disk.diskName).join(', ')
-      configErrorMessage = `Cannot submit migration plan: RDM disk${disksWithMissingFields.length > 1 ? 's' : ''} (${allDiskNames}) ${disksWithMissingFields.length > 1 ? 'require' : 'requires'} configuration (${allMissingFields.join(', ')}). Please configure the RDM disk${disksWithMissingFields.length > 1 ? 's' : ''} before proceeding.`
+      const allDiskNames = invalidRdmDisks.map((disk) => disk.diskName).join(', ')
+      configErrorMessage = `Cannot submit migration plan: RDM disk${invalidRdmDisks.length > 1 ? 's' : ''} (${allDiskNames}) ${invalidRdmDisks.length > 1 ? 'require' : 'requires'} configuration (${allMissingFields.join(', ')}). Please configure the RDM disk${invalidRdmDisks.length > 1 ? 's' : ''} before proceeding.`
     }
 
-    // Generate volume type error message
-    let volumeTypeErrorMessage = ''
-    const disksWithVolumeTypeError = invalidRdmDisks.filter((d) => d.incompatibleVolumeType)
-    const hasVolumeTypeError = disksWithVolumeTypeError.length > 0
-
-    if (hasVolumeTypeError) {
-      const messages = disksWithVolumeTypeError.map((disk) => {
-        const vt = disk.incompatibleVolumeType
-        if (!vt) return ''
-        return `"${disk.diskName}" has volume type "${vt.selectedType}" but backend "${vt.backendPool}" expects "${vt.expectedType}"`
-      }).filter(Boolean)
-      volumeTypeErrorMessage = `Incompatible volume type mapping: ${messages.join('; ')}.`
-    }
-
-    // Combined validation - only blocking errors prevent submission (volume type mismatch is a warning only)
+    // Combined validation - either power state error or config error prevents submission
     const hasValidationError = hasPoweredOnVMs || hasConfigError
 
-    // Priority: power state > volume type > config
-    let errorMessage = ''
-    if (hasPoweredOnVMs) {
-      errorMessage = powerStateErrorMessage
-    } else if (hasVolumeTypeError) {
-      errorMessage = volumeTypeErrorMessage
-    } else if (hasConfigError) {
-      errorMessage = configErrorMessage
-    }
+    // Priority: power state error message first, then config error
+    const errorMessage = hasPoweredOnVMs ? powerStateErrorMessage : configErrorMessage
 
     return {
       hasValidationError,
@@ -224,8 +180,6 @@ export const useRdmConfigValidation = ({
       powerStateErrorMessage,
       hasConfigError,
       configErrorMessage,
-      hasVolumeTypeError,
-      volumeTypeErrorMessage,
       hasSelectionError: false,
       selectionErrorMessage: '',
       missingVMs: [],
@@ -233,7 +187,7 @@ export const useRdmConfigValidation = ({
       requiredVMs: [],
       invalidRdmDisks
     }
-  }, [selectedVMs, rdmDisks, backendVolumeTypeMap])
+  }, [selectedVMs, rdmDisks])
 
   return validationResult
 }

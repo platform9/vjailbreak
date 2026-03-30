@@ -62,8 +62,6 @@ type AdvancedOptions struct {
 	PeriodicSyncEnabled bool `json:"periodicSyncEnabled,omitempty"`
 	// NetworkPersistence instructs the migration helper to persist the source networking configuration
 	NetworkPersistence bool `json:"networkPersistence,omitempty"`
-	// RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration
-	RemoveVMwareTools bool `json:"removeVMwareTools,omitempty"`
 	// AcknowledgeNetworkConflictRisk indicates that the user acknowledges the risk of network conflicts when doing live migration
 	AcknowledgeNetworkConflictRisk bool `json:"acknowledgeNetworkConflictRisk,omitempty"`
 }
@@ -74,18 +72,6 @@ type PostMigrationAction struct {
 	Suffix       string `json:"suffix,omitempty"`
 	MoveToFolder *bool  `json:"moveToFolder,omitempty"`
 	FolderName   string `json:"folderName,omitempty"`
-}
-
-// NICOverride defines per-NIC overrides for IP and MAC preservation during migration
-type NICOverride struct {
-	// InterfaceIndex is the zero-based index of the NIC
-	InterfaceIndex int `json:"interfaceIndex"`
-	// PreserveIP indicates whether to preserve the source VM's IP address for this NIC.
-	// When nil the migration default (preserve) is used.
-	PreserveIP *bool `json:"preserveIP,omitempty"`
-	// PreserveMAC indicates whether to preserve the source VM's MAC address for this NIC.
-	// When nil the migration default (preserve) is used.
-	PreserveMAC *bool `json:"preserveMAC,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan including
@@ -101,9 +87,6 @@ type MigrationPlanSpec struct {
 	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
 	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
 	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
-	// NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
-	// Only NICs with non-default settings (i.e., preserve=false) need to be listed
-	NetworkOverridesPerVM map[string][]NICOverride `json:"networkOverridesPerVM,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan

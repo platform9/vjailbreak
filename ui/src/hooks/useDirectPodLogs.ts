@@ -16,9 +16,6 @@ interface UseDirectPodLogsReturn {
 }
 
 const MAX_LOG_LINES = 5000
-const INITIAL_RECONNECT_DELAY_MS = 5000
-const MAX_RECONNECT_DELAY_MS = 30000
-const MAX_RETRIES = 5
 
 export const useDirectPodLogs = ({
   podName,
@@ -31,7 +28,6 @@ export const useDirectPodLogs = ({
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const retryCountRef = useRef(0)
   const hasInitiallyLoadedRef = useRef(false)
   const previousPodRef = useRef<string>('')
   const seenLogsRef = useRef<Set<string>>(new Set())
@@ -45,38 +41,11 @@ export const useDirectPodLogs = ({
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
-    retryCountRef.current = 0
   }, [])
 
   const connect = useCallback(async () => {
     if (!enabled || !podName || !namespace) {
       return
-    }
-
-    const queueReconnect = (transientError = true) => {
-      if (!enabled || !podName || !namespace || !transientError) {
-        return
-      }
-      if (retryCountRef.current >= MAX_RETRIES) {
-        setError('Max retries exceeded. Please reconnect manually.')
-        return
-      }
-
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
-
-      const delay = Math.min(
-        INITIAL_RECONNECT_DELAY_MS * Math.pow(2, retryCountRef.current),
-        MAX_RECONNECT_DELAY_MS
-      )
-      retryCountRef.current += 1
-
-      reconnectTimeoutRef.current = setTimeout(() => {
-        reconnectTimeoutRef.current = null
-        retryCountRef.current -= 1
-        connect()
-      }, delay)
     }
 
     cleanup()
@@ -90,7 +59,7 @@ export const useDirectPodLogs = ({
       const shouldFetchHistory = !hasInitiallyLoadedRef.current
       const response = await streamPodLogs(namespace, podName, {
         follow: true,
-        tailLines: shouldFetchHistory ? '2000' : '200',
+        tailLines: shouldFetchHistory ? '2000' : undefined,
         limitBytes: 8 * 1024 * 1024,
         signal: abortController.signal
       })
@@ -100,7 +69,6 @@ export const useDirectPodLogs = ({
       }
 
       setIsLoading(false)
-      retryCountRef.current = 0
 
       const reader = response.body?.getReader()
       if (!reader) {
@@ -130,8 +98,6 @@ export const useDirectPodLogs = ({
                 return newLogs
               })
             }
-
-            queueReconnect()
             return
           }
 
@@ -181,10 +147,7 @@ export const useDirectPodLogs = ({
 
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to connect to pod logs stream'
-      
-      const isTransient = !errorMessage.includes('not found') && !errorMessage.includes('unauthorized')
       setError(errorMessage)
-      queueReconnect(isTransient)
     }
   }, [enabled, podName, namespace, cleanup])
 
@@ -192,7 +155,6 @@ export const useDirectPodLogs = ({
     setLogs([])
     hasInitiallyLoadedRef.current = false
     seenLogsRef.current.clear()
-    retryCountRef.current = 0
     connect()
   }, [connect])
 
@@ -200,7 +162,6 @@ export const useDirectPodLogs = ({
     setLogs([])
     hasInitiallyLoadedRef.current = false
     seenLogsRef.current.clear()
-    retryCountRef.current = 0
   }, [sessionKey])
 
   useEffect(() => {
@@ -209,7 +170,6 @@ export const useDirectPodLogs = ({
       setLogs([])
       hasInitiallyLoadedRef.current = false
       seenLogsRef.current.clear()
-      retryCountRef.current = 0
     }
     previousPodRef.current = currentPodKey
 

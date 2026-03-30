@@ -114,9 +114,12 @@ export function SidenavFlyout({
                 }}
               >
                 <List disablePadding>
-                  {visibleFlyoutChildren.map((child) => {
+                  {visibleFlyoutChildren.map((child, idx) => {
                     const isSelected = currentActiveItem === child.path
-                    const lineColor = isSelected ? SUBMENU_CONNECTOR_BLUE : SUBMENU_CONNECTOR_GREY
+                    const isActiveBranch = activeChildIndex >= 0 && idx <= activeChildIndex
+                    const lineColor = isActiveBranch
+                      ? SUBMENU_CONNECTOR_BLUE
+                      : SUBMENU_CONNECTOR_GREY
 
                     return (
                       <ChildNavItemWrapper key={child.id}>
@@ -126,7 +129,7 @@ export function SidenavFlyout({
                             left: `${SUBMENU_CONNECTOR_SVG_LEFT_PX}px`,
                             top: '50%',
                             transform: 'translateY(-65%)',
-                            visibility: 'visible'
+                            visibility: isSelected ? 'visible' : 'hidden'
                           }}
                         >
                           <SubmenuConnectorIcon color={lineColor} />

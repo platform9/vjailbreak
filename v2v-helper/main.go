@@ -4,16 +4,15 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -83,11 +82,6 @@ func main() {
 		openstackProjectName = strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
 	}
 
-	err = os.Setenv("CURRENT_INSTANCE_ID", migrationparams.CurrentInstanceID)
-	if err != nil {
-		utils.PrintLog(fmt.Sprintf("Failed to set CURRENT_INSTANCE_ID environment variable: %v", err))
-	}
-
 	starttime, _ := time.Parse(time.RFC3339, migrationparams.DataCopyStart)
 	cutstart, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverStart)
 	cutend, _ := time.Parse(time.RFC3339, migrationparams.VMcutoverEnd)
@@ -123,15 +117,6 @@ func main() {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 		return
 	}
-	// Parse network overrides if present
-	var networkOverrides []migrate.NICOverride
-	if migrationparams.NetworkOverrides != "" {
-		if err := json.Unmarshal([]byte(migrationparams.NetworkOverrides), &networkOverrides); err != nil {
-			handleError(fmt.Sprintf("Failed to parse network overrides: %v", err))
-			return
-		}
-	}
-
 	migrationobj := migrate.Migrate{
 		URL:                     vCenterURL,
 		UserName:                vCenterUserName,
@@ -178,7 +163,6 @@ func main() {
 		ArrayInsecure:          arrayInsecure,
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
-		NetworkOverrides:       networkOverrides,
 	}
 
 	if migrationobj.ServerGroup != "" {
@@ -232,12 +216,10 @@ FALLBACK_TO_DHCP=%s
 PERIODIC_SYNC_INTERVAL=%s
 PERIODIC_SYNC_ENABLED=%s
 NETWORK_PERSISTENCE=%s
-REMOVE_VMWARE_TOOLS=%s
 STORAGE_COPY_METHOD=%s
 VENDOR_TYPE=%s
 ARRAY_CREDS_MAPPING=%s
-ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s
-CURRENT_INSTANCE_ID=%s`,
+ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
 		migrationparams.SourceVMName,
 		migrationparams.OpenstackOSType,
 		migrationparams.MigrationType,
@@ -252,11 +234,9 @@ CURRENT_INSTANCE_ID=%s`,
 		migrationparams.PeriodicSyncInterval,
 		migrationparams.PeriodicSyncEnabled,
 		migrationparams.NetworkPersistance,
-		migrationparams.RemoveVMwareTools,
 		migrationparams.StorageCopyMethod,
 		migrationparams.VendorType,
 		migrationparams.ArrayCredsMapping,
 		migrationparams.AcknowledgeNetworkConflictRisk,
-		migrationparams.CurrentInstanceID,
 	))
 }

@@ -1,5 +1,4 @@
 import axios from 'src/api/axios'
-import type { AxiosRequestConfig } from 'axios'
 
 export interface VddkUploadResponse {
   success?: boolean
@@ -19,13 +18,7 @@ export type UploadProgressHandler = (progress: number) => void
 
 export const uploadVddkFile = async (
   file: File,
-  {
-    onProgress,
-    signal
-  }: {
-    onProgress?: UploadProgressHandler
-    signal?: AxiosRequestConfig['signal']
-  } = {}
+  { onProgress }: { onProgress?: UploadProgressHandler } = {}
 ): Promise<VddkUploadResponse> => {
   const formData = new FormData()
   formData.append('vddk_file', file)
@@ -37,7 +30,6 @@ export const uploadVddkFile = async (
       headers: {
         'Content-Type': 'multipart/form-data'
       },
-      signal,
       onUploadProgress: (event) => {
         if (!event.total) return
         const progress = (event.loaded / event.total) * 100

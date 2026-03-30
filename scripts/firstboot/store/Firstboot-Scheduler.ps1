@@ -9,7 +9,6 @@ $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
 $StateFilePath = Join-Path $ScriptRoot "Firstboot-Scheduler.state"
 $SchedulerScriptPath = Join-Path $ScriptRoot "Firstboot-Scheduler.ps1"
-$failedScriptNames = New-Object 'System.Collections.Generic.List[string]'
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -77,7 +76,6 @@ function Schedule-MyTask {
 
     Write-Log "Task '$taskName' created → will run your script once after next reboot."
 }
-
 
 function Ensure-64BitPowerShell {
     if (-not [Environment]::Is64BitOperatingSystem) {
@@ -206,7 +204,7 @@ function Push-Script {
         if (Test-Path $StateFilePath) {
             $existingScripts = Get-Content -Path $StateFilePath 
             foreach ($existingScript in $existingScripts) {
-                $entryName,$scriptAsync, [int]$entryNumber = $existingScript -split '\|'
+                $entryName, [int]$entryNumber = $existingScript -split '\|'
                 if ($entryName -eq $ScriptName) {
                     Write-Log "Script '$ScriptName' already exists in the state file with number '$entryNumber'."
                     if ($entryNumber -lt 3){
@@ -223,7 +221,7 @@ function Push-Script {
             }else{
                 $originalRunTimes = $scriptRunTimes
                 $scriptRunTimes = $scriptRunTimes + 1
-                $updated = $existingScripts -replace "$ScriptName\|$scriptAsync\|$originalRunTimes", "$ScriptName|$scriptAsync|$scriptRunTimes"
+                $updated = $existingScripts -replace "$ScriptName\|$originalRunTimes", "$ScriptName|$scriptRunTimes"
                 Set-Content -Path $StateFilePath -Value $updated
             }
         }else{
@@ -261,9 +259,7 @@ function Init-Table{
             Write-Log "Successfully parsed scripts.json, found $(($scriptsArray | Measure-Object).Count) script(s)"
             
             foreach ($script in $scriptsArray) {
-                $script_name = $script.Script
-                $script_async = $script.async
-                Add-Content -Path $StateFilePath -Value "$script_name|$script_async|-1"
+                Add-Content -Path $StateFilePath -Value "$script|-1"
             }
         } catch {
             Write-Log "Failed to parse scripts.json: $_" -Level "ERROR"
@@ -276,7 +272,7 @@ function Get-Script{
         $stateEntries = Get-Content -Path $StateFilePath
         #validate
         foreach ($entry in $stateEntries){
-            $entryName,$scriptAsync, [int]$entryNumber = $entry -split '\|'
+            $entryName, [int]$entryNumber = $entry -split '\|'
             if ($entryName -ne "" -and $entryNumber -ge -1 -and $entryNumber -lt 3){
                 Write-Log "Script Name: $entryName, Run Times: $entryNumber"
             } else {
@@ -284,20 +280,15 @@ function Get-Script{
             }
         }
         foreach ($entry in $stateEntries) {
-            $entryName,$scriptAsync, [int]$entryNumber = $entry -split '\|'
-            if ($failedScriptNames -contains $entryName) {
-                continue
-            }else{
-
+            $entryName, [int]$entryNumber = $entry -split '\|'
             if ($entryNumber -eq -1){
-                return $entryName, $scriptAsync
+                return $entryName
             } 
             if ($entryNumber -ge 0 -and $entryNumber -lt 3){
-                return $entryName, $scriptAsync
-            }
+                return $entryName
             }
         }
-    return "", ""
+    return ""
     }else{
         throw "State file does not exist."
     }
@@ -325,27 +316,17 @@ try {
         Write-Log "Found scripts.json at: $scriptsJsonPath"
         Schedule-MyTask -TaskName $TaskName -ScriptPath $SchedulerScriptPath -Description "Firstboot Scheduler" 
         try {
-            if (-not (Test-Path $StateFilePath)) {
-                Write-Log "State file does not exist, creating..."
-                Init-Table
-            }
+            Init-Table
             while ($true) {
-                $script,$async = Get-Script
-                Write-Log "Selected script: $script (async: $async)"
+                $script = Get-Script
+                Write-Log "Selected script: $script"
                 if ($script -ne "" -and $script -ne "False"){
                     Push-Script -ScriptName $script
                     $result = Script-Runner -ScriptPath (Join-Path $ScriptRoot $script)
                     if ($result.ExitCode -ne 0) {
                         Write-Log "Script '$script' failed with exit code $($result.ExitCode)" -Level "ERROR"
                         Write-Log "Output: $($result.Output)" -Level "ERROR"
-                        $failedScriptNames.Add($script)
-
-                        if ($async -eq $false -and $script -notlike "user_firstboot_part_*") {
-                            Write-Log "Script failed - breaking to reschedule on reboot" -Level "ERROR"
-                            break
-                        } else {
-                            Write-Log "Continuing to next script" -Level "WARNING"
-                        }
+                        break
                     } else {
                         Write-Log "Script '$script' executed successfully"
                         Write-Log "Output: $($result.Output)"
@@ -356,10 +337,6 @@ try {
                     Remove-MyTask -TaskName $TaskName
                     break
                 }
-            }
-
-            if ($failedScriptNames.Count -gt 0) {
-                Write-Log "SUMMARY: $($failedScriptNames.Count) script(s) failed but scheduler continued: $($failedScriptNames -join ', ')" -Level "WARNING"
             }
 
         } catch {

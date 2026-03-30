@@ -1,9 +1,0 @@
-network:
-  version: 2
-
-  ethernets:
-    all-interfaces:
-      match:
-        name: "*"
-      dhcp4: true
-      optional: true

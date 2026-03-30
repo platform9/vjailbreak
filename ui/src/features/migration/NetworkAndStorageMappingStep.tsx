@@ -15,7 +15,6 @@ import { ResourceMappingTableNew as ResourceMappingTable } from './components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
-import { PCDNetworkInfo } from 'src/api/openstack-creds/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -43,7 +42,7 @@ export type StorageCopyMethod = (typeof STORAGE_COPY_METHOD_OPTIONS)[number]['va
 interface NetworkAndStorageMappingStepProps {
   vmwareNetworks: string[]
   vmWareStorage: string[]
-  openstackNetworks: PCDNetworkInfo[]
+  openstackNetworks: string[]
   openstackStorage: string[]
   params: {
     networkMappings?: ResourceMap[]
@@ -98,19 +97,13 @@ export default function NetworkAndStorageMappingStep({
   )
 
   // Filter out any mappings that don't match the available networks/storage
-  // Extract network names from PCDNetworkInfo for filtering
-  const openstackNetworkNames = useMemo(
-    () => openstackNetworks.map((net) => net.name),
-    [openstackNetworks]
-  )
-
   const filteredNetworkMappings = useMemo(
     () =>
       (params.networkMappings || []).filter(
         (mapping) =>
-          vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
+          vmwareNetworks.includes(mapping.source) && openstackNetworks.includes(mapping.target)
       ),
-    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
+    [params.networkMappings, vmwareNetworks, openstackNetworks]
   )
 
   const filteredStorageMappings = useMemo(
@@ -283,7 +276,7 @@ export default function NetworkAndStorageMappingStep({
               </Typography>
               <ResourceMappingTable
                 sourceItems={vmwareNetworks}
-                targetItems={openstackNetworkNames}
+                targetItems={openstackNetworks}
                 sourceLabel="VMware Network"
                 targetLabel="PCD Network"
                 values={params.networkMappings || []}

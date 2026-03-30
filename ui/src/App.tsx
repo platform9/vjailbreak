@@ -14,7 +14,6 @@ import MaasConfigPage from './features/baremetalConfig/pages/MaasConfigPage'
 import Onboarding from './features/onboarding/pages/Onboarding'
 import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPage'
 import StorageManagementPage from './features/storageManagement/pages/StorageManagementPage'
-import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
@@ -62,31 +61,21 @@ function useHasAnyCredentials() {
   const isLoading = vmwareLoading || openstackLoading
   const isError = vmwareError || openstackError
 
-  const hasVmwareCredentials = useMemo(() => {
+  const hasAnyCredentials = useMemo(() => {
     const vmwareCount = Array.isArray(vmwareCredentials) ? vmwareCredentials.length : 0
-    return vmwareCount > 0
-  }, [vmwareCredentials])
+    const openstackCount = Array.isArray(openstackCredentials) ? openstackCredentials.length : 0
+    return vmwareCount + openstackCount > 0
+  }, [openstackCredentials, vmwareCredentials])
 
-  const hasPcdCredentials = useMemo(() => {
-    const openstack = Array.isArray(openstackCredentials) ? openstackCredentials : []
-    return (
-      openstack.filter(
-        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
-      ).length > 0
-    )
-  }, [openstackCredentials])
-
-  return { hasVmwareCredentials, hasPcdCredentials, isLoading, isError }
+  return { hasAnyCredentials, isLoading, isError }
 }
 
 function DashboardIndexRedirect() {
-  const { hasVmwareCredentials, hasPcdCredentials, isLoading, isError } = useHasAnyCredentials()
+  const { hasAnyCredentials, isLoading, isError } = useHasAnyCredentials()
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
-
-  const hasAllCredentials = hasVmwareCredentials && hasPcdCredentials
 
   if (isLoading || vddkLoading) return null
   if (isError) return <Navigate to="/dashboard/migrations" replace />
@@ -94,7 +83,7 @@ function DashboardIndexRedirect() {
   // If the status endpoint fails, don't hard-block navigation.
   // Fall back to migrations/credentials behavior based on credentials only.
   if (vddkError) {
-    return hasAllCredentials ? (
+    return hasAnyCredentials ? (
       <Navigate to="/dashboard/migrations" replace />
     ) : (
       <Navigate to="/dashboard/credentials/vm" replace />
@@ -105,7 +94,7 @@ function DashboardIndexRedirect() {
     return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
   }
 
-  return hasAllCredentials ? (
+  return hasAnyCredentials ? (
     <Navigate to="/dashboard/migrations" replace />
   ) : (
     <Navigate to="/dashboard/credentials/vm" replace />
@@ -128,19 +117,13 @@ function App() {
   })
   const hideAppbar = location.pathname === '/onboarding' || location.pathname === '/'
 
-  const {
-    hasVmwareCredentials,
-    hasPcdCredentials,
-    isLoading: credsLoading
-  } = useHasAnyCredentials()
+  const { hasAnyCredentials, isLoading: credsLoading } = useHasAnyCredentials()
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
 
-  const missingVmwareCredentials = !hasVmwareCredentials
-  const missingPcdCredentials = !hasPcdCredentials
-  const missingCredentials = missingVmwareCredentials || missingPcdCredentials
+  const missingCredentials = !hasAnyCredentials
   const missingVddk = !vddkUploaded
   const shouldShowGuide = missingCredentials || missingVddk
 
@@ -164,36 +147,14 @@ function App() {
     }
 
     if (guideMode === 'credentials') {
-      if (missingVmwareCredentials) {
-        return {
-          path: '/dashboard/credentials/vm',
-          target: '[data-tour="add-vmware-creds"]',
-          placement: 'bottom' as const,
-          spotlightPadding: 8,
-          content:
-            'Add your VMware credentials here. Then go to the PCD Credentials page to add your PCD credentials so you can start migrations.',
-          navState: undefined
-        }
-      }
-
-      if (missingPcdCredentials) {
-        return {
-          path: '/dashboard/credentials/pcd',
-          target: '[data-tour="add-pcd-creds"]',
-          placement: 'bottom' as const,
-          spotlightPadding: 8,
-          content: 'Add your PCD credentials here so you can start migrations.',
-          navState: undefined
-        }
-      }
-
       return {
-        path: null as string | null,
-        target: null as string | null,
-        placement: 'center' as const,
-        spotlightPadding: 0,
-        content: '',
-        navState: undefined as undefined
+        path: '/dashboard/credentials/vm',
+        target: '[data-tour="add-vmware-creds"]',
+        placement: 'bottom' as const,
+        spotlightPadding: 8,
+        content:
+          'Add your PCD and VMware credentials from the Credentials page. Then you can start migrations.',
+        navState: undefined
       }
     }
 
@@ -205,7 +166,7 @@ function App() {
       content: '',
       navState: undefined as undefined
     }
-  }, [guideMode, missingPcdCredentials, missingVmwareCredentials])
+  }, [guideMode])
 
   const isOnExpectedPage = guideConfig.path ? location.pathname === guideConfig.path : false
 
@@ -299,7 +260,7 @@ function App() {
       return
     }
 
-    if (guideMode === 'credentials' && guideConfig.path) {
+    if (guideMode === 'credentials' && guideConfig.path === '/dashboard/credentials/vm') {
       if (location.pathname !== guideConfig.path) {
         navigate(guideConfig.path, { replace: true })
       }
@@ -437,7 +398,6 @@ function App() {
               <Route path="baremetal-config" element={<MaasConfigPage />} />
               <Route path="global-settings" element={<GlobalSettingsPage />} />
               <Route path="storage-management" element={<StorageManagementPage />} />
-              <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>

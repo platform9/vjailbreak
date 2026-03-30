@@ -545,25 +545,26 @@ jobs:
         run: |
           set -e
           TAG=${{ needs.determine-release.outputs.tag }}
+          DATE_FOLDER=$(date -u +"%Y-%m-%d")
           REGION="${S3_REGION}"
 
           if [[ "${{ github.event_name }}" == "release" ]]; then
             S3_BUCKET=${S3_BUCKET_PROD}
-            S3_PATH_PREFIX="releases/${TAG}"
-            S3_LATEST_PATH_PREFIX="releases/latest"
+            S3_PATH_PREFIX="releases/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="releases/latest/${TAG}"
             QCOW2_FILENAME="vjailbreak.qcow2"
             DO_LATEST=true
 
           elif [[ "${{ github.event.inputs.is_nightly }}" == "true" ]]; then
             S3_BUCKET=${S3_BUCKET_DEV}
-            S3_PATH_PREFIX="nightly/${TAG}"
-            S3_LATEST_PATH_PREFIX="nightly/latest"
+            S3_PATH_PREFIX="nightly/${DATE_FOLDER}/${TAG}"
+            S3_LATEST_PATH_PREFIX="nightly/latest/${TAG}"
             QCOW2_FILENAME="vjailbreak.qcow2"
             DO_LATEST=true
 
           else
             S3_BUCKET=${S3_BUCKET_DEV}
-            S3_PATH_PREFIX="dev/${TAG}"
+            S3_PATH_PREFIX="dev/${DATE_FOLDER}/${TAG}"
             QCOW2_FILENAME="vjailbreak.qcow2"
             DO_LATEST=false
           fi

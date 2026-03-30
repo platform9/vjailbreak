@@ -8,8 +8,6 @@ import type { NetworkMapping } from 'src/api/network-mapping/model'
 import { getNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import type { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
-import type { ArrayCredsMapping } from 'src/api/arraycreds-mapping/model'
-import { getArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import type { RdmDisk } from 'src/api/rdm-disks/model'
 import { getRdmDisksList } from 'src/api/rdm-disks/rdmDisks'
 import type { StorageMapping } from 'src/api/storage-mappings/model'
@@ -24,7 +22,6 @@ export interface MigrationDetailResources {
   openstackCreds: OpenstackCreds | null
   networkMapping: NetworkMapping | null
   storageMapping: StorageMapping | null
-  arrayCredsMapping: ArrayCredsMapping | null
   vmwareMachine: VMwareMachine | null
   rdmDisks: RdmDisk[]
 }
@@ -49,7 +46,6 @@ export const useMigrationDetailResourcesQuery = ({
           openstackCreds: null,
           networkMapping: null,
           storageMapping: null,
-          arrayCredsMapping: null,
           vmwareMachine: null,
           rdmDisks: []
         }
@@ -66,10 +62,9 @@ export const useMigrationDetailResourcesQuery = ({
         (migrationSpec?.vmwareMachineRef as string) ||
         ''
       const migrationPlanName =
-        (migrationSpec?.migrationPlan as string) ||
-        (migration?.metadata as any)?.labels?.migrationplan
+        (migrationSpec?.migrationPlan as string) || (migration?.metadata as any)?.labels?.migrationplan
 
-      const safeGet = async <T>(fn: () => Promise<T>): Promise<T | null> => {
+      const safeGet = async <T,>(fn: () => Promise<T>): Promise<T | null> => {
         try {
           return await fn()
         } catch (error) {
@@ -78,13 +73,9 @@ export const useMigrationDetailResourcesQuery = ({
         }
       }
 
-      const migrationPlan = migrationPlanName
-        ? await safeGet(() => getMigrationPlan(migrationPlanName, namespace))
-        : null
+      const migrationPlan = migrationPlanName ? await safeGet(() => getMigrationPlan(migrationPlanName, namespace)) : null
 
-      const migrationTemplateName = (migrationPlan?.spec as any)?.migrationTemplate as
-        | string
-        | undefined
+      const migrationTemplateName = (migrationPlan?.spec as any)?.migrationTemplate as string | undefined
       const migrationTemplate = migrationTemplateName
         ? await safeGet(() => getMigrationTemplate(migrationTemplateName, namespace))
         : null
@@ -93,34 +84,23 @@ export const useMigrationDetailResourcesQuery = ({
       const openstackRef = templateSpec?.destination?.openstackRef as string | undefined
       const networkMappingName = templateSpec?.networkMapping as string | undefined
       const storageMappingName = templateSpec?.storageMapping as string | undefined
-      const arrayCredsMappingName = templateSpec?.arrayCredsMapping as string | undefined
       const vmwareRef = templateSpec?.source?.vmwareRef as string | undefined
 
-      const [openstackCreds, networkMapping, storageMapping, arrayCredsMapping] = await Promise.all(
-        [
-          openstackRef
-            ? safeGet(() => getOpenstackCredentials(openstackRef, namespace))
-            : Promise.resolve(null),
-          networkMappingName
-            ? safeGet(() => getNetworkMapping(networkMappingName, namespace))
-            : Promise.resolve(null),
-          storageMappingName
-            ? safeGet(() => getStorageMapping(storageMappingName, namespace))
-            : Promise.resolve(null),
-          arrayCredsMappingName
-            ? safeGet(() => getArrayCredsMapping(arrayCredsMappingName, namespace))
-            : Promise.resolve(null)
-        ]
-      )
+      const [openstackCreds, networkMapping, storageMapping] = await Promise.all([
+        openstackRef ? safeGet(() => getOpenstackCredentials(openstackRef, namespace)) : Promise.resolve(null),
+        networkMappingName ? safeGet(() => getNetworkMapping(networkMappingName, namespace)) : Promise.resolve(null),
+        storageMappingName ? safeGet(() => getStorageMapping(storageMappingName, namespace)) : Promise.resolve(null)
+      ])
 
       const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace, vmwareRef))
       const vmwareMachines = vmwareMachinesList?.items || []
 
-      const vmwareMachine = vmwareMachines.length
-        ? vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
-          vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
-          null
-        : null
+      const vmwareMachine =
+        vmwareMachines.length
+          ? vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
+            vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
+            null
+          : null
 
       const rdmDiskNames = ((vmwareMachine?.spec as any)?.vms?.rdmDisks as string[]) || []
       const effectiveVmName = vmName || ((vmwareMachine?.spec as any)?.vms?.name as string) || ''
@@ -131,8 +111,7 @@ export const useMigrationDetailResourcesQuery = ({
         const metaName = (d?.metadata?.name as string) || ''
         return (
           (effectiveVmName && ownerVMs.includes(effectiveVmName)) ||
-          (rdmDiskNames.length &&
-            (rdmDiskNames.includes(metaName) || rdmDiskNames.includes(diskName)))
+          (rdmDiskNames.length && (rdmDiskNames.includes(metaName) || rdmDiskNames.includes(diskName)))
         )
       })
 
@@ -142,7 +121,6 @@ export const useMigrationDetailResourcesQuery = ({
         openstackCreds,
         networkMapping,
         storageMapping,
-        arrayCredsMapping,
         vmwareMachine,
         rdmDisks
       }

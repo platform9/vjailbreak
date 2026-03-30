@@ -1,4 +1,3 @@
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,17 +13,10 @@ spec:
       labels:
         app: vjailbreak-ui
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
-      serviceAccountName: ui-manager-sa
+      serviceAccountName: migration-controller-manager
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.2
+          image: quay.io/platform9/vjailbreak-ui:origin/HEAD-5cf61fcb
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

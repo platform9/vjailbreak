@@ -5,7 +5,6 @@ import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Insights'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
-import VpnKeyIcon from '@mui/icons-material/VpnKey'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -50,18 +49,7 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'array-credentials',
         label: 'Storage Array',
-        path: '/dashboard/storage-management',
-        badge: {
-          label: 'Beta',
-          color: 'warning',
-          variant: 'outlined'
-        }
-      },
-      {
-        id: 'esxi-ssh-keys',
-        label: 'ESXi SSH',
-        path: '/dashboard/esxi-ssh-keys',
-        icon: <VpnKeyIcon />
+        path: '/dashboard/storage-management'
       }
     ]
   },

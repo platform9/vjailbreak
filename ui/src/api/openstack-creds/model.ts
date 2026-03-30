@@ -78,19 +78,13 @@ export interface ServerGroupOption {
   members: number
 }
 
-export interface PCDNetworkInfo {
-  name: string
-  tags: string[]
-}
-
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
   openstack?: {
-    networks?: PCDNetworkInfo[]
+    networks?: string[]
     volumeTypes?: string[]
     volumeBackends?: string[]
-    backendVolumeTypeMap?: { [key: string]: string }
     securityGroups?: SecurityGroupOption[]
     serverGroups?: ServerGroupOption[]
   }

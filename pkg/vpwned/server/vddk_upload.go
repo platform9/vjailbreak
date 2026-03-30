@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	maxUploadSize  = 500 * 1024 * 1024
-	vddkUploadDir  = "/home/ubuntu"
-	vddkInstallDir = "/home/ubuntu/vmware-vix-disklib-distrib"
+	maxUploadSize    = 500 * 1024 * 1024
+	vddkUploadDir    = "/home/ubuntu"
+	vddkInstallDir   = "/home/ubuntu/vmware-vix-disklib-distrib"
 )
 
 // VDDKStatusResponse represents the response for VDDK status check
@@ -53,41 +53,39 @@ func getVDDKVersion() string {
 		return ""
 	}
 
-	var latestLibPath string
-	var latestTimestamp int64
-
+	// Find the actual library file (not a symlink) with the full version like libvixDiskLib.so.8.0.0
+	var libPath string
 	for _, match := range matches {
 		info, err := os.Lstat(match)
 		if err != nil {
 			logrus.WithField("func", fn).WithError(err).Debug("Failed to stat library file")
 			continue
 		}
-
-		// Skip symlinks and prefer actual files
+		// Skip symlinks, we want the actual file
 		if info.Mode()&os.ModeSymlink == 0 {
-			// Check the timestamp to ensure we're picking the most recent one
-			if info.ModTime().Unix() > latestTimestamp {
-				latestTimestamp = info.ModTime().Unix()
-				latestLibPath = match
+			// Prefer the one with the longest name (most specific version)
+			if len(match) > len(libPath) {
+				libPath = match
 			}
 		}
 	}
-	if latestLibPath == "" {
+
+	if libPath == "" {
 		logrus.WithFields(logrus.Fields{
 			"func":    fn,
 			"matches": matches,
-		}).Debug("No valid non-symlink libvixDiskLib.so file found")
+		}).Debug("No non-symlink libvixDiskLib.so file found")
 		return ""
 	}
 
 	// Extract version from filename: libvixDiskLib.so.8.0.0 -> 8.0.0
-	basename := filepath.Base(latestLibPath)
+	basename := filepath.Base(libPath)
 	version := strings.TrimPrefix(basename, "libvixDiskLib.so.")
 
 	logrus.WithFields(logrus.Fields{
 		"func":    fn,
 		"version": version,
-		"libPath": latestLibPath,
+		"libPath": libPath,
 	}).Debug("Extracted VDDK version from filename")
 
 	return version

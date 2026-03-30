@@ -218,21 +218,6 @@ func (mr *MockOpenstackOperationsMockRecorder) GetFlavor(ctx, flavorId interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFlavor", reflect.TypeOf((*MockOpenstackOperations)(nil).GetFlavor), ctx, flavorId)
 }
 
-// GetIsSimpleNetwork mocks base method.
-func (m *MockOpenstackOperations) GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetIsSimpleNetwork", ctx, networkID)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetIsSimpleNetwork indicates an expected call of GetIsSimpleNetwork.
-func (mr *MockOpenstackOperationsMockRecorder) GetIsSimpleNetwork(ctx, networkID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIsSimpleNetwork", reflect.TypeOf((*MockOpenstackOperations)(nil).GetIsSimpleNetwork), ctx, networkID)
-}
-
 // GetNetwork mocks base method.
 func (m *MockOpenstackOperations) GetNetwork(ctx context.Context, networkname string) (*networks.Network, error) {
 	m.ctrl.T.Helper()

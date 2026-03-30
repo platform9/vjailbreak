@@ -55,6 +55,3 @@ export type { TooltipContentProps } from './TooltipContent'
 
 export { default as ClickableTableCell } from './ClickableTableCell'
 export type { ClickableTableCellProps } from './ClickableTableCell'
-
-export { default as Banner } from './Banner'
-export type { BannerProps, BannerVariant } from './Banner'

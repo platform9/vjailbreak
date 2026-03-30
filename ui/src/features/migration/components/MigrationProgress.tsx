@@ -4,7 +4,6 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom'
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { Phase } from 'src/api/migrations/model'
 
 const ProgressContainer = styled(Box)({
@@ -20,15 +19,10 @@ const ProgressContainer = styled(Box)({
 interface MigrationProgressProps {
   phase: Phase
   progressText: string
-  syncWarningMessage?: string
 }
 
-export default function MigrationProgress({ progressText, phase, syncWarningMessage }: MigrationProgressProps) {
+export default function MigrationProgress({ progressText, phase }: MigrationProgressProps) {
   const statusIcon = useMemo(() => {
-    // Show warning icon if sync is in warning state (non-empty warning message)
-    if (syncWarningMessage) {
-      return <WarningAmberIcon style={{ color: '#ed6c02' }} />
-    }
     if (phase === Phase.Succeeded) {
       return <CheckCircleOutlineIcon style={{ color: 'green' }} />
     } else if (phase === Phase.AwaitingAdminCutOver) {
@@ -49,7 +43,7 @@ export default function MigrationProgress({ progressText, phase, syncWarningMess
     } else {
       return <HourglassBottomIcon style={{ color: 'grey' }} />
     }
-  }, [phase, syncWarningMessage])
+  }, [phase])
 
   return (
     <>

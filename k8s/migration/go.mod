@@ -10,13 +10,14 @@ replace github.com/olekukonko/tablewriter => github.com/olekukonko/tablewriter v
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/gophercloud/gophercloud v1.14.1
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
-	github.com/platform9/vjailbreak/pkg/common v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/openstack v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/utils v0.0.0-00010101000000-000000000000
+	github.com/platform9/vjailbreak/pkg/common/validation v0.0.0-00010101000000-000000000000
 	github.com/platform9/vjailbreak/pkg/vpwned v0.0.0-20260113094714-8b5cc668b1b6
 	github.com/platform9/vjailbreak/v2v-helper v0.0.0-20250718102048-de8740c10909
 	github.com/prometheus/client_golang v1.22.0
@@ -86,7 +87,6 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
@@ -111,6 +111,8 @@ require (
 	sigs.k8s.io/yaml v1.5.0 // indirect
 )
 
-replace github.com/platform9/vjailbreak/pkg/common => ../../pkg/common
-
 replace github.com/platform9/vjailbreak/pkg/vpwned => ../../pkg/vpwned
+
+replace github.com/platform9/vjailbreak/pkg/common/validation => ../../pkg/common/validation
+
+replace github.com/platform9/vjailbreak/pkg/common/openstack => ../../pkg/common/openstack

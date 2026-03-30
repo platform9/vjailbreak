@@ -25,15 +25,13 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   overflow: 'auto',
-  padding: theme.spacing(2),
-  boxSizing: 'border-box',
   minHeight: 0,
   border: `1px solid ${theme.palette.divider}`,
   borderRadius: theme.spacing(1.25),
   '& .MuiDataGrid-root': {
     flex: 1,
     border: 'none',
-    minHeight: 0
+    height: '100%'
   },
   '& .MuiDataGrid-main': {
     overflow: 'hidden'

@@ -1,11 +1,9 @@
-# Enhanced-Cleanup-v3.ps1
-# Improved for Windows Server 2016 compatibility
-# Goal: Remove ghost NICs + free old names so Rename-NetAdapter works later
+# Enhanced-Cleanup-v2.ps1
+# Aim: Really remove ghost NICs + free up old connection names so Rename-NetAdapter works later
 
 param(
     [switch]$WhatIf,
-    [string]$LogFile = "C:\NIC-Recovery\Enhanced-Cleanup-v3.log",
-    [string]$DevconPath = "C:\NIC-Recovery\devcon.exe"   # <-- put devcon.exe here if you have it
+    [string]$LogFile = "C:\NIC-Recovery\Enhanced-Cleanup-v2.log"
 )
 
 function Write-Log {
@@ -20,244 +18,106 @@ function Write-Log {
     }
     Write-Host "$timestamp - $Message"
 }
-function Remove-StaleNetworkAdapter {
-    [CmdletBinding(SupportsShouldProcess=$true)]
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$AdapterName
-    )
-
-    Write-Log "Starting removal of stale network adapters matching: $AdapterName"
-    
-    $classGuid = "{4D36E972-E325-11CE-BFC1-08002BE10318}"
-
-    $paths = @(
-        "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$classGuid",
-        "HKLM:\SYSTEM\CurrentControlSet\Control\Network\$classGuid"
-    )
-
-    $removalCount = 0
-    
-    foreach ($basePath in $paths) {
-        Write-Log "Scanning registry path: $basePath"
-
-        if (-not (Test-Path $basePath)) { 
-            Write-Log "Registry path does not exist: $basePath"
-            continue 
-        }
-
-        $adapterKeys = Get-ChildItem $basePath -ErrorAction SilentlyContinue
-        if ($null -eq $adapterKeys) {
-            Write-Log "No subkeys found in $basePath"
-            continue
-        }
-
-        foreach ($key in $adapterKeys) {
-            try {
-                $props = Get-ItemProperty $key.PSPath -ErrorAction Stop
-
-                $matchesDescription = $props.DriverDesc -and ($props.DriverDesc -like "*$AdapterName*")
-                $matchesName = $props.Name -and ($props.Name -like "*$AdapterName*")
-
-                if ($matchesDescription -or $matchesName) {
-                    Write-Log "Found matching adapter - DriverDesc: '$($props.DriverDesc)', Name: '$($props.Name)', Path: $($key.PSPath)"
-
-                    if ($PSCmdlet.ShouldProcess($key.PSPath, "Remove stale adapter key")) {
-                        Remove-Item $key.PSPath -Recurse -Force -ErrorAction Stop
-                        Write-Log "Successfully removed: $($key.PSPath)"
-                        Write-Host "Removed: $($key.PSPath)" -ForegroundColor Yellow
-                        $removalCount++
-                    } else {
-                        Write-Log "Would remove: $($key.PSPath) (in WhatIf mode)"
-                    }
-                }
-            }
-            catch {
-                Write-Log "Skipping inaccessible key: $($key.PSPath) - Error: $($_.Exception.Message)"
-                Write-Warning "Skipping inaccessible key: $($key.PSPath)"
-            }
-        }
-    }
-
-    Write-Log "Stale network adapter cleanup completed. Total removed: $removalCount"
-    Write-Host "Cleanup complete. Reboot recommended." -ForegroundColor Green
-}
-
-
 
 # Must be admin
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Script requires Administrator rights."
 }
 
-Write-Log "=== Starting Enhanced Network Cleanup v3 ==="
-Write-Log "PowerShell version: $($PSVersionTable.PSVersion)"
-Write-Log "OS: $([System.Environment]::OSVersion.VersionString)"
+Write-Log "=== Starting Enhanced Network Cleanup v2 ==="
 
 try {
-    # 0. Check if devcon is available (optional but very effective)
-    $useDevcon = (Test-Path $DevconPath -PathType Leaf)
-    if ($useDevcon) {
-        Write-Log "devcon.exe found at $DevconPath → will use for removal"
-    } else {
-        Write-Log "devcon.exe not found → removal will be limited"
-    }
-
-    # 1. Rename conflicting visible adapters
-    Write-Log "Renaming any existing conflicting interface names (vjb*, Ethernet, etc.)..."
+    # ────────────────────────────────────────────────
+    # 1. Rename conflicting visible adapters (your original logic - good)
+    # ────────────────────────────────────────────────
+    Write-Log "Renaming any existing conflicting interface names (vjb* or similar)..."
     $interfaces = Get-NetAdapter -ErrorAction SilentlyContinue |
-                  Where-Object { $_.Name -match '(?i)^vjb|Ethernet|Local Area Connection|Wi-Fi' }
+                  Where-Object { $_.Name -match '^vjb|Ethernet|Local Area Connection|Wi-Fi' }
 
     foreach ($nic in $interfaces) {
-        $newName = "vjb_" + [guid]::NewGuid().ToString().Substring(0,8)
-        Write-Log "Renaming '$($nic.Name)' → '$newName' to avoid name conflicts"
+        $newName = "tmp_" + [guid]::NewGuid().ToString().Substring(0,8)
+        Write-Log "Renaming $($nic.Name) → $newName to avoid name conflicts"
         if (-not $WhatIf) {
             try {
                 Rename-NetAdapter -Name $nic.Name -NewName $newName -ErrorAction Stop
                 Write-Log "  → Success"
             } catch {
-                Write-Log "  → Failed: $($_.Exception.Message)"
+                Write-Log "  → Failed: $_"
             }
-        } else {
-            Write-Log "  [WhatIf] Would rename '$($nic.Name)' to '$newName'"
         }
     }
 
-    # 2. Detect and handle ghost / non-present network devices
-    Write-Log "Removing ghost/non-present network devices..."
+    # ────────────────────────────────────────────────
+    # 2. Remove ghost / non-present devices using pnputil (most effective method)
+    # ────────────────────────────────────────────────
+    Write-Log "Removing ghost/non-present network devices via pnputil..."
     $ghosts = Get-PnpDevice -Class Net -ErrorAction SilentlyContinue |
-              Where-Object { $_.Status -notin @("OK", "Degraded") }
+              Where-Object { $_.Status -eq "Unknown" -or $_.Status -eq "Error" }
 
     if (-not $ghosts) {
         Write-Log "No ghost NICs found via Get-PnpDevice."
     } else {
-        # Check if pnputil supports /remove-device
-        $pnputilSupportsRemove = $false
-        try {
-            $help = & pnputil /remove-device /? 2>&1
-            if ($help -match "remove-device") { $pnputilSupportsRemove = $true }
-        } catch { }
-
-        Write-Log "pnputil /remove-device supported? $pnputilSupportsRemove"
-
         foreach ($dev in $ghosts) {
-            $fname = if ($dev.FriendlyName) { $dev.FriendlyName } else { "Unknown Device" }
+            $fname = if ($dev.FriendlyName) { $dev.FriendlyName } else { "Unknown" }
             $iid   = $dev.InstanceId
-            Write-Log "Found ghost: $fname ($iid)  [Status: $($dev.Status)]"
+            Write-Log "Found ghost: $fname ($iid)"
 
             if (-not $WhatIf) {
                 try {
-                    # Step A: Disable (almost always works)
-                    Disable-PnpDevice -InstanceId $iid -Confirm:$false -ErrorAction SilentlyContinue
-                    Write-Log "  → Disabled via Disable-PnpDevice"
-
-                    # Step B: Try real removal (preferred order)
-                    $removed = $false
-
-                    # Try devcon first (if present)
-                    if ($useDevcon) {
-                        & $DevconPath remove "@$iid" | Out-Null
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Log "  → Removed via devcon.exe"
-                            $removed = $true
-                        } else {
-                            Write-Log "  → devcon remove failed (exit $($LASTEXITCODE))"
-                        }
+                    $output = & pnputil.exe /remove-device "$iid" 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "  → Removed successfully via pnputil"
+                    } else {
+                        Write-Log "  → pnputil failed: $output"
                     }
-
-                    # Then try pnputil if supported and not already removed
-                    if (-not $removed -and $pnputilSupportsRemove) {
-                        $output = & pnputil /remove-device "$iid" 2>&1
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Log "  → Removed via pnputil /remove-device"
-                            $removed = $true
-                        } else {
-                            Write-Log "  → pnputil /remove-device failed: $output"
-                        }
-                    }
-
-                    if (-not $removed) {
-                        Write-Log "  → Could not fully remove device (fallback: disabled only)"
-                    }
+                } catch {
+                    Write-Log "  → Exception during pnputil: $_"
                 }
-                catch {
-                    Write-Log "  → Exception during removal attempt: $($_.Exception.Message)"
-                }
-            }
-            else {
-                Write-Log "  [WhatIf] Would attempt to remove/disable $iid"
+            } else {
+                Write-Log "  [WhatIf] Would remove device $iid"
             }
         }
     }
 
-    # 3. Clean stale network profiles
+    # ────────────────────────────────────────────────
+    # 3. Clean stale network connection profiles / names
+    #    (this is usually WHY rename fails even after ghosts are gone)
+    # ────────────────────────────────────────────────
     Write-Log "Cleaning stale network profile names..."
     $oldProfiles = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles" -ErrorAction SilentlyContinue |
                    Where-Object {
                        $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
-                       ($p.ProfileName -match '(?i)vjb|Ethernet|Local Area|Wi-Fi') -or
-                       ($p.Description -match '(?i)vjb|Ethernet|Local Area|Wi-Fi') -or
-                       ([string]::IsNullOrWhiteSpace($p.ProfileName))
+                       $p.ProfileName -match "vjb|Ethernet|Local Area|Wi-Fi" -or
+                       $p.Description -match "vjb|Ethernet|Local Area|Wi-Fi"
                    }
 
     foreach ($prof in $oldProfiles) {
-        $name = (Get-ItemProperty $prof.PSPath -ErrorAction SilentlyContinue).ProfileName
-        $guid = $prof.PSChildName
-        Write-Log "Found stale profile: '$name' ($guid)"
+        $name = (Get-ItemProperty $prof.PSPath).ProfileName
+        Write-Log "Found stale profile: $name ($($prof.PSChildName))"
 
         if (-not $WhatIf) {
             try {
                 Remove-Item $prof.PSPath -Recurse -Force -ErrorAction Stop
                 Write-Log "  → Deleted profile key"
             } catch {
-                Write-Log "  → Failed to delete profile: $($_.Exception.Message)"
+                Write-Log "  → Failed to delete profile: $_"
             }
         } else {
-            Write-Log "  [WhatIf] Would delete profile $guid"
+            Write-Log "  [WhatIf] Would delete profile $($prof.PSChildName)"
         }
     }
 
-    # 4. Trigger hardware rescan
+    # Optional: trigger hardware rescan (helps Windows forget ghosts faster)
     Write-Log "Triggering hardware rescan..."
     if (-not $WhatIf) {
-        try {
-            & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
-            Start-Sleep -Seconds 4   # give PnP manager a moment
-        } catch {
-            Write-Log "Warning: Failed to trigger hardware rescan: $($_.Exception.Message)"
-        }
+        & "$env:SystemRoot\System32\pnputil.exe" /scan-devices | Out-Null
     }
-    
-    # Clean up stale network adapters with common patterns
-    $commonAdapterPatterns = @(
-        "Intel*", 
-        "Broadcom*", 
-        "Realtek*", 
-        "VMware*", 
-        "Hyper-V*",
-        "vEthernet*",
-        "VirtualBox*",
-        "Cisco*",
-        "Qualcomm*",
-        "Microsoft*"
-    )
-    
-    foreach ($pattern in $commonAdapterPatterns) {
-        try {
-            Write-Log "Removing stale network adapters matching pattern: $pattern"
-            Remove-StaleNetworkAdapter -AdapterName $pattern
-        } catch {
-            Write-Log "Warning: Error processing adapter pattern '$pattern': $($_.Exception.Message)"
-        }
-    }
-    
-    Write-Log "=== Cleanup finished ==="
-    if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes were made" }
 
-    exit 0
+    Write-Log "=== Cleanup finished ==="
+    if ($WhatIf) { Write-Log "NOTE: WhatIf mode - no actual changes made" }
 }
 catch {
-    Write-Log "CRITICAL ERROR: $($_.Exception.Message)"
+    Write-Log "Critical error: $_"
     Write-Log $_.ScriptStackTrace
     throw
 }

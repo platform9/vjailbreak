@@ -140,7 +140,6 @@ export interface FormValues extends Record<string, unknown> {
   fallbackToDHCP?: boolean
   useGPU?: boolean
   networkPersistence?: boolean
-  removeVMwareTools?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -150,8 +149,6 @@ export interface SelectedMigrationOptionsType {
   cutoverStartTime: boolean
   cutoverEndTime: boolean
   postMigrationScript: boolean
-  useGPU?: boolean
-  useFlavorless?: boolean
   periodicSyncEnabled?: boolean
   postMigrationAction?: {
     suffix?: boolean
@@ -171,8 +168,6 @@ const defaultMigrationOptions = {
   cutoverStartTime: false,
   cutoverEndTime: false,
   postMigrationScript: false,
-  useGPU: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -704,40 +699,11 @@ export default function MigrationFormDrawer({
       })
     }
 
-    const networkOverridesPerVM: Record<
-      string,
-      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
-    > = {}
-    if (params.vms) {
-      params.vms.forEach((vm) => {
-        const preserveIp = vm.preserveIp || {}
-        const preserveMac = vm.preserveMac || {}
-
-        const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
-
-        if (indices.size === 0) return
-
-        networkOverridesPerVM[vm.name] = Array.from(indices)
-          .map((indexStr) => {
-            const interfaceIndex = Number(indexStr)
-            const ipFlag = preserveIp[interfaceIndex]
-            const macFlag = preserveMac[interfaceIndex]
-            return {
-              interfaceIndex,
-              preserveIP: ipFlag !== false,
-              preserveMAC: macFlag !== false
-            }
-          })
-          .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
-      })
-    }
-
     const migrationFields = {
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
       ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
-      ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {
           dataCopyStart: params.dataCopyStartTime
@@ -773,9 +739,6 @@ export default function MigrationFormDrawer({
       ...(typeof params.networkPersistence === 'boolean' && {
         networkPersistence: params.networkPersistence
       }),
-      ...(typeof params.removeVMwareTools === 'boolean' && {
-        removeVMwareTools: params.removeVMwareTools
-      }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
       acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk
@@ -785,6 +748,7 @@ export default function MigrationFormDrawer({
 
     try {
       const data = await postMigrationPlan(body)
+
       // Track successful migration creation
       track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
         migrationName: data.metadata?.name,
@@ -942,14 +906,6 @@ export default function MigrationFormDrawer({
       if (key === 'periodicSyncEnabled' && selectedMigrationOptions.periodicSyncEnabled) {
         return params?.periodicSyncInterval !== '' && fieldErrors['periodicSyncInterval'] === ''
       }
-      if (key === 'dataCopyStartTime' && selectedMigrationOptions.dataCopyStartTime) {
-        const value = String(params?.dataCopyStartTime ?? '').trim()
-        return value !== '' && !fieldErrors['dataCopyStartTime']
-      }
-      if (key === 'postMigrationScript' && selectedMigrationOptions.postMigrationScript) {
-        const value = String(params?.postMigrationScript ?? '').trim()
-        return value !== '' && !fieldErrors['postMigrationScript']
-      }
       if (selectedMigrationOptions[key as keyof typeof selectedMigrationOptions]) {
         return params?.[key as keyof typeof params] !== undefined && !fieldErrors[key]
       }
@@ -957,7 +913,7 @@ export default function MigrationFormDrawer({
     })
   }, [selectedMigrationOptions, params, fieldErrors])
 
-  // VM validation - ensure OS is assigned/detected for selected VMs
+  // VM validation - ensure powered-off VMs have IP assigned and powered-on VMs have OS detected
   const vmValidation = useMemo(() => {
     if (!params.vms || params.vms.length === 0) {
       return { hasError: false, errorMessage: '' }
@@ -975,6 +931,11 @@ export default function MigrationFormDrawer({
       return powerState === 'powered-on'
     })
 
+    // Check for powered-off VMs without IP addresses
+    const vmsWithoutIPs = poweredOffVMs.filter(
+      (vm) => !vm.ipAddress || vm.ipAddress === '—' || vm.ipAddress.trim() === ''
+    )
+
     // Check for VMs without OS assignment or with Unknown OS (any power state)
     const vmsWithoutOSAssigned = poweredOffVMs
       .filter((vm) => !vm.osFamily || vm.osFamily === 'Unknown' || vm.osFamily.trim() === '')
@@ -984,9 +945,17 @@ export default function MigrationFormDrawer({
         )
       )
 
-    if (vmsWithoutOSAssigned.length > 0) {
+    if (vmsWithoutIPs.length > 0 || vmsWithoutOSAssigned.length > 0) {
       let errorMessage = 'Cannot proceed with migration: '
       const issues: string[] = []
+
+      if (vmsWithoutIPs.length > 0) {
+        issues.push(
+          `${vmsWithoutIPs.length} powered-off VM${
+            vmsWithoutIPs.length === 1 ? '' : 's'
+          } missing IP address${vmsWithoutIPs.length === 1 ? '' : 'es'}`
+        )
+      }
 
       if (vmsWithoutOSAssigned.length > 0) {
         issues.push(
@@ -1008,8 +977,7 @@ export default function MigrationFormDrawer({
   // RDM validation - check if RDM disks have missing required configuration
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: params.vms || [],
-    rdmDisks: rdmDisks,
-    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
+    rdmDisks: rdmDisks
   })
 
   const storageCopyMethod = params.storageCopyMethod || 'normal'
@@ -1047,15 +1015,10 @@ export default function MigrationFormDrawer({
     // RDM validation - ensure RDM disks are properly configured
     rdmValidation.hasValidationError
 
-  const sortedOpenstackNetworks = useMemo(() => {
-    const networks = openstackCredentials?.status?.openstack?.networks || []
-    if (!Array.isArray(networks) || networks.length === 0) return []
-
-    return networks
-      .filter((n) => n && typeof n.name === 'string')
-      .slice()
-      .sort((a, b) => stringsCompareFn(a?.name, b?.name))
-  }, [openstackCredentials?.status?.openstack?.networks])
+  const sortedOpenstackNetworks = useMemo(
+    () => (openstackCredentials?.status?.openstack?.networks || []).sort(stringsCompareFn),
+    [openstackCredentials?.status?.openstack?.networks]
+  )
   const sortedOpenstackVolumeTypes = useMemo(
     () => (openstackCredentials?.status?.openstack?.volumeTypes || []).sort(stringsCompareFn),
     [openstackCredentials?.status?.openstack?.volumeTypes]
@@ -1247,20 +1210,16 @@ export default function MigrationFormDrawer({
       Boolean(selectedMigrationOptions.dataCopyStartTime) ||
       Boolean(selectedMigrationOptions.cutoverOption) ||
       Boolean(selectedMigrationOptions.postMigrationScript) ||
-      Boolean(params.removeVMwareTools) ||
-      Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
       postMigrationActionSelected
     )
-  }, [selectedMigrationOptions, params.removeVMwareTools])
+  }, [selectedMigrationOptions])
 
   const areSelectedMigrationOptionsConfigured = useMemo(() => {
     if (!hasAnyMigrationOptionSelected) return false
 
     const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
     const periodicSyncIntervalValue = String(params.periodicSyncInterval ?? '').trim()
-    const postMigrationScriptValue = String(params.postMigrationScript ?? '').trim()
 
     const dataCopyStartTimeOk =
       !selectedMigrationOptions.dataCopyStartTime ||
@@ -1296,11 +1255,7 @@ export default function MigrationFormDrawer({
 
     const postMigrationScriptOk =
       !selectedMigrationOptions.postMigrationScript ||
-      (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
-
-    const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -1327,7 +1282,6 @@ export default function MigrationFormDrawer({
       cutoverOk &&
       periodicSyncOk &&
       postMigrationScriptOk &&
-      pcdOptionsOk &&
       postMigrationActionOk
     )
   }, [
@@ -1339,22 +1293,12 @@ export default function MigrationFormDrawer({
     params.cutoverEndTime,
     params.periodicSyncInterval,
     params.postMigrationScript,
-    params.useGPU,
-    params.useFlavorless,
     params.postMigrationAction,
     fieldErrors
   ])
 
   const step5Complete = Boolean(
-    touchedSections.options &&
-      (areSelectedMigrationOptionsConfigured ||
-        Boolean(
-          params.disconnectSourceNetwork ||
-            params.fallbackToDHCP ||
-            params.networkPersistence ||
-            params.removeVMwareTools
-        )) &&
-      !step5HasErrors
+    touchedSections.options && areSelectedMigrationOptionsConfigured && !step5HasErrors
   )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
@@ -1666,7 +1610,6 @@ export default function MigrationFormDrawer({
                   params={params}
                   onChange={getParamsUpdater}
                   openstackCredentials={openstackCredentials}
-                  openstackNetworks={sortedOpenstackNetworks}
                   stepNumber="4"
                   showHeader={false}
                 />

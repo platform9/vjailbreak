@@ -515,6 +515,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         loading={isLoading}
         emptyMessage="No credentials available"
         sx={{
+          '& .MuiDataGrid-main': {
+            overflow: 'auto'
+          },
           '& .MuiDataGrid-cell:focus': {
             outline: 'none'
           }

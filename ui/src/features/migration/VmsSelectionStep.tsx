@@ -1,5 +1,6 @@
 import {
   Chip,
+  FormControl,
   FormHelperText,
   Paper,
   styled,
@@ -13,13 +14,11 @@ import {
   DialogActions,
   MenuItem,
   Select,
-  TextField,
   Typography,
   Snackbar,
   Alert,
-  GlobalStyles,
-  Switch,
   CircularProgress,
+  GlobalStyles,
   InputAdornment
 } from '@mui/material'
 import {
@@ -35,6 +34,7 @@ import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
 import { Step } from 'src/shared/components/forms'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import * as React from 'react'
 import { getMigrationPlans } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
@@ -56,8 +56,6 @@ import { RdmDiskConfigurationPanel } from './components'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
-
-const { useCallback, useEffect, useRef, useState } = React
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -95,7 +93,6 @@ const CustomToolbarWithActions = (props) => {
     hasRdmVMs,
     onAssignRdmConfiguration,
     selectedCount,
-    rdmVMsCount,
     ...toolbarProps
   } = props
 
@@ -112,14 +109,14 @@ const CustomToolbarWithActions = (props) => {
             <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
             </Button>
-            {hasRdmVMs && rdmVMsCount > 0 && (
+            {hasRdmVMs && (
               <Button
                 variant="text"
                 color="secondary"
                 onClick={onAssignRdmConfiguration}
                 size="small"
               >
-                Configure RDM ({rdmVMsCount})
+                Configure RDM ({rowSelectionModel.length})
               </Button>
             )}
             {selectedCount > 0 && (
@@ -187,67 +184,11 @@ function VmsSelectionStep({
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
   const queryClient = useQueryClient()
-
-  const IPV4_REGEX =
-    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-
-  const normalizeNetworkInterfaces = (networkInterfaces?: VmData['networkInterfaces']) => {
-    if (!networkInterfaces || networkInterfaces.length === 0) return networkInterfaces
-    return networkInterfaces.map((nic) => ({
-      ...nic,
-      ipAddress: Array.isArray((nic as any).ipAddress)
-        ? (nic as any).ipAddress
-        : (nic as any).ipAddress
-          ? [(nic as any).ipAddress]
-          : []
-    }))
-  }
-
-  const parseIpList = (value: string): string[] => {
-    const trimmed = value.trim()
-    if (!trimmed) return []
-    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
-  }
-
-  const isValidIPAddressList = (value: string): boolean => {
-    const ips = parseIpList(value)
-    if (ips.length === 0) return false
-    return ips.every((ip) => isValidIPAddress(ip))
-  }
-
-  const flattenBulkIps = (items: BulkIpEdit[]) => {
-    const flattened: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
-    items.forEach((item) => {
-      const parsed = parseIpList(item.ip)
-      if (parsed.length === 0) {
-        flattened.push({ ...item, ip: '' })
-        return
-      }
-      parsed.forEach((ip) =>
-        flattened.push({ vmName: item.vmName, interfaceIndex: item.interfaceIndex, ip })
-      )
-    })
-    return flattened
-  }
-
-  const extractFirstIPv4 = (value: string): string => {
-    if (!value) return ''
-    const matches = value.match(IPV4_REGEX)
-    return matches?.[0] || ''
-  }
-
-  const hasMultipleIPv4 = (value: string): boolean => {
-    if (!value) return false
-    const matches = value.match(IPV4_REGEX)
-    return (matches?.length || 0) > 1
-  }
-
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
   const [selectedFlavor, setSelectedFlavor] = useState<string>('')
   const [rdmConfigDialogOpen, setRdmConfigDialogOpen] = useState(false)
-  const [rdmConfirmDialogOpen, setRdmConfirmDialogOpen] = useState(false)
   const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set())
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
   const [snackbarOpen, setSnackbarOpen] = useState(false)
@@ -287,10 +228,9 @@ function VmsSelectionStep({
   // RDM validation logic
   const rdmValidation = useRdmConfigValidation({
     selectedVMs: Array.from(selectedVMs)
-      .map((vmName) => vmsWithFlavor.find((vm) => vm.name === vmName))
+      .map((vmId) => vmsWithFlavor.find((vm) => vm.id === vmId))
       .filter(Boolean) as VmData[],
-    rdmDisks: rdmDisks,
-    backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
+    rdmDisks: rdmDisks
   })
 
   // RDM configuration state
@@ -358,15 +298,6 @@ function VmsSelectionStep({
   // Bulk IP editing state (kept for potential future use but not accessible via UI)
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
   const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkPreserveIp, setBulkPreserveIp] = useState<Record<string, Record<number, boolean>>>({})
-  const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
-    {}
-  )
-  const [bulkCurrentIPs, setBulkCurrentIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
-  const [originalIPsPerVM, setOriginalIPsPerVM] = useState<Record<string, Record<number, string>>>(
-    {}
-  )
   const [bulkValidationStatus, setBulkValidationStatus] = useState<
     Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
   >({})
@@ -374,59 +305,16 @@ function VmsSelectionStep({
     Record<string, Record<number, string>>
   >({})
   const [assigningIPs, setAssigningIPs] = useState(false)
-  const [bulkEditOverrides, setBulkEditOverrides] = useState<
-    Record<string, Record<number, { preserveIP: boolean; preserveMAC: boolean }>>
-  >({})
-
-  const hasBulkOverrideChanges = React.useMemo(() => {
-    return Object.values(bulkEditOverrides).some((interfaces) =>
-      Object.values(interfaces || {}).some((o) => o.preserveIP === false || o.preserveMAC === false)
-    )
-  }, [bulkEditOverrides])
-
-  useEffect(() => {
-    setOriginalIPsPerVM((prev) => {
-      const next = { ...prev }
-      vmsWithFlavor.forEach((vm) => {
-        if (!next[vm.name]) next[vm.name] = {}
-        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-          vm.networkInterfaces.forEach((nic, index) => {
-            if (next[vm.name][index] !== undefined) return
-            const discovered = (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-              .filter((v: string) => v && v.trim() !== '')
-              .join(', ')
-            if (discovered.trim() !== '') {
-              next[vm.name][index] = discovered
-            }
-          })
-        } else {
-          if (next[vm.name][0] !== undefined) return
-          const discovered = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-          if (discovered.trim() !== '') {
-            next[vm.name][0] = discovered
-          }
-        }
-      })
-      return next
-    })
-  }, [vmsWithFlavor])
   const hasBulkIpValidationErrors = React.useMemo(() => {
     return Object.values(bulkValidationStatus).some((interfaces) =>
       Object.values(interfaces || {}).some((status) => status === 'invalid')
     )
   }, [bulkValidationStatus])
   const hasBulkIpsToApply = React.useMemo(() => {
-    const anyTypedIp = Object.values(bulkEditIPs).some((interfaces) =>
+    return Object.values(bulkEditIPs).some((interfaces) =>
       Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
     )
-    const anyPreserveIpOff = Object.values(bulkPreserveIp).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    const anyPreserveMacOff = Object.values(bulkPreserveMac).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    return anyTypedIp || anyPreserveIpOff || anyPreserveMacOff || hasBulkOverrideChanges
-  }, [bulkEditIPs, bulkPreserveIp, bulkPreserveMac, hasBulkOverrideChanges])
+  }, [bulkEditIPs])
 
   const clusterName = React.useMemo(() => {
     if (!vmwareCluster) return undefined
@@ -442,75 +330,79 @@ function VmsSelectionStep({
     return parts.length === 3 ? parts[1] : undefined
   }, [vmwareCluster])
 
+  const vmNameCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {}
+    vmsWithFlavor.forEach((vm) => {
+      counts[vm.name] = (counts[vm.name] || 0) + 1
+    })
+    return counts
+  }, [vmsWithFlavor])
+
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
     {
       field: 'name',
       headerName: 'VM Name',
       flex: 2.5,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      renderCell: (params) => {
+        // Check if this VM name has duplicates - if so, show MOID in parentheses
+        const isDuplicate = vmNameCounts[params.value] > 1
+        const vmid = params.row.vmid
+        const displayName = isDuplicate && vmid ? `${params.value} (${vmid})` : params.value
+
+        return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
               <CdsIconWrapper>
-                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                {/* @ts-ignore */}
-                <cds-icon
-                  shape="vm"
-                  size="md"
-                  badge={params.row.vmState === 'running' ? 'success' : 'danger'}
-                >
+                  {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                   {/* @ts-ignore */}
-                </cds-icon>
-              </CdsIconWrapper>
-            </Tooltip>
-            <Box>{params.value}</Box>
+                  <cds-icon
+                    shape="vm"
+                    size="md"
+                    badge={params.row.vmState === 'running' ? 'success' : 'danger'}
+                  >
+                    {/* @ts-ignore */}
+                  </cds-icon>
+                </CdsIconWrapper>
+              </Tooltip>
+              <Box>{displayName}</Box>
+            {params.row.isMigrated && (
+              <Chip variant="outlined" label="Migrated" color="info" size="small" />
+            )}
+            {params.row.flavorNotFound && (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <WarningIcon color="warning" fontSize="small" />
+              </Box>
+            )}
+            {params.row.hasSharedRdm && (
+              <Tooltip title="This VM has shared RDM disks">
+                <Chip
+                  variant="outlined"
+                  label="RDM"
+                  color="secondary"
+                  size="small"
+                  sx={{ fontSize: '0.7rem', height: '20px' }}
+                />
+              </Tooltip>
+            )}
           </Box>
-          {params.row.isMigrated && (
-            <Chip variant="outlined" label="Migrated" color="info" size="small" />
-          )}
-          {params.row.flavorNotFound && (
-            <Box display="flex" alignItems="center" gap={0.5}>
-              <WarningIcon color="warning" fontSize="small" />
-            </Box>
-          )}
-          {params.row.hasSharedRdm && (
-            <Tooltip title="This VM has shared RDM disks">
-              <Chip
-                variant="outlined"
-                label="RDM"
-                color="secondary"
-                size="small"
-                sx={{ fontSize: '0.7rem', height: '20px' }}
-              />
-            </Tooltip>
-          )}
-        </Box>
-      )
+        )
+      }
     },
     {
       field: 'ipAddress',
       headerName: 'IP Address(es)',
-      flex: 0.8,
-      minWidth: 190,
+      flex: 1,
       hideable: true,
       renderCell: (params) => {
         const vm = params.row as VmDataWithFlavor
-        const vmId = vm.name
+        const vmId = vm.id
         const isSelected = selectedVMs.has(vmId)
         const networkInterfaces = Array.isArray(vm.networkInterfaces) ? vm.networkInterfaces : []
         const hasMultipleInterfaces = networkInterfaces.length > 1
-        const formatNicIps = (ips?: string[]) => {
-          const cleaned = (Array.isArray(ips) ? ips : []).filter((ip) => ip && ip.trim() !== '')
-          return cleaned.length > 0 ? cleaned.join(', ') : '—'
-        }
-
         const ipDisplay = hasMultipleInterfaces
-          ? networkInterfaces.map((nic) => formatNicIps(nic.ipAddress)).join(', ')
-          : formatNicIps(networkInterfaces[0]?.ipAddress) !== '—'
-            ? formatNicIps(networkInterfaces[0]?.ipAddress)
-            : vm.ipAddress || '—'
-
+          ? networkInterfaces.map((nic) => nic.ipAddress || '—').join(', ')
+          : networkInterfaces[0]?.ipAddress || vm.ipAddress || '—'
         const tooltipMessage = hasMultipleInterfaces
           ? "Use 'Assign IP' button in toolbar to edit IP addresses for multiple network interfaces"
           : "Use 'Assign IP' button in toolbar to assign IP address"
@@ -521,17 +413,13 @@ function VmsSelectionStep({
               display: 'flex',
               alignItems: 'center',
               width: '100%',
-              height: '100%',
-              gap: 1,
-              minWidth: 0
+              height: '100%'
             }}
           >
             <Typography
               variant="body2"
               sx={{
                 fontSize: '0.875rem',
-                flex: 1,
-                minWidth: 0,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
@@ -693,7 +581,6 @@ function VmsSelectionStep({
       field: 'flavor',
       headerName: 'Flavor',
       flex: 1,
-      getApplyQuickFilterFn: () => null,
       valueGetter: (value) => value || 'auto-assign',
       renderHeader: () => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -823,7 +710,7 @@ function VmsSelectionStep({
 
       let allIPs = vm.networkInterfaces
         ? vm.networkInterfaces
-            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
+            .map((nic) => nic.ipAddress)
             .filter((ip) => ip && ip.trim() !== '')
             .join(', ')
         : vm.ipAddress || ''
@@ -839,8 +726,6 @@ function VmsSelectionStep({
       if (existingVm && existingVm.networkInterfaces && existingVm.networkInterfaces.length > 0) {
         preferredNetworkInterfaces = existingVm.networkInterfaces
       }
-
-      preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
 
       // If existingVm stored assignedIPs, keep them in the new object
       const assignedIPs = existingVm?.assignedIPs ?? undefined
@@ -894,15 +779,15 @@ function VmsSelectionStep({
     if (vmsWithFlavor.length === 0) return
 
     // Clean up selection - remove VMs that no longer exist
-    const availableVmNames = new Set(vmsWithFlavor.map((vm) => vm.name))
+    const availableVmIds = new Set(vmsWithFlavor.map((vm) => vm.id))
     const cleanedSelection = new Set(
-      Array.from(selectedVMs).filter((vmName) => availableVmNames.has(vmName))
+      Array.from(selectedVMs).filter((vmId) => availableVmIds.has(vmId))
     )
 
     if (!areSetsEqual(cleanedSelection, selectedVMs)) {
       setSelectedVMs(cleanedSelection)
 
-      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.name))
+      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.id))
       syncSelectedVmSelection(selectedVmData)
 
       if (rdmConfigurations.length > 0) {
@@ -919,7 +804,7 @@ function VmsSelectionStep({
   ])
 
   useEffect(() => {
-    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
     syncSelectedVmSelection(selectedVmData)
 
     if (selectedVmData.length > 0 && rdmConfigurations.length > 0) {
@@ -942,7 +827,7 @@ function VmsSelectionStep({
 
     setSelectedVMs(newSelection)
 
-    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.name))
+    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.id))
     syncSelectedVmSelection(selectedVmData)
 
     if (rdmConfigurations.length > 0) {
@@ -1004,105 +889,8 @@ function VmsSelectionStep({
   const handleCloseBulkEditDialog = () => {
     setBulkEditDialogOpen(false)
     setBulkEditIPs({})
-    setBulkPreserveIp({})
-    setBulkPreserveMac({})
-    setBulkCurrentIPs({})
-    setBulkEditOverrides({})
     setBulkValidationStatus({})
     setBulkValidationMessages({})
-  }
-
-  const handleBulkPreserveIpChange = (
-    vmName: string,
-    interfaceIndex: number,
-    preserveIp: boolean
-  ) => {
-    const currentIpValue =
-      bulkEditIPs?.[vmName]?.[interfaceIndex] ?? bulkExistingIPs?.[vmName]?.[interfaceIndex] ?? ''
-    if (!preserveIp && parseIpList(currentIpValue).length > 1) {
-      return
-    }
-
-    setBulkPreserveIp((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: preserveIp }
-    }))
-
-    if (preserveIp) {
-      const originalIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
-      setBulkEditIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: originalIp }
-      }))
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: originalIp.trim() ? 'valid' : 'empty' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-      }))
-    } else {
-      const currentIp = bulkCurrentIPs?.[vmName]?.[interfaceIndex] || ''
-      setBulkEditIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
-      }))
-      const trimmed = currentIp.trim()
-      if (!trimmed) {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-        }))
-      } else if (!isValidIPAddressList(trimmed)) {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'Invalid IP format' }
-        }))
-      } else {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-        }))
-      }
-    }
-    if (!preserveIp) {
-      const current = bulkEditIPs?.[vmName]?.[interfaceIndex] ?? ''
-      const trimmed = current.trim()
-      const { status, message } = !trimmed
-        ? { status: 'empty' as const, message: '' }
-        : !isValidIPAddressList(trimmed)
-          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
-          : ({ status: 'valid' as const, message: '' } as const)
-
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: status }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: message }
-      }))
-    }
-  }
-
-  const handleBulkPreserveMacChange = (vmName: string, interfaceIndex: number, value: boolean) => {
-    setBulkPreserveMac((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-    }))
   }
 
   const handleBulkIpChange = (vmName: string, interfaceIndex: number, value: string) => {
@@ -1110,21 +898,6 @@ function VmsSelectionStep({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: value }
     }))
-
-    if (parseIpList(value).length > 1) {
-      setBulkPreserveIp((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: true }
-      }))
-    }
-
-    // Track latest user-entered value as "current" when Preserve IP is disabled.
-    if (bulkPreserveIp?.[vmName]?.[interfaceIndex] === false) {
-      setBulkCurrentIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-      }))
-    }
 
     if (!value.trim()) {
       setBulkValidationStatus((prev) => ({
@@ -1135,29 +908,23 @@ function VmsSelectionStep({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
       }))
-    } else if (!isValidIPAddressList(value.trim())) {
+    } else if (!isValidIPAddress(value.trim())) {
       setBulkValidationStatus((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
       }))
       setBulkValidationMessages((prev) => ({
         ...prev,
-        [vmName]: {
-          ...prev[vmName],
-          [interfaceIndex]: 'Invalid IP format'
-        }
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'Invalid IP format' }
       }))
     } else {
       setBulkValidationStatus((prev) => ({
         ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
       }))
       setBulkValidationMessages((prev) => ({
         ...prev,
-        [vmName]: {
-          ...prev[vmName],
-          [interfaceIndex]: ''
-        }
+        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
       }))
     }
   }
@@ -1215,294 +982,45 @@ function VmsSelectionStep({
     return null
   }
 
-  type BulkIpEdit = { vmName: string; interfaceIndex: number; ip: string }
-
-  const getPreserveIpFlag = (vmName: string, interfaceIndex: number) =>
-    bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
-
-  const getExistingIp = (vmName: string, interfaceIndex: number) =>
-    bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
-
-  const validateRequiredIpsForPreserveEnabled = () => {
-    let missingRequiredIp = false
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-
-        // Preserve IP can be enabled even when the discovered/original IP is empty.
-        // In that case, we should not block Apply Changes or show a validation error.
-        if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
-          setBulkValidationStatus((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-          }))
-          setBulkValidationMessages((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-          }))
-        }
-      })
-    })
-    return !missingRequiredIp
-  }
-
-  const collectIpsToApply = (): BulkIpEdit[] => {
-    const ipsToApply: BulkIpEdit[] = []
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-        const typedIp = ip.trim()
-
-        if (typedIp === '') return
-
-        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
-          return
-        }
-
-        ipsToApply.push({ vmName, interfaceIndex, ip: typedIp })
-      })
-    })
-    return ipsToApply
-  }
-
-  type BulkIpClear = { vmName: string; interfaceIndex: number }
-
-  const collectIpsToClear = (): BulkIpClear[] => {
-    const clears: BulkIpClear[] = []
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-        const typedIp = ip.trim()
-
-        // Rolling migration behavior: if Preserve IP is disabled and the user clears the field,
-        // treat it as an explicit clear for that interface.
-        if (!preserveIp && typedIp === '' && existingIp.trim() !== '') {
-          clears.push({ vmName, interfaceIndex })
-        }
-      })
-    })
-    return clears
-  }
-
-  const applyClearsToAssignedIpsMap = (
-    assignedIPsPerVM: Record<string, string[]>,
-    clears: BulkIpClear[]
-  ) => {
-    clears.forEach(({ vmName, interfaceIndex }) => {
-      if (!assignedIPsPerVM[vmName]) {
-        assignedIPsPerVM[vmName] = []
-      }
-      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-        assignedIPsPerVM[vmName].push('')
-      }
-      assignedIPsPerVM[vmName][interfaceIndex] = ''
-    })
-  }
-
-  const updateVmRowsAndForm = (updatedVms: VmDataWithFlavor[]) => {
-    setVmsWithFlavor(updatedVms)
-    setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
-  }
-
-  const applyPreserveFlagsOnly = () => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const preserveIp = bulkPreserveIp[vm.name]
-      const preserveMac = bulkPreserveMac[vm.name]
-      const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
-      if (!hasAnyPreserveFlags) return vm
-
-      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-        const preserveIP = preserveIp?.[index] !== false
-        const preserveMAC = preserveMac?.[index] !== false
-        return {
-          ...nic,
-          preserveIP,
-          preserveMAC
-        }
-      })
-
-      return {
-        ...vm,
-        networkInterfaces: updatedNetworkInterfaces,
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-    showToast('Preserve settings saved.', 'success')
-    handleCloseBulkEditDialog()
-  }
-
-  const applyOverrideChangesOnly = () => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const vmOverrides = bulkEditOverrides[vm.name]
-      if (!vmOverrides) return vm
-      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-        const overrides = vmOverrides[index]
-        return overrides
-          ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
-          : nic
-      })
-      const preserveIp = bulkPreserveIp[vm.name]
-      const preserveMac = bulkPreserveMac[vm.name]
-      return {
-        ...vm,
-        networkInterfaces: updatedNetworkInterfaces,
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-    showToast('Network override settings applied', 'success')
-    handleCloseBulkEditDialog()
-  }
-
-  const markBulkValidationFailure = (ips: BulkIpEdit[], message: string) => {
-    setBulkValidationStatus((prev) => {
-      const newStatus = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!newStatus[vmName]) newStatus[vmName] = {}
-        newStatus[vmName][interfaceIndex] = 'invalid'
-      })
-      return newStatus
-    })
-    setBulkValidationMessages((prev) => {
-      const newMessages = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!newMessages[vmName]) newMessages[vmName] = {}
-        newMessages[vmName][interfaceIndex] = message
-      })
-      return newMessages
-    })
-  }
-
-  const setBulkStatusForIps = (
-    ips: BulkIpEdit[],
-    status: 'empty' | 'valid' | 'invalid' | 'validating'
-  ) => {
-    setBulkValidationStatus((prev) => {
-      const next = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!next[vmName]) next[vmName] = {}
-        next[vmName][interfaceIndex] = status
-      })
-      return next
-    })
-  }
-
-  const buildAssignedIpsPerVm = (ips: BulkIpEdit[]) => {
-    const assignedIPsPerVM: Record<string, string[]> = {}
-    ips.forEach(({ vmName, interfaceIndex, ip }) => {
-      if (!assignedIPsPerVM[vmName]) {
-        assignedIPsPerVM[vmName] = []
-      }
-      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-        assignedIPsPerVM[vmName].push('')
-      }
-      if (assignedIPsPerVM[vmName].length > interfaceIndex) {
-        assignedIPsPerVM[vmName][interfaceIndex] = ip
-      }
-    })
-    return assignedIPsPerVM
-  }
-
-  const applyIpAssignmentsToRows = (assignedIPsPerVM: Record<string, string[]>) => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const assignedIPs = assignedIPsPerVM[vm.name]
-      const preserveIp = bulkPreserveIp[vm.name]
-      const preserveMac = bulkPreserveMac[vm.name]
-      if (!assignedIPs && !preserveIp && !preserveMac) return vm
-
-      const vmOverrides = bulkEditOverrides[vm.name]
-
-      let updatedNetworkInterfaces = vm.networkInterfaces
-      if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
-        updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-          const assignedIP = assignedIPs?.[index]
-          const overrides = vmOverrides?.[index]
-          const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
-          const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
-          const parsed = assignedIP !== undefined ? parseIpList(assignedIP) : undefined
-          return {
-            ...nic,
-            ...(assignedIP !== undefined
-              ? parsed && parsed.length > 0
-                ? { ipAddress: parsed }
-                : !preserveIP
-                  ? { ipAddress: [] }
-                  : {}
-              : {}),
-            ...(overrides
-              ? {
-                  preserveIP: overrides.preserveIP,
-                  preserveMAC: overrides.preserveMAC
-                }
-              : { preserveIP, preserveMAC })
-          }
-        })
-      }
-
-      if (!assignedIPs && !vmOverrides) return vm
-
-      const displayIPs = updatedNetworkInterfaces
-        ? updatedNetworkInterfaces
-            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
-            .filter((ip) => ip && ip.trim() !== '')
-        : []
-      const ipDisplay = displayIPs.join(', ')
-      const assignedIPsCsv = updatedNetworkInterfaces
-        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress?.[0] ?? '').join(',')
-        : assignedIPs
-          ? assignedIPs.join(',')
-          : undefined
-
-      return {
-        ...vm,
-        ...(updatedNetworkInterfaces && {
-          assignedIPs: assignedIPsCsv,
-          ipAddress: ipDisplay || '—',
-          networkInterfaces: updatedNetworkInterfaces
-        }),
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-  }
-
   const handleApplyBulkIPs = async () => {
     // Collect all IPs to apply with their VM and interface info
-    const hasRequiredIps = validateRequiredIpsForPreserveEnabled()
-    if (!hasRequiredIps) {
-      showToast('Provide an IP address for all interfaces where Preserve IP is enabled.', 'error')
-      return
-    }
+    const ipsToApply: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
 
-    const ipsToApply = collectIpsToApply()
-    const ipsToClear = collectIpsToClear()
+    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
+      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
+        if (ip.trim() !== '') {
+          ipsToApply.push({
+            vmName,
+            interfaceIndex: parseInt(interfaceIndexStr),
+            ip: ip.trim()
+          })
+        }
+      })
+    })
 
-    if (ipsToApply.length === 0 && ipsToClear.length === 0) {
-      // No IPs to validate/apply.
-      // Apply overrides if present, otherwise persist preserve flags.
-      if (hasBulkOverrideChanges) {
-        applyOverrideChangesOnly()
-      } else {
-        applyPreserveFlagsOnly()
-      }
-      return
-    }
+    if (ipsToApply.length === 0) return
     if (hasBulkIpValidationErrors) {
       showToast('Resolve invalid IP addresses before applying changes.', 'error')
       return
+    }
+
+    const markBulkValidationFailure = (message: string) => {
+      setBulkValidationStatus((prev) => {
+        const newStatus = { ...prev }
+        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+          if (!newStatus[vmName]) newStatus[vmName] = {}
+          newStatus[vmName][interfaceIndex] = 'invalid'
+        })
+        return newStatus
+      })
+      setBulkValidationMessages((prev) => {
+        const newMessages = { ...prev }
+        ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+          if (!newMessages[vmName]) newMessages[vmName] = {}
+          newMessages[vmName][interfaceIndex] = message
+        })
+        return newMessages
+      })
     }
 
     setAssigningIPs(true)
@@ -1510,11 +1028,17 @@ function VmsSelectionStep({
     try {
       // Batch validation before applying any changes
       if (openstackCredentials) {
-        const flattenedIps = flattenBulkIps(ipsToApply)
-        const ipList = flattenedIps.map((item) => item.ip)
+        const ipList = ipsToApply.map((item) => item.ip)
 
         // Set validating status for all IPs
-        setBulkStatusForIps(ipsToApply, 'validating')
+        setBulkValidationStatus((prev) => {
+          const newStatus = { ...prev }
+          ipsToApply.forEach(({ vmName, interfaceIndex }) => {
+            if (!newStatus[vmName]) newStatus[vmName] = {}
+            newStatus[vmName][interfaceIndex] = 'validating'
+          })
+          return newStatus
+        })
 
         let validationResult
         try {
@@ -1534,7 +1058,7 @@ function VmsSelectionStep({
               apiMessage ||
               'PCD IP validation service is unavailable (500). Please verify credentials or try again later.'
 
-            markBulkValidationFailure(ipsToApply, validationErrorMessage)
+            markBulkValidationFailure(validationErrorMessage)
             showToast(validationErrorMessage, 'error')
             reportError(error as Error, {
               context: 'bulk-ip-validation-request',
@@ -1555,24 +1079,11 @@ function VmsSelectionStep({
         const validIPs: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
         let hasInvalidIPs = false
 
-        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
-        flattenedIps.forEach((flatItem, index) => {
-          const key = `${flatItem.vmName}__${flatItem.interfaceIndex}`
+        ipsToApply.forEach((item, index) => {
           const isValid = validationResult.isValid[index]
           const reason = validationResult.reason[index]
-          const current = byInterfaceKey.get(key)
-          if (!current) {
-            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
-          } else if (current.ok && !isValid) {
-            byInterfaceKey.set(key, { ok: false, reason })
-          }
-        })
 
-        ipsToApply.forEach((item) => {
-          const key = `${item.vmName}__${item.interfaceIndex}`
-          const result = byInterfaceKey.get(key)
-          const ok = result?.ok !== false
-          if (ok) {
+          if (isValid) {
             validIPs.push(item)
             setBulkValidationStatus((prev) => ({
               ...prev,
@@ -1590,10 +1101,7 @@ function VmsSelectionStep({
             }))
             setBulkValidationMessages((prev) => ({
               ...prev,
-              [item.vmName]: {
-                ...prev[item.vmName],
-                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
-              }
+              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: reason }
             }))
           }
         })
@@ -1605,9 +1113,50 @@ function VmsSelectionStep({
         }
 
         // Group IPs by VM name
-        const assignedIPsPerVM = buildAssignedIpsPerVm(validIPs)
-        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
-        applyIpAssignmentsToRows(assignedIPsPerVM)
+        const assignedIPsPerVM: Record<string, string[]> = {}
+
+        validIPs.forEach(({ vmName, interfaceIndex, ip }) => {
+          if (!assignedIPsPerVM[vmName]) {
+            assignedIPsPerVM[vmName] = []
+          }
+          // Ensure the array has enough slots
+          while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
+            assignedIPsPerVM[vmName].push('')
+          }
+          if (assignedIPsPerVM[vmName].length > interfaceIndex) {
+            assignedIPsPerVM[vmName][interfaceIndex] = ip
+          }
+        })
+
+        // Update vmsWithFlavor to include assigned IPs for display purposes only
+        const updatedVms = vmsWithFlavor.map((vm) => {
+          const assignedIPs = assignedIPsPerVM[vm.name]
+          if (!assignedIPs) return vm
+
+          // Update networkInterfaces with assigned IPs
+          let updatedNetworkInterfaces = vm.networkInterfaces
+          if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
+            updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
+              const assignedIP = assignedIPs[index]
+              if (assignedIP && assignedIP.trim() !== '') {
+                return { ...nic, ipAddress: assignedIP }
+              }
+              return nic
+            })
+          }
+
+          const validIPs = assignedIPs.filter((ip) => ip && ip.trim() !== '')
+          const ipDisplay = validIPs.join(', ')
+
+          return {
+            ...vm,
+            assignedIPs: assignedIPs.join(','),
+            ipAddress: ipDisplay || vm.ipAddress,
+            networkInterfaces: updatedNetworkInterfaces
+          }
+        })
+
+        setVmsWithFlavor(updatedVms)
 
         // Mark all as successfully applied
         validIPs.forEach(({ vmName, interfaceIndex }) => {
@@ -1622,21 +1171,8 @@ function VmsSelectionStep({
         })
 
         // Notify success
-        showToast(
-          `Successfully applied network changes to ${validIPs.length + ipsToClear.length} interface(s)`,
-          'success'
-        )
+        showToast(`Successfully assigned IPs to ${validIPs.length} interface(s)`, 'success')
 
-        handleCloseBulkEditDialog()
-      } else {
-        // No OpenStack credentials available for remote validation; apply locally.
-        const assignedIPsPerVM = buildAssignedIpsPerVm(ipsToApply)
-        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
-        applyIpAssignmentsToRows(assignedIPsPerVM)
-        showToast(
-          `Successfully applied network changes to ${ipsToApply.length + ipsToClear.length} interface(s)`,
-          'success'
-        )
         handleCloseBulkEditDialog()
       }
     } catch (error) {
@@ -1667,98 +1203,37 @@ function VmsSelectionStep({
 
     // Initialize bulk edit IPs for selected VMs
     const initialBulkEditIPs: Record<string, Record<number, string>> = {}
-    const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
-    const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
-    const initialBulkCurrentIPs: Record<string, Record<number, string>> = {}
-    const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
-    const initialBulkEditOverrides: Record<
-      string,
-      Record<number, { preserveIP: boolean; preserveMAC: boolean }>
-    > = {}
     const initialValidationStatus: Record<
       string,
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
     > = {}
 
-    Array.from(selectedVMs).forEach((vmName) => {
-      const vm = vmsWithFlavor.find((v) => v.name === vmName)
-      if (!vm) return
+    Array.from(selectedVMs).forEach((vmId) => {
+      // Look up VM by id (vmid/MOID) for unique identification
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
+      if (!vm) {
+        return
+      }
 
-      initialBulkEditIPs[vmName] = {}
-      initialBulkPreserveIp[vmName] = {}
-      initialBulkPreserveMac[vmName] = {}
-      initialBulkCurrentIPs[vmName] = {}
-      initialBulkExistingIPs[vmName] = {}
-      initialBulkEditOverrides[vmName] = {}
-      initialValidationStatus[vmName] = {}
+      // Use vm.id as the key for unique identification
+      initialBulkEditIPs[vmId] = {}
+      initialValidationStatus[vmId] = {}
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
+        // Multiple network interfaces
         vm.networkInterfaces.forEach((nic, index) => {
-          const originalIp =
-            originalIPsPerVM?.[vmName]?.[index] !== undefined
-              ? originalIPsPerVM[vmName][index]
-              : (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-                  .filter((ip: string) => ip && ip.trim() !== '')
-                  .join(', ')
-          const currentIp = (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-            .filter((ip: string) => ip && ip.trim() !== '')
-            .join(', ')
-
-          initialBulkExistingIPs[vmName][index] = originalIp
-          initialBulkCurrentIPs[vmName][index] = currentIp
-
-          const initialPreserveIp = vm.preserveIp?.[index] !== false
-          const initialPreserveMac = vm.preserveMac?.[index] !== false
-
-          const isPoweredOff = vm.vmState !== 'running'
-          const hasMultipleIps = parseIpList(originalIp).length > 1
-          const effectivePreserveIp = isPoweredOff ? false : hasMultipleIps ? true : initialPreserveIp
-          initialBulkPreserveIp[vmName][index] = effectivePreserveIp
-          initialBulkPreserveMac[vmName][index] = initialPreserveMac
-
-          initialBulkEditIPs[vmName][index] = effectivePreserveIp ? originalIp : currentIp
-          initialBulkEditOverrides[vmName][index] = {
-            preserveIP: effectivePreserveIp,
-            preserveMAC: initialPreserveMac
-          }
-
-          const initialValue = initialBulkEditIPs[vmName][index]
-          initialValidationStatus[vmName][index] = initialValue.trim() ? 'valid' : 'empty'
+          initialBulkEditIPs[vmId][index] = nic.ipAddress || ''
+          initialValidationStatus[vmId][index] = nic.ipAddress ? 'valid' : 'empty'
         })
       } else {
-        const tableIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-        const originalIp =
-          originalIPsPerVM?.[vmName]?.[0] !== undefined ? originalIPsPerVM[vmName][0] : tableIp
-        const currentIp = tableIp
-
-        initialBulkExistingIPs[vmName][0] = originalIp
-        initialBulkCurrentIPs[vmName][0] = currentIp
-
-        const isPoweredOff = vm.vmState !== 'running'
-        const hasMultipleIps = parseIpList(originalIp).length > 1
-        const effectivePreserveIp =
-          isPoweredOff ? false : hasMultipleIps ? true : vm.preserveIp?.[0] !== false
-        const initialPreserveMac = vm.preserveMac?.[0] !== false
-
-        initialBulkPreserveIp[vmName][0] = effectivePreserveIp
-        initialBulkPreserveMac[vmName][0] = initialPreserveMac
-        initialBulkEditIPs[vmName][0] = effectivePreserveIp ? originalIp : currentIp
-        initialBulkEditOverrides[vmName][0] = {
-          preserveIP: effectivePreserveIp,
-          preserveMAC: initialPreserveMac
-        }
-        initialValidationStatus[vmName][0] = initialBulkEditIPs[vmName][0].trim()
-          ? 'valid'
-          : 'empty'
+        // Single interface (treat as interface 0)
+        initialBulkEditIPs[vmId][0] = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
+        initialValidationStatus[vmId][0] =
+          vm.ipAddress && vm.ipAddress !== '—' ? 'valid' : 'empty'
       }
     })
 
     setBulkEditIPs(initialBulkEditIPs)
-    setBulkPreserveIp(initialBulkPreserveIp)
-    setBulkPreserveMac(initialBulkPreserveMac)
-    setBulkExistingIPs(initialBulkExistingIPs)
-    setBulkCurrentIPs(initialBulkCurrentIPs)
-    setBulkEditOverrides(initialBulkEditOverrides)
     setBulkValidationStatus(initialValidationStatus)
     setBulkValidationMessages({})
     setBulkEditDialogOpen(true)
@@ -1793,7 +1268,7 @@ function VmsSelectionStep({
           : selectedFlavor
 
       const updatedVms = vmsWithFlavor.map((vm) => {
-        if (selectedVMs.has(vm.name)) {
+        if (selectedVMs.has(vm.id)) {
           return {
             ...vm,
             targetFlavorId: isAutoAssign ? '' : selectedFlavor,
@@ -1805,10 +1280,10 @@ function VmsSelectionStep({
         return vm
       })
 
-      const selectedVmNames = Array.from(selectedVMs)
+      const selectedVmIds = Array.from(selectedVMs)
 
-      const updatePromises = selectedVmNames.map((vmName) => {
-        const vmwareMachineName = vmList.find((vm) => vm.name === vmName)?.vmWareMachineName
+      const updatePromises = selectedVmIds.map((vmId) => {
+        const vmwareMachineName = vmList.find((vm) => vm.id === vmId)?.vmWareMachineName
         const payload = {
           spec: {
             targetFlavorId: isAutoAssign ? '' : selectedFlavor
@@ -1823,12 +1298,12 @@ function VmsSelectionStep({
       await Promise.all(updatePromises)
 
       setVmsWithFlavor(updatedVms)
-      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
+      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
 
       const actionText = isAutoAssign ? 'cleared flavor assignment for' : 'assigned flavor to'
       setSnackbarMessage(
-        `Successfully ${actionText} ${selectedVmNames.length} VM${
-          selectedVmNames.length > 1 ? 's' : ''
+        `Successfully ${actionText} ${selectedVmIds.length} VM${
+          selectedVmIds.length > 1 ? 's' : ''
         }`
       )
       setSnackbarSeverity('success')
@@ -1855,29 +1330,8 @@ function VmsSelectionStep({
     }
   }
 
-  // Check if any RDM configuration has volume type warnings
-  const hasRdmVolumeTypeWarnings = React.useMemo(() => {
-    if (!rdmConfigurations || rdmConfigurations.length === 0) return false
-    const backendVolumeTypeMap = openstackCredentials?.status?.openstack?.backendVolumeTypeMap || {}
-    return rdmConfigurations.some((config) => {
-      if (!config.cinderBackendPool || !config.volumeType) return false
-      const expectedType = backendVolumeTypeMap[config.cinderBackendPool]
-      return expectedType && expectedType !== config.volumeType
-    })
-  }, [rdmConfigurations, openstackCredentials?.status?.openstack?.backendVolumeTypeMap])
-
-  // Handle apply button click - show confirmation if there are warnings
-  const handleApplyRdmConfigurationsClick = () => {
-    if (hasRdmVolumeTypeWarnings) {
-      setRdmConfirmDialogOpen(true)
-    } else {
-      handleApplyRdmConfigurations()
-    }
-  }
-
   // RDM disk configuration functions
   const handleApplyRdmConfigurations = async () => {
-    setRdmConfirmDialogOpen(false)
     if (!rdmConfigurations || rdmConfigurations.length === 0) {
       showToast('No RDM configurations to apply', 'warning')
       return
@@ -1956,7 +1410,7 @@ function VmsSelectionStep({
 
   const rowSelectionModelArray = React.useMemo(
     () =>
-      Array.from(selectedVMs).filter((vmName) => vmsWithFlavor.some((vm) => vm.name === vmName)),
+      Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
     [selectedVMs, vmsWithFlavor]
   )
 
@@ -1980,7 +1434,7 @@ function VmsSelectionStep({
         <Box sx={{ mb: 1 }}>
           <FieldLabel label="Virtual Machines" required align="flex-start" />
         </Box>
-        <Box>
+        <FormControl error={!!error} required>
           <Paper sx={{ width: '100%', height: 389 }}>
             <DataGrid
               rows={vmsWithFlavor}
@@ -2004,7 +1458,7 @@ function VmsSelectionStep({
               rowHeight={45}
               onRowSelectionModelChange={handleVmSelection}
               rowSelectionModel={rowSelectionModelArray}
-              getRowId={(row) => row.name}
+              getRowId={(row) => row.id}
               isRowSelectable={isRowSelectable}
               disableRowSelectionOnClick
               slots={{
@@ -2026,11 +1480,6 @@ function VmsSelectionStep({
                       hasRdmVMs={rdmValidation.hasRdmVMs}
                       onAssignIP={handleOpenBulkIPAssignment}
                       selectedCount={rowSelectionModelArray.length}
-                      rdmVMsCount={
-                        rowSelectionModelArray.filter((vmName) =>
-                          rdmDisks.some((disk) => disk.spec.ownerVMs.includes(vmName as string))
-                        ).length
-                      }
                     />
                   )
                 },
@@ -2068,7 +1517,7 @@ function VmsSelectionStep({
               keepNonExistentRowsSelected
             />
           </Paper>
-        </Box>
+        </FormControl>
         {error && <FormHelperText error>{error}</FormHelperText>}
         {/* Separate RDM Error Messages */}
         {rdmValidation.hasSelectionError && (
@@ -2083,15 +1532,9 @@ function VmsSelectionStep({
           </Alert>
         )}
 
-        {rdmValidation.hasVolumeTypeError && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            {rdmValidation.volumeTypeErrorMessage}
-          </Alert>
-        )}
-
         {/* GPU Warning Message */}
         {(() => {
-          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.name))
+          const selectedVmsData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
           const hasGPUVMs = selectedVmsData.some((vm) => (vm as any).useGPU)
           const hasAssignedFlavors = selectedVmsData.some((vm) => vm.targetFlavorId)
 
@@ -2218,7 +1661,7 @@ function VmsSelectionStep({
           {rdmValidation.hasRdmVMs && rdmDisks.length > 0 && (
             <ActionButton
               tone="primary"
-              onClick={handleApplyRdmConfigurationsClick}
+              onClick={handleApplyRdmConfigurations}
               disabled={
                 updating ||
                 !rdmConfigurations ||
@@ -2230,35 +1673,6 @@ function VmsSelectionStep({
               Apply RDM Configuration
             </ActionButton>
           )}
-        </DialogActions>
-      </Dialog>
-
-      {/* RDM Volume Type Warning Confirmation Dialog */}
-      <Dialog
-        open={rdmConfirmDialogOpen}
-        onClose={() => setRdmConfirmDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Confirm RDM Configuration</DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              One or more RDM disk configurations have volume type mismatches with the selected
-              backend pool. This may cause issues during migration.
-            </Typography>
-          </Alert>
-          <Typography variant="body2">
-            Are you sure you want to apply this configuration?
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <ActionButton tone="secondary" onClick={() => setRdmConfirmDialogOpen(false)}>
-            Cancel
-          </ActionButton>
-          <ActionButton tone="primary" onClick={handleApplyRdmConfigurations}>
-            Yes, Apply Configuration
-          </ActionButton>
         </DialogActions>
       </Dialog>
 
@@ -2274,7 +1688,7 @@ function VmsSelectionStep({
       </Snackbar>
 
       {/* Bulk IP Editor Dialog */}
-      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md" fullWidth>
+      <Dialog open={bulkEditDialogOpen} onClose={handleCloseBulkEditDialog} maxWidth="md">
         <DialogTitle>
           Edit IP Addresses for {selectedVMs.size} {selectedVMs.size === 1 ? 'VM' : 'VMs'}
         </DialogTitle>
@@ -2309,202 +1723,55 @@ function VmsSelectionStep({
                       p: 2,
                       border: '1px solid',
                       borderColor: 'divider',
-                      borderRadius: 2,
-                      bgcolor: 'background.paper',
-                      boxShadow: 1,
+                      borderRadius: 1,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 2
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Tooltip title={vm.vmState === 'running' ? 'Running' : 'Stopped'}>
-                        <CdsIconWrapper>
-                          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                          {/* @ts-ignore */}
-                          <cds-icon
-                            shape="vm"
-                            size="md"
-                            badge={vm.vmState === 'running' ? 'success' : 'danger'}
-                          >
-                            {/* @ts-ignore */}
-                          </cds-icon>
-                        </CdsIconWrapper>
-                      </Tooltip>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {vm.name}
-                      </Typography>
-                    </Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {vm.name}
+                    </Typography>
 
                     {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
                       const interfaceIndex = parseInt(interfaceIndexStr)
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
-                      const status = bulkValidationStatus[vmName]?.[interfaceIndex]
-                      const message = bulkValidationMessages[vmName]?.[interfaceIndex]
-                      const isPoweredOff = vm.vmState !== 'running'
-                      const hasMultipleIps = parseIpList(ip).length > 1
-                      const preserveIp =
-                        !isPoweredOff &&
-                        (hasMultipleIps || bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false)
-                      const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
-                      const discoveredIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
-                      const currentIp =
-                        bulkCurrentIPs?.[vmName]?.[interfaceIndex] ||
-                        (Array.isArray(networkInterface?.ipAddress)
-                          ? networkInterface?.ipAddress
-                              ?.filter((v) => v && v.trim() !== '')
-                              .join(', ')
-                          : '') ||
-                        ''
-                      const displayIp = preserveIp ? discoveredIp : currentIp
+                      const status = bulkValidationStatus[vmId]?.[interfaceIndex]
+                      const message = bulkValidationMessages[vmId]?.[interfaceIndex]
                       return (
                         <Box
                           key={interfaceIndex}
                           sx={{
                             display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', sm: '240px 150px 1fr' },
+                            gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' },
                             columnGap: { xs: 1.5, sm: 2 },
                             rowGap: 1,
                             alignItems: 'flex-start'
                           }}
                         >
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{ minWidth: 36 }}
-                              >
-                                IP:
-                              </Typography>
-                              <Box
-                                component="span"
-                                sx={{
-                                  px: 1,
-                                  py: 0.25,
-                                  borderRadius: 1,
-                                  bgcolor: (theme) =>
-                                    theme.palette.mode === 'dark'
-                                      ? 'rgba(255, 255, 255, 0.08)'
-                                      : theme.palette.grey[100],
-                                  border: '1px solid',
-                                  borderColor: 'divider',
-                                  color: 'text.primary',
-                                  fontFamily: 'monospace'
-                                }}
-                              >
-                                {displayIp.trim() !== ''
-                                  ? displayIp
-                                  : !preserveIp &&
-                                      !networkInterface &&
-                                      interfaceIndex === 0 &&
-                                      !hasMultipleIPv4(vm.ipAddress || '')
-                                    ? extractFirstIPv4(vm.ipAddress || '')
-                                    : '—'}
-                              </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{ minWidth: 36 }}
-                              >
-                                MAC:
-                              </Typography>
-                              <Box
-                                sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 0.75,
-                                  minWidth: 0
-                                }}
-                              >
-                                <Box
-                                  component="span"
-                                  sx={{
-                                    px: 1,
-                                    py: 0.25,
-                                    borderRadius: 1,
-                                    bgcolor: (theme) =>
-                                      theme.palette.mode === 'dark'
-                                        ? 'rgba(255, 255, 255, 0.08)'
-                                        : theme.palette.grey[100],
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    color: 'text.primary',
-                                    fontFamily: 'monospace'
-                                  }}
-                                >
-                                  {networkInterface?.mac || '—'}
-                                </Box>
-                                {!preserveMac ? (
-                                  <Tooltip
-                                    title="A new MAC address will be assigned in the destination"
-                                    placement="right"
-                                  >
-                                    <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-                                  </Tooltip>
-                                ) : null}
-                              </Box>
-                            </Box>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {networkInterface?.mac ||
+                                networkInterface?.network ||
+                                `Interface ${interfaceIndex + 1}`}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Current: {networkInterface?.ipAddress || vm.ipAddress || '—'}
+                            </Typography>
                           </Box>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.25 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Switch
-                                size="small"
-                                checked={preserveIp}
-                                disabled={isPoweredOff || hasMultipleIps}
-                                onChange={(e) =>
-                                  handleBulkPreserveIpChange(
-                                    vmName,
-                                    interfaceIndex,
-                                    e.target.checked
-                                  )
-                                }
-                              />
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                Preserve IP
-                              </Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Switch
-                                size="small"
-                                checked={preserveMac}
-                                onChange={(e) =>
-                                  handleBulkPreserveMacChange(
-                                    vmName,
-                                    interfaceIndex,
-                                    e.target.checked
-                                  )
-                                }
-                              />
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                Preserve MAC
-                              </Typography>
-                            </Box>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TextField
-                              value={ip}
-                              onChange={(e) =>
-                                handleBulkIpChange(vmName, interfaceIndex, e.target.value)
-                              }
-                              placeholder={
-                                preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
-                              }
-                              size="small"
-                              fullWidth
-                              disabled={
-                                preserveIp &&
-                                Boolean(bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim())
-                              }
-                              InputProps={{
-                                endAdornment: renderValidationAdornment(status)
-                              }}
-                              error={status === 'invalid'}
-                              helperText={status === 'invalid' ? message || 'Invalid IP' : ''}
-                            />
-                          </Box>
+                          <SharedTextField
+                            value={ip}
+                            onChange={(e) =>
+                              handleBulkIpChange(vmId, interfaceIndex, e.target.value)
+                            }
+                            placeholder="Enter IP address"
+                            size="small"
+                            fullWidth
+                            error={status === 'invalid'}
+                            helperText={message || ' '}
+                            FormHelperTextProps={{ sx: { ml: 0 } }}
+                            InputProps={{ endAdornment: renderValidationAdornment(status) }}
+                          />
                         </Box>
                       )
                     })}
