@@ -215,6 +215,17 @@ func (vcclient *VCenterClient) RenameVM(ctx context.Context, vmName, newVMName s
 	return nil
 }
 
+// RenameVMByMOID renames a VM using its vCenter Managed Object ID, avoiding ambiguous name lookups.
+func (vcclient *VCenterClient) RenameVMByMOID(ctx context.Context, moid, newVMName string) error {
+	vm := vcclient.GetVMByMOID(moid)
+	spec := types.VirtualMachineConfigSpec{Name: newVMName}
+	task, err := vm.Reconfigure(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("failed to reconfigure VM (moid=%s) with new name '%s': %v", moid, newVMName, err)
+	}
+	return task.Wait(ctx)
+}
+
 // MoveVMFolder moves a VM to a specified folder in vCenter
 func (vcclient *VCenterClient) MoveVMFolder(ctx context.Context, vmName, folderName string) error {
 	// Find the VM
@@ -240,6 +251,32 @@ func (vcclient *VCenterClient) MoveVMFolder(ctx context.Context, vmName, folderN
 	}
 
 	return nil
+}
+
+// MoveVMFolderByMOID moves a VM (identified by MOID) to a folder, scoped to the given datacenter name.
+// This avoids ambiguous name-based VM lookups for duplicate VM names.
+func (vcclient *VCenterClient) MoveVMFolderByMOID(ctx context.Context, moid, datacenterName, folderName string) error {
+	vm := vcclient.GetVMByMOID(moid)
+
+	// Scope the finder to the known datacenter for folder lookup
+	if datacenterName != "" {
+		dc, err := vcclient.VCFinder.Datacenter(ctx, datacenterName)
+		if err != nil {
+			return fmt.Errorf("failed to find datacenter '%s': %v", datacenterName, err)
+		}
+		vcclient.VCFinder.SetDatacenter(dc)
+	}
+
+	folderRef, err := vcclient.VCFinder.Folder(ctx, folderName)
+	if err != nil {
+		return fmt.Errorf("failed to find folder '%s': %v", folderName, err)
+	}
+
+	task, err := folderRef.MoveInto(ctx, []types.ManagedObjectReference{vm.Reference()})
+	if err != nil {
+		return fmt.Errorf("failed to initiate move of VM (moid=%s) to folder '%s': %v", moid, folderName, err)
+	}
+	return task.Wait(ctx)
 }
 
 // RunCommandOnEsxi runs a command on an ESXi host
