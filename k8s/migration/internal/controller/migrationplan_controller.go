@@ -254,10 +254,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		return errors.Wrap(err, "failed to get migration resources")
 	}
 
-	// Resolve actual vCenter VM name and VMID for unambiguous lookup.
-	// For duplicate VM names the plan stores a "name-vmid" composite key,
-	// but vCenter only knows the original "name". Use the VMID (MOID) whenever
-	// available to avoid "resolves to multiple vms" errors.
 	vcenterVMName := vm
 	var vmid, datacenterName string
 	vmMachine, vmMachineErr := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
@@ -357,7 +353,7 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 
 	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
 
-	// When VMID is known, use MOID-based move to avoid "resolves to multiple vms" for duplicate names.
+	// When VMID is known, use MOID-based name
 	if vmid != "" {
 		if err := vcClient.MoveVMFolderByMOID(ctx, vmid, datacenterName, folderName); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {

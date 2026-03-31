@@ -296,9 +296,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		}
 		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
 	}
-	// VMKey is the unique composite identifier (e.g. "win-2k12-31090") used for
-	// OpenStack resource naming to avoid collisions when duplicate VM names exist.
-	// vmk8sName is VMWARE_MACHINE_OBJECT_NAME which is always set to the vmKey.
+
 	vmKey := vmk8sName
 	if vmKey == "" {
 		vmKey = o.Name

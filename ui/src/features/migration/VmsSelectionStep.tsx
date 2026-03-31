@@ -457,7 +457,7 @@ function VmsSelectionStep({
       headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => {
-        // Check if this VM name has duplicates - if so, show MOID in parentheses
+        // Check if this VM name has duplicates
         const isDuplicate = vmNameCounts[params.value] > 1
         const vmid = params.row.vmid
         const displayName = isDuplicate && vmid ? `${params.value}-${vmid.replace(/^vm-/, '')}` : params.value
