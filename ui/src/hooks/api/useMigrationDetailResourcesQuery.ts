@@ -15,7 +15,7 @@ import { getRdmDisksList } from 'src/api/rdm-disks/rdmDisks'
 import type { StorageMapping } from 'src/api/storage-mappings/model'
 import { getStorageMapping } from 'src/api/storage-mappings/storageMappings'
 import type { VMwareMachine } from 'src/api/vmware-machines/model'
-import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
+import { getVMwareMachine, getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
 import type { Migration } from 'src/features/migration/api/migrations'
 
 export interface MigrationDetailResources {
@@ -113,14 +113,30 @@ export const useMigrationDetailResourcesQuery = ({
         ]
       )
 
-      const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace, vmwareRef))
+      let vmwareMachine: VMwareMachine | null = null
+      if (vmName) {
+        vmwareMachine = await safeGet(() => getVMwareMachine(vmName, namespace))
+      }
+
+      const vmwareMachinesList =
+        !vmwareMachine ? await safeGet(() => getVMwareMachines(namespace, vmwareRef)) : null
       const vmwareMachines = vmwareMachinesList?.items || []
 
-      const vmwareMachine = vmwareMachines.length
-        ? vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
+      if (!vmwareMachine && vmwareMachines.length) {
+        vmwareMachine =
+          vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
+          vmwareMachines.find((m) => vmName && m?.metadata?.name === vmName) ||
+          vmwareMachines.find((m) => {
+            const vms = (m?.spec as any)?.vms
+            const reconstructed =
+              vms?.name && vms?.vmid
+                ? `${vms.name}-${String(vms.vmid).replace(/^vm-/, '')}`
+                : vms?.name
+            return vmName && reconstructed === vmName
+          }) ||
           vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
           null
-        : null
+      }
 
       const rdmDiskNames = ((vmwareMachine?.spec as any)?.vms?.rdmDisks as string[]) || []
       const effectiveVmName = vmName || ((vmwareMachine?.spec as any)?.vms?.name as string) || ''
