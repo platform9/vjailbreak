@@ -75,7 +75,7 @@ export const mapToVmDataWithRdm = (
     const isDuplicate = nameCounts[machine.spec.vms.name] > 1
     const vmKey =
       isDuplicate && machine.spec.vms.vmid
-        ? `${machine.spec.vms.name}-${machine.spec.vms.vmid}`
+        ? `${machine.spec.vms.name}-${machine.spec.vms.vmid.replace(/^vm-/, '')}`
         : machine.spec.vms.name
 
     return {

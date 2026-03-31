@@ -467,7 +467,7 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 
 	// Verify VM name matches. For duplicate VM names the plan stores "name-vmid",
 	// so accept both the plain name and the name-vmid composite.
-	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + vmMachine.Spec.VMInfo.VMID
+	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
 	if vmMachine.Spec.VMInfo.Name != vm && vmidSuffixed != vm {
 		return nil, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
 	}
@@ -646,7 +646,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name == vmName {
+			if v.Spec.VMInfo.Name == vmName || v.Spec.VMInfo.Name+"-"+strings.TrimPrefix(v.Spec.VMInfo.VMID, "vm-") == vmName {
 				isValid = true
 				break
 			}

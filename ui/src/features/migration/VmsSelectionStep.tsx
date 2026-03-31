@@ -460,7 +460,7 @@ function VmsSelectionStep({
         // Check if this VM name has duplicates - if so, show MOID in parentheses
         const isDuplicate = vmNameCounts[params.value] > 1
         const vmid = params.row.vmid
-        const displayName = isDuplicate && vmid ? `${params.value} (${vmid})` : params.value
+        const displayName = isDuplicate && vmid ? `${params.value}-${vmid.replace(/^vm-/, '')}` : params.value
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
