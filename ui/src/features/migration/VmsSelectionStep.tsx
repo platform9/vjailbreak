@@ -1692,9 +1692,10 @@ function VmsSelectionStep({
       Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
     > = {}
 
-    Array.from(selectedVMs).forEach((vmName) => {
-      const vm = vmsWithFlavor.find((v) => v.name === vmName)
+    Array.from(selectedVMs).forEach((vmId) => {
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (!vm) return
+      const vmName = vm.vmKey || vm.name
 
       initialBulkEditIPs[vmName] = {}
       initialBulkPreserveIp[vmName] = {}
@@ -2311,7 +2312,7 @@ function VmsSelectionStep({
               }}
             >
               {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
-                const vm = vmsWithFlavor.find((v) => v.name === vmName)
+                const vm = vmsWithFlavor.find((v) => (v.vmKey || v.name) === vmName)
                 if (!vm) return null
 
                 return (
