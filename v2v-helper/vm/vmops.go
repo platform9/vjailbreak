@@ -62,6 +62,7 @@ type VMInfo struct {
 	VMDisks           []VMDisk
 	UEFI              bool
 	Name              string
+	VMKey             string
 	OSType            string
 	GuestNetworks     []vjailbreakv1alpha1.GuestNetwork
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
@@ -295,6 +296,13 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		}
 		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
 	}
+	// VMKey is the unique composite identifier (e.g. "win-2k12-31090") used for
+	// OpenStack resource naming to avoid collisions when duplicate VM names exist.
+	// vmk8sName is VMWARE_MACHINE_OBJECT_NAME which is always set to the vmKey.
+	vmKey := vmk8sName
+	if vmKey == "" {
+		vmKey = o.Name
+	}
 	vminfo := VMInfo{
 		CPU:               o.Config.Hardware.NumCPU,
 		Memory:            o.Config.Hardware.MemoryMB,
@@ -304,6 +312,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		UUID:              o.Config.Uuid,
 		Host:              o.Runtime.Host.Reference().Value,
 		Name:              o.Name,
+		VMKey:             vmKey,
 		VMDisks:           vmdisks,
 		RDMDisks:          rdmDiskSlice,
 		UEFI:              uefi,
