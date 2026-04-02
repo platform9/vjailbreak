@@ -2681,8 +2681,6 @@ spec:
               vmIP:
                 description: VMIP is the IP address of the VM
                 type: string
-            required:
-            - vmIP
             type: object
         type: object
     served: true
