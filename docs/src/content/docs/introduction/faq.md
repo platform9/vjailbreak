@@ -112,3 +112,9 @@ vJailbreak migrates virtual machines along with the disks that are **currently a
 Yes, vJailbreak can migrate VMs that are part of a Docker Swarm cluster. However, the same principles apply as with any distributed workload: vJailbreak performs VM-level migration and does not manage workload-specific concerns.
 
 Users must take appropriate precautions for Docker Swarm, such as draining nodes, managing service placement, and ensuring cluster quorum is maintained during migration. vJailbreak does not inspect or manage what is running inside the VM.
+
+
+### Can vJailbreak migrate Windows VMs with GPO applied?
+Yes, but GPO settings may interfere with driver injection during migration. You may need to disable restrictive Group Policy settings before migrating.
+ 
+See the [GPO Migration Guide](../guides/How-to/gpo_migration.md) for detailed steps on how to resolve GPO-related migration issues.
