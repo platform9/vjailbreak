@@ -412,7 +412,10 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
 	// Always use libvirtxml mode to convert all disks
-	args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	args = append(args, "-i", "libvirtxml", xmlFile)
+	if strings.ToLower(ostype) != constants.OSFamilyWindows {
+		args = append(args, "--root", path)
+	}
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
