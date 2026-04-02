@@ -89,8 +89,6 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 	vmIP := GetNodeInternalIP(masterNode)
 	if vmIP != "" {
 		vjNode.Status.VMIP = vmIP
-	} else {
-		vjNode.Status.VMIP = "0.0.0.0"
 	}
 	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
 	vjNode.Status.OpenstackUUID = openstackuuid
