@@ -2679,7 +2679,7 @@ spec:
                   (e.g., Provisioning, Ready, Error, Decommissioning)
                 type: string
               vmIP:
-                description: VMIP is the IP address of the VM
+                description: VMIP  is the IP address of the VM
                 type: string
             required:
             - vmIP
