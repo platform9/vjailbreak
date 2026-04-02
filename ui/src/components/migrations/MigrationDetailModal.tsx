@@ -194,9 +194,78 @@ export default function MigrationDetailModal({
   }, [vmSpec?.networkInterfaces, vmSpec?.networks])
 
   const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
-  const destinationTenant =
-    ((data?.openstackCreds?.spec as any)?.projectName as string) ||
-    (data?.openstackCredsMissing ? 'Credentials deleted' : 'N/A')
+
+  // Destination tenant is derived from the referenced OpenStack creds when available.
+  // If that creds was deleted, derive the tenant using the destination cluster -> PCDCluster label
+  // mapping to an OpenStack creds name, and then resolve its projectName from the remaining creds list.
+  const openstackCredNameToProjectName = useMemo(() => {
+    const entries = (data?.openstackCredsList || [])
+      .map((c) => {
+        const name = String(c?.metadata?.name || '').trim()
+        const project = String((c?.spec as any)?.projectName || '').trim()
+        return name && project ? ([name, project] as const) : null
+      })
+      .filter(Boolean) as Array<readonly [string, string]>
+
+    return new Map(entries)
+  }, [data?.openstackCredsList])
+
+  const destinationClusterToOpenstackCredName = useMemo(() => {
+    const entries = (data?.pcdClusters || [])
+      .map((c) => {
+        const clusterName = String((c as any)?.spec?.clusterName || '').trim()
+        const openstackCredName = String(
+          (c as any)?.metadata?.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
+        ).trim()
+
+        return clusterName && openstackCredName ? ([clusterName, openstackCredName] as const) : null
+      })
+      .filter(Boolean) as Array<readonly [string, string]>
+
+    return new Map(entries)
+  }, [data?.pcdClusters])
+
+  const destinationClusterToProjectNameFromHostConfig = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const cred of data?.openstackCredsList || []) {
+      const projectName = String((cred?.spec as any)?.projectName || '').trim()
+      if (!projectName) continue
+      const hostConfigs = ((cred?.spec as any)?.pcdHostConfig as any[]) || []
+      for (const cfg of hostConfigs) {
+        const clusterName = String((cfg as any)?.clusterName || '').trim()
+        if (clusterName && !map.has(clusterName)) {
+          map.set(clusterName, projectName)
+        }
+      }
+    }
+    return map
+  }, [data?.openstackCredsList])
+
+  const destinationTenant = useMemo(() => {
+    const direct = ((data?.openstackCreds?.spec as any)?.projectName as string) || ''
+    if (direct) return direct
+
+    const clusterName = String(destinationCluster || '').trim()
+    if (!clusterName || clusterName === 'N/A') return 'N/A'
+
+    const mappedCredName = destinationClusterToOpenstackCredName.get(clusterName)
+    if (mappedCredName) {
+      const mappedProjectName = openstackCredNameToProjectName.get(mappedCredName)
+      if (mappedProjectName) return mappedProjectName
+    }
+
+    const fromHostConfig = destinationClusterToProjectNameFromHostConfig.get(clusterName)
+    if (fromHostConfig) return fromHostConfig
+
+    return 'N/A'
+  }, [
+    data?.openstackCreds,
+    data?.openstackCredsList,
+    destinationCluster,
+    destinationClusterToOpenstackCredName,
+    openstackCredNameToProjectName,
+    destinationClusterToProjectNameFromHostConfig
+  ])
 
   const rawNetworkMappings = useMemo(
     () =>
@@ -503,23 +572,13 @@ export default function MigrationDetailModal({
                   title="Migration Environment"
                   subtitle="Source and destination overview"
                 >
-                  {data?.vmwareCredsMissing || data?.openstackCredsMissing ? (
+                  {data?.vmwareCredsCount === 0 || data?.openstackCredsCount === 0 ? (
                     <Alert severity="warning" sx={{ mb: 2 }}>
-                      {data?.vmwareCredsMissing && data?.openstackCredsMissing
-                        ? `VMware and PCD credentials were deleted or are not accessible.${
-                            data?.vmwareCredsRef || data?.openstackCredsRef
-                              ? ` (VMware: ${data?.vmwareCredsRef || 'unknown'}, PCD: ${
-                                  data?.openstackCredsRef || 'unknown'
-                                })`
-                              : ''
-                          }`
-                        : data?.vmwareCredsMissing
-                          ? `VMware credentials were deleted or are not accessible.${
-                              data?.vmwareCredsRef ? ` (${data.vmwareCredsRef})` : ''
-                            }`
-                          : `PCD credentials were deleted or are not accessible.${
-                              data?.openstackCredsRef ? ` (${data.openstackCredsRef})` : ''
-                            }`}
+                      {data?.vmwareCredsCount === 0 && data?.openstackCredsCount === 0
+                        ? 'No VMware or PCD credentials are present. Migration details may be incomplete.'
+                        : data?.vmwareCredsCount === 0
+                          ? 'No VMware credentials are present. Migration details may be incomplete.'
+                          : 'No PCD credentials are present. Migration details may be incomplete.'}
                     </Alert>
                   ) : null}
                   <KeyValueGrid items={migrationEnvironmentItems} />
