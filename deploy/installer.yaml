@@ -4751,8 +4751,11 @@ rules:
   - secrets
   verbs:
   - create
-  - get
   - delete
+  - get
+  - list
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
