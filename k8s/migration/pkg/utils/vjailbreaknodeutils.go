@@ -40,7 +40,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	nodeExists := false
-	err = k3sclient.Get(ctx, client.ObjectKey{Name: masterNode.Name}, &vjNode)
+	err = k3sclient.Get(ctx, client.ObjectKey{Name: constants.VjailbreakMasterNodeName}, &vjNode)
 	if err == nil {
 		nodeExists = true
 		// VjailbreakNode already exists with OpenstackUUID set
