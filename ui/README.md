@@ -21,3 +21,14 @@ To run the app locally:
    `yarn dev`
 
 4. Load the UI in your browser at `http://localhost:3000`
+
+## E2E Tests (Playwright)
+
+1. Install Playwright browsers:
+   `yarn e2e:install`
+
+2. Run E2E tests:
+   `yarn e2e`
+
+3. Open the Playwright UI runner:
+   `yarn e2e:ui`
