@@ -90,7 +90,8 @@ function Remove-VMwareDrivers {
     "vmmemctl.sys","vmmouse.sys",
     "vmrawdsk.sys","vmtools.sys",
     "vmusbmouse.sys","vmvss.sys",
-    "vsock.sys","vmx_svga.sys","vmxnet3.sys"
+    "vsock.sys","vmx_svga.sys","vmxnet3.sys",
+    "vmgencounter.sys","vmgid.sys","vms3cap.sys","vmstorfl.sys"
     )
 
     $driverPath="C:\Windows\System32\drivers"
@@ -122,12 +123,12 @@ function Remove-DriverStore {
 
     Write-Log "Cleaning DriverStore VMware entries"
 
-    $drivers = pnputil /enum-drivers *> $null
+    $driverLines = pnputil /enum-drivers 2>$null
 
     $published=""
     $provider=""
 
-    foreach($line in $drivers){
+    foreach($line in $driverLines){
 
         if($line -match "Published Name\s*:\s*(oem\d+\.inf)"){
             $published=$matches[1]
@@ -143,7 +144,7 @@ function Remove-DriverStore {
 
                 Write-Log "Removing driverstore $published"
 
-                pnputil /delete-driver $published /force *> $null
+                pnputil /delete-driver $published /force /uninstall *> $null
             }
 
             $published=""
@@ -200,8 +201,21 @@ function Remove-VMwareFolders {
                 Remove-Item $p -Recurse -Force
 
             }catch{
-
-                Schedule-DeleteOnReboot $p
+                $tempEmpty = $null
+                try {
+                    $tempEmpty = Join-Path $env:TEMP "empty_$(Get-Random)"
+                    New-Item -ItemType Directory -Path $tempEmpty -Force | Out-Null
+                    robocopy $tempEmpty $p /MIR /R:3 /W:5 /MT:32 /NP /NDL /NJH /NJS *> $null
+                    Remove-Item $p -Recurse -Force -ErrorAction Stop
+                    Write-Log "Robocopy MIR succeeded on $p"
+                } catch {
+                    Schedule-DeleteOnReboot $p
+                    Write-Log "Scheduled folder delete on reboot: $p"
+                } finally {
+                    if ($tempEmpty -and (Test-Path $tempEmpty)) {
+                        Remove-Item $tempEmpty -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                }
             }
         }
     }
@@ -270,13 +284,11 @@ function Remove-VMwareResiduals {
         Write-Log "Ghost MSI uninstall failed"
     }
 
-    # Remove installer registry leftovers
     Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
 
     Remove-Item -Path "HKLM:\SOFTWARE\Classes\Installer\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
 
 
-    # Force remove VMware folder if present
     $vmwarePath = "C:\Program Files\VMware"
 
     if(Test-Path $vmwarePath){
@@ -292,29 +304,21 @@ function Remove-VMwareResiduals {
         }
 
         try{
-
             cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
             cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
-
             Remove-Item $vmwarePath -Recurse -Force -ErrorAction Stop
-
             Write-Log "VMware folder removed successfully"
-
         }catch{
-
             Write-Log "Initial folder delete failed, retrying..."
-
-            Start-Sleep -Seconds 2
-
+            Start-Sleep -Seconds 3
             cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
             cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
-
             Remove-Item $vmwarePath -Recurse -Force -ErrorAction SilentlyContinue
-
             if(!(Test-Path $vmwarePath)){
                 Write-Log "VMware folder removed on retry"
             }else{
                 Write-Log "VMware folder still present"
+                Schedule-DeleteOnReboot $vmwarePath
             }
         }
 
@@ -414,6 +418,59 @@ Write-Log "=== VMware Cleanup Start ==="
 
 Stop-VMwareProcesses
 Remove-VMwareServices
+
+Write-Log "Unregistering VMware DLLs before any folder deletion"
+$vmStatsDLL = "C:\Program Files\VMware\VMware Tools\vmStatsProvider\win64\vmStatsProvider.dll"
+$vssDLL     = "C:\Program Files\Common Files\VMware\Drivers\vss\VCBSnapshotProvider.dll"
+$vssComreg  = "C:\Program Files\Common Files\VMware\Drivers\vss\comreg.exe"
+
+if (Test-Path $vmStatsDLL) {
+    regsvr32 /s /u $vmStatsDLL
+    Write-Log "Unregistered vmStatsProvider.dll"
+}
+try {
+    if (Test-Path $vssComreg) {
+        & $vssComreg -unregister "VMware Snapshot Provider" *> $null
+        Write-Log "Unregistered VMware Snapshot Provider via comreg.exe"
+    }
+} catch {}
+if (Test-Path $vssDLL) {
+    regsvr32 /s /u $vssDLL
+    Write-Log "Unregistered VCBSnapshotProvider.dll"
+}
+
+@($vmStatsDLL, $vssDLL) | ForEach-Object {
+    if (Test-Path $_) {
+        try {
+            takeown /F $_ | Out-Null
+            icacls $_ /grant Administrators:F | Out-Null
+            Remove-Item $_ -Force
+            Write-Log "Force-deleted DLL: $_"
+        } catch {
+            Schedule-DeleteOnReboot $_
+            Write-Log "Scheduled delete on reboot for DLL: $_"
+        }
+    }
+}
+
+try {
+    $comCatalog = New-Object -ComObject COMAdmin.COMAdminCatalog
+    $appColl = $comCatalog.GetCollection("Applications")
+    $appColl.Populate()
+    for ($i = 0; $i -lt $appColl.Count; $i++) {
+        if ($appColl.Item($i).Name -eq "VMware Snapshot Provider") {
+            $appColl.Remove($i)
+            $appColl.SaveChanges()
+            Write-Log "Removed stale VMware Snapshot Provider COM+ application"
+            break
+        }
+    }
+} catch {
+    Write-Log "COM+ cleanup skipped or failed (normal on newer Windows)"
+}
+
+Start-Sleep -Seconds 2
+
 Remove-VMwareDrivers
 Remove-DriverStore
 Remove-VMwareDevices
