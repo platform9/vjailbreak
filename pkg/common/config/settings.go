@@ -39,6 +39,38 @@ type VjailbreakSettings struct {
 	V2VHelperPodMemoryLimit             string
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
+	VirtV2VMemsizeMB                    int
+}
+
+// parseMemoryMiB converts a Kubernetes memory quantity string (e.g. "6Gi", "3Gi", "1024Mi") to MiB.
+// Returns 0 if the string cannot be parsed.
+func parseMemoryMiB(s string) int {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "Gi") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "Gi"))
+		if err == nil {
+			return n * 1024
+		}
+	}
+	if strings.HasSuffix(s, "Mi") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "Mi"))
+		if err == nil {
+			return n
+		}
+	}
+	if strings.HasSuffix(s, "G") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "G"))
+		if err == nil {
+			return n * 1000
+		}
+	}
+	if strings.HasSuffix(s, "M") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "M"))
+		if err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 // Atoi is a helper function to convert string to int with a default value of 0
@@ -85,6 +117,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			V2VHelperPodMemoryLimit:             constants.V2VHelperPodMemoryLimit,
 			V2VHelperPodEphemeralStorageRequest: constants.V2VHelperPodEphemeralStorageRequest,
 			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
+			VirtV2VMemsizeMB:                    constants.VirtV2VMemsizeMB,
 		}, nil
 	}
 
@@ -183,6 +216,10 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey] = constants.V2VHelperPodEphemeralStorageLimit
 	}
 
+	if vjailbreakSettingsCM.Data[constants.VirtV2VMemsizeMBKey] == "" {
+		vjailbreakSettingsCM.Data[constants.VirtV2VMemsizeMBKey] = strconv.Itoa(constants.VirtV2VMemsizeMB)
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: Atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -209,5 +246,27 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		V2VHelperPodMemoryLimit:             vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey],
 		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
+		VirtV2VMemsizeMB:                    clampVirtV2VMemsize(Atoi(vjailbreakSettingsCM.Data[constants.VirtV2VMemsizeMBKey]), vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey]),
 	}, nil
+}
+
+// clampVirtV2VMemsize ensures the requested virt-v2v appliance memsize does not exceed
+// the pod memory limit minus 1 GiB. Returns 0 (use virt-v2v default) when memsizeMB is 0.
+// Clamps to maxAllowed when memsizeMB exceeds the limit.
+func clampVirtV2VMemsize(memsizeMB int, podMemoryLimit string) int {
+	if memsizeMB <= 0 {
+		return 0
+	}
+	limitMiB := parseMemoryMiB(podMemoryLimit)
+	if limitMiB <= 0 {
+		return memsizeMB
+	}
+	maxAllowed := limitMiB - 1024
+	if maxAllowed <= 0 {
+		return 0
+	}
+	if memsizeMB > maxAllowed {
+		return maxAllowed
+	}
+	return memsizeMB
 }

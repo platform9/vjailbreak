@@ -398,6 +398,9 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Step 3: Prepare virt-v2v args
 	args := []string{"-v", "--no-fstrim"}
+	if memsizeMB > 0 {
+		args = append(args, "--memsize", strconv.Itoa(memsizeMB))
+	}
 
 	if strings.ToLower(ostype) == constants.OSFamilyLinux {
 		userWrapperPath, err := prepareLinuxUserFirstBootWrapper(ostype)
