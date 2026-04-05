@@ -14,6 +14,7 @@ import (
 type MigrationParams struct {
 	// vCenter params
 	SourceVMName string
+	SourceVMID   string
 
 	// openstack params
 	OpenstackNetworkNames string
@@ -71,6 +72,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 	}
 	return &MigrationParams{
 		SourceVMName:                   string(configMap.Data["SOURCE_VM_NAME"]),
+		SourceVMID:                     string(configMap.Data["SOURCE_VM_ID"]),
 		OpenstackNetworkNames:          string(configMap.Data["NEUTRON_NETWORK_NAMES"]),
 		OpenstackNetworkPorts:          string(configMap.Data["NEUTRON_PORT_IDS"]),
 		OpenstackVolumeTypes:           string(configMap.Data["CINDER_VOLUME_TYPES"]),

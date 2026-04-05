@@ -174,14 +174,29 @@ export const useMigrationDetailResourcesQuery = ({
           ? -1
           : 0
 
-      const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace))
-      const vmwareMachines = vmwareMachinesList?.items || []
+      let vmwareMachine: VMwareMachine | null = null
+      if (vmName) {
+        vmwareMachine = await safeGet(() => getVMwareMachine(vmName, namespace))
+      }
 
-      const vmwareMachine = vmwareMachines.length
-        ? vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
+      const vmwareMachinesList =
+        !vmwareMachine ? await safeGet(() => getVMwareMachines(namespace, vmwareRef)) : null
+
+      if (!vmwareMachine && vmwareMachines.length) {
+        vmwareMachine =
+          vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
+          vmwareMachines.find((m) => vmName && m?.metadata?.name === vmName) ||
+          vmwareMachines.find((m) => {
+            const vms = (m?.spec as any)?.vms
+            const reconstructed =
+              vms?.name && vms?.vmid
+                ? `${vms.name}-${String(vms.vmid).replace(/^vm-/, '')}`
+                : vms?.name
+            return vmName && reconstructed === vmName
+          }) ||
           vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
           null
-        : null
+      }
 
       const rdmDiskNames = ((vmwareMachine?.spec as any)?.vms?.rdmDisks as string[]) || []
       const effectiveVmName = vmName || ((vmwareMachine?.spec as any)?.vms?.name as string) || ''
