@@ -23,8 +23,12 @@ export const getBugsnagConfig = (configMapData?: AnalyticsConfig): BugsnagConfig
   const releaseStage = configMapData?.releaseStage || import.meta.env.MODE || 'development'
 
   // Determine enabled release stages based on the actual release stage
-  const enabledReleaseStages =
+  const baseEnabledReleaseStages =
     releaseStage === 'production' ? ['production'] : ['development', 'staging', 'production']
+
+  const enabledReleaseStages = Array.from(
+    new Set([...baseEnabledReleaseStages, releaseStage].filter(Boolean))
+  )
 
   return {
     apiKey,
