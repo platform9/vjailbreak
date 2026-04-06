@@ -12,33 +12,25 @@ if [[ ! -e "$DISK" ]]; then
     exit 1
 fi
 
-echo "[offline-vmware-cleanup] Target disk: $DISK"
+echo "Target disk: $DISK"
 
 guestfish -a "$DISK" -i --rw <<'EOF'
 
-# ── Program Files\VMware ──────────────────────────────────────────────────
 -rm-rf "/Program Files/VMware/VMware Tools"
 -rm-rf "/Program Files/VMware"
 -rm-rf "/Program Files (x86)/VMware"
 
-# ── Common Files\VMware ───────────────────────────────────────────────────
 -rm-rf "/Program Files/Common Files/VMware"
 
-# ── ProgramData\VMware ────────────────────────────────────────────────────
 -rm-rf "/ProgramData/VMware"
 
-# ── User profile AppData (Local + Roaming) ────────────────────────────────
-# guestfish does not support shell globs; iterate common profile locations.
-# Covers the default Administrator and any named accounts created pre-migration.
+-rm-rf "/ProgramData/Microsoft/Windows/Start Menu/Programs/VMware"
+
 -rm-rf "/Users/Administrator/AppData/Local/VMware"
 -rm-rf "/Users/Administrator/AppData/Roaming/VMware"
 -rm-rf "/Users/Default/AppData/Local/VMware"
 -rm-rf "/Users/Default/AppData/Roaming/VMware"
-# Add extra per-user entries here if your environment has known account names.
-# Post-conversion, vmware-tools-deletion.ps1 will catch any remaining user-profile
-# folders via Remove-VMwareFolderAggressive once Windows boots.
 
-# ── Kernel drivers (System32\drivers) ─────────────────────────────────────
 -rm-f "/Windows/System32/drivers/vmci.sys"
 -rm-f "/Windows/System32/drivers/vm3dmp.sys"
 -rm-f "/Windows/System32/drivers/vm3dmp_loader.sys"
@@ -63,10 +55,10 @@ guestfish -a "$DISK" -i --rw <<'EOF'
 
 EOF
 
-echo "[offline-vmware-cleanup] Filesystem cleanup done."
+echo "Filesystem cleanup done."
 
 if command -v virt-win-reg &>/dev/null; then
-    echo "[offline-vmware-cleanup] Removing VMware registry keys offline..."
+    echo "Removing VMware registry keys offline..."
 
     REG_TMP=$(mktemp /tmp/vmware-del-XXXXXX.reg)
     cat >"$REG_TMP" <<'REGEOF'
@@ -97,14 +89,13 @@ Windows Registry Editor Version 5.00
 REGEOF
 
     virt-win-reg --merge "$DISK" "$REG_TMP" && \
-        echo "[offline-vmware-cleanup] Registry keys removed." || \
-        echo "[offline-vmware-cleanup] WARN: virt-win-reg merge failed (non-fatal)." >&2
+        echo "Registry keys removed." || \
+        echo "WARN: virt-win-reg merge failed (non-fatal)." >&2
 
     rm -f "$REG_TMP"
 else
-    echo "[offline-vmware-cleanup] virt-win-reg not found; skipping offline registry cleanup."
+    echo "virt-win-reg not found; skipping offline registry cleanup."
     echo "  Install libguestfs-winsupport for registry hive editing, or let"
-    echo "  vmware-tools-deletion.ps1 handle registry cleanup at firstboot."
 fi
 
-echo "[offline-vmware-cleanup] Complete. vmware-tools-deletion.ps1 will handle any remaining leftovers at firstboot."
+echo "offline vmware cleanup complete"

@@ -244,6 +244,7 @@ function Remove-VMwareFolders {
     Remove-VMwareFolderAggressive "C:\Program Files\Common Files\VMware"
     Remove-VMwareFolderAggressive "C:\Program Files (x86)\VMware"
     Remove-VMwareFolderAggressive "C:\ProgramData\VMware"
+    Remove-VMwareFolderAggressive "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware"
 }
 
 
@@ -289,6 +290,38 @@ function Remove-ControlPanelEntry {
             }
         }
     }
+}
+
+function Remove-VMwarePnPDevicesAggressive {
+    Write-Log "Removing remaining VMware PnP devices from Device Manager (including hidden)"
+
+    $vmDevices = Get-PnpDevice | Where-Object {
+        $_.FriendlyName  -like "*VMware*" -or
+        $_.InstanceId    -like "*VMWARE*" -or
+        $_.Class         -like "*VMware*" -or
+        $_.Manufacturer  -like "*VMware*"
+    }
+
+    foreach ($dev in $vmDevices) {
+
+        try {
+            Write-Log "Removing device: $($dev.FriendlyName) [$($dev.InstanceId)]"
+
+            Stop-Process -Name "vmtoolsd","vmwareuser" -Force -ErrorAction SilentlyContinue
+
+            pnputil /remove-device "$($dev.InstanceId)" /force *> $null
+
+            $wmiDev = Get-WmiObject -Class Win32_PnPEntity | Where-Object { $_.DeviceID -eq $dev.InstanceId }
+            if ($wmiDev) { $wmiDev.Delete() | Out-Null }
+
+            Write-Log "Removed: $($dev.FriendlyName)"
+        }
+        catch {
+            Write-Log "Failed to remove $($dev.FriendlyName) - may require reboot"
+        }
+    }
+
+    Write-Log "VMware PnP device cleanup completed"
 }
 
 function Remove-VMwareResiduals {
@@ -381,6 +414,7 @@ Remove-VMwareFolders
 Remove-VMwareRegistry
 Remove-ControlPanelEntry
 Remove-VMwareResiduals
+Remove-VMwarePnPDevicesAggressive
 
 
 
