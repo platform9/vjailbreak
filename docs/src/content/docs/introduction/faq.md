@@ -117,4 +117,4 @@ Users must take appropriate precautions for Docker Swarm, such as draining nodes
 ### Can vJailbreak migrate Windows VMs with GPO applied?
 Yes, but GPO settings may interfere with driver injection during migration. You may need to disable restrictive Group Policy settings before migrating.
  
-See the [GPO Migration Guide](../guides/How-to/gpo_migration.md) for detailed steps on how to resolve GPO-related migration issues.
+See the [GPO Migration Guide](../guides/how-to/gpo_migration.md) for detailed steps on how to resolve GPO-related migration issues.
