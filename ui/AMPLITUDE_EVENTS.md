@@ -27,33 +27,79 @@
 
 ---
 
-# Tracked Events (custom / explicit in code)
+# User Journeys & Tracking Points
+
+This section lists the most important user journeys and where Amplitude events are (and should be) called.
+
+Legend:
+
+- `implemented`: event is currently tracked in the code
+- `gap`: recommended tracking point, not currently implemented
+
+## 1) Credentials
+
+### VMware credentials
+
+| Action / Step                                 | Event name                                                        | Where fired (file)                                                | When / Trigger                                        | Status      |
+| --------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- | ----------- |
+| Create/Validate VMware credentials (explicit) | `VMware Credentials Added` / `VMware Credentials Failed`          | `src/features/credentials/components/VMwareCredentialsDrawer.tsx` | Same triggers as generic credential events            | implemented |
+| Delete VMware credential outcomes             | `VMware Credentials Deleted` / `VMware Credentials Delete Failed` | `src/features/credentials/components/CredentialsTable.tsx`        | When user deletes VMware credential(s) from the table | implemented |
+
+### PCD (OpenStack) credentials
+
+| Action / Step                              | Event name                                                  | Where fired (file)                                                   | When / Trigger                                     | Status      |
+| ------------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------- | ----------- |
+| Create/Validate PCD credentials (explicit) | `PCD Credentials Added` / `PCD Credentials Failed`          | `src/features/credentials/components/OpenstackCredentialsDrawer.tsx` | Same triggers as generic credential events         | implemented |
+| Delete PCD credential outcomes             | `PCD Credentials Deleted` / `PCD Credentials Delete Failed` | `src/features/credentials/components/CredentialsTable.tsx`           | When user deletes PCD credential(s) from the table | implemented |
+
+### Storage Array credentials
+
+| Action / Step                                     | Event name                                                                      | Where fired (file)                                                         | When / Trigger                                                              | Status      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------- |
+| Create/Validate storage array credentials         | `Storage Array Credentials Added` / `Storage Array Credentials Failed`          | `src/features/storageManagement/components/AddArrayCredentialsDrawer.tsx`  | Around `createArrayCredsWithSecretFlow(...)` + validation polling (`stage`) | implemented |
+| Update/Validate storage array credentials         | `Storage Array Credentials Updated` / `Storage Array Credentials Update Failed` | `src/features/storageManagement/components/EditArrayCredentialsDrawer.tsx` | Around update flow + validation polling (`stage`)                           | implemented |
+| Delete storage array credential outcomes (single) | `Storage Array Credentials Deleted` / `Storage Array Credentials Delete Failed` | `src/features/storageManagement/components/StorageArrayTable.tsx`          | When user deletes a single storage array credential                         | implemented |
+| Delete storage array credential outcomes (bulk)   | `Storage Array Credentials Deleted` / `Storage Array Credentials Delete Failed` | `src/features/storageManagement/components/StorageArrayTable.tsx`          | When user bulk-deletes storage array credentials                            | implemented |
+
+## 2) Standard Migration (Migration Plan)
+
+| Action / Step                   | Event name                                      | Where fired (file)                                | When / Trigger                                                  | Status      |
+| ------------------------------- | ----------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- | ----------- |
+| Create migration plan (per VM)  | `Migration Created`                             | `src/features/migration/MigrationForm.tsx`        | After `postMigrationPlan(...)` succeeds; one event per `vmName` | implemented |
+| Create migration plan (failure) | `Migration Creation Failed`                     | `src/features/migration/MigrationForm.tsx`        | On `postMigrationPlan(...)` error                               | implemented |
+| Migration execution failed      | `Migration Execution Failed`                    | `src/hooks/useMigrationStatusMonitor.ts`          | When Migration phase transitions to `Failed`                    | implemented |
+| Migration succeeded             | `Migration Succeeded`                           | `src/hooks/useMigrationStatusMonitor.ts`          | When Migration phase transitions to `Succeeded`                 | implemented |
+| Delete migration outcomes       | `Migration Deleted` / `Migration Delete Failed` | `src/features/migration/pages/MigrationsPage.tsx` | When user deletes migration(s) from the migrations table        | implemented |
+
+## 3) Rolling Migration / Cluster Conversion
+
+| Action / Step                           | Event name                            | Where fired (file)                                | When / Trigger                                                     | Status      |
+| --------------------------------------- | ------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------ | ----------- |
+| Submit rolling migration plan (success) | `Rolling Migration Created`           | `src/features/migration/RollingMigrationForm.tsx` | On successful submission                                           | implemented |
+| Submit rolling migration plan (failure) | `Rolling Migration Submission Failed` | `src/features/migration/RollingMigrationForm.tsx` | On submission error                                                | implemented |
+| Rolling migration execution failed      | `Cluster Conversion Execution Failed` | `src/hooks/useRollingMigrationsStatusMonitor.ts`  | When RollingMigrationPlan phase transitions to `Failed`            | implemented |
+| Rolling migration succeeded             | `Cluster Conversion Succeeded`        | `src/hooks/useRollingMigrationsStatusMonitor.ts`  | When RollingMigrationPlan phase transitions to `Succeeded`         | implemented |
+| Cluster conversion triggered            | `Cluster Conversion Triggered`        | (TBD)                                             | When conversion is initiated (if there is a distinct user trigger) | gap         |
+
+## 4) Agents
+
+| Action / Step                     | Event name                                       | Where fired (file)                                 | When / Trigger                                  | Status      |
+| --------------------------------- | ------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------- | ----------- |
+| Scale up agents (start/failure)   | `Agents Scale Up`                                | `src/features/agents/components/ScaleUpDrawer.tsx` | Around `createNodes(...)` with `stage` property | implemented |
+| Scale down agents (start/failure) | `Agents Scale Down` / `Agents Scale Down Failed` | `src/features/agents/components/NodesTable.tsx`    | When user confirms scale down in dialog         | implemented |
+
+## 5) ESXi SSH Credentials
+
+| Action / Step                 | Event name                                                            | Where fired (file)                                            | When / Trigger                                        | Status      |
+| ----------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- | ----------- |
+| Configure ESXi SSH key (add)  | `ESXi SSH Credentials Added` / `ESXi SSH Credentials Failed`          | `src/features/esxiSshKeys/components/AddEsxiSshKeyDrawer.tsx` | When user saves a new SSH private key secret          | implemented |
+| Configure ESXi SSH key (edit) | `ESXi SSH Credentials Updated` / `ESXi SSH Credentials Update Failed` | `src/features/esxiSshKeys/components/AddEsxiSshKeyDrawer.tsx` | When user updates the existing SSH private key secret | implemented |
 
 ## Legend
 
 - Where fired: file/component that calls `track(...)`
 - Trigger: what user/system action causes the event
 - Notes: extra context like `stage` values
-
-## Events table
-
-| Event Name (Amplitude)                                        | Where fired                                                                                                                                                                                                     | Trigger (action)                                                       | Properties / Notes                                                                                                                               |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Credentials Added`                                           | [src/features/credentials/components/VMwareCredentialsDrawer.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/credentials/components/VMwareCredentialsDrawer.tsx:0:0-0:0)       | User submits “Add VMware Credentials” form (start + success)           | Uses `stage`: `creation_start`, `creation_success`, `validation_success`. Also sends `credentialType: 'vmware'`, `credentialName`, `vcenterHost` |
-| `Credentials Failed`                                          | [src/features/credentials/components/VMwareCredentialsDrawer.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/credentials/components/VMwareCredentialsDrawer.tsx:0:0-0:0)       | Credential creation fails OR validation fails                          | Uses `stage`: `creation`, `validation`. Includes `errorMessage`                                                                                  |
-| `Credentials Added`                                           | [src/features/credentials/components/OpenstackCredentialsDrawer.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/credentials/components/OpenstackCredentialsDrawer.tsx:0:0-0:0) | User submits “Add PCD Credentials” form (success) + validation success | Uses `stage`: `validation_success` (on validation success). Includes `credentialType: 'openstack'`, `credentialName`, `isPcd`, `namespace`       |
-| `Credentials Failed`                                          | [src/features/credentials/components/OpenstackCredentialsDrawer.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/credentials/components/OpenstackCredentialsDrawer.tsx:0:0-0:0) | OpenStack cred creation fails OR validation fails                      | Uses `stage`: `creation`, `validation`. Includes `errorMessage`                                                                                  |
-| `Migration Created`                                           | [src/features/migration/MigrationForm.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/migration/MigrationForm.tsx:0:0-0:0)                                                     | Migration plan POST succeeds                                           | Includes `migrationName`, `migrationTemplateName`, `virtualMachineCount`, etc.                                                                   |
-| `Migration Creation Failed`                                   | [src/features/migration/MigrationForm.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/migration/MigrationForm.tsx:0:0-0:0)                                                     | Migration plan POST fails                                              | Includes `migrationTemplateName`, `virtualMachineCount`, `migrationType`, `errorMessage`                                                         |
-| `Migration Execution Failed`                                  | [src/hooks/useMigrationStatusMonitor.ts](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/hooks/useMigrationStatusMonitor.ts:0:0-0:0)                                                         | Migration status transitions to `Failed`                               | Fires once per migration per phase transition. Includes `migrationName`, `vmName`, phases, `errorMessage`, reason, time, namespace               |
-| `Migration Succeeded`                                         | [src/hooks/useMigrationStatusMonitor.ts](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/hooks/useMigrationStatusMonitor.ts:0:0-0:0)                                                         | Migration status transitions to `Succeeded`                            | Fires once per migration success transition. Includes `migrationName`, phases, `vmName`, namespace                                               |
-| `Rolling Migration Created`                                   | [src/features/migration/RollingMigrationForm.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/migration/RollingMigrationForm.tsx:0:0-0:0)                                       | Rolling migration plan submission succeeds                             | Includes `clusterMigrationName`, `sourceCluster`, `destinationCluster`, etc.                                                                     |
-| `Rolling Migration Submission Failed`                         | [src/features/migration/RollingMigrationForm.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/migration/RollingMigrationForm.tsx:0:0-0:0)                                       | Rolling migration submission fails                                     | Includes `clusterMigrationName`, clusters, selected VMs context, `errorMessage`                                                                  |
-| `Cluster Conversion Execution Failed`                         | [src/hooks/useRollingMigrationsStatusMonitor.ts](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/hooks/useRollingMigrationsStatusMonitor.ts:0:0-0:0)                                         | Rolling migration plan transitions to `Failed`                         | Includes `rollingMigrationPlanName`, clusterName, phases, counts, namespace, strategy, `errorMessage`                                            |
-| `Cluster Conversion Succeeded`                                | [src/hooks/useRollingMigrationsStatusMonitor.ts](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/hooks/useRollingMigrationsStatusMonitor.ts:0:0-0:0)                                         | Rolling migration plan transitions to `Succeeded`                      | Includes `rollingMigrationPlanName`, clusterName, counts, namespace, strategy                                                                    |
-| `Agents Scale Up` (string literal, not in `AMPLITUDE_EVENTS`) | [src/features/agents/components/ScaleUpDrawer.tsx](cci:7://file:///home/abhijeet/Projects/Platform9/vjailbreak/ui/src/features/agents/components/ScaleUpDrawer.tsx:0:0-0:0)                                     | User scales up agents: start/success/failure                           | Uses `stage`: `start`, `success`, `failure`. Includes `nodeCount`, `flavorId`, `credentialName`, optional `errorMessage`                         |
-
----
 
 # Helper wrappers used for tracking
 
