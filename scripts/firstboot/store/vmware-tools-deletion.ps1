@@ -82,6 +82,8 @@ function Remove-VMwareDrivers {
 
     Write-Log "Removing VMware drivers"
 
+    sc.exe stop vmmouse *> $null
+    sc.exe delete vmmouse *> $null
     sc stop VMMemCtl *> $null
     sc delete VMMemCtl *> $null
 
@@ -302,12 +304,14 @@ function Remove-VMwarePnPDevicesAggressive {
         $_.Manufacturer  -like "*VMware*"
     }
 
+    Stop-Process -Name "vmtoolsd","vmwareuser" -Force -ErrorAction SilentlyContinue
+
     foreach ($dev in $vmDevices) {
 
         try {
             Write-Log "Removing device: $($dev.FriendlyName) [$($dev.InstanceId)]"
 
-            Stop-Process -Name "vmtoolsd","vmwareuser" -Force -ErrorAction SilentlyContinue
+            Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
 
             pnputil /remove-device "$($dev.InstanceId)" /force *> $null
 
@@ -410,11 +414,11 @@ Remove-VMwareServices
 Remove-VMwareDrivers
 Remove-DriverStore
 Remove-VMwareDevices
+Remove-VMwarePnPDevicesAggressive
 Remove-VMwareFolders
 Remove-VMwareRegistry
 Remove-ControlPanelEntry
 Remove-VMwareResiduals
-Remove-VMwarePnPDevicesAggressive
 
 
 
