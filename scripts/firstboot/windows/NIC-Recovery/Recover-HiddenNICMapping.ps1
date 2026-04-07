@@ -118,6 +118,8 @@ catch{
 }
 
 Write-Log "Found $($hiddenIPs.Count) hidden IP configurations"
+Write-Log "Active NICs dump: $($activeNics | ConvertTo-Json -Compress)"
+Write-Log "Hidden names dump: $($hiddenNames | ConvertTo-Json -Compress)"
 
 Write-Log "Reading hidden adapter names from registry..."
 $hiddenNames = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}" -ErrorAction SilentlyContinue | 
@@ -136,6 +138,7 @@ $hiddenNames = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D
 Write-Log "Found $($hiddenNames.Count) hidden adapter names"
 
 Write-Log "Matching hidden IPs with hidden names and active NICs..."
+$matchedMacs = @()
 $result = foreach ($hidden in $hiddenIPs) {
     $name = $hiddenNames | Where-Object { $_.GUID -eq $hidden.GUID }
     if (-not $name) { 
@@ -144,7 +147,7 @@ $result = foreach ($hidden in $hiddenIPs) {
     }
     
     $match = $activeNics | 
-             Where-Object { $_.Network -eq $hidden.Network } | 
+             Where-Object { $_.Network -eq $hidden.Network -and $_.MACAddress -notin $matchedMacs } | 
              Select-Object -First 1
              
     if (-not $match) { 
@@ -152,6 +155,7 @@ $result = foreach ($hidden in $hiddenIPs) {
         continue 
     }
     
+    $matchedMacs += $match.MACAddress
     Write-Log "Matched: $($name.Name) -> $($match.MACAddress) (Network: $($hidden.Network))"
     
     [PSCustomObject]@{
