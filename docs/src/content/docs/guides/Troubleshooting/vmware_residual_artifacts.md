@@ -37,7 +37,7 @@ In v0.4.3, the following artifacts remain on the Windows VMs after selecting "Re
 
 | Folder Path | 2012 | 2016 | 2019 | 2022 | 2025 |
 |---|---|---|---|---|---|
-| C:\Program Files\VMware | **Present** (0.14 MB) | Not Found | **Present** (0.14 MB) | Not Found | **Present** (0.14 MB) |
+| C:\Program Files\VMware | **Present** (0.14 MB) | Not Found | **Present** | Not Found | **Present** |
 | C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware | Not Found | Not Found | Not Found | Not Found | Not Found |
 | All other VMware folders (Program Files (x86), Common Files, ProgramData\VMware) | Not Found | Not Found | Not Found | Not Found | Not Found |
 
