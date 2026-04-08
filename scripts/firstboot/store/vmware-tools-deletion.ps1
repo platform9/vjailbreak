@@ -28,6 +28,8 @@ function Schedule-DeleteOnReboot {
 
     if(!$current){$current=@()}
 
+    if($current -contains $Path){ return }
+
     $new=@($Path,"")
     Set-ItemProperty $regPath -Name PendingFileRenameOperations -Value ($current + $new)
 }
@@ -57,7 +59,7 @@ function Remove-VMwareServices {
     "vmaudio","vmhgfs","VMMemCtl",
     "vmmouse","VMRawDisk","vmrawdsk",
     "vmusbmouse","vmvss","vsock",
-    "vmxnet3","vnetWFP"
+    "vmxnet3","vnetWFP","WmiApSrv"
     )
 
     foreach($svc in $services){
@@ -80,6 +82,8 @@ function Remove-VMwareDrivers {
 
     Write-Log "Removing VMware drivers"
 
+    sc.exe stop vmmouse *> $null
+    sc.exe delete vmmouse *> $null
     sc stop VMMemCtl *> $null
     sc delete VMMemCtl *> $null
 
@@ -90,7 +94,10 @@ function Remove-VMwareDrivers {
     "vmmemctl.sys","vmmouse.sys",
     "vmrawdsk.sys","vmtools.sys",
     "vmusbmouse.sys","vmvss.sys",
-    "vsock.sys","vmx_svga.sys","vmxnet3.sys"
+    "vsock.sys","vmx_svga.sys",
+    "vmxnet3.sys","vmgencounter.sys",
+    "vmgid.sys","vms3cap.sys",
+    "vmstorfl.sys","vmscsi.sys"
     )
 
     $driverPath="C:\Windows\System32\drivers"
@@ -176,36 +183,72 @@ function Remove-VMwareDevices {
     }
 }
 
-function Remove-VMwareFolders {
-
-    Write-Log "Removing VMware folders"
-
-    $paths=@(
-    "C:\Program Files\VMware",
-    "C:\Program Files (x86)\VMware",
-    "C:\Program Files\Common Files\VMware",
-    "C:\Program Files (x86)\Common Files\VMware",
-    "C:\ProgramData\VMware",
-    "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware"
+function Unregister-VMwareDLLs {
+    Write-Log "Unregistering VMware COM/VSS/WMI providers"
+    $dlls = @(
+        "C:\Program Files\Common Files\VMware\Drivers\vss\VCBSnapshotProvider.dll",
+        "C:\Program Files\VMware\VMware Tools\vmStatsProvider\win64\vmStatsProvider.dll"
     )
-
-    foreach($p in $paths){
-
-        if(Test-Path $p){
-
-            try{
-
-                takeown /F $p /R /D Y | Out-Null
-                icacls $p /grant Administrators:F /T | Out-Null
-                Remove-Item $p -Recurse -Force
-
-            }catch{
-
-                Schedule-DeleteOnReboot $p
-            }
+    foreach ($dll in $dlls) {
+        if (Test-Path $dll) {
+            try {
+                regsvr32 /s /u $dll
+                Write-Log "Unregistered $dll"
+            } catch { Write-Log "Failed to unregister $dll" }
         }
     }
+    Stop-Service -Name "WmiApSrv" -Force -ErrorAction SilentlyContinue
 }
+
+function Remove-VMwareFolderAggressive {
+    param([string]$TargetPath)
+
+    if (!(Test-Path $TargetPath)) {
+        Write-Log "$TargetPath not present"
+        return
+    }
+
+    Write-Log "Aggressively removing folder: $TargetPath"
+
+    Stop-Process -Name "vmtoolsd","vmwareuser","vmwaretray" -Force -ErrorAction SilentlyContinue
+    Stop-Service -Name "WmiApSrv" -Force -ErrorAction SilentlyContinue
+
+    takeown /F $TargetPath /R /D Y | Out-Null
+    icacls $TargetPath /grant Administrators:F /T | Out-Null
+
+    $empty = Join-Path $env:TEMP "empty_$(Get-Random)"
+    New-Item -ItemType Directory -Path $empty -Force | Out-Null
+    robocopy "$empty" "$TargetPath" /MIR /R:5 /W:5 /NP /NFL /NDL /NJH /NJS | Out-Null
+    Remove-Item $empty -Recurse -Force -ErrorAction SilentlyContinue
+
+    Get-ChildItem $TargetPath -Recurse -Force -File | ForEach-Object {
+        try {
+            Remove-Item $_.FullName -Force -ErrorAction Stop
+            Write-Log "Deleted: $($_.FullName)"
+        } catch {
+            Schedule-DeleteOnReboot $_.FullName
+            Write-Log "Scheduled on reboot: $($_.FullName)"
+        }
+    }
+
+    try {
+        Remove-Item $TargetPath -Recurse -Force -ErrorAction Stop
+        Write-Log "Removed folder: $TargetPath"
+    } catch {
+        Schedule-DeleteOnReboot $TargetPath
+        Write-Log "Scheduled folder on reboot: $TargetPath"
+    }
+}
+
+function Remove-VMwareFolders {
+    Write-Log "Removing VMware folders aggressively"
+    Remove-VMwareFolderAggressive "C:\Program Files\VMware\VMware Tools"
+    Remove-VMwareFolderAggressive "C:\Program Files\Common Files\VMware"
+    Remove-VMwareFolderAggressive "C:\Program Files (x86)\VMware"
+    Remove-VMwareFolderAggressive "C:\ProgramData\VMware"
+    Remove-VMwareFolderAggressive "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware"
+}
+
 
 function Remove-VMwareRegistry {
 
@@ -251,6 +294,40 @@ function Remove-ControlPanelEntry {
     }
 }
 
+function Remove-VMwarePnPDevicesAggressive {
+    Write-Log "Removing remaining VMware PnP devices from Device Manager (including hidden)"
+
+    $vmDevices = Get-PnpDevice | Where-Object {
+        $_.FriendlyName  -like "*VMware*" -or
+        $_.InstanceId    -like "*VMWARE*" -or
+        $_.Class         -like "*VMware*" -or
+        $_.Manufacturer  -like "*VMware*"
+    }
+
+    Stop-Process -Name "vmtoolsd","vmwareuser" -Force -ErrorAction SilentlyContinue
+
+    foreach ($dev in $vmDevices) {
+
+        try {
+            Write-Log "Removing device: $($dev.FriendlyName) [$($dev.InstanceId)]"
+
+            Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+
+            pnputil /remove-device "$($dev.InstanceId)" /force *> $null
+
+            $wmiDev = Get-WmiObject -Class Win32_PnPEntity | Where-Object { $_.DeviceID -eq $dev.InstanceId }
+            if ($wmiDev) { $wmiDev.Delete() | Out-Null }
+
+            Write-Log "Removed: $($dev.FriendlyName)"
+        }
+        catch {
+            Write-Log "Failed to remove $($dev.FriendlyName) - may require reboot"
+        }
+    }
+
+    Write-Log "VMware PnP device cleanup completed"
+}
+
 function Remove-VMwareResiduals {
 
     Write-Log "Running additional VMware residual cleanup"
@@ -274,87 +351,6 @@ function Remove-VMwareResiduals {
     Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
 
     Remove-Item -Path "HKLM:\SOFTWARE\Classes\Installer\Products\46E471FAFC2268349ACE372F58379989" -Recurse -Force -ErrorAction SilentlyContinue
-
-
-    # Force remove VMware folder if present
-    $vmwarePath = "C:\Program Files\VMware"
-
-    if(Test-Path $vmwarePath){
-
-        Write-Log "VMware folder detected, forcing cleanup..."
-
-        $devices = Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match "VMware" }
-
-        foreach ($dev in $devices) {
-            $instanceId = $dev.DeviceID
-            Write-Log "Removing device: $($dev.Name)"
-            pnputil /remove-device "$instanceId" /force *> $null
-        }
-
-        try{
-
-            cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
-            cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
-
-            Remove-Item $vmwarePath -Recurse -Force -ErrorAction Stop
-
-            Write-Log "VMware folder removed successfully"
-
-        }catch{
-
-            Write-Log "Initial folder delete failed, retrying..."
-
-            Start-Sleep -Seconds 2
-
-            cmd /c "takeown /F `"$vmwarePath`" /R /D Y" *> $null
-            cmd /c "icacls `"$vmwarePath`" /grant Administrators:F /T" *> $null
-
-            Remove-Item $vmwarePath -Recurse -Force -ErrorAction SilentlyContinue
-
-            if(!(Test-Path $vmwarePath)){
-                Write-Log "VMware folder removed on retry"
-            }else{
-                Write-Log "VMware folder still present"
-            }
-        }
-
-    }else{
-        Write-Log "VMware folder not present"
-    }
-
-
-    # VMware driver files
-    $vmDrivers = @(
-        "C:\Windows\System32\drivers\vmmemctl.sys",
-        "C:\Windows\System32\drivers\vmmouse.sys"
-    )
-
-    foreach($drv in $vmDrivers){
-
-        if(Test-Path $drv){
-
-            Write-Log "Removing driver file $drv"
-
-            try{
-
-                cmd /c "takeown /F `"$drv`"" *> $null
-                cmd /c "icacls `"$drv`" /grant Administrators:F" *> $null
-                cmd /c "del /F /Q `"$drv`"" *> $null
-
-                if(!(Test-Path $drv)){
-                    Write-Log "Driver removed successfully: $drv"
-                }else{
-                    Write-Log "Driver removal failed: $drv"
-                }
-
-            }catch{
-                Write-Log "Error removing driver $drv"
-            }
-
-        }else{
-            Write-Log "$drv not present"
-        }
-    }
 
 
     # Remove VMware devices via WMI fallback
@@ -413,10 +409,12 @@ function Remove-VMwareResiduals {
 Write-Log "=== VMware Cleanup Start ==="
 
 Stop-VMwareProcesses
+Unregister-VMwareDLLs
 Remove-VMwareServices
 Remove-VMwareDrivers
 Remove-DriverStore
 Remove-VMwareDevices
+Remove-VMwarePnPDevicesAggressive
 Remove-VMwareFolders
 Remove-VMwareRegistry
 Remove-ControlPanelEntry
