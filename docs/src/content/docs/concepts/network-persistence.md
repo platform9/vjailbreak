@@ -39,7 +39,7 @@ The Windows network persistence mechanism operates on the first boot post-migrat
 
 The network persistence script runs on the first boot post-migration. Its primary function is to restore the network configuration to its pre-migration state by performing the following actions:
 
-- **Statically Configured Interfaces**: The original names of network interfaces that were statically configured before migration are restored.
+- **Statically Configured Interfaces**: The original names of network interfaces that were statically configured before migration are restored. The static IP configuration is converted to DHCP assignment; however, the original IP address from the source is persisted on the destination, ensuring continuous network connectivity.
 - **DHCP Configured Interfaces**: Interfaces configured via DHCP are renamed to a consistent pattern: `vjb_<random_number>`.
 
 ### Supported Versions
