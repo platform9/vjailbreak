@@ -1210,6 +1210,11 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if removeVMwareTools {
+			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+				utils.PrintLog(fmt.Sprintf("WARNING: offline VMware Tools cleanup returned error: %v", err))
+			}
+		}
 
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
