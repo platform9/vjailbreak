@@ -103,18 +103,6 @@ cd ui && yarn dev        # UI dev server (requires VITE_API_HOST, VITE_API_TOKEN
 
 ---
 
-## Known Issues
-
-### Initramfs Virtio Module Bug (CentOS 7.0.1406)
-**Problem**: dracut-033 fails to include virtio modules in libguestfs chroot.
-**Solution**: `VerifyAndFixInitramfs` in `v2v-helper/virtv2v/virtv2vops.go` checks and rebuilds initramfs if virtio modules missing.
-
-### Fstab /sysroot Prefix Bug
-**Problem**: Scripts running via guestfish see guest filesystems under `/sysroot`, causing fstab boot failures.
-**Solution**: `scripts/generate-mount-persistence.sh` detects appliance environment, strips `/sysroot` prefix, writes to correct location.
-
----
-
 ## Common Pitfalls
 
 - **macOS Development**: v2v-helper tests require Linux CGO, use Docker/Linux VM

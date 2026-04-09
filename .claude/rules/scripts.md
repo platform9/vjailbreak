@@ -38,47 +38,6 @@ else
 fi
 ```
 
-## Known Issues & Solutions
-
-### Fstab /sysroot Prefix Bug
-
-**Problem**: `generate-mount-persistence.sh` was writing appliance mountpoints (with `/sysroot` prefix) directly into guest's `/etc/fstab`, causing boot failures.
-
-**Solution implemented**:
-1. Detect guestfish appliance environment
-2. Strip `/sysroot` prefix from mountpoints before writing to fstab
-3. Write to `/sysroot/etc/fstab` (not `/etc/fstab`) when in appliance
-4. Use exact field match for dedup instead of substring grep
-
-**Example**:
-```bash
-# BAD - writes appliance paths to guest fstab
-echo "/sysroot / ext4 defaults 0 1" >> /etc/fstab
-
-# GOOD - strips prefix and writes to correct location
-echo "/ / ext4 defaults 0 1" >> /sysroot/etc/fstab
-```
-
-### Path Handling Rules
-
-When working with guest filesystem paths:
-
-1. **Reading from guest**: Prefix with `/sysroot` in appliance
-   ```bash
-   cat /sysroot/etc/fstab  # Read guest's fstab
-   ```
-
-2. **Writing to guest**: Prefix with `/sysroot` in appliance
-   ```bash
-   echo "data" > /sysroot/etc/config  # Write to guest's /etc/config
-   ```
-
-3. **Processing paths**: Strip `/sysroot` before writing to guest files
-   ```bash
-   # If path is /sysroot/boot, write /boot to fstab
-   MOUNT_PATH=$(echo "$FULL_PATH" | sed 's|^/sysroot||')
-   ```
-
 ## Script Standards
 
 ### Shebang and Options

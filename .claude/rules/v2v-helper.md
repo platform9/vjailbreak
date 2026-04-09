@@ -33,33 +33,6 @@ cd v2v-helper
 CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go test ./... -v
 ```
 
-## Known Issues & Solutions
-
-### Initramfs Virtio Module Bug (CentOS 7.0.1406)
-
-**Problem**: dracut-033 silently fails to include virtio modules when run in libguestfs chroot environment.
-
-**Solution**: `VerifyAndFixInitramfs` function in `virtv2v/virtv2vops.go`:
-- Runs after virt-v2v-in-place completes
-- Checks if rebuilt initramfs contains virtio modules (virtio_blk, virtio_scsi, virtio_net, virtio_pci) using lsinitrd
-- If missing, runs `depmod + dracut --force --force-drivers` to rebuild
-- Called from `performDiskConversion` in `migrate/migrate.go` for all Linux guests
-- Uses guestfish 'command' subcommand which runs in proper chroot of guest
-
-**Implementation location**: `v2v-helper/virtv2v/virtv2vops.go`
-
-### Fstab /sysroot Prefix Bug
-
-**Problem**: When scripts run via guestfish, `/proc/mounts` shows guest filesystems under `/sysroot` prefix. Writing these paths directly to guest's `/etc/fstab` causes boot failures.
-
-**Solution**: Scripts must:
-1. Detect guestfish appliance environment
-2. Strip `/sysroot` prefix from mountpoints before writing to fstab
-3. Write to `/sysroot/etc/fstab` (not `/etc/fstab`) when in appliance
-4. Use exact field match for dedup instead of substring grep
-
-**Related script**: `scripts/generate-mount-persistence.sh`
-
 ## Guest OS Support
 
 ### Before Adding Support for New OS
