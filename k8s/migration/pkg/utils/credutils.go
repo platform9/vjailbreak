@@ -713,19 +713,6 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 		allVMs = append(allVMs, vms...)
 	}
 
-	// Count VM name occurrences to detect duplicates
-	vmNameCounts := make(map[string]int)
-	for _, vm := range allVMs {
-		vmNameCounts[vm.Name()]++
-	}
-	log.Info("VM name count analysis", "totalVMs", len(allVMs), "uniqueNames", len(vmNameCounts))
-	// Log any duplicates found
-	for name, count := range vmNameCounts {
-		if count > 1 {
-			log.Info("Duplicate VM name detected", "name", name, "count", count)
-		}
-	}
-
 	// Pre-allocate vminfo slice
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(allVMs))
 
@@ -746,7 +733,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 				}
 			}()
 			vmDatacenter := vmToDatacenter[allVMs[i].Reference().Value]
-			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter, vmNameCounts)
+			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -984,15 +971,10 @@ func AppendUnique(slice []string, values ...string) []string {
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string, vmNameCounts map[string]int) error {
-	// Determine the K8s resource name: append MOID if VM name is duplicated
-	vmNameForK8s := vminfo.Name
-	if vmNameCounts != nil && vmNameCounts[vminfo.Name] > 1 {
-		// Duplicate VM name detected, append MOID to make it unique
-		vmNameForK8s = fmt.Sprintf("%s-%s", vminfo.Name, strings.TrimPrefix(vminfo.VMID, "vm-"))
-		log.FromContext(ctx).Info("Duplicate VM name detected, using MOID-suffixed name for K8s resource",
-			"originalName", vminfo.Name, "vmid", vminfo.VMID, "k8sName", vmNameForK8s)
-	}
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
+	vmNameForK8s := fmt.Sprintf("%s-%s", vminfo.Name, strings.TrimPrefix(vminfo.VMID, "vm-"))
+	log.FromContext(ctx).Info("Using MOID-suffixed name for K8s resource",
+		"originalName", vminfo.Name, "vmid", vminfo.VMID, "k8sName", vmNameForK8s)
 	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vmNameForK8s, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
@@ -1665,7 +1647,7 @@ var rdmSemaphore = &sync.Mutex{}
 // due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
 //
 //nolint:gocyclo
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string, vmNameCounts map[string]int) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4)               // Pre-allocate with estimated capacity
@@ -1907,7 +1889,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		GPU:               gpuInfo,
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
-	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM, vmDatacenter, vmNameCounts)
+	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM, vmDatacenter)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to create or update VMwareMachine: %w", err))
 	}

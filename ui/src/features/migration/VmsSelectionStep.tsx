@@ -388,22 +388,22 @@ function VmsSelectionStep({
     setOriginalIPsPerVM((prev) => {
       const next = { ...prev }
       vmsWithFlavor.forEach((vm) => {
-        if (!next[vm.name]) next[vm.name] = {}
+        if (!next[vm.id]) next[vm.id] = {}
         if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
           vm.networkInterfaces.forEach((nic, index) => {
-            if (next[vm.name][index] !== undefined) return
+            if (next[vm.id][index] !== undefined) return
             const discovered = (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
               .filter((v: string) => v && v.trim() !== '')
               .join(', ')
             if (discovered.trim() !== '') {
-              next[vm.name][index] = discovered
+              next[vm.id][index] = discovered
             }
           })
         } else {
-          if (next[vm.name][0] !== undefined) return
+          if (next[vm.id][0] !== undefined) return
           const discovered = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
           if (discovered.trim() !== '') {
-            next[vm.name][0] = discovered
+            next[vm.id][0] = discovered
           }
         }
       })
@@ -442,14 +442,6 @@ function VmsSelectionStep({
     return parts.length === 3 ? parts[1] : undefined
   }, [vmwareCluster])
 
-  const vmNameCounts = React.useMemo(() => {
-    const counts: Record<string, number> = {}
-    vmsWithFlavor.forEach((vm) => {
-      counts[vm.name] = (counts[vm.name] || 0) + 1
-    })
-    return counts
-  }, [vmsWithFlavor])
-
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
     {
@@ -457,10 +449,7 @@ function VmsSelectionStep({
       headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => {
-        // Check if this VM name has duplicates
-        const isDuplicate = vmNameCounts[params.value] > 1
-        const vmid = params.row.vmid
-        const displayName = isDuplicate && vmid ? `${params.value}-${vmid.replace(/^vm-/, '')}` : params.value
+        const displayName = params.row.vmKey || params.value
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
@@ -1695,21 +1684,20 @@ function VmsSelectionStep({
     Array.from(selectedVMs).forEach((vmId) => {
       const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (!vm) return
-      const vmName = vm.vmKey || vm.name
 
-      initialBulkEditIPs[vmName] = {}
-      initialBulkPreserveIp[vmName] = {}
-      initialBulkPreserveMac[vmName] = {}
-      initialBulkCurrentIPs[vmName] = {}
-      initialBulkExistingIPs[vmName] = {}
-      initialBulkEditOverrides[vmName] = {}
-      initialValidationStatus[vmName] = {}
+      initialBulkEditIPs[vmId] = {}
+      initialBulkPreserveIp[vmId] = {}
+      initialBulkPreserveMac[vmId] = {}
+      initialBulkCurrentIPs[vmId] = {}
+      initialBulkExistingIPs[vmId] = {}
+      initialBulkEditOverrides[vmId] = {}
+      initialValidationStatus[vmId] = {}
 
       if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
         vm.networkInterfaces.forEach((nic, index) => {
           const originalIp =
-            originalIPsPerVM?.[vmName]?.[index] !== undefined
-              ? originalIPsPerVM[vmName][index]
+            originalIPsPerVM?.[vmId]?.[index] !== undefined
+              ? originalIPsPerVM[vmId][index]
               : (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
                   .filter((ip: string) => ip && ip.trim() !== '')
                   .join(', ')
@@ -1717,8 +1705,8 @@ function VmsSelectionStep({
             .filter((ip: string) => ip && ip.trim() !== '')
             .join(', ')
 
-          initialBulkExistingIPs[vmName][index] = originalIp
-          initialBulkCurrentIPs[vmName][index] = currentIp
+          initialBulkExistingIPs[vmId][index] = originalIp
+          initialBulkCurrentIPs[vmId][index] = currentIp
 
           const initialPreserveIp = vm.preserveIp?.[index] !== false
           const initialPreserveMac = vm.preserveMac?.[index] !== false
@@ -1726,26 +1714,26 @@ function VmsSelectionStep({
           const isPoweredOff = vm.vmState !== 'running'
           const hasMultipleIps = parseIpList(originalIp).length > 1
           const effectivePreserveIp = isPoweredOff ? false : hasMultipleIps ? true : initialPreserveIp
-          initialBulkPreserveIp[vmName][index] = effectivePreserveIp
-          initialBulkPreserveMac[vmName][index] = initialPreserveMac
+          initialBulkPreserveIp[vmId][index] = effectivePreserveIp
+          initialBulkPreserveMac[vmId][index] = initialPreserveMac
 
-          initialBulkEditIPs[vmName][index] = effectivePreserveIp ? originalIp : currentIp
-          initialBulkEditOverrides[vmName][index] = {
+          initialBulkEditIPs[vmId][index] = effectivePreserveIp ? originalIp : currentIp
+          initialBulkEditOverrides[vmId][index] = {
             preserveIP: effectivePreserveIp,
             preserveMAC: initialPreserveMac
           }
 
-          const initialValue = initialBulkEditIPs[vmName][index]
-          initialValidationStatus[vmName][index] = initialValue.trim() ? 'valid' : 'empty'
+          const initialValue = initialBulkEditIPs[vmId][index]
+          initialValidationStatus[vmId][index] = initialValue.trim() ? 'valid' : 'empty'
         })
       } else {
         const tableIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
         const originalIp =
-          originalIPsPerVM?.[vmName]?.[0] !== undefined ? originalIPsPerVM[vmName][0] : tableIp
+          originalIPsPerVM?.[vmId]?.[0] !== undefined ? originalIPsPerVM[vmId][0] : tableIp
         const currentIp = tableIp
 
-        initialBulkExistingIPs[vmName][0] = originalIp
-        initialBulkCurrentIPs[vmName][0] = currentIp
+        initialBulkExistingIPs[vmId][0] = originalIp
+        initialBulkCurrentIPs[vmId][0] = currentIp
 
         const isPoweredOff = vm.vmState !== 'running'
         const hasMultipleIps = parseIpList(originalIp).length > 1
@@ -1753,14 +1741,14 @@ function VmsSelectionStep({
           isPoweredOff ? false : hasMultipleIps ? true : vm.preserveIp?.[0] !== false
         const initialPreserveMac = vm.preserveMac?.[0] !== false
 
-        initialBulkPreserveIp[vmName][0] = effectivePreserveIp
-        initialBulkPreserveMac[vmName][0] = initialPreserveMac
-        initialBulkEditIPs[vmName][0] = effectivePreserveIp ? originalIp : currentIp
-        initialBulkEditOverrides[vmName][0] = {
+        initialBulkPreserveIp[vmId][0] = effectivePreserveIp
+        initialBulkPreserveMac[vmId][0] = initialPreserveMac
+        initialBulkEditIPs[vmId][0] = effectivePreserveIp ? originalIp : currentIp
+        initialBulkEditOverrides[vmId][0] = {
           preserveIP: effectivePreserveIp,
           preserveMAC: initialPreserveMac
         }
-        initialValidationStatus[vmName][0] = initialBulkEditIPs[vmName][0].trim()
+        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim()
           ? 'valid'
           : 'empty'
       }
@@ -2311,13 +2299,13 @@ function VmsSelectionStep({
                 gap: 2
               }}
             >
-              {Object.entries(bulkEditIPs).map(([vmName, interfaces]) => {
-                const vm = vmsWithFlavor.find((v) => (v.vmKey || v.name) === vmName)
+              {Object.entries(bulkEditIPs).map(([vmId, interfaces]) => {
+                const vm = vmsWithFlavor.find((v) => v.id === vmId)
                 if (!vm) return null
 
                 return (
                   <Box
-                    key={vmName}
+                    key={vmId}
                     sx={{
                       p: 2,
                       border: '1px solid',
@@ -2345,24 +2333,24 @@ function VmsSelectionStep({
                         </CdsIconWrapper>
                       </Tooltip>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {vm.name}
+                        {vm.vmKey || vm.name}
                       </Typography>
                     </Box>
 
                     {Object.entries(interfaces).map(([interfaceIndexStr, ip]) => {
                       const interfaceIndex = parseInt(interfaceIndexStr)
                       const networkInterface = vm.networkInterfaces?.[interfaceIndex]
-                      const status = bulkValidationStatus[vmName]?.[interfaceIndex]
-                      const message = bulkValidationMessages[vmName]?.[interfaceIndex]
+                      const status = bulkValidationStatus[vmId]?.[interfaceIndex]
+                      const message = bulkValidationMessages[vmId]?.[interfaceIndex]
                       const isPoweredOff = vm.vmState !== 'running'
                       const hasMultipleIps = parseIpList(ip).length > 1
                       const preserveIp =
                         !isPoweredOff &&
-                        (hasMultipleIps || bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false)
-                      const preserveMac = bulkPreserveMac?.[vmName]?.[interfaceIndex] !== false
-                      const discoveredIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
+                        (hasMultipleIps || bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false)
+                      const preserveMac = bulkPreserveMac?.[vmId]?.[interfaceIndex] !== false
+                      const discoveredIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
                       const currentIp =
-                        bulkCurrentIPs?.[vmName]?.[interfaceIndex] ||
+                        bulkCurrentIPs?.[vmId]?.[interfaceIndex] ||
                         (Array.isArray(networkInterface?.ipAddress)
                           ? networkInterface?.ipAddress
                               ?.filter((v) => v && v.trim() !== '')
@@ -2469,7 +2457,7 @@ function VmsSelectionStep({
                                 disabled={isPoweredOff || hasMultipleIps}
                                 onChange={(e) =>
                                   handleBulkPreserveIpChange(
-                                    vmName,
+                                    vmId,
                                     interfaceIndex,
                                     e.target.checked
                                   )
@@ -2485,7 +2473,7 @@ function VmsSelectionStep({
                                 checked={preserveMac}
                                 onChange={(e) =>
                                   handleBulkPreserveMacChange(
-                                    vmName,
+                                    vmId,
                                     interfaceIndex,
                                     e.target.checked
                                   )
@@ -2500,7 +2488,7 @@ function VmsSelectionStep({
                             <TextField
                               value={ip}
                               onChange={(e) =>
-                                handleBulkIpChange(vmName, interfaceIndex, e.target.value)
+                                handleBulkIpChange(vmId, interfaceIndex, e.target.value)
                               }
                               placeholder={
                                 preserveIp ? 'Enter IP address' : 'Enter new IP (optional)'
@@ -2509,7 +2497,7 @@ function VmsSelectionStep({
                               fullWidth
                               disabled={
                                 preserveIp &&
-                                Boolean(bulkExistingIPs?.[vmName]?.[interfaceIndex]?.trim())
+                                Boolean(bulkExistingIPs?.[vmId]?.[interfaceIndex]?.trim())
                               }
                               InputProps={{
                                 endAdornment: renderValidationAdornment(status)

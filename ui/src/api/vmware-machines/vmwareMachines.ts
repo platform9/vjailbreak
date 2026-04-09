@@ -62,18 +62,12 @@ export const patchVMwareMachine = async (
 }
 
 export const mapToVmData = (machines: VMwareMachine[]): VmData[] => {
-  const nameCounts: Record<string, number> = {}
-  machines.forEach((m) => {
-    nameCounts[m.spec.vms.name] = (nameCounts[m.spec.vms.name] || 0) + 1
-  })
   return machines.map((machine) => {
-    const isDuplicate = nameCounts[machine.spec.vms.name] > 1
-    const vmKey =
-      isDuplicate && machine.spec.vms.vmid
-        ? `${machine.spec.vms.name}-${machine.spec.vms.vmid.replace(/^vm-/, '')}`
-        : machine.spec.vms.name
+    const vmKey = machine.spec.vms.vmid
+      ? `${machine.spec.vms.name}-${machine.spec.vms.vmid.replace(/^vm-/, '')}`
+      : machine.spec.vms.name
     return {
-    id: machine.spec.vms.vmid || machine.spec.vms.name,
+    id: vmKey,
     name: machine.spec.vms.name,
     vmid: machine.spec.vms.vmid,
     vmKey,

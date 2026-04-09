@@ -17,7 +17,7 @@ import { getRdmDisksList } from 'src/api/rdm-disks/rdmDisks'
 import type { StorageMapping } from 'src/api/storage-mappings/model'
 import { getStorageMapping } from 'src/api/storage-mappings/storageMappings'
 import type { VMwareMachine } from 'src/api/vmware-machines/model'
-import { getVMwareMachine, getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
+import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
 import type { PCDCluster, PCDClusterList } from 'src/api/pcd-clusters/model'
 import { getPCDClusters } from 'src/api/pcd-clusters/pcdClusters'
 import type { Migration } from 'src/features/migration/api/migrations'
@@ -174,26 +174,20 @@ export const useMigrationDetailResourcesQuery = ({
           ? -1
           : 0
 
-      let vmwareMachine: VMwareMachine | null = null
-      if (vmName) {
-        vmwareMachine = await safeGet(() => getVMwareMachine(vmName, namespace))
-      }
-
-      const vmwareMachinesList =
-        !vmwareMachine ? await safeGet(() => getVMwareMachines(namespace, vmwareRef)) : null
+      const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace, vmwareRef))
       const vmwareMachines = vmwareMachinesList?.items || []
 
-      if (!vmwareMachine && vmwareMachines.length) {
+      let vmwareMachine: VMwareMachine | null = null
+      if (vmwareMachines.length) {
         vmwareMachine =
           vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
-          vmwareMachines.find((m) => vmName && m?.metadata?.name === vmName) ||
           vmwareMachines.find((m) => {
             const vms = (m?.spec as any)?.vms
-            const reconstructed =
+            const vmKey =
               vms?.name && vms?.vmid
                 ? `${vms.name}-${String(vms.vmid).replace(/^vm-/, '')}`
                 : vms?.name
-            return vmName && reconstructed === vmName
+            return vmName && vmKey === vmName
           }) ||
           vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
           null

@@ -60,7 +60,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/session"
 	govmomitypes "github.com/vmware/govmomi/vim25/types"
@@ -318,12 +317,7 @@ func (*MigrationPlanReconciler) renameVM(
 	}
 	newVMName := vm + suffix
 	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "vmid", vmid, "migrationplan", migrationplan.Name)
-	var err error
-	if vmid != "" {
-		err = vcClient.RenameVMByMOID(ctx, vmid, newVMName)
-	} else {
-		err = vcClient.RenameVM(ctx, vm, newVMName)
-	}
+	err := vcClient.RenameVMByMOID(ctx, vmid, newVMName)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			ctxlog.Info("VM not found for rename; possibly already processed or deleted", "oldName", vm, "newName", newVMName)
@@ -353,47 +347,13 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 
 	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
 
-	// When VMID is known, use MOID-based name
-	if vmid != "" {
-		if err := vcClient.MoveVMFolderByMOID(ctx, vmid, datacenterName, folderName); err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "not found") {
-				ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm, "vmid", vmid)
-				return nil
-			}
-			ctxlog.Error(err, "VM move failed", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
-			return errors.Wrapf(err, "failed to move VM '%s' (moid=%s) to folder '%s'", vm, vmid, folderName)
-		}
-		ctxlog.Info("Successfully moved VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
-		return nil
-	}
-
-	// Fallback: auto-detect datacenter from the VM by name (non-duplicate case)
-	ctxlog.Info("Auto-detecting datacenter from VM...", "vm", vm)
-	_, dc, err := vcClient.GetVMWithDatacenter(ctx, vm)
-	if err != nil {
+	if err := vcClient.MoveVMFolderByMOID(ctx, vmid, datacenterName, folderName); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm)
+			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm, "vmid", vmid)
 			return nil
 		}
-		ctxlog.Error(err, "Failed to find VM and its datacenter", "vm", vm)
-		return errors.Wrapf(err, "failed to find VM '%s' and its datacenter", vm)
-	}
-	if dc == nil {
-		ctxlog.Error(nil, "Datacenter is nil after auto-detection", "vm", vm)
-		return errors.Errorf("datacenter is nil for VM '%s'", vm)
-	}
-	ctxlog.Info("Auto-detected datacenter for VM", "vm", vm, "datacenter", dc.Name())
-
-	ctxlog.Info("Ensuring folder exists...", "folder", folderName)
-	if _, err := EnsureVMFolderExists(ctx, vcClient.VCFinder, dc, folderName); err != nil {
-		ctxlog.Error(err, "Folder creation/verification failed", "folder", folderName, "vm", vm, "migrationplan", migrationplan.Name)
-		return errors.Wrapf(err, "failed to ensure folder '%s' exists", folderName)
-	}
-
-	ctxlog.Info("Moving VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
-	if err := vcClient.MoveVMFolder(ctx, vm, folderName); err != nil {
-		ctxlog.Error(err, "VM move failed", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
-		return errors.Wrapf(err, "failed to move VM '%s' to folder '%s'", vm, folderName)
+		ctxlog.Error(err, "VM move failed", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
+		return errors.Wrapf(err, "failed to move VM '%s' (moid=%s) to folder '%s'", vm, vmid, folderName)
 	}
 	ctxlog.Info("Successfully moved VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
 	return nil
@@ -487,11 +447,9 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
 	}
 
-	// Verify VM name matches. For duplicate VM names the plan stores "name-vmid",
-	// so accept both the plain name and the name-vmid composite.
 	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
-	if vmMachine.Spec.VMInfo.Name != vm && vmidSuffixed != vm {
-		return nil, errors.Errorf("VMwareMachine %s VM name mismatch: expected %s, got %s", vmMachine.Name, vm, vmMachine.Spec.VMInfo.Name)
+	if vmidSuffixed != vm {
+		return nil, errors.Errorf("VMwareMachine %s VM key mismatch: expected %s, got %s", vmMachine.Name, vm, vmidSuffixed)
 	}
 	return vmMachine, nil
 }
@@ -668,7 +626,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name == vmName || v.Spec.VMInfo.Name+"-"+strings.TrimPrefix(v.Spec.VMInfo.VMID, "vm-") == vmName {
+			if v.Spec.VMInfo.Name+"-"+strings.TrimPrefix(v.Spec.VMInfo.VMID, "vm-") == vmName {
 				isValid = true
 				break
 			}
@@ -2078,29 +2036,6 @@ func MergeLabels(a, b map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
-}
-
-// EnsureVMFolderExists ensures that the specified folder exists in the datacenter.
-// If the folder does not exist, it creates a new folder with the specified name.
-func EnsureVMFolderExists(ctx context.Context, finder *find.Finder, dc *object.Datacenter, folderName string) (*object.Folder, error) {
-	finder.SetDatacenter(dc)
-
-	// Check if folder exists
-	folder, err := finder.Folder(ctx, folderName)
-	if err == nil {
-		return folder, nil
-	}
-
-	// Create folder if missing
-	folders, err := dc.Folders(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get datacenter folders")
-	}
-	folder, err = folders.VmFolder.CreateFolder(ctx, folderName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create folder '%s'", folderName)
-	}
-	return folder, nil
 }
 
 func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines map[string]*vjailbreakv1alpha1.VMwareMachine, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {

@@ -191,30 +191,6 @@ func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name str
 	return nil, nil, fmt.Errorf("VM not found")
 }
 
-// RenameVM renames a VM in vCenter by appending a suffix to its name
-func (vcclient *VCenterClient) RenameVM(ctx context.Context, vmName, newVMName string) error {
-	// Find the VM
-	vm, err := vcclient.GetVMByName(ctx, vmName)
-	if err != nil {
-		return fmt.Errorf("failed to find VM '%s': %v", vmName, err)
-	}
-
-	// Rename the VM
-	spec := types.VirtualMachineConfigSpec{
-		Name: newVMName,
-	}
-	task, err := vm.Reconfigure(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("failed to reconfigure VM '%s' with new name '%s': %v", vmName, newVMName, err)
-	}
-	err = task.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to rename VM '%s' to '%s': %v", vmName, newVMName, err)
-	}
-
-	return nil
-}
-
 // RenameVMByMOID renames a VM using its vCenter Managed Object ID
 func (vcclient *VCenterClient) RenameVMByMOID(ctx context.Context, moid, newVMName string) error {
 	vm := vcclient.GetVMByMOID(moid)
@@ -265,25 +241,6 @@ func (vcclient *VCenterClient) getOrCreateVMFolder(ctx context.Context, datacent
 		return nil, fmt.Errorf("failed to create folder '%s': %v", folderName, err)
 	}
 	return newFolder, nil
-}
-
-// MoveVMFolder moves a VM to a specified folder in vCenter, creating the folder if it does not exist
-func (vcclient *VCenterClient) MoveVMFolder(ctx context.Context, vmName, folderName string) error {
-	vm, err := vcclient.GetVMByName(ctx, vmName)
-	if err != nil {
-		return fmt.Errorf("failed to find VM '%s': %v", vmName, err)
-	}
-
-	folderRef, err := vcclient.getOrCreateVMFolder(ctx, "", folderName)
-	if err != nil {
-		return err
-	}
-
-	task, err := folderRef.MoveInto(ctx, []types.ManagedObjectReference{vm.Reference()})
-	if err != nil {
-		return fmt.Errorf("failed to initiate move of VM '%s' to folder '%s': %v", vmName, folderName, err)
-	}
-	return task.Wait(ctx)
 }
 
 // MoveVMFolderByMOID moves a VM (identified by MOID) to a folder, creating the folder if it does not exist.
