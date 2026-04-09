@@ -412,7 +412,10 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
 	// Always use libvirtxml mode to convert all disks
-	args = append(args, "-i", "libvirtxml", xmlFile, "--root", path)
+	args = append(args, "-i", "libvirtxml", xmlFile)
+	if strings.ToLower(ostype) != constants.OSFamilyWindows {
+		args = append(args, "--root", path)
+	}
 
 	start := time.Now()
 	// Step 5: Run virt-v2v-in-place
@@ -1076,6 +1079,28 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 	log.Printf("Network persistence script output: %s", string(output))
 
+	return nil
+}
+
+func RunOfflineVMwareCleanup(diskPath string) error {
+	const scriptPath = "/home/fedora/offline-vmware-cleanup.sh"
+
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		log.Printf("WARNING: offline-vmware-cleanup.sh not found at %s; skipping offline VMware Tools removal", scriptPath)
+		return nil
+	}
+
+	log.Printf("Running offline VMware Tools cleanup on %s", diskPath)
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	cmd := exec.Command("bash", scriptPath, diskPath)
+	out, err := cmd.CombinedOutput()
+	log.Printf("offline-vmware-cleanup output:\n%s", strings.TrimSpace(string(out)))
+	if err != nil {
+		log.Printf("WARNING: offline VMware Tools cleanup failed: %v", err)
+	} else {
+		log.Printf("Offline VMware Tools cleanup completed successfully")
+	}
 	return nil
 }
 
