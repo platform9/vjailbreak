@@ -1087,184 +1087,198 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
-	if err != nil && apierrors.IsNotFound(err) {
-		r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vm))
-		job = &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      jobName,
-				Namespace: migrationplan.Namespace,
-			},
-			Spec: batchv1.JobSpec{
-				PodFailurePolicy: &batchv1.PodFailurePolicy{
-					Rules: []batchv1.PodFailurePolicyRule{
-						{
-							Action: batchv1.PodFailurePolicyActionFailJob,
-							OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
-								Values:   []int32{0},
-								Operator: batchv1.PodFailurePolicyOnExitCodesOpNotIn,
-							},
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, fmt.Sprintf("failed to get job '%s'", jobName))
+	}
+	if err == nil {
+		// Job exists — if it belongs to this Migration, nothing to do.
+		for _, ref := range job.OwnerReferences {
+			if ref.UID == migrationobj.UID {
+				return nil
+			}
+		}
+		// Stale Job from a previous attempt — delete it before creating a fresh one.
+		r.ctxlog.Info(fmt.Sprintf("Deleting stale Job '%s' owned by a previous Migration before retry", jobName))
+		if delErr := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); delErr != nil && !apierrors.IsNotFound(delErr) {
+			return errors.Wrap(delErr, fmt.Sprintf("failed to delete stale job '%s'", jobName))
+		}
+	}
+	r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vm))
+	job = &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: migrationplan.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			PodFailurePolicy: &batchv1.PodFailurePolicy{
+				Rules: []batchv1.PodFailurePolicyRule{
+					{
+						Action: batchv1.PodFailurePolicyActionFailJob,
+						OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+							Values:   []int32{0},
+							Operator: batchv1.PodFailurePolicyOnExitCodesOpNotIn,
 						},
 					},
 				},
-				TTLSecondsAfterFinished: nil,
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							constants.VMNameLabel: vmk8sname,
-							"startCutover":        cutoverlabel,
-						},
+			},
+			TTLSecondsAfterFinished: nil,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						constants.VMNameLabel: vmk8sname,
+						"startCutover":        cutoverlabel,
 					},
-					Spec: corev1.PodSpec{
-						RestartPolicy:                 corev1.RestartPolicyNever,
-						ServiceAccountName:            "migration-controller-manager",
-						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
-						HostNetwork:                   true,
-						DNSPolicy: corev1.DNSClusterFirstWithHostNet,
-						DNSConfig: &corev1.PodDNSConfig{
-							Options: []corev1.PodDNSConfigOption{
-								{
-									Name:  "ndots",
-									Value: ptr.To("1"),
-								},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:                 corev1.RestartPolicyNever,
+					ServiceAccountName:            "migration-controller-manager",
+					TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
+					HostNetwork:                   true,
+					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
+					DNSConfig: &corev1.PodDNSConfig{
+						Options: []corev1.PodDNSConfigOption{
+							{
+								Name:  "ndots",
+								Value: ptr.To("1"),
 							},
 						},
-						Containers: []corev1.Container{
-							{
-								Name:            "fedora",
-								Image:           v2vimage,
-								ImagePullPolicy: corev1.PullIfNotPresent,
-								Command:         []string{"/home/fedora/manager"},
-								SecurityContext: &corev1.SecurityContext{
-									Privileged: &pointtrue,
-								},
-								Env: envVars,
-								EnvFrom: func() []corev1.EnvFromSource {
-									envFrom := []corev1.EnvFromSource{
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: vmwareSecretRef,
-												},
-											},
-										},
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: openstackSecretRef,
-												},
-											},
-										},
-									}
-									if arrayCredsSecretRef != "" {
-										envFrom = append(envFrom, corev1.EnvFromSource{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: arrayCredsSecretRef,
-												},
-											},
-										})
-									}
-									envFrom = append(envFrom, corev1.EnvFromSource{
-										ConfigMapRef: &corev1.ConfigMapEnvSource{
+					},
+					Containers: []corev1.Container{
+						{
+							Name:            "fedora",
+							Image:           v2vimage,
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Command:         []string{"/home/fedora/manager"},
+							SecurityContext: &corev1.SecurityContext{
+								Privileged: &pointtrue,
+							},
+							Env: envVars,
+							EnvFrom: func() []corev1.EnvFromSource {
+								envFrom := []corev1.EnvFromSource{
+									{
+										SecretRef: &corev1.SecretEnvSource{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "pf9-env",
+												Name: vmwareSecretRef,
+											},
+										},
+									},
+									{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: openstackSecretRef,
+											},
+										},
+									},
+								}
+								if arrayCredsSecretRef != "" {
+									envFrom = append(envFrom, corev1.EnvFromSource{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: arrayCredsSecretRef,
 											},
 										},
 									})
-									return envFrom
-								}(),
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "vddk",
-										MountPath: "/home/fedora/vmware-vix-disklib-distrib",
+								}
+								envFrom = append(envFrom, corev1.EnvFromSource{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "pf9-env",
+										},
 									},
-									{
-										Name:      "dev",
-										MountPath: "/dev",
-									},
-									{
-										Name:      "firstboot",
-										MountPath: "/home/fedora/scripts",
-									},
-									{
-										Name:      "logs",
-										MountPath: "/var/log/pf9",
-									},
-									{
-										Name:      "virtio-driver",
-										MountPath: "/home/fedora/virtio-win",
-									},
+								})
+								return envFrom
+							}(),
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "vddk",
+									MountPath: "/home/fedora/vmware-vix-disklib-distrib",
 								},
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPURequest),
-										corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryRequest),
-										corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageRequest),
-									},
-									Limits: corev1.ResourceList{
-										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPULimit),
-										corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryLimit),
-										corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageLimit),
+								{
+									Name:      "dev",
+									MountPath: "/dev",
+								},
+								{
+									Name:      "firstboot",
+									MountPath: "/home/fedora/scripts",
+								},
+								{
+									Name:      "logs",
+									MountPath: "/var/log/pf9",
+								},
+								{
+									Name:      "virtio-driver",
+									MountPath: "/home/fedora/virtio-win",
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPURequest),
+									corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryRequest),
+									corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageRequest),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPULimit),
+									corev1.ResourceMemory:           resource.MustParse(vjailbreakSettings.V2VHelperPodMemoryLimit),
+									corev1.ResourceEphemeralStorage: resource.MustParse(vjailbreakSettings.V2VHelperPodEphemeralStorageLimit),
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "vddk",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/home/ubuntu/vmware-vix-disklib-distrib",
+									Type: utils.NewHostPathType("Directory"),
+								},
+							},
+						},
+						{
+							Name: "dev",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/dev",
+									Type: utils.NewHostPathType("Directory"),
+								},
+							},
+						},
+						{
+							Name: "firstboot",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: firstbootconfigMapName,
 									},
 								},
 							},
 						},
-						Volumes: []corev1.Volume{
-							{
-								Name: "vddk",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-										Type: utils.NewHostPathType("Directory"),
-									},
+						{
+							Name: "logs",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/log/pf9",
+									Type: utils.NewHostPathType("DirectoryOrCreate"),
 								},
 							},
-							{
-								Name: "dev",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/dev",
-										Type: utils.NewHostPathType("Directory"),
-									},
-								},
-							},
-							{
-								Name: "firstboot",
-								VolumeSource: corev1.VolumeSource{
-									ConfigMap: &corev1.ConfigMapVolumeSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: firstbootconfigMapName,
-										},
-									},
-								},
-							},
-							{
-								Name: "logs",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/var/log/pf9",
-										Type: utils.NewHostPathType("DirectoryOrCreate"),
-									},
-								},
-							},
-							{
-								Name: "virtio-driver",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/home/ubuntu/virtio-win",
-										Type: utils.NewHostPathType("DirectoryOrCreate"),
-									},
+						},
+						{
+							Name: "virtio-driver",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/home/ubuntu/virtio-win",
+									Type: utils.NewHostPathType("DirectoryOrCreate"),
 								},
 							},
 						},
 					},
 				},
 			},
-		}
-		if err := r.createResource(ctx, migrationobj, job); err != nil {
-			r.ctxlog.Error(err, fmt.Sprintf("Failed to create Job '%s'", jobName))
-			return errors.Wrap(err, fmt.Sprintf("failed to create job '%s'", jobName))
-		}
+		},
+	}
+	if err := r.createResource(ctx, migrationobj, job); err != nil {
+		r.ctxlog.Error(err, fmt.Sprintf("Failed to create Job '%s'", jobName))
+		return errors.Wrap(err, fmt.Sprintf("failed to create job '%s'", jobName))
 	}
 	return nil
 }
