@@ -317,7 +317,7 @@ func (*MigrationPlanReconciler) renameVM(
 	}
 	newVMName := vm + suffix
 	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "vmid", vmid, "migrationplan", migrationplan.Name)
-	err := vcClient.RenameVMByMOID(ctx, vmid, newVMName)
+	err := vcClient.RenameVM(ctx, vmid, newVMName)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			ctxlog.Info("VM not found for rename; possibly already processed or deleted", "oldName", vm, "newName", newVMName)
@@ -347,7 +347,7 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 
 	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
 
-	if err := vcClient.MoveVMFolderByMOID(ctx, vmid, datacenterName, folderName); err != nil {
+	if err := vcClient.MovetoFolder(ctx, vmid, datacenterName, folderName); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm, "vmid", vmid)
 			return nil

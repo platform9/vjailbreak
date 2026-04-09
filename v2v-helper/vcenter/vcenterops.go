@@ -191,8 +191,8 @@ func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name str
 	return nil, nil, fmt.Errorf("VM not found")
 }
 
-// RenameVMByMOID renames a VM using its vCenter Managed Object ID
-func (vcclient *VCenterClient) RenameVMByMOID(ctx context.Context, moid, newVMName string) error {
+// RenameVM renames a VM using its vCenter Managed Object ID
+func (vcclient *VCenterClient) RenameVM(ctx context.Context, moid, newVMName string) error {
 	vm := vcclient.GetVMByMOID(moid)
 	spec := types.VirtualMachineConfigSpec{Name: newVMName}
 	task, err := vm.Reconfigure(ctx, spec)
@@ -243,8 +243,8 @@ func (vcclient *VCenterClient) getOrCreateVMFolder(ctx context.Context, datacent
 	return newFolder, nil
 }
 
-// MoveVMFolderByMOID moves a VM (identified by MOID) to a folder, creating the folder if it does not exist.
-func (vcclient *VCenterClient) MoveVMFolderByMOID(ctx context.Context, moid, datacenterName, folderName string) error {
+// MovetoFolder moves a VM (identified by MOID) to a folder, creating the folder if it does not exist.
+func (vcclient *VCenterClient) MovetoFolder(ctx context.Context, moid, datacenterName, folderName string) error {
 	vm := vcclient.GetVMByMOID(moid)
 
 	folderRef, err := vcclient.getOrCreateVMFolder(ctx, datacenterName, folderName)
