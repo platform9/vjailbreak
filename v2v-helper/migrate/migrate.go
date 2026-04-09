@@ -1241,14 +1241,14 @@ func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VM
 	persistNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	if persistNetwork {
 		osType := strings.ToLower(vminfo.OSType)
-		if err := virtv2v.InjectRestorationScript(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
-			return errors.Wrap(err, "failed to inject restoration script")
-		}
-		utils.PrintLog("Restoration script injected successfully")
 		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac, osType); err != nil {
 			return errors.Wrap(err, "failed to inject mac to ips")
 		}
 		utils.PrintLog("Mac to IP mapping injected successfully")
+		if err := virtv2v.InjectRestorationScript(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+			return errors.Wrap(err, "failed to inject restoration script")
+		}
+		utils.PrintLog("Restoration script injected successfully")
 	}
 	return nil
 }
