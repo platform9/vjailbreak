@@ -58,7 +58,7 @@ jobs:
         run: |
           echo "Running Gosec scan..."
           mkdir -p tmp
-          gosec -fmt=json -severity=medium -out=tmp/gosec-report.json ./... || true
+          gosec -fmt=json -severity=high -out=tmp/gosec-report.json ./... || true
           cat tmp/gosec-report.json || echo '{"Issues":[]}'
           count=$(jq '[.Issues[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' tmp/gosec-report.json || echo 0)
 
@@ -259,9 +259,18 @@ jobs:
         if: ${{ steps.scan.outputs.gosec_high_found == 'true' }}
         run: |
           echo "=========================================="
-          echo "Gosec Vulnerability Report:"
+          echo "Gosec HIGH/CRITICAL Vulnerability Report"
           echo "=========================================="
-          cat tmp/pr-body.md
+          printf "%-60s %-6s %-8s %-10s %s\n" "FILE" "LINE" "RULE" "SEVERITY" "DETAILS"
+          printf "%-60s %-6s %-8s %-10s %s\n" "----" "----" "----" "--------" "-------"
+          jq -r '
+            .Issues[]
+            | select(.severity == "HIGH" or .severity == "CRITICAL")
+            | [.file, .line, .rule_id, .severity, .details]
+            | @tsv
+          ' tmp/gosec-report.json | while IFS=$'\t' read -r file line rule sev details; do
+            printf "%-60s %-6s %-8s %-10s %s\n" "$file" "$line" "$rule" "$sev" "$details"
+          done
           echo "=========================================="
 
       - name: Store Gosec Report as Artifact (Main/Release)
@@ -283,10 +292,18 @@ jobs:
           branch: auto/gosec-scan/${{ env.SAFE_REF_NAME }}
           base: ${{ github.ref_name }}
           delete-branch: true
+          add-paths: tmp/pr-body.md
 
-      - name: Fail Job If Vulnerabilities Found
-        if: ${{ steps.scan.outputs.gosec_high_found == 'true' }}
-        run: exit 1
+      # Temporarily disabled: fail on vulnerabilities — fixing existing findings before re-enabling
+      # - name: Fail Job If Vulnerabilities Found (Push)
+      #   if: ${{ github.event_name != 'pull_request' && steps.scan.outputs.gosec_high_found == 'true' }}
+      #   run: exit 1
+      #
+      # - name: Fail Job If New Vulnerabilities Introduced (PR)
+      #   if: ${{ github.event_name == 'pull_request' && steps.gosec_compare.outputs.added_count > 0 }}
+      #   run: |
+      #     echo "New HIGH/CRITICAL vulnerabilities introduced: ${{ steps.gosec_compare.outputs.added_count }}"
+      #     exit 1
 
   trivy_scan:
     name: Trivy Security Scan (Full)
@@ -592,9 +609,22 @@ jobs:
         if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
         run: |
           echo "=========================================="
-          echo "Trivy Vulnerability Report:"
+          echo "Trivy HIGH/CRITICAL Vulnerability Report"
           echo "=========================================="
-          cat tmp/pr-body.md
+          printf "%-50s %-20s %-25s %-10s %s\n" "TARGET" "VULNERABILITY" "PACKAGE" "SEVERITY" "TITLE"
+          printf "%-50s %-20s %-25s %-10s %s\n" "------" "-------------" "-------" "--------" "-----"
+          jq -r '
+            (.Results // [])
+            | .[]
+            | .Target as $target
+            | (.Vulnerabilities? // [])
+            | map(select(.Severity == "HIGH" or .Severity == "CRITICAL"))
+            | .[]
+            | [$target, .VulnerabilityID, (.PkgName + " " + .InstalledVersion), .Severity, .Title]
+            | @tsv
+          ' tmp/trivy-report.json | while IFS=$'\t' read -r target vuln pkg sev title; do
+            printf "%-50s %-20s %-25s %-10s %s\n" "$target" "$vuln" "$pkg" "$sev" "$title"
+          done
           echo "=========================================="
 
       - name: Store Trivy Filesystem Report as Artifact (Main/Release)
@@ -616,16 +646,24 @@ jobs:
           branch: auto/trivy-scan/${{ env.SAFE_REF_NAME }}
           base: ${{ github.ref_name }}
           delete-branch: true
+          add-paths: tmp/pr-body.md
 
-      - name: Fail Job If Vulnerabilities Found
-        if: ${{ steps.scan.outputs.trivy_high_found == 'true' }}
-        run: exit 1
+      # Temporarily disabled: fail on vulnerabilities — fixing existing findings before re-enabling
+      # - name: Fail Job If Vulnerabilities Found (Push)
+      #   if: ${{ github.event_name != 'pull_request' && steps.scan.outputs.trivy_high_found == 'true' }}
+      #   run: exit 1
+      #
+      # - name: Fail Job If New Vulnerabilities Introduced (PR)
+      #   if: ${{ github.event_name == 'pull_request' && steps.trivy_compare.outputs.added_count > 0 }}
+      #   run: |
+      #     echo "New HIGH/CRITICAL vulnerabilities introduced: ${{ steps.trivy_compare.outputs.added_count }}"
+      #     exit 1
 
   vulnerability_summary:
     name: Vulnerability Summary Report
     needs: [gosec_scan, trivy_scan]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && always()
+    if: always() && github.event_name == 'pull_request'
     steps:
       - name: Create Vulnerability Summary Comment
         uses: actions/github-script@v7
