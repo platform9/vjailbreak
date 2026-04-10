@@ -67,6 +67,12 @@ func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networ
 
 func GetCurrentInstanceUUID() (string, error) {
 
+	// Use the env var directly if set, avoiding a network round-trip to the
+	// metadata service which may not be reachable in all deployment environments.
+	if id := os.Getenv("CURRENT_INSTANCE_ID"); id != "" {
+		return id, nil
+	}
+
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
@@ -103,11 +109,6 @@ func GetCurrentInstanceUUID() (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
-		if currentInstanceUUID != "" {
-			PrintLog("CURRENT_INSTANCE_ID environment variable is set to: " + currentInstanceUUID)
-			return currentInstanceUUID, nil
-		}
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
