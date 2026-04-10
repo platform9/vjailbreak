@@ -118,7 +118,7 @@ try {
             }
 
         } catch {
-            Write-Log "Failed for $alias: $_" -Level "ERROR"
+            Write-Log "Failed for $alias $_" -Level "ERROR"
             Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "ERROR"
             continue
         }

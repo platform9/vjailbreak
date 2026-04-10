@@ -137,6 +137,26 @@ $hiddenNames = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D
     }
 Write-Log "Found $($hiddenNames.Count) hidden adapter names"
 
+Write-Log "Reading macToIP mapping file..."
+$macToIpFile = Join-Path (Split-Path -Parent $OutFile) "macToIP"
+$macToIpMap = @{}
+if (Test-Path $macToIpFile) {
+    Get-Content $macToIpFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -match '^([0-9a-fA-F:]{17}):ip:(\d+\.\d+\.\d+\.\d+)$') {
+            $mac = $matches[1].ToLower()
+            $ip = $matches[2]
+            $macToIpMap[$ip] = $mac
+            Write-Log "Loaded mapping: $ip -> $mac"
+        } else {
+            Write-Log "Warning: Skipping invalid line in macToIP: $line"
+        }
+    }
+    Write-Log "Loaded $($macToIpMap.Count) MAC-to-IP mappings from file"
+} else {
+    Write-Log "macToIP file not found at $macToIpFile - will use fallback matching"
+}
+
 Write-Log "Matching hidden IPs with hidden names and active NICs..."
 $matchedMacs = @()
 $result = foreach ($hidden in $hiddenIPs) {
@@ -145,22 +165,50 @@ $result = foreach ($hidden in $hiddenIPs) {
         Write-Log "No matching name found for GUID $($hidden.GUID)"
         continue 
     }
-    
-    $match = $activeNics | 
-             Where-Object { $_.Network -eq $hidden.Network -and $_.MACAddress -notin $matchedMacs } | 
-             Select-Object -First 1
-             
-    if (-not $match) { 
-        Write-Log "No matching active NIC found for network $($hidden.Network) (GUID: $($hidden.GUID))"
-        continue 
+
+    $macAddress = $null
+    $matchSource = ""
+
+    # Priority 1: Look up MAC from macToIP file by IP address
+    if ($macToIpMap.ContainsKey($hidden.IPAddress)) {
+        $macFromFile = $macToIpMap[$hidden.IPAddress]
+        # Normalize MAC format (colons to dashes for comparison with active NICs)
+        $macNormalized = $macFromFile -replace ':', '-'
+        # Verify this MAC exists in active NICs and hasn't been used yet
+        $activeMatch = $activeNics | Where-Object { $_.MACAddress -eq $macNormalized -and $_.MACAddress -notin $matchedMacs } | Select-Object -First 1
+        if ($activeMatch) {
+            $macAddress = $macNormalized
+            $matchSource = "macToIP file"
+            Write-Log "Found MAC from file for IP $($hidden.IPAddress): $macFromFile"
+        } else {
+            Write-Log "MAC $macFromFile from file not found in unused active NICs for IP $($hidden.IPAddress)"
+        }
     }
-    
-    $matchedMacs += $match.MACAddress
-    Write-Log "Matched: $($name.Name) -> $($match.MACAddress) (Network: $($hidden.Network))"
-    
+
+    # Priority 2: Fallback to network-based matching with active NICs
+    if (-not $macAddress) {
+        $fallbackMatch = $activeNics |
+            Where-Object { $_.Network -eq $hidden.Network -and $_.MACAddress -notin $matchedMacs } |
+            Select-Object -First 1
+
+        if ($fallbackMatch) {
+            $macAddress = $fallbackMatch.MACAddress
+            $matchSource = "network fallback"
+            Write-Log "Using fallback network matching for IP $($hidden.IPAddress): $($fallbackMatch.MACAddress)"
+        }
+    }
+
+    if (-not $macAddress) {
+        Write-Log "No matching active NIC found for IP $($hidden.IPAddress) / network $($hidden.Network) (GUID: $($hidden.GUID))"
+        continue
+    }
+
+    $matchedMacs += $macAddress
+    Write-Log "Matched: $($name.Name) -> $macAddress (Source: $matchSource, IP: $($hidden.IPAddress))"
+
     [PSCustomObject]@{
         InterfaceAlias = $name.Name
-        MACAddress = $match.MACAddress
+        MACAddress = $macAddress
         IPAddress = $hidden.IPAddress
         PrefixLength = $hidden.PrefixLength
         Gateway = if ($hidden.Gateway) { $hidden.Gateway } else { $null }
