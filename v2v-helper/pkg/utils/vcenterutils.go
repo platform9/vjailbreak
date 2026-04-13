@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
@@ -52,6 +53,7 @@ type MigrationParams struct {
 	ArrayCredsMapping string
 
 	CurrentInstanceID string
+	VirtV2VMemsizeMB  int
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -103,5 +105,14 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		CurrentInstanceID:              string(configMap.Data["CURRENT_INSTANCE_ID"]),
+		VirtV2VMemsizeMB:               atoiOrZero(string(configMap.Data[constants.VirtV2VMemsizeMBKey])),
 	}, nil
+}
+
+func atoiOrZero(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
 }

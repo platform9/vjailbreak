@@ -179,6 +179,7 @@ func main() {
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 		NetworkOverrides:       networkOverrides,
+		VirtV2VMemsizeMB:       migrationparams.VirtV2VMemsizeMB,
 	}
 
 	if migrationobj.ServerGroup != "" {

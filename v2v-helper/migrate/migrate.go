@@ -84,6 +84,7 @@ type Migrate struct {
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
+	VirtV2VMemsizeMB  int
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -1205,7 +1206,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, migobj.VirtV2VMemsizeMB); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 

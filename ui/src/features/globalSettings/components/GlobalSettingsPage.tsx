@@ -83,6 +83,11 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: true,
   DEPLOYMENT_NAME: 'vJailbreak',
+  V2V_HELPER_POD_CPU_REQUEST: '2000m',
+  V2V_HELPER_POD_CPU_LIMIT: '2000m',
+  V2V_HELPER_POD_MEMORY_REQUEST: '5Gi',
+  V2V_HELPER_POD_MEMORY_LIMIT: '5Gi',
+  VIRTV2V_MEMSIZE_MB: 0,
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -124,7 +129,12 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
-    'AUTO_FSTAB_UPDATE'
+    'AUTO_FSTAB_UPDATE',
+    'V2V_HELPER_POD_CPU_REQUEST',
+    'V2V_HELPER_POD_CPU_LIMIT',
+    'V2V_HELPER_POD_MEMORY_REQUEST',
+    'V2V_HELPER_POD_MEMORY_LIMIT',
+    'VIRTV2V_MEMSIZE_MB'
   ],
   vddk: []
 }
@@ -245,7 +255,17 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
-    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).',
+  V2V_HELPER_POD_CPU_REQUEST:
+    'CPU request for the v2v-helper migration pod (e.g. 1000m, 2). Must be a valid Kubernetes CPU quantity.',
+  V2V_HELPER_POD_CPU_LIMIT:
+    'CPU limit for the v2v-helper migration pod (e.g. 2000m, 4). Must be >= CPU request.',
+  V2V_HELPER_POD_MEMORY_REQUEST:
+    'Memory request for the v2v-helper migration pod (e.g. 2Gi, 1024Mi). Must be a valid Kubernetes memory quantity.',
+  V2V_HELPER_POD_MEMORY_LIMIT:
+    'Memory limit for the v2v-helper migration pod (e.g. 3Gi, 4096Mi). Must be >= memory request.',
+  VIRTV2V_MEMSIZE_MB:
+    'Appliance VM memory size passed to virt-v2v via --memsize (in MB). Set to 0 to use the virt-v2v default (2 × source VM memory). Must not exceed the pod memory limit minus 1 GiB (1024 MB).'
 }
 
 type ToggleKey = Extract<
@@ -303,6 +323,44 @@ const DEFAULT_NOTIFICATION: NotificationState = {
 }
 
 const EMPTY_ERRORS: FieldErrorMap = {}
+
+// parseK8sMemoryToMiB converts Kubernetes memory quantity strings to MiB.
+// Returns NaN if the format is not recognized.
+const parseK8sMemoryToMiB = (value: string): number => {
+  const trimmed = (value ?? '').trim()
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|K|M|G|T)?$/)
+  if (!match) return NaN
+  const num = parseFloat(match[1])
+  const unit = match[2] ?? ''
+  const unitMap: Record<string, number> = {
+    Ki: 1 / 1024,
+    Mi: 1,
+    Gi: 1024,
+    Ti: 1024 * 1024,
+    K: 1000 / (1024 * 1024),
+    M: 1000 * 1000 / (1024 * 1024),
+    G: 1000 * 1000 * 1000 / (1024 * 1024),
+    T: 1000 * 1000 * 1000 * 1000 / (1024 * 1024),
+    '': 1 / (1024 * 1024)
+  }
+  return num * (unitMap[unit] ?? NaN)
+}
+
+// validateK8sCPU returns an error string if the value is not a valid Kubernetes CPU quantity.
+const validateK8sCPU = (value: string): string | undefined => {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return 'Required.'
+  if (/^\d+m$/.test(trimmed) || /^\d+(\.\d+)?$/.test(trimmed)) return undefined
+  return 'Enter a valid CPU quantity (e.g. 500m, 1, 2000m, 2.5).'
+}
+
+// validateK8sMemory returns an error string if the value is not a valid Kubernetes memory quantity.
+const validateK8sMemory = (value: string): string | undefined => {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return 'Required.'
+  if (/^\d+(?:\.\d+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$/.test(trimmed)) return undefined
+  return 'Enter a valid memory quantity (e.g. 512Mi, 1Gi, 2Gi).'
+}
 
 const { parseInterval, validateProxyUrl, deriveProxyState, applyProxyState } = helpers
 const { toConfigMapData, fromConfigMapData, buildEnvPayload } = helpers
@@ -403,6 +461,31 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       e.DEPLOYMENT_NAME = 'Required.'
     } else if (dn.length > 63) {
       e.DEPLOYMENT_NAME = 'Must be 63 characters or fewer.'
+    }
+
+    const cpuRequestErr = validateK8sCPU(state.V2V_HELPER_POD_CPU_REQUEST)
+    if (cpuRequestErr) e.V2V_HELPER_POD_CPU_REQUEST = cpuRequestErr
+
+    const cpuLimitErr = validateK8sCPU(state.V2V_HELPER_POD_CPU_LIMIT)
+    if (cpuLimitErr) e.V2V_HELPER_POD_CPU_LIMIT = cpuLimitErr
+
+    const memRequestErr = validateK8sMemory(state.V2V_HELPER_POD_MEMORY_REQUEST)
+    if (memRequestErr) e.V2V_HELPER_POD_MEMORY_REQUEST = memRequestErr
+
+    const memLimitErr = validateK8sMemory(state.V2V_HELPER_POD_MEMORY_LIMIT)
+    if (memLimitErr) e.V2V_HELPER_POD_MEMORY_LIMIT = memLimitErr
+
+    const memsizeMB = state.VIRTV2V_MEMSIZE_MB
+    if (!Number.isFinite(memsizeMB) || !Number.isInteger(memsizeMB) || memsizeMB < 0) {
+      e.VIRTV2V_MEMSIZE_MB = 'Enter 0 (use virt-v2v default) or a positive integer (MB).'
+    } else if (memsizeMB > 0) {
+      const memLimitMiB = parseK8sMemoryToMiB(state.V2V_HELPER_POD_MEMORY_LIMIT)
+      if (!isNaN(memLimitMiB)) {
+        const maxAllowedMB = Math.floor(memLimitMiB) - 1024
+        if (memsizeMB > maxAllowedMB) {
+          e.VIRTV2V_MEMSIZE_MB = `Must not exceed pod memory limit minus 1 GiB (max: ${maxAllowedMB} MB for a limit of ${state.V2V_HELPER_POD_MEMORY_LIMIT}).`
+        }
+      }
     }
 
     const proxyEnabled = state.PROXY_ENABLED
@@ -1376,6 +1459,61 @@ export default function GlobalSettingsPage() {
                   data-testid={`global-settings-toggle-${String(key)}`}
                 />
               ))}
+            </FormGrid>
+
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              Migration Pod Resources
+            </Typography>
+            <FormGrid minWidth={320} gap={2}>
+              <RHFTextField
+                name="V2V_HELPER_POD_CPU_REQUEST"
+                label="Pod CPU Request"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_CPU_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_CPU_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_CPU_REQUEST}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_CPU_LIMIT"
+                label="Pod CPU Limit"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_CPU_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_CPU_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_CPU_LIMIT}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_REQUEST"
+                label="Pod Memory Request"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_REQUEST }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_REQUEST)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_REQUEST}
+              />
+              <RHFTextField
+                name="V2V_HELPER_POD_MEMORY_LIMIT"
+                label="Pod Memory Limit"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.V2V_HELPER_POD_MEMORY_LIMIT }}
+                error={Boolean(errors.V2V_HELPER_POD_MEMORY_LIMIT)}
+                helperText={errors.V2V_HELPER_POD_MEMORY_LIMIT}
+              />
+            </FormGrid>
+
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              virt-v2v Conversion Settings
+            </Typography>
+            <FormGrid minWidth={320} gap={2}>
+              <RHFTextField
+                name="VIRTV2V_MEMSIZE_MB"
+                label="Appliance Memory Size (MB)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.VIRTV2V_MEMSIZE_MB }}
+                error={Boolean(errors.VIRTV2V_MEMSIZE_MB)}
+                helperText={errors.VIRTV2V_MEMSIZE_MB || '0 = use virt-v2v default (2 × source VM memory)'}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'VIRTV2V_MEMSIZE_MB',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
             </FormGrid>
           </TabPanel>
 

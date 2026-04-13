@@ -1365,6 +1365,14 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 
 	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, vm, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
 
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		r.ctxlog.Error(err, "Failed to get vjailbreak settings for migration configmap, using default memsize")
+		configMapData[constants.VirtV2VMemsizeMBKey] = strconv.Itoa(constants.VirtV2VMemsizeMBDefault)
+	} else {
+		configMapData[constants.VirtV2VMemsizeMBKey] = strconv.Itoa(vjailbreakSettings.VirtV2VMemsizeMB)
+	}
+
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
 	}
