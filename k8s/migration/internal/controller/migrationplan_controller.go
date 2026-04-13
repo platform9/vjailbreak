@@ -284,13 +284,13 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}()
 
 	if migrationplan.Spec.PostMigrationAction.RenameVM != nil && *migrationplan.Spec.PostMigrationAction.RenameVM {
-		if err := r.renameVM(ctx, vcClient, migrationplan, vcenterVMName, vmid); err != nil {
+		if err := r.renameVM(ctx, vcClient, migrationplan, vmid); err != nil {
 			return errors.Wrap(err, "failed to rename VM")
 		}
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vcenterVMName, vmid, datacenterName); err != nil {
+		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vmid, datacenterName); err != nil {
 			return errors.Wrap(err, "failed to move VM to folder")
 		}
 	}
@@ -302,7 +302,6 @@ func (*MigrationPlanReconciler) renameVM(
 	ctx context.Context,
 	vcClient *vcenter.VCenterClient,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	vm string,
 	vmid string,
 ) error {
 	ctxlog := log.FromContext(ctx)
@@ -311,18 +310,23 @@ func (*MigrationPlanReconciler) renameVM(
 		suffix = "_migrated_to_pcd"
 		ctxlog.Info("Using default suffix", "suffix", suffix)
 	}
-	newVMName := vm + suffix
-	ctxlog.Info("Starting VM rename operation", "oldName", vm, "newName", newVMName, "vmid", vmid, "migrationplan", migrationplan.Name)
-	err := vcClient.RenameVM(ctx, vmid, newVMName)
+	vmObj := vcClient.GetVMByMOID(vmid)
+	currentName, err := vmObj.ObjectName(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "failed to fetch current VM name for moid %s", vmid)
+	}
+	newVMName := currentName + suffix
+	ctxlog.Info("Starting VM rename operation", "oldName", currentName, "newName", newVMName, "vmid", vmid, "migrationplan", migrationplan.Name)
+	err = vcClient.RenameVM(ctx, vmid, newVMName)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			ctxlog.Info("VM not found for rename; possibly already processed or deleted", "oldName", vm, "newName", newVMName)
+			ctxlog.Info("VM not found for rename; possibly already processed or deleted", "oldName", currentName, "newName", newVMName)
 			return nil
 		}
-		ctxlog.Error(err, "Failed to rename VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+		ctxlog.Error(err, "Failed to rename VM", "oldName", currentName, "newName", newVMName, "migrationplan", migrationplan.Name)
 		return err
 	}
-	ctxlog.Info("Successfully renamed VM", "oldName", vm, "newName", newVMName, "migrationplan", migrationplan.Name)
+	ctxlog.Info("Successfully renamed VM", "oldName", currentName, "newName", newVMName, "migrationplan", migrationplan.Name)
 	return nil
 }
 
@@ -330,7 +334,6 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 	ctx context.Context,
 	vcClient *vcenter.VCenterClient,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	vm string,
 	vmid string,
 	datacenterName string,
 ) error {
@@ -341,17 +344,17 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 		ctxlog.Info("Using default folder name", "folderName", folderName)
 	}
 
-	ctxlog.Info("Starting VM move to folder operation", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
+	ctxlog.Info("Starting VM move to folder operation", "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
 
 	if err := vcClient.MovetoFolder(ctx, vmid, datacenterName, folderName); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vm", vm, "vmid", vmid)
+			ctxlog.Info("VM not found for move; possibly already processed or deleted", "vmid", vmid)
 			return nil
 		}
-		ctxlog.Error(err, "VM move failed", "vm", vm, "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
-		return errors.Wrapf(err, "failed to move VM '%s' (moid=%s) to folder '%s'", vm, vmid, folderName)
+		ctxlog.Error(err, "VM move failed", "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
+		return errors.Wrapf(err, "failed to move VM (moid=%s) to folder '%s'", vmid, folderName)
 	}
-	ctxlog.Info("Successfully moved VM to folder", "vm", vm, "folder", folderName, "migrationplan", migrationplan.Name)
+	ctxlog.Info("Successfully moved VM to folder", "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
 	return nil
 }
 
