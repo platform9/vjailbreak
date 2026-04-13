@@ -7,13 +7,13 @@ package utils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -111,7 +111,7 @@ func CreatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Cli
 
 // CreateDummyPCDClusterForStandAlonePCDHosts creates a PCDCluster for no cluster
 func CreateDummyPCDClusterForStandAlonePCDHosts(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
-	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
+	k8sClusterName, err := commonutils.GetK8sCompatibleVMWareObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -145,7 +145,7 @@ func CreateDummyPCDClusterForStandAlonePCDHosts(ctx context.Context, k8sClient c
 
 // DeleteEntryForNoPCDCluster deletes the PCDCluster for null cluster
 func DeleteEntryForNoPCDCluster(ctx context.Context, k8sClient client.Client, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
-	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
+	k8sClusterName, err := commonutils.GetK8sCompatibleVMWareObjectName(constants.PCDClusterNameNoCluster, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -186,7 +186,7 @@ func UpdatePCDHostFromResmgrHost(ctx context.Context, k8sClient client.Client, h
 func UpdatePCDClusterFromResmgrCluster(ctx context.Context, k8sClient client.Client, cluster resmgr.Cluster, openstackCreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	oldPCDCluster := vjailbreakv1alpha1.PCDCluster{}
 
-	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(cluster.Name, openstackCreds.Name)
+	k8sClusterName, err := commonutils.GetK8sCompatibleVMWareObjectName(cluster.Name, openstackCreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -259,7 +259,7 @@ func generatePCDHostFromResmgrHost(openstackCreds *vjailbreakv1alpha1.OpenstackC
 }
 
 func generatePCDClusterFromResmgrCluster(openstackCreds *vjailbreakv1alpha1.OpenstackCreds, cluster resmgr.Cluster) (*vjailbreakv1alpha1.PCDCluster, error) {
-	k8sClusterName, err := GetK8sCompatibleVMWareObjectName(cluster.Name, openstackCreds.Name)
+	k8sClusterName, err := commonutils.GetK8sCompatibleVMWareObjectName(cluster.Name, openstackCreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -398,7 +398,7 @@ func filterPCDHostsOnOpenstackCreds(ctx context.Context, k8sClient client.Client
 // GetVMwareHostFromESXiName retrieves a VMwareHost resource based on the ESXi host name
 func GetVMwareHostFromESXiName(ctx context.Context, k8sClient client.Client, esxiName, credName string) (*vjailbreakv1alpha1.VMwareHost, error) {
 	vmwareHost := &vjailbreakv1alpha1.VMwareHost{}
-	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(esxiName, credName)
+	esxiK8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(esxiName, credName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
@@ -475,30 +475,4 @@ func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, open
 		}
 	}
 	return false, nil
-}
-
-// GetVMK8sCompatibleName returns a k8s compatible name for a VM, using name-<moid> as
-// the stable unique key before hashing. This ensures uniqueness even when two VMs share the same display name.
-func GetVMK8sCompatibleName(vmName, vmid, credName string) (string, error) {
-	vmNameForK8s := fmt.Sprintf("%s-%s", vmName, strings.TrimPrefix(vmid, "vm-"))
-	return GetK8sCompatibleVMWareObjectName(vmNameForK8s, credName)
-}
-
-// GetK8sCompatibleVMWareObjectName returns a k8s compatible name for a vCenter object
-func GetK8sCompatibleVMWareObjectName(vCenterObjectName, credName string) (string, error) {
-	// get a unique string for the cluster + credentials
-	vCenterObjectCredsName := fmt.Sprintf("%s-%s", vCenterObjectName, credName)
-
-	// hash the cluster + credentials string
-	hash := GenerateSha256Hash(vCenterObjectCredsName)[:constants.HashSuffixLength]
-
-	// convert the cluster name to a k8s name
-	k8sClusterName, err := ConvertToK8sName(vCenterObjectName)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
-	}
-
-	// truncate the k8s cluster name to the max length
-	name := fmt.Sprintf("%s-%s", k8sClusterName[:min(len(k8sClusterName), constants.VMNameMaxLength)], hash)
-	return name[:min(len(name), constants.K8sNameMaxLength)], nil
 }

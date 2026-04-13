@@ -42,10 +42,11 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	migrationmetrics "github.com/platform9/vjailbreak/k8s/migration/pkg/metrics"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 )
 
 // MigrationReconciler reconciles a Migration object
@@ -298,7 +299,7 @@ func (r *MigrationReconciler) reconcileDelete(ctx context.Context, migration *vj
 	}
 
 	// Then use it to get the k8s compatible name
-	vmwMachineName, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
+	vmwMachineName, err := commonutils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		ctxlog.Error(err, "Could not determine VMwareMachine name from VM name", "VMName", migration.Spec.VMName)
 		return nil
@@ -462,7 +463,7 @@ func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials name")
 	}
-	name, err := utils.GetK8sCompatibleVMWareObjectName(scope.Migration.Spec.VMName, vmwareCredsName)
+	name, err := commonutils.GetK8sCompatibleVMWareObjectName(scope.Migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware machine name")
 	}
@@ -514,7 +515,7 @@ func (r *MigrationReconciler) GetPod(ctx context.Context, scope *scope.Migration
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials name")
 	}
-	vmname, err := utils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
+	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(migration.Spec.VMName, vmwareCredsName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}

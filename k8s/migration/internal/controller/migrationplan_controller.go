@@ -38,6 +38,7 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -259,7 +260,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 	vcenterVMName := vmMachine.Spec.VMInfo.Name
 	vmid := vmMachine.Spec.VMInfo.VMID
-	datacenterName := vmMachine.Annotations[constants.VMwareDatacenterLabel]
 	ctxlog.Info("Resolved vCenter VM for post-migration", "vmKey", vm, "vcenterName", vcenterVMName, "vmid", vmid)
 
 	// Extract and validate credentials
@@ -290,7 +290,7 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
-		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vmid, datacenterName); err != nil {
+		if err := r.moveVMToFolder(ctx, vcClient, migrationplan, vmid); err != nil {
 			return errors.Wrap(err, "failed to move VM to folder")
 		}
 	}
@@ -335,7 +335,6 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 	vcClient *vcenter.VCenterClient,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	vmid string,
-	datacenterName string,
 ) error {
 	ctxlog := log.FromContext(ctx)
 	folderName := migrationplan.Spec.PostMigrationAction.FolderName
@@ -344,7 +343,19 @@ func (*MigrationPlanReconciler) moveVMToFolder(
 		ctxlog.Info("Using default folder name", "folderName", folderName)
 	}
 
-	ctxlog.Info("Starting VM move to folder operation", "vmid", vmid, "folder", folderName, "migrationplan", migrationplan.Name)
+	datacenterName := ""
+	vmObj := vcClient.GetVMByMOID(vmid)
+	if currentName, nameErr := vmObj.ObjectName(ctx); nameErr == nil {
+		if _, dc, dcErr := vcClient.GetVMWithDatacenter(ctx, currentName); dcErr == nil {
+			datacenterName = dc.Name()
+		} else {
+			ctxlog.Info("Could not resolve datacenter for VM, proceeding without datacenter context", "vmid", vmid, "err", dcErr)
+		}
+	} else {
+		ctxlog.Info("Could not get VM name for datacenter lookup, proceeding without datacenter context", "vmid", vmid, "err", nameErr)
+	}
+
+	ctxlog.Info("Starting VM move to folder operation", "vmid", vmid, "datacenter", datacenterName, "folder", folderName, "migrationplan", migrationplan.Name)
 
 	if err := vcClient.MovetoFolder(ctx, vmid, datacenterName, folderName); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -413,7 +424,7 @@ func extractVCenterCredentials(secret *corev1.Secret) (username, password, host 
 // GetVMwareMachineForVM fetches the VMwareMachine corresponding to a given VM name
 func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm string, migrationtemplate *vjailbreakv1alpha1.MigrationTemplate, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vjailbreakv1alpha1.VMwareMachine, error) {
 	// Generate the expected VMwareMachine name
-	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+	vmk8sname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get k8s compatible name for VM %s", vm)
 	}
@@ -547,7 +558,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	terminalMigrations := make(map[string]bool)
 	for _, vmName := range allVMNames {
-		vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vmName, vmwcreds.Name)
+		vmk8sname, err := commonutils.GetK8sCompatibleVMWareObjectName(vmName, vmwcreds.Name)
 		if err != nil {
 			r.ctxlog.Error(err, "Failed to convert VM name to k8s name", "vm", vmName)
 			continue
@@ -921,7 +932,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
 	}
-	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
+	vmk8sname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
@@ -1042,7 +1053,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
-	vmk8sname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
+	vmk8sname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to get vm name")
 	}
@@ -1279,7 +1290,7 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
 	}
-	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
+	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwarecreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
@@ -1315,7 +1326,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 ) (*corev1.ConfigMap, error) {
-	vmname, err := utils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
+	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}
@@ -1840,7 +1851,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	vmKeyForMachine := make(map[string]string)
 	for _, group := range migrationplan.Spec.VirtualMachines {
 		for _, planVMKey := range group {
-			k8sName, k8sErr := utils.GetK8sCompatibleVMWareObjectName(planVMKey, vmwcreds.Name)
+			k8sName, k8sErr := commonutils.GetK8sCompatibleVMWareObjectName(planVMKey, vmwcreds.Name)
 			if k8sErr == nil {
 				vmKeyForMachine[k8sName] = planVMKey
 			}
