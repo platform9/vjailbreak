@@ -281,18 +281,18 @@ jobs:
           path: tmp/gosec-report.json
           retention-days: 90
 
-      - name: Create Pull Request (if vulnerabilities found)
-        if: ${{ github.event_name == 'push' && steps.scan.outputs.gosec_high_found == 'true' }}
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v5
-        with:
-          commit-message: 'chore: vulnerabilities detected by Gosec (HIGH/CRITICAL)'
-          title: 'Gosec Vulnerability Report for branch ${{ github.ref_name }}'
-          body-path: tmp/pr-body.md
-          branch: auto/gosec-scan/${{ env.SAFE_REF_NAME }}
-          base: ${{ github.ref_name }}
-          delete-branch: true
-          add-paths: tmp/pr-body.md
+      # - name: Create Pull Request (if vulnerabilities found)
+      #   if: ${{ github.event_name == 'push' && steps.scan.outputs.gosec_high_found == 'true' }}
+      #   continue-on-error: true
+      #   uses: peter-evans/create-pull-request@v5
+      #   with:
+      #     commit-message: 'chore: vulnerabilities detected by Gosec (HIGH/CRITICAL)'
+      #     title: 'Gosec Vulnerability Report for branch ${{ github.ref_name }}'
+      #     body-path: tmp/pr-body.md
+      #     branch: auto/gosec-scan/${{ env.SAFE_REF_NAME }}
+      #     base: ${{ github.ref_name }}
+      #     delete-branch: true
+      #     add-paths: tmp/pr-body.md
 
       # Temporarily disabled: fail on vulnerabilities — fixing existing findings before re-enabling
       # - name: Fail Job If Vulnerabilities Found (Push)
@@ -635,18 +635,18 @@ jobs:
           path: tmp/trivy-report.json
           retention-days: 90
 
-      - name: Create Pull Request (if vulnerabilities found)
-        if: ${{ github.event_name == 'push' && steps.scan.outputs.trivy_high_found == 'true' }}
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v5
-        with:
-          commit-message: 'chore: vulnerabilities detected by Trivy (HIGH/CRITICAL)'
-          title: 'Trivy Vulnerability Report for branch ${{ github.ref_name }}'
-          body-path: tmp/pr-body.md
-          branch: auto/trivy-scan/${{ env.SAFE_REF_NAME }}
-          base: ${{ github.ref_name }}
-          delete-branch: true
-          add-paths: tmp/pr-body.md
+      # - name: Create Pull Request (if vulnerabilities found)
+      #   if: ${{ github.event_name == 'push' && steps.scan.outputs.trivy_high_found == 'true' }}
+      #   continue-on-error: true
+      #   uses: peter-evans/create-pull-request@v5
+      #   with:
+      #     commit-message: 'chore: vulnerabilities detected by Trivy (HIGH/CRITICAL)'
+      #     title: 'Trivy Vulnerability Report for branch ${{ github.ref_name }}'
+      #     body-path: tmp/pr-body.md
+      #     branch: auto/trivy-scan/${{ env.SAFE_REF_NAME }}
+      #     base: ${{ github.ref_name }}
+      #     delete-branch: true
+      #     add-paths: tmp/pr-body.md
 
       # Temporarily disabled: fail on vulnerabilities — fixing existing findings before re-enabling
       # - name: Fail Job If Vulnerabilities Found (Push)
