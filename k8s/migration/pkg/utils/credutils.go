@@ -972,7 +972,7 @@ func AppendUnique(slice []string, values ...string) []string {
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
-	sanitizedVMName, err := netutils.GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
+	sanitizedVMName, err := netutils.GetVMK8sCompatibleName(vminfo.Name, vminfo.VMID, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
 	}
