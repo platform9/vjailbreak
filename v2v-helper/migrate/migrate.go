@@ -170,11 +170,7 @@ func (migobj *Migrate) CreateVolumes(ctx context.Context, vminfo vm.VMInfo) (vm.
 		if len(vminfo.RDMDisks) > 0 {
 			setRDMLabel = true
 		}
-		vmKey := vminfo.VMKey
-		if vmKey == "" {
-			vmKey = vminfo.Name
-		}
-		volume, err := openstackops.CreateVolume(ctx, vmKey+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
+		volume, err := openstackops.CreateVolume(ctx, vminfo.Name+"-"+vmdisk.Name, vmdisk.Size, vminfo.OSType, vminfo.UEFI, migobj.Volumetypes[idx], setRDMLabel)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to create volume")
 		}
@@ -2084,11 +2080,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			}
 
 			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			portVMKey := vminfo.VMKey
-			if portVMKey == "" {
-				portVMKey = vminfo.Name
-			}
-			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, portVMKey, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
 			if err != nil {
 				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
 			}
