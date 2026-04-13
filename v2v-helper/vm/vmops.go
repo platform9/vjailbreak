@@ -297,7 +297,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		rdmDiskSlice = append(rdmDiskSlice, *rdmDisk)
 	}
 
-	vmKey := vmk8sName
+	vmKey := k8sutils.GetSourceVMKey()
 	if vmKey == "" {
 		vmKey = o.Name
 	}

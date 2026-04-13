@@ -253,17 +253,14 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		return errors.Wrap(err, "failed to get migration resources")
 	}
 
-	vcenterVMName := vm
-	var vmid, datacenterName string
-	vmMachine, vmMachineErr := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-	if vmMachineErr == nil && vmMachine.Spec.VMInfo.Name != "" {
-		vcenterVMName = vmMachine.Spec.VMInfo.Name
-		vmid = vmMachine.Spec.VMInfo.VMID
-		datacenterName = vmMachine.Annotations[constants.VMwareDatacenterLabel]
-		ctxlog.Info("Resolved actual vCenter VM name for post-migration", "vmKey", vm, "vcenterName", vcenterVMName, "vmid", vmid)
-	} else if vmMachineErr != nil {
-		ctxlog.Info("Could not resolve VMwareMachine for post-migration, using vm key as name", "vm", vm, "error", vmMachineErr)
+	vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+	if err != nil {
+		return errors.Wrapf(err, "failed to resolve VMwareMachine for post-migration actions on VM %s", vm)
 	}
+	vcenterVMName := vmMachine.Spec.VMInfo.Name
+	vmid := vmMachine.Spec.VMInfo.VMID
+	datacenterName := vmMachine.Annotations[constants.VMwareDatacenterLabel]
+	ctxlog.Info("Resolved vCenter VM for post-migration", "vmKey", vm, "vcenterName", vcenterVMName, "vmid", vmid)
 
 	// Extract and validate credentials
 	username, password, host, err := extractVCenterCredentials(secret)
@@ -290,7 +287,6 @@ func (r *MigrationPlanReconciler) reconcilePostMigration(ctx context.Context, sc
 		if err := r.renameVM(ctx, vcClient, migrationplan, vcenterVMName, vmid); err != nil {
 			return errors.Wrap(err, "failed to rename VM")
 		}
-		vcenterVMName += migrationplan.Spec.PostMigrationAction.Suffix
 	}
 
 	if migrationplan.Spec.PostMigrationAction.MoveToFolder != nil && *migrationplan.Spec.PostMigrationAction.MoveToFolder {
@@ -490,7 +486,11 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		existingMigrationMap := make(map[string]bool)
 		hasExistingFailures := false
 		for _, m := range migrationList.Items {
-			existingMigrationMap[m.Spec.VMName] = true
+			vmKey := m.Labels[constants.MigrationVMKeyLabel]
+			if vmKey == "" {
+				vmKey = m.Spec.VMName
+			}
+			existingMigrationMap[vmKey] = true
 			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed || m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
 				hasExistingFailures = true
 			}
@@ -785,7 +785,11 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			}
 
 			r.ctxlog.Info("Migration succeeded for VM, applying post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
-			err := r.reconcilePostMigration(ctx, scope, migration.Spec.VMName)
+			vmKey := migration.Labels[constants.MigrationVMKeyLabel]
+			if vmKey == "" {
+				vmKey = migration.Spec.VMName
+			}
+			err := r.reconcilePostMigration(ctx, scope, vmKey)
 			if err != nil {
 				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
 				return false, errors.Wrap(err, "failed post-migration")
@@ -948,13 +952,14 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				Name:      utils.MigrationNameFromVMName(vmk8sname),
 				Namespace: migrationplan.Namespace,
 				Labels: map[string]string{
-					"migrationplan":              migrationplan.Name,
-					constants.NumberOfDisksLabel: strconv.Itoa(len(vminfo.Disks)),
+					"migrationplan":               migrationplan.Name,
+					constants.NumberOfDisksLabel:  strconv.Itoa(len(vminfo.Disks)),
+					constants.MigrationVMKeyLabel: vm,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{
 				MigrationPlan: migrationplan.Name,
-				VMName:        vm,
+				VMName:        vmMachine.Spec.VMInfo.Name,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
@@ -1357,7 +1362,8 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
+	sourceVMKey := computeSourceVMKey(vmMachine, migrationplan.Spec.VirtualMachines)
+	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, sourceVMKey, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
 
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
@@ -1445,10 +1451,47 @@ func (r *MigrationPlanReconciler) processAdvancedOptions(ctx context.Context,
 	return openstackports, nil
 }
 
+// computeSourceVMKey returns the name to use for OpenStack resource naming.
+// If another VM in the plan shares the same display name, the MOID suffix is appended
+// to disambiguate (e.g. "vmname-31090")
+func computeSourceVMKey(vmMachine *vjailbreakv1alpha1.VMwareMachine, allGroups [][]string) string {
+	displayName := vmMachine.Spec.VMInfo.Name
+	moid := strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
+	currentKey := displayName + "-" + moid
+	for _, group := range allGroups {
+		for _, vmKey := range group {
+			if vmKey == currentKey {
+				continue
+			}
+			if vmKeyDisplayName(vmKey) == displayName {
+				return currentKey
+			}
+		}
+	}
+	return displayName
+}
+
+// vmKeyDisplayName extracts the display name from a vmKey of the form "name-<moid>".
+// The moid suffix is purely numeric, so we strip the last "-<digits>" segment.
+func vmKeyDisplayName(vmKey string) string {
+	idx := strings.LastIndex(vmKey, "-")
+	if idx == -1 {
+		return vmKey
+	}
+	suffix := vmKey[idx+1:]
+	for _, c := range suffix {
+		if c < '0' || c > '9' {
+			return vmKey
+		}
+	}
+	return vmKey[:idx]
+}
+
 func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	sourceVMKey string,
 	virtiodrivers string,
 	openstacknws, openstackports, openstackvolumetypes []string,
 	currentInstanceID string,
@@ -1456,6 +1499,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	return map[string]string{
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
+		"SOURCE_VM_KEY":                     sourceVMKey,
 		"CONVERT":                           "true",
 		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
 		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
@@ -1633,7 +1677,7 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 		return nil, nil, errors.Wrapf(err, "failed to get VMwareMachine for VM %s", vm)
 	}
 	if vmMachine.Annotations == nil {
-		return nil, nil, fmt.Errorf("VMwareMachine %s has no annotations", vmMachine.Name)
+		return nil, nil, fmt.Errorf("VMwareMachine %s has no annotations, cannot find datacenter", vmMachine.Name)
 	}
 	datacenter, exists := vmMachine.Annotations[constants.VMwareDatacenterLabel]
 	if !exists || datacenter == "" {

@@ -12,8 +12,8 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -475,6 +475,13 @@ func WaitforHostToShowUpOnPCD(ctx context.Context, k8sClient client.Client, open
 		}
 	}
 	return false, nil
+}
+
+// GetVMK8sCompatibleName returns a k8s compatible name for a VM, using name-<moid> as
+// the stable unique key before hashing. This ensures uniqueness even when two VMs share the same display name.
+func GetVMK8sCompatibleName(vmName, vmid, credName string) (string, error) {
+	vmNameForK8s := fmt.Sprintf("%s-%s", vmName, strings.TrimPrefix(vmid, "vm-"))
+	return GetK8sCompatibleVMWareObjectName(vmNameForK8s, credName)
 }
 
 // GetK8sCompatibleVMWareObjectName returns a k8s compatible name for a vCenter object

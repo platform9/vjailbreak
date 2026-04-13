@@ -442,6 +442,12 @@ function VmsSelectionStep({
     return parts.length === 3 ? parts[1] : undefined
   }, [vmwareCluster])
 
+  const duplicateNames = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    vmsWithFlavor.forEach((vm) => counts.set(vm.name, (counts.get(vm.name) ?? 0) + 1))
+    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+  }, [vmsWithFlavor])
+
   // Define columns inside component to access state and functions
   const columns: GridColDef[] = [
     {
@@ -449,7 +455,8 @@ function VmsSelectionStep({
       headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => {
-        const displayName = params.row.vmKey || params.value
+        const displayName =
+          duplicateNames.has(params.row.name) ? (params.row.vmKey || params.value) : params.value
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
@@ -2333,7 +2340,7 @@ function VmsSelectionStep({
                         </CdsIconWrapper>
                       </Tooltip>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {vm.vmKey || vm.name}
+                        {duplicateNames.has(vm.name) ? (vm.vmKey || vm.name) : vm.name}
                       </Typography>
                     </Box>
 
