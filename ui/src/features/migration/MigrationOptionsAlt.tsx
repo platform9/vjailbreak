@@ -18,7 +18,11 @@ import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
-import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
+import type {
+  FieldErrors,
+  FormValues,
+  SelectedMigrationOptionsType
+} from 'src/features/migration/types'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
 import { IntervalField } from 'src/shared/components/forms'
@@ -130,9 +134,10 @@ export default function MigrationOptionsAlt({
 
   const postMigrationScriptValue = String(params?.postMigrationScript || '')
   const hasBashShebang = /(^|\n)\s*#!\/bin\/(ba)?sh/i.test(postMigrationScriptValue)
-  const hasPowerShellSyntax = /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
-    postMigrationScriptValue
-  )
+  const hasPowerShellSyntax =
+    /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
+      postMigrationScriptValue
+    )
   const hasLinuxTag = /(^|\n)\s*(\/\/|#)\s*LINUX-SCRIPT:/i.test(postMigrationScriptValue)
   const hasWindowsTag = /(^|\n)\s*(\/\/|#)\s*WINDOWS-SCRIPT:/i.test(postMigrationScriptValue)
 
@@ -801,7 +806,10 @@ export default function MigrationOptionsAlt({
                   />
                 }
               />
-              <OptionHelp variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <OptionHelp
+                variant="caption"
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+              >
                 <span>Supports PowerShell for Windows and Bash for Linux.</span>
                 <Tooltip
                   arrow
@@ -833,35 +841,57 @@ export default function MigrationOptionsAlt({
                       <Typography variant="subtitle2" gutterBottom>
                         Post-Migration Script Guide
                       </Typography>
-                      
-                      <Box sx={{ 
-                        bgcolor: 'action.hover', 
-                        p: 1, 
-                        borderRadius: 1, 
-                        fontFamily: 'monospace',
-                        mb: 1.5,
-                        border: '1px solid',
-                        borderColor: 'divider'
-                      }}>
+
+                      <Box
+                        sx={{
+                          bgcolor: 'action.hover',
+                          p: 1,
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          mb: 1.5,
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }}
+                      >
                         <Typography variant="caption" component="div">
-                          <Box component="span" sx={{ color: 'primary.main' }}>// WINDOWS-SCRIPT:</Box><br />
-                          Write-Host "Hello Windows"<br />
-                          <Box component="span" sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}>{NEXT_SCRIPT_DELIMITER}</Box>
-                          <Box component="span" sx={{ color: 'success.main' }}>// LINUX-SCRIPT:</Box><br />
+                          <Box component="span" sx={{ color: 'primary.main' }}>
+                            // WINDOWS-SCRIPT:
+                          </Box>
+                          <br />
+                          Write-Host "Hello Windows"
+                          <br />
+                          <Box
+                            component="span"
+                            sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}
+                          >
+                            {NEXT_SCRIPT_DELIMITER}
+                          </Box>
+                          <Box component="span" sx={{ color: 'success.main' }}>
+                            // LINUX-SCRIPT:
+                          </Box>
+                          <br />
                           echo "Hello Linux"
                         </Typography>
                       </Box>
 
-                      <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Instructions
+                      </Typography>
                       <Typography variant="caption" component="div">
-                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.<br />
-                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" for respective OS execution.<br />
-                        • Untagged blocks will execute on all selected VMs irrespective of OS.
+                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.
+                        <br />
+                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:"
+                        for respective OS execution.
+                        <br />• Untagged blocks will execute on all selected VMs irrespective of OS.
                       </Typography>
                     </Box>
                   }
                 >
-                  <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', ml: 0.5 }} />
+                  <InfoOutlinedIcon
+                    color="primary"
+                    fontSize="small"
+                    sx={{ cursor: 'help', ml: 0.5 }}
+                  />
                 </Tooltip>
               </OptionHelp>
             </OptionLeft>

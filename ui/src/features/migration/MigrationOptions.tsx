@@ -6,7 +6,11 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
 import { useCallback, useEffect } from 'react'
 import { Step, TextField } from 'src/shared/components/forms'
-import { FieldErrors, FormValues, SelectedMigrationOptionsType } from './MigrationForm'
+import type {
+  FieldErrors,
+  FormValues,
+  SelectedMigrationOptionsType
+} from 'src/features/migration/types'
 
 // Accordian Imports
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'

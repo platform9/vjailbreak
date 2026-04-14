@@ -52,7 +52,7 @@ import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from 'src/hooks/api/useRdmDisksQ
 import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import axios from 'axios'
-import { RdmDiskConfigurationPanel } from './components'
+import { RdmDiskConfigurationPanel } from '../components'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
@@ -445,7 +445,11 @@ function VmsSelectionStep({
   const duplicateNames = React.useMemo(() => {
     const counts = new Map<string, number>()
     vmsWithFlavor.forEach((vm) => counts.set(vm.name, (counts.get(vm.name) ?? 0) + 1))
-    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, c]) => c > 1)
+        .map(([n]) => n)
+    )
   }, [vmsWithFlavor])
 
   // Define columns inside component to access state and functions
@@ -455,15 +459,18 @@ function VmsSelectionStep({
       headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => {
-        const displayName =
-          duplicateNames.has(params.row.name) ? (params.row.vmKey || params.value) : params.value
+        const displayName = duplicateNames.has(params.row.name)
+          ? params.row.vmKey || params.value
+          : params.value
+
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
-              <CdsIconWrapper>
-                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
+                <CdsIconWrapper>
+                  {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                   {/* @ts-ignore */}
-                <cds-icon
+                  <cds-icon
                     shape="vm"
                     size="md"
                     badge={params.row.vmState === 'running' ? 'success' : 'danger'}
@@ -473,6 +480,7 @@ function VmsSelectionStep({
                 </CdsIconWrapper>
               </Tooltip>
               <Box>{displayName}</Box>
+            </Box>
             {params.row.isMigrated && (
               <Chip variant="outlined" label="Migrated" color="info" size="small" />
             )}
@@ -493,7 +501,7 @@ function VmsSelectionStep({
               </Tooltip>
             )}
           </Box>
-          )
+        )
       }
     },
     {
@@ -859,7 +867,10 @@ function VmsSelectionStep({
       return {
         ...vm,
         ipAddress: allIPs || '—', // Update the main IP field to contain comma-separated IPs
-        isMigrated: migratedVms.has(vm.vmKey || vm.name) || migratedVms.has(vm.name) || Boolean(vm.isMigrated),
+        isMigrated:
+          migratedVms.has(vm.vmKey || vm.name) ||
+          migratedVms.has(vm.name) ||
+          Boolean(vm.isMigrated),
         flavor,
         flavorNotFound,
         powerState,
@@ -902,9 +913,9 @@ function VmsSelectionStep({
     if (vmsWithFlavor.length === 0) return
 
     // Clean up selection - remove VMs that no longer exist
-    const availableVmIds = new Set(vmsWithFlavor.map((vm) => vm.id))
+    const availableVmNames = new Set(vmsWithFlavor.map((vm) => vm.id))
     const cleanedSelection = new Set(
-      Array.from(selectedVMs).filter((vmId) => availableVmIds.has(vmId))
+      Array.from(selectedVMs).filter((vmId) => availableVmNames.has(vmId))
     )
 
     if (!areSetsEqual(cleanedSelection, selectedVMs)) {
@@ -964,7 +975,7 @@ function VmsSelectionStep({
       // Update local state first for immediate UI feedback
       setVmOSAssignments((prev) => ({ ...prev, [vmId]: osFamily }))
 
-      const vm = vmsWithFlavor.find((v) => v.name === vmId)
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (vm?.vmWareMachineName) {
         await patchVMwareMachine(vm.vmWareMachineName, {
           spec: {
@@ -1315,13 +1326,13 @@ function VmsSelectionStep({
 
   const updateVmRowsAndForm = (updatedVms: VmDataWithFlavor[]) => {
     setVmsWithFlavor(updatedVms)
-    setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
+    setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.name)))
   }
 
   const applyPreserveFlagsOnly = () => {
     const updatedVms = vmsWithFlavor.map((vm) => {
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
       const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
       if (!hasAnyPreserveFlags) return vm
 
@@ -1350,7 +1361,7 @@ function VmsSelectionStep({
 
   const applyOverrideChangesOnly = () => {
     const updatedVms = vmsWithFlavor.map((vm) => {
-      const vmOverrides = bulkEditOverrides[vm.id]
+      const vmOverrides = bulkEditOverrides[vm.name]
       if (!vmOverrides) return vm
       const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
         const overrides = vmOverrides[index]
@@ -1358,8 +1369,8 @@ function VmsSelectionStep({
           ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
           : nic
       })
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
       return {
         ...vm,
         networkInterfaces: updatedNetworkInterfaces,
@@ -1424,20 +1435,20 @@ function VmsSelectionStep({
 
   const applyIpAssignmentsToRows = (assignedIPsPerVM: Record<string, string[]>) => {
     const updatedVms = vmsWithFlavor.map((vm) => {
-      const assignedIPs = assignedIPsPerVM[vm.id]
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
+      const assignedIPs = assignedIPsPerVM[vm.name]
+      const preserveIp = bulkPreserveIp[vm.name]
+      const preserveMac = bulkPreserveMac[vm.name]
       if (!assignedIPs && !preserveIp && !preserveMac) return vm
 
-      const vmOverrides = bulkEditOverrides[vm.id]
+      const vmOverrides = bulkEditOverrides[vm.name]
 
       let updatedNetworkInterfaces = vm.networkInterfaces
       if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
         updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
           const assignedIP = assignedIPs?.[index]
           const overrides = vmOverrides?.[index]
-          const preserveIP = bulkPreserveIp?.[vm.id]?.[index] !== false
-          const preserveMAC = bulkPreserveMac?.[vm.id]?.[index] !== false
+          const preserveIP = bulkPreserveIp?.[vm.name]?.[index] !== false
+          const preserveMAC = bulkPreserveMac?.[vm.name]?.[index] !== false
           const parsed = assignedIP !== undefined ? parseIpList(assignedIP) : undefined
           return {
             ...nic,
@@ -1720,7 +1731,11 @@ function VmsSelectionStep({
 
           const isPoweredOff = vm.vmState !== 'running'
           const hasMultipleIps = parseIpList(originalIp).length > 1
-          const effectivePreserveIp = isPoweredOff ? false : hasMultipleIps ? true : initialPreserveIp
+          const effectivePreserveIp = isPoweredOff
+            ? false
+            : hasMultipleIps
+              ? true
+              : initialPreserveIp
           initialBulkPreserveIp[vmId][index] = effectivePreserveIp
           initialBulkPreserveMac[vmId][index] = initialPreserveMac
 
@@ -1744,8 +1759,11 @@ function VmsSelectionStep({
 
         const isPoweredOff = vm.vmState !== 'running'
         const hasMultipleIps = parseIpList(originalIp).length > 1
-        const effectivePreserveIp =
-          isPoweredOff ? false : hasMultipleIps ? true : vm.preserveIp?.[0] !== false
+        const effectivePreserveIp = isPoweredOff
+          ? false
+          : hasMultipleIps
+            ? true
+            : vm.preserveIp?.[0] !== false
         const initialPreserveMac = vm.preserveMac?.[0] !== false
 
         initialBulkPreserveIp[vmId][0] = effectivePreserveIp
@@ -1755,9 +1773,7 @@ function VmsSelectionStep({
           preserveIP: effectivePreserveIp,
           preserveMAC: initialPreserveMac
         }
-        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim()
-          ? 'valid'
-          : 'empty'
+        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim() ? 'valid' : 'empty'
       }
     })
 
@@ -1812,9 +1828,10 @@ function VmsSelectionStep({
         }
         return vm
       })
-      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
-      const selectedVmIds = Array.from(selectedVMs)
 
+      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
+
+      const selectedVmIds = Array.from(selectedVMs)
       const updatePromises = selectedVmIds.map((vmId) => {
         const vmwareMachineName = vmList.find((vm) => vm.id === vmId)?.vmWareMachineName
         const payload = {
@@ -1963,8 +1980,7 @@ function VmsSelectionStep({
   }
 
   const rowSelectionModelArray = React.useMemo(
-    () =>
-      Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
+    () => Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
     [selectedVMs, vmsWithFlavor]
   )
 
@@ -2340,7 +2356,7 @@ function VmsSelectionStep({
                         </CdsIconWrapper>
                       </Tooltip>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {duplicateNames.has(vm.name) ? (vm.vmKey || vm.name) : vm.name}
+                        {duplicateNames.has(vm.name) ? vm.vmKey || vm.name : vm.name}{' '}
                       </Typography>
                     </Box>
 
@@ -2463,11 +2479,7 @@ function VmsSelectionStep({
                                 checked={preserveIp}
                                 disabled={isPoweredOff || hasMultipleIps}
                                 onChange={(e) =>
-                                  handleBulkPreserveIpChange(
-                                    vmId,
-                                    interfaceIndex,
-                                    e.target.checked
-                                  )
+                                  handleBulkPreserveIpChange(vmId, interfaceIndex, e.target.checked)
                                 }
                               />
                               <Typography variant="body2" sx={{ fontWeight: 600 }}>

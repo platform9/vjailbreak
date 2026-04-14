@@ -12,7 +12,7 @@ import {
   InputAdornment
 } from '@mui/material'
 import vmwareLogo from 'src/assets/vmware.jpeg'
-import { useClusterData } from './useClusterData'
+import { useClusterData } from '../useClusterData'
 
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, searchIcon } from '@cds/core/icon'

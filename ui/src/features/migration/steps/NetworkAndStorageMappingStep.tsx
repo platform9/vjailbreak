@@ -11,12 +11,15 @@ import {
   Chip
 } from '@mui/material'
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react'
-import { ResourceMappingTableNew as ResourceMappingTable } from './components'
+import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
 import { PCDNetworkInfo, OpenstackCreds } from 'src/api/openstack-creds/model'
-import { checkNetworkSubnetCompatibility, CheckNetworkSubnetCompatibilityResponse } from 'src/api/openstack-creds/openstackCreds'
+import {
+  checkNetworkSubnetCompatibility,
+  CheckNetworkSubnetCompatibilityResponse
+} from 'src/api/openstack-creds/openstackCreds'
 import { VmData } from 'src/features/migration/api/migration-templates/model'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
@@ -262,7 +265,12 @@ export default function NetworkAndStorageMappingStep({
         }
 
         if (vm.ipAddress && vm.ipAddress !== '—' && vm.ipAddress.trim()) {
-          ips.push(...vm.ipAddress.split(',').map((ip) => ip.trim()).filter(Boolean))
+          ips.push(
+            ...vm.ipAddress
+              .split(',')
+              .map((ip) => ip.trim())
+              .filter(Boolean)
+          )
         }
 
         if (ips.length > 0) map.set(network, ips)
@@ -307,7 +315,10 @@ export default function NetworkAndStorageMappingStep({
           if (ips.length === 0) return
 
           const isL2Network = openstackNetworks.some(
-            (n) => n.name === mapping.target && Array.isArray(n.tags) && n.tags.includes('simple_network')
+            (n) =>
+              n.name === mapping.target &&
+              Array.isArray(n.tags) &&
+              n.tags.includes('simple_network')
           )
           if (isL2Network) return
 
@@ -336,8 +347,7 @@ export default function NetworkAndStorageMappingStep({
                 `${incompatibleIPs.length} VM IP address(es) [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
                 `Ensure fallback to DHCP is enabled, otherwise it may lead to migration failures`
             }
-          } catch {
-          }
+          } catch {}
         })
       )
 

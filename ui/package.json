@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "docker:build": "docker build -t vjailbreak -f ./Dockerfile .",
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx,json,css,md}\" --write",
@@ -80,6 +82,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
+    "vitest": "^2.1.9",
     "vite-plugin-runtime-env": "^0.1.1"
   }
 }
