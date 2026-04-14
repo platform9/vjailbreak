@@ -589,7 +589,7 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 	}
 
 	for _, nic := range nicList {
-		name, err := resolveNetworkName(ctx, c, nic)
+		name, err := resolveNetworkName(ctx, c, nic, vmname)
 		if err != nil {
 			return nil, err
 		}
@@ -845,13 +845,14 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 //   - OpaqueNetwork: OpaqueNetworkId is not a MOR value so the inventory
 //     must be scanned to find the object with a matching OpaqueNetworkId
 //   - empty: nil backing reference, meaning the port group was deleted, surfaced as error
-func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1alpha1.NIC) (string, error) {
+func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1alpha1.NIC, vmName string) (string, error) {
 	switch nic.NetworkType {
 	case "":
 		return "", fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
 
 	case constants.VMwareNetworkTypeNetwork:
 		var netObj mo.Network
+		log.FromContext(ctx).Info("Resolving network name for VM %s, Network %s", "VM", vmName, "Network", nic.Network, "NetworkType", nic.NetworkType)
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeNetwork, Value: nic.Network}
 		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
 			return "", fmt.Errorf("failed to retrieve network name for %s: %w", nic.Network, err)
@@ -860,6 +861,7 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 
 	case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
 		var netObj mo.DistributedVirtualPortgroup
+		log.FromContext(ctx).Info("Resolving network name for VM %s, Network %s", "VM", vmName, "Network", nic.Network, "NetworkType", nic.NetworkType)
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
 		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
 			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
@@ -868,6 +870,7 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 
 	case constants.VMwareNetworkTypeOpaqueNetwork:
 		m := view.NewManager(c)
+		log.FromContext(ctx).Info("Resolving network name for VM %s, Network %s", "VM", vmName, "Network", nic.Network, "NetworkType", nic.NetworkType)
 		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{constants.VMwareNetworkTypeOpaqueNetwork}, true)
 		if err != nil {
 			return "", fmt.Errorf("failed to create container view for opaque networks: %w", err)
@@ -1779,7 +1782,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
-		name, err := resolveNetworkName(ctx, c, nic)
+		name, err := resolveNetworkName(ctx, c, nic, vm.Name())
 		if err != nil {
 			// Network is orphaned/deleted or has no backing — log but continue VM discovery
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), err)
