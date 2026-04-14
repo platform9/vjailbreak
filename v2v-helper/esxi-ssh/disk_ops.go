@@ -697,3 +697,155 @@ func (c *Client) GetHostIQN() (string, error) {
 
 	return "", fmt.Errorf("no iSCSI IQN found on ESXi host")
 }
+
+// GetHostFCAdapters returns the Fibre Channel adapter UIDs of the ESXi host.
+// FC UIDs are returned in ESXi format: "fc.WWNN:WWPN" (lowercase hex, no separators).
+func (c *Client) GetHostFCAdapters() ([]string, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage adapter list: %w", err)
+	}
+
+	var fcAdapters []string
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		driver := adapter["Driver"]
+
+		if !hasUID || !hasLink {
+			continue
+		}
+
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		isActive := linkState == "link-up" || linkState == "online"
+		if isActive && strings.HasPrefix(uid, "fc.") {
+			klog.Infof("Found ESXi FC adapter: Driver=%s, UID=%s", driver, uid)
+			fcAdapters = append(fcAdapters, uid)
+		}
+	}
+
+	if len(fcAdapters) == 0 {
+		return nil, fmt.Errorf("no FC adapters found on ESXi host")
+	}
+	return fcAdapters, nil
+}
+
+// GetTransportType returns the dominant storage transport type on the ESXi host.
+// Returns "fc" if FC adapters are present, "iscsi" for iSCSI only, "mixed" for both,
+// or "unknown" if neither is detected.
+func (c *Client) GetTransportType() (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
+	if err != nil {
+		return "", fmt.Errorf("failed to get storage adapter list: %w", err)
+	}
+
+	hasISCSI := false
+	hasFC := false
+
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		if !hasUID || !hasLink {
+			continue
+		}
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		isActive := linkState == "link-up" || linkState == "online"
+		if isActive && strings.HasPrefix(uid, "iqn.") {
+			hasISCSI = true
+		} else if isActive && strings.HasPrefix(uid, "fc.") {
+			hasFC = true
+		}
+	}
+
+	switch {
+	case hasFC && hasISCSI:
+		return "mixed", nil
+	case hasFC:
+		return "fc", nil
+	case hasISCSI:
+		return "iscsi", nil
+	default:
+		return "unknown", nil
+	}
+}
+
+// GetAllHostAdapters returns all active storage HBA identifiers on the ESXi host.
+// Includes iSCSI IQNs (format: "iqn.xxx") and FC UIDs (format: "fc.WWNN:WWPN").
+// Use this instead of GetHostIQN when the host may use FC or mixed transport.
+func (c *Client) GetAllHostAdapters() ([]string, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage adapter list: %w", err)
+	}
+
+	var adapters []string
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		driver := adapter["Driver"]
+		if !hasUID || !hasLink {
+			continue
+		}
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		isActive := linkState == "link-up" || linkState == "online"
+		if isActive && (strings.HasPrefix(uid, "iqn.") || strings.HasPrefix(uid, "fc.")) {
+			klog.Infof("Found ESXi adapter: Driver=%s, UID=%s", driver, uid)
+			adapters = append(adapters, uid)
+		}
+	}
+
+	if len(adapters) == 0 {
+		return nil, fmt.Errorf("no iSCSI or FC adapters found on ESXi host")
+	}
+	return adapters, nil
+}
+
+// GetDatastoreBackingNAA returns the NAA identifier of the physical device backing
+// a VMFS datastore. Used to identify the source volume on the storage array for
+// FC server-side copy operations.
+func (c *Client) GetDatastoreBackingNAA(datastoreName string) (string, error) {
+	if c.sshClient == nil {
+		return "", fmt.Errorf("not connected to ESXi host")
+	}
+
+	output, err := c.ExecuteCommand("esxcli storage vmfs extent list")
+	if err != nil {
+		return "", fmt.Errorf("failed to list VMFS extents: %w", err)
+	}
+
+	// Output format:
+	// Volume Name   VMFS UUID                              Extent Number  Device Name           Partition
+	// -----------   -------------------------------------  -------------  --------------------  ---------
+	// datastore1    5f16f71f-xxxx-xxxx-xxxx-xxxxxxxxxxxx  0              naa.624a9370...       1
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip header and separator lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "Volume") || strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		fields := strings.Fields(line)
+		// Expect: [volume_name, uuid, extent_number, device_name, partition]
+		if len(fields) >= 4 && fields[0] == datastoreName {
+			deviceName := fields[3]
+			if strings.HasPrefix(deviceName, "naa.") {
+				klog.Infof("Found backing device %s for datastore %s", deviceName, datastoreName)
+				return deviceName, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no VMFS backing device found for datastore %s", datastoreName)
+}
