@@ -1,12 +1,6 @@
 import { useCallback } from 'react'
 import axios from 'axios'
 import type { QueryClient } from '@tanstack/react-query'
-import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
-import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
-import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
-import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
-import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { patchMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
 import { createMigrationPlanJson } from 'src/features/migration/api/migration-plans/helpers'
 import { postMigrationPlan } from 'src/features/migration/api/migration-plans/migrationPlans'
@@ -16,6 +10,7 @@ import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import type { FormValues, SelectedMigrationOptionsType } from 'src/features/migration/types'
 import { CUTOVER_TYPES } from 'src/features/migration/constants'
 import { buildAssignedIPsPerVM, buildNetworkOverridesPerVM } from 'src/features/migration/utils'
+import { createMigrationMappingsResources } from 'src/features/migration/hooks/createMigrationMappingsResources'
 
 type TrackFn = (event: string, properties?: Record<string, unknown>) => void
 
@@ -62,89 +57,6 @@ export function useMigrationSubmit({
   track: TrackFn
   reportError: ReportErrorFn
 }) {
-  const createNetworkMapping = useCallback(
-    async (networkMappingParams: unknown) => {
-      const body = createNetworkMappingJson({
-        networkMappings: networkMappingParams
-      })
-
-      try {
-        const data = postNetworkMapping(body)
-        return data
-      } catch (err) {
-        setError({
-          title: 'Error creating network mapping',
-          message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
-        })
-        getFieldErrorsUpdater('networksMapping')(
-          'Error creating network mapping : ' +
-            (axios.isAxiosError(err) ? err?.response?.data?.message : err)
-        )
-      }
-    },
-    [getFieldErrorsUpdater, setError]
-  )
-
-  const createStorageMapping = useCallback(
-    async (storageMappingsParams: unknown) => {
-      const body = createStorageMappingJson({
-        storageMappings: storageMappingsParams
-      })
-      try {
-        const data = postStorageMapping(body)
-        return data
-      } catch (err) {
-        console.error('Error creating storage mapping', err)
-        reportError(err as Error, {
-          context: 'storage-mapping-creation',
-          metadata: {
-            storageMappingsParams: storageMappingsParams,
-            action: 'create-storage-mapping'
-          }
-        })
-        setError({
-          title: 'Error creating storage mapping',
-          message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
-        })
-        getFieldErrorsUpdater('storageMapping')(
-          'Error creating storage mapping : ' +
-            (axios.isAxiosError(err) ? err?.response?.data?.message : err)
-        )
-      }
-    },
-    [getFieldErrorsUpdater, reportError, setError]
-  )
-
-  const createArrayCredsMapping = useCallback(
-    async (arrayCredsMappingsParams: { source: string; target: string }[]) => {
-      const body = createArrayCredsMappingJson({
-        mappings: arrayCredsMappingsParams
-      })
-      try {
-        const data = await postArrayCredsMapping(body)
-        return data
-      } catch (err) {
-        console.error('Error creating ArrayCreds mapping', err)
-        reportError(err as Error, {
-          context: 'arraycreds-mapping-creation',
-          metadata: {
-            arrayCredsMappingsParams: arrayCredsMappingsParams,
-            action: 'create-arraycreds-mapping'
-          }
-        })
-        setError({
-          title: 'Error creating ArrayCreds mapping',
-          message: axios.isAxiosError(err) ? err?.response?.data?.message : ''
-        })
-        getFieldErrorsUpdater('storageMapping')(
-          'Error creating ArrayCreds mapping : ' +
-            (axios.isAxiosError(err) ? err?.response?.data?.message : err)
-        )
-      }
-    },
-    [getFieldErrorsUpdater, reportError, setError]
-  )
-
   const updateMigrationTemplate = useCallback(
     async (
       template: MigrationTemplate | undefined,
@@ -312,35 +224,32 @@ export function useMigrationSubmit({
 
     const storageCopyMethod = params.storageCopyMethod || 'normal'
 
-    const networkMappings = await createNetworkMapping(params.networkMappings)
+    let mappingResources: {
+      networkMapping: any
+      storageMapping: any | null
+      arrayCredsMapping: any | null
+    }
 
-    if (!networkMappings) {
+    try {
+      mappingResources = await createMigrationMappingsResources({
+        networkMappings: params.networkMappings,
+        storageMappings: params.storageMappings,
+        arrayCredsMappings: params.arrayCredsMappings,
+        storageCopyMethod,
+        setError,
+        getFieldErrorsUpdater,
+        reportError
+      })
+    } catch (_err) {
       setSubmitting(false)
       return
     }
 
-    let storageMappings: any = null
-    let arrayCredsMapping: any = null
-
-    if (storageCopyMethod === 'StorageAcceleratedCopy') {
-      arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings || [])
-      if (!arrayCredsMapping) {
-        setSubmitting(false)
-        return
-      }
-    } else {
-      storageMappings = await createStorageMapping(params.storageMappings)
-      if (!storageMappings) {
-        setSubmitting(false)
-        return
-      }
-    }
-
     const updatedMigrationTemplate = await updateMigrationTemplate(
       migrationTemplate,
-      networkMappings,
-      storageMappings,
-      arrayCredsMapping
+      mappingResources.networkMapping,
+      mappingResources.storageMapping,
+      mappingResources.arrayCredsMapping
     )
 
     await createMigrationPlan(updatedMigrationTemplate)
@@ -353,10 +262,8 @@ export function useMigrationSubmit({
     onClose()
     navigate('/dashboard/migrations')
   }, [
-    createArrayCredsMapping,
     createMigrationPlan,
-    createNetworkMapping,
-    createStorageMapping,
+    getFieldErrorsUpdater,
     migrationTemplate,
     migrationsQueryKey,
     navigate,
@@ -367,6 +274,7 @@ export function useMigrationSubmit({
     params.storageCopyMethod,
     params.storageMappings,
     queryClient,
+    reportError,
     setError,
     setSubmitting,
     updateMigrationTemplate

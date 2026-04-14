@@ -1,5 +1,13 @@
 import { isMappingComplete } from 'src/features/migration/utils/mappings'
 import { CUTOVER_TYPES } from 'src/features/migration/constants'
+import {
+  getCutoverOk,
+  getDataCopyStartTimeOk,
+  getPcdOptionsOk,
+  getPostMigrationActionOk,
+  getPostMigrationActionSelected,
+  getPostMigrationScriptOk
+} from 'src/features/migration/utils/migrationOptionsValidationCore'
 
 type FieldErrors = Record<string, string>
 
@@ -44,11 +52,8 @@ export function getRollingHasAnyMigrationOptionSelected(input: {
 }) {
   const { selectedMigrationOptions } = input
 
-  const postMigrationAction = selectedMigrationOptions.postMigrationAction
-  const postMigrationActionSelected = Boolean(
-    postMigrationAction &&
-      typeof postMigrationAction === 'object' &&
-      Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+  const postMigrationActionSelected = getPostMigrationActionSelected(
+    selectedMigrationOptions.postMigrationAction
   )
 
   return (
@@ -76,50 +81,29 @@ export function getRollingMigrationOptionValidated(input: {
   const dataCopyMethodOk =
     !selectedMigrationOptions.dataCopyMethod || Boolean(params.dataCopyMethod)
 
-  const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
-  const dataCopyStartTimeOk =
-    !selectedMigrationOptions.dataCopyStartTime ||
-    (Boolean(dataCopyStartTimeValue) &&
-      dataCopyStartTimeValue !== 'undefined' &&
-      dataCopyStartTimeValue !== 'null' &&
-      !fieldErrors['dataCopyStartTime'])
+  const dataCopyStartTimeOk = getDataCopyStartTimeOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const cutoverOk = !selectedMigrationOptions.cutoverOption
-    ? true
-    : Boolean(
-        params.cutoverOption &&
-          !fieldErrors['cutoverOption'] &&
-          (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
-            (params.cutoverStartTime &&
-              params.cutoverEndTime &&
-              !fieldErrors['cutoverStartTime'] &&
-              !fieldErrors['cutoverEndTime']))
-      )
+  const cutoverOk = getCutoverOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors,
+    includePeriodicSyncChecks: false
+  })
 
-  const postMigrationScriptValue = String(params.postMigrationScript ?? '').trim()
-  const postMigrationScriptOk =
-    !selectedMigrationOptions.postMigrationScript ||
-    (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
+  const postMigrationScriptOk = getPostMigrationScriptOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const postMigrationAction = selectedMigrationOptions.postMigrationAction
-  const postMigrationActionSelected = Boolean(
-    postMigrationAction &&
-      typeof postMigrationAction === 'object' &&
-      Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
-  )
-
-  const postMigrationActionOk = !postMigrationActionSelected
-    ? true
-    : Boolean(
-        postMigrationAction &&
-          typeof postMigrationAction === 'object' &&
-          (Boolean(postMigrationAction.renameVm) ||
-            Boolean(postMigrationAction.moveToFolder) ||
-            !postMigrationAction.suffix ||
-            Boolean(params.postMigrationAction?.suffix) ||
-            !postMigrationAction.folderName ||
-            Boolean(params.postMigrationAction?.folderName))
-      )
+  const postMigrationActionOk = getPostMigrationActionOk({
+    selectedMigrationOptions,
+    params
+  })
 
   return Boolean(
     dataCopyMethodOk &&
@@ -143,54 +127,34 @@ export function getRollingAreSelectedMigrationOptionsConfigured(input: {
 
   if (!hasAnyMigrationOptionSelected) return false
 
-  const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
-  const dataCopyStartTimeOk =
-    !selectedMigrationOptions.dataCopyStartTime ||
-    (Boolean(dataCopyStartTimeValue) &&
-      dataCopyStartTimeValue !== 'undefined' &&
-      dataCopyStartTimeValue !== 'null' &&
-      !fieldErrors['dataCopyStartTime'])
+  const dataCopyStartTimeOk = getDataCopyStartTimeOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const cutoverOk = !selectedMigrationOptions.cutoverOption
-    ? true
-    : Boolean(
-        params.cutoverOption &&
-          !fieldErrors['cutoverOption'] &&
-          (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
-            (params.cutoverStartTime &&
-              params.cutoverEndTime &&
-              !fieldErrors['cutoverStartTime'] &&
-              !fieldErrors['cutoverEndTime']))
-      )
+  const cutoverOk = getCutoverOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors,
+    includePeriodicSyncChecks: false
+  })
 
-  const postMigrationScriptValue = String(params.postMigrationScript ?? '').trim()
-  const postMigrationScriptOk =
-    !selectedMigrationOptions.postMigrationScript ||
-    (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
+  const postMigrationScriptOk = getPostMigrationScriptOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const pcdOptionsOk =
-    (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-    (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+  const pcdOptionsOk = getPcdOptionsOk({
+    selectedMigrationOptions,
+    params
+  })
 
-  const postMigrationAction = selectedMigrationOptions.postMigrationAction
-  const postMigrationActionSelected = Boolean(
-    postMigrationAction &&
-      typeof postMigrationAction === 'object' &&
-      Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
-  )
-
-  const postMigrationActionOk = !postMigrationActionSelected
-    ? true
-    : Boolean(
-        postMigrationAction &&
-          typeof postMigrationAction === 'object' &&
-          (Boolean(postMigrationAction.renameVm) ||
-            Boolean(postMigrationAction.moveToFolder) ||
-            !postMigrationAction.suffix ||
-            Boolean(params.postMigrationAction?.suffix) ||
-            !postMigrationAction.folderName ||
-            Boolean(params.postMigrationAction?.folderName))
-      )
+  const postMigrationActionOk = getPostMigrationActionOk({
+    selectedMigrationOptions,
+    params
+  })
 
   return Boolean(
     dataCopyStartTimeOk &&

@@ -24,31 +24,33 @@ export function useMigrationFormRHFParamsSync({
   params,
   getParamsUpdater,
   selectedMigrationOptions,
-  rhfValues
+  rhfValues,
+  enableSecurityPlacementSync = true
 }: {
   form: UseFormReturn<MigrationDrawerRHFValues, any, MigrationDrawerRHFValues>
   params: FormValues
   getParamsUpdater: (key: string) => (value: unknown) => void
   selectedMigrationOptions: SelectedMigrationOptionsType
   rhfValues: {
-    securityGroups: unknown
-    serverGroup: unknown
+    securityGroups?: unknown
+    serverGroup?: unknown
     dataCopyStartTime: unknown
     cutoverStartTime: unknown
     cutoverEndTime: unknown
     postMigrationActionSuffix: unknown
     postMigrationActionFolderName: unknown
   }
+  enableSecurityPlacementSync?: boolean
 }) {
   useEffect(() => {
-    const nextSecurityGroups = params.securityGroups ?? []
-    const nextServerGroup = params.serverGroup ?? ''
-
     const nextDataCopyStartTime = params.dataCopyStartTime ?? ''
     const nextCutoverStartTime = params.cutoverStartTime ?? ''
     const nextCutoverEndTime = params.cutoverEndTime ?? ''
     const nextPostMigrationActionSuffix = params.postMigrationAction?.suffix ?? ''
     const nextPostMigrationActionFolderName = params.postMigrationAction?.folderName ?? ''
+
+    const nextSecurityGroups = params.securityGroups ?? []
+    const nextServerGroup = params.serverGroup ?? ''
 
     const currentSecurityGroups = form.getValues('securityGroups') ?? []
     const currentServerGroup = form.getValues('serverGroup') ?? ''
@@ -59,11 +61,13 @@ export function useMigrationFormRHFParamsSync({
     const currentPostMigrationActionFolderName =
       form.getValues('postMigrationActionFolderName') ?? ''
 
-    if (!stringArrayEqual(currentSecurityGroups, nextSecurityGroups)) {
-      form.setValue('securityGroups', nextSecurityGroups)
-    }
-    if (currentServerGroup !== nextServerGroup) {
-      form.setValue('serverGroup', nextServerGroup)
+    if (enableSecurityPlacementSync) {
+      if (!stringArrayEqual(currentSecurityGroups, nextSecurityGroups)) {
+        form.setValue('securityGroups', nextSecurityGroups)
+      }
+      if (currentServerGroup !== nextServerGroup) {
+        form.setValue('serverGroup', nextServerGroup)
+      }
     }
 
     if (currentDataCopyStartTime !== nextDataCopyStartTime) {
@@ -83,6 +87,7 @@ export function useMigrationFormRHFParamsSync({
     }
   }, [
     form,
+    enableSecurityPlacementSync,
     params.securityGroups,
     params.serverGroup,
     params.dataCopyStartTime,
@@ -156,15 +161,24 @@ export function useMigrationFormRHFParamsSync({
 
   useEffect(() => {
     const next = (rhfValues.securityGroups ?? []) as string[]
+    if (!enableSecurityPlacementSync) return
+
     if (!stringArrayEqual(params.securityGroups ?? [], next)) {
       getParamsUpdater('securityGroups')(next)
     }
-  }, [params.securityGroups, rhfValues.securityGroups, getParamsUpdater])
+  }, [
+    enableSecurityPlacementSync,
+    params.securityGroups,
+    rhfValues.securityGroups,
+    getParamsUpdater
+  ])
 
   useEffect(() => {
     const next = (rhfValues.serverGroup ?? '') as string
+    if (!enableSecurityPlacementSync) return
+
     if ((params.serverGroup ?? '') !== next) {
       getParamsUpdater('serverGroup')(next)
     }
-  }, [params.serverGroup, rhfValues.serverGroup, getParamsUpdater])
+  }, [enableSecurityPlacementSync, params.serverGroup, rhfValues.serverGroup, getParamsUpdater])
 }

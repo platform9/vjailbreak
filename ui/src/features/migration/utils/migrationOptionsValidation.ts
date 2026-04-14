@@ -1,5 +1,17 @@
-import type { FieldErrors, FormValues, SelectedMigrationOptionsType } from 'src/features/migration/types'
-import { CUTOVER_TYPES } from 'src/features/migration/constants'
+import type {
+  FieldErrors,
+  FormValues,
+  SelectedMigrationOptionsType
+} from 'src/features/migration/types'
+import {
+  getCutoverOk,
+  getDataCopyStartTimeOk,
+  getPcdOptionsOk,
+  getPeriodicSyncOk,
+  getPostMigrationActionOk,
+  getPostMigrationActionSelected,
+  getPostMigrationScriptOk
+} from 'src/features/migration/utils/migrationOptionsValidationCore'
 
 export function getHasAnyMigrationOptionSelected({
   selectedMigrationOptions,
@@ -8,11 +20,8 @@ export function getHasAnyMigrationOptionSelected({
   selectedMigrationOptions: SelectedMigrationOptionsType
   removeVMwareTools: boolean | undefined
 }) {
-  const postMigrationAction = selectedMigrationOptions.postMigrationAction
-  const postMigrationActionSelected = Boolean(
-    postMigrationAction &&
-      typeof postMigrationAction === 'object' &&
-      Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
+  const postMigrationActionSelected = getPostMigrationActionSelected(
+    selectedMigrationOptions.postMigrationAction
   )
 
   return (
@@ -41,69 +50,40 @@ export function getAreSelectedMigrationOptionsConfigured({
 }) {
   if (!hasAnyMigrationOptionSelected) return false
 
-  const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
-  const periodicSyncIntervalValue = String(params.periodicSyncInterval ?? '').trim()
-  const postMigrationScriptValue = String(params.postMigrationScript ?? '').trim()
+  const dataCopyStartTimeOk = getDataCopyStartTimeOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const dataCopyStartTimeOk =
-    !selectedMigrationOptions.dataCopyStartTime ||
-    (Boolean(dataCopyStartTimeValue) &&
-      dataCopyStartTimeValue !== 'undefined' &&
-      dataCopyStartTimeValue !== 'null' &&
-      !fieldErrors['dataCopyStartTime'])
+  const cutoverOk = getCutoverOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors,
+    includePeriodicSyncChecks: true
+  })
 
-  const cutoverOk = !selectedMigrationOptions.cutoverOption
-    ? true
-    : Boolean(
-        params.cutoverOption &&
-          !fieldErrors['cutoverOption'] &&
-          (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
-            (params.cutoverStartTime &&
-              params.cutoverEndTime &&
-              !fieldErrors['cutoverStartTime'] &&
-              !fieldErrors['cutoverEndTime'])) &&
-          (params.cutoverOption !== CUTOVER_TYPES.ADMIN_INITIATED ||
-            !selectedMigrationOptions.periodicSyncEnabled ||
-            (Boolean(periodicSyncIntervalValue) &&
-              periodicSyncIntervalValue !== 'undefined' &&
-              periodicSyncIntervalValue !== 'null' &&
-              !fieldErrors['periodicSyncInterval']))
-      )
+  const periodicSyncOk = getPeriodicSyncOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const periodicSyncOk =
-    !selectedMigrationOptions.periodicSyncEnabled ||
-    (Boolean(periodicSyncIntervalValue) &&
-      periodicSyncIntervalValue !== 'undefined' &&
-      periodicSyncIntervalValue !== 'null' &&
-      !fieldErrors['periodicSyncInterval'])
+  const postMigrationScriptOk = getPostMigrationScriptOk({
+    selectedMigrationOptions,
+    params,
+    fieldErrors
+  })
 
-  const postMigrationScriptOk =
-    !selectedMigrationOptions.postMigrationScript ||
-    (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
+  const pcdOptionsOk = getPcdOptionsOk({
+    selectedMigrationOptions,
+    params
+  })
 
-  const pcdOptionsOk =
-    (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-    (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
-
-  const postMigrationAction = selectedMigrationOptions.postMigrationAction
-  const postMigrationActionSelected = Boolean(
-    postMigrationAction &&
-      typeof postMigrationAction === 'object' &&
-      Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
-  )
-
-  const postMigrationActionOk = !postMigrationActionSelected
-    ? true
-    : Boolean(
-        postMigrationAction &&
-          typeof postMigrationAction === 'object' &&
-          (Boolean(postMigrationAction.renameVm) ||
-            Boolean(postMigrationAction.moveToFolder) ||
-            !postMigrationAction.suffix ||
-            Boolean(params.postMigrationAction?.suffix) ||
-            !postMigrationAction.folderName ||
-            Boolean(params.postMigrationAction?.folderName))
-      )
+  const postMigrationActionOk = getPostMigrationActionOk({
+    selectedMigrationOptions,
+    params
+  })
 
   return (
     dataCopyStartTimeOk &&

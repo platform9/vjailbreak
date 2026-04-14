@@ -41,24 +41,18 @@ import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import NetworkAndStorageMappingStep, { ResourceMap } from './steps/NetworkAndStorageMappingStep'
 import {
-  createRollingMigrationPlanJson,
   postRollingMigrationPlan,
+  createRollingMigrationPlanJson,
   VMSequence,
   ClusterMapping
 } from 'src/api/rolling-migration-plans'
 import SourceDestinationClusterSelection from './steps/SourceDestinationClusterSelection'
-// Import required APIs for creating migration resources
-import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
-import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
-import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
-import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
-import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
 import {
   patchMigrationTemplate,
   postMigrationTemplate
 } from 'src/features/migration/api/migration-templates/migrationTemplates'
+import { createMigrationMappingsResources } from 'src/features/migration/hooks/createMigrationMappingsResources'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from './MigrationOptionsAlt'
 import { CUTOVER_TYPES } from './constants'
@@ -1046,45 +1040,27 @@ export default function RollingMigrationFormDrawer({
         }
       }
 
-      // 1. Create network mapping
-      const networkMappingJson = createNetworkMappingJson({
-        networkMappings: networkMappings.map((mapping) => ({
-          source: mapping.source,
-          target: mapping.target
-        }))
-      })
-      const networkMappingResponse = await postNetworkMapping(networkMappingJson)
-
-      // 2. Create storage mapping
-      let storageMappingResponse: any = null
-      let arrayCredsMappingResponse: any = null
-
-      if (storageCopyMethod === 'StorageAcceleratedCopy') {
-        const arrayCredsMappingJson = createArrayCredsMappingJson({
-          mappings: arrayCredsMappings.map((mapping) => ({
-            source: mapping.source,
-            target: mapping.target
-          }))
+      const mappingResources: Awaited<ReturnType<typeof createMigrationMappingsResources>> =
+        await createMigrationMappingsResources({
+          networkMappings: networkMappings.map((m) => ({ source: m.source, target: m.target })),
+          storageMappings: storageMappings.map((m) => ({ source: m.source, target: m.target })),
+          arrayCredsMappings: arrayCredsMappings.map((m) => ({
+            source: m.source,
+            target: m.target
+          })),
+          storageCopyMethod,
+          reportError
         })
-        arrayCredsMappingResponse = await postArrayCredsMapping(arrayCredsMappingJson)
-      } else {
-        const storageMappingJson = createStorageMappingJson({
-          storageMappings: storageMappings.map((mapping) => ({
-            source: mapping.source,
-            target: mapping.target
-          }))
-        })
-        storageMappingResponse = await postStorageMapping(storageMappingJson)
-      }
 
       // 3. Create migration template
       const migrationTemplateJson = createMigrationTemplateJson({
         vmwareRef: selectedVMwareCredName,
         openstackRef: selectedPcdCredName,
-        networkMapping: networkMappingResponse.metadata.name,
-        ...(storageMappingResponse?.metadata?.name && {
-          storageMapping: storageMappingResponse.metadata.name
-        }),
+        networkMapping: mappingResources.networkMapping.metadata.name,
+        ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
+          mappingResources.storageMapping?.metadata?.name && {
+            storageMapping: mappingResources.storageMapping.metadata.name
+          }),
         targetPCDClusterName: targetPCDClusterName
       })
       const migrationTemplateResponse = await postMigrationTemplate(migrationTemplateJson)
@@ -1093,15 +1069,15 @@ export default function RollingMigrationFormDrawer({
       if (migrationTemplateResponse?.metadata?.name) {
         await patchMigrationTemplate(migrationTemplateResponse.metadata.name, {
           spec: {
-            networkMapping: networkMappingResponse.metadata.name,
+            networkMapping: mappingResources.networkMapping.metadata.name,
             storageCopyMethod,
             ...(storageCopyMethod === 'StorageAcceleratedCopy' &&
-              arrayCredsMappingResponse?.metadata?.name && {
-                arrayCredsMapping: arrayCredsMappingResponse.metadata.name
+              mappingResources.arrayCredsMapping?.metadata?.name && {
+                arrayCredsMapping: mappingResources.arrayCredsMapping.metadata.name
               }),
             ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
-              storageMappingResponse?.metadata?.name && {
-                storageMapping: storageMappingResponse.metadata.name
+              mappingResources.storageMapping?.metadata?.name && {
+                storageMapping: mappingResources.storageMapping.metadata.name
               })
           }
         })
