@@ -8,6 +8,7 @@ import (
 
 	"github.com/devans10/pugo/flasharray"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/fcutil"
 	"k8s.io/klog/v2"
 )
 
@@ -155,8 +156,9 @@ func (p *PureStorageProvider) GetAllVolumeNAAs() ([]string, error) {
 	return p.BaseStorageProvider.GetAllVolumeNAAs(p.ListAllVolumes)
 }
 
-// CreateOrUpdateInitiatorGroup creates or updates an initiator group with the ESX adapters
-// mapping esxi's hba adapters initiator group to the volume host in pure.
+// CreateOrUpdateInitiatorGroup creates or updates an initiator group with the ESX adapters,
+// mapping the ESXi host's HBA adapters to the corresponding Pure FlashArray host object.
+// Supports both iSCSI (IQN) and Fibre Channel (fc.WWNN:WWPN) adapter identifiers.
 func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
 	hosts, err := p.client.Hosts.ListHosts(nil)
 	if err != nil {
@@ -167,12 +169,43 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 
 	for _, h := range hosts {
 		klog.Infof("Checking host %s, iqns: %v, wwns: %v", h.Name, h.Iqn, h.Wwn)
+		matched := false
 
-		// Check IQNs (case-insensitive since IQNs can be presented with different casing)
+		// Check IQNs (iSCSI) — case-insensitive
 		for _, iqn := range h.Iqn {
 			if storage.ContainsIgnoreCase(hbaIdentifiers, iqn) {
 				klog.Infof("Adding host %s to group (matched IQN: %s)", h.Name, iqn)
 				matchedHosts = append(matchedHosts, h.Name)
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+
+		// Check WWNs (Fibre Channel) — extract WWPN from the ESXi fc.WWNN:WWPN identifier
+		// and compare against the Pure host's registered WWN list. fcutil.EqualWWNs
+		// normalises both sides (strips colons/dashes, uppercases) before comparing.
+		for _, hostWWN := range h.Wwn {
+			for _, hbaID := range hbaIdentifiers {
+				if !strings.HasPrefix(hbaID, "fc.") {
+					continue
+				}
+				wwpn, err := fcutil.WWPNFromFCUID(hbaID)
+				if err != nil {
+					klog.Warningf("Failed to parse FC adapter UID %s: %v", hbaID, err)
+					continue
+				}
+				klog.Infof("Comparing ESXi WWPN %s with Pure host WWN %s", wwpn, hostWWN)
+				if fcutil.EqualWWNs(wwpn, hostWWN) {
+					klog.Infof("Adding host %s to group (matched FC WWN: %s)", h.Name, hostWWN)
+					matchedHosts = append(matchedHosts, h.Name)
+					matched = true
+					break
+				}
+			}
+			if matched {
 				break
 			}
 		}
