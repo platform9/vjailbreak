@@ -1957,6 +1957,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 }
 
 func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
+
 	networkids := []string{}
 	ipaddresses := []string{}
 	portids := []string{}
