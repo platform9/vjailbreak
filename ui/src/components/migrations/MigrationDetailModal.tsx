@@ -41,6 +41,7 @@ export interface MigrationDetailModalProps {
   open: boolean
   migration: Migration | null
   onClose: () => void
+  isDuplicate?: boolean
 }
 
 const formatCommaSeparated = (value: unknown) => {
@@ -115,7 +116,8 @@ function MappingTable({
 export default function MigrationDetailModal({
   open,
   migration,
-  onClose
+  onClose,
+  isDuplicate = false
 }: MigrationDetailModalProps) {
   const [tab, setTab] = useState(0)
   const [onlyShowOverrides, setOnlyShowOverrides] = useState(true)
@@ -128,6 +130,8 @@ export default function MigrationDetailModal({
   }, [open])
 
   const vmName = useMemo(() => ((migration?.spec as any)?.vmName as string) || '', [migration])
+  const vmKey = (migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string || ''
+  const displayVmName = isDuplicate && vmKey ? vmKey : vmName
   const phase = migration?.status?.phase
   const phaseLabel = (phase as string) || 'Unknown'
 
@@ -423,7 +427,7 @@ export default function MigrationDetailModal({
 
   const generalInfoItems = useMemo(
     () => [
-      { label: 'VM Name', value: vmName || 'N/A' },
+      { label: 'VM Name', value: displayVmName || 'N/A' },
       { label: 'Migration Type', value: migrationType },
       { label: 'Assigned IP(s)', value: assignedIps },
       { label: 'Created At', value: createdAt },
@@ -529,7 +533,7 @@ export default function MigrationDetailModal({
         <Box>
           <DrawerHeader
             title="Migration Details"
-            subtitle={vmName || migration?.metadata?.name || ''}
+            subtitle={displayVmName || migration?.metadata?.name || ''}
             onClose={onClose}
             actions={<StatusChip label={phaseLabel} size="small" variant="filled" />}
           />

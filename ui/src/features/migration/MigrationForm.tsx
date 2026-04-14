@@ -688,14 +688,14 @@ export default function MigrationFormDrawer({
       ? params.postMigrationAction
       : undefined
 
-    const vmsToMigrate = (params.vms || []).map((vm) => vm.name)
+    const vmsToMigrate = (params.vms || []).map((vm) => vm.vmKey || vm.name)
 
     // Build AssignedIPsPerVM map for cold migration
     const assignedIPsPerVM: Record<string, string> = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
         if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
-          assignedIPsPerVM[vm.name] = vm.assignedIPs
+          assignedIPsPerVM[vm.vmKey || vm.name] = vm.assignedIPs
         }
       })
     }
@@ -713,7 +713,7 @@ export default function MigrationFormDrawer({
 
         if (indices.size === 0) return
 
-        networkOverridesPerVM[vm.name] = Array.from(indices)
+        networkOverridesPerVM[vm.vmKey || vm.name] = Array.from(indices)
           .map((indexStr) => {
             const interfaceIndex = Number(indexStr)
             const ipFlag = preserveIp[interfaceIndex]

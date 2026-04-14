@@ -971,18 +971,17 @@ func AppendUnique(slice []string, values ...string) []string {
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
-	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string,
-) error {
-	sanitizedVMName, err := GetK8sCompatibleVMWareObjectName(vminfo.Name, vmwcreds.Name)
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
+	sanitizedVMName, err := netutils.GetVMK8sCompatibleName(vminfo.Name, vminfo.VMID, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
 	}
-	esxiK8sName, err := GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
+	esxiK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
 	}
 	clusterK8sID := GetClusterK8sID(vminfo.ClusterName, datacenter)
-	clusterK8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
+	clusterK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -1796,7 +1795,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	// Convert VM name to Kubernetes-safe name
-	vmName, err := GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
+	vmName, err := netutils.GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
 	}
@@ -1870,6 +1869,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
+		VMID:              vm.Reference().Value,
 		Datastores:        datastores,
 		Disks:             disks,
 		Networks:          networks,
