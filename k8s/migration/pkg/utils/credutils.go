@@ -859,12 +859,31 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 		return netObj.Name, nil
 
 	case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
+		// Try direct MOR lookup first (fast path).
 		var netObj mo.DistributedVirtualPortgroup
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
-		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
-			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
+		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err == nil {
+			return netObj.Name, nil
 		}
-		return netObj.Name, nil
+		// Fallback: enumerate DVS portgroups via ContainerView.
+		// Some vCenter configurations (permissions, linked-mode, cross-datacenter DVS)
+		// cause direct MOR lookups to fail even though the portgroup is functional.
+		m := view.NewManager(c)
+		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{constants.VMwareNetworkTypeDistributedVirtualPortgroup}, true)
+		if err != nil {
+			return "", fmt.Errorf("failed to create container view for distributed virtual portgroups: %w", err)
+		}
+		defer v.Destroy(ctx) //nolint:errcheck
+		var pgs []mo.DistributedVirtualPortgroup
+		if err := v.Retrieve(ctx, []string{constants.VMwareNetworkTypeDistributedVirtualPortgroup}, []string{"name"}, &pgs); err != nil {
+			return "", fmt.Errorf("failed to retrieve distributed virtual portgroups: %w", err)
+		}
+		for _, pg := range pgs {
+			if pg.Self.Value == nic.Network {
+				return pg.Name, nil
+			}
+		}
+		return "", fmt.Errorf("distributed virtual portgroup %s not found in inventory", nic.Network)
 
 	case constants.VMwareNetworkTypeOpaqueNetwork:
 		m := view.NewManager(c)
