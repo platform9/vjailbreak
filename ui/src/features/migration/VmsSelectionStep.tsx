@@ -886,10 +886,10 @@ function VmsSelectionStep({
 
     setVmsWithFlavor((prev) =>
       prev.map((vm) => {
-        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.name)) {
+        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.id)) {
           return {
             ...vm,
-            osFamily: vmOSAssignments[vm.name]
+            osFamily: vmOSAssignments[vm.id]
           }
         }
         return vm
@@ -964,7 +964,7 @@ function VmsSelectionStep({
       // Update local state first for immediate UI feedback
       setVmOSAssignments((prev) => ({ ...prev, [vmId]: osFamily }))
 
-      const vm = vmsWithFlavor.find((v) => v.name === vmId)
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (vm?.vmWareMachineName) {
         await patchVMwareMachine(vm.vmWareMachineName, {
           spec: {
