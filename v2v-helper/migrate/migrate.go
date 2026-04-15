@@ -1143,7 +1143,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 			Script: "Firstboot-Scheduler.ps1",
 			Async:  false,
 		})
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "install-virtio-win12.ps1",
