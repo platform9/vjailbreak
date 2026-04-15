@@ -1788,6 +1788,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
+
+	if len(migobj.Volumetypes) == 1 && len(vminfo.VMDisks) > 1 && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+		volType := migobj.Volumetypes[0]
+		migobj.Volumetypes = make([]string, len(vminfo.VMDisks))
+		for i := range migobj.Volumetypes {
+			migobj.Volumetypes[i] = volType
+		}
+		migobj.logMessage(fmt.Sprintf("Expanded single volume type '%s' to %d entries for VM with %d disks", volType, len(vminfo.VMDisks), len(vminfo.VMDisks)))
+	}
 	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}

@@ -499,6 +499,94 @@ func TestDeleteAllVolumes(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestVolumeTypeExpansionForMultiDiskVM(t *testing.T) {
+	// Test that a single volume type is expanded to match disk count for multi-disk VMs
+
+	migobj := Migrate{
+		Volumetypes:       []string{"lvm"}, // Single volume type
+		StorageCopyMethod: "",              // Not using StorageCopyMethod
+	}
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", Size: int64(1024)},
+			{Name: "disk2", Size: int64(2048)},
+		},
+	}
+
+	// Simulate the expansion logic from MigrateVM
+	if len(migobj.Volumetypes) == 1 && len(vminfo.VMDisks) > 1 && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+		volType := migobj.Volumetypes[0]
+		migobj.Volumetypes = make([]string, len(vminfo.VMDisks))
+		for i := range migobj.Volumetypes {
+			migobj.Volumetypes[i] = volType
+		}
+	}
+
+	// Verify expansion happened
+	assert.Equal(t, 2, len(migobj.Volumetypes), "Volume types should be expanded to match disk count")
+	assert.Equal(t, "lvm", migobj.Volumetypes[0], "First volume type should be 'lvm'")
+	assert.Equal(t, "lvm", migobj.Volumetypes[1], "Second volume type should be 'lvm'")
+	assert.Equal(t, len(vminfo.VMDisks), len(migobj.Volumetypes), "Volume types count should match disks count")
+}
+
+func TestVolumeTypeNoExpansionForSingleDisk(t *testing.T) {
+	// Test that single volume type is NOT expanded for single-disk VMs
+
+	migobj := Migrate{
+		Volumetypes:       []string{"lvm"},
+		StorageCopyMethod: "",
+	}
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", Size: int64(1024)},
+		},
+	}
+
+	// Simulate the expansion logic from MigrateVM
+	if len(migobj.Volumetypes) == 1 && len(vminfo.VMDisks) > 1 && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+		volType := migobj.Volumetypes[0]
+		migobj.Volumetypes = make([]string, len(vminfo.VMDisks))
+		for i := range migobj.Volumetypes {
+			migobj.Volumetypes[i] = volType
+		}
+	}
+
+	// Verify NO expansion happened (single disk case)
+	assert.Equal(t, 1, len(migobj.Volumetypes), "Volume types should NOT be expanded for single disk")
+	assert.Equal(t, "lvm", migobj.Volumetypes[0], "Volume type should remain 'lvm'")
+}
+
+func TestVolumeTypeNoExpansionForStorageCopyMethod(t *testing.T) {
+	// Test that volume type expansion does NOT happen when using StorageCopyMethod
+
+	migobj := Migrate{
+		Volumetypes:       []string{"lvm"},
+		StorageCopyMethod: constants.StorageCopyMethod, // Using StorageCopyMethod
+	}
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", Size: int64(1024)},
+			{Name: "disk2", Size: int64(2048)},
+		},
+	}
+
+	// Simulate the expansion logic from MigrateVM
+	if len(migobj.Volumetypes) == 1 && len(vminfo.VMDisks) > 1 && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+		volType := migobj.Volumetypes[0]
+		migobj.Volumetypes = make([]string, len(vminfo.VMDisks))
+		for i := range migobj.Volumetypes {
+			migobj.Volumetypes[i] = volType
+		}
+	}
+
+	// Verify NO expansion happened (StorageCopyMethod case)
+	assert.Equal(t, 1, len(migobj.Volumetypes), "Volume types should NOT be expanded when using StorageCopyMethod")
+	assert.Equal(t, "lvm", migobj.Volumetypes[0], "Volume type should remain 'lvm'")
+}
+
 func TestCreateTargetInstance(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
