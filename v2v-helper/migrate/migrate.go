@@ -1788,7 +1788,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-
 	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
