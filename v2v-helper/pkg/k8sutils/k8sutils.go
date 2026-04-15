@@ -50,6 +50,13 @@ func GetVMwareMachineName() (string, error) {
 	return vmK8sName, nil
 }
 
+// GetSourceVMKey returns the SOURCE_VM_KEY env var, which is the key used for naming
+// OpenStack resources (ports, volumes). It is the plain VM name for unique names,
+// or "name-<moid>" for VMs that share a display name with another VM in the plan.
+func GetSourceVMKey() string {
+	return os.Getenv("SOURCE_VM_KEY")
+}
+
 func GetRDMDisk(ctx context.Context, diskName string) (*vjailbreakv1alpha1.RDMDisk, error) {
 	client, err := GetInclusterClient()
 	if err != nil {

@@ -7,6 +7,7 @@ function Write-Log {
         [ValidateSet("INFO", "WARNING", "ERROR")]
         [string]$Level = "INFO"
     )
+
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logEntry = "$timestamp - $Level - $Message"
 
@@ -22,92 +23,16 @@ function Write-Log {
     }
 }
 
-function Rename-NICRobust {
-    param(
-        [string]$CurrentName,
-        [string]$TargetName,
-        [int]$MaxRetries = 5
-    )
-
-    for ($i = 1; $i -le $MaxRetries; $i++) {
-        try {
-            Write-Log "Attempt [$i/$MaxRetries]: Renaming '$CurrentName' → '$TargetName'"
-
-            Rename-NetAdapter -Name $CurrentName -NewName $TargetName -Confirm:$false -ErrorAction Stop
-            Start-Sleep -Seconds 2
-
-            $renamed = Get-NetAdapter -Name $TargetName -ErrorAction SilentlyContinue
-            if ($renamed) {
-                Write-Log "Rename successful: '$TargetName'"
-                return $renamed
-            } else {
-                throw "Rename command succeeded but adapter not found"
-            }
-        }
-        catch {
-            $err = $_.Exception.Message
-            Write-Log "Rename attempt failed: $err" -Level "WARNING"
-
-            if ($err -match "exists|in use|duplicate") {
-
-                Write-Log "Conflict detected for '$TargetName'"
-
-                $conflict = Get-NetAdapter -Name $TargetName -ErrorAction SilentlyContinue
-
-                if ($conflict) {
-                    $tempName = "conflict_" + [guid]::NewGuid().ToString().Substring(0,6)
-                    Write-Log "Renaming conflicting adapter '$TargetName' → '$tempName'"
-
-                    try {
-                        Rename-NetAdapter -Name $TargetName -NewName $tempName -Confirm:$false -ErrorAction Stop
-                        Start-Sleep -Seconds 2
-                    } catch {
-                        Write-Log "Failed to rename conflicting adapter: $($_.Exception.Message)" -Level "WARNING"
-                    }
-                }
-                else {
-                    Write-Log "Ghost NIC likely holding name '$TargetName'" -Level "WARNING"
-
-                    # Fallback: break binding
-                    $tempSelf = "temp_" + [guid]::NewGuid().ToString().Substring(0,6)
-                    Write-Log "Renaming current adapter '$CurrentName' → '$tempSelf'"
-
-                    try {
-                        Rename-NetAdapter -Name $CurrentName -NewName $tempSelf -Confirm:$false -ErrorAction Stop
-                        Start-Sleep -Seconds 2
-                        $CurrentName = $tempSelf
-                    } catch {
-                        Write-Log "Fallback rename failed: $($_.Exception.Message)" -Level "WARNING"
-                    }
-                }
-            }
-
-            Start-Sleep -Seconds (2 * $i)
-
-            # Refresh adapter reference
-            $refreshed = Get-NetAdapter -IncludeHidden -ErrorAction SilentlyContinue |
-                         Where-Object { $_.Name -eq $CurrentName } |
-                         Select-Object -First 1
-
-            if ($refreshed) {
-                $CurrentName = $refreshed.Name
-                Write-Log "Adapter refreshed: '$CurrentName'"
-            } else {
-                Write-Log "Adapter not found during refresh" -Level "WARNING"
-            }
-        }
-    }
-
-    throw "Failed to rename '$CurrentName' → '$TargetName' after retries"
+function Normalize-MAC {
+    param([string]$mac)
+    return ($mac -replace '[:-]', '').ToLower()
 }
 
 try {
-    Write-Log "=== Starting Network Configuration Restore ==="
-    Write-Log "Waiting 200 seconds for network interfaces to initialize..."
-    Start-Sleep -Seconds 200
+    Write-Log "=== Starting Network Configuration Restore (MAC-based) ==="
 
-    Write-Log "Stabilizing NIC state..."
-    Start-Sleep -Seconds 10
+    Write-Log "Waiting 120 seconds for NICs to initialize..."
+    Start-Sleep -Seconds 120
 
     if (-not (Test-Path "C:\NIC-Recovery\netconfig.json")) {
         throw "Missing netconfig.json"
@@ -116,45 +41,84 @@ try {
     $configs = Get-Content "C:\NIC-Recovery\netconfig.json" | ConvertFrom-Json
     Write-Log "Found $(($configs | Measure-Object).Count) NIC(s) to configure"
 
+    $allNics = Get-NetAdapter -IncludeHidden
+
     foreach ($cfg in $configs) {
 
         $alias = $cfg.InterfaceAlias
+        $macTarget = Normalize-MAC $cfg.MACAddress
         $ipAddr = $cfg.IPAddress
 
-        Write-Log "Configuring $alias (IP: $ipAddr)"
+        Write-Log "Configuring $alias (MAC: $($cfg.MACAddress), IP: $ipAddr)"
 
         try {
-            # IP-based detection (kept as requested)
-            $nic = Get-NetIPAddress -IPAddress $ipAddr -ErrorAction SilentlyContinue |
-                   Get-NetAdapter -ErrorAction SilentlyContinue |
-                   Select-Object -First 1
+            # ---- Find NIC via MAC ----
+            $nic = $allNics | Where-Object {
+                (Normalize-MAC $_.MacAddress) -eq $macTarget
+            } | Select-Object -First 1
 
             if (-not $nic) {
-                Write-Log "No NIC found with IP $ipAddr, retrying after delay..." -Level "WARNING"
-                Start-Sleep -Seconds 5
-
-                # Retry once (important!)
-                $nic = Get-NetIPAddress -IPAddress $ipAddr -ErrorAction SilentlyContinue |
-                       Get-NetAdapter -ErrorAction SilentlyContinue |
-                       Select-Object -First 1
+                throw "No adapter found with MAC: $($cfg.MACAddress)"
             }
 
-            if (-not $nic) {
-                throw "No network adapter found with IP: $ipAddr"
-            }
+            Write-Log " - Found adapter: $($nic.Name), Status: $($nic.Status)"
 
-            Write-Log " - Found adapter: $($nic.Name), Status: $($nic.Status), Speed: $($nic.LinkSpeed)"
-
-            # Rename if needed
+            # ---- Rename (clean assumption: no conflict) ----
             if ($nic.Name -ne $alias) {
                 Write-Log " - Renaming '$($nic.Name)' → '$alias'"
-                $nic = Rename-NICRobust -CurrentName $nic.Name -TargetName $alias
+                Rename-NetAdapter -Name $nic.Name -NewName $alias -Confirm:$false -ErrorAction Stop
+                Start-Sleep -Seconds 2
+                $nic = Get-NetAdapter -Name $alias -ErrorAction Stop
             }
 
-            Write-Log " - Final adapter name: $($nic.Name)"
+            # ---- Remove existing IPs (safe) ----
+            $oldIPs = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+            if ($oldIPs) {
+                Write-Log " - Removing existing IPv4 addresses"
+                $oldIPs | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+            }
+
+            # ---- Remove existing default routes ----
+            Get-NetRoute -InterfaceAlias $nic.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+            # ---- Configure Static IP ----
+            $params = @{
+                InterfaceAlias = $nic.Name
+                IPAddress      = $ipAddr
+                PrefixLength   = $cfg.PrefixLength
+            }
+
+            if ($cfg.Gateway) {
+                $params.DefaultGateway = $cfg.Gateway
+                Write-Log " - Setting IP: $ipAddr/$($cfg.PrefixLength) with GW $($cfg.Gateway)"
+            } else {
+                Write-Log " - Setting IP: $ipAddr/$($cfg.PrefixLength)"
+            }
+
+            New-NetIPAddress @params -ErrorAction Stop
+
+            # ---- Disable DHCP AFTER static config ----
+            Write-Log " - Disabling DHCP"
+            Set-NetIPInterface -InterfaceAlias $nic.Name -Dhcp Disabled -Confirm:$false -ErrorAction Stop
+
+            # ---- Configure DNS ----
+            if ($cfg.DNSServers -and $cfg.DNSServers.Count -gt 0) {
+                Write-Log " - Setting DNS: $($cfg.DNSServers -join ', ')"
+                Set-DnsClientServerAddress -InterfaceAlias $nic.Name -ServerAddresses $cfg.DNSServers -ErrorAction Stop
+            }
+
+            # ---- Verification ----
+            $newIP = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+
+            if ($newIP) {
+                Write-Log " - SUCCESS: $alias → $($newIP.IPAddress)/$($newIP.PrefixLength)"
+            } else {
+                Write-Log " - WARNING: Config applied but verification failed" -Level "WARNING"
+            }
 
         } catch {
-            Write-Log "Failed to configure $alias (IP: $ipAddr): $_" -Level "ERROR"
+            Write-Log "Failed for $alias $_" -Level "ERROR"
             Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "ERROR"
             continue
         }
