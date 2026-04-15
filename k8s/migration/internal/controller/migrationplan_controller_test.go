@@ -121,7 +121,7 @@ func TestGetDatastoresForVolumeMapping_FallsBackToLegacyDatastores(t *testing.T)
 	}
 }
 
-func TestGetDatastoresForVolumeMapping_IgnoresBlankDiskDatastore(t *testing.T) {
+func TestGetDatastoresForVolumeMapping_PreservesBlankDiskDatastore(t *testing.T) {
 	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
 		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
 			VMInfo: vjailbreakv1alpha1.VMInfo{
@@ -135,8 +135,8 @@ func TestGetDatastoresForVolumeMapping_IgnoresBlankDiskDatastore(t *testing.T) {
 	}
 
 	got := getDatastoresForVolumeMapping(vmMachine)
-	want := []string{"nfs"}
+	want := []string{"", "nfs"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected datastore mapping with blanks: got %v, want %v", got, want)
+		t.Fatalf("unexpected datastore mapping for blank datastore disks: got %v, want %v", got, want)
 	}
 }

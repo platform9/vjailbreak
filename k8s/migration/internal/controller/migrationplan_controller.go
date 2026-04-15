@@ -1720,9 +1720,6 @@ func getDatastoresForVolumeMapping(vmMachine *vjailbreakv1alpha1.VMwareMachine) 
 	if len(vmMachine.Spec.VMInfo.Disks) > 0 {
 		vmds := make([]string, 0, len(vmMachine.Spec.VMInfo.Disks))
 		for _, disk := range vmMachine.Spec.VMInfo.Disks {
-			if disk.Datastore == "" {
-				continue
-			}
 			vmds = append(vmds, disk.Datastore)
 		}
 		if len(vmds) > 0 {
@@ -1805,15 +1802,21 @@ func (r *MigrationPlanReconciler) reconcileStorage(ctx context.Context,
 	}
 
 	openstackvolumetypes := []string{}
-	for _, vmdatastore := range vmds {
+	for diskIdx, vmdatastore := range vmds {
+		if vmdatastore == "" {
+			return nil, errors.Errorf("VMware datastore is empty for disk index %d", diskIdx)
+		}
+		found := false
 		for _, storagemaptype := range storagemap.Spec.Storages {
 			if vmdatastore == storagemaptype.Source {
 				openstackvolumetypes = append(openstackvolumetypes, storagemaptype.Target)
+				found = true
+				break
 			}
 		}
-	}
-	if len(openstackvolumetypes) != len(vmds) {
-		return nil, errors.Errorf("VMware Datastore(s) not found in StorageMapping vm(%d) openstack(%d)", len(vmds), len(openstackvolumetypes))
+		if !found {
+			return nil, errors.Errorf("VMware datastore %q not found in StorageMapping for disk index %d", vmdatastore, diskIdx)
+		}
 	}
 	if storagemap.Status.StoragemappingValidationStatus != string(corev1.PodSucceeded) {
 		err = utils.VerifyStorage(ctx, r.Client, openstackcreds, openstackvolumetypes)
