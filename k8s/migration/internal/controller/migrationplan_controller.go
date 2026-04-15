@@ -1704,13 +1704,33 @@ func (r *MigrationPlanReconciler) reconcileMapping(ctx context.Context,
 	// Skip storage mapping reconciliation for StorageCopyMethod storage copy method
 	// as it uses ArrayCredsMapping instead of StorageMapping
 	if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
-		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, openstackcreds, vmMachine.Spec.VMInfo.Datastores)
+		vmDatastores := getDatastoresForVolumeMapping(vmMachine)
+		openstackvolumetypes, err = r.reconcileStorage(ctx, migrationtemplate, openstackcreds, vmDatastores)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to reconcile storage")
 		}
 		return openstacknws, openstackvolumetypes, nil
 	}
 	return openstacknws, openstackvolumetypes, nil
+}
+
+// getDatastoresForVolumeMapping returns datastores in per-disk order so
+// StorageMapping produces one Cinder volume type for each virtual disk.
+func getDatastoresForVolumeMapping(vmMachine *vjailbreakv1alpha1.VMwareMachine) []string {
+	if len(vmMachine.Spec.VMInfo.Disks) > 0 {
+		vmds := make([]string, 0, len(vmMachine.Spec.VMInfo.Disks))
+		for _, disk := range vmMachine.Spec.VMInfo.Disks {
+			if disk.Datastore == "" {
+				continue
+			}
+			vmds = append(vmds, disk.Datastore)
+		}
+		if len(vmds) > 0 {
+			return vmds
+		}
+	}
+
+	return vmMachine.Spec.VMInfo.Datastores
 }
 
 //nolint:dupl // Similar logic to storages reconciliation, excluding from linting to keep it readable

@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"reflect"
+	"testing"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -80,3 +82,61 @@ var _ = ginkgo.Describe("MigrationPlan Controller", func() {
 		})
 	})
 })
+
+func TestGetDatastoresForVolumeMapping_UsesPerDiskOrderWithDuplicates(t *testing.T) {
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Datastores: []string{"nfs"},
+				Disks: []vjailbreakv1alpha1.Disk{
+					{Name: "Hard disk 1", Datastore: "nfs"},
+					{Name: "Hard disk 2", Datastore: "nfs"},
+					{Name: "Hard disk 3", Datastore: "ssd"},
+				},
+			},
+		},
+	}
+
+	got := getDatastoresForVolumeMapping(vmMachine)
+	want := []string{"nfs", "nfs", "ssd"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected datastore mapping: got %v, want %v", got, want)
+	}
+}
+
+func TestGetDatastoresForVolumeMapping_FallsBackToLegacyDatastores(t *testing.T) {
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Datastores: []string{"nfs", "ssd"},
+				Disks:      nil,
+			},
+		},
+	}
+
+	got := getDatastoresForVolumeMapping(vmMachine)
+	want := []string{"nfs", "ssd"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected fallback datastore mapping: got %v, want %v", got, want)
+	}
+}
+
+func TestGetDatastoresForVolumeMapping_IgnoresBlankDiskDatastore(t *testing.T) {
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Datastores: []string{"legacy-ds"},
+				Disks: []vjailbreakv1alpha1.Disk{
+					{Name: "Hard disk 1", Datastore: ""},
+					{Name: "Hard disk 2", Datastore: "nfs"},
+				},
+			},
+		},
+	}
+
+	got := getDatastoresForVolumeMapping(vmMachine)
+	want := []string{"nfs"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected datastore mapping with blanks: got %v, want %v", got, want)
+	}
+}
