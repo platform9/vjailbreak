@@ -16,6 +16,8 @@ import { NODES_QUERY_KEY } from 'src/hooks/api/useNodesQuery'
 import { NodeItem } from 'src/api/nodes/model'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { intervalToDuration } from 'date-fns'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 const formatAge = (date: Date) => {
   const duration = intervalToDuration({
@@ -246,6 +248,7 @@ const NodesToolbar = ({
 
 export default function NodesTable() {
   const { reportError } = useErrorHandler({ component: 'NodesTable' })
+  const { track } = useAmplitude({ component: 'NodesTable' })
   const { data: nodes, isLoading: fetchingNodes, refetch: refreshNodes } = useNodesQuery()
   const [selectedNodes, setSelectedNodes] = useState<string[]>([])
   const [scaleUpOpen, setScaleUpOpen] = useState(false)
@@ -294,21 +297,36 @@ export default function NodesTable() {
   }
 
   const confirmScaleDown = async () => {
+    const nodesSnapshot = [...selectedNodes]
+    track(AMPLITUDE_EVENTS.AGENTS_SCALE_DOWN, {
+      stage: 'start',
+      nodesCount: nodesSnapshot.length,
+      selectedNodes: nodesSnapshot
+    })
+
     try {
       setLoading(true)
       setScaleDownError(null)
 
-      for (const nodeName of selectedNodes) {
+      for (const nodeName of nodesSnapshot) {
         await deleteNode(nodeName)
       }
 
       setSelectedNodes([])
       setScaleDownDialogOpen(false)
-      setSuccessMessage(`Successfully scaled down ${selectedNodes.length} node(s)`)
+      setSuccessMessage(`Successfully scaled down ${nodesSnapshot.length} node(s)`)
 
       queryClient.invalidateQueries({ queryKey: NODES_QUERY_KEY })
     } catch (error) {
       console.error('Error scaling down nodes:', error)
+
+      track(AMPLITUDE_EVENTS.AGENTS_SCALE_DOWN_FAILED, {
+        stage: 'failure',
+        nodesCount: nodesSnapshot.length,
+        selectedNodes: nodesSnapshot,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      })
+
       reportError(error as Error, {
         context: 'nodes-scale-down',
         metadata: {

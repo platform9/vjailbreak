@@ -8,6 +8,8 @@ import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { createArrayCredsWithSecretFlow, deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { getArrayCredentials } from 'src/api/array-creds/arrayCreds'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { DesignSystemForm } from 'src/shared/components/forms'
 import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
@@ -36,6 +38,7 @@ export default function AddArrayCredentialsDrawer({
   onClose
 }: AddArrayCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'AddArrayCredentialsDrawer' })
+  const { track } = useAmplitude({ component: 'AddArrayCredentialsDrawer' })
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
@@ -164,6 +167,15 @@ export default function AddArrayCredentialsDrawer({
     setValidationStatus('idle')
     setValidationMessage('')
 
+    track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_ADDED, {
+      credentialName: data.name,
+      vendorType: data.vendorType,
+      volumeType: data.volumeType,
+      backendName: data.backendName,
+      managementEndpoint: data.managementEndpoint,
+      stage: 'creation_start'
+    })
+
     try {
       await createArrayCredsWithSecretFlow(data.name, {
         ARRAY_HOSTNAME: data.managementEndpoint,
@@ -190,6 +202,13 @@ export default function AddArrayCredentialsDrawer({
       setIsValidating(false)
 
       if (!validationResult.success) {
+        track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_FAILED, {
+          credentialName: data.name,
+          vendorType: data.vendorType,
+          stage: 'validation',
+          errorMessage: validationResult.message || 'Validation failed'
+        })
+
         // Validation failed - show error and cleanup
         setValidationStatus('failed')
         setValidationMessage(validationResult.message || 'Validation failed')
@@ -225,6 +244,14 @@ export default function AddArrayCredentialsDrawer({
       setValidationStatus('idle')
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to create array credentials'
+
+      track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_FAILED, {
+        credentialName: data.name,
+        vendorType: data.vendorType,
+        stage: 'creation',
+        errorMessage
+      })
+
       setSubmitError(errorMessage)
       reportError(error, {
         context: 'add-array-credentials',

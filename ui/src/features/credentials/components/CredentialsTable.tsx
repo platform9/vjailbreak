@@ -25,6 +25,8 @@ import VMwareCredentialsDrawer from './VMwareCredentialsDrawer'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import OpenstackCredentialsDrawer from './OpenstackCredentialsDrawer'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 interface CredentialItem {
   id: string
@@ -201,6 +203,7 @@ interface CredentialsTableProps {
 
 export default function CredentialsTable({ credentialType }: CredentialsTableProps) {
   const { reportError } = useErrorHandler({ component: 'CredentialsTable' })
+  const { track } = useAmplitude({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
 
@@ -415,12 +418,29 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         })
       )
 
+      vmwareCreds.forEach((cred) => {
+        const credName = cred.id.replace('vmware-', '')
+        track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_DELETED, {
+          credentialName: credName,
+          namespace: (cred.credObject as any)?.metadata?.namespace
+        })
+      })
+
       await Promise.all(
         openstackCreds.map((cred) => {
           const credName = cred.id.replace('openstack-', '')
           return deleteOpenStackCredsWithSecretFlow(credName)
         })
       )
+
+      openstackCreds.forEach((cred) => {
+        const credName = cred.id.replace('openstack-', '')
+        track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_DELETED, {
+          credentialName: credName,
+          isPcd: true,
+          namespace: (cred.credObject as any)?.metadata?.namespace
+        })
+      })
 
       queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
@@ -429,6 +449,30 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       handleDeleteClose()
     } catch (error) {
       console.error('Error deleting credentials:', error)
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const vmwareCreds = selectedForDeletion.filter((cred) => cred.type === 'VMware')
+      const openstackCreds = selectedForDeletion.filter((cred) => cred.type === 'OpenStack')
+
+      vmwareCreds.forEach((cred) => {
+        const credName = cred.id.replace('vmware-', '')
+        track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_DELETE_FAILED, {
+          credentialName: credName,
+          namespace: (cred.credObject as any)?.metadata?.namespace,
+          errorMessage
+        })
+      })
+
+      openstackCreds.forEach((cred) => {
+        const credName = cred.id.replace('openstack-', '')
+        track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_DELETE_FAILED, {
+          credentialName: credName,
+          isPcd: true,
+          namespace: (cred.credObject as any)?.metadata?.namespace,
+          errorMessage
+        })
+      })
+
       reportError(error as Error, {
         context: 'credentials-deletion',
         metadata: {
