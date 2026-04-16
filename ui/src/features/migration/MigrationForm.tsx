@@ -802,17 +802,44 @@ export default function MigrationFormDrawer({
 
     try {
       const data = await postMigrationPlan(body)
-      // Track successful migration creation
-      track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
-        migrationName: data.metadata?.name,
-        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-        virtualMachineCount: vmsToMigrate?.length || 0,
-        migrationType: migrationFields.type,
-        hasDataCopyStartTime: !!migrationFields.dataCopyStart,
-        hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
-        hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
-        postMigrationAction,
-        namespace: data.metadata?.namespace
+      const virtualMachines = (data as any)?.spec?.virtualMachines
+
+      const extractedVmNames: string[] = !Array.isArray(virtualMachines)
+        ? []
+        : virtualMachines.flatMap((entry: unknown) => {
+            if (typeof entry === 'string') return [entry]
+
+            if (Array.isArray(entry)) {
+              return entry.filter(
+                (name: unknown): name is string => typeof name === 'string' && name.length > 0
+              )
+            }
+
+            return []
+          })
+
+      const vmNames: string[] =
+        extractedVmNames.length > 0
+          ? extractedVmNames
+          : Array.isArray(vmsToMigrate)
+            ? vmsToMigrate.filter(
+                (vm: unknown): vm is string => typeof vm === 'string' && vm.length > 0
+              )
+            : []
+
+      vmNames.forEach((vmName) => {
+        track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
+          migrationName: data.metadata?.name,
+          migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+          virtualMachineCount: vmNames.length,
+          vmName,
+          migrationType: migrationFields.type,
+          hasDataCopyStartTime: !!migrationFields.dataCopyStart,
+          hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
+          hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
+          postMigrationAction,
+          namespace: data.metadata?.namespace
+        })
       })
 
       return data
