@@ -11,8 +11,9 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -110,7 +111,7 @@ func GetVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareCredsScop
 
 // createVMwareHost creates a VMware host resource in Kubernetes
 func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host VMwareHostInfo, credName, clusterName, namespace, datacenter string) (string, error) {
-	hostk8sName, err := GetK8sCompatibleVMWareObjectName(host.Name, credName)
+	hostk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(host.Name, credName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert host name to k8s name")
 	}
@@ -119,7 +120,7 @@ func createVMwareHost(ctx context.Context, scope *scope.VMwareCredsScope, host V
 	if datacenter != "" {
 		clusterK8sID = fmt.Sprintf("%s-%s", clusterName, datacenter)
 	}
-	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, credName)
+	clusterk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, credName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -180,7 +181,7 @@ func createVMwareCluster(ctx context.Context, scope *scope.VMwareCredsScope, clu
 
 	clusterK8sID := GetClusterK8sID(cluster.Name, cluster.Datacenter)
 
-	clusterk8sName, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
+	clusterk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
 	if err != nil {
 		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
@@ -343,7 +344,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	clusterNames := make(map[string]bool)
 	for _, cluster := range clusters {
 		clusterK8sID := GetClusterK8sID(cluster.Name, cluster.Datacenter)
-		cname, err := GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
+		cname, err := commonutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, scope.Name())
 		if err != nil {
 			return errors.Wrap(err, "failed to convert cluster name to k8s name")
 		}
@@ -363,7 +364,7 @@ func DeleteStaleVMwareClustersAndHosts(ctx context.Context, scope *scope.VMwareC
 	hostNames := make(map[string]bool)
 	for _, cluster := range clusters {
 		for _, host := range cluster.Hosts {
-			hname, err := GetK8sCompatibleVMWareObjectName(host.Name, scope.Name())
+			hname, err := commonutils.GetK8sCompatibleVMWareObjectName(host.Name, scope.Name())
 			if err != nil {
 				return errors.Wrap(err, "failed to convert host name to k8s name")
 			}

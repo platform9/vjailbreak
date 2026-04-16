@@ -120,6 +120,10 @@ const (
 	// VMNameLabel is the label for vm name
 	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
 
+	// MigrationVMKeyLabel stores the name-<moid> VM key on Migration objects,
+	// used for internal K8s lookups while spec.VMName holds the plain display name.
+	MigrationVMKeyLabel = "vjailbreak.k8s.pf9.io/vm-key"
+
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
 

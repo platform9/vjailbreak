@@ -474,12 +474,18 @@ func GetOsRelease(path string) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
 		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
 }
-func InjectMacToIps(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+func InjectMacToIps(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry, osType string) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
 	// log the macToIPs
 	log.Println("Mac to IP map:", macToIPs)
-	macToIPsFile := "/home/fedora/macToIP"
+	var macToIPsFile string
+	switch osType {
+	case constants.OSFamilyLinux:
+		macToIPsFile = "/home/fedora/macToIP"
+	case constants.OSFamilyWindows:
+		macToIPsFile = "/home/fedora/NIC-Recovery/macToIP"
+	}
 	f, err := os.Create(macToIPsFile)
 	if err != nil {
 		return err
@@ -501,14 +507,16 @@ func InjectMacToIps(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbre
 
 	// Construct YAML
 	log.Println("Created macToIP file with entries")
-	// Upload it to the disk
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	var ans string
-	command := "upload"
-	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
-	if err != nil {
-		log.Printf("failed to upload macToIP file: %v: %s", err, strings.TrimSpace(ans))
-		return fmt.Errorf("failed to upload macToIP file: %w: %s", err, strings.TrimSpace(ans))
+	if osType == constants.OSFamilyLinux {
+
+		os.Setenv("LIBGUESTFS_BACKEND", "direct")
+		var ans string
+		command := "upload"
+		ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/macToIP", "/etc/macToIP")
+		if err != nil {
+			log.Printf("failed to upload macToIP file: %v: %s", err, strings.TrimSpace(ans))
+			return fmt.Errorf("failed to upload macToIP file: %w: %s", err, strings.TrimSpace(ans))
+		}
 	}
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1034,7 +1035,7 @@ func GetVMMigration(ctx context.Context, k3sclient client.Client, vmName string,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vmware credentials")
 	}
-	vmk8sName, err := GetK8sCompatibleVMWareObjectName(vmName, vmwarecreds.Name)
+	vmk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(vmName, vmwarecreds.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get vm name")
 	}

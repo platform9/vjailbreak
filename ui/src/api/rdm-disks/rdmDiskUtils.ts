@@ -34,27 +34,37 @@ export const fetchRdmDisksMap = async (namespace?: string): Promise<Map<string, 
  */
 export const getRdmDependencies = (
   vm: VMwareMachine,
-  rdmDisksMap: Map<string, RdmDisk>
+  rdmDisksMap: Map<string, RdmDisk>,
+  allMachines?: VMwareMachine[]
 ): string[] => {
   if (!vm.spec.vms.rdmDisks || vm.spec.vms.rdmDisks.length === 0) {
     return []
   }
 
-  const dependencies = new Set<string>()
+  const dependentNames = new Set<string>()
 
   vm.spec.vms.rdmDisks.forEach((rdmDiskName) => {
     const rdmDisk = rdmDisksMap.get(rdmDiskName)
     if (rdmDisk && rdmDisk.spec.ownerVMs) {
       rdmDisk.spec.ownerVMs.forEach((ownerVm) => {
-        // Don't include the current VM in its own dependencies
         if (ownerVm !== vm.spec.vms.name) {
-          dependencies.add(ownerVm)
+          dependentNames.add(ownerVm)
         }
       })
     }
   })
 
-  return Array.from(dependencies)
+  if (allMachines) {
+    return Array.from(dependentNames).map((depName) => {
+      const match = allMachines.find((m) => m.spec.vms.name === depName)
+      if (match && match.spec.vms.vmid) {
+        return `${match.spec.vms.name}-${match.spec.vms.vmid.replace(/^vm-/, '')}`
+      }
+      return depName
+    })
+  }
+
+  return Array.from(dependentNames)
 }
 
 /**
@@ -67,11 +77,16 @@ export const mapToVmDataWithRdm = (
   return machines.map((machine) => {
     const hasSharedRdm = hasSharedRdmDisks(machine)
     const rdmDisks = machine.spec.vms.rdmDisks || []
-    const rdmDependencies = getRdmDependencies(machine, rdmDisksMap)
+    const rdmDependencies = getRdmDependencies(machine, rdmDisksMap, machines)
+    const vmKey = machine.spec.vms.vmid
+      ? `${machine.spec.vms.name}-${machine.spec.vms.vmid.replace(/^vm-/, '')}`
+      : machine.spec.vms.name
 
     return {
-      id: machine.spec.vms.name,
+      id: vmKey,
       name: machine.spec.vms.name,
+      vmid: machine.spec.vms.vmid,
+      vmKey,
       vmState: machine.status.powerState === 'running' ? 'running' : 'stopped',
       ipAddress: machine.spec.vms.ipAddress,
       networks: machine.spec.vms.networks || [],
@@ -103,7 +118,7 @@ export const mapToVmDataWithRdm = (
  * Get all VMs that need to be selected together due to RDM dependencies
  */
 export const getRdmRequiredSelections = (
-  selectedVmNames: string[],
+  selectedVmIds: string[],
   allVms: VmData[]
 ): {
   requiredVms: string[]
@@ -114,7 +129,7 @@ export const getRdmRequiredSelections = (
   const rdmGroups: Record<string, string[]> = {}
 
   // Add initially selected VMs
-  selectedVmNames.forEach((vmName) => requiredVms.add(vmName))
+  selectedVmIds.forEach((vmId) => requiredVms.add(vmId))
 
   // Find all VMs that have RDM dependencies
   const vmsWithRdm = allVms.filter(
@@ -123,18 +138,18 @@ export const getRdmRequiredSelections = (
 
   // Build RDM groups
   vmsWithRdm.forEach((vm) => {
-    if (selectedVmNames.includes(vm.name)) {
-      const groupKey = `rdm-group-${vm.name}`
-      const groupVms = [vm.name, ...(vm.rdmDependencies || [])]
+    if (selectedVmIds.includes(vm.id)) {
+      const groupKey = `rdm-group-${vm.id}`
+      const groupVms = [vm.id, ...(vm.rdmDependencies || [])]
       rdmGroups[groupKey] = groupVms
 
       // Add all VMs in this RDM group to required selections
-      groupVms.forEach((vmName) => requiredVms.add(vmName))
+      groupVms.forEach((vmId) => requiredVms.add(vmId))
     }
   })
 
   const allRequiredVms = Array.from(requiredVms)
-  const missingVms = allRequiredVms.filter((vmName) => !selectedVmNames.includes(vmName))
+  const missingVms = allRequiredVms.filter((vmId) => !selectedVmIds.includes(vmId))
 
   return {
     requiredVms: allRequiredVms,
