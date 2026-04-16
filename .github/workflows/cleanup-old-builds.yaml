@@ -43,6 +43,18 @@ jobs:
             echo "🟢 Mode: DRY RUN — will only list tags/folders older than ${DAYS_TO_KEEP} days"
           fi
 
+      - name: Initialize artifact report
+        if: env.DRY_RUN == 'true'
+        run: |
+          REPORT_DIR="$RUNNER_TEMP/cleanup-report"
+          mkdir -p "$REPORT_DIR"
+          REPORT_FILE="$REPORT_DIR/old-tags-report.txt"
+          echo "Cleanup Dry Run Report — $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REPORT_FILE"
+          echo "Tags/folders older than ${DAYS_TO_KEEP} days" >> "$REPORT_FILE"
+          echo "=========================================" >> "$REPORT_FILE"
+          echo "REPORT_FILE=$REPORT_FILE" >> $GITHUB_ENV
+          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
+
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
@@ -140,6 +152,9 @@ jobs:
                   fi
                 else
                   echo "Old tag: [$TAG_NAME] (last modified: $TAG_DATE)" | tee -a "$OLD_TAGS_FILE"
+                  if [[ -n "${REPORT_FILE:-}" ]]; then
+                    echo "$REPO | $TAG_NAME | $TAG_DATE" >> "$REPORT_FILE"
+                  fi
                 fi
               done <<< "$TAGS_TO_PROCESS"
 
@@ -155,6 +170,9 @@ jobs:
             else
               OLD_TAG_COUNT=$(wc -l < "$OLD_TAGS_FILE")
               echo "Total old tags in $REPO: $OLD_TAG_COUNT"
+              if [[ -n "${REPORT_FILE:-}" ]]; then
+                echo "# Total old tags in $REPO: $OLD_TAG_COUNT" >> "$REPORT_FILE"
+              fi
             fi
             rm -f "$OLD_TAGS_FILE"
             echo ""
@@ -251,6 +269,9 @@ jobs:
                     DELETED=$((DELETED+1))
                   else
                     echo "Old folder: s3://$BUCKET/$folder (last modified: $DATE)"
+                    if [[ -n "${REPORT_FILE:-}" ]]; then
+                      echo "s3://$BUCKET/$folder | $DATE" >> "$REPORT_FILE"
+                    fi
                   fi
                 fi
               done
@@ -269,3 +290,11 @@ jobs:
             cleanup_old_folders "$S3_BUCKET_DEV" "dev/"
             cleanup_old_folders "$S3_BUCKET_DEV" "nightly/"
           fi
+
+      - name: Upload dry run report
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-dry-run-report
+          path: ${{ env.REPORT_DIR }}
+          retention-days: 30
