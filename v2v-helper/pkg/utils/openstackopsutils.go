@@ -291,15 +291,20 @@ func (osclient *OpenStackClients) WaitForVolumeAttachment(ctx context.Context, v
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
+	// Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume attachment for volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		devicePath, _ := osclient.FindDevice(volumeID)
 		if devicePath != "" {
 			return nil
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for specified interval before checking again
 	}
-	return fmt.Errorf("volume attachment not found within %d seconds", constants.MaxIntervalCount*5)
+	return fmt.Errorf("volume attachment not found within %d seconds", vjailbreakSettings.VolumeAvailableWaitRetryLimit*vjailbreakSettings.VolumeAvailableWaitIntervalSeconds)
 }
 
 func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volumeID string) error {
@@ -309,12 +314,18 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volume
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
 
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	// Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		err = volumeattach.Delete(ctx, osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
 			break
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for specified interval before checking again
 	}
 	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)

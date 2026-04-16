@@ -1,0 +1,300 @@
+name: Cleanup Old Images (Quay + S3)
+
+on:
+  # We can set a schedule to run this workflow automatically
+  # schedule:
+  #   - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (true = list only, false = actually delete)"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      days_to_keep:
+        description: "Delete tags/folders older than this many days"
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  REGISTRY: ${{ vars.REGISTRY || 'quay.io' }}
+  ORG: ${{ vars.REPO || 'platform9' }}
+  REPOS: "vjailbreak vjailbreak-ui vjailbreak-v2v-helper vjailbreak-controller vjailbreak-vpwned"
+  S3_BUCKET_DEV: ${{ vars.S3_BUCKET_DEV }}
+  S3_REGION: ${{ vars.S3_REGION }}
+  DAYS_TO_KEEP: ${{ github.event.inputs.days_to_keep }}
+  DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mode
+        run: |
+          if [[ "$DRY_RUN" == "false" ]]; then
+            echo "🔴 Mode: DELETE — will delete tags/folders older than ${DAYS_TO_KEEP} days"
+          else
+            echo "🟢 Mode: DRY RUN — will only list tags/folders older than ${DAYS_TO_KEEP} days"
+          fi
+
+      - name: Initialize artifact report
+        if: env.DRY_RUN == 'true'
+        run: |
+          REPORT_DIR="$RUNNER_TEMP/cleanup-report"
+          mkdir -p "$REPORT_DIR"
+          REPORT_FILE="$REPORT_DIR/old-tags-report.txt"
+          echo "Cleanup Dry Run Report — $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REPORT_FILE"
+          echo "Tags/folders older than ${DAYS_TO_KEEP} days" >> "$REPORT_FILE"
+          echo "=========================================" >> "$REPORT_FILE"
+          echo "REPORT_FILE=$REPORT_FILE" >> $GITHUB_ENV
+          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      ###########################################
+      # Login to Quay
+      ###########################################
+      - name: Login to Quay
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+
+      ###########################################
+      # Cleanup old Quay tags (list or delete)
+      ###########################################
+      - name: Cleanup old Quay tags
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_ROBOT_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_ROBOT_PASSWORD }}
+        run: |
+          set -e
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          is_protected_tag() {
+            local TAG_NAME=$1
+            [[ "$TAG_NAME" == "latest" || \
+               "$TAG_NAME" =~ ^alpine || \
+               "$TAG_NAME" == "base-v0.1.6" || \
+               "$TAG_NAME" == "base-v0.1.4" || \
+               "$TAG_NAME" =~ ^base.* || \
+               "$TAG_NAME" =~ ^ubuntu || \
+               "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          }
+
+          if [[ "$DRY_RUN" == "false" ]]; then
+            echo "Deleting tags older than ${DAYS_TO_KEEP} days"
+          else
+            echo "Listing tags older than ${DAYS_TO_KEEP} days (dry run)"
+          fi
+          echo ""
+
+          for REPO in $REPOS; do
+            echo "=== Repository: $REPO ==="
+            OLD_TAGS_FILE=$(mktemp)
+            DELETED=0
+
+            PAGE=1
+            while : ; do
+              RESPONSE=$(curl -s -u "$QUAY_USERNAME:$QUAY_PASSWORD" \
+                "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/?limit=200&page=${PAGE}")
+
+              TAG_COUNT=$(echo "$RESPONSE" | jq '.tags | length')
+              HAS_MORE=$(echo "$RESPONSE" | jq -r '.has_additional')
+
+              if [[ "$TAG_COUNT" == "0" ]]; then
+                break
+              fi
+
+              TAGS_TO_PROCESS=$(echo "$RESPONSE" | jq -c '.tags[]' | while read tag; do
+                TAG_NAME=$(echo $tag | jq -r '.name')
+                LAST_MODIFIED=$(echo $tag | jq -r '.last_modified')
+                TAG_TIME=$(date -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if is_protected_tag "$TAG_NAME"; then
+                  if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                    echo "PROTECTED:$TAG_NAME" >&2
+                  fi
+                  continue
+                fi
+
+                if [[ $TAG_TIME -gt 0 && $TAG_TIME -lt $THRESHOLD ]]; then
+                  echo "$TAG_NAME|$LAST_MODIFIED"
+                fi
+              done)
+
+              while IFS= read -r entry; do
+                [[ -z "$entry" ]] && continue
+                TAG_NAME="${entry%%|*}"
+                LAST_MODIFIED="${entry##*|}"
+                TAG_DATE=$(date -d "$LAST_MODIFIED" +%Y-%m-%d)
+
+                if [[ "$DRY_RUN" == "false" ]]; then
+                  echo "Deleting tag: $TAG_NAME from $REPO"
+                  sleep 0.2
+                  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+                    -u "$QUAY_USERNAME:$QUAY_PASSWORD" \
+                    "https://quay.io/api/v1/repository/${ORG}/${REPO}/tag/${TAG_NAME}")
+
+                  if [[ "$HTTP_CODE" == "204" || "$HTTP_CODE" == "200" || "$HTTP_CODE" == "404" ]]; then
+                    echo "  Deleted $TAG_NAME"
+                    DELETED=$((DELETED+1))
+                  else
+                    echo "  Failed to delete $TAG_NAME (HTTP $HTTP_CODE)"
+                  fi
+                else
+                  echo "Old tag: [$TAG_NAME] (last modified: $TAG_DATE)" | tee -a "$OLD_TAGS_FILE"
+                  if [[ -n "${REPORT_FILE:-}" ]]; then
+                    echo "$REPO | $TAG_NAME | $TAG_DATE" >> "$REPORT_FILE"
+                  fi
+                fi
+              done <<< "$TAGS_TO_PROCESS"
+
+              if [[ "$HAS_MORE" != "true" ]]; then
+                break
+              fi
+
+              PAGE=$((PAGE+1))
+            done
+
+            if [[ "$DRY_RUN" == "false" ]]; then
+              echo "Deleted $DELETED tags from $REPO"
+            else
+              OLD_TAG_COUNT=$(wc -l < "$OLD_TAGS_FILE")
+              echo "Total old tags in $REPO: $OLD_TAG_COUNT"
+              if [[ -n "${REPORT_FILE:-}" ]]; then
+                echo "# Total old tags in $REPO: $OLD_TAG_COUNT" >> "$REPORT_FILE"
+              fi
+            fi
+            rm -f "$OLD_TAGS_FILE"
+            echo ""
+          done
+
+      ###########################################
+      # Configure AWS
+      ###########################################
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: ${{ env.S3_REGION }}
+
+      ###########################################
+      # Cleanup old S3 folders (list or delete)
+      ###########################################
+      - name: Cleanup old S3 folders
+        run: |
+          set -euo pipefail
+
+          THRESHOLD=$(date -u -d "${DAYS_TO_KEEP} days ago" +%s)
+
+          if [[ "$DRY_RUN" == "false" ]]; then
+            echo "Deleting S3 folders older than ${DAYS_TO_KEEP} days"
+          else
+            echo "Listing S3 folders older than ${DAYS_TO_KEEP} days (dry run)"
+          fi
+          echo ""
+
+          get_latest_object_time() {
+            local BUCKET=$1
+            local PREFIX=$2
+
+            aws s3api list-objects-v2 \
+              --bucket "$BUCKET" \
+              --prefix "$PREFIX" \
+              --query 'Contents[].LastModified' \
+              --output text 2>/dev/null | tr '\t' '\n' | sort | tail -n1
+          }
+
+          cleanup_old_folders() {
+            local BUCKET=$1
+            local PREFIX=$2
+            local TOKEN=""
+            local DELETED=0
+
+            echo "Scanning s3://$BUCKET/$PREFIX"
+
+            while : ; do
+              if [[ -z "$TOKEN" ]]; then
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --delimiter "/" \
+                  --output json)
+              else
+                RESPONSE=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET" \
+                  --prefix "$PREFIX" \
+                  --delimiter "/" \
+                  --continuation-token "$TOKEN" \
+                  --output json)
+              fi
+
+              mapfile -t FOLDERS < <(echo "$RESPONSE" | jq -r '.CommonPrefixes[]?.Prefix')
+
+              for folder in "${FOLDERS[@]}"; do
+                [[ -z "$folder" ]] && continue
+
+                TAG_NAME="${folder#${PREFIX}}"
+                TAG_NAME="${TAG_NAME%/}"
+
+                # Skip protected
+                if [[ "$TAG_NAME" == "latest" || "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  echo "Skipping protected: s3://$BUCKET/$folder"
+                  continue
+                fi
+
+                LAST_MODIFIED=$(get_latest_object_time "$BUCKET" "$folder")
+
+                [[ -z "$LAST_MODIFIED" || "$LAST_MODIFIED" == "None" ]] && continue
+
+                TS=$(date -u -d "$LAST_MODIFIED" +%s 2>/dev/null || echo 0)
+
+                if [[ $TS -gt 0 && $TS -lt $THRESHOLD ]]; then
+                  DATE=$(date -u -d "$LAST_MODIFIED" +%Y-%m-%d)
+                  if [[ "$DRY_RUN" == "false" ]]; then
+                    echo "Deleting: s3://$BUCKET/$folder (last modified: $DATE)"
+                    sleep 0.2
+                    aws s3 rm "s3://$BUCKET/$folder" --recursive
+                    echo "  Deleted s3://$BUCKET/$folder"
+                    DELETED=$((DELETED+1))
+                  else
+                    echo "Old folder: s3://$BUCKET/$folder (last modified: $DATE)"
+                    if [[ -n "${REPORT_FILE:-}" ]]; then
+                      echo "s3://$BUCKET/$folder | $DATE" >> "$REPORT_FILE"
+                    fi
+                  fi
+                fi
+              done
+
+              TOKEN=$(echo "$RESPONSE" | jq -r '.NextContinuationToken // empty')
+              [[ -z "$TOKEN" ]] && break
+            done
+
+            if [[ "$DRY_RUN" == "false" ]]; then
+              echo "Deleted $DELETED folders from s3://$BUCKET/$PREFIX"
+            fi
+          }
+
+          if [[ -n "${S3_BUCKET_DEV:-}" ]]; then
+            echo "=== DEV Bucket: $S3_BUCKET_DEV ==="
+            cleanup_old_folders "$S3_BUCKET_DEV" "dev/"
+            cleanup_old_folders "$S3_BUCKET_DEV" "nightly/"
+          fi
+
+      - name: Upload dry run report
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-dry-run-report
+          path: ${{ env.REPORT_DIR }}
+          retention-days: 30
