@@ -25,7 +25,7 @@ function Write-Log {
 
 function Normalize-MAC {
     param([string]$mac)
-    return ($mac -replace '[:-]', '').ToLower()
+    return ($mac -replace '[:-]', '').ToUpper()
 }
 
 try {
@@ -49,7 +49,7 @@ try {
         $macTarget = Normalize-MAC $cfg.MACAddress
         $ipAddr = $cfg.IPAddress
 
-        Write-Log "Configuring $alias (MAC: $($cfg.MACAddress), IP: $ipAddr)"
+        Write-Log "Configuring $alias (MAC: $($cfg.MACAddress) NORMALIZED: $macTarget, IP: $ipAddr)"
 
         try {
             # ---- Find NIC via MAC ----
