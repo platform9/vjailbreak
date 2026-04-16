@@ -6,10 +6,40 @@ export const AMPLITUDE_EVENTS = {
   MIGRATION_CREATION_FAILED: 'Migration Creation Failed',
   MIGRATION_EXECUTION_FAILED: 'Migration Execution Failed', // For runtime failures
   MIGRATION_SUCCEEDED: 'Migration Succeeded', // For successful completions
+  MIGRATION_DELETED: 'Migration Deleted',
+  MIGRATION_DELETE_FAILED: 'Migration Delete Failed',
+
+  // Agents
+  AGENTS_SCALE_UP: 'Agents Scale Up',
+  AGENTS_SCALE_UP_FAILED: 'Agents Scale Up Failed',
+  AGENTS_SCALE_DOWN: 'Agents Scale Down',
+  AGENTS_SCALE_DOWN_FAILED: 'Agents Scale Down Failed',
+
+  // Storage Array Credentials
+  STORAGE_ARRAY_CREDENTIALS_ADDED: 'Storage Array Credentials Added',
+  STORAGE_ARRAY_CREDENTIALS_FAILED: 'Storage Array Credentials Failed',
+  STORAGE_ARRAY_CREDENTIALS_UPDATED: 'Storage Array Credentials Updated',
+  STORAGE_ARRAY_CREDENTIALS_UPDATE_FAILED: 'Storage Array Credentials Update Failed',
+  STORAGE_ARRAY_CREDENTIALS_DELETED: 'Storage Array Credentials Deleted',
+  STORAGE_ARRAY_CREDENTIALS_DELETE_FAILED: 'Storage Array Credentials Delete Failed',
+
+  // ESXi SSH Credentials
+  ESXI_SSH_CREDENTIALS_ADDED: 'ESXi SSH Credentials Added',
+  ESXI_SSH_CREDENTIALS_FAILED: 'ESXi SSH Credentials Failed',
+  ESXI_SSH_CREDENTIALS_UPDATED: 'ESXi SSH Credentials Updated',
+  ESXI_SSH_CREDENTIALS_UPDATE_FAILED: 'ESXi SSH Credentials Update Failed',
 
   // Credential Events
   CREDENTIALS_ADDED: 'Credentials Added',
   CREDENTIALS_FAILED: 'Credentials Failed',
+  VMWARE_CREDENTIALS_ADDED: 'VMware Credentials Added',
+  VMWARE_CREDENTIALS_FAILED: 'VMware Credentials Failed',
+  PCD_CREDENTIALS_ADDED: 'PCD Credentials Added',
+  PCD_CREDENTIALS_FAILED: 'PCD Credentials Failed',
+  VMWARE_CREDENTIALS_DELETED: 'VMware Credentials Deleted',
+  VMWARE_CREDENTIALS_DELETE_FAILED: 'VMware Credentials Delete Failed',
+  PCD_CREDENTIALS_DELETED: 'PCD Credentials Deleted',
+  PCD_CREDENTIALS_DELETE_FAILED: 'PCD Credentials Delete Failed',
   ROLLING_MIGRATION_CREATED: 'Rolling Migration Created',
   ROLLING_MIGRATION_SUBMISSION_FAILED: 'Rolling Migration Submission Failed',
 

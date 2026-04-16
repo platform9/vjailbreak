@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import { ThemeProvider } from './theme/ThemeContext.tsx'
 import { AnalyticsProvider } from './components/providers'
+import { ErrorBoundary } from './components/providers'
 
 const queryClient = new QueryClient()
 
@@ -15,7 +16,9 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <App />
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
             <ReactQueryDevtools initialIsOpen={false} />
           </QueryClientProvider>
         </ThemeProvider>

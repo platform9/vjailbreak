@@ -11,9 +11,12 @@ import { Migration } from '../api/migrations'
 import MigrationsTable from '../components/MigrationsTable'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 export default function MigrationsPage() {
   const queryClient = useQueryClient()
+  const { track } = useAmplitude({ component: 'MigrationsPage' })
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -62,45 +65,71 @@ export default function MigrationsPage() {
   }
 
   const handleDeleteMigration = async (migrations: Migration[]) => {
-    const migrationPlanUpdates = migrations.reduce(
-      (acc, migration) => {
-        const planId = migration.spec.migrationPlan
-        if (!acc[planId]) {
-          acc[planId] = {
-            vmsToRemove: new Set<string>(),
-            migrationsToDelete: new Set<string>()
-          }
-        }
-        acc[planId].vmsToRemove.add(migration.spec.vmName)
-        acc[planId].migrationsToDelete.add(migration.metadata.name)
-        return acc
-      },
-      {} as Record<string, { vmsToRemove: Set<string>; migrationsToDelete: Set<string> }>
-    )
-
-    await Promise.all(
-      Object.entries(migrationPlanUpdates).map(
-        async ([planId, { vmsToRemove, migrationsToDelete }]) => {
-          const migrationPlan = await getMigrationPlan(planId)
-          const updatedVirtualMachines = migrationPlan.spec.virtualMachines?.[0]?.filter(
-            (vm) => !vmsToRemove.has(vm)
-          )
-
-          await patchMigrationPlan(planId, {
-            spec: {
-              virtualMachines: [updatedVirtualMachines]
+    const migrationsSnapshot = migrations
+    try {
+      const migrationPlanUpdates = migrations.reduce(
+        (acc, migration) => {
+          const planId = migration.spec.migrationPlan
+          if (!acc[planId]) {
+            acc[planId] = {
+              vmsToRemove: new Set<string>(),
+              migrationsToDelete: new Set<string>()
             }
-          })
-
-          await Promise.all(
-            Array.from(migrationsToDelete).map((migrationName) => deleteMigration(migrationName))
-          )
-        }
+          }
+          acc[planId].vmsToRemove.add(migration.spec.vmName)
+          acc[planId].migrationsToDelete.add(migration.metadata.name)
+          return acc
+        },
+        {} as Record<string, { vmsToRemove: Set<string>; migrationsToDelete: Set<string> }>
       )
-    )
 
-    queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
-    handleDeleteClose()
+      await Promise.all(
+        Object.entries(migrationPlanUpdates).map(
+          async ([planId, { vmsToRemove, migrationsToDelete }]) => {
+            const migrationPlan = await getMigrationPlan(planId)
+            const updatedVirtualMachines = migrationPlan.spec.virtualMachines?.[0]?.filter(
+              (vm) => !vmsToRemove.has(vm)
+            )
+
+            await patchMigrationPlan(planId, {
+              spec: {
+                virtualMachines: [updatedVirtualMachines]
+              }
+            })
+
+            await Promise.all(
+              Array.from(migrationsToDelete).map((migrationName) => deleteMigration(migrationName))
+            )
+          }
+        )
+      )
+
+      migrationsSnapshot.forEach((migration) => {
+        track(AMPLITUDE_EVENTS.MIGRATION_DELETED, {
+          migrationName: migration.metadata?.name,
+          migrationPlan: migration.spec?.migrationPlan,
+          vmName: migration.spec?.vmName,
+          namespace: migration.metadata?.namespace
+        })
+      })
+
+      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+      handleDeleteClose()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      migrationsSnapshot.forEach((migration) => {
+        track(AMPLITUDE_EVENTS.MIGRATION_DELETE_FAILED, {
+          migrationName: migration.metadata?.name,
+          migrationPlan: migration.spec?.migrationPlan,
+          vmName: migration.spec?.vmName,
+          namespace: migration.metadata?.namespace,
+          errorMessage
+        })
+      })
+
+      setDeleteError(errorMessage)
+    }
   }
 
   const handleCloseSnackbar = (_event?: React.SyntheticEvent | Event, reason?: string) => {

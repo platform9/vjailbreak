@@ -148,12 +148,6 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         setVmwareCredsValidated(true)
         setValidatingVmwareCreds(false)
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-          credentialType: 'vmware',
-          credentialName: createdCredentialName,
-          stage: 'validation_success'
-        })
-
         setTimeout(async () => {
           refetchVmwareCreds()
 
@@ -179,8 +173,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         setValidatingVmwareCreds(false)
         setFormError(message || 'Validation failed')
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-          credentialType: 'vmware',
+        track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_FAILED, {
           credentialName: createdCredentialName,
           errorMessage: message || 'Validation failed',
           stage: 'validation'
@@ -260,8 +253,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         setValidatingVmwareCreds(true)
         setFormError(null)
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-          credentialType: 'vmware',
+        track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_ADDED, {
           credentialName: vals.credentialName,
           vcenterHost: vals.vcenterHost,
           stage: 'creation_start'
@@ -276,18 +268,10 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
         })
 
         setCreatedCredentialName(response.metadata.name)
-
-        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-          credentialType: 'vmware',
-          credentialName: vals.credentialName,
-          vcenterHost: vals.vcenterHost,
-          stage: 'creation_success'
-        })
       } catch (error) {
         console.error('Error creating VMware credentials:', error)
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-          credentialType: 'vmware',
+        track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_FAILED, {
           credentialName: vals.credentialName,
           vcenterHost: vals.vcenterHost,
           errorMessage: error instanceof Error ? error.message : String(error),

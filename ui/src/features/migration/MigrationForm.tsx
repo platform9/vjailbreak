@@ -702,14 +702,31 @@ export default function MigrationFormDrawer({
 
     const networkOverridesPerVM: Record<
       string,
-      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean }>
+      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean; UserAssignedIP?: string }>
     > = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
         const preserveIp = vm.preserveIp || {}
         const preserveMac = vm.preserveMac || {}
+        const nicAssignedIps: Record<number, string> = {}
 
-        const indices = new Set<string>([...Object.keys(preserveIp), ...Object.keys(preserveMac)])
+        ;(vm.networkInterfaces || []).forEach((nic, index) => {
+          const assigned = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
+            .map((ip) => ip?.trim())
+            .filter((ip): ip is string => Boolean(ip))
+          if (assigned.length > 0) {
+            nicAssignedIps[index] = assigned.join(',')
+          }
+        })
+        if (Object.keys(nicAssignedIps).length === 0 && vm.assignedIPs?.trim()) {
+          nicAssignedIps[0] = vm.assignedIPs.trim()
+        }
+
+        const indices = new Set<string>([
+          ...Object.keys(preserveIp),
+          ...Object.keys(preserveMac),
+          ...Object.keys(nicAssignedIps)
+        ])
 
         if (indices.size === 0) return
 
@@ -718,10 +735,14 @@ export default function MigrationFormDrawer({
             const interfaceIndex = Number(indexStr)
             const ipFlag = preserveIp[interfaceIndex]
             const macFlag = preserveMac[interfaceIndex]
+            const preserveIP = ipFlag !== false
+            const preserveMAC = macFlag !== false
+            const userAssigned = !preserveIP ? nicAssignedIps[interfaceIndex] : undefined
             return {
               interfaceIndex,
-              preserveIP: ipFlag !== false,
-              preserveMAC: macFlag !== false
+              preserveIP,
+              preserveMAC,
+              ...(userAssigned ? { UserAssignedIP: userAssigned } : {})
             }
           })
           .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
@@ -781,17 +802,44 @@ export default function MigrationFormDrawer({
 
     try {
       const data = await postMigrationPlan(body)
-      // Track successful migration creation
-      track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
-        migrationName: data.metadata?.name,
-        migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
-        virtualMachineCount: vmsToMigrate?.length || 0,
-        migrationType: migrationFields.type,
-        hasDataCopyStartTime: !!migrationFields.dataCopyStart,
-        hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
-        hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
-        postMigrationAction,
-        namespace: data.metadata?.namespace
+      const virtualMachines = (data as any)?.spec?.virtualMachines
+
+      const extractedVmNames: string[] = !Array.isArray(virtualMachines)
+        ? []
+        : virtualMachines.flatMap((entry: unknown) => {
+            if (typeof entry === 'string') return [entry]
+
+            if (Array.isArray(entry)) {
+              return entry.filter(
+                (name: unknown): name is string => typeof name === 'string' && name.length > 0
+              )
+            }
+
+            return []
+          })
+
+      const vmNames: string[] =
+        extractedVmNames.length > 0
+          ? extractedVmNames
+          : Array.isArray(vmsToMigrate)
+            ? vmsToMigrate.filter(
+                (vm: unknown): vm is string => typeof vm === 'string' && vm.length > 0
+              )
+            : []
+
+      vmNames.forEach((vmName) => {
+        track(AMPLITUDE_EVENTS.MIGRATION_CREATED, {
+          migrationName: data.metadata?.name,
+          migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
+          virtualMachineCount: vmNames.length,
+          vmName,
+          migrationType: migrationFields.type,
+          hasDataCopyStartTime: !!migrationFields.dataCopyStart,
+          hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
+          hasTimedCutover: !!(migrationFields.vmCutoverStart && migrationFields.vmCutoverEnd),
+          postMigrationAction,
+          namespace: data.metadata?.namespace
+        })
       })
 
       return data

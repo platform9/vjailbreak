@@ -886,10 +886,10 @@ function VmsSelectionStep({
 
     setVmsWithFlavor((prev) =>
       prev.map((vm) => {
-        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.name)) {
+        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.id)) {
           return {
             ...vm,
-            osFamily: vmOSAssignments[vm.name]
+            osFamily: vmOSAssignments[vm.id]
           }
         }
         return vm
@@ -964,7 +964,7 @@ function VmsSelectionStep({
       // Update local state first for immediate UI feedback
       setVmOSAssignments((prev) => ({ ...prev, [vmId]: osFamily }))
 
-      const vm = vmsWithFlavor.find((v) => v.name === vmId)
+      const vm = vmsWithFlavor.find((v) => v.id === vmId)
       if (vm?.vmWareMachineName) {
         await patchVMwareMachine(vm.vmWareMachineName, {
           spec: {
@@ -1025,12 +1025,6 @@ function VmsSelectionStep({
     interfaceIndex: number,
     preserveIp: boolean
   ) => {
-    const currentIpValue =
-      bulkEditIPs?.[vmName]?.[interfaceIndex] ?? bulkExistingIPs?.[vmName]?.[interfaceIndex] ?? ''
-    if (!preserveIp && parseIpList(currentIpValue).length > 1) {
-      return
-    }
-
     setBulkPreserveIp((prev) => ({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: preserveIp }
@@ -1118,13 +1112,6 @@ function VmsSelectionStep({
       ...prev,
       [vmName]: { ...prev[vmName], [interfaceIndex]: value }
     }))
-
-    if (parseIpList(value).length > 1) {
-      setBulkPreserveIp((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: true }
-      }))
-    }
 
     // Track latest user-entered value as "current" when Preserve IP is disabled.
     if (bulkPreserveIp?.[vmName]?.[interfaceIndex] === false) {
@@ -1467,7 +1454,7 @@ function VmsSelectionStep({
         : []
       const ipDisplay = displayIPs.join(', ')
       const assignedIPsCsv = updatedNetworkInterfaces
-        ? updatedNetworkInterfaces.map((nic) => nic.ipAddress?.[0] ?? '').join(',')
+        ? displayIPs.join(',')
         : assignedIPs
           ? assignedIPs.join(',')
           : undefined
@@ -1719,8 +1706,7 @@ function VmsSelectionStep({
           const initialPreserveMac = vm.preserveMac?.[index] !== false
 
           const isPoweredOff = vm.vmState !== 'running'
-          const hasMultipleIps = parseIpList(originalIp).length > 1
-          const effectivePreserveIp = isPoweredOff ? false : hasMultipleIps ? true : initialPreserveIp
+          const effectivePreserveIp = isPoweredOff ? false : initialPreserveIp
           initialBulkPreserveIp[vmId][index] = effectivePreserveIp
           initialBulkPreserveMac[vmId][index] = initialPreserveMac
 
@@ -1743,9 +1729,7 @@ function VmsSelectionStep({
         initialBulkCurrentIPs[vmId][0] = currentIp
 
         const isPoweredOff = vm.vmState !== 'running'
-        const hasMultipleIps = parseIpList(originalIp).length > 1
-        const effectivePreserveIp =
-          isPoweredOff ? false : hasMultipleIps ? true : vm.preserveIp?.[0] !== false
+        const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[0] !== false
         const initialPreserveMac = vm.preserveMac?.[0] !== false
 
         initialBulkPreserveIp[vmId][0] = effectivePreserveIp
@@ -2350,10 +2334,7 @@ function VmsSelectionStep({
                       const status = bulkValidationStatus[vmId]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmId]?.[interfaceIndex]
                       const isPoweredOff = vm.vmState !== 'running'
-                      const hasMultipleIps = parseIpList(ip).length > 1
-                      const preserveIp =
-                        !isPoweredOff &&
-                        (hasMultipleIps || bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false)
+                      const preserveIp = !isPoweredOff && bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
                       const preserveMac = bulkPreserveMac?.[vmId]?.[interfaceIndex] !== false
                       const discoveredIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
                       const currentIp =
@@ -2461,7 +2442,7 @@ function VmsSelectionStep({
                               <Switch
                                 size="small"
                                 checked={preserveIp}
-                                disabled={isPoweredOff || hasMultipleIps}
+                                disabled={isPoweredOff}
                                 onChange={(e) =>
                                   handleBulkPreserveIpChange(
                                     vmId,

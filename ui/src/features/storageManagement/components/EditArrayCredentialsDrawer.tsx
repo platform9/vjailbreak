@@ -15,6 +15,8 @@ import { createArrayCredsSecret, deleteSecret } from 'src/api/secrets/secrets'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { DesignSystemForm } from 'src/shared/components/forms'
 import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
 import ArrayCredentialsFormFields from './ArrayCredentialsFormFields'
@@ -44,6 +46,7 @@ export default function EditArrayCredentialsDrawer({
   credential
 }: EditArrayCredentialsDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'EditArrayCredentialsDrawer' })
+  const { track } = useAmplitude({ component: 'EditArrayCredentialsDrawer' })
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
@@ -156,6 +159,15 @@ export default function EditArrayCredentialsDrawer({
     setValidationStatus('idle')
     setValidationMessage('')
 
+    track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_UPDATED, {
+      credentialName: data.name,
+      vendorType: data.vendorType,
+      volumeType: data.volumeType,
+      backendName: data.backendName,
+      managementEndpoint: data.managementEndpoint,
+      stage: 'update_start'
+    })
+
     try {
       const namespace = credential.metadata.namespace || VJAILBREAK_DEFAULT_NAMESPACE
       const secretName = `${data.name}-array-secret`
@@ -197,6 +209,13 @@ export default function EditArrayCredentialsDrawer({
         setIsValidating(false)
 
         if (!validationResult.success) {
+          track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_UPDATE_FAILED, {
+            credentialName: data.name,
+            vendorType: data.vendorType,
+            stage: 'validation',
+            errorMessage: validationResult.message || 'Validation failed'
+          })
+
           // Validation failed - delete the secret and clear secretRef to allow retry with same name
           setValidationStatus('failed')
           setValidationMessage(validationResult.message || 'Validation failed')
@@ -252,6 +271,14 @@ export default function EditArrayCredentialsDrawer({
       // Then set the error message
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Failed to update array credentials'
+
+      track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_UPDATE_FAILED, {
+        credentialName: data.name,
+        vendorType: data.vendorType,
+        stage: 'update',
+        errorMessage
+      })
+
       setSubmitError(errorMessage)
       reportError(error, {
         context: 'edit-array-credentials',

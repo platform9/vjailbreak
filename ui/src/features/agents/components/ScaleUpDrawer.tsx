@@ -23,6 +23,7 @@ import { NodeItem } from 'src/api/nodes/model'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 interface ScaleUpDrawerProps {
   open: boolean
@@ -230,7 +231,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
         setLoading(true)
         setError(null)
 
-        track('Agents Scale Up', {
+        track(AMPLITUDE_EVENTS.AGENTS_SCALE_UP, {
           stage: 'start',
           nodeCount: nodeCountNum,
           flavorId: values.flavor,
@@ -250,13 +251,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           securityGroups: useMasterSecurityGroups ? undefined : selectedSecurityGroups
         })
 
-        track('Agents Scale Up', {
-          stage: 'success',
-          nodeCount: nodeCountNum,
-          flavorId: values.flavor,
-          credentialName: openstackCredentials?.metadata?.name
-        })
-
         setSuccess(true)
         setTimeout(() => {
           handleClose()
@@ -264,7 +258,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       } catch (err) {
         console.error('Error scaling up nodes:', err)
 
-        track('Agents Scale Up', {
+        track(AMPLITUDE_EVENTS.AGENTS_SCALE_UP_FAILED, {
           stage: 'failure',
           nodeCount: nodeCountNum,
           flavorId: values.flavor,
@@ -429,7 +423,10 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 fullWidth
                 size="small"
                 disabled={
-                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0 || isL2Credential
+                  !openstackCredsValidated ||
+                  !openstackCredentials ||
+                  securityGroups.length === 0 ||
+                  isL2Credential
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
