@@ -2027,8 +2027,9 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					if override.UserAssignedIP != "" {
 						splitUserAssignedIP := strings.Split(override.UserAssignedIP, ",")
 						for _, ip := range splitUserAssignedIP {
-							if strings.TrimSpace(ip) != "" {
-								userAssignedIp = append(userAssignedIp, ip)
+							trimmedIP := strings.TrimSpace(ip)
+							if trimmedIP != "" {
+								userAssignedIp = append(userAssignedIp, trimmedIP)
 							}
 						}
 					}
