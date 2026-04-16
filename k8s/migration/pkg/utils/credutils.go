@@ -859,31 +859,12 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 		return netObj.Name, nil
 
 	case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
-		// Try direct MOR lookup first (fast path).
 		var netObj mo.DistributedVirtualPortgroup
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
-		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err == nil {
-			return netObj.Name, nil
+		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
+			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
 		}
-		// Fallback: enumerate DVS portgroups via ContainerView.
-		// Some vCenter configurations (permissions, linked-mode, cross-datacenter DVS)
-		// cause direct MOR lookups to fail even though the portgroup is functional.
-		m := view.NewManager(c)
-		v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{constants.VMwareNetworkTypeDistributedVirtualPortgroup}, true)
-		if err != nil {
-			return "", fmt.Errorf("failed to create container view for distributed virtual portgroups: %w", err)
-		}
-		defer v.Destroy(ctx) //nolint:errcheck
-		var pgs []mo.DistributedVirtualPortgroup
-		if err := v.Retrieve(ctx, []string{constants.VMwareNetworkTypeDistributedVirtualPortgroup}, []string{"name"}, &pgs); err != nil {
-			return "", fmt.Errorf("failed to retrieve distributed virtual portgroups: %w", err)
-		}
-		for _, pg := range pgs {
-			if pg.Self.Value == nic.Network {
-				return pg.Name, nil
-			}
-		}
-		return "", fmt.Errorf("distributed virtual portgroup %s not found in inventory", nic.Network)
+		return netObj.Name, nil
 
 	case constants.VMwareNetworkTypeOpaqueNetwork:
 		m := view.NewManager(c)
@@ -1795,10 +1776,29 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
+	// Build MAC → network name map from VMware Tools guest info.
+	// Used as fallback when the portgroup object cannot be queried directly
+	// (e.g. stale DVS portgroup MOR in vCenter inventory).
+	guestNetNames := make(map[string]string)
+	if vmProps.Guest != nil {
+		for _, gn := range vmProps.Guest.Net {
+			if gn.Network != "" {
+				guestNetNames[strings.ToLower(gn.MacAddress)] = gn.Network
+			}
+		}
+	}
+
 	// Build networks list from NetworkInterfaces to match NIC count
 	for _, nic := range nicList {
 		name, err := resolveNetworkName(ctx, c, nic)
 		if err != nil {
+			// Fallback: use network name reported by VMware Tools (guest.net)
+			if guestName, ok := guestNetNames[nic.MAC]; ok {
+				log.Info("Resolved network name from VMware Tools guest info",
+					"VM", vm.Name(), "portgroupKey", nic.Network, "networkName", guestName)
+				networks = append(networks, guestName)
+				continue
+			}
 			// Network is orphaned/deleted or has no backing — log but continue VM discovery
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), err)
 			networks = append(networks, "Orphaned Network")
