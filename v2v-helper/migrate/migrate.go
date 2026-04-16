@@ -88,9 +88,10 @@ type Migrate struct {
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
-	InterfaceIndex int   `json:"interfaceIndex"`
-	PreserveIP     *bool `json:"preserveIP,omitempty"`
-	PreserveMAC    *bool `json:"preserveMAC,omitempty"`
+	InterfaceIndex int    `json:"interfaceIndex"`
+	PreserveIP     *bool  `json:"preserveIP,omitempty"`
+	PreserveMAC    *bool  `json:"preserveMAC,omitempty"`
+	UserAssignedIP string `json:"UserAssignedIP,omitempty"`
 }
 
 type MigrationTimes struct {
@@ -1956,6 +1957,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 }
 
 func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
+
 	networkids := []string{}
 	ipaddresses := []string{}
 	portids := []string{}
@@ -2013,6 +2015,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			// Only override when explicitly set — nil means "not specified, keep default".
 			preserveIP := true
 			preserveMAC := true
+			userAssignedIp := []string{}
 			for _, override := range migobj.NetworkOverrides {
 				if override.InterfaceIndex == idx {
 					if override.PreserveIP != nil {
@@ -2020,6 +2023,14 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					}
 					if override.PreserveMAC != nil {
 						preserveMAC = *override.PreserveMAC
+					}
+					if override.UserAssignedIP != "" {
+						splitUserAssignedIP := strings.Split(override.UserAssignedIP, ",")
+						for _, ip := range splitUserAssignedIP {
+							if strings.TrimSpace(ip) != "" {
+								userAssignedIp = append(userAssignedIp, ip)
+							}
+						}
 					}
 					break
 				}
@@ -2035,41 +2046,24 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
 
-			if !preserveIP {
-
-				// User-assigned IP from ConfigMap
-				if migobj.AssignedIP != "" {
-					assignedIPs := strings.Split(migobj.AssignedIP, ",")
-					if idx < len(assignedIPs) {
-						ip := strings.TrimSpace(assignedIPs[idx])
-						if ip != "" {
-							ippm = []string{ip}
-							vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
-								vm.IpEntry{
-									IP:     ip,
-									Prefix: 0,
-								},
-							}
-							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-						} else {
-							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
-						}
-					}
-				}
-			}
-
 			// Apply per-NIC overrides
 			mac := vminfo.Mac[idx]
 			if !preserveIP {
 				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
-				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
 				hasUserAssignedIP := false
-				if migobj.AssignedIP != "" {
-					assignedIPs := strings.Split(migobj.AssignedIP, ",")
-					if idx < len(assignedIPs) && strings.TrimSpace(assignedIPs[idx]) != "" {
-						hasUserAssignedIP = true
+				if len(userAssignedIp) > 0 {
+					ippm = []string{}
+					vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{}
+					for _, ip := range userAssignedIp {
+						vminfo.IPperMac[vminfo.Mac[idx]] = append(vminfo.IPperMac[vminfo.Mac[idx]], vm.IpEntry{
+							IP:     ip,
+							Prefix: 0,
+						})
+						ippm = append(ippm, ip)
 					}
+					hasUserAssignedIP = true
 				}
+				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
 				if !hasUserAssignedIP {
 					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
 					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
