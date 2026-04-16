@@ -123,36 +123,16 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 	}
 	migobj.logMessage(fmt.Sprintf("Detected storage transport type: %s", transportType))
 
-	// Check whether the storage provider supports server-side FC copy
-	_, isFCCapable := migobj.StorageProvider.(storage.FCCopyCapable)
-	useFCPath := (transportType == "fc" || transportType == "mixed") && isFCCapable
-
 	volumes := []storage.Volume{}
 
 	// Process each disk
 	for idx, vmdisk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), vmdisk.Name))
 
-		var clonedVolume storage.Volume
-
-		if useFCPath {
-			// Attempt the FC server-side copy path (Pure FlashArray CopyVolume API).
-			// Falls back to the vmkfstools path if the source volume cannot be identified.
-			migobj.logMessage(fmt.Sprintf("Attempting FC server-side copy for disk %s", vmdisk.Name))
-			clonedVolume, err = migobj.copyDiskViaFCStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
-			if err != nil {
-				migobj.logMessage(fmt.Sprintf("FC server-side copy failed (%v); falling back to vmkfstools path", err))
-				clonedVolume, err = migobj.copyDiskViaStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
-				if err != nil {
-					return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via StorageAcceleratedCopy (fallback)", vmdisk.Name)
-				}
-			}
-		} else {
-			// iSCSI path (or FC without FCCopyCapable): use vmkfstools RDM clone
-			clonedVolume, err = migobj.copyDiskViaStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
-			if err != nil {
-				return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via StorageAcceleratedCopy", vmdisk.Name)
-			}
+		// use vmkfstools RDM clone
+		clonedVolume, err := migobj.copyDiskViaStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
+		if err != nil {
+			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via StorageAcceleratedCopy", vmdisk.Name)
 		}
 
 		// Update the disk with the OpenStack volume info from the cloned volume
@@ -332,121 +312,6 @@ func extractSerialFromPureNAA(naa string) (string, error) {
 		return "", fmt.Errorf("could not extract serial number from NAA %q", naa)
 	}
 	return strings.ToUpper(serial), nil
-}
-
-// copyDiskViaFCStorageAcceleratedCopy copies a single VM disk using the Pure FlashArray
-// server-side CopyVolume API over Fibre Channel transport. This avoids routing data
-// through the ESXi host: the storage array copies the source LUN directly into the
-// newly provisioned target LUN.
-//
-// Prerequisites:
-//   - The VM disk must reside on a VMFS datastore that is backed by a single Pure LUN
-//     (i.e. dedicated datastore, not shared among multiple VMs). If the datastore is
-//     shared the copy would overwrite the whole datastore into the smaller target volume
-//     and will be rejected via a size mismatch check.
-//   - The storage provider must implement storage.FCCopyCapable.
-func (migobj *Migrate) copyDiskViaFCStorageAcceleratedCopy(ctx context.Context, esxiClient *esxissh.Client,
-	idx int, vminfo *vm.VMInfo, hostIP string,
-) (storage.Volume, error) {
-	startTime := time.Now()
-	vmDisk := vminfo.VMDisks[idx]
-
-	defer func() {
-		migobj.logMessage(fmt.Sprintf("FC StorageAcceleratedCopy completed in %s for disk %s",
-			time.Since(startTime).Round(time.Second), vmDisk.Name))
-		migobj.StorageProvider.Disconnect()
-	}()
-
-	// Re-initialize the storage provider for this disk (matches iSCSI path behaviour)
-	migobj.InitializeStorageProvider(ctx)
-
-	fcCapable, ok := migobj.StorageProvider.(storage.FCCopyCapable)
-	if !ok {
-		return storage.Volume{}, fmt.Errorf("storage provider %s does not implement FCCopyCapable", migobj.StorageProvider.WhoAmI())
-	}
-
-	// Step 1: Find the Pure volume that backs the source VMFS datastore
-	migobj.logMessage(fmt.Sprintf("Locating source volume on storage array for datastore %q", vmDisk.Datastore))
-	sourceNAA, err := esxiClient.GetDatastoreBackingNAA(vmDisk.Datastore)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to locate datastore backing device for %q", vmDisk.Datastore)
-	}
-	migobj.logMessage(fmt.Sprintf("Source datastore %q is backed by device: %s", vmDisk.Datastore, sourceNAA))
-
-	serial, err := extractSerialFromPureNAA(sourceNAA)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to extract serial from source NAA %s", sourceNAA)
-	}
-
-	sourceVolume, err := fcCapable.FindVolumeBySerial(serial)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to find source volume by serial %s", serial)
-	}
-	migobj.logMessage(fmt.Sprintf("Found source Pure volume: %s (size: %d bytes)", sourceVolume.Name, sourceVolume.Size))
-
-	// Step 2: Validate that the source LUN is not significantly larger than the VM disk.
-	// A large discrepancy suggests a shared datastore (multiple VMs) which cannot be
-	// handled with a block-level copy.
-	diskSizeBytes := vmDisk.Size
-	if diskSizeBytes%512 != 0 {
-		diskSizeBytes = ((diskSizeBytes / 512) + 1) * 512
-	}
-	if sourceVolume.Size > diskSizeBytes*2 {
-		return storage.Volume{}, fmt.Errorf(
-			"source volume %s (%d bytes) is more than twice the VM disk size (%d bytes); "+
-				"datastore is likely shared among multiple VMs — cannot use FC server-side copy",
-			sourceVolume.Name, sourceVolume.Size, diskSizeBytes)
-	}
-
-	// Step 3: Create a target volume on the storage array
-	sanitizedName := sanitizeVolumeName(vminfo.Name + "-" + vmDisk.Name)
-	migobj.logMessage(fmt.Sprintf("Creating target volume %q with size %d bytes", sanitizedName, sourceVolume.Size))
-	// Use source volume size to ensure the copy succeeds
-	targetVolume, err := migobj.StorageProvider.CreateVolume(sanitizedName, sourceVolume.Size)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to create target volume %q", sanitizedName)
-	}
-
-	// Step 4: Import the target volume into Cinder (renames it on Pure to volume-<id>-cinder)
-	migobj.logMessage(fmt.Sprintf("Importing target volume %q into Cinder", targetVolume.Name))
-	cinderVolumeID, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to import volume %q into Cinder", targetVolume.Name)
-	}
-	vminfo.VMDisks[idx].OpenstackVol = &cindervolumes.Volume{
-		ID:   cinderVolumeID,
-		Name: targetVolume.Name,
-		Size: int(sourceVolume.Size / (1024 * 1024 * 1024)),
-	}
-
-	// Resolve the Cinder-renamed volume name on the array (e.g. volume-<uuid>-cinder)
-	resolvedTarget, err := migobj.StorageProvider.ResolveCinderVolumeToLUN(cinderVolumeID)
-	if err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "failed to resolve Cinder volume %s on storage array", cinderVolumeID)
-	}
-	cinderVolumeName := resolvedTarget.Name
-	migobj.logMessage(fmt.Sprintf("Cinder renamed target volume to: %s", cinderVolumeName))
-
-	// Step 5: Execute the server-side copy on the Pure FlashArray
-	// This copies the source datastore LUN content into the target LUN without any
-	// ESXi data path involvement.
-	migobj.logMessage(fmt.Sprintf("Starting Pure FlashArray server-side copy: %s -> %s",
-		sourceVolume.Name, cinderVolumeName))
-	copyStart := time.Now()
-
-	if err := fcCapable.CopyVolumeOnArray(sourceVolume.Name, cinderVolumeName); err != nil {
-		return storage.Volume{}, errors.Wrapf(err, "Pure FlashArray server-side copy failed: %s -> %s",
-			sourceVolume.Name, cinderVolumeName)
-	}
-
-	migobj.logMessage(fmt.Sprintf("Pure FlashArray server-side copy completed in %s",
-		time.Since(copyStart).Round(time.Second)))
-
-	targetVolume.OpenstackVol = storage.OpenstackVolume{ID: cinderVolumeID}
-	targetVolume.Name = cinderVolumeName
-	targetVolume.NAA = resolvedTarget.NAA
-
-	return targetVolume, nil
 }
 
 // ValidateStorageAcceleratedCopyPrerequisites validates that all prerequisites for StorageAcceleratedCopy copy are met
