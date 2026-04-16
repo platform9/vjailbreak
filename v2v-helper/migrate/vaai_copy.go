@@ -21,10 +21,6 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 )
 
-// pureFCNAAPrefix is the Pure FlashArray NAA vendor prefix used to identify
-// Pure volumes from their NAA identifiers.
-const pureFCNAAPrefix = "naa.624a9370"
-
 // sanitizeVolumeName converts a volume name to meet storage array naming requirements:
 // - 1-63 characters long
 // - Alphanumeric, '_', and '-' only
@@ -114,14 +110,6 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 	// This is necessary to avoid "Failed to lock the file" errors during vmkfstools clone
 	migobj.logMessage("Waiting 5 seconds for ESXi to release disk file locks...")
 	time.Sleep(5 * time.Second)
-
-	// Detect storage transport type to decide which copy path to use
-	transportType, err := esxiClient.GetTransportType()
-	if err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: could not detect transport type (%v); defaulting to iSCSI path", err))
-		transportType = "iscsi"
-	}
-	migobj.logMessage(fmt.Sprintf("Detected storage transport type: %s", transportType))
 
 	volumes := []storage.Volume{}
 
@@ -298,20 +286,6 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	}
 
 	return targetVolume, nil
-}
-
-// extractSerialFromPureNAA extracts the volume serial number from a Pure FlashArray NAA identifier.
-// Pure NAA format: naa.624a9370<serial_lowercase>
-func extractSerialFromPureNAA(naa string) (string, error) {
-	naa = strings.ToLower(naa)
-	if !strings.HasPrefix(naa, pureFCNAAPrefix) {
-		return "", fmt.Errorf("NAA %q is not a Pure FlashArray device (expected prefix %s)", naa, pureFCNAAPrefix)
-	}
-	serial := strings.TrimPrefix(naa, pureFCNAAPrefix)
-	if serial == "" {
-		return "", fmt.Errorf("could not extract serial number from NAA %q", naa)
-	}
-	return strings.ToUpper(serial), nil
 }
 
 // ValidateStorageAcceleratedCopyPrerequisites validates that all prerequisites for StorageAcceleratedCopy copy are met
