@@ -1015,7 +1015,8 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", -1, errors.New("empty bootable partition from the script")
 	}
 
-	index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
+	firstDevice := strings.SplitN(strings.TrimSpace(ans), "\n", 2)[0]
+	index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(firstDevice))
 	if err != nil {
 		fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
 		return -1, "", "", -1, err

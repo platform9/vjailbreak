@@ -1004,19 +1004,24 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	// Run the script
 	var runErr error
-	var runOutput string
 
-	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/get-bootable-partition.sh")
-
+	cmd := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	log.Printf("Executing %s", cmd.String())
+	runErr = cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("get-bootable-partition.sh debug output:\n%s", strings.TrimSpace(stderrBuf.String()))
+	}
 	if runErr != nil {
-		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(runOutput))
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(stderrBuf.String()))
 	}
 
 	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+	log.Printf("Script output: %s", strings.TrimSpace(stdoutBuf.String()))
 
-	return strings.TrimSpace(runOutput), nil
+	return strings.TrimSpace(stdoutBuf.String()), nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
