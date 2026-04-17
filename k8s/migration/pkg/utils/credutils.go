@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	gophercloud "github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
@@ -814,6 +815,7 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 		if nic != nil && nic.Backing != nil {
 			var network, networkType string
 			fmt.Printf("************* DEVINFO %+v\n", device.GetVirtualDevice())
+			spew.Dump(device.GetVirtualDevice())
 			switch backing := device.GetVirtualDevice().Backing.(type) {
 			case *types.VirtualEthernetCardNetworkBackingInfo:
 				if backing.Network != nil {
