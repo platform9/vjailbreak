@@ -84,6 +84,11 @@ type Migrate struct {
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
+	// ImageMetadata is the merged set of Cinder volume_image_metadata key-value pairs
+	// resolved from the MigrationPlan's selected VolumeImageProfiles. When non-empty it is
+	// applied to the boot volume after boot-volume detection so the destination instance is
+	// created with the requested image properties (os_require_quiesce, hw_firmware_type, etc.).
+	ImageMetadata map[string]string
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -1425,6 +1430,18 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 	// Step 7: Mark boot volume
 	utils.PrintLog(fmt.Sprintf("Boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
+
+	// Step 7.5: Apply merged VolumeImageProfile metadata to the boot volume. Nova/libvirt
+	// only read volume_image_metadata from the root disk, so we scope this to the boot volume.
+	if len(migobj.ImageMetadata) > 0 {
+		bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol
+		if bootVol != nil {
+			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, migobj.ImageMetadata); err != nil {
+				return -1, errors.Wrap(err, "failed to apply VolumeImageProfile metadata to boot volume")
+			}
+			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume", len(migobj.ImageMetadata)))
+		}
+	}
 
 	// Step 8: Perform disk conversion
 	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, espDiskIndex); err != nil {

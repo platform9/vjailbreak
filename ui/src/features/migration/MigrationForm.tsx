@@ -142,6 +142,7 @@ export interface FormValues extends Record<string, unknown> {
   useGPU?: boolean
   networkPersistence?: boolean
   removeVMwareTools?: boolean
+  imageProfiles?: string[]
 }
 
 export interface SelectedMigrationOptionsType {
@@ -799,6 +800,10 @@ export default function MigrationFormDrawer({
       ...(typeof params.removeVMwareTools === 'boolean' && {
         removeVMwareTools: params.removeVMwareTools
       }),
+      ...(Array.isArray(params.imageProfiles) &&
+        params.imageProfiles.length > 0 && {
+          imageProfiles: params.imageProfiles
+        }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
       acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk

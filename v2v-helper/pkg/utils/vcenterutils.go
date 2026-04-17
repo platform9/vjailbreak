@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
@@ -53,6 +54,10 @@ type MigrationParams struct {
 	ArrayCredsMapping string
 
 	CurrentInstanceID string
+
+	// ImageMetadata holds the resolved VolumeImageProfile key-value pairs for the boot volume.
+	// Serialized as JSON in the ConfigMap under the IMAGE_METADATA key.
+	ImageMetadata map[string]string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -70,6 +75,13 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get configmap")
 	}
+	var imageMetadata map[string]string
+	if raw := configMap.Data["IMAGE_METADATA"]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &imageMetadata); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal IMAGE_METADATA from configmap")
+		}
+	}
+
 	return &MigrationParams{
 		SourceVMName:                   string(configMap.Data["SOURCE_VM_NAME"]),
 		SourceVMID:                     string(configMap.Data["SOURCE_VM_ID"]),
@@ -105,5 +117,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		CurrentInstanceID:              string(configMap.Data["CURRENT_INSTANCE_ID"]),
+		ImageMetadata:                  imageMetadata,
 	}, nil
 }

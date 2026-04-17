@@ -909,6 +909,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  imageProfiles:
+                    description: |-
+                      ImageProfiles is the ordered list of VolumeImageProfile names to apply to the migrated VM's boot volume.
+                      Profiles are filtered by the VM's detected OS family ("any" profiles always apply) and their properties
+                      are merged left-to-right (later profiles override earlier ones on duplicate keys) before being written to
+                      the boot volume as Cinder volume_image_metadata.
+                    items:
+                      type: string
+                    type: array
                   networkPersistence:
                     description: NetworkPersistence instructs the migration helper
                       to persist the source networking configuration
@@ -1132,6 +1141,15 @@ spec:
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
                   after a successful migration to prevent network conflicts. Defaults to false.
                 type: boolean
+              imageMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ImageMetadata is the merged map of Cinder volume_image_metadata properties resolved
+                  from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering and
+                  left-to-right merging. The v2v-helper applies these to the boot volume before the
+                  destination VM is created.
+                type: object
               initiateCutover:
                 description: InitiateCutover is the flag to initiate cutover
                 type: boolean
@@ -2195,6 +2213,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  imageProfiles:
+                    description: |-
+                      ImageProfiles is the ordered list of VolumeImageProfile names to apply to the migrated VM's boot volume.
+                      Profiles are filtered by the VM's detected OS family ("any" profiles always apply) and their properties
+                      are merged left-to-right (later profiles override earlier ones on duplicate keys) before being written to
+                      the boot volume as Cinder volume_image_metadata.
+                    items:
+                      type: string
+                    type: array
                   networkPersistence:
                     description: NetworkPersistence instructs the migration helper
                       to persist the source networking configuration
@@ -3180,6 +3207,94 @@ spec:
     subresources:
       status: {}
 ---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: volumeimageprofiles.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: VolumeImageProfile
+    listKind: VolumeImageProfileList
+    plural: volumeimageprofiles
+    singular: volumeimageprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.osFamily
+      name: OSFamily
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          VolumeImageProfile is the Schema for the volumeimageprofiles API.
+          It defines a reusable set of Cinder volume_image_metadata properties that can be
+          applied to VM volumes during migration. Profiles are referenced from MigrationPlan
+          and are merged in order to produce the final metadata applied to each migrated volume.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VolumeImageProfileSpec defines the desired state of VolumeImageProfile
+            properties:
+              description:
+                description: Description is an optional human-readable description
+                  of when to use this profile.
+                type: string
+              osFamily:
+                description: |-
+                  OSFamily scopes this profile to a specific OS type.
+                  Use "windows" or "linux" to auto-apply to matching VMs, or "any" to apply regardless of OS.
+                enum:
+                - windows
+                - linux
+                - any
+                type: string
+              properties:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Properties is the map of Cinder volume image metadata key-value pairs
+                  that will be set on the migrated volume. For example:
+                  {"hw_firmware_type": "uefi", "os_require_quiesce": "no"}
+                  Properties from multiple profiles are merged left-to-right; later profiles override earlier ones.
+                type: object
+            required:
+            - osFamily
+            - properties
+            type: object
+          status:
+            description: |-
+              VolumeImageProfileStatus defines the observed state of VolumeImageProfile.
+              Currently unused but reserved for future validation status.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -3521,6 +3636,7 @@ rules:
   - vmwarecreds
   - vmwarehosts
   - vmwaremachines
+  - volumeimageprofiles
   verbs:
   - create
   - delete
@@ -3548,6 +3664,7 @@ rules:
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
+  - volumeimageprofiles/finalizers
   verbs:
   - update
 - apiGroups:
@@ -3572,6 +3689,7 @@ rules:
   - vmwarecreds/status
   - vmwarehosts/status
   - vmwaremachines/status
+  - volumeimageprofiles/status
   verbs:
   - get
   - patch

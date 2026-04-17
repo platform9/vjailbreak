@@ -23,6 +23,7 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_arraycredsmappings.yaml
 - bases/vjailbreak.k8s.pf9.io_arraycreds.yaml
 - bases/vjailbreak.k8s.pf9.io_esxisshcreds.yaml
+- bases/vjailbreak.k8s.pf9.io_volumeimageprofiles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

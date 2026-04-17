@@ -106,6 +106,13 @@ type MigrationSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=hot;cold;mock
 	MigrationType string `json:"migrationType,omitempty"`
+
+	// ImageMetadata is the merged map of Cinder volume_image_metadata properties resolved
+	// from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering and
+	// left-to-right merging. The v2v-helper applies these to the boot volume before the
+	// destination VM is created.
+	// +optional
+	ImageMetadata map[string]string `json:"imageMetadata,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
