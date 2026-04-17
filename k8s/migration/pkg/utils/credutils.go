@@ -820,6 +820,8 @@ func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, e
 					networkType = backing.Network.Type
 				}
 			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+				fmt.Printf("************ DVS %+v", backing)
+				fmt.Printf("*********** %+v  ", backing.GetDynamicData())
 				network = backing.Port.PortgroupKey
 				networkType = constants.VMwareNetworkTypeDistributedVirtualPortgroup
 			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
