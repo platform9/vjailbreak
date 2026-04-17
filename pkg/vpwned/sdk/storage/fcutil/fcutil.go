@@ -1,5 +1,5 @@
 // Package fcutil provides helpers for working with Fibre Channel World Wide
-// Names (WWNs) as reported by ESXi hosts and Pure FlashArray storage arrays.
+// Names (WWNs) as reported by ESXi hosts and storage arrays.
 package fcutil
 
 import (
