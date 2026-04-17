@@ -140,6 +140,7 @@ rules:
   - vmwarecreds
   - vmwarehosts
   - vmwaremachines
+  - volumeimageprofiles
   verbs:
   - create
   - delete
@@ -167,6 +168,7 @@ rules:
   - storagemappings/finalizers
   - vjailbreaknodes/finalizers
   - vmwarecreds/finalizers
+  - volumeimageprofiles/finalizers
   verbs:
   - update
 - apiGroups:
@@ -191,6 +193,7 @@ rules:
   - vmwarecreds/status
   - vmwarehosts/status
   - vmwaremachines/status
+  - volumeimageprofiles/status
   verbs:
   - get
   - patch

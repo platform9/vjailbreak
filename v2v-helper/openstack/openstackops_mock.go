@@ -351,6 +351,20 @@ func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(ctx, volum
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeImageMetadata), ctx, volume, setRDMLabel)
 }
 
+// ApplyBootVolumeImageMetadata mocks base method.
+func (m *MockOpenstackOperations) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyBootVolumeImageMetadata", ctx, volume, metadata)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyBootVolumeImageMetadata indicates an expected call of ApplyBootVolumeImageMetadata.
+func (mr *MockOpenstackOperationsMockRecorder) ApplyBootVolumeImageMetadata(ctx, volume, metadata interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBootVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).ApplyBootVolumeImageMetadata), ctx, volume, metadata)
+}
+
 // SetVolumeUEFI mocks base method.
 func (m *MockOpenstackOperations) SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
 	m.ctrl.T.Helper()
