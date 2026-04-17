@@ -697,3 +697,74 @@ func (c *Client) GetHostIQN() (string, error) {
 
 	return "", fmt.Errorf("no iSCSI IQN found on ESXi host")
 }
+
+// GetHostFCAdapters returns the Fibre Channel adapter UIDs of the ESXi host.
+// FC UIDs are returned in ESXi format: "fc.WWNN:WWPN" (lowercase hex, no separators).
+func (c *Client) GetHostFCAdapters() ([]string, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage adapter list: %w", err)
+	}
+
+	var fcAdapters []string
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		driver := adapter["Driver"]
+
+		if !hasUID || !hasLink {
+			continue
+		}
+
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		isActive := linkState == "link-up" || linkState == "online"
+		if isActive && strings.HasPrefix(uid, "fc.") {
+			klog.Infof("Found ESXi FC adapter: Driver=%s, UID=%s", driver, uid)
+			fcAdapters = append(fcAdapters, uid)
+		}
+	}
+
+	if len(fcAdapters) == 0 {
+		return nil, fmt.Errorf("no FC adapters found on ESXi host")
+	}
+	return fcAdapters, nil
+}
+
+// GetAllHostAdapters returns all active storage HBA identifiers on the ESXi host.
+// Includes iSCSI IQNs (format: "iqn.xxx") and FC UIDs (format: "fc.WWNN:WWPN").
+// Use this instead of GetHostIQN when the host may use FC or mixed transport.
+func (c *Client) GetAllHostAdapters() ([]string, error) {
+	if c.sshClient == nil {
+		return nil, fmt.Errorf("not connected to ESXi host")
+	}
+
+	results, err := c.RunEsxcliCommand("storage", []string{"core", "adapter", "list"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage adapter list: %w", err)
+	}
+
+	var adapters []string
+	for _, adapter := range results {
+		uid, hasUID := adapter["UID"]
+		linkState, hasLink := adapter["LinkState"]
+		driver := adapter["Driver"]
+		if !hasUID || !hasLink {
+			continue
+		}
+		uid = strings.ToLower(strings.TrimSpace(uid))
+		isActive := linkState == "link-up" || linkState == "online"
+		if isActive && (strings.HasPrefix(uid, "iqn.") || strings.HasPrefix(uid, "fc.")) {
+			klog.Infof("Found ESXi adapter: Driver=%s, UID=%s", driver, uid)
+			adapters = append(adapters, uid)
+		}
+	}
+
+	if len(adapters) == 0 {
+		return nil, fmt.Errorf("no iSCSI or FC adapters found on ESXi host")
+	}
+	return adapters, nil
+}

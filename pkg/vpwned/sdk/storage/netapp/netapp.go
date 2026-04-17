@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/fcutil"
 	"k8s.io/klog/v2"
 )
 
@@ -60,9 +61,13 @@ type OntapLUNResponse struct {
 }
 
 type OntapIgroup struct {
-	UUID       string `json:"uuid"`
-	Name       string `json:"name"`
-	Protocol   string `json:"protocol"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	SVM      struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+	} `json:"svm"`
 	Initiators []struct {
 		Name string `json:"name"`
 	} `json:"initiators"`
@@ -253,39 +258,183 @@ func (n *NetAppStorageProvider) GetAllVolumeNAAs() ([]string, error) {
 	return n.BaseStorageProvider.GetAllVolumeNAAs(n.ListAllVolumes)
 }
 
-// CreateOrUpdateInitiatorGroup creates or updates an igroup with the ESX adapters
+// detectSANProtocol inspects hbaIdentifiers and returns the ONTAP igroup protocol
+// string: "fcp" when all adapters are Fibre Channel, "iscsi" when all are iSCSI,
+// or "mixed" when both types are present.
+func detectSANProtocol(hbaIdentifiers []string) string {
+	hasFC, hasIQN := false, false
+	for _, id := range hbaIdentifiers {
+		lower := strings.ToLower(id)
+		switch {
+		case strings.HasPrefix(lower, "fc."):
+			hasFC = true
+		case strings.HasPrefix(lower, "iqn."), strings.HasPrefix(lower, "eui."), strings.HasPrefix(lower, "nqn."):
+			hasIQN = true
+		}
+	}
+	switch {
+	case hasFC && !hasIQN:
+		return "fcp"
+	case hasIQN && !hasFC:
+		return "iscsi"
+	default:
+		return "mixed"
+	}
+}
+
+// normaliseToONTAPInitiators converts HBA identifiers to the format ONTAP expects.
+// FC adapter UIDs (fc.WWNN:WWPN) are converted to colon-separated WWPN strings;
+// IQN / EUI / NQN values are kept as-is.
+func normaliseToONTAPInitiators(hbaIdentifiers []string) ([]string, error) {
+	out := make([]string, 0, len(hbaIdentifiers))
+	for _, id := range hbaIdentifiers {
+		if strings.HasPrefix(strings.ToLower(id), "fc.") {
+			wwpn, err := fcutil.FormattedWWPNFromFCUID(id)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse FC adapter UID %q: %w", id, err)
+			}
+			out = append(out, wwpn)
+		} else {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+// ensureIgroupExists returns the UUID of the named igroup on svmName, creating it
+// (with the given protocol and os_type "vmware") if it does not already exist.
+func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, protocol, svmName string) (string, error) {
+	igroups, err := n.listIgroups(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list igroups: %w", err)
+	}
+	for _, ig := range igroups {
+		if ig.Name == name {
+			klog.Infof("Igroup %q already exists (UUID: %s)", name, ig.UUID)
+			return ig.UUID, nil
+		}
+	}
+
+	klog.Infof("Creating igroup %q (protocol: %s, SVM: %s)", name, protocol, svmName)
+	reqBody := map[string]interface{}{
+		"name":     name,
+		"protocol": protocol,
+		"os_type":  "vmware",
+		"svm": map[string]interface{}{
+			"name": svmName,
+		},
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal igroup create request: %w", err)
+	}
+
+	var response OntapIgroupResponse
+	err = n.DoRequestJSON(ctx, "POST", "/protocols/san/igroups?return_records=true", bytes.NewReader(jsonBody), &response)
+	if err != nil {
+		return "", fmt.Errorf("failed to create igroup %q: %w", name, err)
+	}
+	if len(response.Records) == 0 {
+		return "", fmt.Errorf("igroup creation returned no records for %q", name)
+	}
+	klog.Infof("Created igroup %q with UUID %s", name, response.Records[0].UUID)
+	return response.Records[0].UUID, nil
+}
+
+// addInitiatorToIgroup adds a single initiator (IQN or colon-separated WWPN) to
+// the igroup identified by igroupUUID. Duplicate-initiator errors are silently
+// ignored since the desired state is already satisfied.
+func (n *NetAppStorageProvider) addInitiatorToIgroup(ctx context.Context, igroupUUID, initiatorName string) error {
+	reqBody := map[string]interface{}{"name": initiatorName}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+	endpoint := fmt.Sprintf("/protocols/san/igroups/%s/initiators", igroupUUID)
+	err = n.DoRequestJSON(ctx, "POST", endpoint, bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+			klog.Infof("Initiator %q already in igroup %s — skipping", initiatorName, igroupUUID)
+			return nil
+		}
+		return fmt.Errorf("failed to add initiator %q to igroup %s: %w", initiatorName, igroupUUID, err)
+	}
+	klog.Infof("Added initiator %q to igroup %s", initiatorName, igroupUUID)
+	return nil
+}
+
+// CreateOrUpdateInitiatorGroup creates or updates an igroup with the ESX adapters.
+// It supports both iSCSI (IQN) and Fibre Channel (fc.WWNN:WWPN) adapter identifiers.
+//
+// The function first searches all existing igroups for one that already contains a
+// matching initiator. If none is found it creates a protocol-specific vjailbreak
+// igroup (name: "<initiatorGroupName>-fcp" or "<initiatorGroupName>-iscsi") and
+// populates it with the normalised initiator list.
 func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
 	ctx := context.Background()
 
-	// List existing igroups and find matches
+	// Normalise FC UIDs → colon-separated WWPN; IQNs are kept unchanged.
+	ontapInitiators, err := normaliseToONTAPInitiators(hbaIdentifiers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalise HBA identifiers: %w", err)
+	}
+
+	protocol := detectSANProtocol(hbaIdentifiers)
+	klog.Infof("Detected SAN protocol: %s, normalised initiators: %v", protocol, ontapInitiators)
+
+	// Search existing igroups for a matching initiator.
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list igroups: %w", err)
 	}
 
 	matchedIgroups := []string{}
-
 	for _, ig := range igroups {
 		initiatorNames := make([]string, len(ig.Initiators))
 		for i, init := range ig.Initiators {
 			initiatorNames[i] = init.Name
 		}
-		klog.Infof("Checking igroup %s, initiators: %v", ig.Name, initiatorNames)
+		klog.Infof("Checking igroup %s (protocol: %s), initiators: %v", ig.Name, ig.Protocol, initiatorNames)
 
 		for _, init := range ig.Initiators {
-			if storage.ContainsIgnoreCase(hbaIdentifiers, init.Name) {
-				klog.Infof("Adding igroup %s (matched initiator: %s)", ig.Name, init.Name)
+			if storage.ContainsIgnoreCase(ontapInitiators, init.Name) {
+				klog.Infof("Matched igroup %s via initiator %s", ig.Name, init.Name)
 				matchedIgroups = append(matchedIgroups, ig.Name)
 				break
 			}
 		}
 	}
 
-	if len(matchedIgroups) == 0 {
-		return nil, fmt.Errorf("no igroups found matching any of the provided IQNs/WWNs: %v", hbaIdentifiers)
+	if len(matchedIgroups) > 0 {
+		return storage.MappingContext{"igroups": matchedIgroups}, nil
 	}
 
-	return storage.MappingContext{"igroups": matchedIgroups}, nil
+	// No existing igroup matched — create a vjailbreak-managed one.
+	if protocol == "mixed" {
+		return nil, fmt.Errorf(
+			"host has both FC and iSCSI adapters; cannot create a single ONTAP igroup — "+
+				"ensure the ESXi host uses a single transport type: %v", hbaIdentifiers)
+	}
+
+	_, svmName, err := n.getDefaultVolumePathAndSVM(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover SVM for igroup creation: %w", err)
+	}
+
+	igroupName := fmt.Sprintf("%s-%s", initiatorGroupName, protocol)
+	igroupUUID, err := n.ensureIgroupExists(ctx, igroupName, protocol, svmName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, initiator := range ontapInitiators {
+		klog.Infof("Adding initiator %q to igroup %s", initiator, igroupName)
+		if err := n.addInitiatorToIgroup(ctx, igroupUUID, initiator); err != nil {
+			return nil, err
+		}
+	}
+
+	return storage.MappingContext{"igroups": []string{igroupName}}, nil
 }
 
 // MapVolumeToGroup maps a LUN to igroups
@@ -534,7 +683,7 @@ func (n *NetAppStorageProvider) listLUNs(ctx context.Context, filter string) ([]
 
 func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup, error) {
 	var response OntapIgroupResponse
-	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=uuid,name,initiators", nil, &response)
+	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=uuid,name,protocol,svm,initiators", nil, &response)
 	if err != nil {
 		return nil, err
 	}

@@ -117,7 +117,7 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 	for idx, vmdisk := range vminfo.VMDisks {
 		migobj.logMessage(fmt.Sprintf("Processing disk %d/%d: %s", idx+1, len(vminfo.VMDisks), vmdisk.Name))
 
-		// Perform StorageAcceleratedCopy copy for this disk
+		// use vmkfstools RDM clone
 		clonedVolume, err := migobj.copyDiskViaStorageAcceleratedCopy(ctx, esxiClient, idx, &vminfo, hostIP)
 		if err != nil {
 			return []storage.Volume{}, errors.Wrapf(err, "failed to copy disk %s via StorageAcceleratedCopy", vmdisk.Name)
@@ -139,10 +139,10 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 		vminfo.VMDisks[idx].Path = devicePath
 		volumes = append(volumes, clonedVolume)
 
-		migobj.logMessage(fmt.Sprintf("Successfully copied disk %s via StorageAcceleratedCopy XCOPY", vmdisk.Name))
+		migobj.logMessage(fmt.Sprintf("Successfully copied disk %s via StorageAcceleratedCopy", vmdisk.Name))
 	}
 
-	migobj.logMessage("StorageAcceleratedCopy XCOPY-based disk copy completed successfully")
+	migobj.logMessage("StorageAcceleratedCopy disk copy completed successfully")
 	return volumes, nil
 }
 
@@ -162,17 +162,17 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	// Step 1: Initialize storage provider
 	migobj.InitializeStorageProvider(ctx)
 
-	// Step 2: Get ESXi host IQN for volume mapping
-	hostIQN, err := esxiClient.GetHostIQN()
+	// Step 2: Get all ESXi host HBA adapters (IQN for iSCSI, fc.WWNN:WWPN for FC)
+	hostAdapters, err := esxiClient.GetAllHostAdapters()
 	if err != nil {
-		return storage.Volume{}, errors.Wrap(err, "failed to get ESXi host IQN")
+		return storage.Volume{}, errors.Wrap(err, "failed to get ESXi host adapters")
 	}
-	migobj.logMessage(fmt.Sprintf("ESXi host IQN: %s", hostIQN))
+	migobj.logMessage(fmt.Sprintf("ESXi host adapters: %v", hostAdapters))
 
-	// Step 3: Map host IQN to initiator group
+	// Step 3: Map host adapters to initiator group on the storage array
 	initiatorGroup := fmt.Sprintf("vjailbreak-xcopy")
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
-	mappingContext, err := migobj.StorageProvider.CreateOrUpdateInitiatorGroup(initiatorGroup, []string{hostIQN})
+	mappingContext, err := migobj.StorageProvider.CreateOrUpdateInitiatorGroup(initiatorGroup, hostAdapters)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to create initiator group %s", initiatorGroup)
 	}
