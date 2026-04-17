@@ -187,12 +187,10 @@ jobs:
               added_details=""
               while IFS= read -r vuln_id; do
                 if [[ -n "$vuln_id" ]]; then
-                  # Extract file, line, rule_id from the identifier
                   file_path=$(echo "$vuln_id" | cut -d':' -f1)
                   line_num=$(echo "$vuln_id" | cut -d':' -f2)
                   rule_id=$(echo "$vuln_id" | cut -d':' -f3)
                   
-                  # Get full details from the report
                   details=$(jq -r --arg file "$file_path" --arg line "$line_num" --arg rule "$rule_id" '
                     .Issues[] | select(.file == $file and (.line | tostring) == $line and .rule_id == $rule and (.severity == "HIGH" or .severity == "CRITICAL")) | 
                     "**File:** `\(.file)` (Line \(.line))\\n**Rule:** \(.rule_id)\\n**Severity:** \(.severity)\\n**Details:** \(.details)\\n"
@@ -211,12 +209,10 @@ jobs:
               fixed_details=""
               while IFS= read -r vuln_id; do
                 if [[ -n "$vuln_id" ]]; then
-                  # Extract file, line, rule_id from the identifier
                   file_path=$(echo "$vuln_id" | cut -d':' -f1)
                   line_num=$(echo "$vuln_id" | cut -d':' -f2)
                   rule_id=$(echo "$vuln_id" | cut -d':' -f3)
                   
-                  # Get full details from the baseline report
                   baseline_report="baseline-reports/gosec-report.json"
                   if [[ "$baseline_method" == "live_scan" ]]; then
                     baseline_report="tmp/gosec-report-baseline.json"
@@ -242,7 +238,6 @@ jobs:
           echo "fixed_count=$fixed_count" >> "$GITHUB_OUTPUT"
           echo "baseline_method=$baseline_method" >> "$GITHUB_OUTPUT"
           
-          # Set detailed outputs (escape for GitHub Actions)
           {
             echo "added_details<<EOF"
             echo -e "$added_details"
@@ -327,12 +322,11 @@ jobs:
 
       - name: Install Trivy
         run: |
-          sudo apt update
-          sudo apt install wget -y
-          wget -qO- https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo tee /etc/apt/trusted.gpg.d/trivy.asc
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt update
-          sudo apt install -y trivy jq
+          TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name | sed 's/v//')
+          wget https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb
+          sudo dpkg -i trivy_${TRIVY_VERSION}_Linux-64bit.deb
+          sudo apt install -f -y
+          sudo apt install -y jq
 
       - name: Sanitize branch name
         run: echo "SAFE_REF_NAME=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
@@ -533,12 +527,10 @@ jobs:
               added_details=""
               while IFS= read -r vuln_id; do
                 if [[ -n "$vuln_id" ]]; then
-                  # Extract target, vuln_id, pkg_name from the identifier
                   target=$(echo "$vuln_id" | cut -d':' -f1)
                   vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
                   pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
                   
-                  # Get full details from the report
                   details=$(jq -r --arg target "$target" --arg vuln "$vuln_cve" --arg pkg "$pkg_name" '
                     (.Results // []) | .[] | select(.Target == $target) | 
                     (.Vulnerabilities? // []) | .[] | 
@@ -559,12 +551,10 @@ jobs:
               fixed_details=""
               while IFS= read -r vuln_id; do
                 if [[ -n "$vuln_id" ]]; then
-                  # Extract target, vuln_id, pkg_name from the identifier
                   target=$(echo "$vuln_id" | cut -d':' -f1)
                   vuln_cve=$(echo "$vuln_id" | cut -d':' -f2)
                   pkg_name=$(echo "$vuln_id" | cut -d':' -f3)
                   
-                  # Get full details from the baseline report
                   baseline_report="baseline-reports/trivy-report.json"
                   if [[ "$baseline_method" == "live_scan" ]]; then
                     baseline_report="tmp/trivy-report-baseline.json"
@@ -592,7 +582,6 @@ jobs:
           echo "fixed_count=$fixed_count" >> "$GITHUB_OUTPUT"
           echo "baseline_method=$baseline_method" >> "$GITHUB_OUTPUT"
           
-          # Set detailed outputs (escape for GitHub Actions)
           {
             echo "added_details<<EOF"
             echo -e "$added_details"
@@ -682,7 +671,6 @@ jobs:
             const gosecMethod = '${{ needs.gosec_scan.outputs.gosec_baseline_method }}' || 'none';
             const trivyMethod = '${{ needs.trivy_scan.outputs.trivy_baseline_method }}' || 'none';
             
-            // Get detailed vulnerability information (safely encoded)
             const gosecAddedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_added_details) }} || '';
             const gosecFixedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_fixed_details) }} || '';
             const trivyAddedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_added_details) }} || '';
@@ -692,7 +680,6 @@ jobs:
             const totalCurrent = parseInt(gosecCurrent) + parseInt(trivyCurrent);
             const totalBaseline = parseInt(gosecBaseline) + parseInt(trivyBaseline);
             
-            // Method indicators
             const getMethodIcon = (method) => {
               switch(method) {
                 case 'artifact': return '📦';

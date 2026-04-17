@@ -25,7 +25,7 @@ function Write-Log {
 
 function Normalize-MAC {
     param([string]$mac)
-    return ($mac -replace '[:-]', '').ToLower()
+    return ($mac -replace '[:-]', '').ToUpper()
 }
 
 try {
@@ -41,50 +41,60 @@ try {
     $configs = Get-Content "C:\NIC-Recovery\netconfig.json" | ConvertFrom-Json
     Write-Log "Found $(($configs | Measure-Object).Count) NIC(s) to configure"
 
-    $allNics = Get-NetAdapter -IncludeHidden
-
+    $maxRetries = 10
+    $retryDelay = 5
     foreach ($cfg in $configs) {
-
         $alias = $cfg.InterfaceAlias
         $macTarget = Normalize-MAC $cfg.MACAddress
         $ipAddr = $cfg.IPAddress
 
-        Write-Log "Configuring $alias (MAC: $($cfg.MACAddress), IP: $ipAddr)"
+        Write-Log "Configuring $alias (MAC: $($cfg.MACAddress) NORMALIZED: $macTarget, IP: $ipAddr)"
+
+        $wmiNic = $null
+        for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+            $wmiNics = Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.MACAddress -and $_.PhysicalAdapter }
+            Write-Log " - WMI NICs (attempt $attempt): $($wmiNics | ForEach-Object { "$($_.NetConnectionID) [$($_.MACAddress)]" } | Out-String)"
+            $wmiNic = $wmiNics | Where-Object {
+                (Normalize-MAC $_.MACAddress) -eq $macTarget
+            } | Select-Object -First 1
+
+            if ($wmiNic) { break }
+
+            Write-Log " - Adapter not found yet (attempt $attempt/$maxRetries), waiting ${retryDelay}s..."
+            Start-Sleep -Seconds $retryDelay
+        }
 
         try {
             # ---- Find NIC via MAC ----
-            $nic = $allNics | Where-Object {
-                (Normalize-MAC $_.MacAddress) -eq $macTarget
-            } | Select-Object -First 1
-
-            if (-not $nic) {
+            if (-not $wmiNic) {
                 throw "No adapter found with MAC: $($cfg.MACAddress)"
             }
 
-            Write-Log " - Found adapter: $($nic.Name), Status: $($nic.Status)"
+            $nicAlias = $wmiNic.NetConnectionID
+            Write-Log " - Found adapter: $nicAlias, Status: $($wmiNic.NetConnectionStatus)"
 
             # ---- Rename (clean assumption: no conflict) ----
-            if ($nic.Name -ne $alias) {
-                Write-Log " - Renaming '$($nic.Name)' → '$alias'"
-                Rename-NetAdapter -Name $nic.Name -NewName $alias -Confirm:$false -ErrorAction Stop
+            if ($nicAlias -ne $alias) {
+                Write-Log " - Renaming '$nicAlias' → '$alias'"
+                Rename-NetAdapter -Name $nicAlias -NewName $alias -Confirm:$false -ErrorAction Stop
                 Start-Sleep -Seconds 2
-                $nic = Get-NetAdapter -Name $alias -ErrorAction Stop
+                $nicAlias = $alias
             }
 
             # ---- Remove existing IPs (safe) ----
-            $oldIPs = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+            $oldIPs = Get-NetIPAddress -InterfaceAlias $nicAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue
             if ($oldIPs) {
                 Write-Log " - Removing existing IPv4 addresses"
                 $oldIPs | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
             }
 
             # ---- Remove existing default routes ----
-            Get-NetRoute -InterfaceAlias $nic.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Get-NetRoute -InterfaceAlias $nicAlias -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
                 Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
             # ---- Configure Static IP ----
             $params = @{
-                InterfaceAlias = $nic.Name
+                InterfaceAlias = $nicAlias
                 IPAddress      = $ipAddr
                 PrefixLength   = $cfg.PrefixLength
             }
@@ -100,16 +110,16 @@ try {
 
             # ---- Disable DHCP AFTER static config ----
             Write-Log " - Disabling DHCP"
-            Set-NetIPInterface -InterfaceAlias $nic.Name -Dhcp Disabled -Confirm:$false -ErrorAction Stop
+            Set-NetIPInterface -InterfaceAlias $nicAlias -Dhcp Disabled -Confirm:$false -ErrorAction Stop
 
             # ---- Configure DNS ----
             if ($cfg.DNSServers -and $cfg.DNSServers.Count -gt 0) {
                 Write-Log " - Setting DNS: $($cfg.DNSServers -join ', ')"
-                Set-DnsClientServerAddress -InterfaceAlias $nic.Name -ServerAddresses $cfg.DNSServers -ErrorAction Stop
+                Set-DnsClientServerAddress -InterfaceAlias $nicAlias -ServerAddresses $cfg.DNSServers -ErrorAction Stop
             }
 
             # ---- Verification ----
-            $newIP = Get-NetIPAddress -InterfaceAlias $nic.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue
+            $newIP = Get-NetIPAddress -InterfaceAlias $nicAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue
 
             if ($newIP) {
                 Write-Log " - SUCCESS: $alias → $($newIP.IPAddress)/$($newIP.PrefixLength)"
