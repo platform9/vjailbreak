@@ -16,6 +16,9 @@ export type SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
+  V2V_HELPER_VIRTV2V_MEMSIZE_MB: number
+  V2V_HELPER_POD_MEMORY_REQUEST: string
+  V2V_HELPER_POD_MEMORY_LIMIT: string
   // Proxy-related fields are UI-only and handled via injectEnvVariables
   PROXY_ENABLED: boolean
   PROXY_HTTP_SCHEME: 'http' | 'https'
@@ -40,6 +43,15 @@ type ProxyFormState = Pick<
   | 'PROXY_HTTPS_PORT'
   | 'NO_PROXY'
 >
+
+export const parseMemoryMiB = (s: string): number => {
+  const trimmed = (s ?? '').trim()
+  if (/^(\d+)Gi$/.test(trimmed)) return parseInt(trimmed) * 1024
+  if (/^(\d+)Mi$/.test(trimmed)) return parseInt(trimmed)
+  if (/^(\d+)G$/.test(trimmed)) return parseInt(trimmed) * 1000
+  if (/^(\d+)M$/.test(trimmed)) return parseInt(trimmed)
+  return 0
+}
 
 export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
   const parseBool = (v: unknown, fallback: boolean) =>
@@ -176,7 +188,10 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
     VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
     AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
-    DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
+    DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
+    V2V_HELPER_VIRTV2V_MEMSIZE_MB: String(f.V2V_HELPER_VIRTV2V_MEMSIZE_MB),
+    V2V_HELPER_POD_MEMORY_REQUEST: f.V2V_HELPER_POD_MEMORY_REQUEST,
+    V2V_HELPER_POD_MEMORY_LIMIT: f.V2V_HELPER_POD_MEMORY_LIMIT
   })
 
   const fromConfigMapData = (
@@ -244,6 +259,18 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, defaults.AUTO_FSTAB_UPDATE),
     DEPLOYMENT_NAME:
       typeof data?.DEPLOYMENT_NAME === 'string' ? data.DEPLOYMENT_NAME : defaults.DEPLOYMENT_NAME,
+    V2V_HELPER_VIRTV2V_MEMSIZE_MB: parseNum(
+      data?.V2V_HELPER_VIRTV2V_MEMSIZE_MB,
+      defaults.V2V_HELPER_VIRTV2V_MEMSIZE_MB
+    ),
+    V2V_HELPER_POD_MEMORY_REQUEST:
+      typeof data?.V2V_HELPER_POD_MEMORY_REQUEST === 'string'
+        ? data.V2V_HELPER_POD_MEMORY_REQUEST
+        : defaults.V2V_HELPER_POD_MEMORY_REQUEST,
+    V2V_HELPER_POD_MEMORY_LIMIT:
+      typeof data?.V2V_HELPER_POD_MEMORY_LIMIT === 'string'
+        ? data.V2V_HELPER_POD_MEMORY_LIMIT
+        : defaults.V2V_HELPER_POD_MEMORY_LIMIT,
     PROXY_ENABLED: defaults.PROXY_ENABLED,
     PROXY_HTTP_SCHEME: defaults.PROXY_HTTP_SCHEME,
     PROXY_HTTP_HOST: defaults.PROXY_HTTP_HOST,
