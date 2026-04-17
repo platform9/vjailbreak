@@ -588,10 +588,13 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
 	}
 
-	for _, nic := range nicList {
-		name, err := resolveNetworkName(ctx, c, nic)
-		if err != nil {
-			return nil, err
+	// Normalise NICs against the VM's live network list and collect names.
+	// Stale VMX-era DVPG keys (e.g. from a 6.x -> 9.x vCenter rebuild with
+	// DVS import) are rewritten to the current MORs in-place.
+	names, errs := resolveVMNICNetworks(ctx, c, nicList, o.Network)
+	for i, name := range names {
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
 		networks = append(networks, name)
 	}
@@ -704,6 +707,10 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 
 		vms, err := finder.VirtualMachineList(ctx, "*")
 		if err != nil {
+			if _, ok := err.(*find.NotFoundError); ok {
+				log.Info("no vms found in datacenter, skipping", "datacenter", dcName)
+				continue
+			}
 			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
 			continue
 		}
@@ -790,66 +797,197 @@ func DetectGPUUsage(vmProps *mo.VirtualMachine) bool {
 	return gpuInfo.HasGPU()
 }
 
-// ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware (config.hardware.device).
-// It returns a list of NICs with MAC addresses, backing network identifiers, and index order.
+// ExtractVirtualNICs retrieves the virtual NICs defined in the VM hardware
+// (config.hardware.device). The returned NIC.Network contains whatever the
+// backing stored (DVPG key for DVS, network MOR for standard networks, opaque
+// id for opaque networks); resolveVMNICNetworks normalises that to the live
+// vCenter MOR.
 func ExtractVirtualNICs(vmProps *mo.VirtualMachine) ([]vjailbreakv1alpha1.NIC, error) {
 	nicList := []vjailbreakv1alpha1.NIC{}
-	nicsIndex := 0
-
 	for _, device := range vmProps.Config.Hardware.Device {
-		var nic *types.VirtualEthernetCard
-
-		switch d := device.(type) {
-		case *types.VirtualE1000,
-			*types.VirtualE1000e,
-			*types.VirtualVmxnet,
-			*types.VirtualVmxnet2,
-			*types.VirtualVmxnet3,
-			*types.VirtualPCNet32:
-			if ethCard, ok := d.(types.BaseVirtualEthernetCard); ok {
-				nic = ethCard.GetVirtualEthernetCard()
-			}
+		ethCard, ok := device.(types.BaseVirtualEthernetCard)
+		if !ok {
+			continue
+		}
+		nic := ethCard.GetVirtualEthernetCard()
+		if nic == nil || nic.Backing == nil {
+			continue
 		}
 
-		if nic != nil && nic.Backing != nil {
-			var network, networkType string
-			switch backing := device.GetVirtualDevice().Backing.(type) {
-			case *types.VirtualEthernetCardNetworkBackingInfo:
-				if backing.Network != nil {
-					network = backing.Network.Value
-					networkType = backing.Network.Type
-				}
-			case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
-				network = backing.Port.PortgroupKey
-				networkType = constants.VMwareNetworkTypeDistributedVirtualPortgroup
-			case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
-				network = backing.OpaqueNetworkId
-				networkType = constants.VMwareNetworkTypeOpaqueNetwork
+		var network, networkType string
+		switch b := nic.Backing.(type) {
+		case *types.VirtualEthernetCardNetworkBackingInfo:
+			if b.Network != nil {
+				network = b.Network.Value
+				networkType = b.Network.Type
 			}
-			nicList = append(nicList, vjailbreakv1alpha1.NIC{
-				MAC:         strings.ToLower(nic.MacAddress),
-				Index:       nicsIndex,
-				Network:     network,
-				NetworkType: networkType,
-			})
-			nicsIndex++
+		case *types.VirtualEthernetCardDistributedVirtualPortBackingInfo:
+			network = b.Port.PortgroupKey
+			networkType = constants.VMwareNetworkTypeDistributedVirtualPortgroup
+		case *types.VirtualEthernetCardOpaqueNetworkBackingInfo:
+			network = b.OpaqueNetworkId
+			networkType = constants.VMwareNetworkTypeOpaqueNetwork
 		}
+
+		nicList = append(nicList, vjailbreakv1alpha1.NIC{
+			MAC:         strings.ToLower(nic.MacAddress),
+			Index:       len(nicList),
+			Network:     network,
+			NetworkType: networkType,
+		})
 	}
 	return nicList, nil
 }
 
-// resolveNetworkName returns the human-readable name for a NIC's backing network.
-// Each VMware network type requires a different resolution strategy:
-//   - Network: direct MOR lookup
-//   - DistributedVirtualPortgroup: direct MOR lookup with the correct MOR type
-//   - OpaqueNetwork: OpaqueNetworkId is not a MOR value so the inventory
-//     must be scanned to find the object with a matching OpaqueNetworkId
-//   - empty: nil backing reference, meaning the port group was deleted, surfaced as error
-func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1alpha1.NIC) (string, error) {
-	switch nic.NetworkType {
-	case "":
-		return "", fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
+// buildVMNetworkIndex resolves every MOR in the VM's runtime network list
+// (vmProps.Network) to its display name, indexed by every identifier a NIC
+// backing can plausibly reference:
+//
+//   - DistributedVirtualPortgroup: both the current MOR value AND the `key`
+//     property. The key differs from the MOR when a DVS has been exported from
+//     one vCenter and imported into another (e.g. vCenter 6.0 -> 7/8/9
+//     migration); the new vCenter preserves the original MOR as the portgroup
+//     key while allocating a fresh MOR. The VMX/NIC backing stores the key,
+//     not the MOR, so MOR-only lookups fail with "ManagedObjectNotFound".
+//   - OpaqueNetwork: the OpaqueNetworkId (from the summary) and the MOR value.
+//   - Network: the MOR value.
+//
+// This index is cheap (one RetrieveProperties call per VM for the already-
+// connected networks) and bypasses stale-key issues entirely because
+// vmProps.Network contains today's MORs as resolved by vCenter.
+//
+// The returned map is keyed by every identifier a NIC backing might plausibly
+// carry (current MOR value, DVPG `key`, OpaqueNetworkId) and yields the current
+// authoritative MOR value plus the display name for that network. Callers use
+// this both to resolve a name and to rewrite a NIC's stored identifier to the
+// current MOR (replacing stale VMX-era keys carried over from an earlier
+// vCenter).
+type vmNetworkEntry struct {
+	MOR  string
+	Name string
+}
 
+func buildVMNetworkIndex(ctx context.Context, c *vim25.Client, nets []types.ManagedObjectReference) map[string]vmNetworkEntry {
+	idx := make(map[string]vmNetworkEntry)
+	if len(nets) == 0 {
+		return idx
+	}
+
+	// Partition refs by type so we can retrieve the right property set.
+	var dvpgRefs, opaqueRefs, netRefs []types.ManagedObjectReference
+	for _, ref := range nets {
+		switch ref.Type {
+		case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
+			dvpgRefs = append(dvpgRefs, ref)
+		case constants.VMwareNetworkTypeOpaqueNetwork:
+			opaqueRefs = append(opaqueRefs, ref)
+		default:
+			// "Network" and any other subtype reachable via mo.Network.
+			netRefs = append(netRefs, ref)
+		}
+	}
+
+	pc := property.DefaultCollector(c)
+
+	if len(dvpgRefs) > 0 {
+		var dvpgs []mo.DistributedVirtualPortgroup
+		if err := pc.Retrieve(ctx, dvpgRefs, []string{"name", "key"}, &dvpgs); err == nil {
+			for _, pg := range dvpgs {
+				if pg.Name == "" {
+					continue
+				}
+				entry := vmNetworkEntry{MOR: pg.Self.Value, Name: pg.Name}
+				idx[pg.Self.Value] = entry
+				if pg.Key != "" {
+					idx[pg.Key] = entry
+				}
+			}
+		}
+	}
+
+	if len(opaqueRefs) > 0 {
+		var opaques []mo.OpaqueNetwork
+		if err := pc.Retrieve(ctx, opaqueRefs, []string{"name", "summary"}, &opaques); err == nil {
+			for _, on := range opaques {
+				if on.Name == "" {
+					continue
+				}
+				entry := vmNetworkEntry{MOR: on.Self.Value, Name: on.Name}
+				idx[on.Self.Value] = entry
+				if s, ok := on.Summary.(*types.OpaqueNetworkSummary); ok && s != nil && s.OpaqueNetworkId != "" {
+					idx[s.OpaqueNetworkId] = entry
+				}
+			}
+		}
+	}
+
+	if len(netRefs) > 0 {
+		var plainNets []mo.Network
+		if err := pc.Retrieve(ctx, netRefs, []string{"name"}, &plainNets); err == nil {
+			for _, n := range plainNets {
+				if n.Name == "" {
+					continue
+				}
+				idx[n.Self.Value] = vmNetworkEntry{MOR: n.Self.Value, Name: n.Name}
+			}
+		}
+	}
+
+	return idx
+}
+
+// resolveVMNICNetworks normalises nicList against the VM's live network
+// inventory and returns the parallel list of display names plus any per-NIC
+// resolution errors.
+//
+// For each NIC:
+//  1. Look up the NIC's stored identifier (MOR / DVPG key / OpaqueNetworkId)
+//     in the VM-scoped index built from vmProps.Network. On a hit, rewrite
+//     NIC.Network to the live MOR and record the display name in one pass
+//     (the primary path; cheap and handles stale VMX keys from cross-vCenter
+//     DVS imports).
+//  2. On miss, fall back to resolveNetworkNameByRef which does a direct MOR
+//     lookup or OpaqueNetwork container scan — the pre-refactor behaviour,
+//     preserved for cases where the VM's runtime network list is empty or
+//     incomplete.
+//
+// Errors are returned per-NIC (index-aligned) so callers can choose to mark
+// individual NICs as orphaned while still surfacing other resolved names.
+func resolveVMNICNetworks(ctx context.Context, c *vim25.Client, nicList []vjailbreakv1alpha1.NIC, vmNets []types.ManagedObjectReference) ([]string, []error) {
+	names := make([]string, len(nicList))
+	errs := make([]error, len(nicList))
+	idx := buildVMNetworkIndex(ctx, c, vmNets)
+
+	for i := range nicList {
+		nic := &nicList[i]
+		if nic.NetworkType == "" {
+			errs[i] = fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
+			continue
+		}
+		if entry, ok := idx[nic.Network]; ok && entry.Name != "" {
+			if entry.MOR != "" {
+				nic.Network = entry.MOR // normalise CR to the live MOR
+			}
+			names[i] = entry.Name
+			continue
+		}
+		name, err := resolveNetworkNameByRef(ctx, c, *nic)
+		if err != nil {
+			errs[i] = err
+			continue
+		}
+		names[i] = name
+	}
+	return names, errs
+}
+
+// resolveNetworkNameByRef is the fallback path for when the VM-scoped index
+// does not contain an entry for a NIC (e.g. vmProps.Network was empty at the
+// time of collection). It performs the original per-type lookup: direct MOR
+// read for Network / DVPG, container-view scan by OpaqueNetworkId for opaque
+// networks.
+func resolveNetworkNameByRef(ctx context.Context, c *vim25.Client, nic vjailbreakv1alpha1.NIC) (string, error) {
+	switch nic.NetworkType {
 	case constants.VMwareNetworkTypeNetwork:
 		var netObj mo.Network
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeNetwork, Value: nic.Network}
@@ -862,7 +1000,7 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 		var netObj mo.DistributedVirtualPortgroup
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
 		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
-			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
+			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s (key/MOR mismatch or inaccessible): %w", nic.Network, err)
 		}
 		return netObj.Name, nil
 
@@ -1777,12 +1915,15 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
-	// Build networks list from NetworkInterfaces to match NIC count
-	for _, nic := range nicList {
-		name, err := resolveNetworkName(ctx, c, nic)
-		if err != nil {
-			// Network is orphaned/deleted or has no backing — log but continue VM discovery
-			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), err)
+	// Normalise NICs against the VM's live network list (vmProps.Network).
+	// This rewrites nic.Network to the current vCenter MOR when the VMX
+	// carried a stale DVPG key (e.g. after a 6.x -> 9.x vCenter rebuild with
+	// DVS import) and returns the per-NIC display names alongside per-NIC
+	// errors so discovery can continue when individual NICs fail.
+	netNames, netErrs := resolveVMNICNetworks(ctx, c, nicList, vmProps.Network)
+	for i, name := range netNames {
+		if netErrs[i] != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), netErrs[i])
 			networks = append(networks, "Orphaned Network")
 			continue
 		}
