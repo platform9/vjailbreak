@@ -88,6 +88,14 @@ type Disk struct {
 
 // NIC represents a Virtual ethernet card in the virtual machine.
 type NIC struct {
+	// Network is the current vCenter identifier for the backing network.
+	// For DistributedVirtualPortgroup this is the live MOR (e.g.
+	// "dvportgroup-2291") rather than the DVPG `key` stored in the VMX,
+	// which can be a stale MOR inherited from a prior vCenter (e.g. after a
+	// DVS export/import across a vCenter rebuild). For OpaqueNetwork this
+	// is the MOR; for Network it is the MOR value. When the identifier
+	// cannot be resolved against vCenter's live inventory it falls back to
+	// whatever the backing stored.
 	Network     string   `json:"network,omitempty" `
 	NetworkType string   `json:"networkType,omitempty"`
 	MAC         string   `json:"mac,omitempty"`
