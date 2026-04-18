@@ -576,7 +576,7 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config", "network"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"config", "network", "guest"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
@@ -591,7 +591,11 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 	// Normalise NICs against the VM's live network list and collect names.
 	// Stale VMX-era DVPG keys (e.g. from a 6.x -> 9.x vCenter rebuild with
 	// DVS import) are rewritten to the current MORs in-place.
-	names, errs := resolveVMNICNetworks(ctx, c, nicList, o.Network)
+	var guestNets []types.GuestNicInfo
+	if o.Guest != nil {
+		guestNets = o.Guest.Net
+	}
+	names, errs := resolveVMNICNetworks(ctx, c, nicList, o.Network, guestNets)
 	for i, name := range names {
 		if errs[i] != nil {
 			return nil, errs[i]
@@ -953,7 +957,13 @@ func buildVMNetworkIndex(ctx context.Context, c *vim25.Client, nets []types.Mana
 //
 // Errors are returned per-NIC (index-aligned) so callers can choose to mark
 // individual NICs as orphaned while still surfacing other resolved names.
-func resolveVMNICNetworks(ctx context.Context, c *vim25.Client, nicList []vjailbreakv1alpha1.NIC, vmNets []types.ManagedObjectReference) ([]string, []error) {
+//
+// guestNets (vmProps.Guest.Net) is an optional last-resort fallback: when a
+// DVPG referenced by the NIC backing has been deleted from vCenter (so it is
+// absent from both vmProps.Network and direct MOR lookup), VMware Tools still
+// reports the last-known portgroup name per MAC in GuestNicInfo.Network. Use
+// it to salvage a human-readable name instead of marking the NIC orphaned.
+func resolveVMNICNetworks(ctx context.Context, c *vim25.Client, nicList []vjailbreakv1alpha1.NIC, vmNets []types.ManagedObjectReference, guestNets []types.GuestNicInfo) ([]string, []error) {
 	names := make([]string, len(nicList))
 	errs := make([]error, len(nicList))
 	idx := buildVMNetworkIndex(ctx, c, vmNets)
@@ -961,6 +971,10 @@ func resolveVMNICNetworks(ctx context.Context, c *vim25.Client, nicList []vjailb
 	for i := range nicList {
 		nic := &nicList[i]
 		if nic.NetworkType == "" {
+			if name := guestNetworkNameForMAC(guestNets, nic.MAC); name != "" {
+				names[i] = name
+				continue
+			}
 			errs[i] = fmt.Errorf("NIC %s has no network backing (port group may have been deleted)", nic.MAC)
 			continue
 		}
@@ -973,12 +987,36 @@ func resolveVMNICNetworks(ctx context.Context, c *vim25.Client, nicList []vjailb
 		}
 		name, err := resolveNetworkNameByRef(ctx, c, *nic)
 		if err != nil {
+			// Last-resort fallback: ask VMware Tools (guest.net) what
+			// portgroup this MAC is connected to. This salvages names for
+			// NICs whose DVPG has been deleted from vCenter (ManagedObject
+			// "has already been deleted or has not been completely created").
+			if toolsName := guestNetworkNameForMAC(guestNets, nic.MAC); toolsName != "" {
+				names[i] = toolsName
+				continue
+			}
 			errs[i] = err
 			continue
 		}
 		names[i] = name
 	}
 	return names, errs
+}
+
+// guestNetworkNameForMAC returns the portgroup name reported by VMware Tools
+// for the NIC with the given MAC, or "" if tools has no record / no name.
+// MAC comparison is case-insensitive to match ExtractVirtualNICs which lowers
+// the device MAC.
+func guestNetworkNameForMAC(guestNets []types.GuestNicInfo, mac string) string {
+	if mac == "" {
+		return ""
+	}
+	for i := range guestNets {
+		if strings.EqualFold(guestNets[i].MacAddress, mac) && guestNets[i].Network != "" {
+			return guestNets[i].Network
+		}
+	}
+	return ""
 }
 
 // resolveNetworkNameByRef is the fallback path for when the VM-scoped index
@@ -1920,7 +1958,16 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	// carried a stale DVPG key (e.g. after a 6.x -> 9.x vCenter rebuild with
 	// DVS import) and returns the per-NIC display names alongside per-NIC
 	// errors so discovery can continue when individual NICs fail.
-	netNames, netErrs := resolveVMNICNetworks(ctx, c, nicList, vmProps.Network)
+	//
+	// vmProps.Guest.Net is passed as a final fallback so NICs whose DVPG has
+	// been deleted from vCenter (direct MOR lookup fails with "has already
+	// been deleted") can still be labelled with the portgroup name reported
+	// by VMware Tools for that MAC.
+	var guestNets []types.GuestNicInfo
+	if vmProps.Guest != nil {
+		guestNets = vmProps.Guest.Net
+	}
+	netNames, netErrs := resolveVMNICNetworks(ctx, c, nicList, vmProps.Network, guestNets)
 	for i, name := range netNames {
 		if netErrs[i] != nil {
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), netErrs[i])
