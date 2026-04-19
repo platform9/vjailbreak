@@ -18,39 +18,42 @@ package controller
 
 import (
 	"context"
-	"reflect"
-	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
-
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
-// VolumeImageProfileReconciler reconciles VolumeImageProfile objects.
-// It seeds the default Windows and Linux profiles on startup if they don't exist.
-type VolumeImageProfileReconciler struct {
+// defaultProfilesSeedMarker is the name of the ConfigMap used as a one-shot
+// marker indicating that the default VolumeImageProfiles have been seeded.
+// Its presence (in the migration-system namespace) short-circuits the seeder
+// so that user edits or deletions of the defaults are never reversed.
+const defaultProfilesSeedMarker = "vjailbreak-default-profiles-seeded"
+
+// VolumeImageProfileSeeder seeds the default VolumeImageProfile resources
+// exactly once in the cluster's lifetime. After the initial seed the marker
+// ConfigMap is written and every subsequent startup is a no-op.
+type VolumeImageProfileSeeder struct {
 	client.Client
 	Scheme *runtime.Scheme
 	ctxlog logr.Logger
 }
 
-// Default profiles that are seeded at startup
+// defaultProfiles is the out-of-box profile set applied to fresh installs.
 var defaultProfiles = []vjailbreakv1alpha1.VolumeImageProfile{
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "vjailbreak-default-windows",
-			Annotations: map[string]string{
-				"description": "Default profile for Windows VMs - enables QEMU guest agent and sets virtio drivers",
-			},
 		},
 		Spec: vjailbreakv1alpha1.VolumeImageProfileSpec{
 			OSFamily: "windows",
@@ -61,131 +64,77 @@ var defaultProfiles = []vjailbreakv1alpha1.VolumeImageProfile{
 				"hw_qemu_guest_agent": "yes",
 				"hw_video_model":      "qxl",
 			},
-			Description: "Default Windows profile with virtio drivers and QEMU guest agent",
+			Description: "Default profile for Windows VMs",
 		},
 	},
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "vjailbreak-default-linux",
-			Annotations: map[string]string{
-				"description": "Default profile for Linux VMs - enables QEMU guest agent",
-			},
 		},
 		Spec: vjailbreakv1alpha1.VolumeImageProfileSpec{
 			OSFamily: "linux",
 			Properties: map[string]string{
 				"hw_qemu_guest_agent": "yes",
 			},
-			Description: "Default Linux profile with QEMU guest agent enabled",
+			Description: "Default profile for Linux VMs",
 		},
 	},
 }
 
-// seedOnce ensures default profiles are seeded only once
-var seedOnce sync.Once
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=volumeimageprofiles,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;create
 
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=volumeimageprofiles,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=volumeimageprofiles/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=volumeimageprofiles/finalizers,verbs=update
-
-// Reconcile ensures the default VolumeImageProfile resources exist.
-// For user-created profiles, it simply acknowledges their existence.
-func (r *VolumeImageProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.ctxlog = log.FromContext(ctx)
-
-	profile := &vjailbreakv1alpha1.VolumeImageProfile{}
-	if err := r.Get(ctx, req.NamespacedName, profile); err != nil {
-		if apierrors.IsNotFound(err) {
-			// If a default profile was deleted, recreate it
-			for _, defaultProfile := range defaultProfiles {
-				if req.Name == defaultProfile.Name && req.Namespace == constants.NamespaceMigrationSystem {
-					r.ctxlog.Info("Recreating deleted default VolumeImageProfile", "profile", defaultProfile.Name)
-					if err := r.createProfile(ctx, &defaultProfile); err != nil {
-						return ctrl.Result{}, errors.Wrapf(err, "failed to recreate default profile %s", defaultProfile.Name)
-					}
-					return ctrl.Result{}, nil
-				}
-			}
-			// Regular user profile was deleted, nothing to do
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, errors.Wrap(err, "failed to get VolumeImageProfile")
-	}
-
-	// For default profiles, ensure they are not modified (except by the controller itself)
-	// We check the generation to avoid fighting with our own updates
-	if profile.Generation > 1 {
-		for _, defaultProfile := range defaultProfiles {
-			if profile.Name == defaultProfile.Name {
-				// Check if the spec has been modified from the default
-				if profile.Spec.OSFamily != defaultProfile.Spec.OSFamily ||
-					profile.Spec.Description != defaultProfile.Spec.Description ||
-					!reflect.DeepEqual(profile.Spec.Properties, defaultProfile.Spec.Properties) {
-					r.ctxlog.Info("Default profile was modified, restoring to default", "profile", profile.Name)
-					profile.Spec = defaultProfile.Spec
-					if err := r.Update(ctx, profile); err != nil {
-						return ctrl.Result{}, errors.Wrapf(err, "failed to restore default profile %s", profile.Name)
-					}
-					return ctrl.Result{}, nil
-				}
-			}
-		}
-	}
-
-	return ctrl.Result{}, nil
+// SetupWithManager registers the seeder as a manager Runnable so that it
+// executes once after the cache is synced. No watch or reconcile loop is
+// installed — the seeder never fires again for the lifetime of the process.
+func (s *VolumeImageProfileSeeder) SetupWithManager(mgr ctrl.Manager) error {
+	s.Client = mgr.GetClient()
+	s.Scheme = mgr.GetScheme()
+	s.ctxlog = log.Log.WithName("VolumeImageProfileSeeder")
+	return mgr.Add(manager.RunnableFunc(s.Run))
 }
 
-// SeedDefaultProfiles creates the default profiles on controller startup.
-// It is called from SetupWithManager.
-func (r *VolumeImageProfileReconciler) SeedDefaultProfiles(ctx context.Context) error {
-	var seedErr error
-	seedOnce.Do(func() {
-		for _, profile := range defaultProfiles {
-			profile.Namespace = constants.NamespaceMigrationSystem
-			existing := &vjailbreakv1alpha1.VolumeImageProfile{}
-			err := r.Get(ctx, client.ObjectKeyFromObject(&profile), existing)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					r.ctxlog.Info("Seeding default VolumeImageProfile", "profile", profile.Name)
-					if createErr := r.createProfile(ctx, &profile); createErr != nil {
-						seedErr = errors.Wrapf(createErr, "failed to create default profile %s", profile.Name)
-						return
-					}
-				} else {
-					seedErr = errors.Wrapf(err, "failed to check existence of default profile %s", profile.Name)
-					return
-				}
-			} else {
-				r.ctxlog.Info("Default VolumeImageProfile already exists", "profile", profile.Name)
-			}
-		}
-	})
-	return seedErr
-}
-
-func (r *VolumeImageProfileReconciler) createProfile(ctx context.Context, profile *vjailbreakv1alpha1.VolumeImageProfile) error {
-	profile.Namespace = constants.NamespaceMigrationSystem
-	if err := r.Create(ctx, profile); err != nil {
-		return errors.Wrap(err, "failed to create profile")
+// Run seeds the default profiles if and only if the marker ConfigMap is
+// absent. The marker is created after a successful seed, so user deletions
+// and modifications of the default profiles survive every subsequent restart.
+func (s *VolumeImageProfileSeeder) Run(ctx context.Context) error {
+	marker := &corev1.ConfigMap{}
+	markerKey := client.ObjectKey{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      defaultProfilesSeedMarker,
 	}
+
+	err := s.Get(ctx, markerKey, marker)
+	switch {
+	case err == nil:
+		s.ctxlog.Info("Default VolumeImageProfiles already seeded; skipping",
+			"marker", defaultProfilesSeedMarker)
+		return nil
+	case !apierrors.IsNotFound(err):
+		return errors.Wrap(err, "failed to check default-profile seed marker")
+	}
+
+	for i := range defaultProfiles {
+		profile := defaultProfiles[i]
+		profile.Namespace = constants.NamespaceMigrationSystem
+		if err := s.Create(ctx, &profile); err != nil && !apierrors.IsAlreadyExists(err) {
+			return errors.Wrapf(err, "failed to create default profile %s", profile.Name)
+		}
+		s.ctxlog.Info("Seeded default VolumeImageProfile", "profile", profile.Name)
+	}
+
+	marker = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: constants.NamespaceMigrationSystem,
+			Name:      defaultProfilesSeedMarker,
+			Annotations: map[string]string{
+				"vjailbreak.k8s.pf9.io/description": "One-shot marker: default VolumeImageProfiles have been seeded. Deleting this ConfigMap will cause defaults to be re-seeded on next controller startup.",
+			},
+		},
+	}
+	if err := s.Create(ctx, marker); err != nil && !apierrors.IsAlreadyExists(err) {
+		return errors.Wrap(err, "failed to create default-profile seed marker")
+	}
+	s.ctxlog.Info("Wrote default-profile seed marker", "marker", defaultProfilesSeedMarker)
 	return nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *VolumeImageProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Client = mgr.GetClient()
-	r.Scheme = mgr.GetScheme()
-	r.ctxlog = log.Log.WithName("VolumeImageProfile")
-
-	// Seed default profiles on startup
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := r.SeedDefaultProfiles(ctx); err != nil {
-		r.ctxlog.Error(err, "Failed to seed default VolumeImageProfiles on startup")
-		// Continue even if seeding fails - the controller will try to recreate on reconcile
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.VolumeImageProfile{}).
-		Complete(r)
 }

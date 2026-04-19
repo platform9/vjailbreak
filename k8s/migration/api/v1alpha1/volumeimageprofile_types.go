@@ -23,40 +23,28 @@ import (
 // VolumeImageProfileSpec defines the desired state of VolumeImageProfile
 type VolumeImageProfileSpec struct {
 	// OSFamily scopes this profile to a specific OS type.
-	// Use "windows" or "linux" to auto-apply to matching VMs, or "any" to apply regardless of OS.
 	// +kubebuilder:validation:Enum=windows;linux;any
 	OSFamily string `json:"osFamily"`
 
 	// Properties is the map of Cinder volume image metadata key-value pairs
-	// that will be set on the migrated volume. For example:
-	// {"hw_firmware_type": "uefi", "os_require_quiesce": "no"}
-	// Properties from multiple profiles are merged left-to-right; later profiles override earlier ones.
 	Properties map[string]string `json:"properties"`
 
-	// Description is an optional human-readable description of when to use this profile.
+	// Description will indicate the usage context of this profile
 	// +optional
 	Description string `json:"description,omitempty"`
 }
 
-// VolumeImageProfileStatus defines the observed state of VolumeImageProfile.
-// Currently unused but reserved for future validation status.
-type VolumeImageProfileStatus struct{}
-
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="OSFamily",type="string",JSONPath=".spec.osFamily"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// VolumeImageProfile is the Schema for the volumeimageprofiles API.
-// It defines a reusable set of Cinder volume_image_metadata properties that can be
-// applied to VM volumes during migration. Profiles are referenced from MigrationPlan
-// and are merged in order to produce the final metadata applied to each migrated volume.
+// VolumeImageProfile defines a reusable set of Cinder volume_image_metadata properties
+// that can be applied to VM volumes during migration.
 type VolumeImageProfile struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   VolumeImageProfileSpec   `json:"spec,omitempty"`
-	Status VolumeImageProfileStatus `json:"status,omitempty"`
+	Spec VolumeImageProfileSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

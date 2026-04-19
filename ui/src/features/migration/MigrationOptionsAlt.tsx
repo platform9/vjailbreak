@@ -272,8 +272,6 @@ export default function MigrationOptionsAlt({
     initializedImageProfilesRef
   ])
 
-  // Prune selected profiles whose osFamily no longer matches the current VM selection
-  // so the form payload doesn't carry ghost profile names after the user changes VMs.
   useEffect(() => {
     if (loadingProfiles) return
     if (selectedImageProfiles.length === 0) return

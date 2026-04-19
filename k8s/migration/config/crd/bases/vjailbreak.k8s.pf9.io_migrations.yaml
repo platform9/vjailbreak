@@ -73,9 +73,7 @@ spec:
                   type: string
                 description: |-
                   ImageMetadata is the merged map of Cinder volume_image_metadata properties resolved
-                  from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering and
-                  left-to-right merging. The v2v-helper applies these to the boot volume before the
-                  destination VM is created.
+                  from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering.
                 type: object
               initiateCutover:
                 description: InitiateCutover is the flag to initiate cutover

@@ -25,10 +25,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          VolumeImageProfile is the Schema for the volumeimageprofiles API.
-          It defines a reusable set of Cinder volume_image_metadata properties that can be
-          applied to VM volumes during migration. Profiles are referenced from MigrationPlan
-          and are merged in order to produce the final metadata applied to each migrated volume.
+          VolumeImageProfile defines a reusable set of Cinder volume_image_metadata properties
+          that can be applied to VM volumes during migration.
         properties:
           apiVersion:
             description: |-
@@ -51,13 +49,10 @@ spec:
             description: VolumeImageProfileSpec defines the desired state of VolumeImageProfile
             properties:
               description:
-                description: Description is an optional human-readable description
-                  of when to use this profile.
+                description: Description will indicate the usage context of this profile
                 type: string
               osFamily:
-                description: |-
-                  OSFamily scopes this profile to a specific OS type.
-                  Use "windows" or "linux" to auto-apply to matching VMs, or "any" to apply regardless of OS.
+                description: OSFamily scopes this profile to a specific OS type.
                 enum:
                 - windows
                 - linux
@@ -66,23 +61,14 @@ spec:
               properties:
                 additionalProperties:
                   type: string
-                description: |-
-                  Properties is the map of Cinder volume image metadata key-value pairs
-                  that will be set on the migrated volume. For example:
-                  {"hw_firmware_type": "uefi", "os_require_quiesce": "no"}
-                  Properties from multiple profiles are merged left-to-right; later profiles override earlier ones.
+                description: Properties is the map of Cinder volume image metadata
+                  key-value pairs
                 type: object
             required:
             - osFamily
             - properties
             type: object
-          status:
-            description: |-
-              VolumeImageProfileStatus defines the observed state of VolumeImageProfile.
-              Currently unused but reserved for future validation status.
-            type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
+    subresources: {}

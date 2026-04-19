@@ -67,9 +67,6 @@ type AdvancedOptions struct {
 	// AcknowledgeNetworkConflictRisk indicates that the user acknowledges the risk of network conflicts when doing live migration
 	AcknowledgeNetworkConflictRisk bool `json:"acknowledgeNetworkConflictRisk,omitempty"`
 	// ImageProfiles is the ordered list of VolumeImageProfile names to apply to the migrated VM's boot volume.
-	// Profiles are filtered by the VM's detected OS family ("any" profiles always apply) and their properties
-	// are merged left-to-right (later profiles override earlier ones on duplicate keys) before being written to
-	// the boot volume as Cinder volume_image_metadata.
 	// +optional
 	ImageProfiles []string `json:"imageProfiles,omitempty"`
 }
