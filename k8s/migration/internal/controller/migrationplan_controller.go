@@ -1621,11 +1621,7 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 	return nil
 }
 
-// setImageMetadataFromProfiles resolves the VolumeImageProfile names referenced on the
-// MigrationPlan, filters them by the VM's effective OS family (profiles with osFamily "any"
-// always apply), merges their Properties maps left-to-right (later profiles override earlier
-// ones on duplicate keys), stamps the result onto the Migration spec so v2v-helper can apply
-// it to the boot volume, and also emits it into the migration ConfigMap as IMAGE_METADATA JSON.
+// setImageMetadataFromProfiles resolves the VolumeImageProfile names referenced on the MigrationPlan
 func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Context,
 	configMapData map[string]string,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1680,8 +1676,7 @@ func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Conte
 }
 
 // resolveImageProfiles fetches VolumeImageProfiles by name in the requested order, drops any
-// that don't match the VM's OS family (profiles with osFamily "any" always apply), and merges
-// their Properties maps left-to-right.
+// that don't match the VM's OS family (profiles with osFamily "any" always apply).
 func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 	namespace string,
 	profileNames []string,

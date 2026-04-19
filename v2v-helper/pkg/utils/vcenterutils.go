@@ -55,8 +55,6 @@ type MigrationParams struct {
 
 	CurrentInstanceID string
 
-	// ImageMetadata holds the resolved VolumeImageProfile key-value pairs for the boot volume.
-	// Serialized as JSON in the ConfigMap under the IMAGE_METADATA key.
 	ImageMetadata map[string]string
 }
 

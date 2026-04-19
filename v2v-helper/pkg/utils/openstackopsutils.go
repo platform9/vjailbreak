@@ -381,10 +381,6 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	return nil
 }
 
-// ApplyBootVolumeImageMetadata writes an arbitrary map of Cinder volume_image_metadata
-// key-value pairs onto a boot volume. It is used to apply the merged VolumeImageProfile
-// properties resolved by the controller so that Nova/libvirt pick them up when the
-// destination VM is created.
 func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
 	if len(metadata) == 0 {
 		return nil
