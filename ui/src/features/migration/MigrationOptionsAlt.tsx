@@ -1,12 +1,15 @@
 import {
   Alert,
+  Autocomplete,
   Box,
   Checkbox,
+  Chip,
   Divider,
   FormControlLabel,
   MenuItem,
   Select,
   styled,
+  TextField as MuiTextField,
   Tooltip,
   Typography
 } from '@mui/material'
@@ -24,6 +27,8 @@ import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constant
 import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 import { hasSelectedLayer2Network } from 'src/shared/utils/network'
+import { useVolumeImageProfilesQuery } from 'src/hooks/api/useVolumeImageProfilesQuery'
+import { VolumeImageProfile } from 'src/api/volume-image-profiles/model'
 
 const SectionBlock = styled(Box)(({ theme }) => ({
   display: 'grid',
@@ -210,6 +215,72 @@ export default function MigrationOptionsAlt({
   ])
 
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
+
+  const { data: volumeImageProfiles = [], isLoading: loadingProfiles } =
+    useVolumeImageProfilesQuery()
+
+  const applicableProfiles = useMemo(() => {
+    const list = Array.isArray(volumeImageProfiles) ? volumeImageProfiles : []
+    return list.filter((p) => {
+      const fam = (p.spec?.osFamily || '').toLowerCase()
+      if (fam === 'any' || !fam) return true
+      if (fam === 'windows') return hasWindowsVMSelected
+      if (fam === 'linux') return hasLinuxVMSelected
+      return false
+    })
+  }, [volumeImageProfiles, hasWindowsVMSelected, hasLinuxVMSelected])
+
+  const selectedImageProfiles: string[] = useMemo(
+    () => (Array.isArray(params?.imageProfiles) ? params.imageProfiles : []),
+    [params?.imageProfiles]
+  )
+
+  const initializedImageProfilesRef = useMemo(() => ({ done: false }), [])
+  useEffect(() => {
+    if (initializedImageProfilesRef.done) return
+    if (loadingProfiles) return
+    if (applicableProfiles.length === 0) return
+    if (selectedImageProfiles.length > 0) {
+      initializedImageProfilesRef.done = true
+      return
+    }
+
+    const autoSelected = applicableProfiles
+      .filter((p) => {
+        const name = p.metadata?.name || ''
+        const fam = (p.spec?.osFamily || '').toLowerCase()
+        if (fam === 'any') return true
+        if (fam === 'windows' && hasWindowsVMSelected && name === 'vjailbreak-default-windows')
+          return true
+        if (fam === 'linux' && hasLinuxVMSelected && name === 'vjailbreak-default-linux')
+          return true
+        return false
+      })
+      .map((p) => p.metadata.name)
+
+    if (autoSelected.length > 0) {
+      onChange('imageProfiles')(autoSelected)
+    }
+    initializedImageProfilesRef.done = true
+  }, [
+    loadingProfiles,
+    applicableProfiles,
+    hasLinuxVMSelected,
+    hasWindowsVMSelected,
+    onChange,
+    selectedImageProfiles.length,
+    initializedImageProfilesRef
+  ])
+
+  useEffect(() => {
+    if (loadingProfiles) return
+    if (selectedImageProfiles.length === 0) return
+    const applicableNames = new Set(applicableProfiles.map((p) => p.metadata?.name))
+    const pruned = selectedImageProfiles.filter((name) => applicableNames.has(name))
+    if (pruned.length !== selectedImageProfiles.length) {
+      onChange('imageProfiles')(pruned)
+    }
+  }, [applicableProfiles, selectedImageProfiles, loadingProfiles, onChange])
 
   useEffect(() => {
     if (!isPowerOffThenCopy) return
@@ -753,6 +824,75 @@ export default function MigrationOptionsAlt({
             </OptionRow>
           </SectionBlock>
         ) : null}
+
+        <SectionBlock>
+          <SectionHeaderRow>
+            <Typography variant="subtitle2">Image profiles</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Apply OpenStack image metadata to the boot volume
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
+              <Typography variant="body2">Select image profiles</Typography>
+              <OptionHelp variant="caption">
+                Profiles matching the selected VMs' OS family are pre-selected. Properties from later
+                profiles override earlier ones on duplicate keys.
+              </OptionHelp>
+            </OptionLeft>
+            <Box sx={{ width: '100%' }}>
+              <Autocomplete
+                multiple
+                size="small"
+                loading={loadingProfiles}
+                options={applicableProfiles}
+                getOptionLabel={(o: VolumeImageProfile) => o.metadata?.name || ''}
+                isOptionEqualToValue={(o, v) => o.metadata?.name === v.metadata?.name}
+                value={applicableProfiles.filter((p) =>
+                  selectedImageProfiles.includes(p.metadata.name)
+                )}
+                onChange={(_, values) => {
+                  onChange('imageProfiles')(values.map((v) => v.metadata.name))
+                }}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`${option.metadata.name} (${option.spec.osFamily})`}
+                      {...getTagProps({ index })}
+                      key={option.metadata.name}
+                    />
+                  ))
+                }
+                renderOption={(props, option) => (
+                  <li {...props} key={option.metadata.name}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                      <Typography variant="body2">{option.metadata.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.spec.osFamily} ·{' '}
+                        {Object.keys(option.spec.properties || {}).length} prop(s)
+                        {option.spec.description ? ` · ${option.spec.description}` : ''}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <MuiTextField
+                    {...params}
+                    placeholder={
+                      applicableProfiles.length === 0
+                        ? 'No applicable profiles'
+                        : 'Select profiles'
+                    }
+                  />
+                )}
+              />
+            </Box>
+          </OptionRow>
+        </SectionBlock>
 
         <SectionBlock>
           <SectionHeaderRow>

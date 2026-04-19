@@ -308,6 +308,13 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "RollingMigrationPlan")
 		return err
 	}
+	if err := (&controller.VolumeImageProfileSeeder{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register startup runnable", "runnable", "VolumeImageProfileSeeder")
+		return err
+	}
 
 	return nil
 }

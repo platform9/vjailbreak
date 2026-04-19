@@ -179,6 +179,7 @@ func main() {
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 		NetworkOverrides:       networkOverrides,
+		ImageMetadata:          migrationparams.ImageMetadata,
 	}
 
 	if migrationobj.ServerGroup != "" {

@@ -80,6 +80,12 @@ spec:
                     items:
                       type: string
                     type: array
+                  imageProfiles:
+                    description: ImageProfiles is the ordered list of VolumeImageProfile
+                      names to apply to the migrated VM's boot volume.
+                    items:
+                      type: string
+                    type: array
                   networkPersistence:
                     description: NetworkPersistence instructs the migration helper
                       to persist the source networking configuration

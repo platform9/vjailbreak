@@ -1,0 +1,74 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: volumeimageprofiles.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: VolumeImageProfile
+    listKind: VolumeImageProfileList
+    plural: volumeimageprofiles
+    singular: volumeimageprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.osFamily
+      name: OSFamily
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          VolumeImageProfile defines a reusable set of Cinder volume_image_metadata properties
+          that can be applied to VM volumes during migration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VolumeImageProfileSpec defines the desired state of VolumeImageProfile
+            properties:
+              description:
+                description: Description will indicate the usage context of this profile
+                type: string
+              osFamily:
+                description: OSFamily scopes this profile to a specific OS type.
+                enum:
+                - windows
+                - linux
+                - any
+                type: string
+              properties:
+                additionalProperties:
+                  type: string
+                description: Properties is the map of Cinder volume image metadata
+                  key-value pairs
+                type: object
+            required:
+            - osFamily
+            - properties
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

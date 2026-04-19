@@ -381,6 +381,24 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	return nil
 }
 
+func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
+	if len(metadata) == 0 {
+		return nil
+	}
+	PrintLog(fmt.Sprintf("OPENSTACK API: Applying %d image metadata key(s) to boot volume %s", len(metadata), volume.ID))
+	options := volumes.ImageMetadataOpts{
+		Metadata: map[string]string{},
+	}
+	for k, v := range metadata {
+		options.Metadata[k] = v
+	}
+	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+	if err != nil {
+		return fmt.Errorf("failed to apply boot volume image metadata: %s", err)
+	}
+	return nil
+}
+
 func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Setting volume %s as bootable, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
 	options := volumes.BootableOpts{

@@ -68,6 +68,13 @@ spec:
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
                   after a successful migration to prevent network conflicts. Defaults to false.
                 type: boolean
+              imageMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ImageMetadata is the merged map of Cinder volume_image_metadata properties resolved
+                  from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering.
+                type: object
               initiateCutover:
                 description: InitiateCutover is the flag to initiate cutover
                 type: boolean

@@ -195,3 +195,12 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - vjailbreak.k8s.pf9.io
+  resources:
+  - volumeimageprofiles
+  verbs:
+  - create
+  - get
+  - list
+  - watch
