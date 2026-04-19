@@ -17,6 +17,8 @@ import { ConfirmationDialog } from 'src/components/dialogs'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { getSecret } from 'src/api/secrets/secrets'
 import { useNavigate } from 'react-router-dom'
 import { Banner } from 'src/components/design-system'
@@ -213,6 +215,7 @@ const CustomToolbar = ({
 
 export default function StorageArrayTable() {
   const { reportError } = useErrorHandler({ component: 'StorageArrayTable' })
+  const { track } = useAmplitude({ component: 'StorageArrayTable' })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
@@ -303,10 +306,25 @@ export default function StorageArrayTable() {
     setDeleting(true)
     try {
       await deleteArrayCredsWithSecretFlow(selectedForDeletion.name)
+
+      track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_DELETED, {
+        credentialName: selectedForDeletion.name,
+        vendorType: selectedForDeletion.vendor,
+        source: selectedForDeletion.source
+      })
+
       queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       handleDeleteClose()
     } catch (error) {
       console.error('Error deleting array credential:', error)
+
+      track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_DELETE_FAILED, {
+        credentialName: selectedForDeletion.name,
+        vendorType: selectedForDeletion.vendor,
+        source: selectedForDeletion.source,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      })
+
       reportError(error as Error, {
         context: 'array-credentials-deletion',
         metadata: {
@@ -329,14 +347,37 @@ export default function StorageArrayTable() {
   }
 
   const handleConfirmBulkDelete = async () => {
+    const idsSnapshot = [...rowSelectionModel]
     setDeleting(true)
     try {
-      await Promise.all(rowSelectionModel.map((id) => deleteArrayCredsWithSecretFlow(id as string)))
+      await Promise.all(idsSnapshot.map((id) => deleteArrayCredsWithSecretFlow(id as string)))
+
+      const selectedRowsSnapshot = rows.filter((row) => idsSnapshot.includes(row.id))
+      selectedRowsSnapshot.forEach((row) => {
+        track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_DELETED, {
+          credentialName: row.name,
+          vendorType: row.vendor,
+          source: row.source
+        })
+      })
+
       queryClient.invalidateQueries({ queryKey: ARRAY_CREDS_QUERY_KEY })
       setRowSelectionModel([])
       handleBulkDeleteClose()
     } catch (error) {
       console.error('Error deleting array credentials:', error)
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const selectedRowsSnapshot = rows.filter((row) => idsSnapshot.includes(row.id))
+      selectedRowsSnapshot.forEach((row) => {
+        track(AMPLITUDE_EVENTS.STORAGE_ARRAY_CREDENTIALS_DELETE_FAILED, {
+          credentialName: row.name,
+          vendorType: row.vendor,
+          source: row.source,
+          errorMessage
+        })
+      })
+
       reportError(error as Error, {
         context: 'array-credentials-bulk-deletion'
       })

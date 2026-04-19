@@ -45,7 +45,7 @@ RUN dnf install -y \
     ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./virt-v2v-2.7.17-1.fc42.x86_64.rpm \
+    ./virt-v2v-2.8.1-1.fc42.x86_64.rpm \
     ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
     guestfs-tools \
     netplan && \
@@ -61,7 +61,7 @@ RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-
     libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
     nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
     nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
-    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.7.17-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch && \
+    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.8.1-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 
@@ -74,5 +74,6 @@ COPY scripts/get-bootable-partition.sh /home/fedora/get-bootable-partition.sh
 COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
 COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
 COPY scripts/firstboot/store /home/fedora/store
+COPY scripts/offline-vmware-cleanup.sh /home/fedora/offline-vmware-cleanup.sh
 COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
 COPY scripts/99-l2-Netplan.yaml /home/fedora/99-l2-Netplan.yaml

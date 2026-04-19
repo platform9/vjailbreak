@@ -67,6 +67,12 @@ func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networ
 
 func GetCurrentInstanceUUID() (string, error) {
 
+	// Use the env var directly if set, avoiding a network round-trip to the
+	// metadata service which may not be reachable in all deployment environments.
+	if id := os.Getenv("CURRENT_INSTANCE_ID"); id != "" {
+		return id, nil
+	}
+
 	// Step 1. Path with a read lock
 	// First Check if the data is already cached. This read lock allows multiple
 	// Goroutines to read the cached data concurrently.
@@ -103,11 +109,6 @@ func GetCurrentInstanceUUID() (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		currentInstanceUUID := os.Getenv("CURRENT_INSTANCE_ID")
-		if currentInstanceUUID != "" {
-			PrintLog("CURRENT_INSTANCE_ID environment variable is set to: " + currentInstanceUUID)
-			return currentInstanceUUID, nil
-		}
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
 	defer resp.Body.Close()
@@ -290,15 +291,20 @@ func (osclient *OpenStackClients) WaitForVolumeAttachment(ctx context.Context, v
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
+	// Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume attachment for volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		devicePath, _ := osclient.FindDevice(volumeID)
 		if devicePath != "" {
 			return nil
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for specified interval before checking again
 	}
-	return fmt.Errorf("volume attachment not found within %d seconds", constants.MaxIntervalCount*5)
+	return fmt.Errorf("volume attachment not found within %d seconds", vjailbreakSettings.VolumeAvailableWaitRetryLimit*vjailbreakSettings.VolumeAvailableWaitIntervalSeconds)
 }
 
 func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volumeID string) error {
@@ -308,12 +314,18 @@ func (osclient *OpenStackClients) DetachVolumeFromVM(ctx context.Context, volume
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
 
-	for i := 0; i < constants.MaxIntervalCount; i++ {
+	// Get vjailbreak settings
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vjailbreak settings")
+	}
+
+	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		err = volumeattach.Delete(ctx, osclient.ComputeClient, instanceID, volumeID).ExtractErr()
 		if err == nil {
 			break
 		}
-		time.Sleep(5 * time.Second) // Wait for 5 seconds before checking again
+		time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second) // Wait for specified interval before checking again
 	}
 	if err != nil && !strings.Contains(err.Error(), "is not attached") {
 		return fmt.Errorf("failed to detach volume from VM: %s", err)
@@ -700,7 +712,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -751,15 +763,44 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		serverCreateOpts.Metadata["hw_scsi_reservations"] = "true"
 	}
 
-	// Set up boot block device with BootIndex 0
-	bootBlockDevice := servers.BlockDevice{
-		DeleteOnTermination: false,
-		DestinationType:     servers.DestinationVolume,
-		SourceType:          servers.SourceVolume,
-		UUID:                uuid,
-		BootIndex:           0,
+	// Set up block devices for VM creation
+	var blockDevices []servers.BlockDevice
+
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootableDiskIndex {
+		// UEFI multi-disk layout: ESP on separate disk
+		// Attach ESP disk with BootIndex=0 (UEFI firmware needs this first)
+		espBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.VMDisks[espDiskIndex].OpenstackVol.ID,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, espBlockDevice)
+
+		// Attach root/boot disk with BootIndex=1
+		rootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           1,
+		}
+		blockDevices = append(blockDevices, rootBlockDevice)
+		PrintLog(fmt.Sprintf("UEFI multi-disk layout: ESP (Disk %d) + Root (Disk %d) attached at create time", espDiskIndex, bootableDiskIndex))
+	} else {
+		// Standard layout: single boot disk or ESP on same disk as root
+		bootBlockDevice := servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                uuid,
+			BootIndex:           0,
+		}
+		blockDevices = append(blockDevices, bootBlockDevice)
 	}
-	serverCreateOpts.BlockDevice = []servers.BlockDevice{bootBlockDevice}
+
+	serverCreateOpts.BlockDevice = blockDevices
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -817,7 +858,17 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 
 	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
-	for _, disk := range append(vminfo.VMDisks[:bootableDiskIndex], vminfo.VMDisks[bootableDiskIndex+1:]...) {
+	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
+	for idx, disk := range vminfo.VMDisks {
+		// Skip boot disk
+		if idx == bootableDiskIndex {
+			continue
+		}
+		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
+		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
+			continue
+		}
+
 		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
 			VolumeID:            disk.OpenstackVol.ID,
 			DeleteOnTermination: false,
@@ -826,6 +877,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
 		}
 	}
+
 	return server, nil
 }
 

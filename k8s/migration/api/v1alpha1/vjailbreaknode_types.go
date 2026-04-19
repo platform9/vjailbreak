@@ -58,7 +58,7 @@ type VjailbreakNodeStatus struct {
 	// OpenstackUUID is the UUID of the VM in OpenStack
 	OpenstackUUID string `json:"openstackUUID,omitempty"`
 
-	// VMIP is the IP address of the VM
+	// VMIP  is the IP address of the VM
 	VMIP string `json:"vmIP"`
 
 	// Phase is the current lifecycle phase of the node

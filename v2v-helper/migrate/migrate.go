@@ -88,9 +88,10 @@ type Migrate struct {
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
-	InterfaceIndex int   `json:"interfaceIndex"`
-	PreserveIP     *bool `json:"preserveIP,omitempty"`
-	PreserveMAC    *bool `json:"preserveMAC,omitempty"`
+	InterfaceIndex int    `json:"interfaceIndex"`
+	PreserveIP     *bool  `json:"preserveIP,omitempty"`
+	PreserveMAC    *bool  `json:"preserveMAC,omitempty"`
+	UserAssignedIP string `json:"UserAssignedIP,omitempty"`
 }
 
 type MigrationTimes struct {
@@ -971,99 +972,94 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 }
 
 // detectBootVolume identifies which volume contains the boot partition
-func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, useSingleDisk bool, err error) {
+func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
 	bootVolumeIndex = -1
+
+	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
 
 	for idx := range vminfo.VMDisks {
 		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
-		if cmdErr != nil {
-			utils.PrintLog(fmt.Sprintf("Error running '%s'. Error: '%s', Output: %s\n", getBootCommand, cmdErr, strings.TrimSpace(ans)))
+		if cmdErr != nil || ans == "" {
 			continue
 		}
 
-		if ans == "" {
-			continue
-		}
-
-		utils.PrintLog(fmt.Sprintf("Output from '%s' - '%s'\n", getBootCommand, strings.TrimSpace(ans)))
+		utils.PrintLog(fmt.Sprintf("Boot volume detected: Disk %d (%s)", idx, vminfo.VMDisks[idx].Name))
 		osPath = strings.TrimSpace(ans)
 		bootVolumeIndex = idx
-		useSingleDisk = true
 		break
 	}
 
-	return bootVolumeIndex, osPath, useSingleDisk, nil
+	if bootVolumeIndex < 0 {
+		utils.PrintLog("WARNING: No boot volume detected")
+	}
+
+	return bootVolumeIndex, osPath, nil
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
-func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, err error) {
+func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex int, osPath string, autoFstabUpdate bool) (finalBootIndex int, finalOsPath string, osRelease string, espDiskIndex int, err error) {
 	finalBootIndex = bootVolumeIndex
 	finalOsPath = osPath
 
-	if useSingleDisk {
-		osRelease, err = virtv2v.GetOsRelease(vminfo.VMDisks[bootVolumeIndex].Path)
-		if err != nil {
-			return -1, "", "", errors.Wrap(err, "failed to get os release")
-		}
-	} else {
-		// Run get-bootable-partition.sh script
-		migobj.logMessage("Running get-bootable-partition.sh script")
-		var ans string
-		var cmdErr error
+	// Run get-bootable-partition.sh script
+	var ans string
+	var cmdErr error
 
-		if ans, cmdErr = virtv2v.RunGetBootablePartitionScript(vminfo.VMDisks); cmdErr != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
-			// Don't fail the migration, just log the warning
+	if ans, cmdErr = virtv2v.RunGetBootablePartitionScript(vminfo.VMDisks); cmdErr != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
+	} else if ans != "" {
+		migobj.logMessage(fmt.Sprintf("Bootable partition: %s", ans))
+	}
+
+	if ans == "" {
+		return -1, "", "", -1, errors.New("empty bootable partition from the script")
+	}
+
+	index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
+	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
+		return -1, "", "", -1, err
+	}
+
+	finalBootIndex, err = strconv.Atoi(strings.TrimSpace(index))
+	if err != nil {
+		return -1, "", "", -1, errors.Wrap(err, "failed to convert bootable partition index to int")
+	}
+	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
+
+	// Detect ESP for UEFI VMs
+	espDiskIndex = -1
+	if vminfo.UEFI {
+		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
+		if espErr != nil {
+			migobj.logMessage(fmt.Sprintf("Error detecting ESP disk: %v", espErr))
+		} else if detectedESPIndex >= 0 {
+			espDiskIndex = detectedESPIndex
+			migobj.logMessage(fmt.Sprintf("ESP detected on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
 		} else {
-			if ans == "" {
-				migobj.logMessage("Failed to run get-bootable-partition.sh script, empty output")
-			} else {
-				migobj.logMessage(fmt.Sprintf("Successfully ran get-bootable-partition.sh script with output: %s", ans))
-			}
-		}
-
-		if ans == "" {
-			return -1, "", "", errors.New("empty bootable partition from the script")
-		}
-
-		index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-			return -1, "", "", err
-		}
-
-		finalBootIndex, err = strconv.Atoi(strings.TrimSpace(index))
-		if err != nil {
-			return -1, "", "", errors.Wrap(err, "failed to convert bootable partition index to int")
-		}
-		migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
-
-		lvm, lvmErr := virtv2v.CheckForLVM(vminfo.VMDisks)
-		if lvmErr != nil || lvm == "" {
-			return -1, "", "", errors.Wrap(lvmErr, "OS install location not found, Failed to check for LVM")
-		}
-		finalOsPath = strings.TrimSpace(lvm)
-		if finalBootIndex < 0 {
-			finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
-			if err != nil {
-				return -1, "", "", errors.Wrap(err, "Failed to get bootable volume index")
-			}
-		}
-
-		osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
-		if err != nil {
-			return -1, "", "", errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
+			migobj.logMessage("WARNING: No ESP detected for UEFI VM")
 		}
 	}
 
+	// Use boot partition device as OS path for virt-v2v
+	// virt-v2v-in-place will auto-detect the actual OS location (LVM or regular partition)
+	// when all disks are provided in the libvirt XML
+	finalOsPath = strings.TrimSpace(ans)
+	migobj.logMessage(fmt.Sprintf("OS path for virt-v2v: %s", finalOsPath))
+
+	osRelease, err = virtv2v.GetOsReleaseAllVolumes(vminfo.VMDisks)
+	if err != nil {
+		return -1, "", "", -1, errors.Wrapf(err, "failed to get os release: %s", strings.TrimSpace(osRelease))
+	}
+
 	if err := migobj.validateLinuxOS(osRelease); err != nil {
-		return -1, "", "", err
+		return -1, "", "", -1, err
 	}
 
 	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
 	if autoFstabUpdate {
 		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
-		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path); err != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
 			// Don't fail the migration, just log the warning
 		} else {
@@ -1073,7 +1069,11 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		migobj.logMessage("Skipping generate-mount-persistence.sh script (AUTO_FSTAB_UPDATE is disabled)")
 	}
 
-	return finalBootIndex, finalOsPath, osRelease, nil
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != finalBootIndex {
+		migobj.logMessage(fmt.Sprintf("UEFI multi-disk: ESP on Disk %d, Root on Disk %d", espDiskIndex, finalBootIndex))
+	}
+
+	return finalBootIndex, finalOsPath, osRelease, espDiskIndex, nil
 }
 
 // validateLinuxOS checks if the detected Linux OS is supported
@@ -1099,23 +1099,19 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 }
 
 // handleWindowsBootDetection handles boot volume detection for Windows systems
-func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) (int, string, error) {
+func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIndex int) (int, string, error) {
 	utils.PrintLog("operating system compatibility check passed")
 
 	var finalBootIndex int
 	var err error
 
-	if !useSingleDisk {
-		utils.PrintLog("checking for bootable volume in case of LDM")
-		finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
-		if err != nil {
-			return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
-		}
-	} else {
-		finalBootIndex = bootVolumeIndex
+	utils.PrintLog("checking for bootable volume in case of LDM")
+	finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
+	if err != nil {
+		return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
 	}
 
-	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[finalBootIndex].Path)
+	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Warning: Failed to detect Windows version: %v", err))
 		osRelease = "Windows (version unknown)"
@@ -1127,7 +1123,7 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 }
 
 // performDiskConversion runs virt-v2v conversion on the boot disk
-func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, espDiskIndex int) error {
 
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
@@ -1148,7 +1144,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 			Script: "Firstboot-Scheduler.ps1",
 			Async:  false,
 		})
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && (strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012")) {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
 			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
 				Script: "install-virtio-win12.ps1",
@@ -1210,13 +1206,18 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if removeVMwareTools {
+			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+				utils.PrintLog(fmt.Sprintf("WARNING: offline VMware Tools cleanup returned error: %v", err))
+			}
+		}
 
-		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
+		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
 		}
 	}
@@ -1226,12 +1227,26 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to set volume as bootable")
 	}
 
+	// For UEFI multi-disk layouts, also mark the ESP disk as bootable
+	// This is required because OpenStack won't allow attaching a non-bootable volume with BootIndex=0
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootVolumeIndex {
+		migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+		if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[espDiskIndex].OpenstackVol); err != nil {
+			return errors.Wrap(err, "failed to set ESP volume as bootable")
+		}
+	}
+
 	return nil
 }
-func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	persistNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	if persistNetwork {
-		if err := virtv2v.InjectRestorationScript(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+		osType := strings.ToLower(vminfo.OSType)
+		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac, osType); err != nil {
+			return errors.Wrap(err, "failed to inject mac to ips")
+		}
+		utils.PrintLog("Mac to IP mapping injected successfully")
+		if err := virtv2v.InjectRestorationScript(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to inject restoration script")
 		}
 		utils.PrintLog("Restoration script injected successfully")
@@ -1240,10 +1255,11 @@ func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VM
 }
 
 // configureLinuxNetwork handles network configuration for Linux systems
-func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	if persisNetwork {
-		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+		osType := strings.ToLower(vminfo.OSType)
+		if err := virtv2v.InjectMacToIps(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac, osType); err != nil {
 			return errors.Wrap(err, "failed to inject mac to ips")
 		}
 		utils.PrintLog("Mac to ips injection completed successfully")
@@ -1254,14 +1270,14 @@ func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMIn
 		isNetplan := isNetplanSupported(versionID) && strings.Contains(osRelease, "ubuntu")
 		utils.PrintLog(fmt.Sprintf("Is netplan: %v", isNetplan))
 		utils.PrintLog("Running network persistence script")
-		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, isNetplan); err != nil {
+		if err := virtv2v.RunNetworkPersistence(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.OSType, isNetplan); err != nil {
 			utils.PrintLog(fmt.Sprintf("Warning: Network persistence script failed: %v", err))
 		} else {
 			utils.PrintLog("Network persistence script executed successfully")
 		}
 	} else {
 		if strings.Contains(osRelease, "ubuntu") {
-			return migobj.configureUbuntuNetwork(vminfo, bootVolumeIndex, osRelease, useSingleDisk)
+			return migobj.configureUbuntuNetwork(vminfo, bootVolumeIndex, osRelease)
 		}
 
 		if virtv2v.IsRHELFamily(osRelease) {
@@ -1273,7 +1289,7 @@ func (migobj *Migrate) configureLinuxNetwork(ctx context.Context, vminfo vm.VMIn
 }
 
 // configureUbuntuNetwork handles Ubuntu-specific network configuration
-func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string, useSingleDisk bool) error {
+func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	versionID := parseVersionID(osRelease)
 	utils.PrintLog(fmt.Sprintf("Version ID: %s", versionID))
 
@@ -1285,11 +1301,11 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 		utils.PrintLog("Adding wildcard netplan")
 		if migobj.isSimpleNetwork {
 			utils.PrintLog("L2 network detected adding l2 wildcard")
-			if err := virtv2v.AddWildcardNetplanForL2(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
+			if err := virtv2v.AddWildcardNetplanForL2(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 				return errors.Wrap(err, "failed to add l2 wildcard netplan")
 			}
 		} else {
-			if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
+			if err := virtv2v.AddWildcardNetplan(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, vminfo.GuestNetworks, vminfo.GatewayIP, vminfo.IPperMac); err != nil {
 				return errors.Wrap(err, "failed to add wildcard netplan")
 			}
 		}
@@ -1297,11 +1313,11 @@ func (migobj *Migrate) configureUbuntuNetwork(vminfo vm.VMInfo, bootVolumeIndex 
 		return nil
 	}
 
-	return migobj.addUdevRulesForUbuntu(vminfo, bootVolumeIndex, useSingleDisk)
+	return migobj.addUdevRulesForUbuntu(vminfo, bootVolumeIndex)
 }
 
 // addUdevRulesForUbuntu adds udev rules for older Ubuntu versions
-func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex int, useSingleDisk bool) error {
+func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex int) error {
 	utils.PrintLog("Ubuntu version does not support netplan, going to use udev rules")
 
 	interfaces, err := virtv2v.GetNetworkInterfaceNames(vminfo.VMDisks[bootVolumeIndex].Path)
@@ -1323,7 +1339,7 @@ func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex i
 	}
 	utils.PrintLog(fmt.Sprintf("MACs: %v", macs))
 
-	if err := virtv2v.AddUdevRules(vminfo.VMDisks, useSingleDisk, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs); err != nil {
+	if err := virtv2v.AddUdevRules(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, interfaces, macs); err != nil {
 		log.Printf(`Warning Failed to add udev rules: %s, incase of interface name mismatch,
                         network might not come up post migration, please check the network configuration post migration`, err)
 		log.Println("Continuing with migration")
@@ -1351,7 +1367,7 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 	return nil
 }
 
-func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) error {
+func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
 	// Step 1: Determine boot command based on OS type
@@ -1359,79 +1375,80 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) err
 
 	// Step 2: Attach all volumes
 	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
-		return err
+		return -1, err
 	}
 
 	// Step 3: Generate XML configuration for conversion
 	if err := vmutils.GenerateXMLConfig(vminfo); err != nil {
-		return errors.Wrap(err, "failed to generate XML")
+		return -1, errors.Wrap(err, "failed to generate XML")
 	}
 
 	// Step 3.5: Get vjailbreak settings
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
-		return errors.Wrap(err, "failed to get vjailbreak settings")
+		return -1, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
 	// Step 4: Detect boot volume
-	bootVolumeIndex, osPath, useSingleDisk, err := migobj.detectBootVolume(vminfo, getBootCommand)
+	bootVolumeIndex, osPath, err := migobj.detectBootVolume(vminfo, getBootCommand)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
 	// Step 5: Handle OS-specific detection and validation
 	var osRelease string
+	var espDiskIndex int = -1
 	osType := strings.ToLower(vminfo.OSType)
 
 	switch osType {
 	case constants.OSFamilyLinux:
-		bootVolumeIndex, osPath, osRelease, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, useSingleDisk, osPath, vjailbreakSettings.AutoFstabUpdate)
+		bootVolumeIndex, osPath, osRelease, espDiskIndex, err = migobj.handleLinuxOSDetection(vminfo, bootVolumeIndex, osPath, vjailbreakSettings.AutoFstabUpdate)
 		if err != nil {
-			return err
+			return -1, err
 		}
 
 	case constants.OSFamilyWindows:
-		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex, useSingleDisk)
+		bootVolumeIndex, osRelease, err = migobj.handleWindowsBootDetection(vminfo, bootVolumeIndex)
 		if err != nil {
-			return err
+			return -1, err
 		}
 
 	default:
-		return errors.Errorf("unsupported OS type: %s", vminfo.OSType)
+		return -1, errors.Errorf("unsupported OS type: %s", vminfo.OSType)
 	}
 
 	// Step 6: Validate boot volume was found
 	if bootVolumeIndex == -1 {
-		return errors.Errorf("boot volume not found, cannot create target VM")
+		return -1, errors.Errorf("boot volume not found, cannot create target VM")
 	}
 
 	// Step 7: Mark boot volume
-	utils.PrintLog(fmt.Sprintf("Setting up boot volume as: %s", vminfo.VMDisks[bootVolumeIndex].Name))
+	utils.PrintLog(fmt.Sprintf("Boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 
 	// Step 8: Perform disk conversion
-	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, useSingleDisk); err != nil {
-		return err
+	if err := migobj.performDiskConversion(ctx, vminfo, bootVolumeIndex, osPath, osRelease, espDiskIndex); err != nil {
+		return -1, err
 	}
 
 	// Step 9: Configure network for Linux systems
 	if osType == constants.OSFamilyLinux {
-		if err := migobj.configureLinuxNetwork(ctx, vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
-			return err
+		if err := migobj.configureLinuxNetwork(ctx, vminfo, bootVolumeIndex, osRelease); err != nil {
+			return -1, err
 		}
 	} else if osType == constants.OSFamilyWindows {
-		if err := migobj.configureWindowsNetwork(ctx, vminfo, bootVolumeIndex, osRelease, useSingleDisk); err != nil {
-			return err
+		if err := migobj.configureWindowsNetwork(ctx, vminfo, bootVolumeIndex, osRelease); err != nil {
+			return -1, err
 		}
 	}
 
 	// Step 10: Detach all volumes
 	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
-		return errors.Wrap(err, "Failed to detach all volumes from VM")
+		return -1, errors.Wrap(err, "Failed to detach all volumes from VM")
 	}
 
 	migobj.logMessage("Successfully converted disk")
-	return nil
+	return espDiskIndex, nil
 }
 
 // DetectAndHandleNetwork: Checks if RHEL family, then detects NM presence offline.
@@ -1471,14 +1488,14 @@ func DetectAndHandleNetwork(diskPath string, osRelease string, vmInfo vm.VMInfo)
 	// to the MAC addresses so that they are consistent after migration.
 	// This will ensure that the network interfaces are named consistently after migration
 	// and they get the correct IP address.
-	err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, false, diskPath, interfaces, macs)
+	err = virtv2v.AddUdevRules([]vm.VMDisk{{Path: diskPath}}, diskPath, interfaces, macs)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Warning: Failed to add udev: %v", err))
 	}
 	return nil
 }
 
-func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string) error {
+func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInfo, networkids, portids []string, ipaddresses []string, espDiskIndex int) error {
 	migobj.logMessage("Creating target instance")
 	openstackops := migobj.Openstackclients
 	var flavor *flavors.Flavor
@@ -1527,7 +1544,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless)
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
@@ -1840,7 +1857,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 	}
 	// Convert the Boot Disk to raw format
-	err = migobj.ConvertVolumes(ctx, vminfo)
+	espDiskIndex, err := migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {
 		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
 			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
@@ -1863,7 +1880,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return errors.Wrap(err, "failed to convert disks")
 	}
 
-	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses)
+	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
 	if err != nil {
 		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
 			// combine both errors
@@ -1940,6 +1957,7 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 }
 
 func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
+
 	networkids := []string{}
 	ipaddresses := []string{}
 	portids := []string{}
@@ -1997,6 +2015,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 			// Only override when explicitly set — nil means "not specified, keep default".
 			preserveIP := true
 			preserveMAC := true
+			userAssignedIp := []string{}
 			for _, override := range migobj.NetworkOverrides {
 				if override.InterfaceIndex == idx {
 					if override.PreserveIP != nil {
@@ -2004,6 +2023,15 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					}
 					if override.PreserveMAC != nil {
 						preserveMAC = *override.PreserveMAC
+					}
+					if override.UserAssignedIP != "" {
+						splitUserAssignedIP := strings.Split(override.UserAssignedIP, ",")
+						for _, ip := range splitUserAssignedIP {
+							trimmedIP := strings.TrimSpace(ip)
+							if trimmedIP != "" {
+								userAssignedIp = append(userAssignedIp, trimmedIP)
+							}
+						}
 					}
 					break
 				}
@@ -2019,41 +2047,24 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
 			}
 
-			if !preserveIP {
-
-				// User-assigned IP from ConfigMap
-				if migobj.AssignedIP != "" {
-					assignedIPs := strings.Split(migobj.AssignedIP, ",")
-					if idx < len(assignedIPs) {
-						ip := strings.TrimSpace(assignedIPs[idx])
-						if ip != "" {
-							ippm = []string{ip}
-							vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{
-								vm.IpEntry{
-									IP:     ip,
-									Prefix: 0,
-								},
-							}
-							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] for MAC %s: %s", idx, vminfo.Mac[idx], ip))
-						} else {
-							utils.PrintLog(fmt.Sprintf("User-Assigned IP[%d] is empty for MAC %s, using previously determined IP", idx, vminfo.Mac[idx]))
-						}
-					}
-				}
-			}
-
 			// Apply per-NIC overrides
 			mac := vminfo.Mac[idx]
 			if !preserveIP {
 				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
-				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
 				hasUserAssignedIP := false
-				if migobj.AssignedIP != "" {
-					assignedIPs := strings.Split(migobj.AssignedIP, ",")
-					if idx < len(assignedIPs) && strings.TrimSpace(assignedIPs[idx]) != "" {
-						hasUserAssignedIP = true
+				if len(userAssignedIp) > 0 {
+					ippm = []string{}
+					vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{}
+					for _, ip := range userAssignedIp {
+						vminfo.IPperMac[vminfo.Mac[idx]] = append(vminfo.IPperMac[vminfo.Mac[idx]], vm.IpEntry{
+							IP:     ip,
+							Prefix: 0,
+						})
+						ippm = append(ippm, ip)
 					}
+					hasUserAssignedIP = true
 				}
+				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
 				if !hasUserAssignedIP {
 					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
 					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts

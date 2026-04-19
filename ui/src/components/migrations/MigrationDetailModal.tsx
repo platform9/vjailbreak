@@ -41,6 +41,7 @@ export interface MigrationDetailModalProps {
   open: boolean
   migration: Migration | null
   onClose: () => void
+  isDuplicate?: boolean
 }
 
 const formatCommaSeparated = (value: unknown) => {
@@ -115,7 +116,8 @@ function MappingTable({
 export default function MigrationDetailModal({
   open,
   migration,
-  onClose
+  onClose,
+  isDuplicate = false
 }: MigrationDetailModalProps) {
   const [tab, setTab] = useState(0)
   const [onlyShowOverrides, setOnlyShowOverrides] = useState(true)
@@ -128,6 +130,8 @@ export default function MigrationDetailModal({
   }, [open])
 
   const vmName = useMemo(() => ((migration?.spec as any)?.vmName as string) || '', [migration])
+  const vmKey = (migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string || ''
+  const displayVmName = isDuplicate && vmKey ? vmKey : vmName
   const phase = migration?.status?.phase
   const phaseLabel = (phase as string) || 'Unknown'
 
@@ -150,7 +154,27 @@ export default function MigrationDetailModal({
     ''
   const assignedIpFromPlan =
     ((planSpec?.assignedIPsPerVM as Record<string, string> | undefined) || {})[vmName] || ''
-  const assignedIps = formatCommaSeparated(assignedIpRaw || assignedIpFromPlan)
+  const assignedIpFromOverrides = useMemo(() => {
+    const rawOverrides = migrationSpec?.networkOverrides
+    if (!rawOverrides) return ''
+
+    let parsedOverrides: any[] = []
+    try {
+      parsedOverrides = Array.isArray(rawOverrides)
+        ? rawOverrides
+        : JSON.parse(String(rawOverrides))
+    } catch {
+      return ''
+    }
+
+    if (!Array.isArray(parsedOverrides) || parsedOverrides.length === 0) return ''
+
+    const ips = parsedOverrides
+      .map((item) => String(item?.UserAssignedIP || '').trim())
+      .filter(Boolean)
+    return ips.join(',')
+  }, [migrationSpec?.networkOverrides])
+  const assignedIps = formatCommaSeparated(assignedIpRaw || assignedIpFromOverrides || assignedIpFromPlan)
 
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
@@ -194,7 +218,78 @@ export default function MigrationDetailModal({
   }, [vmSpec?.networkInterfaces, vmSpec?.networks])
 
   const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
-  const destinationTenant = (data?.openstackCreds?.spec as any)?.projectName || 'N/A'
+
+  // Destination tenant is derived from the referenced OpenStack creds when available.
+  // If that creds was deleted, derive the tenant using the destination cluster -> PCDCluster label
+  // mapping to an OpenStack creds name, and then resolve its projectName from the remaining creds list.
+  const openstackCredNameToProjectName = useMemo(() => {
+    const entries = (data?.openstackCredsList || [])
+      .map((c) => {
+        const name = String(c?.metadata?.name || '').trim()
+        const project = String((c?.spec as any)?.projectName || '').trim()
+        return name && project ? ([name, project] as const) : null
+      })
+      .filter(Boolean) as Array<readonly [string, string]>
+
+    return new Map(entries)
+  }, [data?.openstackCredsList])
+
+  const destinationClusterToOpenstackCredName = useMemo(() => {
+    const entries = (data?.pcdClusters || [])
+      .map((c) => {
+        const clusterName = String((c as any)?.spec?.clusterName || '').trim()
+        const openstackCredName = String(
+          (c as any)?.metadata?.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
+        ).trim()
+
+        return clusterName && openstackCredName ? ([clusterName, openstackCredName] as const) : null
+      })
+      .filter(Boolean) as Array<readonly [string, string]>
+
+    return new Map(entries)
+  }, [data?.pcdClusters])
+
+  const destinationClusterToProjectNameFromHostConfig = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const cred of data?.openstackCredsList || []) {
+      const projectName = String((cred?.spec as any)?.projectName || '').trim()
+      if (!projectName) continue
+      const hostConfigs = ((cred?.spec as any)?.pcdHostConfig as any[]) || []
+      for (const cfg of hostConfigs) {
+        const clusterName = String((cfg as any)?.clusterName || '').trim()
+        if (clusterName && !map.has(clusterName)) {
+          map.set(clusterName, projectName)
+        }
+      }
+    }
+    return map
+  }, [data?.openstackCredsList])
+
+  const destinationTenant = useMemo(() => {
+    const direct = ((data?.openstackCreds?.spec as any)?.projectName as string) || ''
+    if (direct) return direct
+
+    const clusterName = String(destinationCluster || '').trim()
+    if (!clusterName || clusterName === 'N/A') return 'N/A'
+
+    const mappedCredName = destinationClusterToOpenstackCredName.get(clusterName)
+    if (mappedCredName) {
+      const mappedProjectName = openstackCredNameToProjectName.get(mappedCredName)
+      if (mappedProjectName) return mappedProjectName
+    }
+
+    const fromHostConfig = destinationClusterToProjectNameFromHostConfig.get(clusterName)
+    if (fromHostConfig) return fromHostConfig
+
+    return 'N/A'
+  }, [
+    data?.openstackCreds,
+    data?.openstackCredsList,
+    destinationCluster,
+    destinationClusterToOpenstackCredName,
+    openstackCredNameToProjectName,
+    destinationClusterToProjectNameFromHostConfig
+  ])
 
   const rawNetworkMappings = useMemo(
     () =>
@@ -352,7 +447,7 @@ export default function MigrationDetailModal({
 
   const generalInfoItems = useMemo(
     () => [
-      { label: 'VM Name', value: vmName || 'N/A' },
+      { label: 'VM Name', value: displayVmName || 'N/A' },
       { label: 'Migration Type', value: migrationType },
       { label: 'Assigned IP(s)', value: assignedIps },
       { label: 'Created At', value: createdAt },
@@ -458,7 +553,7 @@ export default function MigrationDetailModal({
         <Box>
           <DrawerHeader
             title="Migration Details"
-            subtitle={vmName || migration?.metadata?.name || ''}
+            subtitle={displayVmName || migration?.metadata?.name || ''}
             onClose={onClose}
             actions={<StatusChip label={phaseLabel} size="small" variant="filled" />}
           />
@@ -501,6 +596,15 @@ export default function MigrationDetailModal({
                   title="Migration Environment"
                   subtitle="Source and destination overview"
                 >
+                  {data?.vmwareCredsCount === 0 || data?.openstackCredsCount === 0 ? (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {data?.vmwareCredsCount === 0 && data?.openstackCredsCount === 0
+                        ? 'No VMware or PCD credentials are present. Migration details may be incomplete.'
+                        : data?.vmwareCredsCount === 0
+                          ? 'No VMware credentials are present. Migration details may be incomplete.'
+                          : 'No PCD credentials are present. Migration details may be incomplete.'}
+                    </Alert>
+                  ) : null}
                   <KeyValueGrid items={migrationEnvironmentItems} />
                 </SurfaceCard>
 

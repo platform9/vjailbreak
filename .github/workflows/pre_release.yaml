@@ -7,6 +7,11 @@ on:
         description: "Release tag (e.g. v0.4.0)"
         required: true
         type: string
+      branch:
+        description: "Branch to use (default: main)"
+        required: false
+        default: "main"
+        type: string
 
 permissions:
   contents: write
@@ -18,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main branch
+      - name: Checkout branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.inputs.branch || 'main' }}
           fetch-depth: 0
 
       - name: Setup Go

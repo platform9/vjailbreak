@@ -166,6 +166,15 @@ func (vcclient *VCenterClient) GetVMByName(ctx context.Context, name string) (*o
 	return vm, err
 }
 
+// GetVMByMOID returns a VM object using its vCenter Managed Object ID (e.g. "vm-31090")
+func (vcclient *VCenterClient) GetVMByMOID(moid string) *object.VirtualMachine {
+	ref := types.ManagedObjectReference{
+		Type:  "VirtualMachine",
+		Value: moid,
+	}
+	return object.NewVirtualMachine(vcclient.VCClient, ref)
+}
+
 // GetVMWithDatacenter finds a VM by name and returns both the VM and its parent datacenter.
 func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name string) (*object.VirtualMachine, *object.Datacenter, error) {
 	datacenters, err := vcclient.getDatacenters(ctx)
@@ -182,55 +191,72 @@ func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name str
 	return nil, nil, fmt.Errorf("VM not found")
 }
 
-// RenameVM renames a VM in vCenter by appending a suffix to its name
-func (vcclient *VCenterClient) RenameVM(ctx context.Context, vmName, newVMName string) error {
-	// Find the VM
-	vm, err := vcclient.GetVMByName(ctx, vmName)
-	if err != nil {
-		return fmt.Errorf("failed to find VM '%s': %v", vmName, err)
-	}
-
-	// Rename the VM
-	spec := types.VirtualMachineConfigSpec{
-		Name: newVMName,
-	}
+// RenameVM renames a VM using its vCenter Managed Object ID
+func (vcclient *VCenterClient) RenameVM(ctx context.Context, moid, newVMName string) error {
+	vm := vcclient.GetVMByMOID(moid)
+	spec := types.VirtualMachineConfigSpec{Name: newVMName}
 	task, err := vm.Reconfigure(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("failed to reconfigure VM '%s' with new name '%s': %v", vmName, newVMName, err)
+		return fmt.Errorf("failed to reconfigure VM (moid=%s) with new name '%s': %v", moid, newVMName, err)
 	}
-	err = task.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to rename VM '%s' to '%s': %v", vmName, newVMName, err)
-	}
-
-	return nil
+	return task.Wait(ctx)
 }
 
-// MoveVMFolder moves a VM to a specified folder in vCenter
-func (vcclient *VCenterClient) MoveVMFolder(ctx context.Context, vmName, folderName string) error {
-	// Find the VM
-	vm, err := vcclient.GetVMByName(ctx, vmName)
-	if err != nil {
-		return fmt.Errorf("failed to find VM '%s': %v", vmName, err)
+// getOrCreateVMFolder finds a folder by name under the VM folder hierarchy,
+// creating it if it does not exist.
+func (vcclient *VCenterClient) getOrCreateVMFolder(ctx context.Context, datacenterName, folderName string) (*object.Folder, error) {
+	var dc *object.Datacenter
+	if datacenterName != "" {
+		foundDC, err := vcclient.VCFinder.Datacenter(ctx, datacenterName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find datacenter '%s': %v", datacenterName, err)
+		}
+		dc = foundDC
+		vcclient.VCFinder.SetDatacenter(dc)
 	}
 
-	// Find the target folder
 	folderRef, err := vcclient.VCFinder.Folder(ctx, folderName)
-	if err != nil {
-		return fmt.Errorf("failed to find folder '%s': %v", folderName, err)
+	if err == nil {
+		return folderRef, nil
 	}
 
-	// Move the VM to the folder
+	if dc == nil {
+		datacenters, dcErr := vcclient.getDatacenters(ctx)
+		if dcErr != nil || len(datacenters) == 0 {
+			return nil, fmt.Errorf("folder '%s' not found and no datacenter available to create it: %v", folderName, dcErr)
+		}
+		dc = datacenters[0]
+	}
+
+	dcFolders, err := dc.Folders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get datacenter VM folder to create '%s': %v", folderName, err)
+	}
+
+	newFolder, err := dcFolders.VmFolder.CreateFolder(ctx, folderName)
+	if err != nil {
+		if folderRef2, findErr := vcclient.VCFinder.Folder(ctx, folderName); findErr == nil {
+			return folderRef2, nil
+		}
+		return nil, fmt.Errorf("failed to create folder '%s': %v", folderName, err)
+	}
+	return newFolder, nil
+}
+
+// MovetoFolder moves a VM (identified by MOID) to a folder, creating the folder if it does not exist.
+func (vcclient *VCenterClient) MovetoFolder(ctx context.Context, moid, datacenterName, folderName string) error {
+	vm := vcclient.GetVMByMOID(moid)
+
+	folderRef, err := vcclient.getOrCreateVMFolder(ctx, datacenterName, folderName)
+	if err != nil {
+		return err
+	}
+
 	task, err := folderRef.MoveInto(ctx, []types.ManagedObjectReference{vm.Reference()})
 	if err != nil {
-		return fmt.Errorf("failed to initiate move of VM '%s' to folder '%s': %v", vmName, folderName, err)
+		return fmt.Errorf("failed to initiate move of VM (moid=%s) to folder '%s': %v", moid, folderName, err)
 	}
-	err = task.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to move VM '%s' to folder '%s': %v", vmName, folderName, err)
-	}
-
-	return nil
+	return task.Wait(ctx)
 }
 
 // RunCommandOnEsxi runs a command on an ESXi host

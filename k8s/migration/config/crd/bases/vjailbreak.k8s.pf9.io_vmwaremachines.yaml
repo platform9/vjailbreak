@@ -157,6 +157,8 @@ spec:
                           type: string
                         network:
                           type: string
+                        networkType:
+                          type: string
                         order:
                           type: integer
                       type: object
@@ -178,6 +180,10 @@ spec:
                     type: array
                   vmState:
                     description: VMState is the state of the virtual machine
+                    type: string
+                  vmid:
+                    description: VMID is the vCenter Managed Object ID (MOID) of the
+                      virtual machine
                     type: string
                 required:
                 - name

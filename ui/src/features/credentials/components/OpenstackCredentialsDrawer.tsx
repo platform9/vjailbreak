@@ -212,17 +212,16 @@ export default function OpenstackCredentialsDrawer({
         setCreatedCredentialName(response.metadata.name)
         setCreatedCredentialIsPcd(values.isPcd)
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-          credentialType: 'openstack',
+        track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_ADDED, {
           credentialName: values.credentialName,
           isPcd: values.isPcd,
-          namespace: response.metadata.namespace
+          namespace: response.metadata.namespace,
+          stage: 'creation_success'
         })
       } catch (error: unknown) {
         console.error('Error creating OpenStack credentials:', error)
 
-        track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-          credentialType: 'openstack',
+        track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_FAILED, {
           credentialName: values.credentialName,
           isPcd: values.isPcd,
           errorMessage: error instanceof Error ? error.message : String(error),
@@ -263,13 +262,6 @@ export default function OpenstackCredentialsDrawer({
       setOpenstackCredsValidated(true)
       setValidatingOpenstackCreds(false)
 
-      track(AMPLITUDE_EVENTS.CREDENTIALS_ADDED, {
-        credentialType: 'openstack',
-        credentialName: createdCredentialName,
-        isPcd: createdCredentialIsPcd,
-        stage: 'validation_success'
-      })
-
       setTimeout(async () => {
         refetchOpenstackCreds()
 
@@ -295,8 +287,7 @@ export default function OpenstackCredentialsDrawer({
       setValidatingOpenstackCreds(false)
       setOperationError(message || 'Validation failed')
 
-      track(AMPLITUDE_EVENTS.CREDENTIALS_FAILED, {
-        credentialType: 'openstack',
+      track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_FAILED, {
         credentialName: createdCredentialName,
         isPcd: createdCredentialIsPcd,
         errorMessage: message || 'Validation failed',

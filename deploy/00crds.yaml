@@ -985,6 +985,8 @@ spec:
                     description: NICOverride defines per-NIC overrides for IP and
                       MAC preservation during migration
                     properties:
+                      UserAssignedIP:
+                        type: string
                       interfaceIndex:
                         description: InterfaceIndex is the zero-based index of the
                           NIC
@@ -2679,7 +2681,7 @@ spec:
                   (e.g., Provisioning, Ready, Error, Decommissioning)
                 type: string
               vmIP:
-                description: VMIP is the IP address of the VM
+                description: VMIP  is the IP address of the VM
                 type: string
             required:
             - vmIP
@@ -3127,6 +3129,8 @@ spec:
                           type: string
                         network:
                           type: string
+                        networkType:
+                          type: string
                         order:
                           type: integer
                       type: object
@@ -3148,6 +3152,10 @@ spec:
                     type: array
                   vmState:
                     description: VMState is the state of the virtual machine
+                    type: string
+                  vmid:
+                    description: VMID is the vCenter Managed Object ID (MOID) of the
+                      virtual machine
                     type: string
                 required:
                 - name
@@ -4540,8 +4548,11 @@ rules:
   - secrets
   verbs:
   - create
-  - get
   - delete
+  - get
+  - list
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
@@ -4589,6 +4600,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds
+  - arraycredsmappings
   - bmconfigs
   - esxisshcreds
   - clustermigrations
@@ -4620,6 +4632,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/finalizers
+  - arraycredsmappings/finalizers
   - bmconfigs/finalizers
   - esxisshcreds/finalizers
   - clustermigrations/finalizers
@@ -4641,6 +4654,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/status
+  - arraycredsmappings/status
   - bmconfigs/status
   - esxisshcreds/status
   - clustermigrations/status

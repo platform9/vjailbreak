@@ -299,6 +299,15 @@ export default function MigrationsTable({
 
   const destinationByPlan = destinationByPlanQuery.data || {}
 
+  const duplicateVmNames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const m of migrations) {
+      const name = m.spec?.vmName || ''
+      if (name) counts.set(name, (counts.get(name) || 0) + 1)
+    }
+    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+  }, [migrations])
+
   const columns: GridColDef[] = useMemo(() => {
     return [
       {
@@ -345,6 +354,10 @@ export default function MigrationsTable({
           const isInProgress = activePhases.has(phase)
           const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
 
+          const isDuplicate = duplicateVmNames.has(vmName)
+          const vmKey = (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) || ''
+          const displayVmName = isDuplicate && vmKey ? vmKey : vmName
+
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {isHotMigration && (
@@ -387,7 +400,7 @@ export default function MigrationsTable({
                   params.row.setMigrationDetailModalOpen?.(true)
                 }}
               >
-                {vmName}
+                {displayVmName}
               </ClickableTableCell>
             </Box>
           )
@@ -560,7 +573,7 @@ export default function MigrationsTable({
         }
       }
     ]
-  }, [destinationByPlan, pulse])
+  }, [destinationByPlan, pulse, duplicateVmNames])
 
   const selectedMigrations = useMemo(
     () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],
@@ -733,6 +746,11 @@ export default function MigrationsTable({
         open={migrationDetailModalOpen}
         migration={selectedMigrationDetail}
         onClose={() => setMigrationDetailModalOpen(false)}
+        isDuplicate={
+          selectedMigrationDetail
+            ? duplicateVmNames.has(selectedMigrationDetail.spec?.vmName || '')
+            : false
+        }
       />
     </>
   )

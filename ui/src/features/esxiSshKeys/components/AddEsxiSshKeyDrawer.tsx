@@ -7,6 +7,8 @@ import { DesignSystemForm, RHFTextField } from 'src/shared/components/forms'
 import { createSecret, replaceSecret } from 'src/api/secrets/secrets'
 import { upsertESXiSSHCreds } from 'src/api/esxi-ssh-creds/esxiSshCreds'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { isValidName } from 'src/utils'
 
 interface AddEsxiSshKeyDrawerProps {
@@ -59,6 +61,7 @@ export default function AddEsxiSshKeyDrawer({
   initialValues
 }: AddEsxiSshKeyDrawerProps) {
   const { reportError } = useErrorHandler({ component: 'AddEsxiSshKeyDrawer' })
+  const { track } = useAmplitude({ component: 'AddEsxiSshKeyDrawer' })
   const [error, setError] = useState<string | null>(null)
 
   const defaultValues = useMemo(
@@ -163,9 +166,28 @@ export default function AddEsxiSshKeyDrawer({
       return
     }
 
+    const isEdit = mode === 'edit'
+    const startEvent = isEdit
+      ? AMPLITUDE_EVENTS.ESXI_SSH_CREDENTIALS_UPDATED
+      : AMPLITUDE_EVENTS.ESXI_SSH_CREDENTIALS_ADDED
+    const failureEvent = isEdit
+      ? AMPLITUDE_EVENTS.ESXI_SSH_CREDENTIALS_UPDATE_FAILED
+      : AMPLITUDE_EVENTS.ESXI_SSH_CREDENTIALS_FAILED
+
+    track(startEvent, {
+      credentialName: name,
+      stage: 'save_start'
+    })
+
     try {
       setError(null)
       await saveKey({ name, sshPrivateKey: data.sshPrivateKey })
+
+      track(startEvent, {
+        credentialName: name,
+        stage: 'save_success'
+      })
+
       handleClose()
     } catch (e: any) {
       const status = e?.response?.status
@@ -173,6 +195,13 @@ export default function AddEsxiSshKeyDrawer({
         status === 409 && mode === 'add'
           ? 'A secret with this name already exists. Choose a different name.'
           : e?.response?.data?.message || e?.message || 'Failed to save ESXi SSH key'
+
+      track(failureEvent, {
+        credentialName: name,
+        stage: 'save',
+        errorMessage: message
+      })
+
       setError(message)
       reportError(e as Error, {
         context: mode === 'edit' ? 'edit-esxi-ssh-key' : 'create-esxi-ssh-key'

@@ -149,6 +149,15 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 	}
 
 	if openstackCredential.VJBInstanceID != "" {
+		// Verify the provided instance ID exists in the OpenStack environment
+		_, err = verifyInstanceExists(providerClient, openstackCredential.RegionName, openstackCredential.VJBInstanceID)
+		if err != nil {
+			return ValidationResult{
+				Valid:   false,
+				Message: fmt.Sprintf("Failed to verify instance ID '%s': %s", openstackCredential.VJBInstanceID, err.Error()),
+				Error:   err,
+			}
+		}
 		return successfulValidationObject
 	}
 
@@ -280,6 +289,47 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 		}
 		return false, fmt.Errorf("failed to verify instance access: %w. "+
 			"Please check if the provided credentials have compute:get_server permission", err)
+	}
+	return true, nil
+}
+
+// verifyInstanceExists checks if the provided instance ID exists in the OpenStack environment
+func verifyInstanceExists(providerClient *gophercloud.ProviderClient, regionName string, instanceID string) (ok bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			err = fmt.Errorf("panic while verifying instance existence: %v", r)
+		}
+	}()
+
+	if providerClient == nil {
+		return false, fmt.Errorf("provider client is nil")
+	}
+	if providerClient.EndpointLocator == nil {
+		return false, fmt.Errorf("OpenStack client is not authenticated (endpoint locator is not initialized)")
+	}
+	if strings.TrimSpace(regionName) == "" {
+		return false, fmt.Errorf("region name is empty")
+	}
+	if strings.TrimSpace(instanceID) == "" {
+		return false, fmt.Errorf("instance ID is empty")
+	}
+
+	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
+		Region: regionName,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
+	}
+
+	_, err = servers.Get(context.TODO(), computeClient, instanceID).Extract()
+	if err != nil {
+		if strings.Contains(err.Error(), "Resource not found") ||
+			strings.Contains(err.Error(), "No server with a name or ID") ||
+			strings.Contains(err.Error(), "404") {
+			return false, fmt.Errorf("instance ID '%s' not found in the OpenStack environment. Please verify the instance ID and ensure the credentials are for the correct OpenStack environment", instanceID)
+		}
+		return false, fmt.Errorf("failed to verify instance access: %w. Please check if the provided credentials have compute:get_server permission", err)
 	}
 	return true, nil
 }

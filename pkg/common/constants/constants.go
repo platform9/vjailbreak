@@ -96,6 +96,15 @@ const (
 	// K8sMasterNodeAnnotation is the annotation for k8s master node
 	K8sMasterNodeAnnotation = "node-role.kubernetes.io/control-plane"
 
+	// VMwareNetworkTypeNetwork is the VMware network type for standard port groups
+	VMwareNetworkTypeNetwork = "Network"
+
+	// VMwareNetworkTypeDistributedVirtualPortgroup is the VMware network type for dvPort groups
+	VMwareNetworkTypeDistributedVirtualPortgroup = "DistributedVirtualPortgroup"
+
+	// VMwareNetworkTypeOpaqueNetwork is the VMware network type for NSX-T opaque networks
+	VMwareNetworkTypeOpaqueNetwork = "OpaqueNetwork"
+
 	// VMwareCredsLabel is the label for vmware credentials
 	VMwareCredsLabel = "vjailbreak.k8s.pf9.io/vmwarecreds" //nolint:gosec // not a password string
 
@@ -110,6 +119,10 @@ const (
 
 	// VMNameLabel is the label for vm name
 	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
+
+	// MigrationVMKeyLabel stores the name-<moid> VM key on Migration objects,
+	// used for internal K8s lookups while spec.VMName holds the plain display name.
+	MigrationVMKeyLabel = "vjailbreak.k8s.pf9.io/vm-key"
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
