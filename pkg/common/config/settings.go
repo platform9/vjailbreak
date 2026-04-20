@@ -39,6 +39,8 @@ type VjailbreakSettings struct {
 	V2VHelperPodMemoryLimit             string
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
+	Timezone                            string
+	NTPServers                          string
 }
 
 // Atoi is a helper function to convert string to int with a default value of 0
@@ -85,6 +87,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			V2VHelperPodMemoryLimit:             constants.V2VHelperPodMemoryLimit,
 			V2VHelperPodEphemeralStorageRequest: constants.V2VHelperPodEphemeralStorageRequest,
 			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
+			Timezone:                            "",
+			NTPServers:                          "",
 		}, nil
 	}
 
@@ -183,6 +187,13 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey] = constants.V2VHelperPodEphemeralStorageLimit
 	}
 
+	if vjailbreakSettingsCM.Data["TIMEZONE"] == "" {
+		vjailbreakSettingsCM.Data["TIMEZONE"] = ""
+	}
+	if vjailbreakSettingsCM.Data["NTP_SERVERS"] == "" {
+		vjailbreakSettingsCM.Data["NTP_SERVERS"] = ""
+	}
+
 	return &VjailbreakSettings{
 		ChangedBlocksCopyIterationThreshold: Atoi(vjailbreakSettingsCM.Data["CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD"]),
 		PeriodicSyncInterval:                vjailbreakSettingsCM.Data["PERIODIC_SYNC_INTERVAL"],
@@ -209,5 +220,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		V2VHelperPodMemoryLimit:             vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey],
 		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
+		Timezone:                            strings.TrimSpace(vjailbreakSettingsCM.Data["TIMEZONE"]),
+		NTPServers:                          strings.TrimSpace(vjailbreakSettingsCM.Data["NTP_SERVERS"]),
 	}, nil
 }

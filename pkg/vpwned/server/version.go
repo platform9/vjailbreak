@@ -330,6 +330,7 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 	backoffLimit := int32(0)
 	ttlSeconds := int32(86400)
 	activeDeadlineSeconds := int64(3600)
+	optionalConfigMap := true
 
 	autoCleanupStr := "false"
 	if autoCleanup {
@@ -366,6 +367,16 @@ func createUpgradeJob(ctx context.Context, kubeClient client.Client, targetVersi
 							Image:           vpwnedImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"./vpwctl", "upgrade-job"},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "pf9-env",
+										},
+										Optional: &optionalConfigMap,
+									},
+								},
+							},
 							Env: []corev1.EnvVar{
 								{
 									Name:  "UPGRADE_TARGET_VERSION",
@@ -440,6 +451,7 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 	backoffLimit := int32(0)
 	ttlSeconds := int32(86400)
 	activeDeadlineSeconds := int64(3600)
+	optionalConfigMap := true
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -471,6 +483,16 @@ func createRollbackJob(ctx context.Context, kubeClient client.Client, previousVe
 							Image:           vpwnedImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"./vpwctl", "upgrade-job"},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "pf9-env",
+										},
+										Optional: &optionalConfigMap,
+									},
+								},
+							},
 							Env: []corev1.EnvVar{
 								{
 									Name:  "UPGRADE_TARGET_VERSION",
