@@ -48,6 +48,12 @@ jobs:
           cd k8s/migration
           make build-installer TAG=${{ github.event.inputs.tag }}
 
+      - name: Update release marker file
+        run: |
+          echo "package common" > pkg/common/marker.go
+          echo "" >> pkg/common/marker.go
+          echo "// generated CRDs for ${{ github.event.inputs.tag }}" >> pkg/common/marker.go
+
       - name: Check for changes
         id: changes
         run: |
