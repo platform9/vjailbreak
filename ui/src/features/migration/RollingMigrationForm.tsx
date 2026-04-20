@@ -1268,7 +1268,12 @@ export default function RollingMigrationFormDrawer({
 
       const networkOverridesPerVM: Record<
         string,
-        Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean; UserAssignedIP?: string }>
+        Array<{
+          interfaceIndex: number
+          preserveIP: boolean
+          preserveMAC: boolean
+          UserAssignedIP?: string
+        }>
       > = {}
       vmsWithAssignments
         .filter((vm) => selectedVMs.includes(vm.id))
@@ -1458,7 +1463,7 @@ export default function RollingMigrationFormDrawer({
 
       await postRollingMigrationPlan(migrationPlanJson, VJAILBREAK_DEFAULT_NAMESPACE)
 
-      console.log('Submitted rolling migration plan', migrationPlanJson)
+      const regionName = openstackCredData?.metadata?.labels?.['vjailbreak.k8s.pf9.io/region-name']
 
       // Track successful cluster conversion creation
       track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_CREATED, {
@@ -1483,6 +1488,7 @@ export default function RollingMigrationFormDrawer({
           selectedMigrationOptions.cutoverOption &&
           params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW,
         migrationTemplate: migrationTemplateResponse.metadata.name,
+        regionName,
         namespace: VJAILBREAK_DEFAULT_NAMESPACE
       })
 
@@ -1499,6 +1505,8 @@ export default function RollingMigrationFormDrawer({
       const selectedPCD = pcdData.find((p) => p.id === destinationPCD)
       const selectedVMsData = vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
 
+      const regionName = openstackCredData?.metadata?.labels?.['vjailbreak.k8s.pf9.io/region-name']
+
       track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_SUBMISSION_FAILED, {
         clusterMigrationName: clusterObj?.name,
         sourceCluster: clusterObj?.name,
@@ -1507,6 +1515,7 @@ export default function RollingMigrationFormDrawer({
         pcdCredential: selectedPcdCredName,
         virtualMachineCount: selectedVMsData?.length || 0,
         esxHostCount: orderedESXHosts?.length || 0,
+        regionName,
         errorMessage: error instanceof Error ? error.message : String(error),
         stage: 'creation'
       })

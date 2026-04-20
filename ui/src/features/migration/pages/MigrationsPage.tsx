@@ -13,6 +13,7 @@ import WarningIcon from '@mui/icons-material/Warning'
 import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import { getRegionNameForMigrationPlan } from 'src/utils/regionNameResolver'
 
 export default function MigrationsPage() {
   const queryClient = useQueryClient()
@@ -105,12 +106,20 @@ export default function MigrationsPage() {
       )
 
       migrationsSnapshot.forEach((migration) => {
-        track(AMPLITUDE_EVENTS.MIGRATION_DELETED, {
-          migrationName: migration.metadata?.name,
-          migrationPlan: migration.spec?.migrationPlan,
-          vmName: migration.spec?.vmName,
-          namespace: migration.metadata?.namespace
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationPlan(
+            migration.spec?.migrationPlan,
+            migration.metadata?.namespace
+          )
+
+          track(AMPLITUDE_EVENTS.MIGRATION_DELETED, {
+            migrationName: migration.metadata?.name,
+            migrationPlan: migration.spec?.migrationPlan,
+            vmName: migration.spec?.vmName,
+            regionName,
+            namespace: migration.metadata?.namespace
+          })
+        })()
       })
 
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
@@ -119,13 +128,21 @@ export default function MigrationsPage() {
       const errorMessage = error instanceof Error ? error.message : String(error)
 
       migrationsSnapshot.forEach((migration) => {
-        track(AMPLITUDE_EVENTS.MIGRATION_DELETE_FAILED, {
-          migrationName: migration.metadata?.name,
-          migrationPlan: migration.spec?.migrationPlan,
-          vmName: migration.spec?.vmName,
-          namespace: migration.metadata?.namespace,
-          errorMessage
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationPlan(
+            migration.spec?.migrationPlan,
+            migration.metadata?.namespace
+          )
+
+          track(AMPLITUDE_EVENTS.MIGRATION_DELETE_FAILED, {
+            migrationName: migration.metadata?.name,
+            migrationPlan: migration.spec?.migrationPlan,
+            vmName: migration.spec?.vmName,
+            regionName,
+            namespace: migration.metadata?.namespace,
+            errorMessage
+          })
+        })()
       })
 
       setDeleteError(errorMessage)
