@@ -84,6 +84,7 @@ export default function OpenstackCredentialsDrawer({
   const [submitting, setSubmitting] = useState(false)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
   const [createdCredentialIsPcd, setCreatedCredentialIsPcd] = useState(false)
+  const [createdRegionName, setCreatedRegionName] = useState<string | null>(null)
   const [promptAddVmwareOpen, setPromptAddVmwareOpen] = useState(false)
 
   const watchedValues = watch()
@@ -110,6 +111,7 @@ export default function OpenstackCredentialsDrawer({
     setRcFileValues(null)
     setCreatedCredentialName(null)
     setCreatedCredentialIsPcd(false)
+    setCreatedRegionName(null)
     setValidatingOpenstackCreds(false)
     setOpenstackCredsValidated(null)
     setOperationError(null)
@@ -189,6 +191,9 @@ export default function OpenstackCredentialsDrawer({
       setValidatingOpenstackCreds(true)
       setOperationError(null)
 
+      const regionName = (rcFileValues.OS_REGION_NAME || '').trim()
+      setCreatedRegionName(regionName || null)
+
       try {
         const projectName = rcFileValues.OS_PROJECT_NAME || rcFileValues.OS_TENANT_NAME
 
@@ -215,6 +220,7 @@ export default function OpenstackCredentialsDrawer({
         track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_ADDED, {
           credentialName: values.credentialName,
           isPcd: values.isPcd,
+          regionName,
           namespace: response.metadata.namespace,
           stage: 'creation_success'
         })
@@ -224,6 +230,7 @@ export default function OpenstackCredentialsDrawer({
         track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_FAILED, {
           credentialName: values.credentialName,
           isPcd: values.isPcd,
+          regionName,
           errorMessage: error instanceof Error ? error.message : String(error),
           stage: 'creation'
         })
@@ -290,6 +297,7 @@ export default function OpenstackCredentialsDrawer({
       track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_FAILED, {
         credentialName: createdCredentialName,
         isPcd: createdCredentialIsPcd,
+        regionName: createdRegionName || undefined,
         errorMessage: message || 'Validation failed',
         stage: 'validation'
       })
