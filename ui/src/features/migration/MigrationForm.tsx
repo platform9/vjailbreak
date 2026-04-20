@@ -1281,7 +1281,9 @@ export default function MigrationFormDrawer({
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
 
   const step4Complete = Boolean(
-    (params.securityGroups && params.securityGroups.length > 0) || params.serverGroup
+    (params.securityGroups && params.securityGroups.length > 0) ||
+      params.serverGroup ||
+      (params.imageProfiles && params.imageProfiles.length > 0)
   )
 
   const step5HasErrors = Boolean(

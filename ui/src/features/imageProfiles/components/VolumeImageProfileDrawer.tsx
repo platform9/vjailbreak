@@ -2,7 +2,6 @@ import {
   Box,
   IconButton,
   Tooltip,
-  Chip,
   TextField,
   MenuItem,
   Select,
@@ -11,17 +10,13 @@ import {
   Typography,
   Autocomplete
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import LockIcon from '@mui/icons-material/Lock'
-import { useState } from 'react'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import ProfileIcon from '@mui/icons-material/AccountBox'
+import { useState, useEffect } from 'react'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
-import {
-  StyledDrawer,
-  DrawerContent,
-  Header,
-  Footer
-} from 'src/shared/components/forms'
+import { ConfirmationDialog } from 'src/components/dialogs'
+import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
 import {
   createVolumeImageProfile,
   updateVolumeImageProfile
@@ -33,7 +28,6 @@ import {
   DEFAULT_PROFILE_NAMES
 } from 'src/api/volume-image-profiles/model'
 import { VOLUME_IMAGE_PROFILES_QUERY_KEY } from 'src/hooks/api/useVolumeImageProfilesQuery'
-import TuneIcon from '@mui/icons-material/Tune'
 
 interface KeyValueRow {
   key: string
@@ -66,6 +60,17 @@ function rowsToProperties(rows: KeyValueRow[]): Record<string, string> {
   return result
 }
 
+// Ensures the rows list always ends with exactly one empty row — the bottom
+// input slot where users type their next entry. When they fill the empty row,
+// a fresh empty row is appended below so typing can continue without any
+// "add" button.
+function ensureTrailingEmpty(rows: KeyValueRow[]): KeyValueRow[] {
+  if (rows.length === 0) return [{ key: '', value: '' }]
+  const last = rows[rows.length - 1]
+  if (last.key || last.value) return [...rows, { key: '', value: '' }]
+  return rows
+}
+
 export default function VolumeImageProfileDrawer({
   open,
   onClose,
@@ -75,19 +80,34 @@ export default function VolumeImageProfileDrawer({
   const isDefaultProfile =
     editProfile && DEFAULT_PROFILE_NAMES.includes(editProfile.metadata.name)
 
-  const [name, setName] = useState(editProfile?.metadata.name ?? '')
-  const [osFamily, setOsFamily] = useState<VolumeImageProfileSpec['osFamily']>(
-    editProfile?.spec.osFamily ?? 'any'
-  )
-  const [description, setDescription] = useState(editProfile?.spec.description ?? '')
-  const [rows, setRows] = useState<KeyValueRow[]>(
-    editProfile?.spec.properties
-      ? propertiesToRows(editProfile.spec.properties)
-      : [{ key: '', value: '' }]
-  )
+  const [name, setName] = useState('')
+  const [osFamily, setOsFamily] = useState<VolumeImageProfileSpec['osFamily']>('any')
+  const [description, setDescription] = useState('')
+  const [rows, setRows] = useState<KeyValueRow[]>([{ key: '', value: '' }])
   const [nameError, setNameError] = useState('')
   const [rowErrors, setRowErrors] = useState<string[]>([])
   const [submitError, setSubmitError] = useState('')
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasUserInteracted, setHasUserInteracted] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setName(editProfile?.metadata.name ?? '')
+      setOsFamily(editProfile?.spec.osFamily ?? 'any')
+      setDescription(editProfile?.spec.description ?? '')
+      setRows(
+        ensureTrailingEmpty(
+          editProfile?.spec.properties ? propertiesToRows(editProfile.spec.properties) : []
+        )
+      )
+      setNameError('')
+      setRowErrors([])
+      setSubmitError('')
+      setShowDiscardDialog(false)
+      setHasUserInteracted(false)
+    }
+  }, [open, editProfile])
 
   const queryClient = useQueryClient()
 
@@ -112,16 +132,32 @@ export default function VolumeImageProfileDrawer({
     }
   })
 
-  const handleAddRow = () => {
-    setRows((prev) => [...prev, { key: '', value: '' }])
+  const handleClose = () => {
+    if (hasUserInteracted && !isSubmitting) {
+      setShowDiscardDialog(true)
+      return
+    }
+    setSubmitError('')
+    onClose()
+  }
+
+  const handleDiscardChanges = async () => {
+    setShowDiscardDialog(false)
+    setSubmitError('')
+    onClose()
   }
 
   const handleRemoveRow = (index: number) => {
-    setRows((prev) => prev.filter((_, i) => i !== index))
+    setRows((prev) => ensureTrailingEmpty(prev.filter((_, i) => i !== index)))
+    setHasUserInteracted(true)
   }
 
   const handleRowChange = (index: number, field: 'key' | 'value', val: string) => {
-    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: val } : row)))
+    setRows((prev) => {
+      const updated = prev.map((row, i) => (i === index ? { ...row, [field]: val } : row))
+      return ensureTrailingEmpty(updated)
+    })
+    setHasUserInteracted(true)
   }
 
   const validate = (): boolean => {
@@ -145,9 +181,10 @@ export default function VolumeImageProfileDrawer({
     }
 
     const keys = rows.map((r) => r.key.trim()).filter(Boolean)
-    const hasDuplicate = keys.length !== new Set(keys).size
-    if (hasDuplicate) {
-      setSubmitError('Duplicate property keys are not allowed')
+    if (keys.length !== new Set(keys).size) {
+      setSubmitError(
+        'This profile already has that property. Each key must be unique within a profile.'
+      )
       valid = false
     }
 
@@ -156,27 +193,48 @@ export default function VolumeImageProfileDrawer({
 
   const handleSubmit = async () => {
     if (!validate()) return
-    await mutateAsync()
+    setIsSubmitting(true)
+    try {
+      await mutateAsync()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const hintForKey = (key: string) =>
     KNOWN_IMAGE_PROPERTIES.find((p) => p.key === key)?.hint ?? ''
 
   return (
-    <StyledDrawer anchor="right" open={open} onClose={onClose}>
-      <Header
-        title={isEdit ? 'Edit Image Profile' : 'Add Image Profile'}
-        icon={<TuneIcon color="primary" />}
-      />
-
-      <DrawerContent>
-        {isDefaultProfile && (
-          <Alert severity="info" icon={<LockIcon fontSize="small" />} sx={{ mb: 3 }}>
-            This is a system default profile. Changes here override the built-in defaults.
-          </Alert>
-        )}
-
+    <>
+      <DrawerShell
+        open={open}
+        onClose={handleClose}
+        requireCloseConfirmation={false}
+        header={
+          <DrawerHeader
+            title={isEdit ? 'Edit Profile' : 'Add Profile'}
+            icon={<ProfileIcon color="primary" />}
+            onClose={handleClose}
+          />
+        }
+        footer={
+          <DrawerFooter>
+            <ActionButton tone="secondary" onClick={handleClose} disabled={isSubmitting || isPending}>
+              Cancel
+            </ActionButton>
+            <ActionButton loading={isSubmitting || isPending} onClick={handleSubmit}>
+              {isEdit ? 'Save Changes' : 'Create Profile'}
+            </ActionButton>
+          </DrawerFooter>
+        }
+      >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {isDefaultProfile && (
+            <Alert severity="info" icon={<AutoAwesomeIcon fontSize="small" />}>
+              This is a system default profile. Changes here override the built-in defaults.
+            </Alert>
+          )}
+
           {/* Name */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="body2" fontWeight={600}>
@@ -187,7 +245,10 @@ export default function VolumeImageProfileDrawer({
               fullWidth
               placeholder="e.g. windows-uefi-q35"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                setHasUserInteracted(true)
+              }}
               disabled={isEdit}
               error={Boolean(nameError)}
               helperText={nameError || (isEdit ? 'Name cannot be changed after creation' : '')}
@@ -202,9 +263,10 @@ export default function VolumeImageProfileDrawer({
             <FormControl size="small" fullWidth>
               <Select
                 value={osFamily}
-                onChange={(e) =>
+                onChange={(e) => {
                   setOsFamily(e.target.value as VolumeImageProfileSpec['osFamily'])
-                }
+                  setHasUserInteracted(true)
+                }}
               >
                 {OS_FAMILY_OPTIONS.map((opt) => (
                   <MenuItem key={opt.value} value={opt.value}>
@@ -212,9 +274,6 @@ export default function VolumeImageProfileDrawer({
                   </MenuItem>
                 ))}
               </Select>
-              {/* <FormHelperText>
-                Profile is auto-applied in migration form for matching OS type
-              </FormHelperText> */}
             </FormControl>
           </Box>
 
@@ -228,24 +287,19 @@ export default function VolumeImageProfileDrawer({
               fullWidth
               placeholder="Optional"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                setHasUserInteracted(true)
+              }}
             />
           </Box>
 
           {/* Properties key-value editor */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Typography variant="body2" fontWeight={600}>
-                Image Properties
-              </Typography>
-              <Tooltip title="Add property">
-                <IconButton size="small" onClick={handleAddRow} color="primary">
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
+            <Typography variant="body2" fontWeight={600}>
+              Image Properties
+            </Typography>
 
-            {/* Header row */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 36px', gap: 1, px: 0.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={600}>
                 Key
@@ -256,7 +310,7 @@ export default function VolumeImageProfileDrawer({
             </Box>
 
             {rows.map((row, index) => {
-              const hint = hintForKey(row.key)
+              const isEmpty = !row.key && !row.value
               return (
                 <Box
                   key={index}
@@ -272,11 +326,14 @@ export default function VolumeImageProfileDrawer({
                     size="small"
                     options={knownKeys}
                     value={row.key}
-                    onInputChange={(_e, val) => handleRowChange(index, 'key', val)}
+                    onInputChange={(_e, val, reason) => {
+                      if (reason === 'reset') return
+                      handleRowChange(index, 'key', val)
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
-                        placeholder="e.g. hw_firmware_type"
+                        placeholder="Select or type a key"
                         error={Boolean(rowErrors[index])}
                         helperText={rowErrors[index]}
                         size="small"
@@ -286,61 +343,38 @@ export default function VolumeImageProfileDrawer({
                   <TextField
                     size="small"
                     fullWidth
-                    placeholder={hint || 'value'}
+                    placeholder={hintForKey(row.key) || 'value'}
                     value={row.value}
                     onChange={(e) => handleRowChange(index, 'value', e.target.value)}
                   />
-                  <Tooltip title="Remove">
-                    <span>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRemoveRow(index)}
-                        disabled={rows.length === 1}
-                      >
+                  {isEmpty ? (
+                    <Box />
+                  ) : (
+                    <Tooltip title="Remove">
+                      <IconButton size="small" onClick={() => handleRemoveRow(index)}>
                         <DeleteOutlineIcon fontSize="small" />
                       </IconButton>
-                    </span>
-                  </Tooltip>
+                    </Tooltip>
+                  )}
                 </Box>
               )
             })}
-
-            {/* Known properties reference chips */}
-            <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-              {KNOWN_IMAGE_PROPERTIES.map((p) => (
-                <Tooltip key={p.key} title={p.hint} placement="top">
-                  <Chip
-                    label={p.key}
-                    size="small"
-                    variant="outlined"
-                    onClick={() => {
-                      const emptyRow = rows.findIndex((r) => !r.key)
-                      if (emptyRow >= 0) {
-                        handleRowChange(emptyRow, 'key', p.key)
-                      } else {
-                        setRows((prev) => [...prev, { key: p.key, value: '' }])
-                      }
-                    }}
-                    sx={{ fontSize: '0.7rem', cursor: 'pointer' }}
-                  />
-                </Tooltip>
-              ))}
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Click a chip to add a known property. Hover for accepted values.
-            </Typography>
           </Box>
 
           {submitError && <Alert severity="error">{submitError}</Alert>}
         </Box>
-      </DrawerContent>
+      </DrawerShell>
 
-      <Footer
-        submitButtonLabel={isEdit ? 'Save Changes' : 'Create Profile'}
-        onClose={onClose}
-        onSubmit={handleSubmit}
-        submitting={isPending}
+      <ConfirmationDialog
+        open={showDiscardDialog}
+        onClose={() => setShowDiscardDialog(false)}
+        title="Discard Changes?"
+        message="Are you sure you want to leave? Any unsaved changes will be lost."
+        actionLabel="Leave"
+        actionColor="warning"
+        actionVariant="outlined"
+        onConfirm={handleDiscardChanges}
       />
-    </StyledDrawer>
+    </>
   )
 }

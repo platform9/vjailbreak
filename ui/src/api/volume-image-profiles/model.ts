@@ -44,4 +44,4 @@ export const KNOWN_IMAGE_PROPERTIES = [
   { key: 'hw_pointer_model', hint: 'usbtablet | ps2mouse' }
 ]
 
-export const DEFAULT_PROFILE_NAMES = ['vjailbreak-default-windows', 'vjailbreak-default-linux']
+export const DEFAULT_PROFILE_NAMES = ['default-windows', 'default-linux']

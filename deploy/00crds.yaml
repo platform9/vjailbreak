@@ -3669,15 +3669,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - vjailbreak.k8s.pf9.io
-  resources:
-  - volumeimageprofiles
-  verbs:
-  - create
-  - get
-  - list
-  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -4722,6 +4713,7 @@ rules:
   - vmwarecreds
   - vmwarehosts
   - vmwaremachines
+  - volumeimageprofiles
   verbs:
   - create
   - delete

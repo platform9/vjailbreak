@@ -31,7 +31,7 @@ export const navigationItems: NavigationItem[] = [
       },
       {
         id: 'image-profiles',
-        label: 'Image Profiles',
+        label: 'Profiles',
         path: '/dashboard/profiles'
       }
     ]

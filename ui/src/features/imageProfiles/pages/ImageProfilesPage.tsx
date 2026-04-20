@@ -2,9 +2,9 @@ import { useState, useCallback } from 'react'
 import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import LockIcon from '@mui/icons-material/Lock'
-import TuneIcon from '@mui/icons-material/Tune'
+import EditIcon from '@mui/icons-material/Edit'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import ProfileIcon from '@mui/icons-material/AccountBox'
 import WarningIcon from '@mui/icons-material/Warning'
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
@@ -71,7 +71,7 @@ function ProfileToolbar({
   )
 
   return (
-    <ListingToolbar title="Image Profiles" icon={<TuneIcon />} search={search} actions={actions} />
+    <ListingToolbar title="Profiles" icon={<ProfileIcon />} search={search} actions={actions} />
   )
 }
 
@@ -161,7 +161,7 @@ export default function ImageProfilesPage() {
           <Typography variant="body2">{row.metadata.name}</Typography>
           {isDefault(row.metadata.name) && (
             <Tooltip title="System default profile">
-              <LockIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+              <AutoAwesomeIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
             </Tooltip>
           )}
         </Box>
@@ -219,23 +219,18 @@ export default function ImageProfilesPage() {
                 handleOpenEdit(row)
               }}
             >
-              <EditOutlinedIcon />
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip
-            title={isDefault(row.metadata.name) ? 'Cannot delete system default profiles' : 'Delete'}
-          >
-            <span>
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleSingleDelete(row)
-                }}
-                disabled={isDefault(row.metadata.name)}
-              >
-                <DeleteOutlineIcon />
-              </IconButton>
-            </span>
+          <Tooltip title="Delete">
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation()
+                handleSingleDelete(row)
+              }}
+            >
+              <DeleteOutlineIcon />
+            </IconButton>
           </Tooltip>
         </Box>
       )
@@ -250,8 +245,8 @@ export default function ImageProfilesPage() {
         rows={profiles}
         columns={columns}
         loading={isLoading}
-        loadingMessage="Loading image profiles..."
-        emptyMessage="No image profiles yet"
+        loadingMessage="Loading profiles..."
+        emptyMessage="No profiles yet"
         disableRowSelectionOnClick
         checkboxSelection
         rowSelectionModel={selectedIds}
@@ -297,7 +292,7 @@ export default function ImageProfilesPage() {
         icon={<WarningIcon color="warning" />}
         message={
           selectedForDeletion.length > 1
-            ? 'Are you sure you want to delete these image profiles?'
+            ? 'Are you sure you want to delete these profiles?'
             : `Are you sure you want to delete profile "${selectedForDeletion[0]?.metadata.name}"?`
         }
         items={selectedForDeletion.map((p) => ({ id: p.metadata.name, name: p.metadata.name }))}
