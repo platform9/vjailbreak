@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - pre-release/**
   pull_request:
 
 permissions:
@@ -14,7 +15,7 @@ jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
+    if: "!startsWith(github.head_ref, 'pre-release/') && !contains(github.ref, 'pre-release/')"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

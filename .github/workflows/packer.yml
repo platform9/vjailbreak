@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release-*
+      - pre-release/**
   pull_request:
     branches:
       - main
@@ -152,7 +153,7 @@ jobs:
 
   build-ui:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
+    if: "!startsWith(github.head_ref, 'pre-release/') && !contains(github.ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -184,7 +185,7 @@ jobs:
 
   build-v2v-helper:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
+    if: "!startsWith(github.head_ref, 'pre-release/') && !contains(github.ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -219,7 +220,7 @@ jobs:
 
   build-controller:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
+    if: "!startsWith(github.head_ref, 'pre-release/') && !contains(github.ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -257,7 +258,7 @@ jobs:
 
   build-vpwned:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
+    if: "!startsWith(github.head_ref, 'pre-release/') && !contains(github.ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -292,10 +293,11 @@ jobs:
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned]
     if: |
       !startsWith(github.head_ref, 'pre-release/') &&
+      !contains(github.ref, 'pre-release/') &&
       needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
-      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
       (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     
@@ -379,11 +381,12 @@ jobs:
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, push-images]
     if: |
       !startsWith(github.head_ref, 'pre-release/') &&
+      !contains(github.ref, 'pre-release/') &&
       needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
-      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
-      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') && 
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
       (needs.push-images.result == 'success')
 
     steps:
