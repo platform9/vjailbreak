@@ -776,24 +776,25 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, nil
 }
 
-// ApplyTimeSettings triggers the script via nsenter.
+// ApplyTimeSettings runs the apply-time-settings.sh script synchronously via nsenter and
+// returns an error if the script fails so the caller gets accurate status.
 func (p *vjailbreakProxy) ApplyTimeSettings(_ context.Context, _ *api.ApplyTimeSettingsRequest) (*api.ApplyTimeSettingsResponse, error) {
 	const fn = "ApplyTimeSettings"
-	logrus.WithField("func", fn).Info("Triggering apply-time-settings.sh on host via nsenter")
+	logrus.WithField("func", fn).Info("Running apply-time-settings.sh on host via nsenter")
 
-	go func() {
-		cmd := exec.Command("nsenter", "--target", "1", "--mount", "--", applyTimeSettingsScript)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			logrus.WithField("func", fn).WithError(err).Errorf("apply-time-settings.sh failed: %s", string(out))
-			return
-		}
-		logrus.WithField("func", fn).Infof("apply-time-settings.sh completed: %s", string(out))
-	}()
+	cmd := exec.Command("nsenter", "--target", "1", "--mount", "--", applyTimeSettingsScript)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Errorf("apply-time-settings.sh failed: %s", string(out))
+		return nil, fmt.Errorf("apply-time-settings.sh failed: %w: %s", err, string(out))
+	}
 
+	logrus.WithField("func", fn).Infof("apply-time-settings.sh completed: %s", string(out))
 	return &api.ApplyTimeSettingsResponse{
-		Message: "Time settings apply triggered on host",
+		Message: "Time settings applied successfully",
 	}, nil
+}
+
 // checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility
 type checkNetworkSubnetCompatibilityRequest struct {
 	Ips            []string `json:"ips"`

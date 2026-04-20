@@ -780,11 +780,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         } as any)
 
         if (timeSettingsChanged) {
-          try {
-            await applyTimeSettings()
-          } catch (tsErr) {
-            console.warn('apply-time-settings endpoint unavailable:', tsErr)
-          }
+          await applyTimeSettings()
         }
 
         let envInjectionFailed = false
@@ -829,8 +825,13 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           )
         }
       } catch (err) {
-        console.error('Failed to save Global Settings ConfigMap:', err)
-        show('Failed to save Global Settings. No changes were applied.', 'error')
+        console.error('Failed to save Global Settings:', err)
+        const msg = err instanceof Error ? err.message : String(err)
+        if (timeSettingsChanged && msg) {
+          show(`Failed to apply time settings: ${msg}`, 'error')
+        } else {
+          show('Failed to save Global Settings. No changes were applied.', 'error')
+        }
       } finally {
         setSaving(false)
       }

@@ -561,6 +561,10 @@ service VailbreakProxy {
     rpc ApplyTimeSettings(ApplyTimeSettingsRequest) returns (ApplyTimeSettingsResponse) {
       option (google.api.http) = {
         post: "/vpw/v1/settings/apply-time-settings"
+        body: "*"
+      };
+    }
+
     rpc CheckNetworkSubnetCompatibility(CheckNetworkSubnetCompatibilityRequest) returns (CheckNetworkSubnetCompatibilityResponse) {
       option (google.api.http) = {
         post: "/vpw/v1/check_network_subnet_compatibility"

@@ -262,8 +262,6 @@ if [ "$desired_fingerprint" = "$current_fingerprint" ]; then
   exit 0
 fi
 
-log "Applying time settings: TIMEZONE=${timezone:-<none>} NTP_SERVERS=${ntp_servers:-<default pools>}"
-
 sync_enabled="false"
 target_timezone=""
 
@@ -274,7 +272,7 @@ if [ -n "$ntp_servers" ]; then
     target_timezone="$timezone"
   else
     target_timezone="UTC"
-    log "No valid timezone selected with custom NTP servers; defaulting timezone to UTC"
+    log "No timezone configured with custom NTP servers; defaulting timezone to UTC"
   fi
 elif [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
   sync_enabled="true"
@@ -283,6 +281,14 @@ elif [ -n "$timezone" ] && [ -f "/usr/share/zoneinfo/${timezone}" ]; then
 else
   clear_timesyncd_conf
   target_timezone="UTC"
+fi
+
+if [ -n "$ntp_servers" ]; then
+  log "Applying time settings: TIMEZONE=${target_timezone} NTP_SERVERS=${ntp_servers}"
+elif [ -n "$timezone" ]; then
+  log "Applying time settings: TIMEZONE=${target_timezone} NTP_SERVERS=<default pools>"
+else
+  log "Applying time settings: no timezone or NTP configured; disabling NTP sync, resetting to UTC"
 fi
 
 if [ -n "$target_timezone" ]; then
@@ -324,6 +330,8 @@ EOF
   sudo systemctl disable --now vjailbreak-time-settings.service >/dev/null 2>&1 || true
   log "Time settings apply script installed. Watcher service removed."
 }
+
+install_time_settings_apply_script
 
 # Create /etc/htpasswd with ubuntu user using openssl apr1 hash (airgapped-safe)
 sudo sh -c 'umask 0177; mkdir -p /etc; echo "admin:$(openssl passwd -apr1 password)" > /etc/htpasswd'
