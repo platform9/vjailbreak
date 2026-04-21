@@ -12,7 +12,7 @@ import {
 } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
-import ProfileIcon from '@mui/icons-material/AccountBox'
+import ProfileIcon from '@mui/icons-material/Tune'
 import { useState, useEffect } from 'react'
 import { useForm, FormProvider } from 'react-hook-form'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
