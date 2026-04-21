@@ -12,12 +12,12 @@ import {
 } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
-import ProfileIcon from '@mui/icons-material/Tune'
 import { useState, useEffect } from 'react'
 import { useForm, FormProvider } from 'react-hook-form'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
+import { FieldLabel } from 'src/components/design-system/ui/FieldLabel'
 import { RHFTextField } from 'src/shared/components/forms'
 import {
   createVolumeImageProfile,
@@ -224,7 +224,11 @@ export default function VolumeImageProfileDrawer({
         header={
           <DrawerHeader
             title={isEdit ? 'Edit Profile' : 'Add Profile'}
-            icon={<ProfileIcon color="primary" />}
+            subtitle={
+              isEdit
+                ? 'Update image metadata properties for this profile'
+                : 'Define image metadata properties to apply to migrated VM boot volumes'
+            }
             onClose={handleClose}
           />
         }
@@ -270,9 +274,12 @@ export default function VolumeImageProfileDrawer({
 
           {/* OS Family */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Typography variant="body2" fontWeight={600}>
-              OS Family <span style={{ color: 'red' }}>*</span>
-            </Typography>
+            <FieldLabel
+              label="OS Family"
+              required
+              helperText="Profiles are applied only to VMs of the matching OS type"
+              align="flex-start"
+            />
             <FormControl size="small" fullWidth>
               <Select
                 value={osFamily}
@@ -294,6 +301,7 @@ export default function VolumeImageProfileDrawer({
           <RHFTextField
             name="description"
             label="Description"
+            labelHelperText="Optional note shown in the profile list"
             size="small"
             fullWidth
             placeholder="Optional"

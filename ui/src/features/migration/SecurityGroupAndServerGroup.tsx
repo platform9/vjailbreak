@@ -286,8 +286,8 @@ export default function SecurityGroupAndServerGroup({
                   selectedImageProfiles.length > 0
                     ? ''
                     : applicableProfiles.length === 0
-                      ? 'No applicable profiles'
-                      : 'Select profiles'
+                      ? "No profiles created. Create one at profile's page to select here"
+                      : "Select profiles"
                 }
               />
             )}

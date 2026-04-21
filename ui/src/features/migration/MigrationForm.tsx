@@ -1724,8 +1724,8 @@ export default function MigrationFormDrawer({
             <Box ref={section4Ref} data-testid="migration-form-step-security">
               <SurfaceCard
                 variant="section"
-                title="Security groups and server group"
-                subtitle="Optional placement and security settings"
+                title="Security groups, server group & image profiles"
+                subtitle="Optional placement, security settings, and boot volume metadata"
                 data-testid="migration-form-step4-card"
               >
                 <SecurityGroupAndServerGroupStep
