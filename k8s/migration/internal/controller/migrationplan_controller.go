@@ -1697,8 +1697,12 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 			}
 			return nil, errors.Wrapf(err, "failed to get VolumeImageProfile %s", name)
 		}
-		profileOS := strings.ToLower(strings.TrimSpace(profile.Spec.OSFamily))
+		profileOS := profile.Spec.OSFamily
 		if profileOS != "any" && profileOS != "" && profileOS != osFamily {
+			r.ctxlog.Info("Skipping VolumeImageProfile; OS family does not match VM",
+				"profile", profile.Name,
+				"profileOSFamily", profileOS,
+				"vmOSFamily", osFamily)
 			continue
 		}
 		for k, v := range profile.Spec.Properties {

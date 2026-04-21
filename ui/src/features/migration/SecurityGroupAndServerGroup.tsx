@@ -45,22 +45,15 @@ export default function SecurityGroupAndServerGroup({
 
   const hasL2Network = hasSelectedLayer2Network(params.networkMappings, openstackNetworks)
 
-  // Determine which OS families are in the selected VM list
-  const hasWindowsVMSelected = useMemo(() => {
-    if (!params?.vms || params.vms.length === 0) return false
-    return params.vms.some((vm) => {
-      const fam = (vm.osFamily || '').toLowerCase()
-      return fam === 'windows' || fam === 'windowsguest'
-    })
-  }, [params?.vms])
+  const hasWindowsVMSelected = useMemo(
+    () => Boolean(params?.vms?.some((vm) => vm.osFamily === 'windowsGuest')),
+    [params?.vms]
+  )
 
-  const hasLinuxVMSelected = useMemo(() => {
-    if (!params?.vms || params.vms.length === 0) return false
-    return params.vms.some((vm) => {
-      const fam = (vm.osFamily || '').toLowerCase()
-      return fam === 'linux' || fam === 'linuxguest'
-    })
-  }, [params?.vms])
+  const hasLinuxVMSelected = useMemo(
+    () => Boolean(params?.vms?.some((vm) => vm.osFamily === 'linuxGuest')),
+    [params?.vms]
+  )
 
   const { data: volumeImageProfiles = [], isLoading: loadingProfiles } =
     useVolumeImageProfilesQuery()
@@ -68,10 +61,10 @@ export default function SecurityGroupAndServerGroup({
   const applicableProfiles = useMemo(() => {
     const list = Array.isArray(volumeImageProfiles) ? volumeImageProfiles : []
     return list.filter((p) => {
-      const fam = (p.spec?.osFamily || '').toLowerCase()
+      const fam = p.spec?.osFamily || ''
       if (fam === 'any' || !fam) return true
-      if (fam === 'windows') return hasWindowsVMSelected
-      if (fam === 'linux') return hasLinuxVMSelected
+      if (fam === 'windowsGuest') return hasWindowsVMSelected
+      if (fam === 'linuxGuest') return hasLinuxVMSelected
       return false
     })
   }, [volumeImageProfiles, hasWindowsVMSelected, hasLinuxVMSelected])
@@ -97,10 +90,10 @@ export default function SecurityGroupAndServerGroup({
       .filter((p) => {
         const name = p.metadata?.name || ''
         if (current.has(name)) return false
-        const fam = (p.spec?.osFamily || '').toLowerCase()
-        if (fam === 'windows' && hasWindowsVMSelected && name === 'default-windows')
+        const fam = p.spec?.osFamily || ''
+        if (fam === 'windowsGuest' && hasWindowsVMSelected && name === 'default-windows')
           return true
-        if (fam === 'linux' && hasLinuxVMSelected && name === 'default-linux')
+        if (fam === 'linuxGuest' && hasLinuxVMSelected && name === 'default-linux')
           return true
         return false
       })

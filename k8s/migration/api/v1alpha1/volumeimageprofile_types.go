@@ -22,8 +22,8 @@ import (
 
 // VolumeImageProfileSpec defines the desired state of VolumeImageProfile
 type VolumeImageProfileSpec struct {
-	// OSFamily scopes this profile to a specific OS type.
-	// +kubebuilder:validation:Enum=windows;linux;any
+	// OSFamily scopes this profile to a specific VMware guest family.
+	// +kubebuilder:validation:Enum=windowsGuest;linuxGuest;any
 	OSFamily string `json:"osFamily"`
 
 	// Properties is the map of Cinder volume image metadata key-value pairs

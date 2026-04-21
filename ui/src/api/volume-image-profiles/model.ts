@@ -14,10 +14,18 @@ export interface VolumeImageProfileMetadata {
   resourceVersion?: string
 }
 
+export type VolumeImageProfileOSFamily = 'windowsGuest' | 'linuxGuest' | 'any'
+
 export interface VolumeImageProfileSpec {
-  osFamily: 'windows' | 'linux' | 'any'
+  osFamily: VolumeImageProfileOSFamily
   properties: Record<string, string>
   description?: string
+}
+
+export const OS_FAMILY_LABEL: Record<string, string> = {
+  windowsGuest: 'Windows',
+  linuxGuest: 'Linux',
+  any: 'Any'
 }
 
 export interface VolumeImageProfileList {

@@ -19,9 +19,15 @@ import { VolumeImageProfile, DEFAULT_PROFILE_NAMES } from 'src/api/volume-image-
 import VolumeImageProfileDrawer from '../components/VolumeImageProfileDrawer'
 
 const OS_FAMILY_COLOR: Record<string, 'primary' | 'success' | 'default'> = {
-  windows: 'primary',
-  linux: 'success',
+  windowsGuest: 'primary',
+  linuxGuest: 'success',
   any: 'default'
+}
+
+const OS_FAMILY_LABEL: Record<string, string> = {
+  windowsGuest: 'Windows',
+  linuxGuest: 'Linux',
+  any: 'Any'
 }
 
 interface ProfileToolbarProps {
@@ -174,11 +180,10 @@ export default function ImageProfilesPage() {
       valueGetter: (_value, row) => row.spec.osFamily,
       renderCell: ({ row }) => (
         <Chip
-          label={row.spec.osFamily}
+          label={OS_FAMILY_LABEL[row.spec.osFamily] ?? row.spec.osFamily}
           size="small"
           color={OS_FAMILY_COLOR[row.spec.osFamily] ?? 'default'}
           variant="outlined"
-          sx={{ textTransform: 'capitalize' }}
         />
       )
     },

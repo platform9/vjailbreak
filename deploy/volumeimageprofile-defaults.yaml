@@ -4,7 +4,7 @@ metadata:
   name: default-windows
   namespace: migration-system
 spec:
-  osFamily: windows
+  osFamily: windowsGuest
   description: Default profile for Windows VMs
   properties:
     hw_disk_bus: virtio
@@ -19,7 +19,7 @@ metadata:
   name: default-linux
   namespace: migration-system
 spec:
-  osFamily: linux
+  osFamily: linuxGuest
   description: Default profile for Linux VMs
   properties:
     hw_qemu_guest_agent: "yes"

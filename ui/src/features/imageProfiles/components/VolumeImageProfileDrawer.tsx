@@ -41,8 +41,8 @@ interface VolumeImageProfileDrawerProps {
 }
 
 const OS_FAMILY_OPTIONS: { label: string; value: VolumeImageProfileSpec['osFamily'] }[] = [
-  { label: 'Windows', value: 'windows' },
-  { label: 'Linux', value: 'linux' },
+  { label: 'Windows', value: 'windowsGuest' },
+  { label: 'Linux', value: 'linuxGuest' },
   { label: 'Any (applies to all VMs)', value: 'any' }
 ]
 

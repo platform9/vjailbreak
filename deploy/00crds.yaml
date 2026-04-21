@@ -3252,10 +3252,11 @@ spec:
                 description: Description will indicate the usage context of this profile
                 type: string
               osFamily:
-                description: OSFamily scopes this profile to a specific OS type.
+                description: OSFamily scopes this profile to a specific VMware guest
+                  family.
                 enum:
-                - windows
-                - linux
+                - windowsGuest
+                - linuxGuest
                 - any
                 type: string
               properties:
