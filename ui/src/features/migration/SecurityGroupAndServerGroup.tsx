@@ -76,7 +76,10 @@ export default function SecurityGroupAndServerGroup({
 
   // Auto-select OS-matching default profiles whenever the VM selection changes.
   const lastVmsKeyRef = useRef<string>('')
-  const vmsKey = (params?.vms ?? []).map((vm) => vm.name ?? vm.id ?? '').sort().join(',')
+  const vmsKey = useMemo(
+    () => (params?.vms ?? []).map((vm) => vm.name ?? vm.id ?? '').sort().join(','),
+    [params?.vms]
+  )
   useEffect(() => {
     if (loadingProfiles) return
     if (vmsKey === lastVmsKeyRef.current) return
@@ -211,7 +214,7 @@ export default function SecurityGroupAndServerGroup({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <FieldLabel
             label="Profiles"
-            tooltip="Apply OpenStack image metadata to the boot volume. Profiles matching the selected VMs' OS family are pre-selected. Properties from later profiles override earlier ones on duplicate keys."
+            tooltip="Apply OpenStack image metadata to the boot volume. Profiles matching the selected VMs' OS family are pre-selected. Profiles that define the same property with different values cannot be combined — remove one before adding the other."
             align="flex-start"
           />
           <Autocomplete
