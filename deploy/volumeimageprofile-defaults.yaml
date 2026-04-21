@@ -1,0 +1,27 @@
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VolumeImageProfile
+metadata:
+  name: default-windows
+  namespace: migration-system
+spec:
+  osFamily: windowsGuest
+  description: Default profile for Windows VMs
+  properties:
+    hw_disk_bus: virtio
+    hw_vif_model: virtio
+    os_type: windows
+    hw_qemu_guest_agent: "yes"
+    hw_video_model: qxl
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VolumeImageProfile
+metadata:
+  name: default-linux
+  namespace: migration-system
+spec:
+  osFamily: linuxGuest
+  description: Default profile for Linux VMs
+  properties:
+    hw_qemu_guest_agent: "yes"
+    hw_disk_bus: virtio
+    hw_scsi_model: virtio-scsi

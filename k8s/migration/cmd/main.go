@@ -308,6 +308,5 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "RollingMigrationPlan")
 		return err
 	}
-
 	return nil
 }

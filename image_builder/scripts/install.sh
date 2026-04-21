@@ -225,7 +225,7 @@ if [ "$IS_MASTER" == "true" ]; then
 
   log "Rsync daemon started successfully."
 
-  # Create a config map from env file. 
+  # Create a config map from env file.
   kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
@@ -243,6 +243,20 @@ if [ "$IS_MASTER" == "true" ]; then
       fi
     else
       log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
+  fi
+
+
+  if [ -f "/etc/pf9/volumeimageprofile-defaults.yaml" ]; then
+    log "Waiting for VolumeImageProfile CRD to be Established"
+    if sudo kubectl wait --for condition=Established \
+      CustomResourceDefinition/volumeimageprofiles.vjailbreak.k8s.pf9.io --timeout=120s; then
+      log "Seeding default VolumeImageProfile resources"
+      if ! sudo kubectl apply -f /etc/pf9/volumeimageprofile-defaults.yaml; then
+        log "WARNING: Failed to seed default VolumeImageProfiles. Skipping (non-fatal)."
+      fi
+    else
+      log "WARNING: VolumeImageProfile CRD not Established within timeout. Skipping default seeding (non-fatal)."
+    fi
   fi
 
 else

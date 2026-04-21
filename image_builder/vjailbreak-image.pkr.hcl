@@ -115,6 +115,11 @@ build {
   }
 
   provisioner "file" {
+    source      = "${path.root}/configs/volumeimageprofile-defaults.yaml"
+    destination = "/tmp/volumeimageprofile-defaults.yaml"
+  }
+
+  provisioner "file" {
     source      = "${path.root}/cronjob/version-checker.yaml"
     destination = "/tmp/version-checker.yaml"
   }
@@ -151,6 +156,7 @@ build {
     "sudo mv /tmp/daemonset.yaml /etc/pf9/yamls/daemonset.yaml",
     "sudo mv /tmp/env /etc/pf9/env",
     "sudo mv /tmp/vjailbreak-settings.yaml /etc/pf9/yamls/vjailbreak-settings.yaml",
+    "sudo mv /tmp/volumeimageprofile-defaults.yaml /etc/pf9/volumeimageprofile-defaults.yaml",
     "sudo mv /tmp/version-checker.yaml /etc/pf9/yamls/version-checker.yaml",
     "sudo mv /tmp/opensource.txt /home/ubuntu/opensource.txt",
     "sudo chmod +x /etc/pf9/install.sh",
