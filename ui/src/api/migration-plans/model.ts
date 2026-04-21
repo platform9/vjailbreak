@@ -32,16 +32,6 @@ export interface Spec {
   migrationTemplate: string
   retry: boolean
   virtualMachines: Array<string[]>
-  advancedOptions?: AdvancedOptions
-}
-
-export interface AdvancedOptions {
-  periodicSyncInterval?: string
-  periodicSyncEnabled?: boolean
-  networkPersistence?: boolean
-  removeVMwareTools?: boolean
-  acknowledgeNetworkConflictRisk?: boolean
-  imageProfiles?: string[]
 }
 
 export interface MigrationStrategy {

@@ -28,11 +28,6 @@ export const navigationItems: NavigationItem[] = [
         id: 'agents',
         label: 'Agents',
         path: '/dashboard/agents'
-      },
-      {
-        id: 'image-profiles',
-        label: 'Profiles',
-        path: '/dashboard/profiles'
       }
     ]
   },

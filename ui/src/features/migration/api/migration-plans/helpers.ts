@@ -23,8 +23,7 @@ export const createMigrationPlanJson = (params) => {
     networkOverridesPerVM,
     networkPersistence,
     removeVMwareTools,
-    acknowledgeNetworkConflictRisk,
-    imageProfiles
+    acknowledgeNetworkConflictRisk
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -57,9 +56,6 @@ export const createMigrationPlanJson = (params) => {
   }
   if (typeof acknowledgeNetworkConflictRisk === 'boolean') {
     advancedOptions.acknowledgeNetworkConflictRisk = acknowledgeNetworkConflictRisk
-  }
-  if (Array.isArray(imageProfiles) && imageProfiles.length > 0) {
-    advancedOptions.imageProfiles = imageProfiles
   }
   if (Object.keys(advancedOptions).length > 0) {
     spec.advancedOptions = advancedOptions
