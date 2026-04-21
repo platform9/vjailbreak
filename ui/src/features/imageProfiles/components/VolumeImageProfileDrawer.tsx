@@ -10,14 +10,15 @@ import {
   Typography,
   Autocomplete
 } from '@mui/material'
-import { FieldLabel } from 'src/components'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
-import ProfileIcon from '@mui/icons-material/Tune'
+import ProfileIcon from '@mui/icons-material/AccountBox'
 import { useState, useEffect } from 'react'
+import { useForm, FormProvider } from 'react-hook-form'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
+import { RHFTextField } from 'src/shared/components/forms'
 import {
   createVolumeImageProfile,
   updateVolumeImageProfile
@@ -30,26 +31,14 @@ import {
 } from 'src/api/volume-image-profiles/model'
 import { VOLUME_IMAGE_PROFILES_QUERY_KEY } from 'src/hooks/api/useVolumeImageProfilesQuery'
 
+interface DrawerFormValues {
+  name: string
+  description: string
+}
+
 interface KeyValueRow {
-  // Stable id used as the React key so row add/delete/reorder doesn't
-  // cause MUI text fields to re-associate with the wrong row (cursor jumps,
-  // stale error text, value "shifting" after a delete).
-  id: string
   key: string
   value: string
-}
-
-// Tiny id generator — crypto.randomUUID is widely available, but fall back
-// to a timestamp+random for older browsers without requiring a dependency.
-function newRowId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function makeEmptyRow(): KeyValueRow {
-  return { id: newRowId(), key: '', value: '' }
 }
 
 interface VolumeImageProfileDrawerProps {
@@ -67,17 +56,13 @@ const OS_FAMILY_OPTIONS: { label: string; value: VolumeImageProfileSpec['osFamil
 const knownKeys = KNOWN_IMAGE_PROPERTIES.map((p) => p.key)
 
 function propertiesToRows(props: Record<string, string>): KeyValueRow[] {
-  return Object.entries(props).map(([key, value]) => ({ id: newRowId(), key, value }))
+  return Object.entries(props).map(([key, value]) => ({ key, value }))
 }
 
 function rowsToProperties(rows: KeyValueRow[]): Record<string, string> {
   const result: Record<string, string> = {}
   rows.forEach(({ key, value }) => {
-    const k = key.trim()
-    const v = value.trim()
-    // Skip half-filled rows entirely — validate() already surfaces an error
-    // before this runs, but belt-and-braces in case of a future caller.
-    if (k && v) result[k] = v
+    if (key.trim()) result[key.trim()] = value
   })
   return result
 }
@@ -87,9 +72,9 @@ function rowsToProperties(rows: KeyValueRow[]): Record<string, string> {
 // a fresh empty row is appended below so typing can continue without any
 // "add" button.
 function ensureTrailingEmpty(rows: KeyValueRow[]): KeyValueRow[] {
-  if (rows.length === 0) return [makeEmptyRow()]
+  if (rows.length === 0) return [{ key: '', value: '' }]
   const last = rows[rows.length - 1]
-  if (last.key || last.value) return [...rows, makeEmptyRow()]
+  if (last.key || last.value) return [...rows, { key: '', value: '' }]
   return rows
 }
 
@@ -102,13 +87,14 @@ export default function VolumeImageProfileDrawer({
   const isDefaultProfile =
     editProfile && DEFAULT_PROFILE_NAMES.includes(editProfile.metadata.name)
 
-  const [name, setName] = useState('')
+  const methods = useForm<DrawerFormValues>({
+    defaultValues: { name: '', description: '' }
+  })
+  const { reset, trigger, getValues } = methods
+
   const [osFamily, setOsFamily] = useState<VolumeImageProfileSpec['osFamily']>('any')
-  const [description, setDescription] = useState('')
-  const [rows, setRows] = useState<KeyValueRow[]>(() => [makeEmptyRow()])
-  const [nameError, setNameError] = useState('')
+  const [rows, setRows] = useState<KeyValueRow[]>([{ key: '', value: '' }])
   const [rowErrors, setRowErrors] = useState<string[]>([])
-  const [rowValueErrors, setRowValueErrors] = useState<string[]>([])
   const [submitError, setSubmitError] = useState('')
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -116,36 +102,37 @@ export default function VolumeImageProfileDrawer({
 
   useEffect(() => {
     if (open) {
-      setName(editProfile?.metadata.name ?? '')
+      reset({
+        name: editProfile?.metadata.name ?? '',
+        description: editProfile?.spec.description ?? ''
+      })
       setOsFamily(editProfile?.spec.osFamily ?? 'any')
-      setDescription(editProfile?.spec.description ?? '')
       setRows(
         ensureTrailingEmpty(
           editProfile?.spec.properties ? propertiesToRows(editProfile.spec.properties) : []
         )
       )
-      setNameError('')
       setRowErrors([])
-      setRowValueErrors([])
       setSubmitError('')
       setShowDiscardDialog(false)
       setHasUserInteracted(false)
     }
-  }, [open, editProfile])
+  }, [open, editProfile, reset])
 
   const queryClient = useQueryClient()
 
   const { mutateAsync, isPending } = useMutation({
     mutationFn: async () => {
+      const { name: nameVal, description: descVal } = getValues()
       const spec: VolumeImageProfileSpec = {
         osFamily,
         properties: rowsToProperties(rows),
-        description: description.trim() || undefined
+        description: descVal.trim() || undefined
       }
       if (isEdit && editProfile) {
         return updateVolumeImageProfile({ ...editProfile, spec })
       }
-      return createVolumeImageProfile(name.trim(), spec)
+      return createVolumeImageProfile(nameVal.trim(), spec)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: VOLUME_IMAGE_PROFILES_QUERY_KEY })
@@ -184,42 +171,22 @@ export default function VolumeImageProfileDrawer({
     setHasUserInteracted(true)
   }
 
-  const validate = (): boolean => {
+  const validate = async (): Promise<boolean> => {
     let valid = true
-    setNameError('')
     setRowErrors([])
-    setRowValueErrors([])
     setSubmitError('')
 
     if (!isEdit) {
-      const trimmed = name.trim()
-      if (!trimmed) {
-        setNameError('Profile name is required')
-        valid = false
-      } else if (trimmed.length > 63) {
-        setNameError('Name must be 63 characters or fewer')
-        valid = false
-      } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmed)) {
-        // Enforces a Kubernetes DNS label (RFC 1123): lowercase alphanumerics
-        // and hyphens, must start and end with alphanumeric.
-        setNameError(
-          'Name must be lowercase alphanumerics or hyphens, and start/end with an alphanumeric.'
-        )
-        valid = false
-      }
+      const nameValid = await trigger('name')
+      if (!nameValid) valid = false
     }
 
-    const keyErrs = rows.map((row) => {
+    const errs = rows.map((row) => {
       if (row.value && !row.key.trim()) return 'Key is required when value is set'
       return ''
     })
-    const valueErrs = rows.map((row) => {
-      if (row.key.trim() && !row.value.trim()) return 'Value is required when key is set'
-      return ''
-    })
-    if (keyErrs.some(Boolean) || valueErrs.some(Boolean)) {
-      setRowErrors(keyErrs)
-      setRowValueErrors(valueErrs)
+    if (errs.some(Boolean)) {
+      setRowErrors(errs)
       valid = false
     }
 
@@ -235,7 +202,7 @@ export default function VolumeImageProfileDrawer({
   }
 
   const handleSubmit = async () => {
-    if (!validate()) return
+    if (!(await validate())) return
     setIsSubmitting(true)
     try {
       await mutateAsync()
@@ -248,6 +215,7 @@ export default function VolumeImageProfileDrawer({
     KNOWN_IMAGE_PROPERTIES.find((p) => p.key === key)?.hint ?? ''
 
   return (
+    <FormProvider {...methods}>
     <>
       <DrawerShell
         open={open}
@@ -279,26 +247,32 @@ export default function VolumeImageProfileDrawer({
           )}
 
           {/* Name */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <FieldLabel label="Profile Name" required align="flex-start" />
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="e.g. windows-uefi-q35"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value)
-                setHasUserInteracted(true)
-              }}
-              disabled={isEdit}
-              error={Boolean(nameError)}
-              helperText={nameError || (isEdit ? 'Name cannot be changed after creation' : '')}
-            />
-          </Box>
+          <RHFTextField
+            name="name"
+            label="Profile Name"
+            required
+            size="small"
+            fullWidth
+            placeholder="e.g. windows-uefi-q35"
+            disabled={isEdit}
+            helperText={isEdit ? 'Name cannot be changed after creation' : undefined}
+            rules={!isEdit ? {
+              required: 'Profile name is required',
+              maxLength: { value: 253, message: 'Name must be 253 characters or fewer' },
+              pattern: {
+                value: /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/,
+                message:
+                  'Use only lowercase letters, numbers, or hyphens; cannot start or end with a hyphen'
+              }
+            } : undefined}
+            onValueChange={() => setHasUserInteracted(true)}
+          />
 
           {/* OS Family */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <FieldLabel label="OS Family" required align="flex-start" />
+            <Typography variant="body2" fontWeight={600}>
+              OS Family <span style={{ color: 'red' }}>*</span>
+            </Typography>
             <FormControl size="small" fullWidth>
               <Select
                 value={osFamily}
@@ -317,23 +291,20 @@ export default function VolumeImageProfileDrawer({
           </Box>
 
           {/* Description */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <FieldLabel label="Description" align="flex-start" />
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="Optional"
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value)
-                setHasUserInteracted(true)
-              }}
-            />
-          </Box>
+          <RHFTextField
+            name="description"
+            label="Description"
+            size="small"
+            fullWidth
+            placeholder="Optional"
+            onValueChange={() => setHasUserInteracted(true)}
+          />
 
           {/* Properties key-value editor */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <FieldLabel label="Image Properties" align="flex-start" />
+            <Typography variant="body2" fontWeight={600}>
+              Image Properties
+            </Typography>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 36px', gap: 1, px: 0.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -348,7 +319,7 @@ export default function VolumeImageProfileDrawer({
               const isEmpty = !row.key && !row.value
               return (
                 <Box
-                  key={row.id}
+                  key={index}
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr 36px',
@@ -381,8 +352,6 @@ export default function VolumeImageProfileDrawer({
                     placeholder={hintForKey(row.key) || 'value'}
                     value={row.value}
                     onChange={(e) => handleRowChange(index, 'value', e.target.value)}
-                    error={Boolean(rowValueErrors[index])}
-                    helperText={rowValueErrors[index]}
                   />
                   {isEmpty ? (
                     <Box />
@@ -413,5 +382,6 @@ export default function VolumeImageProfileDrawer({
         onConfirm={handleDiscardChanges}
       />
     </>
+    </FormProvider>
   )
 }

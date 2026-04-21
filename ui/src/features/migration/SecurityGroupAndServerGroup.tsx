@@ -76,10 +76,7 @@ export default function SecurityGroupAndServerGroup({
 
   // Auto-select OS-matching default profiles whenever the VM selection changes.
   const lastVmsKeyRef = useRef<string>('')
-  const vmsKey = useMemo(
-    () => (params?.vms ?? []).map((vm) => vm.name ?? vm.id ?? '').sort().join(','),
-    [params?.vms]
-  )
+  const vmsKey = (params?.vms ?? []).map((vm) => vm.name ?? vm.id ?? '').sort().join(',')
   useEffect(() => {
     if (loadingProfiles) return
     if (vmsKey === lastVmsKeyRef.current) return
@@ -119,21 +116,32 @@ export default function SecurityGroupAndServerGroup({
   const [profileConflictError, setProfileConflictError] = useState('')
 
   const detectConflict = (profiles: VolumeImageProfile[]) => {
-    const keyMap: Record<string, { value: string; profile: string }> = {}
-    for (const p of profiles) {
-      for (const [k, v] of Object.entries(p.spec?.properties || {})) {
-        const existing = keyMap[k]
-        if (existing && existing.value !== v) {
-          return {
-            key: k,
-            profiles: [existing.profile, p.metadata.name],
-            values: [existing.value, v]
+    const scan = (bucket: VolumeImageProfile[]) => {
+      const keyMap: Record<string, { value: string; profile: string }> = {}
+      for (const p of bucket) {
+        for (const [k, v] of Object.entries(p.spec?.properties || {})) {
+          const existing = keyMap[k]
+          if (existing && existing.value !== v) {
+            return {
+              key: k,
+              profiles: [existing.profile, p.metadata.name],
+              values: [existing.value, v]
+            }
           }
+          if (!existing) keyMap[k] = { value: v, profile: p.metadata.name }
         }
-        if (!existing) keyMap[k] = { value: v, profile: p.metadata.name }
       }
+      return null
     }
-    return null
+
+    const windowsBucket = profiles.filter(
+      (p) => p.spec?.osFamily === 'windowsGuest' || p.spec?.osFamily === 'any'
+    )
+    const linuxBucket = profiles.filter(
+      (p) => p.spec?.osFamily === 'linuxGuest' || p.spec?.osFamily === 'any'
+    )
+
+    return scan(windowsBucket) || scan(linuxBucket)
   }
 
   useEffect(() => {
@@ -214,7 +222,7 @@ export default function SecurityGroupAndServerGroup({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <FieldLabel
             label="Profiles"
-            tooltip="Apply OpenStack image metadata to the boot volume. Profiles matching the selected VMs' OS family are pre-selected. Profiles that define the same property with different values cannot be combined — remove one before adding the other."
+            tooltip="Apply OpenStack image metadata to the boot volume. Profiles matching the selected VMs' OS family are pre-selected. Properties from later profiles override earlier ones on duplicate keys."
             align="flex-start"
           />
           <Autocomplete
