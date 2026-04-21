@@ -470,7 +470,7 @@ jobs:
           mkdir -p image_builder/deploy/cert-manager
           cp image_builder/cert-manager-manifests/cert-manager.yaml image_builder/deploy/cert-manager/
           cp k8s/cert-manager/00-selfsigned-issuer.yaml image_builder/deploy/cert-manager/
-          cp ./deploy/volumeimageprofile-defaults.yaml image_builder/deploy/volumeimageprofile-defaults.yaml
+          cp ./deploy/volumeimageprofile-defaults.yaml image_builder/configs/volumeimageprofile-defaults.yaml
           
       - name: Copy opensource.txt to image_builder
         if: env.release_found == 'true' || env.is_nightly == 'true'
