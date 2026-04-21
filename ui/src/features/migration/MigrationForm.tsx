@@ -142,6 +142,7 @@ export interface FormValues extends Record<string, unknown> {
   useGPU?: boolean
   networkPersistence?: boolean
   removeVMwareTools?: boolean
+  imageProfiles?: string[]
 }
 
 export interface SelectedMigrationOptionsType {
@@ -799,6 +800,10 @@ export default function MigrationFormDrawer({
       ...(typeof params.removeVMwareTools === 'boolean' && {
         removeVMwareTools: params.removeVMwareTools
       }),
+      ...(Array.isArray(params.imageProfiles) &&
+        params.imageProfiles.length > 0 && {
+          imageProfiles: params.imageProfiles
+        }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
       acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk
@@ -1276,7 +1281,9 @@ export default function MigrationFormDrawer({
   const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
 
   const step4Complete = Boolean(
-    (params.securityGroups && params.securityGroups.length > 0) || params.serverGroup
+    (params.securityGroups && params.securityGroups.length > 0) ||
+      params.serverGroup ||
+      (params.imageProfiles && params.imageProfiles.length > 0)
   )
 
   const step5HasErrors = Boolean(
@@ -1717,8 +1724,8 @@ export default function MigrationFormDrawer({
             <Box ref={section4Ref} data-testid="migration-form-step-security">
               <SurfaceCard
                 variant="section"
-                title="Security groups and server group"
-                subtitle="Optional placement and security settings"
+                title="Security groups, server group & image profiles"
+                subtitle="Optional placement, security settings, and boot volume metadata"
                 data-testid="migration-form-step4-card"
               >
                 <SecurityGroupAndServerGroupStep
