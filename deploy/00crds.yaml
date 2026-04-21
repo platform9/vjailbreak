@@ -4714,6 +4714,7 @@ rules:
   - vmwarecreds
   - vmwarehosts
   - vmwaremachines
+  - volumeimageprofiles
   verbs:
   - create
   - delete
