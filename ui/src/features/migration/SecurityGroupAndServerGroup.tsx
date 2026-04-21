@@ -116,21 +116,32 @@ export default function SecurityGroupAndServerGroup({
   const [profileConflictError, setProfileConflictError] = useState('')
 
   const detectConflict = (profiles: VolumeImageProfile[]) => {
-    const keyMap: Record<string, { value: string; profile: string }> = {}
-    for (const p of profiles) {
-      for (const [k, v] of Object.entries(p.spec?.properties || {})) {
-        const existing = keyMap[k]
-        if (existing && existing.value !== v) {
-          return {
-            key: k,
-            profiles: [existing.profile, p.metadata.name],
-            values: [existing.value, v]
+    const scan = (bucket: VolumeImageProfile[]) => {
+      const keyMap: Record<string, { value: string; profile: string }> = {}
+      for (const p of bucket) {
+        for (const [k, v] of Object.entries(p.spec?.properties || {})) {
+          const existing = keyMap[k]
+          if (existing && existing.value !== v) {
+            return {
+              key: k,
+              profiles: [existing.profile, p.metadata.name],
+              values: [existing.value, v]
+            }
           }
+          if (!existing) keyMap[k] = { value: v, profile: p.metadata.name }
         }
-        if (!existing) keyMap[k] = { value: v, profile: p.metadata.name }
       }
+      return null
     }
-    return null
+
+    const windowsBucket = profiles.filter(
+      (p) => p.spec?.osFamily === 'windowsGuest' || p.spec?.osFamily === 'any'
+    )
+    const linuxBucket = profiles.filter(
+      (p) => p.spec?.osFamily === 'linuxGuest' || p.spec?.osFamily === 'any'
+    )
+
+    return scan(windowsBucket) || scan(linuxBucket)
   }
 
   useEffect(() => {

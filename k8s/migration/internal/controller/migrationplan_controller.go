@@ -1635,9 +1635,9 @@ func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Conte
 	}
 
 	// Prefer the migration template's override when set, otherwise fall back to detected OS family.
-	effectiveOSFamily := strings.ToLower(strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily))
+	effectiveOSFamily := strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily)
 	if migrationtemplate.Spec.OSFamily != "" {
-		effectiveOSFamily = strings.ToLower(strings.TrimSpace(migrationtemplate.Spec.OSFamily))
+		effectiveOSFamily = strings.TrimSpace(migrationtemplate.Spec.OSFamily)
 	}
 
 	merged, err := r.resolveImageProfiles(ctx, migrationplan.Namespace, profileNames, effectiveOSFamily)

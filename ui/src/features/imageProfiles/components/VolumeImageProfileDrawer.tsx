@@ -14,9 +14,11 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import ProfileIcon from '@mui/icons-material/AccountBox'
 import { useState, useEffect } from 'react'
+import { useForm, FormProvider } from 'react-hook-form'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell } from 'src/components/design-system'
+import { RHFTextField } from 'src/shared/components/forms'
 import {
   createVolumeImageProfile,
   updateVolumeImageProfile
@@ -28,6 +30,11 @@ import {
   DEFAULT_PROFILE_NAMES
 } from 'src/api/volume-image-profiles/model'
 import { VOLUME_IMAGE_PROFILES_QUERY_KEY } from 'src/hooks/api/useVolumeImageProfilesQuery'
+
+interface DrawerFormValues {
+  name: string
+  description: string
+}
 
 interface KeyValueRow {
   key: string
@@ -80,11 +87,13 @@ export default function VolumeImageProfileDrawer({
   const isDefaultProfile =
     editProfile && DEFAULT_PROFILE_NAMES.includes(editProfile.metadata.name)
 
-  const [name, setName] = useState('')
+  const methods = useForm<DrawerFormValues>({
+    defaultValues: { name: '', description: '' }
+  })
+  const { reset, trigger, getValues } = methods
+
   const [osFamily, setOsFamily] = useState<VolumeImageProfileSpec['osFamily']>('any')
-  const [description, setDescription] = useState('')
   const [rows, setRows] = useState<KeyValueRow[]>([{ key: '', value: '' }])
-  const [nameError, setNameError] = useState('')
   const [rowErrors, setRowErrors] = useState<string[]>([])
   const [submitError, setSubmitError] = useState('')
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
@@ -93,35 +102,37 @@ export default function VolumeImageProfileDrawer({
 
   useEffect(() => {
     if (open) {
-      setName(editProfile?.metadata.name ?? '')
+      reset({
+        name: editProfile?.metadata.name ?? '',
+        description: editProfile?.spec.description ?? ''
+      })
       setOsFamily(editProfile?.spec.osFamily ?? 'any')
-      setDescription(editProfile?.spec.description ?? '')
       setRows(
         ensureTrailingEmpty(
           editProfile?.spec.properties ? propertiesToRows(editProfile.spec.properties) : []
         )
       )
-      setNameError('')
       setRowErrors([])
       setSubmitError('')
       setShowDiscardDialog(false)
       setHasUserInteracted(false)
     }
-  }, [open, editProfile])
+  }, [open, editProfile, reset])
 
   const queryClient = useQueryClient()
 
   const { mutateAsync, isPending } = useMutation({
     mutationFn: async () => {
+      const { name: nameVal, description: descVal } = getValues()
       const spec: VolumeImageProfileSpec = {
         osFamily,
         properties: rowsToProperties(rows),
-        description: description.trim() || undefined
+        description: descVal.trim() || undefined
       }
       if (isEdit && editProfile) {
         return updateVolumeImageProfile({ ...editProfile, spec })
       }
-      return createVolumeImageProfile(name.trim(), spec)
+      return createVolumeImageProfile(nameVal.trim(), spec)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: VOLUME_IMAGE_PROFILES_QUERY_KEY })
@@ -160,15 +171,14 @@ export default function VolumeImageProfileDrawer({
     setHasUserInteracted(true)
   }
 
-  const validate = (): boolean => {
+  const validate = async (): Promise<boolean> => {
     let valid = true
-    setNameError('')
     setRowErrors([])
     setSubmitError('')
 
-    if (!isEdit && !name.trim()) {
-      setNameError('Profile name is required')
-      valid = false
+    if (!isEdit) {
+      const nameValid = await trigger('name')
+      if (!nameValid) valid = false
     }
 
     const errs = rows.map((row) => {
@@ -192,7 +202,7 @@ export default function VolumeImageProfileDrawer({
   }
 
   const handleSubmit = async () => {
-    if (!validate()) return
+    if (!(await validate())) return
     setIsSubmitting(true)
     try {
       await mutateAsync()
@@ -205,6 +215,7 @@ export default function VolumeImageProfileDrawer({
     KNOWN_IMAGE_PROPERTIES.find((p) => p.key === key)?.hint ?? ''
 
   return (
+    <FormProvider {...methods}>
     <>
       <DrawerShell
         open={open}
@@ -236,24 +247,26 @@ export default function VolumeImageProfileDrawer({
           )}
 
           {/* Name */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Typography variant="body2" fontWeight={600}>
-              Profile Name <span style={{ color: 'red' }}>*</span>
-            </Typography>
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="e.g. windows-uefi-q35"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value)
-                setHasUserInteracted(true)
-              }}
-              disabled={isEdit}
-              error={Boolean(nameError)}
-              helperText={nameError || (isEdit ? 'Name cannot be changed after creation' : '')}
-            />
-          </Box>
+          <RHFTextField
+            name="name"
+            label="Profile Name"
+            required
+            size="small"
+            fullWidth
+            placeholder="e.g. windows-uefi-q35"
+            disabled={isEdit}
+            helperText={isEdit ? 'Name cannot be changed after creation' : undefined}
+            rules={!isEdit ? {
+              required: 'Profile name is required',
+              maxLength: { value: 253, message: 'Name must be 253 characters or fewer' },
+              pattern: {
+                value: /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/,
+                message:
+                  'Use only lowercase letters, numbers, or hyphens; cannot start or end with a hyphen'
+              }
+            } : undefined}
+            onValueChange={() => setHasUserInteracted(true)}
+          />
 
           {/* OS Family */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -278,21 +291,14 @@ export default function VolumeImageProfileDrawer({
           </Box>
 
           {/* Description */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Typography variant="body2" fontWeight={600}>
-              Description
-            </Typography>
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="Optional"
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value)
-                setHasUserInteracted(true)
-              }}
-            />
-          </Box>
+          <RHFTextField
+            name="description"
+            label="Description"
+            size="small"
+            fullWidth
+            placeholder="Optional"
+            onValueChange={() => setHasUserInteracted(true)}
+          />
 
           {/* Properties key-value editor */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -376,5 +382,6 @@ export default function VolumeImageProfileDrawer({
         onConfirm={handleDiscardChanges}
       />
     </>
+    </FormProvider>
   )
 }
