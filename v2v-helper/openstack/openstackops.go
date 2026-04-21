@@ -37,6 +37,7 @@ type OpenstackOperations interface {
 	SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error
 	EnableQGA(ctx context.Context, volume *volumes.Volume) error
 	SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error
+	ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error
 	SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error
 	GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error)
 	GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error)

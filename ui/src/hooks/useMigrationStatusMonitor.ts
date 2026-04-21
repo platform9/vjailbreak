@@ -4,6 +4,7 @@ import { useAmplitude } from './useAmplitude'
 import { useErrorHandler } from './useErrorHandler'
 import { useStatusTracker } from './useStatusMonitor'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import { getRegionNameForMigrationPlan } from 'src/utils/regionNameResolver'
 
 export const useMigrationStatusMonitor = (migrations: Migration[] = []) => {
   const { track } = useAmplitude({ component: 'MigrationStatusMonitor' })
@@ -67,19 +68,27 @@ export const useMigrationStatusMonitor = (migrations: Migration[] = []) => {
       if (currentPhase === Phase.Failed && tracker.lastReportedPhase !== Phase.Failed) {
         const errorDetails = getErrorDetails()
 
-        // Track with Amplitude
-        track(AMPLITUDE_EVENTS.MIGRATION_EXECUTION_FAILED, {
-          migrationName,
-          migrationPlan: migration.spec?.migrationPlan,
-          vmName: migration.spec?.vmName,
-          podRef: migration.spec?.podRef,
-          previousPhase: tracker.previousPhase,
-          currentPhase,
-          errorMessage: errorDetails.message,
-          errorReason: errorDetails.reason,
-          failureTime: errorDetails.lastTransitionTime,
-          namespace: migration.metadata?.namespace
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationPlan(
+            migration.spec?.migrationPlan,
+            migration.metadata?.namespace
+          )
+
+          // Track with Amplitude
+          track(AMPLITUDE_EVENTS.MIGRATION_EXECUTION_FAILED, {
+            migrationName,
+            migrationPlan: migration.spec?.migrationPlan,
+            vmName: migration.spec?.vmName,
+            podRef: migration.spec?.podRef,
+            previousPhase: tracker.previousPhase,
+            currentPhase,
+            regionName,
+            errorMessage: errorDetails.message,
+            errorReason: errorDetails.reason,
+            failureTime: errorDetails.lastTransitionTime,
+            namespace: migration.metadata?.namespace
+          })
+        })()
 
         // Report to Bugsnag
         const bugsnagError = new Error(`Migration execution failed: ${errorDetails.message}`)
@@ -113,14 +122,22 @@ export const useMigrationStatusMonitor = (migrations: Migration[] = []) => {
 
       // Handle migration success (optional - for analytics)
       if (currentPhase === Phase.Succeeded && tracker.lastReportedPhase !== Phase.Succeeded) {
-        track(AMPLITUDE_EVENTS.MIGRATION_SUCCEEDED, {
-          migrationName,
-          migrationPlan: migration.spec?.migrationPlan,
-          vmName: migration.spec?.vmName,
-          previousPhase: tracker.previousPhase,
-          currentPhase,
-          namespace: migration.metadata?.namespace
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationPlan(
+            migration.spec?.migrationPlan,
+            migration.metadata?.namespace
+          )
+
+          track(AMPLITUDE_EVENTS.MIGRATION_SUCCEEDED, {
+            migrationName,
+            migrationPlan: migration.spec?.migrationPlan,
+            vmName: migration.spec?.vmName,
+            previousPhase: tracker.previousPhase,
+            currentPhase,
+            regionName,
+            namespace: migration.metadata?.namespace
+          })
+        })()
 
         // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[migrationName].lastReportedPhase = Phase.Succeeded

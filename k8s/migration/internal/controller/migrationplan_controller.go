@@ -1393,6 +1393,10 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
+	if err := r.setImageMetadataFromProfiles(ctx, configMapData, migrationplan, migrationobj, vmMachine, migrationtemplate); err != nil {
+		return nil, err
+	}
+
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
@@ -1617,6 +1621,106 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 	return nil
 }
 
+// setImageMetadataFromProfiles resolves the VolumeImageProfile names referenced on the MigrationPlan
+func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Context,
+	configMapData map[string]string,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+) error {
+	profileNames := migrationplan.Spec.AdvancedOptions.ImageProfiles
+	if len(profileNames) == 0 {
+		return nil
+	}
+
+	// Prefer the migration template's override when set, otherwise fall back to detected OS family.
+	effectiveOSFamily := strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily)
+	if migrationtemplate.Spec.OSFamily != "" {
+		effectiveOSFamily = strings.TrimSpace(migrationtemplate.Spec.OSFamily)
+	}
+
+	merged, err := r.resolveImageProfiles(ctx, migrationplan.Namespace, profileNames, effectiveOSFamily)
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve image profiles")
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+
+	// Persist merged metadata on the Migration spec so the v2v-helper pod can read it directly.
+	if !reflect.DeepEqual(migrationobj.Spec.ImageMetadata, merged) {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &vjailbreakv1alpha1.Migration{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
+				return getErr
+			}
+			latest.Spec.ImageMetadata = merged
+			if updateErr := r.Update(ctx, latest); updateErr != nil {
+				return updateErr
+			}
+			migrationobj.Spec.ImageMetadata = merged
+			return nil
+		})
+		if err != nil {
+			return errors.Wrapf(err, "failed to persist ImageMetadata on Migration %s", migrationobj.Name)
+		}
+	}
+
+	payload, err := json.Marshal(merged)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal merged image metadata")
+	}
+	configMapData["IMAGE_METADATA"] = string(payload)
+	return nil
+}
+
+// resolveImageProfiles fetches VolumeImageProfiles by name in the requested order, drops any
+// that don't match the VM's OS family (profiles with osFamily "any" always apply).
+func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
+	namespace string,
+	profileNames []string,
+	osFamily string,
+) (map[string]string, error) {
+	merged := map[string]string{}
+	contributedBy := map[string]string{}
+	for _, name := range profileNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		profile := &vjailbreakv1alpha1.VolumeImageProfile{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, profile); err != nil {
+			if apierrors.IsNotFound(err) {
+				r.ctxlog.Info("Skipping VolumeImageProfile not found", "profile", name, "namespace", namespace)
+				continue
+			}
+			return nil, errors.Wrapf(err, "failed to get VolumeImageProfile %s", name)
+		}
+		profileOS := profile.Spec.OSFamily
+		if profileOS != "any" && profileOS != "" && profileOS != osFamily {
+			r.ctxlog.Info("Skipping VolumeImageProfile; OS family does not match VM",
+				"profile", profile.Name,
+				"profileOSFamily", profileOS,
+				"vmOSFamily", osFamily)
+			continue
+		}
+		for k, v := range profile.Spec.Properties {
+			if prev, exists := merged[k]; exists && prev != v {
+				r.ctxlog.Info("VolumeImageProfile key conflict; later profile wins",
+					"key", k,
+					"previousValue", prev,
+					"previousProfile", contributedBy[k],
+					"newValue", v,
+					"newProfile", profile.Name)
+			}
+			merged[k] = v
+			contributedBy[k] = profile.Name
+		}
+	}
+	return merged, nil
+}
+
 // updateMigrationConfigMap updates the mutable fields of an existing migration ConfigMap.
 func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, configMap *corev1.ConfigMap, migrationobj *vjailbreakv1alpha1.Migration, configMapName string) error {
 	if migrationobj.Spec.AssignedIP != "" {
@@ -1628,6 +1732,15 @@ func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, 
 		configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	} else {
 		delete(configMap.Data, "NETWORK_OVERRIDES")
+	}
+	if len(migrationobj.Spec.ImageMetadata) > 0 {
+		payload, err := json.Marshal(migrationobj.Spec.ImageMetadata)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal image metadata")
+		}
+		configMap.Data["IMAGE_METADATA"] = string(payload)
+	} else {
+		delete(configMap.Data, "IMAGE_METADATA")
 	}
 	if err := r.Update(ctx, configMap); err != nil {
 		r.ctxlog.Error(err, fmt.Sprintf("Failed to update ConfigMap '%s'", configMapName))

@@ -66,6 +66,9 @@ type AdvancedOptions struct {
 	RemoveVMwareTools bool `json:"removeVMwareTools,omitempty"`
 	// AcknowledgeNetworkConflictRisk indicates that the user acknowledges the risk of network conflicts when doing live migration
 	AcknowledgeNetworkConflictRisk bool `json:"acknowledgeNetworkConflictRisk,omitempty"`
+	// ImageProfiles is the ordered list of VolumeImageProfile names to apply to the migrated VM's boot volume.
+	// +optional
+	ImageProfiles []string `json:"imageProfiles,omitempty"`
 }
 
 // PostMigrationAction defines the post migration action for the virtual machine

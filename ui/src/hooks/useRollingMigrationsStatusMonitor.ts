@@ -4,6 +4,7 @@ import { useAmplitude } from './useAmplitude'
 import { useErrorHandler } from './useErrorHandler'
 import { useStatusTracker } from './useStatusMonitor'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
+import { getRegionNameForMigrationTemplate } from 'src/utils/regionNameResolver'
 
 export const useRollingMigrationsStatusMonitor = (
   rollingMigrationPlans: RollingMigrationPlan[] = []
@@ -60,20 +61,28 @@ export const useRollingMigrationsStatusMonitor = (
       if (isFailed && tracker.lastReportedPhase !== currentPhase) {
         const errorDetails = getErrorDetails()
 
-        // Track with Amplitude
-        track(AMPLITUDE_EVENTS.CLUSTER_CONVERSION_EXECUTION_FAILED, {
-          rollingMigrationPlanName: planName,
-          clusterName: rollingMigrationPlan.spec?.clusterSequence?.[0]?.clusterName,
-          previousPhase: tracker.previousPhase,
-          currentPhase,
-          errorMessage: errorDetails.message,
-          bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
-          clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
-          vmSequenceLength:
-            rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
-          namespace: rollingMigrationPlan.metadata?.namespace,
-          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationTemplate(
+            rollingMigrationPlan.spec?.migrationTemplate,
+            rollingMigrationPlan.metadata?.namespace
+          )
+
+          // Track with Amplitude
+          track(AMPLITUDE_EVENTS.CLUSTER_CONVERSION_EXECUTION_FAILED, {
+            rollingMigrationPlanName: planName,
+            clusterName: rollingMigrationPlan.spec?.clusterSequence?.[0]?.clusterName,
+            previousPhase: tracker.previousPhase,
+            currentPhase,
+            regionName,
+            errorMessage: errorDetails.message,
+            bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
+            clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
+            vmSequenceLength:
+              rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
+            namespace: rollingMigrationPlan.metadata?.namespace,
+            migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
+          })
+        })()
 
         // Report to Bugsnag
         const bugsnagError = new Error(
@@ -111,18 +120,26 @@ export const useRollingMigrationsStatusMonitor = (
       // Handle rolling migration plan success (optional - for analytics)
       const isSucceeded = currentPhase === 'Succeeded'
       if (isSucceeded && tracker.lastReportedPhase !== currentPhase) {
-        track(AMPLITUDE_EVENTS.CLUSTER_CONVERSION_SUCCEEDED, {
-          rollingMigrationPlanName: planName,
-          clusterName: rollingMigrationPlan.spec?.clusterSequence?.[0]?.clusterName,
-          previousPhase: tracker.previousPhase,
-          currentPhase,
-          bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
-          clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
-          vmSequenceLength:
-            rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
-          namespace: rollingMigrationPlan.metadata?.namespace,
-          migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
-        })
+        void (async () => {
+          const regionName = await getRegionNameForMigrationTemplate(
+            rollingMigrationPlan.spec?.migrationTemplate,
+            rollingMigrationPlan.metadata?.namespace
+          )
+
+          track(AMPLITUDE_EVENTS.CLUSTER_CONVERSION_SUCCEEDED, {
+            rollingMigrationPlanName: planName,
+            clusterName: rollingMigrationPlan.spec?.clusterSequence?.[0]?.clusterName,
+            previousPhase: tracker.previousPhase,
+            currentPhase,
+            regionName,
+            bmConfigRef: rollingMigrationPlan.spec?.bmConfigRef?.name,
+            clusterSequenceLength: rollingMigrationPlan.spec?.clusterSequence?.length || 0,
+            vmSequenceLength:
+              rollingMigrationPlan.spec?.clusterSequence?.[0]?.vmSequence?.length || 0,
+            namespace: rollingMigrationPlan.metadata?.namespace,
+            migrationStrategy: rollingMigrationPlan.spec?.migrationStrategy?.type
+          })
+        })()
 
         // Mark as reported BEFORE updating previousPhase to prevent race conditions
         statusTrackerRef.current[planName].lastReportedPhase = currentPhase

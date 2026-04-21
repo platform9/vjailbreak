@@ -381,6 +381,53 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	return nil
 }
 
+func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
+	if len(metadata) == 0 {
+		return nil
+	}
+
+	// Fetch current state so we know which existing keys to drop.
+	current, err := volumes.Get(ctx, osclient.BlockStorageClient, volume.ID).Extract()
+	if err != nil {
+		return fmt.Errorf("failed to read current volume state before applying image metadata: %s", err)
+	}
+
+	desired := make(map[string]bool, len(metadata))
+	for k := range metadata {
+		desired[k] = true
+	}
+
+	actionURL := osclient.BlockStorageClient.ServiceURL("volumes", volume.ID, "action")
+	for existingKey := range current.VolumeImageMetadata {
+		if desired[existingKey] {
+			continue
+		}
+		body := map[string]interface{}{
+			"os-unset_image_metadata": map[string]interface{}{"key": existingKey},
+		}
+		resp, unsetErr := osclient.BlockStorageClient.Post(ctx, actionURL, body, nil, &gophercloud.RequestOpts{
+			OkCodes: []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent},
+		})
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		if unsetErr != nil {
+			// Non-fatal: log and continue
+			PrintLog(fmt.Sprintf("WARN: failed to unset image metadata key %q on boot volume %s: %s",
+				existingKey, volume.ID, unsetErr))
+			continue
+		}
+		PrintLog(fmt.Sprintf("OPENSTACK API: Removed stale image metadata key %q from boot volume %s", existingKey, volume.ID))
+	}
+
+	PrintLog(fmt.Sprintf("OPENSTACK API: Applying %d image metadata key(s) to boot volume %s", len(metadata), volume.ID))
+	options := volumes.ImageMetadataOpts{Metadata: metadata}
+	if err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr(); err != nil {
+		return fmt.Errorf("failed to apply boot volume image metadata: %s", err)
+	}
+	return nil
+}
+
 func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Setting volume %s as bootable, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
 	options := volumes.BootableOpts{
