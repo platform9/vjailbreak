@@ -6,7 +6,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { postMigrationPlan } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/features/migration/api/migration-plans/model'
-import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
+import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
+import { createMigrationPlanJson } from 'src/features/migration/api/migration-plans/helpers'
 import {
   getMigrationTemplate,
   patchMigrationTemplate,
@@ -16,17 +17,17 @@ import {
 import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
-import { OpenstackCreds } from 'src/api/openstack-creds/model'
-import {
-  getOpenstackCredentials,
-  deleteOpenstackCredentials
-} from 'src/api/openstack-creds/openstackCreds'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
 import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
 import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { getVmwareCredentials, deleteVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import {
+  getOpenstackCredentials,
+  deleteOpenstackCredentials
+} from 'src/api/openstack-creds/openstackCreds'
 import { THREE_SECONDS } from 'src/constants'
 import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
 import { VMWARE_MACHINES_BASE_KEY } from 'src/hooks/api/useVMwareMachinesQuery'
@@ -35,6 +36,7 @@ import useParams from 'src/hooks/useParams'
 import { isNilOrEmpty } from 'src/utils'
 import MigrationOptions from './MigrationOptionsAlt'
 import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
+import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
 import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
 import VmsSelectionStep from './VmsSelectionStep'
 import { CUTOVER_TYPES } from './constants'
@@ -46,8 +48,7 @@ import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
-import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
-import { createMigrationPlanJson } from 'src/features/migration/api/migration-plans/helpers'
+import { getRegionNameForOpenstackRef } from 'src/utils/regionNameResolver'
 import {
   ActionButton,
   DrawerFooter,
@@ -702,7 +703,12 @@ export default function MigrationFormDrawer({
 
     const networkOverridesPerVM: Record<
       string,
-      Array<{ interfaceIndex: number; preserveIP: boolean; preserveMAC: boolean; UserAssignedIP?: string }>
+      Array<{
+        interfaceIndex: number
+        preserveIP: boolean
+        preserveMAC: boolean
+        UserAssignedIP?: string
+      }>
     > = {}
     if (params.vms) {
       params.vms.forEach((vm) => {
@@ -800,6 +806,11 @@ export default function MigrationFormDrawer({
 
     const body = createMigrationPlanJson(migrationFields)
 
+    const regionName = await getRegionNameForOpenstackRef(
+      openstackCredentials?.metadata?.name,
+      openstackCredentials?.metadata?.namespace
+    )
+
     try {
       const data = await postMigrationPlan(body)
       const virtualMachines = (data as any)?.spec?.virtualMachines
@@ -833,6 +844,7 @@ export default function MigrationFormDrawer({
           migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
           virtualMachineCount: vmNames.length,
           vmName,
+          regionName,
           migrationType: migrationFields.type,
           hasDataCopyStartTime: !!migrationFields.dataCopyStart,
           hasAdminInitiatedCutover: !!migrationFields.adminInitiatedCutOver,
@@ -851,6 +863,7 @@ export default function MigrationFormDrawer({
         migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
         virtualMachineCount: vmsToMigrate?.length || 0,
         migrationType: migrationFields.type,
+        regionName,
         errorMessage: error instanceof Error ? error.message : String(error),
         stage: 'creation'
       })
