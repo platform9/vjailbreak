@@ -23,3 +23,5 @@ spec:
   description: Default profile for Linux VMs
   properties:
     hw_qemu_guest_agent: "yes"
+    hw_disk_bus: virtio
+    hw_scsi_model: virtio-scsi

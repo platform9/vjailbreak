@@ -231,7 +231,7 @@ export default function VolumeImageProfileDrawer({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {isDefaultProfile && (
             <Alert severity="info" icon={<AutoAwesomeIcon fontSize="small" />}>
-              This is a system default profile. Changes here override the built-in defaults.
+              This is a system default profile.
             </Alert>
           )}
 

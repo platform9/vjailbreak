@@ -1683,6 +1683,7 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 	osFamily string,
 ) (map[string]string, error) {
 	merged := map[string]string{}
+	contributedBy := map[string]string{}
 	for _, name := range profileNames {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -1701,7 +1702,16 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 			continue
 		}
 		for k, v := range profile.Spec.Properties {
+			if prev, exists := merged[k]; exists && prev != v {
+				r.ctxlog.Info("VolumeImageProfile key conflict; later profile wins",
+					"key", k,
+					"previousValue", prev,
+					"previousProfile", contributedBy[k],
+					"newValue", v,
+					"newProfile", profile.Name)
+			}
 			merged[k] = v
+			contributedBy[k] = profile.Name
 		}
 	}
 	return merged, nil
