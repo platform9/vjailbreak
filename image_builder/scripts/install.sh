@@ -323,17 +323,7 @@ log "Time settings applied"
 EOF
 
   sudo chmod +x /etc/pf9/apply-time-settings.sh
-
-  sudo rm -f /etc/pf9/watch-time-settings.sh
-  sudo rm -f /etc/logrotate.d/pf9-time-settings
-  sudo rm -f /etc/systemd/system/vjailbreak-time-settings-watcher.service
-  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.timer
-  sudo rm -f /etc/systemd/system/vjailbreak-time-settings.service
-  sudo systemctl daemon-reload
-  sudo systemctl disable --now vjailbreak-time-settings-watcher.service >/dev/null 2>&1 || true
-  sudo systemctl disable --now vjailbreak-time-settings.timer >/dev/null 2>&1 || true
-  sudo systemctl disable --now vjailbreak-time-settings.service >/dev/null 2>&1 || true
-  log "Time settings apply script installed. Watcher service removed."
+  log "Time settings apply script installed."
 }
 
 install_time_settings_apply_script
