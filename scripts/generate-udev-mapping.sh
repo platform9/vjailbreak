@@ -135,7 +135,31 @@ process_rhel(){
     fi
     
     if [[ -z "$FOUND_IP" ]]; then
-      display_msg "Skipping entry with empty IP for MAC $FOUND_MAC: $line_entry"
+      display_msg "No IP found for MAC $FOUND_MAC, generating no-IP interface: $line_entry"
+      if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
+        {
+          echo "TYPE=Ethernet"
+          echo "BOOTPROTO=none"
+          echo "NAME=vjb$VJB_INDEX"
+          echo "DEVICE=vjb$VJB_INDEX"
+          echo "ONBOOT=yes"
+          echo "HWADDR=$FOUND_MAC"
+        } > "$TARGET_DIR/ifcfg-vjb$VJB_INDEX"
+        VJB_INDEX=$((VJB_INDEX+1))
+      elif [[ -d "$NM_CONN_PATH" ]]; then
+        {
+          echo "[connection]"
+          echo "id=vjb$VJB_INDEX"
+          echo "type=ethernet"
+          echo "interface-name=vjb$VJB_INDEX"
+          echo "mac-address=$FOUND_MAC"
+          echo "[ipv4]"
+          echo "method=disabled"
+        } > "$NM_CONN_PATH/vjb$VJB_INDEX.nmconnection"
+        VJB_INDEX=$((VJB_INDEX+1))
+      else
+        display_msg "Notice: No valid interface configuration path found. Skipping no-IP interface generation."
+      fi
       continue
     fi
 
