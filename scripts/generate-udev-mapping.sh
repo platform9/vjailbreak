@@ -155,6 +155,8 @@ process_rhel(){
           echo "mac-address=$FOUND_MAC"
           echo "[ipv4]"
           echo "method=disabled"
+          echo "[ipv6]"
+          echo "method=disabled"
         } > "$NM_CONN_PATH/vjb$VJB_INDEX.nmconnection"
         VJB_INDEX=$((VJB_INDEX+1))
       else
