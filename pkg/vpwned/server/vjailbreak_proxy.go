@@ -782,7 +782,7 @@ func (p *vjailbreakProxy) ApplyTimeSettings(_ context.Context, _ *api.ApplyTimeS
 	const fn = "ApplyTimeSettings"
 	logrus.WithField("func", fn).Info("Running apply-time-settings.sh on host via nsenter")
 
-	cmd := exec.Command("nsenter", "--target", "1", "--mount", "--", applyTimeSettingsScript)
+	cmd := exec.Command("nsenter", "--target", "1", "--mount", "--net", "--", applyTimeSettingsScript)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		logrus.WithField("func", fn).WithError(err).Errorf("apply-time-settings.sh failed: %s", string(out))

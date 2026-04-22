@@ -89,7 +89,7 @@ func WriteToLogFile(message string) error {
 	}
 	defer logFile.Close()
 
-	logMessage := fmt.Sprintf("[%s] %s\n", time.Now().Format(time.RFC3339), message)
+	logMessage := fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02T15:04:05"), message)
 
 	// Write the log message
 	if _, err := logFile.WriteString(logMessage); err != nil {

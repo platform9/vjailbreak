@@ -36,6 +36,7 @@ metadata:
   namespace: migration-system
 spec:
   schedule: "0 0 * * *"
+  timeZone: "UTC"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:

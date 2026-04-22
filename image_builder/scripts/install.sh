@@ -221,6 +221,11 @@ update_pf9_env_timezone() {
       kubectl -n migration-system rollout restart deployment "$deployment" >/dev/null 2>&1 || true
     done
   fi
+
+  if kubectl -n migration-system get cronjob vjailbreak-version-checker >/dev/null 2>&1; then
+    kubectl -n migration-system patch cronjob vjailbreak-version-checker --type merge \
+      -p "{\"spec\":{\"timeZone\":\"${tz}\"}}" >/dev/null 2>&1 || true
+  fi
 }
 
 if [ -f "/etc/pf9/k3s.env" ]; then
