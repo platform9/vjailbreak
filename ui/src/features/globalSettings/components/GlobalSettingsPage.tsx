@@ -1493,8 +1493,6 @@ export default function GlobalSettingsPage() {
               <RHFTextField
                 name="NTP_SERVERS"
                 label="NTP Servers"
-                multiline
-                minRows={4}
                 disabled={isTimeSettingsDisabled}
                 labelProps={{
                   tooltip: isTimeSettingsDisabled
@@ -1503,7 +1501,7 @@ export default function GlobalSettingsPage() {
                 }}
                 helperText={errors.NTP_SERVERS || 'Leave blank to use default public pools (enabled automatically when Timezone is set)'}
                 error={Boolean(errors.NTP_SERVERS)}
-                placeholder="0.pool.ntp.org, 1.pool.ntp.org or one per line"
+                placeholder="0.pool.ntp.org, 1.pool.ntp.org"
               />
 
               <FormControl
