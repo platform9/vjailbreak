@@ -37,6 +37,7 @@ import {
   RHFTextField
 } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
+import { isValidNtpServer } from 'src/features/globalSettings/validators'
 import {
   applyTimeSettings,
   getSettingsConfigMap,
@@ -176,28 +177,6 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
   }
 }
 
-const isValidNtpServer = (value: string): boolean => {
-  const v = value.trim()
-  if (!v) return false
-  if (v.includes('://') || v.includes('/')) return false
-
-  const ipv4Match = v.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (ipv4Match) {
-    const octets = ipv4Match.slice(1).map((part) => Number(part))
-    return octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
-  }
-
-  if (!/^[a-zA-Z0-9.-]+$/.test(v)) return false
-  if (v.startsWith('.') || v.endsWith('.') || v.includes('..')) return false
-
-  return v.split('.').every((label) => {
-    if (!label) return false
-    if (label.length > 63) return false
-    if (!/^[a-zA-Z0-9-]+$/.test(label)) return false
-    if (label.startsWith('-') || label.endsWith('-')) return false
-    return true
-  })
-}
 
 const TabLabel = ({
   label,
@@ -1501,7 +1480,7 @@ export default function GlobalSettingsPage() {
                     ? 'Cannot change NTP servers while migrations are in progress.'
                     : FIELD_TOOLTIPS.NTP_SERVERS
                 }}
-                helperText={errors.NTP_SERVERS || 'Leave blank to use default public pools (enabled automatically when Timezone is set)'}
+                helperText={errors.NTP_SERVERS}
                 error={Boolean(errors.NTP_SERVERS)}
                 placeholder="0.pool.ntp.org, 1.pool.ntp.org"
               />
