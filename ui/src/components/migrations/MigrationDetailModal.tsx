@@ -17,6 +17,7 @@ import {
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
 import { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   ActionButton,
   DrawerFooter,
@@ -33,6 +34,8 @@ import {
 import { formatDateTime, formatDiskSize } from 'src/utils'
 import type { Migration } from 'src/features/migration/api/migrations'
 import { useMigrationDetailResourcesQuery } from 'src/hooks/api/useMigrationDetailResourcesQuery'
+import { getVolumeImageProfilesList } from 'src/api/volume-image-profiles/volumeImageProfiles'
+import { OS_FAMILY_LABEL } from 'src/api/volume-image-profiles/model'
 
 import { isDefaultishValue, normalizeMappingRows } from './helpers'
 import { MIGRATION_ENVIRONMENT_FIELDS, MIGRATION_POLICY_FIELDS } from './migrationDetailConstants'
@@ -425,6 +428,38 @@ export default function MigrationDetailModal({
   const networkPersistence = enabledOrNA(planAdvanced?.networkPersistence)
   const removeVMwareTools = enabledOrNA(planAdvanced?.removeVMwareTools)
 
+  const selectedImageProfileNames = useMemo(() => {
+    const names = planAdvanced?.imageProfiles
+    if (!Array.isArray(names)) return [] as string[]
+    return names.map((n) => String(n).trim()).filter(Boolean)
+  }, [planAdvanced?.imageProfiles])
+
+  const profileNamespace = migration?.metadata?.namespace
+  const { data: allProfiles } = useQuery({
+    queryKey: ['volume-image-profiles', profileNamespace],
+    queryFn: () => getVolumeImageProfilesList(profileNamespace),
+    enabled: open && selectedImageProfileNames.length > 0,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
+  })
+
+  const imageProfilesForVM = useMemo(() => {
+    if (!selectedImageProfileNames.length || !Array.isArray(allProfiles)) return []
+    const vmOs = String(guestOS || '').trim()
+    const byName = new Map(
+      allProfiles.map((p) => [String(p?.metadata?.name || ''), p] as const)
+    )
+    return selectedImageProfileNames
+      .map((name) => byName.get(name))
+      .filter(Boolean)
+      .filter((p) => {
+        const os = String(p?.spec?.osFamily || '').trim()
+        if (!os || os === 'any') return true
+        if (!vmOs || vmOs === 'N/A') return true
+        return os === vmOs
+      }) as NonNullable<ReturnType<typeof byName.get>>[]
+  }, [allProfiles, selectedImageProfileNames, guestOS])
+
   const postMigrationScript = useMemo(() => {
     const raw = (planSpec?.firstBootScript as string) || ''
     const trimmed = raw.trim()
@@ -686,6 +721,7 @@ export default function MigrationDetailModal({
                 </SurfaceCard>
               </Box>
             ) : (
+              <Box sx={{ display: 'grid', gap: 2 }}>
               <SurfaceCard
                 variant="card"
                 title="Migration Policies"
@@ -748,6 +784,57 @@ export default function MigrationDetailModal({
                   </Box>
                 ) : null}
               </SurfaceCard>
+
+              {selectedImageProfileNames.length ? (
+                <SurfaceCard
+                  variant="card"
+                  title="Image Profiles"
+                  subtitle="Cinder volume image metadata applied to the boot volume"
+                >
+                  {imageProfilesForVM.length ? (
+                    <Box sx={{ display: 'grid', gap: 1.5 }}>
+                      {imageProfilesForVM.map((profile) => {
+                        const name = profile.metadata?.name || ''
+                        const osLabel =
+                          OS_FAMILY_LABEL[profile.spec?.osFamily as string] ||
+                          profile.spec?.osFamily ||
+                          'N/A'
+                        const description = profile.spec?.description || ''
+                        const properties = profile.spec?.properties || {}
+                        const propertyItems = Object.entries(properties).map(([k, v]) => ({
+                          label: k,
+                          value: String(v ?? '')
+                        }))
+                        return (
+                          <SurfaceCard
+                            key={name}
+                            variant="section"
+                            title={name}
+                            subtitle={description || undefined}
+                            actions={
+                              <StatusChip label={osLabel} size="small" variant="outlined" />
+                            }
+                            sx={{
+                              border: (theme) => `1px solid ${theme.palette.divider}`
+                            }}
+                          >
+                            {propertyItems.length ? (
+                              <KeyValueGrid items={propertyItems} />
+                            ) : (
+                              <Typography variant="body2">No properties configured.</Typography>
+                            )}
+                          </SurfaceCard>
+                        )
+                      })}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2">
+                      No image profiles apply to this VM's OS family.
+                    </Typography>
+                  )}
+                </SurfaceCard>
+              ) : null}
+              </Box>
             )}
           </Section>
         )}
