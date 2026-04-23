@@ -119,10 +119,12 @@ func GetCurrentInstanceUUID() (string, error) {
 
 // getInstanceUUIDFromNode resolves the OpenStack instance UUID for the K8s node
 // this pod is scheduled on by looking up the corresponding VjailbreakNode resource.
+// POD_NAME is injected via the Kubernetes Downward API (metadata.name) in the pod spec,
+// unlike HOSTNAME which reflects the node name in this environment.
 func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
-	podName := os.Getenv("HOSTNAME")
+	podName := os.Getenv("POD_NAME")
 	if podName == "" {
-		return "", fmt.Errorf("HOSTNAME env var not set")
+		return "", fmt.Errorf("POD_NAME env var not set")
 	}
 
 	k8sClient, err := k8sutils.GetInclusterClient()
