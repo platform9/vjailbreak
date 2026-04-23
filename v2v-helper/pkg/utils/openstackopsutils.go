@@ -23,6 +23,8 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	corev1 "k8s.io/api/core/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -66,48 +68,37 @@ func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networ
 }
 
 func GetCurrentInstanceUUID() (string, error) {
-
-	// Use the env var directly if set, avoiding a network round-trip to the
-	// metadata service which may not be reachable in all deployment environments.
-	if id := os.Getenv("CURRENT_INSTANCE_ID"); id != "" {
-		return id, nil
+	// Primary: look up the VJailbreakNode for the K8s node this pod is running on.
+	// This correctly handles agent nodes — the env-var / metadata-service approach
+	// always returns the master's UUID because the ConfigMap is built on the master.
+	if uuid, err := getInstanceUUIDFromNode(context.Background()); err == nil && uuid != "" {
+		return uuid, nil
 	}
 
-	// Step 1. Path with a read lock
-	// First Check if the data is already cached. This read lock allows multiple
-	// Goroutines to read the cached data concurrently.
+	// Fallback: OpenStack metadata service (works on the master node).
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
-		// If cached, return it immediately.
 		defer metadataMutex.RUnlock()
 		return cachedMetadata.UUID, nil
 	}
-
-	// Release the read lock before we get the Write lock.
 	metadataMutex.RUnlock()
 
-	// Step 2. Path with write lock
-	// Acquire a write lock to fetch and cache the metadata.
 	metadataMutex.Lock()
 	defer metadataMutex.Unlock()
-
-	// Check again if another goroutine has already fetched the metadata.
 
 	if cachedMetadata != nil {
 		return cachedMetadata.UUID, nil
 	}
 
-	// Step 4: Fetch metadata from the OpenStack metadata service
-
-	client := retryablehttp.NewClient()
-	client.RetryMax = 5
-	client.Logger = nil
+	httpClient := retryablehttp.NewClient()
+	httpClient.RetryMax = 5
+	httpClient.Logger = nil
 	req, err := retryablehttp.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %s", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
@@ -124,6 +115,46 @@ func GetCurrentInstanceUUID() (string, error) {
 	}
 	cachedMetadata = &metadata
 	return metadata.UUID, nil
+}
+
+// getInstanceUUIDFromNode resolves the OpenStack instance UUID for the K8s node
+// this pod is scheduled on by looking up the corresponding VjailbreakNode resource.
+func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
+	podName := os.Getenv("HOSTNAME")
+	if podName == "" {
+		return "", fmt.Errorf("HOSTNAME env var not set")
+	}
+
+	k8sClient, err := k8sutils.GetInclusterClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get k8s client: %w", err)
+	}
+
+	pod := &corev1.Pod{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      podName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, pod); err != nil {
+		return "", fmt.Errorf("failed to get pod %s: %w", podName, err)
+	}
+
+	nodeName := pod.Spec.NodeName
+	if nodeName == "" {
+		return "", fmt.Errorf("pod %s has no node name assigned yet", podName)
+	}
+
+	vjNodeList := &vjailbreakv1alpha1.VjailbreakNodeList{}
+	if err := k8sClient.List(ctx, vjNodeList); err != nil {
+		return "", fmt.Errorf("failed to list vjailbreak nodes: %w", err)
+	}
+
+	for _, vjNode := range vjNodeList.Items {
+		if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
+			return vjNode.Status.OpenstackUUID, nil
+		}
+	}
+
+	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for node %s", nodeName)
 }
 
 // create a new volume
