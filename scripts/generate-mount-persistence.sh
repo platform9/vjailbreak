@@ -248,7 +248,11 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
       if [ "$TGT_FSTAB" = "/" ]; then
         DUMP_PASS="1 1"
       else
-        DUMP_PASS="0 2"
+        # Skip boot-time fsck on secondary ext filesystems. On sysvinit (e.g.
+        # SLES 11 / openSUSE 11) the fsck step cannot resolve a UUID for a
+        # not-yet-attached Cinder disk and drops the system to a maintenance
+        # shell. Runtime fsck on mount still works when needed.
+        DUMP_PASS="0 0"
       fi
       ;;
     *)
@@ -283,11 +287,28 @@ if $APPLY; then
 
   cp "$FSTAB_PATH" "$FSTAB_PATH.bak.$(date +%s)"
 
+  # Marker comment so post-migration inspection can tell at a glance whether
+  # this script actually ran against the guest's fstab. Grep for:
+  #   grep 'vJailbreak mount-persistence' /etc/fstab
+  if $FORCE_UUID; then
+    MARKER_MODE="force-uuid"
+  elif $REPLACE_FSTAB; then
+    MARKER_MODE="replace-fstab"
+  else
+    MARKER_MODE="apply"
+  fi
+  MARKER_TS=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date)
+  MARKER_LINE="# vJailbreak mount-persistence: ran at ${MARKER_TS} mode=${MARKER_MODE}"
+
   if $REPLACE_FSTAB; then
     echo "Replacing existing fstab entries for detected mounts and swap..."
     tmp_fstab=$(mktemp)
 
     while IFS= read -r line; do
+      # Strip any prior vJailbreak marker so reruns don't accumulate headers.
+      case "$line" in
+        "# vJailbreak mount-persistence:"*) continue ;;
+      esac
       skip=false
       while IFS= read -r entry; do
         mp=$(echo "$entry" | awk '{print $2}')
@@ -298,11 +319,13 @@ if $APPLY; then
       $skip || echo "$line" >> "$tmp_fstab"
     done < "$FSTAB_PATH"
 
-    # Append new entries (already in UUID format from get_fstab_id)
+    # Append marker and new entries (already in UUID format from get_fstab_id)
+    echo "$MARKER_LINE" >> "$tmp_fstab"
     cat "$FSTAB_LINES_FILE" >> "$tmp_fstab"
 
     mv "$tmp_fstab" "$FSTAB_PATH"
   else
+    echo "$MARKER_LINE" >> "$FSTAB_PATH"
     cat "$FSTAB_LINES_FILE" >> "$FSTAB_PATH"
   fi
 
