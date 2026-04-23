@@ -30,6 +30,7 @@ import (
 	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
+	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -425,6 +426,23 @@ func (r *OpenstackCredsReconciler) createArrayCreds(ctx context.Context, scope *
 				Namespace: constants.NamespaceMigrationSystem,
 			},
 		},
+	}
+
+	// Pre-populate NetApp SVM/FlexVol when Cinder already exposes them.
+	// Both fields are required for the NetApp provider to skip the
+	// NeedsBackendSelection phase; populate only when both are present
+	// so a partial config doesn't falsely advance the phase.
+	if vendor == netappsdk.VendorName {
+		svm := backendInfo["svm"]
+		flexvol := backendInfo["flexvol"]
+		if svm != "" && flexvol != "" {
+			arrayCreds.Spec.NetAppConfig = &vjailbreakv1alpha1.NetAppConfig{
+				SVM:     svm,
+				FlexVol: flexvol,
+			}
+			ctxlog.Info("Auto-populated NetApp SVM/FlexVol from Cinder",
+				"arrayCreds", arrayCredsName, "svm", svm, "flexvol", flexvol)
+		}
 	}
 
 	// Set owner reference
