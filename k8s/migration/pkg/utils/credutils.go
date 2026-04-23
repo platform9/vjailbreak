@@ -2079,15 +2079,6 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		volumeServiceHosts = make(map[string]string)
 	}
 
-	// Fetch NetApp-specific per-pool details (SVM/FlexVol) from the raw
-	// scheduler-stats JSON. Non-fatal — absence just means we cannot
-	// pre-populate NetAppConfig on the ArrayCreds.
-	netAppExtras, err := getNetAppPoolExtras(ctx, cinderClient)
-	if err != nil {
-		ctxlog.Error(err, "Failed to fetch NetApp pool extras, continuing without SVM/FlexVol auto-detection")
-		netAppExtras = make(map[string]netAppPoolExtras)
-	}
-
 	// Map backend name -> vendor/type info for quick lookup
 	backendMap := make(map[string]map[string]string)
 	for _, pool := range backendPools {
@@ -2116,29 +2107,13 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 			ctxlog.Info("Volume type not found in Cinder API, using pool name parsing", "backend", backendName, "volumeType", volumeType)
 		}
 
-		entry := map[string]string{
+		backendMap[backendName] = map[string]string{
 			"vendor":     vendor,
 			"driver":     driver,
 			"pool":       pool.Name,
 			"volumeType": volumeType,
 			"cinderHost": cinderHost,
 		}
-
-		// For NetApp backends, surface the SVM/FlexVol that Cinder is
-		// already configured against so downstream ArrayCreds creation
-		// can pre-populate NetAppConfig without user intervention.
-		if GetArrayVendor(vendor) == "netapp" {
-			if extras, ok := netAppExtras[pool.Name]; ok {
-				if extras.SVM != "" {
-					entry["svm"] = extras.SVM
-				}
-				if extras.FlexVol != "" {
-					entry["flexvol"] = extras.FlexVol
-				}
-			}
-		}
-
-		backendMap[backendName] = entry
 	}
 
 	return backendMap, nil
@@ -2256,69 +2231,6 @@ func getCinderVolumeServiceHosts(ctx context.Context, cinderClient *gophercloud.
 	}
 
 	return hostMap, nil
-}
-
-// netAppPoolExtras holds NetApp-specific fields extracted from Cinder
-// scheduler-stats raw capabilities for a single pool.
-type netAppPoolExtras struct {
-	SVM     string
-	FlexVol string
-}
-
-// getNetAppPoolExtras issues a raw GET against the Cinder scheduler-stats
-// endpoint so we can read NetApp-specific capabilities (notably
-// "netapp_vserver") that gophercloud's typed Capabilities struct drops.
-// Returned map is keyed by the full Cinder pool name (e.g.
-// "host@netapp#flexvol1") and is safe to consult for non-NetApp pools —
-// those are skipped entirely.
-//
-// FlexVol is taken from the pool segment of the pool name (the part after
-// "#"), which is the NetApp Cinder driver convention for pool-based
-// reporting. SVM is read from the "netapp_vserver" capability when present.
-func getNetAppPoolExtras(ctx context.Context, cinderClient *gophercloud.ServiceClient) (map[string]netAppPoolExtras, error) {
-	ctxlog := log.FromContext(ctx)
-
-	var resp struct {
-		Pools []struct {
-			Name         string                 `json:"name"`
-			Capabilities map[string]interface{} `json:"capabilities"`
-		} `json:"pools"`
-	}
-
-	url := cinderClient.ServiceURL("scheduler-stats", "get_pools") + "?detail=True"
-	if _, err := cinderClient.Get(ctx, url, &resp, nil); err != nil {
-		return nil, errors.Wrap(err, "failed to fetch raw scheduler-stats for NetApp details")
-	}
-
-	result := make(map[string]netAppPoolExtras)
-	for _, p := range resp.Pools {
-		vendor, _ := p.Capabilities["vendor_name"].(string)
-		if !strings.Contains(strings.ToLower(vendor), "netapp") {
-			continue
-		}
-		info := netAppPoolExtras{}
-
-		// SVM / vserver — the NetApp ONTAP Cinder driver exports this
-		// directly as a pool capability.
-		if v, ok := p.Capabilities["netapp_vserver"].(string); ok {
-			info.SVM = strings.TrimSpace(v)
-		}
-		// Some driver versions expose the FlexVol explicitly; fall back
-		// to the pool segment of the pool name otherwise.
-		if v, ok := p.Capabilities["netapp_volume"].(string); ok {
-			info.FlexVol = strings.TrimSpace(v)
-		}
-		if info.FlexVol == "" {
-			if segs := strings.SplitN(p.Name, "#", 2); len(segs) == 2 {
-				info.FlexVol = strings.TrimSpace(segs[1])
-			}
-		}
-
-		result[p.Name] = info
-		ctxlog.Info("Extracted NetApp pool details from Cinder",
-			"pool", p.Name, "svm", info.SVM, "flexvol", info.FlexVol)
-	}
-	return result, nil
 }
 
 // GetArrayVendor normalizes and returns the storage array vendor name from a vendor string

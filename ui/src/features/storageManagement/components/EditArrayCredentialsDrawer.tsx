@@ -201,8 +201,8 @@ export default function EditArrayCredentialsDrawer({
           volumeType: data.volumeType,
           cinderBackendName: data.backendName
         },
-        data.vendorType === 'netapp' && (data.netAppSvm || data.netAppFlexVol)
-          ? { svm: data.netAppSvm, flexVol: data.netAppFlexVol }
+        data.vendorType === 'netapp'
+          ? { svm: data.netAppSvm ?? '', flexVol: data.netAppFlexVol ?? '' }
           : undefined,
         namespace
       )

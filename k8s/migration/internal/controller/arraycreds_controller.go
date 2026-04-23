@@ -211,8 +211,10 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		scope.ArrayCreds.Status.BackendTargets = backendTargets
 	}
 
-	// For NetApp specifically: verify the user's SVM/FlexVol selection (if any)
-	// exists on the array, and flag when a selection is still required.
+	// For NetApp specifically: both SVM and FlexVol must be supplied by the
+	// user in spec.NetAppConfig and must exist on the array. Anything else
+	// is a validation failure — we no longer advance to an intermediate
+	// "NeedsBackendSelection" phase.
 	phase := constants.ArrayCredsPhaseValidated
 	validationStatus := constants.ArrayCredsStatusSucceeded
 	validationMessage := fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
@@ -220,19 +222,15 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	if arraycreds.Spec.VendorType == netappsdk.VendorName {
 		cfg := arraycreds.Spec.NetAppConfig
 		hasSelection := cfg != nil && cfg.SVM != "" && cfg.FlexVol != ""
-		if hasSelection {
-			if err := validateNetAppTargetSelection(cfg, backendTargets); err != nil {
-				ctxlog.Error(err, "NetApp SVM/FlexVol selection invalid", "arraycreds", scope.ArrayCreds.Name)
-				phase = constants.ArrayCredsPhaseFailed
-				validationStatus = constants.ArrayCredsStatusFailed
-				validationMessage = fmt.Sprintf("Invalid NetApp target selection: %v", err)
-			}
-		} else {
-			phase = constants.ArrayCredsPhaseNeedsBackendSelection
-			validationMessage = fmt.Sprintf(
-				"Credentials validated. Select a NetApp SVM and FlexVol from %d discovered SVM(s) to complete setup.",
-				len(backendTargets),
-			)
+		if !hasSelection {
+			phase = constants.ArrayCredsPhaseFailed
+			validationStatus = constants.ArrayCredsStatusFailed
+			validationMessage = "NetApp ArrayCreds require spec.netAppConfig.svm and spec.netAppConfig.flexVol to be set."
+		} else if err := validateNetAppTargetSelection(cfg, backendTargets); err != nil {
+			ctxlog.Error(err, "NetApp SVM/FlexVol selection invalid", "arraycreds", scope.ArrayCreds.Name)
+			phase = constants.ArrayCredsPhaseFailed
+			validationStatus = constants.ArrayCredsStatusFailed
+			validationMessage = fmt.Sprintf("Invalid NetApp target selection: %v", err)
 		}
 	}
 

@@ -135,23 +135,23 @@ export default function ArrayCredentialsFormFields({
 
       <Box sx={{ my: 1 }} />
 
-      {/* NetApp-specific targeting (optional at create time) */}
+      {/* NetApp-specific targeting — both fields required for validation to succeed. */}
       {isNetApp && (
         <>
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-              NetApp Target (Optional)
+              NetApp Target
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Specify the SVM and FlexVol where migration LUNs will be created. Leave blank to let
-              vJailbreak discover the available SVMs and FlexVols; you will then pick from a list
-              once credentials are validated.
+              Specify the SVM and FlexVol where migration LUNs will be created.
             </Typography>
 
             <FormGrid minWidth={280}>
               <RHFTextField
                 name="netAppSvm"
                 label="SVM"
+                required
+                rules={{ required: 'SVM is required' }}
                 labelProps={{ tooltip: 'NetApp Storage Virtual Machine name' }}
                 helperText={errors.netAppSvm?.message}
                 error={!!errors.netAppSvm}
@@ -160,6 +160,8 @@ export default function ArrayCredentialsFormFields({
               <RHFTextField
                 name="netAppFlexVol"
                 label="FlexVol"
+                required
+                rules={{ required: 'FlexVol is required' }}
                 labelProps={{ tooltip: 'FlexVol name within the SVM where LUNs will be created' }}
                 helperText={errors.netAppFlexVol?.message}
                 error={!!errors.netAppFlexVol}
