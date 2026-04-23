@@ -212,7 +212,11 @@ func (p *PureStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName st
 	}
 
 	if len(matchedHosts) == 0 {
-		return nil, fmt.Errorf("no hosts found matching any of the provided IQNs/FC adapters: %v", hbaIdentifiers)
+		return nil, fmt.Errorf(
+			"no Pure host matches the ESXi HBA identifiers %v. "+
+				"Pure requires the host to be pre-registered with its IQN(s) and/or WWPN(s). "+
+				"Create or update a host on the FlashArray with these initiators and retry",
+			hbaIdentifiers)
 	}
 
 	return storage.MappingContext{"hosts": matchedHosts}, nil

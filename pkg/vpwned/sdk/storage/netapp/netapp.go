@@ -121,7 +121,6 @@ type OntapFlexVolResponse struct {
 	NumRecords int            `json:"num_records"`
 }
 
-
 // Connect establishes connection to NetApp ONTAP array
 func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
 	n.AccessInfo = accessInfo
@@ -335,6 +334,40 @@ func detectSANProtocol(hbaIdentifiers []string) string {
 	}
 }
 
+// isWWPNLike reports whether s looks like an FC world-wide port name: pure hex
+// after removing the usual separators. Used to pick between case-insensitive
+// string equality (IQN/NQN/EUI) and fcutil's normalising comparison (WWPN).
+func isWWPNLike(s string) bool {
+	stripped := fcutil.StripWWNFormatting(s)
+	if stripped == "" {
+		return false
+	}
+	for _, r := range stripped {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// initiatorMatches reports whether candidate matches any entry in initiators.
+// WWPNs are compared with separator/case-insensitive normalisation via fcutil;
+// IQNs fall back to plain case-insensitive equality.
+func initiatorMatches(candidate string, initiators []string) bool {
+	if isWWPNLike(candidate) {
+		for _, init := range initiators {
+			if isWWPNLike(init) && fcutil.EqualWWNs(candidate, init) {
+				return true
+			}
+		}
+		return false
+	}
+	return storage.ContainsIgnoreCase(initiators, candidate)
+}
+
 // normaliseToONTAPInitiators converts HBA identifiers to the format ONTAP expects.
 // FC adapter UIDs (fc.WWNN:WWPN) are converted to colon-separated WWPN strings;
 // IQN / EUI / NQN values are kept as-is.
@@ -385,6 +418,17 @@ func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, pr
 	var response OntapIgroupResponse
 	err = n.DoRequestJSON(ctx, "POST", "/protocols/san/igroups?return_records=true", bytes.NewReader(jsonBody), &response)
 	if err != nil {
+		// Concurrent migrations can race on the same igroup name. If ONTAP
+		// reports the igroup already exists, re-resolve it by name so both
+		// reconciliations converge on the same UUID.
+		if isONTAPConflict(err) {
+			klog.Infof("Igroup %q already exists (conflict on create), re-resolving UUID", name)
+			ig, lookupErr := n.getIgroupByName(ctx, name)
+			if lookupErr == nil {
+				return ig.UUID, nil
+			}
+			return "", fmt.Errorf("igroup %q exists but lookup failed: %w", name, lookupErr)
+		}
 		return "", fmt.Errorf("failed to create igroup %q: %w", name, err)
 	}
 	if len(response.Records) == 0 {
@@ -392,6 +436,22 @@ func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, pr
 	}
 	klog.Infof("Created igroup %q with UUID %s", name, response.Records[0].UUID)
 	return response.Records[0].UUID, nil
+}
+
+// isONTAPConflict reports whether err represents an HTTP 409 / duplicate-entry
+// response from ONTAP. Both the message substrings ("already exists",
+// "duplicate") and the "status 409" marker produced by DoRequest are accepted
+// so that the caller can treat the desired state as already satisfied.
+func isONTAPConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "status 409") ||
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicate") ||
+		strings.Contains(msg, "already mapped") ||
+		strings.Contains(msg, "already in group")
 }
 
 // addInitiatorToIgroup adds a single initiator (IQN or colon-separated WWPN) to
@@ -406,7 +466,7 @@ func (n *NetAppStorageProvider) addInitiatorToIgroup(ctx context.Context, igroup
 	endpoint := fmt.Sprintf("/protocols/san/igroups/%s/initiators", igroupUUID)
 	err = n.DoRequestJSON(ctx, "POST", endpoint, bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+		if isONTAPConflict(err) {
 			klog.Infof("Initiator %q already in igroup %s — skipping", initiatorName, igroupUUID)
 			return nil
 		}
@@ -449,11 +509,38 @@ func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName 
 		}
 		klog.Infof("Checking igroup %s (protocol: %s), initiators: %v", ig.Name, ig.Protocol, initiatorNames)
 
+		// Skip igroups whose protocol does not match what the host is using;
+		// ONTAP will not accept a LUN map on a protocol-mismatched igroup.
+		if protocol != "mixed" && ig.Protocol != "" && !strings.EqualFold(ig.Protocol, protocol) && !strings.EqualFold(ig.Protocol, "mixed") {
+			continue
+		}
+
+		matched := false
 		for _, init := range ig.Initiators {
-			if storage.ContainsIgnoreCase(ontapInitiators, init.Name) {
+			if initiatorMatches(init.Name, ontapInitiators) {
 				klog.Infof("Matched igroup %s via initiator %s", ig.Name, init.Name)
 				matchedIgroups = append(matchedIgroups, ig.Name)
+				matched = true
 				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		// Flag multipath gaps: if any of the host's initiators is missing from
+		// the matched igroup the LUN will only be visible on the registered
+		// paths and the operator needs to add the rest.
+		for _, want := range ontapInitiators {
+			present := false
+			for _, init := range ig.Initiators {
+				if initiatorMatches(init.Name, []string{want}) {
+					present = true
+					break
+				}
+			}
+			if !present {
+				klog.Warningf("Matched igroup %s is missing host initiator %q — multipath coverage may be impaired; add the initiator on the NetApp side", ig.Name, want)
 			}
 		}
 	}
@@ -538,8 +625,7 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 
 		err = n.DoRequestJSON(ctx, "POST", "/protocols/san/lun-maps", bytes.NewReader(jsonBody), nil)
 		if err != nil {
-			// Check if already mapped
-			if strings.Contains(err.Error(), "already mapped") {
+			if isONTAPConflict(err) {
 				klog.Infof("LUN %s already mapped to igroup %s", targetVolume.Name, igroupName)
 				continue
 			}

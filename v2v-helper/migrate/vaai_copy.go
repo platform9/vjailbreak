@@ -170,7 +170,7 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	migobj.logMessage(fmt.Sprintf("ESXi host adapters: %v", hostAdapters))
 
 	// Step 3: Map host adapters to initiator group on the storage array
-	initiatorGroup := fmt.Sprintf("vjailbreak-xcopy")
+	initiatorGroup := "vjailbreak-xcopy"
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
 	mappingContext, err := migobj.StorageProvider.CreateOrUpdateInitiatorGroup(initiatorGroup, hostAdapters)
 	if err != nil {
@@ -228,8 +228,15 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	}
 	_, err = migobj.StorageProvider.MapVolumeToGroup(initiatorGroup, targetVol, mappingContext)
 	if err != nil {
-		// Volume might already be mapped, log warning and continue
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to map target volume (may already be mapped): %v", err))
+		// Accept the operation when the array tells us the LUN is already
+		// mapped (idempotent retry); surface every other error so we fail
+		// fast instead of masquerading as a later "device not visible" timeout.
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "already mapped") || strings.Contains(msg, "connection already exists") {
+			migobj.logMessage(fmt.Sprintf("Target volume already mapped to %s, continuing: %v", initiatorGroup, err))
+		} else {
+			return storage.Volume{}, errors.Wrapf(err, "failed to map target volume %s to initiator group %s", cinderVolumeName, initiatorGroup)
+		}
 	}
 
 	// Cleanup function to unmap after copy
