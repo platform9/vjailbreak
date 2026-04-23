@@ -155,7 +155,7 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for node %s", nodeName)
+	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for k8s node %s", nodeName)
 }
 
 // create a new volume
