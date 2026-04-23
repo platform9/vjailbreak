@@ -17,13 +17,26 @@ import (
 // NetApp ONTAP NAA prefix (OUI for NetApp)
 const NetAppProviderID = "600a0980"
 
+// ProviderOptions keys read by the NetApp provider from
+// storage.StorageAccessInfo.ProviderOptions. Unknown keys are ignored.
+const (
+	OptionSVM     = "svm"
+	OptionFlexVol = "flexvol"
+)
+
 func init() {
 	storage.RegisterStorageProvider("netapp", &NetAppStorageProvider{})
 }
 
-// NetAppStorageProvider implements StorageProvider for NetApp ONTAP
+// NetAppStorageProvider implements StorageProvider for NetApp ONTAP.
+// SVM and FlexVol scope the array operations to a specific storage virtual
+// machine and FlexVol. They may be set explicitly via ProviderOptions; if
+// empty at operation time, the provider falls back to best-effort discovery
+// from existing LUNs or a single-option auto-pick.
 type NetAppStorageProvider struct {
 	storage.BaseStorageProvider
+	SVM     string
+	FlexVol string
 }
 
 // ONTAP API response structures
@@ -78,6 +91,31 @@ type OntapIgroupResponse struct {
 	NumRecords int           `json:"num_records"`
 }
 
+type OntapSVM struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type OntapSVMResponse struct {
+	Records    []OntapSVM `json:"records"`
+	NumRecords int        `json:"num_records"`
+}
+
+type OntapFlexVol struct {
+	UUID  string `json:"uuid"`
+	Name  string `json:"name"`
+	Style string `json:"style"`
+	SVM   struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+	} `json:"svm"`
+}
+
+type OntapFlexVolResponse struct {
+	Records    []OntapFlexVol `json:"records"`
+	NumRecords int            `json:"num_records"`
+}
+
 
 // Connect establishes connection to NetApp ONTAP array
 func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
@@ -93,6 +131,15 @@ func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.
 	n.InitHTTPClient(accessInfo.SkipSSLVerification)
 	n.SetConnected(true)
 
+	if accessInfo.ProviderOptions != nil {
+		if svm := strings.TrimSpace(accessInfo.ProviderOptions[OptionSVM]); svm != "" {
+			n.SVM = svm
+		}
+		if flexvol := strings.TrimSpace(accessInfo.ProviderOptions[OptionFlexVol]); flexvol != "" {
+			n.FlexVol = flexvol
+		}
+	}
+
 	// Validate connection by getting cluster info
 	cluster, err := n.getClusterInfo(ctx)
 	if err != nil {
@@ -100,7 +147,8 @@ func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.
 		return fmt.Errorf("failed to connect to NetApp ONTAP cluster: %w", err)
 	}
 
-	klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s", cluster.Name, cluster.Version.Full)
+	klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s (SVM: %q, FlexVol: %q)",
+		cluster.Name, cluster.Version.Full, n.SVM, n.FlexVol)
 	return nil
 }
 
@@ -728,9 +776,48 @@ func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name string
 	return nil, fmt.Errorf("igroup %s not found", name)
 }
 
-// getDefaultVolumePathAndSVM discovers the volume path and SVM from existing LUNs
-// LUN paths are like /vol/cinder_vol/lun_name, we extract /vol/cinder_vol and SVM name
+// getDefaultVolumePathAndSVM returns the /vol/<flexvol> path and SVM name to
+// target for LUN creation. Resolution order:
+//  1. Explicit n.SVM + n.FlexVol (configured via ProviderOptions).
+//  2. Probe existing LUNs and use the first LUN's SVM + FlexVol.
+//  3. Auto-pick when exactly one SVM with exactly one FlexVol is available.
+//
+// Returns an error if none of the above succeed so the caller can surface a
+// clear "please configure SVM/FlexVol" message.
 func (n *NetAppStorageProvider) getDefaultVolumePathAndSVM(ctx context.Context) (string, string, error) {
+	// 1. Explicit configuration wins.
+	if n.SVM != "" && n.FlexVol != "" {
+		return fmt.Sprintf("/vol/%s", n.FlexVol), n.SVM, nil
+	}
+
+	// 2. LUN-based probe (legacy behaviour).
+	if path, svm, err := n.probeTargetFromExistingLUNs(ctx); err == nil {
+		return path, svm, nil
+	} else {
+		klog.V(2).Infof("LUN probe for SVM/FlexVol unavailable: %v", err)
+	}
+
+	// 3. Auto-pick when the array has exactly one SVM with exactly one FlexVol.
+	groups, err := n.DiscoverBackendTargets(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to discover SVMs/FlexVols: %w", err)
+	}
+	if len(groups) == 1 && len(groups[0].Children) == 1 {
+		svm := groups[0].Name
+		flexvol := groups[0].Children[0].Name
+		klog.Infof("Auto-picked single SVM %q with single FlexVol %q for NetApp target", svm, flexvol)
+		return fmt.Sprintf("/vol/%s", flexvol), svm, nil
+	}
+
+	return "", "", fmt.Errorf(
+		"NetApp SVM and FlexVol are not configured and cannot be auto-detected (found %d SVM(s)); "+
+			"set ArrayCreds.spec.netAppConfig.svm and flexVol explicitly", len(groups))
+}
+
+// probeTargetFromExistingLUNs inspects existing LUNs on the array and returns
+// the /vol/<flexvol> path and SVM name of the first LUN. Used as a legacy
+// fallback when explicit configuration is absent.
+func (n *NetAppStorageProvider) probeTargetFromExistingLUNs(ctx context.Context) (string, string, error) {
 	luns, err := n.listLUNs(ctx, "")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to list LUNs: %w", err)
@@ -759,4 +846,59 @@ func (n *NetAppStorageProvider) getDefaultVolumePathAndSVM(ctx context.Context) 
 	klog.Infof("Discovered NetApp volume path: %s, SVM: %s from LUN: %s", volumePath, svmName, lun.Name)
 
 	return volumePath, svmName, nil
+}
+
+// ListSVMs returns all data SVMs on the ONTAP cluster.
+// Uses ONTAP REST: GET /svm/svms
+func (n *NetAppStorageProvider) ListSVMs(ctx context.Context) ([]OntapSVM, error) {
+	var response OntapSVMResponse
+	err := n.DoRequestJSON(ctx, "GET", "/svm/svms?fields=name,uuid", nil, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list SVMs: %w", err)
+	}
+	return response.Records, nil
+}
+
+// ListFlexVolsForSVM returns FlexVols (style=flexvol) on the given SVM.
+// FlexGroups and other styles are excluded since LUN creation requires a
+// plain FlexVol.
+// Uses ONTAP REST: GET /storage/volumes?svm.name=<svm>&style=flexvol
+func (n *NetAppStorageProvider) ListFlexVolsForSVM(ctx context.Context, svmName string) ([]OntapFlexVol, error) {
+	if svmName == "" {
+		return nil, fmt.Errorf("svmName is required")
+	}
+	endpoint := fmt.Sprintf("/storage/volumes?svm.name=%s&style=flexvol&fields=name,uuid,style,svm", svmName)
+	var response OntapFlexVolResponse
+	err := n.DoRequestJSON(ctx, "GET", endpoint, nil, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list FlexVols for SVM %s: %w", svmName, err)
+	}
+	return response.Records, nil
+}
+
+// DiscoverBackendTargets returns a two-level SVM -> FlexVol tree suitable for
+// user selection. Implements storage.BackendTargetDiscoverer.
+func (n *NetAppStorageProvider) DiscoverBackendTargets(ctx context.Context) ([]storage.BackendTargetGroup, error) {
+	svms, err := n.ListSVMs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	groups := make([]storage.BackendTargetGroup, 0, len(svms))
+	for _, svm := range svms {
+		flexvols, err := n.ListFlexVolsForSVM(ctx, svm.Name)
+		if err != nil {
+			klog.Warningf("Failed to list FlexVols for SVM %s: %v", svm.Name, err)
+			continue
+		}
+		children := make([]storage.BackendTarget, 0, len(flexvols))
+		for _, fv := range flexvols {
+			children = append(children, storage.BackendTarget{Name: fv.Name, UUID: fv.UUID})
+		}
+		groups = append(groups, storage.BackendTargetGroup{
+			Name:     svm.Name,
+			UUID:     svm.UUID,
+			Children: children,
+		})
+	}
+	return groups, nil
 }

@@ -198,10 +198,11 @@ const (
 	ESXiSSHValidationConcurrency = 10
 
 	// ArrayCreds phases
-	ArrayCredsPhaseDiscovered = "Discovered"
-	ArrayCredsPhaseConfigured = "Configured"
-	ArrayCredsPhaseValidated  = "Validated"
-	ArrayCredsPhaseFailed     = "Failed"
+	ArrayCredsPhaseDiscovered            = "Discovered"
+	ArrayCredsPhaseConfigured            = "Configured"
+	ArrayCredsPhaseValidated             = "Validated"
+	ArrayCredsPhaseFailed                = "Failed"
+	ArrayCredsPhaseNeedsBackendSelection = "NeedsBackendSelection"
 
 	// ArrayCreds validation statuses
 	ArrayCredsStatusPending             = "Pending"

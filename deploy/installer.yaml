@@ -71,6 +71,22 @@ spec:
                 description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
                   from OpenStack
                 type: boolean
+              netAppConfig:
+                description: |-
+                  NetAppConfig holds NetApp-specific configuration. Required when
+                  VendorType is "netapp" before a migration can run. May be left empty
+                  at creation time so the controller can surface available SVMs/FlexVols
+                  on status.backendTargets for interactive selection.
+                properties:
+                  flexVol:
+                    description: FlexVol is the FlexVol name (within the SVM) where
+                      LUNs will be created.
+                    type: string
+                  svm:
+                    description: SVM is the Storage Virtual Machine name that owns
+                      the target FlexVol.
+                    type: string
+                type: object
               openstackMapping:
                 description: OpenStackMapping is the openstack mapping for this array
                 properties:
@@ -159,6 +175,38 @@ spec:
                   ArrayValidationStatus is the status of the storage array validation
                   Possible values: Pending, Succeeded, Failed, AwaitingCredentials
                 type: string
+              backendTargets:
+                description: |-
+                  BackendTargets is a vendor-neutral two-level tree of selectable array
+                  targets (e.g., NetApp SVMs -> FlexVols). Populated by the controller
+                  after successful credential validation for vendors that expose a
+                  selectable target hierarchy. UIs consume this to render a picker.
+                items:
+                  description: BackendTargetGroup groups related targets (e.g., a
+                    NetApp SVM and its FlexVols).
+                  properties:
+                    children:
+                      items:
+                        description: |-
+                          BackendTarget is a single selectable target within a BackendTargetGroup
+                          (e.g., a NetApp FlexVol, a Dell pool).
+                        properties:
+                          name:
+                            type: string
+                          uuid:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                    uuid:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               dataStore:
                 description: DataStore is the list of datastores associated with this
                   array
@@ -195,7 +243,7 @@ spec:
               phase:
                 description: |-
                   Phase indicates the current phase of the ArrayCreds
-                  Possible values: Discovered, Configured, Validated, Failed
+                  Possible values: Discovered, Configured, Validated, Failed, NeedsBackendSelection
                 type: string
             type: object
         type: object
@@ -4548,7 +4596,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:main
+        image: quay.io/platform9/vjailbreak-controller:0.1.13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4635,7 +4683,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:main
+        image: quay.io/platform9/vjailbreak-vpwned:0.1.13
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4724,7 +4772,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:main
+          image: quay.io/platform9/vjailbreak-ui:0.1.13
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

@@ -81,6 +81,32 @@ type StorageAccessInfo struct {
 	Password            string
 	SkipSSLVerification bool
 	VendorType          string
+	// ProviderOptions carries vendor-specific configuration (e.g., NetApp SVM/FlexVol).
+	// Each provider documents the keys it reads; unknown keys are ignored.
+	ProviderOptions map[string]string
+}
+
+// BackendTarget represents a single selectable target on a storage array
+// (e.g., a NetApp FlexVol, an HPE CPG, a Dell pool).
+type BackendTarget struct {
+	Name string
+	UUID string
+}
+
+// BackendTargetGroup represents a logical grouping of targets
+// (e.g., a NetApp SVM holding FlexVols, a Dell system holding pools).
+type BackendTargetGroup struct {
+	Name     string
+	UUID     string
+	Children []BackendTarget
+}
+
+// BackendTargetDiscoverer is implemented by providers that expose a
+// two-level target hierarchy for user selection (group -> children).
+// Callers type-assert the provider to this interface; providers that
+// do not need selection simply omit this interface.
+type BackendTargetDiscoverer interface {
+	DiscoverBackendTargets(ctx context.Context) ([]BackendTargetGroup, error)
 }
 
 // ArrayInfo holds basic storage array information

@@ -32,6 +32,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 
 	// Import storage providers to register them
+	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 
 	corev1 "k8s.io/api/core/v1"
@@ -161,8 +162,11 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
+	// Build vendor-specific provider options from the spec (e.g., NetApp SVM/FlexVol).
+	providerOptions := buildProviderOptionsFromSpec(arraycreds.Spec)
+
 	// Validate credentials using storage SDK
-	if err := r.validateArrayCredentials(ctx, arraycreds.Spec.VendorType, arrayCredential); err != nil {
+	if err := r.validateArrayCredentials(ctx, arraycreds.Spec.VendorType, arrayCredential, providerOptions); err != nil {
 		ctxlog.Error(err, "Error validating ArrayCreds", "arraycreds", scope.ArrayCreds.Name)
 		scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseFailed
 		scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusFailed
@@ -194,9 +198,45 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		scope.ArrayCreds.Status.DataStore = datastores
 	}
 
-	scope.ArrayCreds.Status.Phase = constants.ArrayCredsPhaseValidated
-	scope.ArrayCreds.Status.ArrayValidationStatus = constants.ArrayCredsStatusSucceeded
-	scope.ArrayCreds.Status.ArrayValidationMessage = fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
+	// Discover selectable backend targets (SVMs/FlexVols for NetApp). Pure
+	// and other providers without a target hierarchy will return (nil, nil).
+	backendTargets, err := r.discoverBackendTargets(ctx, arraycreds.Spec.VendorType, arrayCredential, providerOptions)
+	if err != nil {
+		// Non-fatal: log and clear targets so UI shows empty state rather than stale data.
+		ctxlog.Error(err, "Failed to discover backend targets", "arraycreds", scope.ArrayCreds.Name)
+		scope.ArrayCreds.Status.BackendTargets = nil
+	} else {
+		scope.ArrayCreds.Status.BackendTargets = backendTargets
+	}
+
+	// For NetApp specifically: verify the user's SVM/FlexVol selection (if any)
+	// exists on the array, and flag when a selection is still required.
+	phase := constants.ArrayCredsPhaseValidated
+	validationStatus := constants.ArrayCredsStatusSucceeded
+	validationMessage := fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
+
+	if arraycreds.Spec.VendorType == "netapp" {
+		cfg := arraycreds.Spec.NetAppConfig
+		hasSelection := cfg != nil && cfg.SVM != "" && cfg.FlexVol != ""
+		if hasSelection {
+			if err := validateNetAppTargetSelection(cfg, backendTargets); err != nil {
+				ctxlog.Error(err, "NetApp SVM/FlexVol selection invalid", "arraycreds", scope.ArrayCreds.Name)
+				phase = constants.ArrayCredsPhaseFailed
+				validationStatus = constants.ArrayCredsStatusFailed
+				validationMessage = fmt.Sprintf("Invalid NetApp target selection: %v", err)
+			}
+		} else {
+			phase = constants.ArrayCredsPhaseNeedsBackendSelection
+			validationMessage = fmt.Sprintf(
+				"Credentials validated. Select a NetApp SVM and FlexVol from %d discovered SVM(s) to complete setup.",
+				len(backendTargets),
+			)
+		}
+	}
+
+	scope.ArrayCreds.Status.Phase = phase
+	scope.ArrayCreds.Status.ArrayValidationStatus = validationStatus
+	scope.ArrayCreds.Status.ArrayValidationMessage = validationMessage
 	ctxlog.Info("Updating status to success", "arraycreds", scope.ArrayCreds.Name)
 	if err := r.Status().Update(ctx, scope.ArrayCreds); err != nil {
 		// If the resource was deleted during reconciliation, ignore the error
@@ -243,8 +283,10 @@ func (r *ArrayCredsReconciler) reconcileDelete(ctx context.Context, scope *scope
 	return nil
 }
 
-// validateArrayCredentials validates storage array credentials using the storage SDK
-func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo) error {
+// validateArrayCredentials validates storage array credentials using the storage SDK.
+// providerOptions carries vendor-specific configuration (e.g., NetApp SVM/FlexVol);
+// pass nil when no extra options apply.
+func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo, providerOptions map[string]string) error {
 	ctxlog := log.FromContext(ctx)
 
 	// Get the storage provider
@@ -260,6 +302,7 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 		Password:            creds.Password,
 		SkipSSLVerification: creds.SkipSSLVerification,
 		VendorType:          vendorType,
+		ProviderOptions:     providerOptions,
 	}
 
 	// Connect to storage array
@@ -278,6 +321,103 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 	}
 
 	return nil
+}
+
+// buildProviderOptionsFromSpec translates a CRD spec into the generic
+// ProviderOptions map consumed by the storage SDK. This is the one place
+// where per-vendor CRD fields are projected into runtime options; new
+// vendors add their case here.
+func buildProviderOptionsFromSpec(spec vjailbreakv1alpha1.ArrayCredsSpec) map[string]string {
+	opts := map[string]string{}
+	switch spec.VendorType {
+	case "netapp":
+		if spec.NetAppConfig != nil {
+			if spec.NetAppConfig.SVM != "" {
+				opts[netappsdk.OptionSVM] = spec.NetAppConfig.SVM
+			}
+			if spec.NetAppConfig.FlexVol != "" {
+				opts[netappsdk.OptionFlexVol] = spec.NetAppConfig.FlexVol
+			}
+		}
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts
+}
+
+// discoverBackendTargets queries the array for its selectable target hierarchy
+// (e.g., NetApp SVMs -> FlexVols). Returns nil when the provider does not
+// implement BackendTargetDiscoverer (e.g., Pure today).
+func (r *ArrayCredsReconciler) discoverBackendTargets(ctx context.Context, vendorType string, creds vjailbreakv1alpha1.ArrayCredsInfo, providerOptions map[string]string) ([]vjailbreakv1alpha1.BackendTargetGroup, error) {
+	ctxlog := log.FromContext(ctx)
+
+	provider, err := storagesdk.NewStorageProvider(vendorType)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get storage provider for vendor type '%s'", vendorType)
+	}
+
+	discoverer, ok := provider.(storagesdk.BackendTargetDiscoverer)
+	if !ok {
+		return nil, nil
+	}
+
+	accessInfo := storagesdk.StorageAccessInfo{
+		Hostname:            creds.Hostname,
+		Username:            creds.Username,
+		Password:            creds.Password,
+		SkipSSLVerification: creds.SkipSSLVerification,
+		VendorType:          vendorType,
+		ProviderOptions:     providerOptions,
+	}
+	if err := provider.Connect(ctx, accessInfo); err != nil {
+		return nil, errors.Wrap(err, "failed to connect to storage array")
+	}
+	defer func() {
+		if err := provider.Disconnect(); err != nil {
+			ctxlog.Error(err, "failed to disconnect from storage array")
+		}
+	}()
+
+	groups, err := discoverer.DiscoverBackendTargets(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]vjailbreakv1alpha1.BackendTargetGroup, 0, len(groups))
+	for _, g := range groups {
+		children := make([]vjailbreakv1alpha1.BackendTarget, 0, len(g.Children))
+		for _, c := range g.Children {
+			children = append(children, vjailbreakv1alpha1.BackendTarget{Name: c.Name, UUID: c.UUID})
+		}
+		out = append(out, vjailbreakv1alpha1.BackendTargetGroup{
+			Name:     g.Name,
+			UUID:     g.UUID,
+			Children: children,
+		})
+	}
+	return out, nil
+}
+
+// validateNetAppTargetSelection checks that the SVM and FlexVol named in
+// spec.NetAppConfig exist in the discovered target tree. Returns a
+// user-facing error when the selection is invalid.
+func validateNetAppTargetSelection(cfg *vjailbreakv1alpha1.NetAppConfig, targets []vjailbreakv1alpha1.BackendTargetGroup) error {
+	if cfg == nil || cfg.SVM == "" || cfg.FlexVol == "" {
+		return nil
+	}
+	for _, g := range targets {
+		if g.Name != cfg.SVM {
+			continue
+		}
+		for _, c := range g.Children {
+			if c.Name == cfg.FlexVol {
+				return nil
+			}
+		}
+		return fmt.Errorf("FlexVol %q not found on SVM %q", cfg.FlexVol, cfg.SVM)
+	}
+	return fmt.Errorf("SVM %q not found on the NetApp array", cfg.SVM)
 }
 
 // discoverDatastores discovers vCenter datastores backed by volumes from this storage array

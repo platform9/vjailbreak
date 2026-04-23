@@ -37,14 +37,23 @@ interface ArrayCredentialRow {
   credObject: ArrayCreds
 }
 
-const getCredentialsStatusColor = (status: string): 'success' | 'warning' | 'default' => {
+const getCredentialsStatusColor = (
+  status: string
+): 'success' | 'warning' | 'error' | 'default' => {
   if (!status) return 'default'
   const normalizedStatus = status.toLowerCase()
   if (normalizedStatus === 'configured' || normalizedStatus === 'succeeded') {
     return 'success'
   }
-  if (normalizedStatus === 'pending' || normalizedStatus === 'validating') {
+  if (
+    normalizedStatus === 'pending' ||
+    normalizedStatus === 'validating' ||
+    normalizedStatus === 'needs target selection'
+  ) {
     return 'warning'
+  }
+  if (normalizedStatus === 'failed') {
+    return 'error'
   }
   return 'default'
 }
@@ -264,7 +273,18 @@ export default function StorageArrayTable() {
   const rows: ArrayCredentialRow[] =
     arrayCredentials?.map((cred: ArrayCreds) => {
       const hasSecret = !!cred.spec?.secretRef?.name
-      const credentialsStatus = hasSecret ? 'Configured' : 'Pending'
+      // Prefer the reconciliation phase on status when available so users can
+      // see states like "Needs target selection" (NetApp SVM/FlexVol missing)
+      // or "Failed" directly, instead of the static Configured/Pending.
+      let credentialsStatus = hasSecret ? 'Configured' : 'Pending'
+      const phase = cred.status?.phase
+      if (phase === 'NeedsBackendSelection') {
+        credentialsStatus = 'Needs target selection'
+      } else if (phase === 'Failed') {
+        credentialsStatus = 'Failed'
+      } else if (cred.status?.arrayValidationStatus === 'Succeeded') {
+        credentialsStatus = 'Succeeded'
+      }
       const source = cred.spec?.autoDiscovered ? 'Auto-discovered' : 'Manual'
 
       return {
