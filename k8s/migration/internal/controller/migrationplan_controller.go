@@ -38,6 +38,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -1596,7 +1597,7 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 		configMapData["STORAGE_COPY_METHOD"] = StorageCopyMethod
 		configMapData["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 		configMapData["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
-		if arraycreds.Spec.VendorType == "netapp" && arraycreds.Spec.NetAppConfig != nil {
+		if arraycreds.Spec.VendorType == netappsdk.VendorName && arraycreds.Spec.NetAppConfig != nil {
 			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
 			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
 		}

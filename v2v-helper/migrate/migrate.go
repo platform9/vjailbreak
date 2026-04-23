@@ -2130,8 +2130,7 @@ func (migobj *Migrate) LogMessage(message string) {
 // options apply. New vendors add their case here.
 func (migobj *Migrate) buildProviderOptions() map[string]string {
 	opts := map[string]string{}
-	switch migobj.VendorType {
-	case "netapp":
+	if migobj.VendorType == netappsdk.VendorName {
 		if migobj.NetAppSVM != "" {
 			opts[netappsdk.OptionSVM] = migobj.NetAppSVM
 		}

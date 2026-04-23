@@ -17,6 +17,11 @@ import (
 // NetApp ONTAP NAA prefix (OUI for NetApp)
 const NetAppProviderID = "600a0980"
 
+// VendorName is the canonical vendor-type string registered with the storage
+// SDK and persisted on ArrayCreds.spec.vendorType. Use this wherever code
+// outside the NetApp SDK needs to compare against the NetApp vendor type.
+const VendorName = "netapp"
+
 // ProviderOptions keys read by the NetApp provider from
 // storage.StorageAccessInfo.ProviderOptions. Unknown keys are ignored.
 const (
@@ -25,7 +30,7 @@ const (
 )
 
 func init() {
-	storage.RegisterStorageProvider("netapp", &NetAppStorageProvider{})
+	storage.RegisterStorageProvider(VendorName, &NetAppStorageProvider{})
 }
 
 // NetAppStorageProvider implements StorageProvider for NetApp ONTAP.

@@ -31,8 +31,10 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 
-	// Import storage providers to register them
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
+
+	// Blank import registers all storage providers via their init() so
+	// storage.NewStorageProvider resolves by vendor type string.
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 
 	corev1 "k8s.io/api/core/v1"
@@ -215,7 +217,7 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 	validationStatus := constants.ArrayCredsStatusSucceeded
 	validationMessage := fmt.Sprintf("Successfully authenticated to %s storage array. Discovered %d datastores.", arraycreds.Spec.VendorType, len(datastores))
 
-	if arraycreds.Spec.VendorType == "netapp" {
+	if arraycreds.Spec.VendorType == netappsdk.VendorName {
 		cfg := arraycreds.Spec.NetAppConfig
 		hasSelection := cfg != nil && cfg.SVM != "" && cfg.FlexVol != ""
 		if hasSelection {
@@ -326,18 +328,15 @@ func (r *ArrayCredsReconciler) validateArrayCredentials(ctx context.Context, ven
 // buildProviderOptionsFromSpec translates a CRD spec into the generic
 // ProviderOptions map consumed by the storage SDK. This is the one place
 // where per-vendor CRD fields are projected into runtime options; new
-// vendors add their case here.
+// vendors add their branch here.
 func buildProviderOptionsFromSpec(spec vjailbreakv1alpha1.ArrayCredsSpec) map[string]string {
 	opts := map[string]string{}
-	switch spec.VendorType {
-	case "netapp":
-		if spec.NetAppConfig != nil {
-			if spec.NetAppConfig.SVM != "" {
-				opts[netappsdk.OptionSVM] = spec.NetAppConfig.SVM
-			}
-			if spec.NetAppConfig.FlexVol != "" {
-				opts[netappsdk.OptionFlexVol] = spec.NetAppConfig.FlexVol
-			}
+	if spec.VendorType == netappsdk.VendorName && spec.NetAppConfig != nil {
+		if spec.NetAppConfig.SVM != "" {
+			opts[netappsdk.OptionSVM] = spec.NetAppConfig.SVM
+		}
+		if spec.NetAppConfig.FlexVol != "" {
+			opts[netappsdk.OptionFlexVol] = spec.NetAppConfig.FlexVol
 		}
 	}
 	if len(opts) == 0 {
