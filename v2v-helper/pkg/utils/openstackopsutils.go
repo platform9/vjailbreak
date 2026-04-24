@@ -847,6 +847,24 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	}
 
 	serverCreateOpts.BlockDevice = blockDevices
+	for idx, disk := range vminfo.VMDisks {
+		// Skip boot disk
+		if idx == bootableDiskIndex {
+			continue
+		}
+		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
+		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
+			continue
+		}
+
+		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                disk.OpenstackVol.ID,
+			BootIndex:           -1,
+		})
+	}
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -902,27 +920,9 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
 	}
 
-	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
+	// PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
 
 	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
-	for idx, disk := range vminfo.VMDisks {
-		// Skip boot disk
-		if idx == bootableDiskIndex {
-			continue
-		}
-		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
-		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
-			continue
-		}
-
-		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
-			VolumeID:            disk.OpenstackVol.ID,
-			DeleteOnTermination: false,
-		}).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
-		}
-	}
 
 	return server, nil
 }
