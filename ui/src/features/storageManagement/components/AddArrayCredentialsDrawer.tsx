@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ARRAY_CREDS_QUERY_KEY } from 'src/hooks/api/useArrayCredentialsQuery'
 import { createArrayCredsWithSecretFlow, deleteArrayCredsWithSecretFlow } from 'src/api/helpers'
 import { getArrayCredentials } from 'src/api/array-creds/arrayCreds'
+import type { ArrayCreds } from 'src/api/array-creds/model'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
@@ -29,6 +30,8 @@ interface FormData {
   username: string
   password: string
   skipSslVerification: boolean
+  netAppSvm?: string
+  netAppFlexVol?: string
 }
 
 type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
@@ -57,7 +60,9 @@ export default function AddArrayCredentialsDrawer({
       managementEndpoint: '',
       username: '',
       password: '',
-      skipSslVerification: false
+      skipSslVerification: false,
+      netAppSvm: '',
+      netAppFlexVol: ''
     }
   })
 
@@ -113,12 +118,12 @@ export default function AddArrayCredentialsDrawer({
     setShowDiscardDialog(false)
   }
 
-  // Poll for validation status after creating credentials
+  // Poll for validation status after creating credentials.
   const pollForValidation = async (
     name: string,
     maxAttempts = 30,
     intervalMs = 2000
-  ): Promise<{ success: boolean; message?: string }> => {
+  ): Promise<{ success: boolean; message?: string; arrayCreds?: ArrayCreds }> => {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs))
 
@@ -128,7 +133,7 @@ export default function AddArrayCredentialsDrawer({
 
         // Check if validation succeeded
         if (status === 'Succeeded') {
-          return { success: true }
+          return { success: true, arrayCreds: updated }
         }
 
         // Check if validation failed
@@ -136,7 +141,8 @@ export default function AddArrayCredentialsDrawer({
           return {
             success: false,
             message:
-              updated.status?.arrayValidationMessage || `Validation failed with status: ${status}`
+              updated.status?.arrayValidationMessage || `Validation failed with status: ${status}`,
+            arrayCreds: updated
           }
         }
       } catch (error) {
@@ -186,7 +192,11 @@ export default function AddArrayCredentialsDrawer({
         OPENSTACK_MAPPING: {
           volumeType: data.volumeType,
           cinderBackendName: data.backendName
-        }
+        },
+        NETAPP_CONFIG:
+          data.vendorType === 'netapp'
+            ? { svm: data.netAppSvm ?? '', flexVol: data.netAppFlexVol ?? '' }
+            : undefined
       })
 
       // Track the created credential name for cleanup if needed

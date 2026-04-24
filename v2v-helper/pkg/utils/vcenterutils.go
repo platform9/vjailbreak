@@ -52,6 +52,10 @@ type MigrationParams struct {
 	StorageCopyMethod string
 	VendorType        string
 	ArrayCredsMapping string
+	// NetApp-specific targeting. Empty for non-NetApp arrays or when the
+	// provider should fall back to auto-detection.
+	NetAppSVM     string
+	NetAppFlexVol string
 
 	ImageMetadata map[string]string
 }
@@ -110,6 +114,8 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		StorageCopyMethod:              string(configMap.Data["STORAGE_COPY_METHOD"]),
 		VendorType:                     string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:              string(configMap.Data["ARRAY_CREDS_MAPPING"]),
+		NetAppSVM:                      string(configMap.Data["NETAPP_SVM"]),
+		NetAppFlexVol:                  string(configMap.Data["NETAPP_FLEXVOL"]),
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		ImageMetadata:                  imageMetadata,

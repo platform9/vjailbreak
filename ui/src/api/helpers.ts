@@ -260,6 +260,10 @@ export const createArrayCredsWithSecretFlow = async (
       cinderBackendPool?: string
       cinderHost?: string
     }
+    NETAPP_CONFIG?: {
+      svm?: string
+      flexVol?: string
+    }
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -278,6 +282,7 @@ export const createArrayCredsWithSecretFlow = async (
       secretName,
       credentials.VENDOR_TYPE,
       credentials.OPENSTACK_MAPPING,
+      credentials.NETAPP_CONFIG,
       namespace
     )
   } catch (error) {

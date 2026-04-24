@@ -1,6 +1,6 @@
 import { Box, Typography, Alert } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
-import { FieldErrors } from 'react-hook-form'
+import { FieldErrors, useWatch } from 'react-hook-form'
 import { ARRAY_VENDOR_TYPES } from 'src/api/array-creds/model'
 import { RHFSelect, RHFToggleField, RHFTextField } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components/design-system'
@@ -14,6 +14,8 @@ export type ArrayCredentialsFormData = {
   username: string
   password: string
   skipSslVerification: boolean
+  netAppSvm?: string
+  netAppFlexVol?: string
 }
 
 export type ArrayCredentialsFormFieldsProps = {
@@ -28,6 +30,8 @@ export default function ArrayCredentialsFormFields({
   isAutoDiscovered
 }: ArrayCredentialsFormFieldsProps) {
   const isAdd = mode === 'add'
+  const vendorType = useWatch<ArrayCredentialsFormData>({ name: 'vendorType' }) as string | undefined
+  const isNetApp = vendorType === 'netapp'
 
   return (
     <>
@@ -130,6 +134,44 @@ export default function ArrayCredentialsFormFields({
       </Box>
 
       <Box sx={{ my: 1 }} />
+
+      {/* NetApp-specific targeting — both fields required for validation to succeed. */}
+      {isNetApp && (
+        <>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
+              NetApp Target
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Specify the SVM and FlexVol where migration LUNs will be created.
+            </Typography>
+
+            <FormGrid minWidth={280}>
+              <RHFTextField
+                name="netAppSvm"
+                label="SVM"
+                required
+                rules={{ required: 'SVM is required' }}
+                labelProps={{ tooltip: 'NetApp Storage Virtual Machine name' }}
+                helperText={errors.netAppSvm?.message}
+                error={!!errors.netAppSvm}
+              />
+
+              <RHFTextField
+                name="netAppFlexVol"
+                label="FlexVol"
+                required
+                rules={{ required: 'FlexVol is required' }}
+                labelProps={{ tooltip: 'FlexVol name within the SVM where LUNs will be created' }}
+                helperText={errors.netAppFlexVol?.message}
+                error={!!errors.netAppFlexVol}
+              />
+            </FormGrid>
+          </Box>
+
+          <Box sx={{ my: 1 }} />
+        </>
+      )}
 
       {/* Storage Array Credentials Section */}
       <Box sx={{ mb: 3 }}>

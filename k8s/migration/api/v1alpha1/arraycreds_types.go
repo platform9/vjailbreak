@@ -55,6 +55,24 @@ type ArrayCredsSpec struct {
 	// AutoDiscovered indicates if this ArrayCreds was auto-discovered from OpenStack
 	// +optional
 	AutoDiscovered bool `json:"autoDiscovered,omitempty"`
+
+	// NetAppConfig holds NetApp-specific configuration. Required when
+	// VendorType is "netapp" before a migration can run. May be left empty
+	// at creation time so the controller can surface available SVMs/FlexVols
+	// on status.backendTargets for interactive selection.
+	// +optional
+	NetAppConfig *NetAppConfig `json:"netAppConfig,omitempty"`
+}
+
+// NetAppConfig holds NetApp ONTAP-specific targeting information. Both fields
+// must be set for the NetApp provider to create LUNs.
+type NetAppConfig struct {
+	// SVM is the Storage Virtual Machine name that owns the target FlexVol.
+	// +optional
+	SVM string `json:"svm,omitempty"`
+	// FlexVol is the FlexVol name (within the SVM) where LUNs will be created.
+	// +optional
+	FlexVol string `json:"flexVol,omitempty"`
 }
 
 // OpenstackMapping holds the OpenStack Cinder configuration mapping
@@ -81,8 +99,28 @@ type ArrayCredsStatus struct {
 	// DataStore is the list of datastores associated with this array
 	DataStore []DatastoreInfo `json:"dataStore,omitempty"`
 	// Phase indicates the current phase of the ArrayCreds
-	// Possible values: Discovered, Configured, Validated, Failed
+	// Possible values: Discovered, Configured, Validated, Failed, NeedsBackendSelection
 	Phase string `json:"phase,omitempty"`
+	// BackendTargets is a vendor-neutral two-level tree of selectable array
+	// targets (e.g., NetApp SVMs -> FlexVols). Populated by the controller
+	// after successful credential validation for vendors that expose a
+	// selectable target hierarchy. UIs consume this to render a picker.
+	// +optional
+	BackendTargets []BackendTargetGroup `json:"backendTargets,omitempty"`
+}
+
+// BackendTarget is a single selectable target within a BackendTargetGroup
+// (e.g., a NetApp FlexVol, a Dell pool).
+type BackendTarget struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid,omitempty"`
+}
+
+// BackendTargetGroup groups related targets (e.g., a NetApp SVM and its FlexVols).
+type BackendTargetGroup struct {
+	Name     string          `json:"name"`
+	UUID     string          `json:"uuid,omitempty"`
+	Children []BackendTarget `json:"children,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -173,6 +173,8 @@ func main() {
 		ArrayInsecure:          arrayInsecure,
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
+		NetAppSVM:              migrationparams.NetAppSVM,
+		NetAppFlexVol:          migrationparams.NetAppFlexVol,
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
 	}

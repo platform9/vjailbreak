@@ -69,6 +69,10 @@ export const createArrayCredsWithSecret = async (
     cinderBackendPool?: string
     cinderHost?: string
   },
+  netAppConfig?: {
+    svm?: string
+    flexVol?: string
+  },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/arraycreds`
@@ -104,12 +108,36 @@ export const createArrayCredsWithSecret = async (
     }
   }
 
+  if (vendorType === 'netapp' && netAppConfig && (netAppConfig.svm || netAppConfig.flexVol)) {
+    credBody.spec.netAppConfig = {}
+    if (netAppConfig.svm) credBody.spec.netAppConfig.svm = netAppConfig.svm
+    if (netAppConfig.flexVol) credBody.spec.netAppConfig.flexVol = netAppConfig.flexVol
+  }
+
   const response = await axios.post<ArrayCreds>({
     endpoint,
     data: credBody
   })
 
   return response
+}
+
+// Patches ArrayCreds.spec.netAppConfig. Used when the user selects SVM/FlexVol
+// after the controller has populated discovered backend targets on status.
+export const patchNetAppConfig = async (
+  name: string,
+  netAppConfig: { svm: string; flexVol: string },
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const patchBody: Partial<ArrayCreds> = {
+    spec: {
+      // vendorType is required by ArrayCredsSpec but merge-patch only
+      // applies the fields present; the server preserves the existing value.
+      vendorType: 'netapp',
+      netAppConfig
+    }
+  }
+  return patchArrayCredentials(name, patchBody, namespace)
 }
 
 export const updateArrayCredsWithSecret = async (
@@ -121,6 +149,10 @@ export const updateArrayCredsWithSecret = async (
     cinderBackendName?: string
     cinderBackendPool?: string
     cinderHost?: string
+  },
+  netAppConfig?: {
+    svm?: string
+    flexVol?: string
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -149,6 +181,12 @@ export const updateArrayCredsWithSecret = async (
     if (openstackMapping.cinderHost) {
       patchBody.spec.openstackMapping.cinderHost = openstackMapping.cinderHost
     }
+  }
+
+  if (vendorType === 'netapp' && netAppConfig && (netAppConfig.svm || netAppConfig.flexVol)) {
+    patchBody.spec.netAppConfig = {}
+    if (netAppConfig.svm) patchBody.spec.netAppConfig.svm = netAppConfig.svm
+    if (netAppConfig.flexVol) patchBody.spec.netAppConfig.flexVol = netAppConfig.flexVol
   }
 
   const response = await axios.patch<ArrayCreds>({
