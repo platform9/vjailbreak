@@ -792,7 +792,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			return false, err
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
-			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
+			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == constants.TrueString {
 				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
 				continue
 			}
@@ -812,7 +812,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			if migrationCopy.Annotations == nil {
 				migrationCopy.Annotations = make(map[string]string)
 			}
-			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = "true"
+			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = constants.TrueString
 			if err := r.Update(ctx, migrationCopy); err != nil {
 				r.ctxlog.Error(err, "Failed to set post-migration complete annotation", "vm", migration.Spec.VMName)
 			}
@@ -1499,7 +1499,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
 		"SOURCE_VM_KEY":                     sourceVMKey,
-		"CONVERT":                           "true",
+		"CONVERT":                           constants.TrueString,
 		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
 		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
 		"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
@@ -1596,6 +1596,10 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 		configMapData["STORAGE_COPY_METHOD"] = StorageCopyMethod
 		configMapData["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 		configMapData["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+	}
+
+	if migrationtemplate.Spec.PreserveVMUUID {
+		configMapData["PRESERVE_VM_UUID"] = constants.TrueString
 	}
 
 	return nil

@@ -84,7 +84,8 @@ type Migrate struct {
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
-	ImageMetadata map[string]string
+	ImageMetadata     map[string]string
+	PreserveVMUUID    bool
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -1557,7 +1558,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex)
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex, migobj.PreserveVMUUID)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}

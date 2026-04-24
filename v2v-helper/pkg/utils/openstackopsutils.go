@@ -758,7 +758,29 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
+// serverCreateOptsWithUUID wraps servers.CreateOpts to inject a custom instance UUID
+// into the Nova create-server request. This is used to preserve the source VM's BIOS
+// UUID on the OpenStack side (requires Nova admin privileges).
+type serverCreateOptsWithUUID struct {
+	servers.CreateOpts
+	InstanceUUID string
+}
+
+func (opts serverCreateOptsWithUUID) ToServerCreateMap() (map[string]any, error) {
+	b, err := opts.CreateOpts.ToServerCreateMap()
+	if err != nil {
+		return nil, err
+	}
+	if opts.InstanceUUID != "" {
+		serverMap, ok := b["server"].(map[string]any)
+		if ok {
+			serverMap["uuid"] = opts.InstanceUUID
+		}
+	}
+	return b, nil
+}
+
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int, preserveVMUUID bool) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -882,7 +904,16 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		}
 	}
 
-	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+	var createOptsBuilder servers.CreateOptsBuilder = serverCreateOpts
+	if preserveVMUUID && vminfo.UUID != "" {
+		PrintLog(fmt.Sprintf("Preserving source VM BIOS UUID %s on OpenStack instance", vminfo.UUID))
+		createOptsBuilder = serverCreateOptsWithUUID{
+			CreateOpts:   serverCreateOpts,
+			InstanceUUID: vminfo.UUID,
+		}
+	}
+
+	server, err := servers.Create(ctx, osclient.ComputeClient, createOptsBuilder, schedulerHints).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %s", err)
 	}

@@ -71,6 +71,12 @@ spec:
                 - windowsGuest
                 - linuxGuest
                 type: string
+              preserveVMUUID:
+                description: |-
+                  PreserveVMUUID indicates if the source VM's BIOS UUID should be preserved on the
+                  destination OpenStack instance. Useful for applications whose licenses are tied to
+                  the VM UUID (SMBIOS UUID). Requires OpenStack admin privileges.
+                type: boolean
               source:
                 description: Source is the source details for the virtual machine
                 properties:

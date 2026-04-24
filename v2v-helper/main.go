@@ -175,6 +175,7 @@ func main() {
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
+		PreserveVMUUID:         migrationparams.PreserveVMUUID,
 	}
 
 	if migrationobj.ServerGroup != "" {

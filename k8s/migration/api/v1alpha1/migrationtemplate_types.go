@@ -66,6 +66,11 @@ type MigrationTemplateSpec struct {
 	// UseGPUFlavor indicates if the migration should filter and use GPU-enabled flavors.
 	// +optional
 	UseGPUFlavor bool `json:"useGPUFlavor,omitempty"`
+	// PreserveVMUUID indicates if the source VM's BIOS UUID should be preserved on the
+	// destination OpenStack instance. Useful for applications whose licenses are tied to
+	// the VM UUID (SMBIOS UUID). Requires OpenStack admin privileges.
+	// +optional
+	PreserveVMUUID bool `json:"preserveVMUUID,omitempty"`
 }
 
 // +kubebuilder:object:root=true

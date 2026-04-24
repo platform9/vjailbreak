@@ -53,7 +53,8 @@ type MigrationParams struct {
 	VendorType        string
 	ArrayCredsMapping string
 
-	ImageMetadata map[string]string
+	ImageMetadata  map[string]string
+	PreserveVMUUID bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -113,5 +114,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		ImageMetadata:                  imageMetadata,
+		PreserveVMUUID:                 string(configMap.Data["PRESERVE_VM_UUID"]) == constants.TrueString,
 	}, nil
 }
