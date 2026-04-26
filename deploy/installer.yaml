@@ -4596,6 +4596,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
+            optional: true
         image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
@@ -4683,6 +4684,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
+            optional: true
         image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
@@ -4690,6 +4692,8 @@ spec:
         - containerPort: 3001
           protocol: TCP
         resources: {}
+        securityContext:
+          privileged: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -4703,6 +4707,7 @@ spec:
         - name: ndots
           value: "1"
       dnsPolicy: ClusterFirst
+      hostPID: true
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
@@ -4776,6 +4781,10 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
+              optional: true
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow
