@@ -920,10 +920,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
 	}
 
-	// PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
-
-	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
-
 	return server, nil
 }
 
