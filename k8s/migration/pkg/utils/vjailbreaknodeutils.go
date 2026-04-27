@@ -24,7 +24,6 @@ import (
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,8 +54,10 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 			// Local mode
 			openstackuuid = "fake-openstackuuid"
 		} else {
-			// Controller manager is always on the master node due to pod affinity
-			openstackuuid, err = utils.GetCurrentInstanceUUID()
+			// Controller manager is always on the master node due to pod affinity.
+			// GetMasterInstanceUUID tries DMI first (no network) then falls back
+			// to the metadata service.
+			openstackuuid, err = GetMasterInstanceUUID()
 			if err != nil {
 				return errors.Wrap(err, "failed to get current instance uuid")
 			}
@@ -241,8 +242,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 
 	var networkIDs []servers.Network
 	var masterSecurityGroups []string
-	if creds.Spec.VJBInstanceID != "" {
-		networkIDs, masterSecurityGroups, err = GetInstanceNetworkInfoByID(ctx, openstackClients, creds.Spec.VJBInstanceID)
+	// Prefer the master VjailbreakNode's UUID (resolved via DMI / metadata at
+	// startup) so we can query Neutron directly. Fall back to the metadata
+	// service only if the master UUID hasn't been populated yet.
+	if masterVjNode.Status.OpenstackUUID != "" {
+		networkIDs, masterSecurityGroups, err = GetInstanceNetworkInfoByID(ctx, openstackClients, masterVjNode.Status.OpenstackUUID)
 		if err != nil {
 			return "", errors.Wrap(err, "failed to get network info")
 		}
@@ -677,19 +681,12 @@ func GetOpenstackVMStatus(ctx context.Context, k3sclient client.Client, vjNode *
 
 // GetFlavorIDFromVM retrieves the flavor ID from a virtual machine using its UUID
 func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	if uuid == "" {
+		return "", fmt.Errorf("instance UUID is required to look up flavor")
+	}
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
-	}
-
-	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get openstack credentials from secret")
-	}
-
-	if uuid == "" {
-		// if uuid is not provided, assume this is L2 network and use the VJB instance ID from the secret
-		uuid = openstackCredential.VJBInstanceID
 	}
 
 	// Fetch the VM details
@@ -706,19 +703,12 @@ func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string
 
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
 func GetImageIDFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	if uuid == "" {
+		return "", fmt.Errorf("instance UUID is required to look up image")
+	}
 	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack clients")
-	}
-
-	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get openstack credentials from secret")
-	}
-
-	if uuid == "" {
-		// if uuid is not provided, assume this is L2 network and use the VJB instance ID from the secret
-		uuid = openstackCredential.VJBInstanceID
 	}
 
 	// Fetch the VM details

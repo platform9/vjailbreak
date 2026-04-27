@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,73 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 )
+
+// dmiProductUUIDPath is the in-pod mount path for the host's
+// /sys/class/dmi/id/product_uuid (exposed via hostPath in the controller
+// deployment). Used only by the master node — see GetMasterInstanceUUIDFromDMI.
+const dmiProductUUIDPath = "/host/dmi/product_uuid"
+
+// metadataServiceURL is the OpenStack metadata service endpoint used as the
+// fallback path when DMI is unavailable.
+const metadataServiceURL = "http://169.254.169.254/openstack/latest/meta_data.json"
+
+// GetMasterInstanceUUIDFromDMI reads the SMBIOS/DMI product UUID exposed by
+// the hypervisor via /sys/class/dmi/id/product_uuid and returns it as a
+// lower-cased UUID string.
+// This is intended ONLY for the master VjailbreakNode. On a Nova/KVM-backed
+// Callers should treat any error here as "not available" and fall back to the
+// existing metadata-service path.
+func GetMasterInstanceUUIDFromDMI() (string, error) {
+	data, err := os.ReadFile(dmiProductUUIDPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", errors.Wrapf(err, "DMI product_uuid not found at %s "+
+				"(controller pod likely missing the hostPath mount — check the "+
+				"'dmi-product-uuid' volume in deploy/05controller-deployment.yaml)",
+				dmiProductUUIDPath)
+		}
+		if os.IsPermission(err) {
+			return "", errors.Wrapf(err, "DMI product_uuid at %s is not readable "+
+				"(check pod securityContext / host file permissions)",
+				dmiProductUUIDPath)
+		}
+		return "", errors.Wrapf(err, "failed to read DMI product_uuid at %s", dmiProductUUIDPath)
+	}
+	uuid := strings.ToLower(strings.TrimSpace(string(data)))
+	if uuid == "" {
+		return "", errors.Errorf("DMI product_uuid file %s is empty "+
+			"(host hypervisor did not expose a SMBIOS UUID)", dmiProductUUIDPath)
+	}
+	return uuid, nil
+}
+
+// GetMasterInstanceUUID returns the OpenStack instance UUID for the master
+// node (the node running the controller). It prefers the SMBIOS/DMI
+// product UUID exposed via the controller pod's hostPath mount (no network
+// dependency, works even when the OpenStack metadata service is disabled)
+// and falls back to the metadata service only if DMI is unavailable.
+//
+// Use this on the master node anywhere we need the controller's own
+// instance UUID. Worker nodes (v2v-helper pods) do not have the DMI
+// hostPath mount and must continue using their own GetCurrentInstanceUUID.
+func GetMasterInstanceUUID() (string, error) {
+	uuid, dmiErr := GetMasterInstanceUUIDFromDMI()
+	if dmiErr == nil && uuid != "" {
+		log.Printf("[INFO] master instance UUID resolved via DMI (%s): %s", dmiProductUUIDPath, uuid)
+		return uuid, nil
+	}
+	log.Printf("[WARN] DMI-based master UUID lookup failed, falling back to OpenStack metadata service at %s: %v",
+		metadataServiceURL, dmiErr)
+
+	metadata, err := GetCurrentInstanceMetadata()
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"could not resolve master instance UUID via DMI or metadata service "+
+				"(DMI error: %v)", dmiErr)
+	}
+	log.Printf("[INFO] master instance UUID resolved via metadata service: %s", metadata.UUID)
+	return metadata.UUID, nil
+}
 
 // InstanceMetadata contains metadata about the current instance.
 type InstanceMetadata struct {
@@ -59,15 +127,18 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 
 	// Step 4: Fetch metadata from the OpenStack metadata service
 
+	log.Printf("[INFO] fetching instance metadata from %s", metadataServiceURL)
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
+	req, err := http.NewRequest("GET", metadataServiceURL, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create metadata request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch instance metadata")
+		return nil, errors.Wrapf(err, "failed to fetch instance metadata from %s "+
+			"(metadata service unreachable — common on L2-only networks or when "+
+			"169.254.169.254 routing is not configured)", metadataServiceURL)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -100,11 +171,10 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 
 // VerifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
 func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (bool, error) {
-	// Get current instance metadata
-	metadata, err := GetCurrentInstanceMetadata()
+	uuid, err := GetMasterInstanceUUID()
 	if err != nil {
-		return false, fmt.Errorf("unable to get current instance metadata: %w. "+
-			"Please ensure this is running on an OpenStack instance with metadata service enabled", err)
+		return false, fmt.Errorf("unable to resolve master instance UUID via DMI or metadata service: %w. "+
+			"Ensure the controller pod has /host/dmi/product_uuid mounted, or that the OpenStack metadata service is reachable", err)
 	}
 
 	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
@@ -114,7 +184,7 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, uuid).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
