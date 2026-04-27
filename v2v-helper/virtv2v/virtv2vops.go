@@ -294,12 +294,14 @@ func NTFSFix(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get partitions: %w", err)
 	}
+	// add arguments to ensure no dirty disk post migration
+	args := []string{"--clear-dirty"}
 	log.Printf("Partitions: %v", partitions)
 	for _, partition := range partitions {
 		if partition == path {
 			continue
 		}
-		cmd := exec.Command("ntfsfix", partition)
+		cmd := exec.Command("ntfsfix", append(args, partition)...)
 		log.Printf("Executing %s", cmd.String())
 
 		// Use the debug logging with proper file cleanup
