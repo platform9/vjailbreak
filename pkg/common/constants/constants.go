@@ -317,6 +317,11 @@ const (
 	MaxRetries = 3
 	RetryCap   = "3h"
 
+	// HTTPTimeoutSeconds is the default HTTP timeout in seconds
+	HTTPTimeoutSeconds = 30
+	// HTTPTimeoutSecondsKey is the configmap/env key for HTTP timeout
+	HTTPTimeoutSecondsKey = "HTTP_TIMEOUT_SECONDS"
+
 	// ConfigMap settings keys
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"

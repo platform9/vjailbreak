@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -185,8 +187,14 @@ func (v *VjbNet) GetTimeout() time.Duration {
 }
 
 func NewVjbNet() *VjbNet {
+	timeout := defaultTimeout
+	if val := os.Getenv("HTTP_TIMEOUT_SECONDS"); val != "" {
+		if secs, err := strconv.Atoi(val); err == nil && secs > 0 {
+			timeout = time.Duration(secs) * time.Second
+		}
+	}
 	return &VjbNet{
-		timeout:         defaultTimeout,
+		timeout:         timeout,
 		Client:          &http.Client{},
 		Insecure:        true,
 		HTTPProxy:       "",

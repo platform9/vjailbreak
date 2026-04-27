@@ -1374,6 +1374,14 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 	sourceVMKey := computeSourceVMKey(vmMachine, migrationplan.Spec.VirtualMachines)
 	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, sourceVMKey, virtiodrivers, openstacknws, openstackports, openstackvolumetypes)
 
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		r.ctxlog.Error(err, "Failed to get vjailbreak settings for HTTP timeout, using default")
+		configMapData[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(constants.HTTPTimeoutSeconds)
+	} else {
+		configMapData[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(vjailbreakSettings.HTTPTimeoutSeconds)
+	}
+
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
 	}
