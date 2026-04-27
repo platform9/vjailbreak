@@ -2627,7 +2627,7 @@ function VmsSelectionStep({
     </VmsSelectionStepContainer>
   )
 }
-
+ 
 const areOpenstackFlavorsEqual = (prev?: OpenStackFlavor[], next?: OpenStackFlavor[]): boolean => {
   if (prev === next) {
     return true
