@@ -406,7 +406,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
-	openstackCredential.VJBInstanceID = openstackcreds.Spec.VJBInstanceID
 
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
@@ -451,10 +450,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		default:
 			return nil, fmt.Errorf("authentication failed: %w. Please verify your OpenStack credentials", err)
 		}
-	}
-
-	if openstackCredential.VJBInstanceID != "" {
-		return providerClient, nil
 	}
 
 	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)

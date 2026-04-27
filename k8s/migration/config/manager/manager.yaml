@@ -100,10 +100,16 @@ spec:
         volumeMounts:
         - mountPath: /etc/pf9/k3s
           name: master-token
-        - mountPath: /home/ubuntu                                 
+        - mountPath: /home/ubuntu
           name: vddk
         - mountPath: /etc/hosts
           name: hosts-file
+          readOnly: true
+        # Master-only: expose the host's DMI product_uuid so the master can
+        # discover its OpenStack instance UUID without depending on the
+        # (sometimes flaky) metadata service. Used by CheckAndCreateMasterNodeEntry.
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
           readOnly: true
       serviceAccountName: controller-manager
       volumes:
@@ -112,11 +118,15 @@ spec:
           path: /var/lib/rancher/k3s/server
           type: Directory
       - name: vddk
-        hostPath:                                                                 
-          path: /home/ubuntu                                                      
+        hostPath:
+          path: /home/ubuntu
           type: Directory
       - name: hosts-file
         hostPath:
           path: /etc/hosts
-          type: File                                                      
+          type: File
+      - name: dmi-product-uuid
+        hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
       terminationGracePeriodSeconds: 30

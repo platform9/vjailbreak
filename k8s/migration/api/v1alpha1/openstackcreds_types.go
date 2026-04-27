@@ -53,8 +53,6 @@ type OpenStackCredsInfo struct {
 	Insecure bool
 	// DomainName is the OpenStack domain
 	DomainName string
-	// VJBInstanceID is the VJB instance ID (optional, used for VJB instances)
-	VJBInstanceID string
 }
 
 // SecurityGroupInfo holds the security group name and ID
@@ -122,9 +120,6 @@ type OpenstackCredsSpec struct {
 
 	// ProjectName is the name of the project in openstack
 	ProjectName string `json:"projectName,omitempty"`
-
-	// VJBInstanceID is the ID of current vjailbreak instance (needed if metadata service is not available)
-	VJBInstanceID string `json:"vjbinstanceid,omitempty"`
 }
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
