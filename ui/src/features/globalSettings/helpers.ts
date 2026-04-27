@@ -16,6 +16,7 @@ export type SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
   DEPLOYMENT_NAME: string
+  HTTP_TIMEOUT_SECONDS: number
   // Proxy-related fields are UI-only and handled via injectEnvVariables
   PROXY_ENABLED: boolean
   PROXY_HTTP_SCHEME: 'http' | 'https'
@@ -176,7 +177,8 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
     VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
     AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
-    DEPLOYMENT_NAME: f.DEPLOYMENT_NAME
+    DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
+    HTTP_TIMEOUT_SECONDS: String(f.HTTP_TIMEOUT_SECONDS)
   })
 
   const fromConfigMapData = (
@@ -244,6 +246,7 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, defaults.AUTO_FSTAB_UPDATE),
     DEPLOYMENT_NAME:
       typeof data?.DEPLOYMENT_NAME === 'string' ? data.DEPLOYMENT_NAME : defaults.DEPLOYMENT_NAME,
+    HTTP_TIMEOUT_SECONDS: parseNum(data?.HTTP_TIMEOUT_SECONDS, defaults.HTTP_TIMEOUT_SECONDS),
     PROXY_ENABLED: defaults.PROXY_ENABLED,
     PROXY_HTTP_SCHEME: defaults.PROXY_HTTP_SCHEME,
     PROXY_HTTP_HOST: defaults.PROXY_HTTP_HOST,
