@@ -55,6 +55,12 @@ The network persistence mechanism has been validated and is supported on the fol
 |   Windows Server 2008 | Unsupported | No |
 |   Windows Server 2012 | Unsupported | No |
 
+:::caution
+**Unsupported Windows Versions**
+
+Windows Server 2008 and Windows Server 2012 are **not supported** for network persistence. Post-migration, VMs running these versions will receive IP addresses via DHCP on all interfaces, regardless of the original network configuration.
+:::
+
 ## User Guidance for Virtio Installation
 
 The Windows Virtual Machine (VM) will undergo multiple reboots during the installation of necessary virtio drivers post-migration.
