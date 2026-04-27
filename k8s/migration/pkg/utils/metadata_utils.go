@@ -23,6 +23,10 @@ import (
 // deployment). Used only by the master node — see GetMasterInstanceUUIDFromDMI.
 const dmiProductUUIDPath = "/host/dmi/product_uuid"
 
+// metadataServiceURL is the OpenStack metadata service endpoint used as the
+// fallback path when DMI is unavailable.
+const metadataServiceURL = "http://169.254.169.254/openstack/latest/meta_data.json"
+
 // GetMasterInstanceUUIDFromDMI reads the SMBIOS/DMI product UUID exposed by
 // the hypervisor via /sys/class/dmi/id/product_uuid and returns it as a
 // lower-cased UUID string.
@@ -32,11 +36,23 @@ const dmiProductUUIDPath = "/host/dmi/product_uuid"
 func GetMasterInstanceUUIDFromDMI() (string, error) {
 	data, err := os.ReadFile(dmiProductUUIDPath)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to read DMI product_uuid")
+		if os.IsNotExist(err) {
+			return "", errors.Wrapf(err, "DMI product_uuid not found at %s "+
+				"(controller pod likely missing the hostPath mount — check the "+
+				"'dmi-product-uuid' volume in deploy/05controller-deployment.yaml)",
+				dmiProductUUIDPath)
+		}
+		if os.IsPermission(err) {
+			return "", errors.Wrapf(err, "DMI product_uuid at %s is not readable "+
+				"(check pod securityContext / host file permissions)",
+				dmiProductUUIDPath)
+		}
+		return "", errors.Wrapf(err, "failed to read DMI product_uuid at %s", dmiProductUUIDPath)
 	}
 	uuid := strings.ToLower(strings.TrimSpace(string(data)))
 	if uuid == "" {
-		return "", errors.New("DMI product_uuid file is empty")
+		return "", errors.Errorf("DMI product_uuid file %s is empty "+
+			"(host hypervisor did not expose a SMBIOS UUID)", dmiProductUUIDPath)
 	}
 	return uuid, nil
 }
@@ -51,15 +67,21 @@ func GetMasterInstanceUUIDFromDMI() (string, error) {
 // instance UUID. Worker nodes (v2v-helper pods) do not have the DMI
 // hostPath mount and must continue using their own GetCurrentInstanceUUID.
 func GetMasterInstanceUUID() (string, error) {
-	if uuid, err := GetMasterInstanceUUIDFromDMI(); err == nil && uuid != "" {
+	uuid, dmiErr := GetMasterInstanceUUIDFromDMI()
+	if dmiErr == nil && uuid != "" {
+		log.Printf("[INFO] master instance UUID resolved via DMI (%s): %s", dmiProductUUIDPath, uuid)
 		return uuid, nil
-	} else if err != nil {
-		log.Printf("[INFO] DMI-based master UUID lookup unavailable, falling back to metadata service: %v", err)
 	}
+	log.Printf("[WARN] DMI-based master UUID lookup failed, falling back to OpenStack metadata service at %s: %v",
+		metadataServiceURL, dmiErr)
+
 	metadata, err := GetCurrentInstanceMetadata()
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err,
+			"could not resolve master instance UUID via DMI or metadata service "+
+				"(DMI error: %v)", dmiErr)
 	}
+	log.Printf("[INFO] master instance UUID resolved via metadata service: %s", metadata.UUID)
 	return metadata.UUID, nil
 }
 
@@ -105,15 +127,18 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 
 	// Step 4: Fetch metadata from the OpenStack metadata service
 
+	log.Printf("[INFO] fetching instance metadata from %s", metadataServiceURL)
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", nil)
+	req, err := http.NewRequest("GET", metadataServiceURL, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create metadata request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch instance metadata")
+		return nil, errors.Wrapf(err, "failed to fetch instance metadata from %s "+
+			"(metadata service unreachable — common on L2-only networks or when "+
+			"169.254.169.254 routing is not configured)", metadataServiceURL)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
