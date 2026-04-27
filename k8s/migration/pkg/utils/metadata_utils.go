@@ -41,6 +41,28 @@ func GetMasterInstanceUUIDFromDMI() (string, error) {
 	return uuid, nil
 }
 
+// GetMasterInstanceUUID returns the OpenStack instance UUID for the master
+// node (the node running the controller). It prefers the SMBIOS/DMI
+// product UUID exposed via the controller pod's hostPath mount (no network
+// dependency, works even when the OpenStack metadata service is disabled)
+// and falls back to the metadata service only if DMI is unavailable.
+//
+// Use this on the master node anywhere we need the controller's own
+// instance UUID. Worker nodes (v2v-helper pods) do not have the DMI
+// hostPath mount and must continue using their own GetCurrentInstanceUUID.
+func GetMasterInstanceUUID() (string, error) {
+	if uuid, err := GetMasterInstanceUUIDFromDMI(); err == nil && uuid != "" {
+		return uuid, nil
+	} else if err != nil {
+		log.Printf("[INFO] DMI-based master UUID lookup unavailable, falling back to metadata service: %v", err)
+	}
+	metadata, err := GetCurrentInstanceMetadata()
+	if err != nil {
+		return "", err
+	}
+	return metadata.UUID, nil
+}
+
 // InstanceMetadata contains metadata about the current instance.
 type InstanceMetadata struct {
 	UUID string `json:"uuid"`
@@ -124,11 +146,10 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 
 // VerifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
 func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (bool, error) {
-	// Get current instance metadata
-	metadata, err := GetCurrentInstanceMetadata()
+	uuid, err := GetMasterInstanceUUID()
 	if err != nil {
-		return false, fmt.Errorf("unable to get current instance metadata: %w. "+
-			"Please ensure this is running on an OpenStack instance with metadata service enabled", err)
+		return false, fmt.Errorf("unable to resolve master instance UUID via DMI or metadata service: %w. "+
+			"Ensure the controller pod has /host/dmi/product_uuid mounted, or that the OpenStack metadata service is reachable", err)
 	}
 
 	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
@@ -138,7 +159,7 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, uuid).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {

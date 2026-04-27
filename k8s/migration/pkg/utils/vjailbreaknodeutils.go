@@ -24,7 +24,6 @@ import (
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,18 +55,11 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 			openstackuuid = "fake-openstackuuid"
 		} else {
 			// Controller manager is always on the master node due to pod affinity.
-			// Try DMI (no network, no creds) first; if unavailable, fall back to
-			// the existing pod-name / metadata-service helper.
-			if dmiUUID, dmiErr := GetMasterInstanceUUIDFromDMI(); dmiErr == nil && dmiUUID != "" {
-				openstackuuid = dmiUUID
-			} else {
-				if dmiErr != nil {
-					fmt.Printf("[INFO] DMI-based master UUID lookup unavailable, falling back to metadata service: %v\n", dmiErr)
-				}
-				openstackuuid, err = utils.GetCurrentInstanceUUID()
-				if err != nil {
-					return errors.Wrap(err, "failed to get current instance uuid")
-				}
+			// GetMasterInstanceUUID tries DMI first (no network) then falls back
+			// to the metadata service.
+			openstackuuid, err = GetMasterInstanceUUID()
+			if err != nil {
+				return errors.Wrap(err, "failed to get current instance uuid")
 			}
 		}
 	}
