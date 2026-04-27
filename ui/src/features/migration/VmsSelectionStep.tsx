@@ -215,6 +215,10 @@ function VmsSelectionStep({
     return ips.every((ip) => isValidIPAddress(ip))
   }
 
+  const hasMultipleIpEntries = (value: string): boolean => {
+    return parseIpList(value).length > 1
+  }
+
   const flattenBulkIps = (items: BulkIpEdit[]) => {
     const flattened: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
     items.forEach((item) => {
@@ -445,7 +449,11 @@ function VmsSelectionStep({
   const duplicateNames = React.useMemo(() => {
     const counts = new Map<string, number>()
     vmsWithFlavor.forEach((vm) => counts.set(vm.name, (counts.get(vm.name) ?? 0) + 1))
-    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, c]) => c > 1)
+        .map(([n]) => n)
+    )
   }, [vmsWithFlavor])
 
   // Define columns inside component to access state and functions
@@ -455,24 +463,25 @@ function VmsSelectionStep({
       headerName: 'VM Name',
       flex: 2.5,
       renderCell: (params) => {
-        const displayName =
-          duplicateNames.has(params.row.name) ? (params.row.vmKey || params.value) : params.value
+        const displayName = duplicateNames.has(params.row.name)
+          ? params.row.vmKey || params.value
+          : params.value
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={params.row.vmState === 'running' ? 'Running' : 'Stopped'}>
               <CdsIconWrapper>
                 {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                  {/* @ts-ignore */}
+                {/* @ts-ignore */}
                 <cds-icon
-                    shape="vm"
-                    size="md"
-                    badge={params.row.vmState === 'running' ? 'success' : 'danger'}
-                  >
-                    {/* @ts-ignore */}
-                  </cds-icon>
-                </CdsIconWrapper>
-              </Tooltip>
-              <Box>{displayName}</Box>
+                  shape="vm"
+                  size="md"
+                  badge={params.row.vmState === 'running' ? 'success' : 'danger'}
+                >
+                  {/* @ts-ignore */}
+                </cds-icon>
+              </CdsIconWrapper>
+            </Tooltip>
+            <Box>{displayName}</Box>
             {params.row.isMigrated && (
               <Chip variant="outlined" label="Migrated" color="info" size="small" />
             )}
@@ -493,7 +502,7 @@ function VmsSelectionStep({
               </Tooltip>
             )}
           </Box>
-          )
+        )
       }
     },
     {
@@ -513,10 +522,24 @@ function VmsSelectionStep({
           return cleaned.length > 0 ? cleaned.join(', ') : '—'
         }
 
+        const getNicIpDisplay = (nic: any, index: number) => {
+          const preserveIP =
+            (vm as any)?.preserveIp?.[index] !== undefined
+              ? (vm as any).preserveIp[index] !== false
+              : nic?.preserveIP !== false
+          if (preserveIP) {
+            const original = originalIPsPerVM?.[vmId]?.[index] || ''
+            if (original.trim() !== '') {
+              return formatNicIps(parseIpList(original))
+            }
+          }
+          return formatNicIps(nic?.ipAddress)
+        }
+
         const ipDisplay = hasMultipleInterfaces
-          ? networkInterfaces.map((nic) => formatNicIps(nic.ipAddress)).join(', ')
-          : formatNicIps(networkInterfaces[0]?.ipAddress) !== '—'
-            ? formatNicIps(networkInterfaces[0]?.ipAddress)
+          ? networkInterfaces.map((nic, index) => getNicIpDisplay(nic as any, index)).join(', ')
+          : getNicIpDisplay(networkInterfaces[0] as any, 0) !== '—'
+            ? getNicIpDisplay(networkInterfaces[0] as any, 0)
             : vm.ipAddress || '—'
 
         const tooltipMessage = hasMultipleInterfaces
@@ -859,7 +882,10 @@ function VmsSelectionStep({
       return {
         ...vm,
         ipAddress: allIPs || '—', // Update the main IP field to contain comma-separated IPs
-        isMigrated: migratedVms.has(vm.vmKey || vm.name) || migratedVms.has(vm.name) || Boolean(vm.isMigrated),
+        isMigrated:
+          migratedVms.has(vm.vmKey || vm.name) ||
+          migratedVms.has(vm.name) ||
+          Boolean(vm.isMigrated),
         flavor,
         flavorNotFound,
         powerState,
@@ -1050,6 +1076,10 @@ function VmsSelectionStep({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
       }))
+      setBulkCurrentIPs((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
+      }))
       const trimmed = currentIp.trim()
       if (!trimmed) {
         setBulkValidationStatus((prev) => ({
@@ -1059,6 +1089,18 @@ function VmsSelectionStep({
         setBulkValidationMessages((prev) => ({
           ...prev,
           [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+        }))
+      } else if (hasMultipleIpEntries(trimmed)) {
+        setBulkValidationStatus((prev) => ({
+          ...prev,
+          [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+        }))
+        setBulkValidationMessages((prev) => ({
+          ...prev,
+          [vmName]: {
+            ...prev[vmName],
+            [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
+          }
         }))
       } else if (!isValidIPAddressList(trimmed)) {
         setBulkValidationStatus((prev) => ({
@@ -1081,13 +1123,18 @@ function VmsSelectionStep({
       }
     }
     if (!preserveIp) {
-      const current = bulkEditIPs?.[vmName]?.[interfaceIndex] ?? ''
+      const current = bulkCurrentIPs?.[vmName]?.[interfaceIndex] ?? ''
       const trimmed = current.trim()
       const { status, message } = !trimmed
         ? { status: 'empty' as const, message: '' }
-        : !isValidIPAddressList(trimmed)
-          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
-          : ({ status: 'valid' as const, message: '' } as const)
+        : hasMultipleIpEntries(trimmed)
+          ? ({
+              status: 'invalid' as const,
+              message: 'Multiple IPs are not supported when Preserve IP is disabled'
+            } as const)
+          : !isValidIPAddressList(trimmed)
+            ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
+            : ({ status: 'valid' as const, message: '' } as const)
 
       setBulkValidationStatus((prev) => ({
         ...prev,
@@ -1129,6 +1176,21 @@ function VmsSelectionStep({
       setBulkValidationMessages((prev) => ({
         ...prev,
         [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
+      }))
+    } else if (
+      bulkPreserveIp?.[vmName]?.[interfaceIndex] === false &&
+      hasMultipleIpEntries(value)
+    ) {
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
+      }))
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmName]: {
+          ...prev[vmName],
+          [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
+        }
       }))
     } else if (!isValidIPAddressList(value.trim())) {
       setBulkValidationStatus((prev) => ({
@@ -1739,9 +1801,7 @@ function VmsSelectionStep({
           preserveIP: effectivePreserveIp,
           preserveMAC: initialPreserveMac
         }
-        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim()
-          ? 'valid'
-          : 'empty'
+        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim() ? 'valid' : 'empty'
       }
     })
 
@@ -1947,8 +2007,7 @@ function VmsSelectionStep({
   }
 
   const rowSelectionModelArray = React.useMemo(
-    () =>
-      Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
+    () => Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
     [selectedVMs, vmsWithFlavor]
   )
 
@@ -2324,7 +2383,7 @@ function VmsSelectionStep({
                         </CdsIconWrapper>
                       </Tooltip>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {duplicateNames.has(vm.name) ? (vm.vmKey || vm.name) : vm.name}
+                        {duplicateNames.has(vm.name) ? vm.vmKey || vm.name : vm.name}
                       </Typography>
                     </Box>
 
@@ -2334,7 +2393,8 @@ function VmsSelectionStep({
                       const status = bulkValidationStatus[vmId]?.[interfaceIndex]
                       const message = bulkValidationMessages[vmId]?.[interfaceIndex]
                       const isPoweredOff = vm.vmState !== 'running'
-                      const preserveIp = !isPoweredOff && bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
+                      const preserveIp =
+                        !isPoweredOff && bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
                       const preserveMac = bulkPreserveMac?.[vmId]?.[interfaceIndex] !== false
                       const discoveredIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
                       const currentIp =
@@ -2444,11 +2504,7 @@ function VmsSelectionStep({
                                 checked={preserveIp}
                                 disabled={isPoweredOff}
                                 onChange={(e) =>
-                                  handleBulkPreserveIpChange(
-                                    vmId,
-                                    interfaceIndex,
-                                    e.target.checked
-                                  )
+                                  handleBulkPreserveIpChange(vmId, interfaceIndex, e.target.checked)
                                 }
                               />
                               <Typography variant="body2" sx={{ fontWeight: 600 }}>
