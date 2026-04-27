@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,29 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/pkg/errors"
 )
+
+// dmiProductUUIDPath is the in-pod mount path for the host's
+// /sys/class/dmi/id/product_uuid (exposed via hostPath in the controller
+// deployment). Used only by the master node — see GetMasterInstanceUUIDFromDMI.
+const dmiProductUUIDPath = "/host/dmi/product_uuid"
+
+// GetMasterInstanceUUIDFromDMI reads the SMBIOS/DMI product UUID exposed by
+// the hypervisor via /sys/class/dmi/id/product_uuid and returns it as a
+// lower-cased UUID string.
+// This is intended ONLY for the master VjailbreakNode. On a Nova/KVM-backed
+// Callers should treat any error here as "not available" and fall back to the
+// existing metadata-service path.
+func GetMasterInstanceUUIDFromDMI() (string, error) {
+	data, err := os.ReadFile(dmiProductUUIDPath)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read DMI product_uuid")
+	}
+	uuid := strings.ToLower(strings.TrimSpace(string(data)))
+	if uuid == "" {
+		return "", errors.New("DMI product_uuid file is empty")
+	}
+	return uuid, nil
+}
 
 // InstanceMetadata contains metadata about the current instance.
 type InstanceMetadata struct {
