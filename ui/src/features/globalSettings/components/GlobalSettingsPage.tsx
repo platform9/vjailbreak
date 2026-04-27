@@ -83,6 +83,7 @@ const DEFAULTS: SettingsForm = {
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: true,
   DEPLOYMENT_NAME: 'vJailbreak',
+  HTTP_TIMEOUT_SECONDS: 30,
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -120,6 +121,7 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES',
     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
     'DEFAULT_MIGRATION_METHOD',
+    'HTTP_TIMEOUT_SECONDS',
     'CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE',
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
@@ -233,6 +235,7 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
+  HTTP_TIMEOUT_SECONDS: 'Timeout in seconds for all outbound HTTP/HTTPS calls made by the migration system. Default is 30 seconds.',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
   PROXY_HTTP_SCHEME:
     "Protocol to use when constructing the HTTP proxy URL (default: 'http'). Many proxies expect http://.",
@@ -382,6 +385,11 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     const loginRetry = state.VCENTER_LOGIN_RETRY_LIMIT
     if (!Number.isFinite(loginRetry) || !Number.isInteger(loginRetry) || loginRetry < 0) {
       e.VCENTER_LOGIN_RETRY_LIMIT = 'Enter an integer >= 0.'
+    }
+
+    const httpTimeout = state.HTTP_TIMEOUT_SECONDS
+    if (!Number.isFinite(httpTimeout) || !Number.isInteger(httpTimeout) || httpTimeout < 1) {
+      e.HTTP_TIMEOUT_SECONDS = 'Enter an integer >= 1.'
     }
 
     const bools: Array<keyof SettingsForm> = [
@@ -1329,6 +1337,22 @@ export default function GlobalSettingsPage() {
                 onValueChange={(value) => {
                   rhfForm.setValue(
                     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
+
+              <RHFTextField
+                name="HTTP_TIMEOUT_SECONDS"
+                label="HTTP Timeout (seconds)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.HTTP_TIMEOUT_SECONDS }}
+                error={Boolean(errors.HTTP_TIMEOUT_SECONDS)}
+                helperText={errors.HTTP_TIMEOUT_SECONDS}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'HTTP_TIMEOUT_SECONDS',
                     value === '' ? ('' as any) : Number(value),
                     { shouldValidate: true }
                   )

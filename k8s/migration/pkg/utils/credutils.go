@@ -418,7 +418,9 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	vjbNet.SetTimeout(60 * time.Second)
+	if vjbSettings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient); err == nil {
+		vjbNet.SetTimeout(time.Duration(vjbSettings.HTTPTimeoutSeconds) * time.Second)
+	}
 
 	if vjbNet.CreateSecureHTTPClient() == nil {
 		providerClient.HTTPClient = *vjbNet.GetClient()
