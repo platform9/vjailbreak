@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -189,7 +190,11 @@ func (v *VjbNet) GetTimeout() time.Duration {
 func NewVjbNet() *VjbNet {
 	timeout := defaultTimeout
 	if val := os.Getenv("HTTP_TIMEOUT_SECONDS"); val != "" {
-		if secs, err := strconv.Atoi(val); err == nil && secs > 0 {
+		if secs, err := strconv.Atoi(val); err != nil {
+			log.Printf("WARNING: invalid HTTP_TIMEOUT_SECONDS %q: %v; using default %v", val, err, defaultTimeout)
+		} else if secs <= 0 {
+			log.Printf("WARNING: HTTP_TIMEOUT_SECONDS must be positive, got %d; using default %v", secs, defaultTimeout)
+		} else {
 			timeout = time.Duration(secs) * time.Second
 		}
 	}
