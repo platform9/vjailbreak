@@ -522,10 +522,24 @@ function VmsSelectionStep({
           return cleaned.length > 0 ? cleaned.join(', ') : '—'
         }
 
+        const getNicIpDisplay = (nic: any, index: number) => {
+          const preserveIP =
+            (vm as any)?.preserveIp?.[index] !== undefined
+              ? (vm as any).preserveIp[index] !== false
+              : nic?.preserveIP !== false
+          if (preserveIP) {
+            const original = originalIPsPerVM?.[vmId]?.[index] || ''
+            if (original.trim() !== '') {
+              return formatNicIps(parseIpList(original))
+            }
+          }
+          return formatNicIps(nic?.ipAddress)
+        }
+
         const ipDisplay = hasMultipleInterfaces
-          ? networkInterfaces.map((nic) => formatNicIps(nic.ipAddress)).join(', ')
-          : formatNicIps(networkInterfaces[0]?.ipAddress) !== '—'
-            ? formatNicIps(networkInterfaces[0]?.ipAddress)
+          ? networkInterfaces.map((nic, index) => getNicIpDisplay(nic as any, index)).join(', ')
+          : getNicIpDisplay(networkInterfaces[0] as any, 0) !== '—'
+            ? getNicIpDisplay(networkInterfaces[0] as any, 0)
             : vm.ipAddress || '—'
 
         const tooltipMessage = hasMultipleInterfaces
