@@ -83,14 +83,14 @@ type Migrate struct {
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.
-	NetAppSVM     string
-	NetAppFlexVol string
+	NetAppSVM         string
+	NetAppFlexVol     string
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
-	ImageMetadata map[string]string
+	ImageMetadata     map[string]string
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -2055,7 +2055,9 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					break
 				}
 			}
-
+			if len(userAssignedIp) > 0 && len(userAssignedIp) > 1 {
+				return nil, nil, nil, errors.Errorf("multiple user assigned IPs not supported for an interface")
+			}
 			var ippm []string
 
 			// VMware Tools detected IPs
