@@ -151,7 +151,7 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 	}
 
 	vjNode := &vjailbreakv1alpha1.VjailbreakNode{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: vjNodeName}, vjNode); err != nil {
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: vjNodeName, Namespace: constants.NamespaceMigrationSystem}, vjNode); err != nil {
 		return "", fmt.Errorf("failed to get vjailbreak node %s: %w", vjNodeName, err)
 	}
 	if vjNode.Status.OpenstackUUID == "" {
