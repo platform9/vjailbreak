@@ -83,7 +83,6 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Quick path for just updating ActiveMigrations if node is ready
 	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
-		log.Info("************ Node is ready, exit*************")
 		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
 	}
 
@@ -107,7 +106,6 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 			if err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client, r.Local, ""); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to resolve master node uuid")
 			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
