@@ -389,14 +389,15 @@ func normaliseToONTAPInitiators(hbaIdentifiers []string) ([]string, error) {
 
 // ensureIgroupExists returns the UUID of the named igroup on svmName, creating it
 // (with the given protocol and os_type "vmware") if it does not already exist.
+// Igroup names are not unique across SVMs in ONTAP, so the lookup is SVM-scoped.
 func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, protocol, svmName string) (string, error) {
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to list igroups: %w", err)
 	}
 	for _, ig := range igroups {
-		if ig.Name == name {
-			klog.Infof("Igroup %q already exists (UUID: %s)", name, ig.UUID)
+		if ig.Name == name && ig.SVM.Name == svmName {
+			klog.Infof("Igroup %q already exists on SVM %s (UUID: %s)", name, svmName, ig.UUID)
 			return ig.UUID, nil
 		}
 	}
@@ -422,8 +423,8 @@ func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, pr
 		// reports the igroup already exists, re-resolve it by name so both
 		// reconciliations converge on the same UUID.
 		if isONTAPConflict(err) {
-			klog.Infof("Igroup %q already exists (conflict on create), re-resolving UUID", name)
-			ig, lookupErr := n.getIgroupByName(ctx, name)
+			klog.Infof("Igroup %q already exists on SVM %s (conflict on create), re-resolving UUID", name, svmName)
+			ig, lookupErr := n.getIgroupByName(ctx, name, svmName)
 			if lookupErr == nil {
 				return ig.UUID, nil
 			}
@@ -495,6 +496,16 @@ func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName 
 	protocol := detectSANProtocol(hbaIdentifiers)
 	klog.Infof("Detected SAN protocol: %s, normalised initiators: %v", protocol, ontapInitiators)
 
+	// Resolve the target SVM up front. ONTAP igroups are SVM-scoped and the
+	// /protocols/san/lun-maps POST requires LUN and igroup to share an SVM —
+	// matching an igroup on a different SVM produces a misleading 404
+	// "No such initiator group exists" later, even though the name resolves.
+	_, svmName, err := n.getDefaultVolumePathAndSVM(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover target SVM for igroup matching: %w", err)
+	}
+	klog.Infof("Restricting igroup matching to SVM %s", svmName)
+
 	// Search existing igroups for a matching initiator.
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
@@ -502,12 +513,25 @@ func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName 
 	}
 
 	matchedIgroups := []string{}
+	// Track which host initiators are covered by the union of matched igroups.
+	// A host with WWPNs split across multiple igroups (e.g., fabric A in ig1,
+	// fabric B in ig2) has full multipath coverage even though no single
+	// igroup holds all WWPNs — so the gap check must run on the union, not
+	// per-igroup, otherwise we emit misleading warnings.
+	coveredInitiators := make(map[string]bool, len(ontapInitiators))
 	for _, ig := range igroups {
+		// Restrict to igroups on the SVM where the LUN will live. Without this
+		// filter, an unrelated igroup on another SVM that happens to contain
+		// the same WWPN/IQN would be selected and lun-maps would 404.
+		if ig.SVM.Name != svmName {
+			continue
+		}
+
 		initiatorNames := make([]string, len(ig.Initiators))
 		for i, init := range ig.Initiators {
 			initiatorNames[i] = init.Name
 		}
-		klog.Infof("Checking igroup %s (protocol: %s), initiators: %v", ig.Name, ig.Protocol, initiatorNames)
+		klog.Infof("Checking igroup %s on SVM %s (protocol: %s), initiators: %v", ig.Name, ig.SVM.Name, ig.Protocol, initiatorNames)
 
 		// Skip igroups whose protocol does not match what the host is using;
 		// ONTAP will not accept a LUN map on a protocol-mismatched igroup.
@@ -518,63 +542,58 @@ func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName 
 		matched := false
 		for _, init := range ig.Initiators {
 			if initiatorMatches(init.Name, ontapInitiators) {
-				klog.Infof("Matched igroup %s via initiator %s", ig.Name, init.Name)
-				matchedIgroups = append(matchedIgroups, ig.Name)
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			continue
-		}
-
-		// Flag multipath gaps: if any of the host's initiators is missing from
-		// the matched igroup the LUN will only be visible on the registered
-		// paths and the operator needs to add the rest.
-		for _, want := range ontapInitiators {
-			present := false
-			for _, init := range ig.Initiators {
-				if initiatorMatches(init.Name, []string{want}) {
-					present = true
-					break
+				if !matched {
+					klog.Infof("Matched igroup %s on SVM %s via initiator %s", ig.Name, ig.SVM.Name, init.Name)
+					matchedIgroups = append(matchedIgroups, ig.Name)
+					matched = true
 				}
-			}
-			if !present {
-				klog.Warningf("Matched igroup %s is missing host initiator %q — multipath coverage may be impaired; add the initiator on the NetApp side", ig.Name, want)
+				// Record every host initiator this igroup covers so the
+				// post-loop union check can identify true gaps.
+				for _, want := range ontapInitiators {
+					if initiatorMatches(init.Name, []string{want}) {
+						coveredInitiators[want] = true
+					}
+				}
 			}
 		}
 	}
 
 	if len(matchedIgroups) > 0 {
-		return storage.MappingContext{"igroups": matchedIgroups}, nil
+		// Multipath gap check on the UNION of matched igroups. A WWPN/IQN that
+		// is not present in any matched igroup will not see the LUN — flag it
+		// so the operator can add it on the NetApp side.
+		for _, want := range ontapInitiators {
+			if !coveredInitiators[want] {
+				klog.Warningf("Host initiator %q is not present in any matched igroup on SVM %s — multipath coverage may be impaired; add the initiator on the NetApp side", want, svmName)
+			}
+		}
+		return storage.MappingContext{"igroups": matchedIgroups, "svm": svmName}, nil
 	}
 
-	// No existing igroup matched — create a vjailbreak-managed one.
+	// No existing igroup matched — create a vjailbreak-managed one on the
+	// target SVM (svmName resolved above), so it is guaranteed to share an SVM
+	// with the LUN that will be created next.
 	if protocol == "mixed" {
 		return nil, fmt.Errorf(
 			"host has both FC and iSCSI adapters; cannot create a single ONTAP igroup — "+
 				"ensure the ESXi host uses a single transport type: %v", hbaIdentifiers)
 	}
 
-	_, svmName, err := n.getDefaultVolumePathAndSVM(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover SVM for igroup creation: %w", err)
-	}
-
 	igroupName := fmt.Sprintf("%s-%s", initiatorGroupName, protocol)
+	klog.Infof("No existing igroup matched on SVM %s — creating vjailbreak-managed igroup %q", svmName, igroupName)
 	igroupUUID, err := n.ensureIgroupExists(ctx, igroupName, protocol, svmName)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, initiator := range ontapInitiators {
-		klog.Infof("Adding initiator %q to igroup %s", initiator, igroupName)
+		klog.Infof("Adding initiator %q to igroup %s on SVM %s", initiator, igroupName, svmName)
 		if err := n.addInitiatorToIgroup(ctx, igroupUUID, initiator); err != nil {
 			return nil, err
 		}
 	}
 
-	return storage.MappingContext{"igroups": []string{igroupName}}, nil
+	return storage.MappingContext{"igroups": []string{igroupName}, "svm": svmName}, nil
 }
 
 // MapVolumeToGroup maps a LUN to igroups
@@ -598,12 +617,14 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 	}
 
 	for _, igroupName := range igroups {
-		klog.Infof("Mapping LUN %s to igroup %s", targetVolume.Name, igroupName)
+		klog.Infof("Mapping LUN %s on SVM %s to igroup %s", targetVolume.Name, lun.SVM.Name, igroupName)
 
-		// Get igroup UUID - ONTAP API requires UUID for lun-maps
-		igroup, err := n.getIgroupByName(ctx, igroupName)
+		// Get igroup UUID - ONTAP API requires UUID for lun-maps. Scope the
+		// lookup to the LUN's SVM since igroup names are not unique across
+		// SVMs and a cross-SVM UUID would be rejected with a 404 here.
+		igroup, err := n.getIgroupByName(ctx, igroupName, lun.SVM.Name)
 		if err != nil {
-			return storage.Volume{}, fmt.Errorf("failed to get igroup %s: %w", igroupName, err)
+			return storage.Volume{}, fmt.Errorf("failed to get igroup %s on SVM %s: %w", igroupName, lun.SVM.Name, err)
 		}
 
 		reqBody := map[string]interface{}{
@@ -659,12 +680,13 @@ func (n *NetAppStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, 
 	}
 
 	for _, igroupName := range igroups {
-		klog.Infof("Unmapping LUN %s from igroup %s", targetVolume.Name, igroupName)
+		klog.Infof("Unmapping LUN %s on SVM %s from igroup %s", targetVolume.Name, lun.SVM.Name, igroupName)
 
-		// Get igroup UUID
-		igroup, err := n.getIgroupByName(ctx, igroupName)
+		// Get igroup UUID, scoped to the LUN's SVM (igroup names are not
+		// unique across SVMs in ONTAP).
+		igroup, err := n.getIgroupByName(ctx, igroupName, lun.SVM.Name)
 		if err != nil {
-			klog.Warningf("Failed to get igroup %s: %v", igroupName, err)
+			klog.Warningf("Failed to get igroup %s on SVM %s: %v", igroupName, lun.SVM.Name, err)
 			continue
 		}
 
@@ -853,18 +875,21 @@ func (n *NetAppStorageProvider) getLUNByName(ctx context.Context, name string) (
 	return &luns[0], nil
 }
 
-// getIgroupByName retrieves an igroup by its name
-func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name string) (*OntapIgroup, error) {
+// getIgroupByName retrieves an igroup by name, scoped to svmName. Igroup names
+// are not unique across SVMs in ONTAP, so callers must pass the SVM that owns
+// the LUN being mapped — otherwise lun-maps POST will return 404 with target
+// "igroup.uuid" even though the name exists elsewhere on the cluster.
+func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name, svmName string) (*OntapIgroup, error) {
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, ig := range igroups {
-		if ig.Name == name {
+		if ig.Name == name && ig.SVM.Name == svmName {
 			return &ig, nil
 		}
 	}
-	return nil, fmt.Errorf("igroup %s not found", name)
+	return nil, fmt.Errorf("igroup %s not found on SVM %s", name, svmName)
 }
 
 // getDefaultVolumePathAndSVM returns the /vol/<flexvol> path and SVM name to
