@@ -1076,6 +1076,14 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			},
 		},
 		{
+			Name: "NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		},
+		{
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},

@@ -23,8 +23,6 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-	corev1 "k8s.io/api/core/v1"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -121,29 +119,17 @@ func GetCurrentInstanceUUID() (string, error) {
 
 // getInstanceUUIDFromNode resolves the OpenStack instance UUID for the K8s node
 // this pod is scheduled on by looking up the corresponding VjailbreakNode resource.
-// POD_NAME is injected via the Kubernetes Downward API (metadata.name) in the pod spec
+// NODE_NAME is injected via the Kubernetes Downward API (spec.nodeName) in the pod spec
+// by the migration controller, so we don't need a Pod GET to discover where we landed.
 func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
-	podName := os.Getenv("POD_NAME")
-	if podName == "" {
-		return "", fmt.Errorf("POD_NAME env var not set")
+	nodeName := os.Getenv("NODE_NAME")
+	if nodeName == "" {
+		return "", fmt.Errorf("NODE_NAME env var not set")
 	}
 
 	k8sClient, err := k8sutils.GetInclusterClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to get k8s client: %w", err)
-	}
-
-	pod := &corev1.Pod{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
-		Name:      podName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, pod); err != nil {
-		return "", fmt.Errorf("failed to get pod %s: %w", podName, err)
-	}
-
-	nodeName := pod.Spec.NodeName
-	if nodeName == "" {
-		return "", fmt.Errorf("pod %s has no node name assigned yet", podName)
 	}
 
 	vjNodeList := &vjailbreakv1alpha1.VjailbreakNodeList{}
