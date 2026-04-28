@@ -23,6 +23,8 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	corev1 "k8s.io/api/core/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -120,7 +122,12 @@ func GetCurrentInstanceUUID() (string, error) {
 // getInstanceUUIDFromNode resolves the OpenStack instance UUID for the K8s node
 // this pod is scheduled on by looking up the corresponding VjailbreakNode resource.
 // NODE_NAME is injected via the Kubernetes Downward API (spec.nodeName) in the pod spec
-// by the migration controller, so we don't need a Pod GET to discover where we landed.
+// by the migration controller.
+//
+// Agent VjailbreakNode CRs are named after their k8s node, so a name match works.
+// The master's VjailbreakNode CR is hardcoded as "vjailbreak-master" — it does NOT
+// match the master's k8s node name — so we detect the master via its k8s node label
+// and look up the master CR by its well-known name.
 func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName == "" {
@@ -132,18 +139,25 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to get k8s client: %w", err)
 	}
 
-	vjNodeList := &vjailbreakv1alpha1.VjailbreakNodeList{}
-	if err := k8sClient.List(ctx, vjNodeList); err != nil {
-		return "", fmt.Errorf("failed to list vjailbreak nodes: %w", err)
+	// Detect whether we landed on the master k8s node.
+	node := &corev1.Node{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: nodeName}, node); err != nil {
+		return "", fmt.Errorf("failed to get k8s node %s: %w", nodeName, err)
 	}
 
-	for _, vjNode := range vjNodeList.Items {
-		if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
-			return vjNode.Status.OpenstackUUID, nil
-		}
+	vjNodeName := nodeName
+	if _, isMaster := node.Labels[constants.K8sMasterNodeAnnotation]; isMaster {
+		vjNodeName = constants.VjailbreakMasterNodeName
 	}
 
-	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for k8s node %s", nodeName)
+	vjNode := &vjailbreakv1alpha1.VjailbreakNode{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{Name: vjNodeName}, vjNode); err != nil {
+		return "", fmt.Errorf("failed to get vjailbreak node %s: %w", vjNodeName, err)
+	}
+	if vjNode.Status.OpenstackUUID == "" {
+		return "", fmt.Errorf("vjailbreak node %s has no OpenstackUUID", vjNodeName)
+	}
+	return vjNode.Status.OpenstackUUID, nil
 }
 
 // create a new volume
