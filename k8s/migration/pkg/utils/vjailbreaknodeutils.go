@@ -28,7 +28,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,9 +54,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 			// Local mode
 			openstackuuid = "fake-openstackuuid"
 		} else {
-			// Controller manager is always on the master node due to pod affinity.
-			// GetMasterInstanceUUID tries DMI first (no network) then falls back
-			// to the metadata service.
+			// Controller manager is always on the master node due to pod affinity
 			openstackuuid, err = GetMasterInstanceUUID()
 			if err != nil {
 				return errors.Wrap(err, "failed to get current instance uuid")
@@ -80,33 +77,28 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "failed to create vjailbreak node")
 		}
-	}
 
-	vmIP := GetNodeInternalIP(masterNode)
-
-	// DMI returns the UUID synchronously in microseconds, so the window between
-	// Create and Status().Update is much tighter than with the metadata-service
-	// path — tight enough to race the VjailbreakNode reconciler that wakes up
-	// on the Create event and bumps resourceVersion. Retry on conflict, re-Get
-	// the latest object each attempt.
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := k3sclient.Get(ctx, types.NamespacedName{
+		err = k3sclient.Get(ctx, types.NamespacedName{
 			Namespace: constants.NamespaceMigrationSystem,
 			Name:      constants.VjailbreakMasterNodeName,
-		}, &vjNode); err != nil {
+		}, &vjNode)
+		if err != nil {
 			return errors.Wrap(err, "failed to get vjailbreak node")
 		}
-		if vmIP != "" {
-			vjNode.Status.VMIP = vmIP
-		}
-		vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
-		vjNode.Status.OpenstackUUID = openstackuuid
+	}
+	vmIP := GetNodeInternalIP(masterNode)
+	if vmIP != "" {
+		vjNode.Status.VMIP = vmIP
+	}
+	vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+	vjNode.Status.OpenstackUUID = openstackuuid
 
-		if err := k3sclient.Status().Update(ctx, &vjNode); err != nil {
-			return errors.Wrap(err, "failed to update vjailbreak node status")
-		}
-		return nil
-	})
+	err = k3sclient.Status().Update(ctx, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to update vjailbreak node status")
+	}
+
+	return nil
 }
 
 // UpdateMasterNodeImageID updates the image ID and flavor ID of the master node
