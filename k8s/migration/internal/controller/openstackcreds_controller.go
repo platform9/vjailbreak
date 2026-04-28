@@ -481,10 +481,6 @@ func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
-	if err := setupMasterNode(ctx, r, scope); err != nil {
-		return err
-	}
-
 	if err := createDummyPCDCluster(ctx, r, scope); err != nil {
 		return err
 	}
@@ -510,20 +506,6 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 		return err
 	}
 
-	return nil
-}
-
-func setupMasterNode(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
-	ctxlog := scope.Logger
-	err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
-	if err != nil {
-		if strings.Contains(err.Error(), "404") {
-			ctxlog.Error(err, "Failed to update master node image ID and flavor list, skipping reconciliation")
-		} else {
-			return errors.Wrap(err, "failed to update master node image id")
-		}
-		ctxlog.Error(err, "Failed to update master node image ID and flavor list")
-	}
 	return nil
 }
 

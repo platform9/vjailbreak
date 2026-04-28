@@ -71,19 +71,23 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 			Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
 				NodeRole: constants.NodeRoleMaster,
 			},
+			Status: vjailbreakv1alpha1.VjailbreakNodeStatus{
+				OpenstackUUID: openstackuuid,
+			},
 		}
 
 		err = k3sclient.Create(ctx, &vjNode)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			return errors.Wrap(err, "failed to create vjailbreak node")
-		}
-
-		err = k3sclient.Get(ctx, types.NamespacedName{
-			Namespace: constants.NamespaceMigrationSystem,
-			Name:      constants.VjailbreakMasterNodeName,
-		}, &vjNode)
 		if err != nil {
-			return errors.Wrap(err, "failed to get vjailbreak node")
+			if !apierrors.IsAlreadyExists(err) {
+				return errors.Wrap(err, "failed to create vjailbreak node")
+			}
+			// Another process already created it; fetch the existing object to get its ResourceVersion.
+			if err = k3sclient.Get(ctx, types.NamespacedName{
+				Namespace: constants.NamespaceMigrationSystem,
+				Name:      constants.VjailbreakMasterNodeName,
+			}, &vjNode); err != nil {
+				return errors.Wrap(err, "failed to get vjailbreak node")
+			}
 		}
 	}
 	vmIP := GetNodeInternalIP(masterNode)

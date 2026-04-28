@@ -293,14 +293,8 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 
 	ctx = ensureLogger(ctx)
 
-	log.Printf("Updating Master Node Image ID")
-	err := utils.UpdateMasterNodeImageID(ctx, k8sClient, false)
-	if err != nil {
-		log.Printf("Warning: Failed to update master node image ID: %v", err)
-	}
-
 	log.Printf("Creating Dummy PCD Cluster if needed")
-	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
+	err := utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			return nil, errors.Wrap(err, "failed to create dummy PCD cluster")

@@ -102,11 +102,17 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	controllerutil.AddFinalizer(vjNode, constants.VjailbreakNodeFinalizer)
 
 	if vjNode.Spec.NodeRole == constants.NodeRoleMaster {
+		if vjNode.Status.OpenstackUUID == "" {
+			if err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client, r.Local, ""); err != nil {
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to resolve master node uuid")
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
-		log.Info("Skipping master node, updating flavor", "name", vjNode.Name)
+		log.Info("Updated master node image and flavor", "name", vjNode.Name)
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
