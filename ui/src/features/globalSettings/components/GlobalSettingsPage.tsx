@@ -1306,6 +1306,22 @@ export default function GlobalSettingsPage() {
                   }}
                 />
               ))}
+
+              <RHFTextField
+                name="HTTP_TIMEOUT_SECONDS"
+                label="HTTP Timeout (seconds)"
+                type="number"
+                labelProps={{ tooltip: FIELD_TOOLTIPS.HTTP_TIMEOUT_SECONDS }}
+                error={Boolean(errors.HTTP_TIMEOUT_SECONDS)}
+                helperText={errors.HTTP_TIMEOUT_SECONDS}
+                onValueChange={(value) => {
+                  rhfForm.setValue(
+                    'HTTP_TIMEOUT_SECONDS',
+                    value === '' ? ('' as any) : Number(value),
+                    { shouldValidate: true }
+                  )
+                }}
+              />
             </FormGrid>
           </TabPanel>
 
@@ -1337,22 +1353,6 @@ export default function GlobalSettingsPage() {
                 onValueChange={(value) => {
                   rhfForm.setValue(
                     'VMWARE_CREDS_REQUEUE_AFTER_MINUTES',
-                    value === '' ? ('' as any) : Number(value),
-                    { shouldValidate: true }
-                  )
-                }}
-              />
-
-              <RHFTextField
-                name="HTTP_TIMEOUT_SECONDS"
-                label="HTTP Timeout (seconds)"
-                type="number"
-                labelProps={{ tooltip: FIELD_TOOLTIPS.HTTP_TIMEOUT_SECONDS }}
-                error={Boolean(errors.HTTP_TIMEOUT_SECONDS)}
-                helperText={errors.HTTP_TIMEOUT_SECONDS}
-                onValueChange={(value) => {
-                  rhfForm.setValue(
-                    'HTTP_TIMEOUT_SECONDS',
                     value === '' ? ('' as any) : Number(value),
                     { shouldValidate: true }
                   )
