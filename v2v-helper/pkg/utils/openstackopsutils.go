@@ -71,7 +71,9 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Primary: look up the VJailbreakNode for the K8s node this pod is running on.
 	// This correctly handles agent nodes — the env-var / metadata-service approach
 	// always returns the master's UUID because the ConfigMap is built on the master.
-	if uuid, err := getInstanceUUIDFromNode(context.Background()); err == nil && uuid != "" {
+	if uuid, err := getInstanceUUIDFromNode(context.Background()); err != nil {
+		PrintLog(fmt.Sprintf("Failed to get instance ID from vjailbreak node: %v", err))
+	} else if uuid != "" {
 		return uuid, nil
 	}
 
