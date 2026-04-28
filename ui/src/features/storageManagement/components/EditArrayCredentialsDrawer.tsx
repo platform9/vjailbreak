@@ -36,6 +36,8 @@ interface FormData {
   username: string
   password: string
   skipSslVerification: boolean
+  netAppSvm?: string
+  netAppFlexVol?: string
 }
 
 type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
@@ -66,7 +68,9 @@ export default function EditArrayCredentialsDrawer({
       managementEndpoint: '',
       username: '',
       password: '',
-      skipSslVerification: false
+      skipSslVerification: false,
+      netAppSvm: credential.spec?.netAppConfig?.svm || '',
+      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || ''
     }
   })
 
@@ -85,7 +89,9 @@ export default function EditArrayCredentialsDrawer({
       managementEndpoint: '',
       username: '',
       password: '',
-      skipSslVerification: false
+      skipSslVerification: false,
+      netAppSvm: credential.spec?.netAppConfig?.svm || '',
+      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || ''
     })
   }, [credential, reset])
 
@@ -195,6 +201,9 @@ export default function EditArrayCredentialsDrawer({
           volumeType: data.volumeType,
           cinderBackendName: data.backendName
         },
+        data.vendorType === 'netapp'
+          ? { svm: data.netAppSvm ?? '', flexVol: data.netAppFlexVol ?? '' }
+          : undefined,
         namespace
       )
 

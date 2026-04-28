@@ -1,5 +1,5 @@
 import { Box, Alert, Autocomplete, Chip, TextField } from '@mui/material'
-import { useMemo, useEffect, useRef, useState } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { Step, RHFAutocomplete } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components'
 import { FieldLabel } from 'src/components/design-system/ui/FieldLabel'
@@ -73,45 +73,6 @@ export default function SecurityGroupAndServerGroup({
     () => (Array.isArray(params?.imageProfiles) ? params.imageProfiles : []),
     [params?.imageProfiles]
   )
-
-  // Auto-select OS-matching default profiles whenever the VM selection changes.
-  const lastVmsKeyRef = useRef<string>('')
-  const vmsKey = (params?.vms ?? []).map((vm) => vm.name ?? vm.id ?? '').sort().join(',')
-  useEffect(() => {
-    if (loadingProfiles) return
-    if (vmsKey === lastVmsKeyRef.current) return
-
-    lastVmsKeyRef.current = vmsKey
-
-    if (!params?.vms || params.vms.length === 0) return
-
-    const current = new Set(selectedImageProfiles)
-    const toAdd = applicableProfiles
-      .filter((p) => {
-        const name = p.metadata?.name || ''
-        if (current.has(name)) return false
-        const fam = p.spec?.osFamily || ''
-        if (fam === 'windowsGuest' && hasWindowsVMSelected && name === 'default-windows')
-          return true
-        if (fam === 'linuxGuest' && hasLinuxVMSelected && name === 'default-linux')
-          return true
-        return false
-      })
-      .map((p) => p.metadata.name)
-
-    if (toAdd.length > 0) {
-      onChange('imageProfiles')([...selectedImageProfiles, ...toAdd])
-    }
-  }, [
-    vmsKey,
-    loadingProfiles,
-    applicableProfiles,
-    hasLinuxVMSelected,
-    hasWindowsVMSelected,
-    onChange,
-    selectedImageProfiles,
-    params?.vms
-  ])
 
   const [profileConflictError, setProfileConflictError] = useState('')
 
@@ -222,7 +183,7 @@ export default function SecurityGroupAndServerGroup({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <FieldLabel
             label="Profiles"
-            tooltip="Apply OpenStack image metadata to the boot volume. Profiles matching the selected VMs' OS family are pre-selected. Properties from later profiles override earlier ones on duplicate keys."
+            tooltip="Apply OpenStack volume image properties."
             align="flex-start"
           />
           <Autocomplete

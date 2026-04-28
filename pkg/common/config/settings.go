@@ -41,6 +41,7 @@ type VjailbreakSettings struct {
 	V2VHelperPodEphemeralStorageLimit   string
 	Timezone                            string
 	NTPServers                          string
+	HTTPTimeoutSeconds                  int
 }
 
 // Atoi is a helper function to convert string to int with a default value of 0
@@ -89,6 +90,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
 			Timezone:                            "",
 			NTPServers:                          "",
+			HTTPTimeoutSeconds:                  constants.HTTPTimeoutSeconds,
 		}, nil
 	}
 
@@ -192,6 +194,8 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	}
 	if vjailbreakSettingsCM.Data["NTP_SERVERS"] == "" {
 		vjailbreakSettingsCM.Data["NTP_SERVERS"] = ""
+	if vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey] == "" {
+		vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(constants.HTTPTimeoutSeconds)
 	}
 
 	return &VjailbreakSettings{
@@ -222,5 +226,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
 		Timezone:                            strings.TrimSpace(vjailbreakSettingsCM.Data["TIMEZONE"]),
 		NTPServers:                          strings.TrimSpace(vjailbreakSettingsCM.Data["NTP_SERVERS"]),
+		HTTPTimeoutSeconds:                  Atoi(vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey]),
 	}, nil
 }

@@ -10,19 +10,38 @@ import (
 	"strings"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/fcutil"
 	"k8s.io/klog/v2"
 )
 
 // NetApp ONTAP NAA prefix (OUI for NetApp)
 const NetAppProviderID = "600a0980"
 
+// VendorName is the canonical vendor-type string registered with the storage
+// SDK and persisted on ArrayCreds.spec.vendorType. Use this wherever code
+// outside the NetApp SDK needs to compare against the NetApp vendor type.
+const VendorName = "netapp"
+
+// ProviderOptions keys read by the NetApp provider from
+// storage.StorageAccessInfo.ProviderOptions. Unknown keys are ignored.
+const (
+	OptionSVM     = "svm"
+	OptionFlexVol = "flexvol"
+)
+
 func init() {
-	storage.RegisterStorageProvider("netapp", &NetAppStorageProvider{})
+	storage.RegisterStorageProvider(VendorName, &NetAppStorageProvider{})
 }
 
-// NetAppStorageProvider implements StorageProvider for NetApp ONTAP
+// NetAppStorageProvider implements StorageProvider for NetApp ONTAP.
+// SVM and FlexVol scope the array operations to a specific storage virtual
+// machine and FlexVol. They may be set explicitly via ProviderOptions; if
+// empty at operation time, the provider falls back to best-effort discovery
+// from existing LUNs or a single-option auto-pick.
 type NetAppStorageProvider struct {
 	storage.BaseStorageProvider
+	SVM     string
+	FlexVol string
 }
 
 // ONTAP API response structures
@@ -60,9 +79,13 @@ type OntapLUNResponse struct {
 }
 
 type OntapIgroup struct {
-	UUID       string `json:"uuid"`
-	Name       string `json:"name"`
-	Protocol   string `json:"protocol"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	SVM      struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+	} `json:"svm"`
 	Initiators []struct {
 		Name string `json:"name"`
 	} `json:"initiators"`
@@ -73,6 +96,30 @@ type OntapIgroupResponse struct {
 	NumRecords int           `json:"num_records"`
 }
 
+type OntapSVM struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type OntapSVMResponse struct {
+	Records    []OntapSVM `json:"records"`
+	NumRecords int        `json:"num_records"`
+}
+
+type OntapFlexVol struct {
+	UUID  string `json:"uuid"`
+	Name  string `json:"name"`
+	Style string `json:"style"`
+	SVM   struct {
+		Name string `json:"name"`
+		UUID string `json:"uuid"`
+	} `json:"svm"`
+}
+
+type OntapFlexVolResponse struct {
+	Records    []OntapFlexVol `json:"records"`
+	NumRecords int            `json:"num_records"`
+}
 
 // Connect establishes connection to NetApp ONTAP array
 func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.StorageAccessInfo) error {
@@ -88,6 +135,15 @@ func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.
 	n.InitHTTPClient(accessInfo.SkipSSLVerification)
 	n.SetConnected(true)
 
+	if accessInfo.ProviderOptions != nil {
+		if svm := strings.TrimSpace(accessInfo.ProviderOptions[OptionSVM]); svm != "" {
+			n.SVM = svm
+		}
+		if flexvol := strings.TrimSpace(accessInfo.ProviderOptions[OptionFlexVol]); flexvol != "" {
+			n.FlexVol = flexvol
+		}
+	}
+
 	// Validate connection by getting cluster info
 	cluster, err := n.getClusterInfo(ctx)
 	if err != nil {
@@ -95,7 +151,8 @@ func (n *NetAppStorageProvider) Connect(ctx context.Context, accessInfo storage.
 		return fmt.Errorf("failed to connect to NetApp ONTAP cluster: %w", err)
 	}
 
-	klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s", cluster.Name, cluster.Version.Full)
+	klog.Infof("Connected to NetApp ONTAP Cluster: %s, Version: %s (SVM: %q, FlexVol: %q)",
+		cluster.Name, cluster.Version.Full, n.SVM, n.FlexVol)
 	return nil
 }
 
@@ -253,39 +310,290 @@ func (n *NetAppStorageProvider) GetAllVolumeNAAs() ([]string, error) {
 	return n.BaseStorageProvider.GetAllVolumeNAAs(n.ListAllVolumes)
 }
 
-// CreateOrUpdateInitiatorGroup creates or updates an igroup with the ESX adapters
+// detectSANProtocol inspects hbaIdentifiers and returns the ONTAP igroup protocol
+// string: "fcp" when all adapters are Fibre Channel, "iscsi" when all are iSCSI,
+// or "mixed" when both types are present.
+func detectSANProtocol(hbaIdentifiers []string) string {
+	hasFC, hasIQN := false, false
+	for _, id := range hbaIdentifiers {
+		lower := strings.ToLower(id)
+		switch {
+		case strings.HasPrefix(lower, "fc."):
+			hasFC = true
+		case strings.HasPrefix(lower, "iqn."), strings.HasPrefix(lower, "eui."), strings.HasPrefix(lower, "nqn."):
+			hasIQN = true
+		}
+	}
+	switch {
+	case hasFC && !hasIQN:
+		return "fcp"
+	case hasIQN && !hasFC:
+		return "iscsi"
+	default:
+		return "mixed"
+	}
+}
+
+// isWWPNLike reports whether s looks like an FC world-wide port name: pure hex
+// after removing the usual separators. Used to pick between case-insensitive
+// string equality (IQN/NQN/EUI) and fcutil's normalising comparison (WWPN).
+func isWWPNLike(s string) bool {
+	stripped := fcutil.StripWWNFormatting(s)
+	if stripped == "" {
+		return false
+	}
+	for _, r := range stripped {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// initiatorMatches reports whether candidate matches any entry in initiators.
+// WWPNs are compared with separator/case-insensitive normalisation via fcutil;
+// IQNs fall back to plain case-insensitive equality.
+func initiatorMatches(candidate string, initiators []string) bool {
+	if isWWPNLike(candidate) {
+		for _, init := range initiators {
+			if isWWPNLike(init) && fcutil.EqualWWNs(candidate, init) {
+				return true
+			}
+		}
+		return false
+	}
+	return storage.ContainsIgnoreCase(initiators, candidate)
+}
+
+// normaliseToONTAPInitiators converts HBA identifiers to the format ONTAP expects.
+// FC adapter UIDs (fc.WWNN:WWPN) are converted to colon-separated WWPN strings;
+// IQN / EUI / NQN values are kept as-is.
+func normaliseToONTAPInitiators(hbaIdentifiers []string) ([]string, error) {
+	out := make([]string, 0, len(hbaIdentifiers))
+	for _, id := range hbaIdentifiers {
+		if strings.HasPrefix(strings.ToLower(id), "fc.") {
+			wwpn, err := fcutil.FormattedWWPNFromFCUID(id)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse FC adapter UID %q: %w", id, err)
+			}
+			out = append(out, wwpn)
+		} else {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+// ensureIgroupExists returns the UUID of the named igroup on svmName, creating it
+// (with the given protocol and os_type "vmware") if it does not already exist.
+// Igroup names are not unique across SVMs in ONTAP, so the lookup is SVM-scoped.
+func (n *NetAppStorageProvider) ensureIgroupExists(ctx context.Context, name, protocol, svmName string) (string, error) {
+	igroups, err := n.listIgroups(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list igroups: %w", err)
+	}
+	for _, ig := range igroups {
+		if ig.Name == name && ig.SVM.Name == svmName {
+			klog.Infof("Igroup %q already exists on SVM %s (UUID: %s)", name, svmName, ig.UUID)
+			return ig.UUID, nil
+		}
+	}
+
+	klog.Infof("Creating igroup %q (protocol: %s, SVM: %s)", name, protocol, svmName)
+	reqBody := map[string]interface{}{
+		"name":     name,
+		"protocol": protocol,
+		"os_type":  "vmware",
+		"svm": map[string]interface{}{
+			"name": svmName,
+		},
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal igroup create request: %w", err)
+	}
+
+	var response OntapIgroupResponse
+	err = n.DoRequestJSON(ctx, "POST", "/protocols/san/igroups?return_records=true", bytes.NewReader(jsonBody), &response)
+	if err != nil {
+		// Concurrent migrations can race on the same igroup name. If ONTAP
+		// reports the igroup already exists, re-resolve it by name so both
+		// reconciliations converge on the same UUID.
+		if isONTAPConflict(err) {
+			klog.Infof("Igroup %q already exists on SVM %s (conflict on create), re-resolving UUID", name, svmName)
+			ig, lookupErr := n.getIgroupByName(ctx, name, svmName)
+			if lookupErr == nil {
+				return ig.UUID, nil
+			}
+			return "", fmt.Errorf("igroup %q exists but lookup failed: %w", name, lookupErr)
+		}
+		return "", fmt.Errorf("failed to create igroup %q: %w", name, err)
+	}
+	if len(response.Records) == 0 {
+		return "", fmt.Errorf("igroup creation returned no records for %q", name)
+	}
+	klog.Infof("Created igroup %q with UUID %s", name, response.Records[0].UUID)
+	return response.Records[0].UUID, nil
+}
+
+// isONTAPConflict reports whether err represents an HTTP 409 / duplicate-entry
+// response from ONTAP. Both the message substrings ("already exists",
+// "duplicate") and the "status 409" marker produced by DoRequest are accepted
+// so that the caller can treat the desired state as already satisfied.
+func isONTAPConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "status 409") ||
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicate") ||
+		strings.Contains(msg, "already mapped") ||
+		strings.Contains(msg, "already in group")
+}
+
+// addInitiatorToIgroup adds a single initiator (IQN or colon-separated WWPN) to
+// the igroup identified by igroupUUID. Duplicate-initiator errors are silently
+// ignored since the desired state is already satisfied.
+func (n *NetAppStorageProvider) addInitiatorToIgroup(ctx context.Context, igroupUUID, initiatorName string) error {
+	reqBody := map[string]interface{}{"name": initiatorName}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+	endpoint := fmt.Sprintf("/protocols/san/igroups/%s/initiators", igroupUUID)
+	err = n.DoRequestJSON(ctx, "POST", endpoint, bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		if isONTAPConflict(err) {
+			klog.Infof("Initiator %q already in igroup %s — skipping", initiatorName, igroupUUID)
+			return nil
+		}
+		return fmt.Errorf("failed to add initiator %q to igroup %s: %w", initiatorName, igroupUUID, err)
+	}
+	klog.Infof("Added initiator %q to igroup %s", initiatorName, igroupUUID)
+	return nil
+}
+
+// CreateOrUpdateInitiatorGroup creates or updates an igroup with the ESX adapters.
+// It supports both iSCSI (IQN) and Fibre Channel (fc.WWNN:WWPN) adapter identifiers.
+//
+// The function first searches all existing igroups for one that already contains a
+// matching initiator. If none is found it creates a protocol-specific vjailbreak
+// igroup (name: "<initiatorGroupName>-fcp" or "<initiatorGroupName>-iscsi") and
+// populates it with the normalised initiator list.
 func (n *NetAppStorageProvider) CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (storage.MappingContext, error) {
 	ctx := context.Background()
 
-	// List existing igroups and find matches
+	// Normalise FC UIDs → colon-separated WWPN; IQNs are kept unchanged.
+	ontapInitiators, err := normaliseToONTAPInitiators(hbaIdentifiers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalise HBA identifiers: %w", err)
+	}
+
+	protocol := detectSANProtocol(hbaIdentifiers)
+	klog.Infof("Detected SAN protocol: %s, normalised initiators: %v", protocol, ontapInitiators)
+
+	// Resolve the target SVM up front. ONTAP igroups are SVM-scoped and the
+	// /protocols/san/lun-maps POST requires LUN and igroup to share an SVM —
+	// matching an igroup on a different SVM produces a misleading 404
+	// "No such initiator group exists" later, even though the name resolves.
+	_, svmName, err := n.getDefaultVolumePathAndSVM(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover target SVM for igroup matching: %w", err)
+	}
+	klog.Infof("Restricting igroup matching to SVM %s", svmName)
+
+	// Search existing igroups for a matching initiator.
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list igroups: %w", err)
 	}
 
 	matchedIgroups := []string{}
-
+	// Track which host initiators are covered by the union of matched igroups.
+	// A host with WWPNs split across multiple igroups (e.g., fabric A in ig1,
+	// fabric B in ig2) has full multipath coverage even though no single
+	// igroup holds all WWPNs — so the gap check must run on the union, not
+	// per-igroup, otherwise we emit misleading warnings.
+	coveredInitiators := make(map[string]bool, len(ontapInitiators))
 	for _, ig := range igroups {
+		// Restrict to igroups on the SVM where the LUN will live. Without this
+		// filter, an unrelated igroup on another SVM that happens to contain
+		// the same WWPN/IQN would be selected and lun-maps would 404.
+		if ig.SVM.Name != svmName {
+			continue
+		}
+
 		initiatorNames := make([]string, len(ig.Initiators))
 		for i, init := range ig.Initiators {
 			initiatorNames[i] = init.Name
 		}
-		klog.Infof("Checking igroup %s, initiators: %v", ig.Name, initiatorNames)
+		klog.Infof("Checking igroup %s on SVM %s (protocol: %s), initiators: %v", ig.Name, ig.SVM.Name, ig.Protocol, initiatorNames)
 
+		// Skip igroups whose protocol does not match what the host is using;
+		// ONTAP will not accept a LUN map on a protocol-mismatched igroup.
+		if protocol != "mixed" && ig.Protocol != "" && !strings.EqualFold(ig.Protocol, protocol) && !strings.EqualFold(ig.Protocol, "mixed") {
+			continue
+		}
+
+		matched := false
 		for _, init := range ig.Initiators {
-			if storage.ContainsIgnoreCase(hbaIdentifiers, init.Name) {
-				klog.Infof("Adding igroup %s (matched initiator: %s)", ig.Name, init.Name)
-				matchedIgroups = append(matchedIgroups, ig.Name)
-				break
+			if initiatorMatches(init.Name, ontapInitiators) {
+				if !matched {
+					klog.Infof("Matched igroup %s on SVM %s via initiator %s", ig.Name, ig.SVM.Name, init.Name)
+					matchedIgroups = append(matchedIgroups, ig.Name)
+					matched = true
+				}
+				// Record every host initiator this igroup covers so the
+				// post-loop union check can identify true gaps.
+				for _, want := range ontapInitiators {
+					if initiatorMatches(init.Name, []string{want}) {
+						coveredInitiators[want] = true
+					}
+				}
 			}
 		}
 	}
 
-	if len(matchedIgroups) == 0 {
-		return nil, fmt.Errorf("no igroups found matching any of the provided IQNs/WWNs: %v", hbaIdentifiers)
+	if len(matchedIgroups) > 0 {
+		// Multipath gap check on the UNION of matched igroups. A WWPN/IQN that
+		// is not present in any matched igroup will not see the LUN — flag it
+		// so the operator can add it on the NetApp side.
+		for _, want := range ontapInitiators {
+			if !coveredInitiators[want] {
+				klog.Warningf("Host initiator %q is not present in any matched igroup on SVM %s — multipath coverage may be impaired; add the initiator on the NetApp side", want, svmName)
+			}
+		}
+		return storage.MappingContext{"igroups": matchedIgroups, "svm": svmName}, nil
 	}
 
-	return storage.MappingContext{"igroups": matchedIgroups}, nil
+	// No existing igroup matched — create a vjailbreak-managed one on the
+	// target SVM (svmName resolved above), so it is guaranteed to share an SVM
+	// with the LUN that will be created next.
+	if protocol == "mixed" {
+		return nil, fmt.Errorf(
+			"host has both FC and iSCSI adapters; cannot create a single ONTAP igroup — "+
+				"ensure the ESXi host uses a single transport type: %v", hbaIdentifiers)
+	}
+
+	igroupName := fmt.Sprintf("%s-%s", initiatorGroupName, protocol)
+	klog.Infof("No existing igroup matched on SVM %s — creating vjailbreak-managed igroup %q", svmName, igroupName)
+	igroupUUID, err := n.ensureIgroupExists(ctx, igroupName, protocol, svmName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, initiator := range ontapInitiators {
+		klog.Infof("Adding initiator %q to igroup %s on SVM %s", initiator, igroupName, svmName)
+		if err := n.addInitiatorToIgroup(ctx, igroupUUID, initiator); err != nil {
+			return nil, err
+		}
+	}
+
+	return storage.MappingContext{"igroups": []string{igroupName}, "svm": svmName}, nil
 }
 
 // MapVolumeToGroup maps a LUN to igroups
@@ -309,12 +617,14 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 	}
 
 	for _, igroupName := range igroups {
-		klog.Infof("Mapping LUN %s to igroup %s", targetVolume.Name, igroupName)
+		klog.Infof("Mapping LUN %s on SVM %s to igroup %s", targetVolume.Name, lun.SVM.Name, igroupName)
 
-		// Get igroup UUID - ONTAP API requires UUID for lun-maps
-		igroup, err := n.getIgroupByName(ctx, igroupName)
+		// Get igroup UUID - ONTAP API requires UUID for lun-maps. Scope the
+		// lookup to the LUN's SVM since igroup names are not unique across
+		// SVMs and a cross-SVM UUID would be rejected with a 404 here.
+		igroup, err := n.getIgroupByName(ctx, igroupName, lun.SVM.Name)
 		if err != nil {
-			return storage.Volume{}, fmt.Errorf("failed to get igroup %s: %w", igroupName, err)
+			return storage.Volume{}, fmt.Errorf("failed to get igroup %s on SVM %s: %w", igroupName, lun.SVM.Name, err)
 		}
 
 		reqBody := map[string]interface{}{
@@ -336,8 +646,7 @@ func (n *NetAppStorageProvider) MapVolumeToGroup(initiatorGroupName string, targ
 
 		err = n.DoRequestJSON(ctx, "POST", "/protocols/san/lun-maps", bytes.NewReader(jsonBody), nil)
 		if err != nil {
-			// Check if already mapped
-			if strings.Contains(err.Error(), "already mapped") {
+			if isONTAPConflict(err) {
 				klog.Infof("LUN %s already mapped to igroup %s", targetVolume.Name, igroupName)
 				continue
 			}
@@ -371,12 +680,13 @@ func (n *NetAppStorageProvider) UnmapVolumeFromGroup(initiatorGroupName string, 
 	}
 
 	for _, igroupName := range igroups {
-		klog.Infof("Unmapping LUN %s from igroup %s", targetVolume.Name, igroupName)
+		klog.Infof("Unmapping LUN %s on SVM %s from igroup %s", targetVolume.Name, lun.SVM.Name, igroupName)
 
-		// Get igroup UUID
-		igroup, err := n.getIgroupByName(ctx, igroupName)
+		// Get igroup UUID, scoped to the LUN's SVM (igroup names are not
+		// unique across SVMs in ONTAP).
+		igroup, err := n.getIgroupByName(ctx, igroupName, lun.SVM.Name)
 		if err != nil {
-			klog.Warningf("Failed to get igroup %s: %v", igroupName, err)
+			klog.Warningf("Failed to get igroup %s on SVM %s: %v", igroupName, lun.SVM.Name, err)
 			continue
 		}
 
@@ -534,7 +844,7 @@ func (n *NetAppStorageProvider) listLUNs(ctx context.Context, filter string) ([]
 
 func (n *NetAppStorageProvider) listIgroups(ctx context.Context) ([]OntapIgroup, error) {
 	var response OntapIgroupResponse
-	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=uuid,name,initiators", nil, &response)
+	err := n.DoRequestJSON(ctx, "GET", "/protocols/san/igroups?fields=uuid,name,protocol,svm,initiators", nil, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -565,23 +875,65 @@ func (n *NetAppStorageProvider) getLUNByName(ctx context.Context, name string) (
 	return &luns[0], nil
 }
 
-// getIgroupByName retrieves an igroup by its name
-func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name string) (*OntapIgroup, error) {
+// getIgroupByName retrieves an igroup by name, scoped to svmName. Igroup names
+// are not unique across SVMs in ONTAP, so callers must pass the SVM that owns
+// the LUN being mapped — otherwise lun-maps POST will return 404 with target
+// "igroup.uuid" even though the name exists elsewhere on the cluster.
+func (n *NetAppStorageProvider) getIgroupByName(ctx context.Context, name, svmName string) (*OntapIgroup, error) {
 	igroups, err := n.listIgroups(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, ig := range igroups {
-		if ig.Name == name {
+		if ig.Name == name && ig.SVM.Name == svmName {
 			return &ig, nil
 		}
 	}
-	return nil, fmt.Errorf("igroup %s not found", name)
+	return nil, fmt.Errorf("igroup %s not found on SVM %s", name, svmName)
 }
 
-// getDefaultVolumePathAndSVM discovers the volume path and SVM from existing LUNs
-// LUN paths are like /vol/cinder_vol/lun_name, we extract /vol/cinder_vol and SVM name
+// getDefaultVolumePathAndSVM returns the /vol/<flexvol> path and SVM name to
+// target for LUN creation. Resolution order:
+//  1. Explicit n.SVM + n.FlexVol (configured via ProviderOptions).
+//  2. Probe existing LUNs and use the first LUN's SVM + FlexVol.
+//  3. Auto-pick when exactly one SVM with exactly one FlexVol is available.
+//
+// Returns an error if none of the above succeed so the caller can surface a
+// clear "please configure SVM/FlexVol" message.
 func (n *NetAppStorageProvider) getDefaultVolumePathAndSVM(ctx context.Context) (string, string, error) {
+	// 1. Explicit configuration wins.
+	if n.SVM != "" && n.FlexVol != "" {
+		return fmt.Sprintf("/vol/%s", n.FlexVol), n.SVM, nil
+	}
+
+	// 2. LUN-based probe (legacy behaviour).
+	if path, svm, err := n.probeTargetFromExistingLUNs(ctx); err == nil {
+		return path, svm, nil
+	} else {
+		klog.V(2).Infof("LUN probe for SVM/FlexVol unavailable: %v", err)
+	}
+
+	// 3. Auto-pick when the array has exactly one SVM with exactly one FlexVol.
+	groups, err := n.DiscoverBackendTargets(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to discover SVMs/FlexVols: %w", err)
+	}
+	if len(groups) == 1 && len(groups[0].Children) == 1 {
+		svm := groups[0].Name
+		flexvol := groups[0].Children[0].Name
+		klog.Infof("Auto-picked single SVM %q with single FlexVol %q for NetApp target", svm, flexvol)
+		return fmt.Sprintf("/vol/%s", flexvol), svm, nil
+	}
+
+	return "", "", fmt.Errorf(
+		"NetApp SVM and FlexVol are not configured and cannot be auto-detected (found %d SVM(s)); "+
+			"set ArrayCreds.spec.netAppConfig.svm and flexVol explicitly", len(groups))
+}
+
+// probeTargetFromExistingLUNs inspects existing LUNs on the array and returns
+// the /vol/<flexvol> path and SVM name of the first LUN. Used as a legacy
+// fallback when explicit configuration is absent.
+func (n *NetAppStorageProvider) probeTargetFromExistingLUNs(ctx context.Context) (string, string, error) {
 	luns, err := n.listLUNs(ctx, "")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to list LUNs: %w", err)
@@ -610,4 +962,59 @@ func (n *NetAppStorageProvider) getDefaultVolumePathAndSVM(ctx context.Context) 
 	klog.Infof("Discovered NetApp volume path: %s, SVM: %s from LUN: %s", volumePath, svmName, lun.Name)
 
 	return volumePath, svmName, nil
+}
+
+// ListSVMs returns all data SVMs on the ONTAP cluster.
+// Uses ONTAP REST: GET /svm/svms
+func (n *NetAppStorageProvider) ListSVMs(ctx context.Context) ([]OntapSVM, error) {
+	var response OntapSVMResponse
+	err := n.DoRequestJSON(ctx, "GET", "/svm/svms?fields=name,uuid", nil, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list SVMs: %w", err)
+	}
+	return response.Records, nil
+}
+
+// ListFlexVolsForSVM returns FlexVols (style=flexvol) on the given SVM.
+// FlexGroups and other styles are excluded since LUN creation requires a
+// plain FlexVol.
+// Uses ONTAP REST: GET /storage/volumes?svm.name=<svm>&style=flexvol
+func (n *NetAppStorageProvider) ListFlexVolsForSVM(ctx context.Context, svmName string) ([]OntapFlexVol, error) {
+	if svmName == "" {
+		return nil, fmt.Errorf("svmName is required")
+	}
+	endpoint := fmt.Sprintf("/storage/volumes?svm.name=%s&style=flexvol&fields=name,uuid,style,svm", svmName)
+	var response OntapFlexVolResponse
+	err := n.DoRequestJSON(ctx, "GET", endpoint, nil, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list FlexVols for SVM %s: %w", svmName, err)
+	}
+	return response.Records, nil
+}
+
+// DiscoverBackendTargets returns a two-level SVM -> FlexVol tree suitable for
+// user selection. Implements storage.BackendTargetDiscoverer.
+func (n *NetAppStorageProvider) DiscoverBackendTargets(ctx context.Context) ([]storage.BackendTargetGroup, error) {
+	svms, err := n.ListSVMs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	groups := make([]storage.BackendTargetGroup, 0, len(svms))
+	for _, svm := range svms {
+		flexvols, err := n.ListFlexVolsForSVM(ctx, svm.Name)
+		if err != nil {
+			klog.Warningf("Failed to list FlexVols for SVM %s: %v", svm.Name, err)
+			continue
+		}
+		children := make([]storage.BackendTarget, 0, len(flexvols))
+		for _, fv := range flexvols {
+			children = append(children, storage.BackendTarget{Name: fv.Name, UUID: fv.UUID})
+		}
+		groups = append(groups, storage.BackendTargetGroup{
+			Name:     svm.Name,
+			UUID:     svm.UUID,
+			Children: children,
+		})
+	}
+	return groups, nil
 }

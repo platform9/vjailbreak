@@ -29,4 +29,5 @@ type VjailbreakSettings struct {
 	V2VHelperPodEphemeralStorageLimit   string
 	Timezone                            string
 	NTPServers                          string
+	HTTPTimeoutSeconds                  int
 }

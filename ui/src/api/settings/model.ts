@@ -17,6 +17,7 @@ export interface VjailbreakSettings {
     VM_ACTIVE_WAIT_INTERVAL_SECONDS: number
     VM_ACTIVE_WAIT_RETRY_LIMIT: number
     AUTO_FSTAB_UPDATE: string
+    HTTP_TIMEOUT_SECONDS: string
   }
   kind: string
   metadata: {

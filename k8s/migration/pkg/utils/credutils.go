@@ -406,7 +406,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
-	openstackCredential.VJBInstanceID = openstackcreds.Spec.VJBInstanceID
 
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
@@ -418,7 +417,11 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	} else {
 		fmt.Printf("Warning: TLS verification is enforced by default. If you encounter certificate errors, set OS_INSECURE=true to skip verification.\n")
 	}
-	vjbNet.SetTimeout(60 * time.Second)
+	if vjbSettings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient); err != nil {
+		log.FromContext(ctx).Error(err, "failed to get vjailbreak settings, using default HTTP timeout")
+	} else {
+		vjbNet.SetTimeout(time.Duration(vjbSettings.HTTPTimeoutSeconds) * time.Second)
+	}
 
 	if vjbNet.CreateSecureHTTPClient() == nil {
 		providerClient.HTTPClient = *vjbNet.GetClient()
@@ -451,10 +454,6 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 		default:
 			return nil, fmt.Errorf("authentication failed: %w. Please verify your OpenStack credentials", err)
 		}
-	}
-
-	if openstackCredential.VJBInstanceID != "" {
-		return providerClient, nil
 	}
 
 	_, err = VerifyCredentialsMatchCurrentEnvironment(providerClient, openstackCredential.RegionName)
@@ -576,7 +575,7 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 
 	// Get the network name of the VM
 	var o mo.VirtualMachine
-	err = vm.Properties(ctx, vm.Reference(), []string{"config", "network"}, &o)
+	err = vm.Properties(ctx, vm.Reference(), []string{"config", "network", "guest"}, &o)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM properties: %w", err)
 	}
@@ -588,9 +587,19 @@ func GetVMwNetworks(ctx context.Context, k3sclient client.Client, vmwcreds *vjai
 		return nil, fmt.Errorf("failed to get virtual NICs for vm %s: %w", vmname, err)
 	}
 
+	var guestNets []types.GuestNicInfo
+	if o.Guest != nil {
+		guestNets = o.Guest.Net
+	}
 	for _, nic := range nicList {
 		name, err := resolveNetworkName(ctx, c, nic)
 		if err != nil {
+			// Last-resort: ask VMware Tools for the portgroup name of this
+			// MAC. Covers DVPGs genuinely deleted from vCenter.
+			if toolsName := guestNetworkNameForMAC(guestNets, nic.MAC); toolsName != "" {
+				networks = append(networks, toolsName)
+				continue
+			}
 			return nil, err
 		}
 		networks = append(networks, name)
@@ -859,12 +868,21 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 		return netObj.Name, nil
 
 	case constants.VMwareNetworkTypeDistributedVirtualPortgroup:
+		// Try direct MOR lookup first — the fast path.
 		var netObj mo.DistributedVirtualPortgroup
 		netRef := types.ManagedObjectReference{Type: constants.VMwareNetworkTypeDistributedVirtualPortgroup, Value: nic.Network}
-		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err != nil {
-			return "", fmt.Errorf("failed to retrieve distributed virtual portgroup name for %s: %w", nic.Network, err)
+		if err := property.DefaultCollector(c).RetrieveOne(ctx, netRef, []string{"name"}, &netObj); err == nil {
+			return netObj.Name, nil
 		}
-		return netObj.Name, nil
+		// Fallback: NIC backing stores the DVPG `key`, not the current MOR.
+		// After a cross-vCenter DVS import, each DVPG keeps its original MOR
+		// as `key` while being assigned a new MOR on the target vCenter, so
+		// the VMX-stored identifier is the key. Scan for a DVPG with a
+		// matching key.
+		if name, err := findDVPGByKey(ctx, c, nic.Network); err == nil {
+			return name, nil
+		}
+		return "", fmt.Errorf("failed to retrieve distributed virtual portgroup %s (no matching MOR or key)", nic.Network)
 
 	case constants.VMwareNetworkTypeOpaqueNetwork:
 		m := view.NewManager(c)
@@ -889,6 +907,49 @@ func resolveNetworkName(ctx context.Context, c *vim25.Client, nic vjailbreakv1al
 	default:
 		return "", fmt.Errorf("unknown network type %q for NIC %s", nic.NetworkType, nic.MAC)
 	}
+}
+
+// findDVPGByKey scans every DistributedVirtualPortgroup on the vCenter for
+// one whose `key` property matches the given id, returning its display name.
+// Used as a fallback when a NIC backing stores a preserved key (e.g. after a
+// cross-vCenter DVS import) rather than the live MOR.
+func findDVPGByKey(ctx context.Context, c *vim25.Client, key string) (string, error) {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder,
+		[]string{constants.VMwareNetworkTypeDistributedVirtualPortgroup}, true)
+	if err != nil {
+		return "", fmt.Errorf("create DVPG container view: %w", err)
+	}
+	defer v.Destroy(ctx) //nolint:errcheck
+
+	var dvpgs []mo.DistributedVirtualPortgroup
+	if err := v.Retrieve(ctx,
+		[]string{constants.VMwareNetworkTypeDistributedVirtualPortgroup},
+		[]string{"name", "key"}, &dvpgs); err != nil {
+		return "", fmt.Errorf("retrieve DVPGs: %w", err)
+	}
+	for _, pg := range dvpgs {
+		if pg.Key == key {
+			return pg.Name, nil
+		}
+	}
+	return "", fmt.Errorf("no DVPG with key %s", key)
+}
+
+// guestNetworkNameForMAC returns the portgroup name VMware Tools reports for
+// the given MAC, or "" if there is no match. Used as a last-resort fallback
+// when vCenter lookups fail because the DVPG has been deleted — Tools still
+// remembers the last-known portgroup name per NIC.
+func guestNetworkNameForMAC(guestNets []types.GuestNicInfo, mac string) string {
+	if mac == "" {
+		return ""
+	}
+	for _, g := range guestNets {
+		if g.Network != "" && strings.EqualFold(g.MacAddress, mac) {
+			return g.Network
+		}
+	}
+	return ""
 }
 
 // ExtractGuestNetworkInfo retrieves the runtime guest network configuration (guest.net)
@@ -1777,9 +1838,19 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get virtual NICs for vm %s: %w", vm.Name(), err))
 	}
 	// Build networks list from NetworkInterfaces to match NIC count
+	var guestNets []types.GuestNicInfo
+	if vmProps.Guest != nil {
+		guestNets = vmProps.Guest.Net
+	}
 	for _, nic := range nicList {
 		name, err := resolveNetworkName(ctx, c, nic)
 		if err != nil {
+			// Last-resort: ask VMware Tools for the portgroup name of this
+			// MAC. Covers DVPGs genuinely deleted from vCenter.
+			if toolsName := guestNetworkNameForMAC(guestNets, nic.MAC); toolsName != "" {
+				networks = append(networks, toolsName)
+				continue
+			}
 			// Network is orphaned/deleted or has no backing — log but continue VM discovery
 			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), err)
 			networks = append(networks, "Orphaned Network")

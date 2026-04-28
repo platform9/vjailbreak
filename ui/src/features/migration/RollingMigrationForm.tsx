@@ -820,6 +820,10 @@ export default function RollingMigrationFormDrawer({
     return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
   }
 
+  const hasMultipleIpEntries = (value: string): boolean => {
+    return parseIpList(value).length > 1
+  }
+
   const isValidIPAddressList = (value: string): boolean => {
     const ips = parseIpList(value)
     if (ips.length === 0) return false
@@ -2502,9 +2506,14 @@ export default function RollingMigrationFormDrawer({
 
       const { status, message } = !trimmed
         ? { status: 'empty' as const, message: '' }
-        : !isValidIPAddressList(trimmed)
-          ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
-          : ({ status: 'valid' as const, message: '' } as const)
+        : hasMultipleIpEntries(trimmed)
+          ? ({
+              status: 'invalid' as const,
+              message: 'Multiple IPs are not supported when Preserve IP is disabled'
+            } as const)
+          : !isValidIPAddressList(trimmed)
+            ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
+            : ({ status: 'valid' as const, message: '' } as const)
 
       setBulkValidationStatus((prev) => ({
         ...prev,
@@ -2538,6 +2547,18 @@ export default function RollingMigrationFormDrawer({
       setBulkValidationMessages((prev) => ({
         ...prev,
         [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
+      }))
+    } else if (bulkPreserveIp?.[vmId]?.[interfaceIndex] === false && hasMultipleIpEntries(value)) {
+      setBulkValidationStatus((prev) => ({
+        ...prev,
+        [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
+      }))
+      setBulkValidationMessages((prev) => ({
+        ...prev,
+        [vmId]: {
+          ...prev[vmId],
+          [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
+        }
       }))
     } else if (!isValidIPAddressList(value.trim())) {
       setBulkValidationStatus((prev) => ({

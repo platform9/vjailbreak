@@ -33,12 +33,12 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
-	v2vutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/verrors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -1366,18 +1366,21 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, errors.Wrap(err, "failed to reconcile mapping")
 	}
 
-	currentInstanceID, err := getCurrentInstanceID(openstackcreds)
-	if err != nil {
-		return nil, err
-	}
-
 	openstackports, err := r.processAdvancedOptions(ctx, migrationplan, openstackcreds, &openstacknws, &openstackvolumetypes)
 	if err != nil {
 		return nil, err
 	}
 
 	sourceVMKey := computeSourceVMKey(vmMachine, migrationplan.Spec.VirtualMachines)
-	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, sourceVMKey, virtiodrivers, openstacknws, openstackports, openstackvolumetypes, currentInstanceID)
+	configMapData := r.buildBaseConfigMapData(migrationplan, migrationobj, vmMachine, sourceVMKey, virtiodrivers, openstacknws, openstackports, openstackvolumetypes)
+
+	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
+	if err != nil {
+		r.ctxlog.Error(err, "Failed to get vjailbreak settings for HTTP timeout, using default")
+		configMapData[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(constants.HTTPTimeoutSeconds)
+	} else {
+		configMapData[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(vjailbreakSettings.HTTPTimeoutSeconds)
+	}
 
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		configMapData["TARGET_AVAILABILITY_ZONE"] = migrationtemplate.Spec.TargetPCDClusterName
@@ -1419,18 +1422,6 @@ func resolveVirtioDriverURL(migrationtemplate *vjailbreakv1alpha1.MigrationTempl
 		return "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 	}
 	return migrationtemplate.Spec.VirtioWinDriver
-}
-
-func getCurrentInstanceID(openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
-	currentInstanceID, err := v2vutils.GetCurrentInstanceUUID()
-	if err != nil {
-		// if metadata fails then only get from spec
-		if openstackcreds.Spec.VJBInstanceID != "" {
-			return openstackcreds.Spec.VJBInstanceID, nil
-		}
-		return "", errors.Wrap(err, "failed to get current instance uuid")
-	}
-	return currentInstanceID, nil
 }
 
 func (r *MigrationPlanReconciler) processAdvancedOptions(ctx context.Context,
@@ -1512,7 +1503,6 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	sourceVMKey string,
 	virtiodrivers string,
 	openstacknws, openstackports, openstackvolumetypes []string,
-	currentInstanceID string,
 ) map[string]string {
 	return map[string]string{
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
@@ -1539,7 +1529,6 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
 		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
 		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
-		"CURRENT_INSTANCE_ID":               currentInstanceID,
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
 	}
 }
@@ -1616,6 +1605,10 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 		configMapData["STORAGE_COPY_METHOD"] = StorageCopyMethod
 		configMapData["VENDOR_TYPE"] = arraycreds.Spec.VendorType
 		configMapData["ARRAY_CREDS_MAPPING"] = migrationtemplate.Spec.ArrayCredsMapping
+		if arraycreds.Spec.VendorType == netappsdk.VendorName && arraycreds.Spec.NetAppConfig != nil {
+			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
+			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
+		}
 	}
 
 	return nil

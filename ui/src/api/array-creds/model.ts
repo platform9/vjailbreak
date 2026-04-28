@@ -45,6 +45,11 @@ export interface OpenstackMapping {
   cinderHost?: string
 }
 
+export interface NetAppConfig {
+  svm?: string
+  flexVol?: string
+}
+
 export interface ArrayCredsSpec {
   vendorType: string
   secretRef?: {
@@ -52,6 +57,18 @@ export interface ArrayCredsSpec {
   }
   openstackMapping?: OpenstackMapping
   autoDiscovered?: boolean
+  netAppConfig?: NetAppConfig
+}
+
+export interface BackendTarget {
+  name: string
+  uuid?: string
+}
+
+export interface BackendTargetGroup {
+  name: string
+  uuid?: string
+  children?: BackendTarget[]
 }
 
 export interface GetArrayCredsListMetadata {
@@ -64,7 +81,10 @@ export interface ArrayCredsStatus {
   arrayValidationMessage?: string
   dataStore?: DatastoreInfo[]
   phase?: string
+  backendTargets?: BackendTargetGroup[]
 }
+
+export const ARRAY_CREDS_PHASE_NEEDS_BACKEND_SELECTION = 'NeedsBackendSelection'
 
 // Supported vendor types for storage arrays
 export const ARRAY_VENDOR_TYPES = [

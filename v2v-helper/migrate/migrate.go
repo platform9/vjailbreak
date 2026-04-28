@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
+	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
@@ -79,12 +80,17 @@ type Migrate struct {
 	ArrayInsecure     bool
 	VendorType        string
 	ArrayCredsMapping string
+	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
+	// the provider falls back to auto-detection from existing LUNs or a
+	// single-SVM/single-FlexVol auto-pick.
+	NetAppSVM         string
+	NetAppFlexVol     string
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
-	ImageMetadata map[string]string
+	ImageMetadata     map[string]string
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -2049,7 +2055,9 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 					break
 				}
 			}
-
+			if len(userAssignedIp) > 0 && len(userAssignedIp) > 1 {
+				return nil, nil, nil, errors.Errorf("multiple user assigned IPs not supported for an interface")
+			}
 			var ippm []string
 
 			// VMware Tools detected IPs
@@ -2119,6 +2127,25 @@ func (migobj *Migrate) LogMessage(message string) {
 	migobj.logMessage(message)
 }
 
+// buildProviderOptions projects vendor-specific Migrate fields into the
+// generic ProviderOptions map passed to the storage SDK. Returns nil when no
+// options apply. New vendors add their case here.
+func (migobj *Migrate) buildProviderOptions() map[string]string {
+	opts := map[string]string{}
+	if migobj.VendorType == netappsdk.VendorName {
+		if migobj.NetAppSVM != "" {
+			opts[netappsdk.OptionSVM] = migobj.NetAppSVM
+		}
+		if migobj.NetAppFlexVol != "" {
+			opts[netappsdk.OptionFlexVol] = migobj.NetAppFlexVol
+		}
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts
+}
+
 // InitializeStorageProvider initializes and validates the storage provider for StorageAcceleratedCopy migration
 func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
 	if migobj.StorageCopyMethod != constants.StorageCopyMethod {
@@ -2146,6 +2173,7 @@ func (migobj *Migrate) InitializeStorageProvider(ctx context.Context) error {
 		Password:            migobj.ArrayPassword,
 		SkipSSLVerification: migobj.ArrayInsecure,
 		VendorType:          migobj.VendorType,
+		ProviderOptions:     migobj.buildProviderOptions(),
 	}
 
 	// Create storage provider

@@ -18,6 +18,7 @@ export type SettingsForm = {
   DEPLOYMENT_NAME: string
   TIMEZONE: string
   NTP_SERVERS: string
+  HTTP_TIMEOUT_SECONDS: number
   // Proxy-related fields are UI-only and handled via injectEnvVariables
   PROXY_ENABLED: boolean
   PROXY_HTTP_SCHEME: 'http' | 'https'
@@ -180,7 +181,8 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
     DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
     TIMEZONE: f.TIMEZONE,
-    NTP_SERVERS: f.NTP_SERVERS
+    NTP_SERVERS: f.NTP_SERVERS,
+    HTTP_TIMEOUT_SECONDS: String(f.HTTP_TIMEOUT_SECONDS)
   })
 
   const fromConfigMapData = (
@@ -251,6 +253,7 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     TIMEZONE: typeof data?.TIMEZONE === 'string' ? data.TIMEZONE : defaults.TIMEZONE,
     NTP_SERVERS:
       typeof data?.NTP_SERVERS === 'string' ? data.NTP_SERVERS : defaults.NTP_SERVERS,
+    HTTP_TIMEOUT_SECONDS: parseNum(data?.HTTP_TIMEOUT_SECONDS, defaults.HTTP_TIMEOUT_SECONDS),
     PROXY_ENABLED: defaults.PROXY_ENABLED,
     PROXY_HTTP_SCHEME: defaults.PROXY_HTTP_SCHEME,
     PROXY_HTTP_HOST: defaults.PROXY_HTTP_HOST,

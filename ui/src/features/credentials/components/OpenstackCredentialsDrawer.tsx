@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import axios from 'axios'
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
   DrawerShell,
@@ -47,8 +47,6 @@ interface OpenstackCredentialsFormValues {
   rcFile?: File
   isPcd: boolean
   insecure: boolean
-  passVjbInstanceId: boolean
-  vjbInstanceId: string
 }
 
 export default function OpenstackCredentialsDrawer({
@@ -64,9 +62,7 @@ export default function OpenstackCredentialsDrawer({
       credentialName: '',
       rcFile: undefined,
       isPcd: true,
-      insecure: false,
-      passVjbInstanceId: false,
-      vjbInstanceId: ''
+      insecure: false
     }
   })
 
@@ -90,8 +86,6 @@ export default function OpenstackCredentialsDrawer({
   const watchedValues = watch()
   const credentialName = watchedValues.credentialName
   const rcFile = watchedValues.rcFile
-  const passVjbInstanceId = watchedValues.passVjbInstanceId
-  const vjbInstanceId = watchedValues.vjbInstanceId
 
   const { refetch: refetchOpenstackCreds } = useOpenstackCredentialsQuery()
   const { refetch: refetchVmwareCreds } = useVmwareCredentialsQuery(undefined, {
@@ -104,9 +98,7 @@ export default function OpenstackCredentialsDrawer({
       credentialName: '',
       rcFile: undefined,
       isPcd: false,
-      insecure: false,
-      passVjbInstanceId: false,
-      vjbInstanceId: ''
+      insecure: false
     })
     setRcFileValues(null)
     setCreatedCredentialName(null)
@@ -142,12 +134,6 @@ export default function OpenstackCredentialsDrawer({
   }, [createdCredentialName, resetDrawerState])
 
   const [rcFileValues, setRcFileValues] = useState<Record<string, string> | null>(null)
-
-  useEffect(() => {
-    if (!passVjbInstanceId && vjbInstanceId) {
-      setValue('vjbInstanceId', '')
-    }
-  }, [passVjbInstanceId, setValue, vjbInstanceId])
 
   const handleRCFileParsed = useCallback(
     (values: Record<string, string>) => {
@@ -210,8 +196,7 @@ export default function OpenstackCredentialsDrawer({
             OS_INSECURE: values.insecure
           },
           values.isPcd,
-          projectName,
-          values.passVjbInstanceId ? values.vjbInstanceId : undefined
+          projectName
         )
 
         setCreatedCredentialName(response.metadata.name)
@@ -261,8 +246,7 @@ export default function OpenstackCredentialsDrawer({
     !!errors.rcFile ||
     !credentialName ||
     !rcFile ||
-    !rcFileValues ||
-    (passVjbInstanceId && !vjbInstanceId?.trim())
+    !rcFileValues
 
   const handleValidationStatus = (status: string, message?: string) => {
     if (status === 'Succeeded') {
@@ -439,35 +423,6 @@ export default function OpenstackCredentialsDrawer({
                 size="small"
                 required
               />
-
-              <Row gap={3} flexWrap="wrap">
-                <Box sx={{ flex: 1, minWidth: 260 }}>
-                  <RHFToggleField
-                    name="passVjbInstanceId"
-                    label="vJailbreak VM is on Layer 2 Network (PCD)"
-                    description="Enable this if the vJailbreak VM is deployed on a PCD Layer 2 network. When enabled, you'll need to provide the vJailbreak instance ID to establish connectivity."
-                  />
-                </Box>
-              </Row>
-
-              {passVjbInstanceId && (
-                <FormGrid minWidth={360} gap={2}>
-                  <RHFTextField
-                    name="vjbInstanceId"
-                    label="vJailbreak Instance ID"
-                    placeholder="e.g. 12345678-1234-1234-1234-123456789abc"
-                    helperText="Specify the PCD instance ID where vJailbreak is running."
-                    rules={{
-                      validate: (value: string) =>
-                        !passVjbInstanceId ||
-                        Boolean(value?.trim()) ||
-                        'Instance ID is required when vJailbreak is on an L2 network'
-                    }}
-                    fullWidth
-                    required
-                  />
-                </FormGrid>
-              )}
 
               <Row gap={3} flexWrap="wrap">
                 <Box sx={{ flex: 1, minWidth: 260 }}>

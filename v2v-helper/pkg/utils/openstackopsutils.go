@@ -23,6 +23,8 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	corev1 "k8s.io/api/core/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -66,48 +68,37 @@ func (osclient *OpenStackClients) GetIsSimpleNetwork(ctx context.Context, networ
 }
 
 func GetCurrentInstanceUUID() (string, error) {
-
-	// Use the env var directly if set, avoiding a network round-trip to the
-	// metadata service which may not be reachable in all deployment environments.
-	if id := os.Getenv("CURRENT_INSTANCE_ID"); id != "" {
-		return id, nil
+	// Primary: look up the VJailbreakNode for the K8s node this pod is running on.
+	// This correctly handles agent nodes — the env-var / metadata-service approach
+	// always returns the master's UUID because the ConfigMap is built on the master.
+	if uuid, err := getInstanceUUIDFromNode(context.Background()); err == nil && uuid != "" {
+		return uuid, nil
 	}
 
-	// Step 1. Path with a read lock
-	// First Check if the data is already cached. This read lock allows multiple
-	// Goroutines to read the cached data concurrently.
+	// Fallback: OpenStack metadata service (works on the master node).
 	metadataMutex.RLock()
 	if cachedMetadata != nil {
-		// If cached, return it immediately.
 		defer metadataMutex.RUnlock()
 		return cachedMetadata.UUID, nil
 	}
-
-	// Release the read lock before we get the Write lock.
 	metadataMutex.RUnlock()
 
-	// Step 2. Path with write lock
-	// Acquire a write lock to fetch and cache the metadata.
 	metadataMutex.Lock()
 	defer metadataMutex.Unlock()
-
-	// Check again if another goroutine has already fetched the metadata.
 
 	if cachedMetadata != nil {
 		return cachedMetadata.UUID, nil
 	}
 
-	// Step 4: Fetch metadata from the OpenStack metadata service
-
-	client := retryablehttp.NewClient()
-	client.RetryMax = 5
-	client.Logger = nil
+	httpClient := retryablehttp.NewClient()
+	httpClient.RetryMax = 5
+	httpClient.Logger = nil
 	req, err := retryablehttp.NewRequest("GET", "http://169.254.169.254/openstack/latest/meta_data.json", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %s", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get response: %s", err)
 	}
@@ -124,6 +115,47 @@ func GetCurrentInstanceUUID() (string, error) {
 	}
 	cachedMetadata = &metadata
 	return metadata.UUID, nil
+}
+
+// getInstanceUUIDFromNode resolves the OpenStack instance UUID for the K8s node
+// this pod is scheduled on by looking up the corresponding VjailbreakNode resource.
+// POD_NAME is injected via the Kubernetes Downward API (metadata.name) in the pod spec
+func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
+	podName := os.Getenv("POD_NAME")
+	if podName == "" {
+		return "", fmt.Errorf("POD_NAME env var not set")
+	}
+
+	k8sClient, err := k8sutils.GetInclusterClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get k8s client: %w", err)
+	}
+
+	pod := &corev1.Pod{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      podName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, pod); err != nil {
+		return "", fmt.Errorf("failed to get pod %s: %w", podName, err)
+	}
+
+	nodeName := pod.Spec.NodeName
+	if nodeName == "" {
+		return "", fmt.Errorf("pod %s has no node name assigned yet", podName)
+	}
+
+	vjNodeList := &vjailbreakv1alpha1.VjailbreakNodeList{}
+	if err := k8sClient.List(ctx, vjNodeList); err != nil {
+		return "", fmt.Errorf("failed to list vjailbreak nodes: %w", err)
+	}
+
+	for _, vjNode := range vjNodeList.Items {
+		if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
+			return vjNode.Status.OpenstackUUID, nil
+		}
+	}
+
+	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for k8s node %s", nodeName)
 }
 
 // create a new volume
@@ -381,49 +413,16 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	return nil
 }
 
+// ApplyBootVolumeImageMetadata merges profile-supplied properties onto the boot volume's existing
+// image metadata. Any key present in both the hardcoded set and the profile resolves to the profile value.
 func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
 	if len(metadata) == 0 {
 		return nil
 	}
-
-	// Fetch current state so we know which existing keys to drop.
-	current, err := volumes.Get(ctx, osclient.BlockStorageClient, volume.ID).Extract()
-	if err != nil {
-		return fmt.Errorf("failed to read current volume state before applying image metadata: %s", err)
-	}
-
-	desired := make(map[string]bool, len(metadata))
-	for k := range metadata {
-		desired[k] = true
-	}
-
-	actionURL := osclient.BlockStorageClient.ServiceURL("volumes", volume.ID, "action")
-	for existingKey := range current.VolumeImageMetadata {
-		if desired[existingKey] {
-			continue
-		}
-		body := map[string]interface{}{
-			"os-unset_image_metadata": map[string]interface{}{"key": existingKey},
-		}
-		resp, unsetErr := osclient.BlockStorageClient.Post(ctx, actionURL, body, nil, &gophercloud.RequestOpts{
-			OkCodes: []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent},
-		})
-		if resp != nil && resp.Body != nil {
-			_ = resp.Body.Close()
-		}
-		if unsetErr != nil {
-			// Non-fatal: log and continue
-			PrintLog(fmt.Sprintf("WARN: failed to unset image metadata key %q on boot volume %s: %s",
-				existingKey, volume.ID, unsetErr))
-			continue
-		}
-		PrintLog(fmt.Sprintf("OPENSTACK API: Removed stale image metadata key %q from boot volume %s", existingKey, volume.ID))
-	}
-
-	PrintLog(fmt.Sprintf("OPENSTACK API: Applying %d image metadata key(s) to boot volume %s", len(metadata), volume.ID))
+	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
 	if err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr(); err != nil {
-		return fmt.Errorf("failed to apply boot volume image metadata: %s", err)
+		return fmt.Errorf("failed to apply profile image metadata to boot volume: %s", err)
 	}
 	return nil
 }
@@ -848,6 +847,24 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	}
 
 	serverCreateOpts.BlockDevice = blockDevices
+	for idx, disk := range vminfo.VMDisks {
+		// Skip boot disk
+		if idx == bootableDiskIndex {
+			continue
+		}
+		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
+		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
+			continue
+		}
+
+		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
+			DeleteOnTermination: false,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                disk.OpenstackVol.ID,
+			BootIndex:           -1,
+		})
+	}
 
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
@@ -901,28 +918,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			return nil, fmt.Errorf("server %s went into ERROR state", server.ID)
 		}
 		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
-	}
-
-	PrintLog(fmt.Sprintf("Server created with ID: %s, Attaching Additional Disks", server.ID))
-
-	// Build list of disks to hot-attach (exclude boot disk and ESP disk if already attached)
-	for idx, disk := range vminfo.VMDisks {
-		// Skip boot disk
-		if idx == bootableDiskIndex {
-			continue
-		}
-		// Skip ESP disk if it was attached at create time (UEFI multi-disk layout)
-		if vminfo.UEFI && espDiskIndex >= 0 && idx == espDiskIndex && espDiskIndex != bootableDiskIndex {
-			continue
-		}
-
-		_, err := volumeattach.Create(ctx, osclient.ComputeClient, server.ID, volumeattach.CreateOpts{
-			VolumeID:            disk.OpenstackVol.ID,
-			DeleteOnTermination: false,
-		}).Extract()
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach volume to VM: %s", err)
-		}
 	}
 
 	return server, nil
