@@ -40,10 +40,14 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 	}
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
+	nodeExists := false
 	err = k3sclient.Get(ctx, client.ObjectKey{Name: constants.VjailbreakMasterNodeName}, &vjNode)
-	if err == nil && vjNode.Status.OpenstackUUID != "" {
+	if err == nil {
+		nodeExists = true
 		// VjailbreakNode already exists with OpenstackUUID set
-		return nil
+		if vjNode.Status.OpenstackUUID != "" {
+			return nil
+		}
 	}
 
 	if openstackuuid == "" {
@@ -61,8 +65,8 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 		}
 	}
 
-	if apierrors.IsNotFound(err) {
-		newNode := vjailbreakv1alpha1.VjailbreakNode{
+	if !nodeExists {
+		vjNode = vjailbreakv1alpha1.VjailbreakNode{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      constants.VjailbreakMasterNodeName,
 				Namespace: constants.NamespaceMigrationSystem,
@@ -71,34 +75,37 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 				NodeRole: constants.NodeRoleMaster,
 			},
 		}
-		if err = k3sclient.Create(ctx, &newNode); err != nil && !apierrors.IsAlreadyExists(err) {
+
+		err = k3sclient.Create(ctx, &vjNode)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "failed to create vjailbreak node")
 		}
 	}
 
 	vmIP := GetNodeInternalIP(masterNode)
 
-	// Re-Get and Status().Update under retry — the VjailbreakNode reconciler
-	// may race us on resourceVersion right after Create.
+	// DMI returns the UUID synchronously in microseconds, so the window between
+	// Create and Status().Update is much tighter than with the metadata-service
+	// path — tight enough to race the VjailbreakNode reconciler that wakes up
+	// on the Create event and bumps resourceVersion. Retry on conflict, re-Get
+	// the latest object each attempt.
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := vjailbreakv1alpha1.VjailbreakNode{}
 		if err := k3sclient.Get(ctx, types.NamespacedName{
 			Namespace: constants.NamespaceMigrationSystem,
 			Name:      constants.VjailbreakMasterNodeName,
-		}, &latest); err != nil {
+		}, &vjNode); err != nil {
 			return errors.Wrap(err, "failed to get vjailbreak node")
 		}
-		if latest.Status.OpenstackUUID == openstackuuid &&
-			latest.Status.Phase == constants.VjailbreakNodePhaseNodeReady &&
-			(vmIP == "" || latest.Status.VMIP == vmIP) {
-			return nil
-		}
 		if vmIP != "" {
-			latest.Status.VMIP = vmIP
+			vjNode.Status.VMIP = vmIP
 		}
-		latest.Status.Phase = constants.VjailbreakNodePhaseNodeReady
-		latest.Status.OpenstackUUID = openstackuuid
-		return k3sclient.Status().Update(ctx, &latest)
+		vjNode.Status.Phase = constants.VjailbreakNodePhaseNodeReady
+		vjNode.Status.OpenstackUUID = openstackuuid
+
+		if err := k3sclient.Status().Update(ctx, &vjNode); err != nil {
+			return errors.Wrap(err, "failed to update vjailbreak node status")
+		}
+		return nil
 	})
 }
 
