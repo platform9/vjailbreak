@@ -83,7 +83,7 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Quick path for just updating ActiveMigrations if node is ready
 	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
-		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
+		return ctrl.Result{}, errors.Wrap(err, "Already in ready state so we are quiting.")
 	}
 
 	// Handle regular VjailbreakNode reconcile
