@@ -74,8 +74,6 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 			Error:   err,
 		}
 	}
-	openstackCredential.VJBInstanceID = openstackcreds.Spec.VJBInstanceID
-
 	// Create provider client
 	providerClient, err := openstack.NewClient(openstackCredential.AuthURL)
 	if err != nil {
@@ -146,19 +144,6 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 			Message: "Authentication failed: client endpoint catalog was not initialized. Please verify your OpenStack credentials and try again",
 			Error:   fmt.Errorf("authentication returned no error but ProviderClient.EndpointLocator is nil"),
 		}
-	}
-
-	if openstackCredential.VJBInstanceID != "" {
-		// Verify the provided instance ID exists in the OpenStack environment
-		_, err = verifyInstanceExists(providerClient, openstackCredential.RegionName, openstackCredential.VJBInstanceID)
-		if err != nil {
-			return ValidationResult{
-				Valid:   false,
-				Message: fmt.Sprintf("Failed to verify instance ID '%s': %s", openstackCredential.VJBInstanceID, err.Error()),
-				Error:   err,
-			}
-		}
-		return successfulValidationObject
 	}
 
 	// Verify credentials match current environment
@@ -267,11 +252,11 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 		return false, fmt.Errorf("region name is empty")
 	}
 
-	// Get current instance metadata
-	metadata, err := utils.GetCurrentInstanceMetadata()
+	// Resolve master instance UUID — DMI first (no network), metadata service as fallback.
+	uuid, err := utils.GetMasterInstanceUUID()
 	if err != nil {
-		return false, fmt.Errorf("unable to get current instance metadata: %w. "+
-			"Please ensure this is running on an OpenStack instance with metadata service enabled", err)
+		return false, fmt.Errorf("unable to resolve master instance UUID via DMI or metadata service: %w. "+
+			"Ensure the controller pod has /host/dmi/product_uuid mounted, or that the OpenStack metadata service is reachable", err)
 	}
 
 	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
@@ -281,7 +266,7 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 	if err != nil {
 		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
 	}
-	_, err = servers.Get(context.TODO(), computeClient, metadata.UUID).Extract()
+	_, err = servers.Get(context.TODO(), computeClient, uuid).Extract()
 	if err != nil {
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
@@ -289,47 +274,6 @@ func verifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 		}
 		return false, fmt.Errorf("failed to verify instance access: %w. "+
 			"Please check if the provided credentials have compute:get_server permission", err)
-	}
-	return true, nil
-}
-
-// verifyInstanceExists checks if the provided instance ID exists in the OpenStack environment
-func verifyInstanceExists(providerClient *gophercloud.ProviderClient, regionName string, instanceID string) (ok bool, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			ok = false
-			err = fmt.Errorf("panic while verifying instance existence: %v", r)
-		}
-	}()
-
-	if providerClient == nil {
-		return false, fmt.Errorf("provider client is nil")
-	}
-	if providerClient.EndpointLocator == nil {
-		return false, fmt.Errorf("OpenStack client is not authenticated (endpoint locator is not initialized)")
-	}
-	if strings.TrimSpace(regionName) == "" {
-		return false, fmt.Errorf("region name is empty")
-	}
-	if strings.TrimSpace(instanceID) == "" {
-		return false, fmt.Errorf("instance ID is empty")
-	}
-
-	computeClient, err := openstack.NewComputeV2(providerClient, gophercloud.EndpointOpts{
-		Region: regionName,
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to create OpenStack compute client: %w", err)
-	}
-
-	_, err = servers.Get(context.TODO(), computeClient, instanceID).Extract()
-	if err != nil {
-		if strings.Contains(err.Error(), "Resource not found") ||
-			strings.Contains(err.Error(), "No server with a name or ID") ||
-			strings.Contains(err.Error(), "404") {
-			return false, fmt.Errorf("instance ID '%s' not found in the OpenStack environment. Please verify the instance ID and ensure the credentials are for the correct OpenStack environment", instanceID)
-		}
-		return false, fmt.Errorf("failed to verify instance access: %w. Please check if the provided credentials have compute:get_server permission", err)
 	}
 	return true, nil
 }
@@ -349,14 +293,8 @@ func FetchResourcesPostValidation(ctx context.Context, k8sClient client.Client, 
 
 	ctx = ensureLogger(ctx)
 
-	log.Printf("Updating Master Node Image ID")
-	err := utils.UpdateMasterNodeImageID(ctx, k8sClient, false)
-	if err != nil {
-		log.Printf("Warning: Failed to update master node image ID: %v", err)
-	}
-
 	log.Printf("Creating Dummy PCD Cluster if needed")
-	err = utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
+	err := utils.CreateDummyPCDClusterForStandAlonePCDHosts(ctx, k8sClient, openstackcreds)
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			return nil, errors.Wrap(err, "failed to create dummy PCD cluster")

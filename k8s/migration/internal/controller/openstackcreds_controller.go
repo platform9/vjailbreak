@@ -515,12 +515,6 @@ func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scop
 
 func setupMasterNode(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
 	ctxlog := scope.Logger
-	if scope.OpenstackCreds.Spec.VJBInstanceID != "" {
-		err := utils.CheckAndCreateMasterNodeEntry(ctx, r.Client, false, scope.OpenstackCreds.Spec.VJBInstanceID)
-		if err != nil {
-			return errors.Wrap(err, "failed to check and create master node entry")
-		}
-	}
 	err := utils.UpdateMasterNodeImageID(ctx, r.Client, r.Local)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {

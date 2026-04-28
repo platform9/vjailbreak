@@ -1754,10 +1754,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              vjbinstanceid:
-                description: VJBInstanceID is the ID of current vjailbreak instance
-                  (needed if metadata service is not available)
-                type: string
             type: object
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
@@ -4630,6 +4626,9 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -4654,6 +4653,10 @@ spec:
           path: /etc/hosts
           type: File
         name: hosts-file
+      - hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
+        name: dmi-product-uuid
 ---
 apiVersion: apps/v1
 kind: Deployment

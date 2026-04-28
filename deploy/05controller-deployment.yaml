@@ -75,6 +75,9 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -99,4 +102,8 @@ spec:
           path: /etc/hosts
           type: File
         name: hosts-file
+      - hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
+        name: dmi-product-uuid
 ---

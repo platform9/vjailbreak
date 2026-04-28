@@ -110,7 +110,6 @@ export const createOpenstackCredsWithSecretFlow = async (
   },
   isPcd: boolean = false,
   projectName: string,
-  vjbInstanceId?: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const secretName = `${credName}-openstack-secret`
@@ -135,11 +134,6 @@ export const createOpenstackCredsWithSecretFlow = async (
       },
       projectName: projectName
     }
-  }
-
-  // Add vjbInstanceId to spec if provided
-  if (vjbInstanceId && vjbInstanceId.trim() !== '') {
-    credBody.spec.vjbinstanceid = vjbInstanceId.trim()
   }
 
   return postOpenstackCredentials(credBody, namespace)
