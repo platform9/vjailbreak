@@ -93,7 +93,7 @@ Devices with **Error** status indicate a residual device entry whose driver was 
 ### 6. Impact of Remaining Artifacts
 
 | Artifact | Versions | Impact |
-|---|---|---|---|
+|---|---|---|
 | `vmmouse.sys` + `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` | Win11 | Residual VMware mouse driver. After migration of VMware hypervisor, there's no VMware hardware to drive, so it's inert. The Pointing Device shows Error in Device Manager but Windows falls back to standard HID drivers — mouse input works normally. |
 | `HKLM:\SOFTWARE\VMware, Inc.` | 2012 | Metadata-only registry key left by the VMware installer. No services load from it, no runtime effect. May appear in software inventory/audit tools as VMware still "installed" but it's not. |
 | `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` | 2012 | VMware virtual network Windows Filtering Platform driver. The service entry remains but since the driver binary is gone, Windows will fail to start it silently. No network degradation observed. |
