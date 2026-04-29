@@ -59,7 +59,7 @@ In v0.4.4, the following artifacts remain on the Windows VMs after selecting "Re
 | HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAF | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 | HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAFCommAmqpListener | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 | HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAFManagementAgentHost | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
-| HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
+| HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP | **Present** | Not Found | Not Found | Not Found | Not Found | Not Found |
 
 ### 3. VMware Folders
 
@@ -82,18 +82,12 @@ In v0.4.4, the following artifacts remain on the Windows VMs after selecting "Re
 
 ### 5. VMware Devices (Device Manager)
 
-Devices with **Error** status indicate a missing driver for a residual device entry. Devices with **Unknown** status are VMware hypervisor hardware detected by Windows and are expected when running on a VMware hypervisor regardless of VMware Tools installation.
+Devices with **Error** status indicate a residual device entry whose driver was removed with VMware Tools.
 
 | Device Name | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
-| VMware VMCI Host Device | Error | Not Found | Not Found | Not Found | Not Found | Not Found |
-| VMware VMCI Bus Device | Not Found | Unknown | Unknown | Unknown | Unknown | Unknown |
-| VMware Pointing Device | Error | Unknown | Error + Unknown | Unknown | Error + Unknown | Error + Unknown |
-| VMware USB Pointing Device | Not Found | Unknown | Unknown | Unknown | Unknown | Unknown |
-| NECVMWar VMware SATA CD00 | Not Found | Unknown | Unknown | Unknown | Unknown | Unknown |
-| VMware SVGA 3D | Not Found | Unknown | Unknown | Unknown | Unknown | Unknown |
-| VMware Virtual disk SCSI Disk Device | Not Found | Unknown | Unknown | Unknown | Unknown | Unknown (×2) |
-| VMware, Inc. VMware20,1 | Not Found | Not Found | Not Found | Not Found | Unknown | Unknown |
-| **Total devices found** | **2** | **6** | **7** | **6** | **8** | **9** |
+| VMware VMCI Host Device | Error | Error | Error | — | — | — |
+| VMware Pointing Device | Error | Error | Error | — | — | — |
+| **Total devices found** | **2** | **2** | **2** | **—** | **—** | **—** |
 
-> **Note:** The remaining artifacts (`vmmouse.sys` driver and `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` registry key on Win11, `HKLM:\SOFTWARE\VMware, Inc.` registry key on Windows 2012, and VMware devices with Error status) will be further addressed and cleaned up in upcoming releases.
+> **Note:** The remaining artifacts (`vmmouse.sys` driver and `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` registry key on Win11, `HKLM:\SOFTWARE\VMware, Inc.` and `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` registry keys on Windows 2012, and VMware devices with Error status) will be further addressed and cleaned up in upcoming releases. Device Manager data for Windows 2022, 2025, and Win11 is pending re-verification.
