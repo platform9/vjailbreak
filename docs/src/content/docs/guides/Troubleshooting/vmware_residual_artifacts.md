@@ -3,7 +3,7 @@ title: VMware Residual Artifacts
 description: Residual VMware artifacts
 ---
 
-The following artifacts remain on Windows VMs after selecting "Remove VMware Tools" option. Compared to v0.4.3, significant cleanup improvements have been made — the `vmmemctl.sys`, `vmmouse.sys` (except Win11), and `C:\Program Files\VMware` folder residuals on multiple versions have been resolved.
+In v0.4.4, the following artifacts remain on the Windows VMs after selecting "Remove VMware Tools" option:
 
 
 ### 1. VMware Driver Files
@@ -83,8 +83,6 @@ The following artifacts remain on Windows VMs after selecting "Remove VMware Too
 ### 5. VMware Devices (Device Manager)
 
 Devices with **Error** status indicate a missing driver for a residual device entry. Devices with **Unknown** status are VMware hypervisor hardware detected by Windows and are expected when running on a VMware hypervisor regardless of VMware Tools installation.
-
-> **Note:** Device Manager data below is from v0.4.3 and has not yet been re-verified for the current release.
 
 | Device Name | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
