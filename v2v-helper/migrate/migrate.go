@@ -610,6 +610,15 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			// Reset state to start fresh each cycle
 			syncCtx.CurrentState = StateCleaningSnapshots
 
+			if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("vCenter session refresh failed: %v. Will retry on next sync interval.", err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
+			}
+
 			// State: CleaningSnapshots
 			err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
 				return vmops.CleanUpSnapshots(false)
@@ -828,6 +837,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+				}
+				if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+					return vminfo, errors.Wrap(err, "failed to refresh vCenter session post-cutover")
 				}
 				if migobj.MigrationType == "mock" {
 					utils.PrintLog("Mock migration detected, skipping VM power off")
