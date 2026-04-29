@@ -610,6 +610,20 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			// Reset state to start fresh each cycle
 			syncCtx.CurrentState = StateCleaningSnapshots
 
+			// Defensive: confirm the vCenter session is alive before doing any
+			// real work. The keepalive handler installed at login should already
+			// keep it warm, but if anything has gone wrong (e.g. session killed
+			// out-of-band, or a long pause between heartbeats), this forces a
+			// fresh login so the rest of the cycle doesn't fail half-way.
+			if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("vCenter session refresh failed: %v. Will retry on next sync interval.", err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
+			}
+
 			// State: CleaningSnapshots
 			err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
 				return vmops.CleanUpSnapshots(false)
@@ -828,6 +842,14 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+				}
+				// The wait above may have returned right between keepalive heartbeats
+				// (or after a long idle period if periodic sync is disabled), so the
+				// vCenter session might be stale before we issue the first cutover
+				// call. Force a session check + relogin so VMPowerOff and the final
+				// CBT copy don't fail on NotAuthenticated.
+				if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+					return vminfo, errors.Wrap(err, "failed to refresh vCenter session post-cutover")
 				}
 				if migobj.MigrationType == "mock" {
 					utils.PrintLog("Mock migration detected, skipping VM power off")

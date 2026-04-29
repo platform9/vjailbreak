@@ -19,6 +19,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/session/keepalive"
 	"github.com/vmware/govmomi/vim25"
@@ -38,6 +39,7 @@ type VCenterOperations interface {
 	GetVMByName(ctx context.Context, name string) (*object.VirtualMachine, error)
 	RunCommandOnEsxi(ctx context.Context, host object.HostSystem, command []string) ([]esx.Values, error)
 	GetDataStores(ctx context.Context, dataCenter *object.Datacenter, datastore string) (*object.Datastore, error)
+	EnsureSessionActive(ctx context.Context) error
 }
 
 type VCenterClient struct {
@@ -119,6 +121,21 @@ func VCenterClientBuilder(ctx context.Context, username, password, host string, 
 	finder := find.NewFinder(client, false)
 	pc := property.DefaultCollector(client)
 	return &VCenterClient{VCClient: client, VCFinder: finder, VCPropertyCollector: pc, Session: session}, nil
+}
+
+func (vcclient *VCenterClient) EnsureSessionActive(ctx context.Context) error {
+	sm := session.NewManager(vcclient.VCClient)
+	active, err := sm.SessionIsActive(ctx)
+	if err == nil && active {
+		return nil
+	}
+	if vcclient.Session == nil {
+		return fmt.Errorf("vcenter session check failed and no cached session available: %v", err)
+	}
+	if loginErr := vcclient.Session.Login(ctx, vcclient.VCClient, nil); loginErr != nil {
+		return fmt.Errorf("vcenter session refresh failed: check err=%v, login err=%v", err, loginErr)
+	}
+	return nil
 }
 
 func GetThumbprint(host string) (string, error) {
