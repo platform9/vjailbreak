@@ -87,31 +87,39 @@ Please refer the following table for the required ports:
 
 ### What network connectivity do I need for vJailbreak?
 
-<!-- The vJailbreak VM and any helper nodes must be able to resolve & connect to your VMware vCenter environment and all ESXi hosts, and must be able to resolve & connect to [quay.io](https://quay.io). -->
+During normal migration operations, vJailbreak only requires connectivity to vCenter, ESXi hosts, and the OpenStack API. The additional endpoints listed below are needed only when **installing or upgrading vJailbreak** itself.
 
-The vJailbreak VM and any helper nodes must be able to resolve and connect to the following:
+#### Required for Migration (always)
 
-- **vCenter, ESXi, and OpenStack API endpoints** — required for API communication.
-- **Cloud-init certificate endpoints**
-- **Virtio ISO download source**:
+The vJailbreak VM and any helper nodes must be able to reach:
+
+- **vCenter and ESXi hosts** — for VM inventory, disk transfer authentication, and NFC data copy (ports 443 and 902)
+- **OpenStack API endpoints** — for creating volumes, networks, and VM resources at the destination
+- **ICMP (ping) access to guest VM IPs** — for post-migration connectivity verification (health checks)
+- **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports, if health checks are enabled
+
+#### Required for Installation and Upgrades Only
+
+The following endpoints are accessed during first-time installation or when upgrading vJailbreak. They are **not** required during normal migration operations:
+
+- **Virtio ISO download source** (for Windows driver injection):
   - [https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso)
-- **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports.
+- **Cloud-init certificate endpoints**
 - **External tooling sources**:
   - [https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml](https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml)
   - [https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml](https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml)
-- **K3s installation sources** — includes scripts and supporting binaries fetched from:
+- **K3s installation sources**:
   - [https://get.k3s.io](https://get.k3s.io)
   - [https://github.com/k3s-io/k3s](https://github.com/k3s-io/k3s)
   - [https://update.k3s.io](https://update.k3s.io)
   - [https://github.com/rancher/k3s-root](https://github.com/rancher/k3s-root)
-- **Helm chart repository for NGINX ingress** — used during setup:
+- **Helm chart repository for NGINX ingress**:
   - [https://kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx)
-- **Container registries required to pull images** — needed for K3s, vJailbreak components (controller, UI), Prometheus, Grafana, CoreDNS, NGINX ingress, exporters, etc.:
+- **Container registries** — for K3s, vJailbreak components (controller, UI), Prometheus, Grafana, CoreDNS, NGINX ingress, exporters:
   - [https://docker.io](https://docker.io)
   - [https://ghcr.io](https://ghcr.io)
   - [https://quay.io](https://quay.io)
   - [https://registry.k8s.io](https://registry.k8s.io)
-- **ICMP (ping) access to guest VM IPs** — for connectivity verification
 
 
 
