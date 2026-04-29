@@ -693,11 +693,13 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 		return Existingport, nil
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
-
-	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check if network is L2")
+	}
 
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 && currentInstanceID == "" {
+	if len(network.Subnets) == 0 && !isL2Network {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
