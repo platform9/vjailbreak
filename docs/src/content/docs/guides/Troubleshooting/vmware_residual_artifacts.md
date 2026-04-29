@@ -86,8 +86,8 @@ Devices with **Error** status indicate a residual device entry whose driver was 
 
 | Device Name | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
-| VMware VMCI Host Device | Error | Error | Error | — | — | — |
-| VMware Pointing Device | Error | Error | Error | — | — | — |
-| **Total devices found** | **2** | **2** | **2** | **—** | **—** | **—** |
+| VMware VMCI Host Device | Error | Error | Error | Not Found | Not Found | Not Found |
+| VMware Pointing Device | Error | Error | Error | Not Found | Not Found | Error |
+| **Total devices found** | **2** | **2** | **2** | **0** | **0** | **1** |
 
-> **Note:** The remaining artifacts (`vmmouse.sys` driver and `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` registry key on Win11, `HKLM:\SOFTWARE\VMware, Inc.` and `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` registry keys on Windows 2012, and VMware devices with Error status) will be further addressed and cleaned up in upcoming releases. Device Manager data for Windows 2022, 2025, and Win11 is pending re-verification.
+> **Note:** The remaining artifacts (`vmmouse.sys` driver and `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` registry key on Win11, `HKLM:\SOFTWARE\VMware, Inc.` and `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` registry keys on Windows 2012, and VMware devices with Error status) will be further addressed and cleaned up in upcoming releases.
