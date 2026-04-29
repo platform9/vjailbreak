@@ -23,7 +23,7 @@ The ESXi portion of the wizard is different from the VM portion and deals with o
 
 The process of converting the ESXi into PCD hypervisor is simple, each ESXi host is put into maintenance mode which migrates all the running VMs into other ESXi hosts. Then the ESXi host is converted into PCD hypervisor and the VMs are migrated into the PCD hypervisor. This process is repeated for all the ESXi hosts in the cluster.
 
-The detailed configuration steps are described in [cluster conversion guide](../../guides/how-to/cluster-conversion/).
+The detailed configuration steps are described in [cluster conversion guide](../../guides/cluster-conversion/cluster-conversion/).
 
 See below the diagram of the cluster conversion setup.
 
