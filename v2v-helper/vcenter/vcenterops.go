@@ -20,9 +20,16 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/session/keepalive"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/types"
 )
+
+// vCenterKeepaliveInterval is how often we send a SOAP heartbeat to keep the
+// vCenter session from expiring while v2v-helper is otherwise idle (notably
+// during the admin-initiated cutover wait). vCenter's default session idle
+// timeout is ~30 minutes; we ping well below that.
+const vCenterKeepaliveInterval = 10 * time.Minute
 
 //go:generate mockgen -source=../vcenter/vcenterops.go -destination=../vcenter/vcenterops_mock.go -package=vcenter
 
@@ -79,6 +86,26 @@ func validateVCenter(ctx context.Context, username, password, host string, disab
 			time.Sleep(baseDelay * time.Duration(1<<uint(attempt-1))) // Exponential backoff
 		}
 	}
+
+	// Install a keepalive handler on the SOAP RoundTripper. vCenter sessions expire
+	// after ~30 minutes of inactivity; without this, long idle periods (e.g. waiting
+	// for an admin-initiated cutover) leave the client with a dead session and any
+	// subsequent call fails with NotAuthenticated.
+	//
+	// cache.Session.Login replaces *c entirely (including c.RoundTripper), so the
+	// keepalive wrapper has to be re-installed on every relogin — hence the
+	// self-referencing closure.
+	var reloginAndWrap func() error
+	reloginAndWrap = func() error {
+		// Use Background so the keepalive's relogin survives cancellation of the
+		// original setup context.
+		if err := s.Login(context.Background(), c, nil); err != nil {
+			return fmt.Errorf("vcenter keepalive relogin failed: %v", err)
+		}
+		c.RoundTripper = keepalive.NewHandlerSOAP(c.RoundTripper, vCenterKeepaliveInterval, reloginAndWrap)
+		return nil
+	}
+	c.RoundTripper = keepalive.NewHandlerSOAP(c.RoundTripper, vCenterKeepaliveInterval, reloginAndWrap)
 
 	// Return both the client and the session for persistent re-authentication
 	return c, s, nil
