@@ -1,8 +1,8 @@
 ---
 name: "doc-coauthoring"
-description: "Collaborate on documentation authoring and editing workflows for the repository."
-argument-hint: "Describe the documentation task, file, or section you want to author or improve."
-compatibility: "Applicable to repositories with markdown documentation, readme files, docs directories, or developer guides."
+description: "Edit and improve public-facing GitHub Pages documentation for the repository, with emphasis on clear structure, readability, and customer-safe public content."
+argument-hint: "Describe the GitHub Pages documentation task, section, or public docs area to improve."
+compatibility: "Applicable to repositories publishing public documentation through GitHub Pages or static docs sites."
 metadata:
   author: "github-spec-kit"
   source: "claude.ai/directory/skills/doc-coauthoring"
@@ -20,36 +20,45 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Pre-Execution Checks
 
-1. Detect key documentation surfaces in the repository:
-   - `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/`, `templates/`, `ui/README.md`, `v2v-helper/README.md`, etc.
-   - Existing markdown style, headers, bullet formatting, and code block conventions.
-2. Determine the user's goal from the input:
-   - Add or improve a user-facing guide.
-   - Clarify architecture or workflow docs.
-   - Create README or onboarding content.
-3. If the user names a specific file, focus on that file and related cross-references.
+1. Detect the public docs publishing surface for this repository:
+   - `docs/` site content and `docs/site` pages used by GitHub Pages
+   - `docs/README.md`, `docs/src/content/`, `docs/guides/`, `docs/reference/`, `docs/release_docs/`
+   - Top-level `README.md` only if it is also part of published public-facing documentation
+   - `AGENTS.md` only when it documents public usage or supported workflows
+2. Confirm the request is for user-facing documentation, not internal developer docs.
+3. Enforce customer-safe public content:
+   - Avoid any customer names, internal project names, or proprietary operational details.
+   - Keep examples generic and abstract.
 
 ## Outline
 
-1. Locate the documentation target.
-   - If the request is broad, identify the highest-impact docs section to update.
-   - If the request is specific, open and analyze the relevant markdown file.
-2. Preserve repository style.
-   - Use the same heading depth, language tone, and formatting.
-   - Maintain existing conventions for sections, lists, tables, and code examples.
-3. Generate or expand content with clarity.
-   - Use concise technical prose.
-   - Include examples, commands, or step-by-step instructions where appropriate.
-   - Add summary and purpose at the top of new sections.
-4. Cross-link relevant repository files.
-   - Reference related docs, scripts, or configuration paths when helpful.
-   - Avoid speculative statements about implementation details.
-5. Provide a short change summary.
-   - Note which documents were updated.
-   - Highlight the key improvements or additions.
+1. Focus on public GitHub Pages documentation.
+   - Prefer content under `docs/` and the docs site entry points.
+   - Only update top-level repo docs when they are part of the published public documentation flow.
+2. Structure content for clarity and scanability.
+   - Use clear section headings: Overview, What it does, Prerequisites, Installation, Usage, Examples, Troubleshooting, References.
+   - Use short paragraphs, numbered steps, bullet lists, tables, and callout-style notes.
+   - Avoid long dense paragraphs.
+3. Make the public docs customer-friendly.
+   - Write in simple, direct language.
+   - Avoid jargon unless defined clearly.
+   - Keep the tone factual, concise, and action-oriented.
+4. Keep content detailed but to the point.
+   - Include concrete commands and examples only when they help the reader complete a task.
+   - Prefer general guidance over overly specific environmental details.
+5. Apply standard documentation best practices.
+   - Add summaries and quick start guidance for new users.
+   - Use consistent terminology and phrase structure.
+   - Validate that each section has a purpose and a clear next step.
+   - Maintain a public/consumer perspective rather than an internal engineering viewpoint.
+6. Preserve repository-specific doc conventions.
+   - Match existing markdown styling, heading levels, and path references.
+   - Keep the docs site structure intact.
 
 ## Expected behavior
 
-- Focus on accuracy and readability.
-- Do not alter unrelated code or configuration files.
-- If the user's request is underspecified, ask a clarifying question before editing major docs.
+- Edit only public-facing documentation that will appear on GitHub Pages or the published docs site.
+- Make the docs clearer, more structured, and easier for customers to follow.
+- Do not add internal or customer-specific details.
+- Prefer generic examples and standard documentation conventions.
+- If the request is too broad, ask a targeted follow-up before editing large public docs sections.
