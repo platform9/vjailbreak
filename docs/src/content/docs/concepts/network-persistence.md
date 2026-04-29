@@ -43,7 +43,7 @@ The network persistence script runs on the first boot post-migration. Its primar
   - **Statically Configured Interfaces**: The original interface name, IP address, and gateway from the source are persisted on the destination, ensuring continuous network connectivity.
   - **DHCP Configured Interfaces**: Interfaces configured via DHCP are renamed to a consistent pattern: `vjb_<random_number>`.
 
-- **Windows Server 2012**:
+- **Windows Server 2012 and below**:
   - **Statically Configured Interfaces**: The IP address from the source interface is preserved, but the interface configuration is converted to DHCP. The interface name and gateway are not preserved.
 
 ### Supported Versions
