@@ -51,6 +51,13 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue VMware credentials validation | `60` | Any positive integer |
 | `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS` | Interval to wait for volume to become available (in seconds) | `10` | Any positive integer |
 | `VOLUME_AVAILABLE_WAIT_RETRY_LIMIT` | Number of retries to wait for volume to become available | `15` | Any positive integer |
+| `HTTP_TIMEOUT_SECONDS` | Timeout in seconds for HTTP requests made by the controller | `30` | Any positive integer |
+| `V2V_HELPER_POD_CPU_REQUEST` | CPU request for v2v-helper migration pods | `1000m` | Kubernetes CPU quantity (e.g., `500m`, `2000m`) |
+| `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
+| `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
+| `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
+| `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
+| `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |
 
 ## Modifying Settings
 
