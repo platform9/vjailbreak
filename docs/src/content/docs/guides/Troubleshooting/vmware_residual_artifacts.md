@@ -90,4 +90,16 @@ Devices with **Error** status indicate a residual device entry whose driver was 
 | VMware Pointing Device | Error | Error | Error | Not Found | Not Found | Error |
 | **Total devices found** | **2** | **2** | **2** | **0** | **0** | **1** |
 
-> **Note:** The remaining artifacts (`vmmouse.sys` driver and `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` registry key on Win11, `HKLM:\SOFTWARE\VMware, Inc.` and `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` registry keys on Windows 2012, and VMware devices with Error status) will be further addressed and cleaned up in upcoming releases.
+### 6. Impact of Remaining Artifacts
+
+| Artifact | Versions | Impact |
+|---|---|---|---|
+| `vmmouse.sys` + `HKLM:\SYSTEM\CurrentControlSet\Services\vmmouse` | Win11 | Residual VMware mouse driver. After migration of VMware hypervisor, there's no VMware hardware to drive, so it's inert. The Pointing Device shows Error in Device Manager but Windows falls back to standard HID drivers — mouse input works normally. |
+| `HKLM:\SOFTWARE\VMware, Inc.` | 2012 | Metadata-only registry key left by the VMware installer. No services load from it, no runtime effect. May appear in software inventory/audit tools as VMware still "installed" but it's not. |
+| `HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP` | 2012 | VMware virtual network Windows Filtering Platform driver. The service entry remains but since the driver binary is gone, Windows will fail to start it silently. No network degradation observed. |
+| VMware Pointing Device / VMCI Host Device (Error) | 2012, 2016, 2019, Win11 | Phantom device entries in Device Manager with no loaded driver (Code 28). Cosmetic only — no runtime effect, no performance impact, no BSOD risk. Windows ignores driver-less device entries during normal operation. |
+
+**Summary:**
+- None of these remnants are harmful to VM operation or stability post-migration.
+- The `vnetWFP` service key on Windows 2012 is the most noteworthy from a compliance audit standpoint, but has no observed runtime impact.
+- The Error devices in Device Manager are cosmetic — they do not affect functionality.
