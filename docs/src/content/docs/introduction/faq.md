@@ -51,7 +51,7 @@ The conversion fails because `/etc/resolv.conf` is marked **immutable** inside t
 chattr -i /etc/resolv.conf
 ```
 
-For the full symptom description, root cause analysis, and verification steps, see: [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](../../guides/troubleshooting/troubleshooting/#virt-v2v-fails-rename-sysrooteresolvconf-operation-not-permitted)
+For the full symptom description, root cause analysis, and verification steps, see: [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](../../guides/troubleshooting/troubleshooting/#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 
 ### How does Vjailbreak handle flavors of the vm in the target openstack environment?
 
