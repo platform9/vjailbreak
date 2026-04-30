@@ -17,7 +17,7 @@ select disk N
 convert basic
 ```
 
-If the disk contains data, back it up first. See the full troubleshooting guide: [Windows Dynamic Disk (LDM) migration issue](../guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/).
+If the disk contains data, back it up first. See the full troubleshooting guide: [Windows Dynamic Disk (LDM) migration issue](https://platform9.github.io/vjailbreak/guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/).
 
 | Configuration | Result |
 |---|---|
@@ -25,19 +25,33 @@ If the disk contains data, back it up first. See the full troubleshooting guide:
 | Root: LDM, Data: Basic | **Fails** — must convert root disk to basic |
 | Root: LDM, Data: LDM | **Fails** — must convert root disk to basic |
 
-## Active Directory-Joined VMs
+## Active Directory Domain Controllers
 
-VMs joined to an Active Directory domain lose their domain trust relationship after migration. The migrated VM will no longer be recognized by the domain controller.
+Migrating an **Active Directory Domain Controller (DC)** VM carries significant risk. Migrating a DC creates a snapshot-like copy of the AD database, which can trigger a **USN rollback** — the domain rejects the migrated DC because its Update Sequence Numbers are out of sync with the replication topology. This causes replication failures and may corrupt the AD environment.
 
-**Impact**: Users may be unable to log in with domain credentials. Applications relying on Kerberos authentication or Group Policy may fail.
+Additionally, after migration the DC may fail to start AD DS with error **C00002E2** (`STATUS_DS_SAM_INIT_FAILURE`). This occurs when Windows detects that the DirectoryServices-DomainController role cannot be initialized, which can happen when the DC was cloned without following the proper virtualization procedures.
 
-**Workaround options**:
-- Re-join the VM to the domain after migration using a local administrator account.
-- Use an `unattend.xml` post-migration script to automate domain re-join.
-- Pre-stage a computer account in AD with the same name before migration to reduce downtime.
+**Symptoms**:
+
+- The VM boots but Active Directory Domain Services fails to start
+- Event log shows stop error C00002E2
+- Other DCs in the domain report replication errors
+
+**Recommended approach**: Do not migrate production Active Directory Domain Controllers directly. Instead:
+
+1. **Build a new DC** in the target OpenStack environment and promote it using standard AD procedures.
+2. **Replicate AD** to the new DC from an existing domain controller.
+3. **Demote and decommission** the source DC from the domain before or after migration.
+
+**If the DC fails to start after migration**, boot into **Directory Services Restore Mode (DSRM)** and either:
+
+- Re-add the DirectoryServices-DomainController role: `dism.exe /online /enable-feature /featurename:DirectoryServices-DomainController`
+- Perform a forced demotion: `Uninstall-AddsDomainController -ForceRemoval` (Windows Server 2012+) or `dcpromo.exe /forceremoval`
+
+See: [Domain controller does not start — C00002E2 error](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/domain-controller-not-start-c00002e2-error)
 
 :::caution
-Plan for domain re-join as part of your migration runbook. Coordinate with your Active Directory team before migrating domain-joined VMs.
+For **member VMs** (non-DC workstations and servers joined to a domain), migration is safe but the VM will need to be re-joined to the domain after migration using a local administrator account, as the domain trust relationship is not preserved.
 :::
 
 ## Persist Network: Windows Server 2012 and Below
@@ -69,7 +83,7 @@ The VMware Tools removal process performed by `virt-v2v` during migration may le
 
 These artifacts are typically harmless but may appear in application logs or security scans.
 
-For a full list of known residual artifacts and cleanup steps, see: [VMware Residual Artifacts](../guides/troubleshooting/vmware_residual_artifacts/).
+For a full list of known residual artifacts and cleanup steps, see: [VMware Residual Artifacts](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/).
 
 ## Multi-Boot VMs Not Supported
 
@@ -84,12 +98,14 @@ OpenStack **hotplug** (live CPU/RAM resize without VM reboot) is supported post-
 To use hotplug after migration:
 
 1. Ask your OpenStack admin to create a flavor with hotplug-enabled extra specs, for example:
-   ```
+
+   ```bash
    openstack flavor set <flavor-name> \
      --property hw:cpu_policy=mixed \
      --property hw:cpu_max_vcpus=<max> \
      --property hw:mem_page_size=any
    ```
+
 2. Assign this flavor in the vJailbreak migration form before starting the migration.
 3. After migration, resize the VM in OpenStack using the hotplug-capable flavor.
 
@@ -99,11 +115,12 @@ Standard flavors without hotplug extra specs will not support live resize. The V
 
 ## Low Disk Space for virt-v2v-in-place
 
-`virt-v2v-in-place` (used during cold migration disk conversion) requires free disk space on the vJailbreak VM to create temporary working files during conversion. If disk space is exhausted mid-conversion, the migration will fail and the partially converted disk may be left in an inconsistent state.
+`virt-v2v-in-place` (used during cold migration disk conversion) requires free disk space on the vJailbreak VM's root volume (`/`) for temporary working files during conversion. If disk space is exhausted mid-conversion, the migration will fail and the partially converted disk may be left in an inconsistent state.
 
-**Recommendation**: Ensure at least **20 GB of free space** is available on the vJailbreak VM before starting migrations. For VMs with large disks (> 500 GB), plan for proportionally more free space.
+The minimum free space required depends on the size of the VM disks being converted. Refer to the [virt-v2v documentation](https://libguestfs.org/virt-v2v.1.html) for exact requirements — the temporary directory used is controlled by the `VIRT_V2V_TMPDIR` environment variable (defaults to `/var/tmp`).
 
 To check free disk space on the vJailbreak VM:
+
 ```bash
 df -h /
 ```

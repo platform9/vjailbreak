@@ -170,6 +170,14 @@
 - [x] T017 Run `cd docs && npm run build` and confirm zero build errors and zero broken internal slug warnings
 - [x] T018 [P] Manually verify all external links added or modified in this feature are reachable (GPO migration URL, vTPM migration URL, virt-v2v resolv.conf upstream link)
 
+## Phase 11: Known Limitations Follow-up Fixes
+
+**Purpose**: Correct inaccurate content and broken links reported post-implementation.
+
+- [ ] T019 Fix "Low Disk Space for virt-v2v-in-place" entry in `docs/src/content/docs/reference/known-limitations.md`: remove the incorrect 20 GB claim; reference the virt-v2v documentation which states 1 GB minimum free in the temp directory (`/var/tmp` or `$VIRT_V2V_TMPDIR`)
+- [ ] T020 Fix broken links in known-limitations.md: change relative paths for "VMware Tools Removal" and "Windows Dynamic Disks" sections to absolute HTTPS URLs (same format as release notes) to avoid base-URL resolution issues
+- [ ] T021 Rewrite "Active Directory-Joined VMs" entry in known-limitations.md: cover domain controller migration failure (C00002E2 error), USN rollback risk, and workarounds per [MS KB: domain-controller-not-start-c00002e2-error](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/domain-controller-not-start-c00002e2-error)
+
 ---
 
 ## Dependencies & Execution Order
