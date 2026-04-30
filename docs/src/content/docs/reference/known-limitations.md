@@ -25,34 +25,34 @@ If the disk contains data, back it up first. See the full troubleshooting guide:
 | Root: LDM, Data: Basic | **Fails** — must convert root disk to basic |
 | Root: LDM, Data: LDM | **Fails** — must convert root disk to basic |
 
-## Active Directory Domain Controllers
+## Active Directory-Joined VMs
 
-Migrating an **Active Directory Domain Controller (DC)** VM carries significant risk. Migrating a DC creates a snapshot-like copy of the AD database, which can trigger a **USN rollback** — the domain rejects the migrated DC because its Update Sequence Numbers are out of sync with the replication topology. This causes replication failures and may corrupt the AD environment.
+### Domain Controllers
 
-Additionally, after migration the DC may fail to start AD DS with error **C00002E2** (`STATUS_DS_SAM_INIT_FAILURE`). This occurs when Windows detects that the DirectoryServices-DomainController role cannot be initialized, which can happen when the DC was cloned without following the proper virtualization procedures.
+Do **not** migrate Active Directory Domain Controller VMs directly. virt-v2v creates a snapshot-like copy of the VM, which means the migrated DC starts with an AD database that is out of sync with the rest of the domain. This triggers a **USN rollback**: other DCs in the domain detect that the migrated DC's Update Sequence Numbers have gone backwards and quarantine it, causing replication to stop or the DC to be taken offline entirely. In severe cases this can corrupt the AD environment.
 
-**Symptoms**:
+**Recommended approach**:
 
-- The VM boots but Active Directory Domain Services fails to start
-- Event log shows stop error C00002E2
-- Other DCs in the domain report replication errors
+1. **Provision a new DC** in the target OpenStack environment.
+2. **Join it to the domain** and let AD replication populate it from an existing DC.
+3. **Decommission the source DC** normally via `dcpromo` or Server Manager once replication is complete.
 
-**Recommended approach**: Do not migrate production Active Directory Domain Controllers directly. Instead:
+### Member Servers and Workstations
 
-1. **Build a new DC** in the target OpenStack environment and promote it using standard AD procedures.
-2. **Replicate AD** to the new DC from an existing domain controller.
-3. **Demote and decommission** the source DC from the domain before or after migration.
+Migrating domain-joined **member VMs** (non-DC servers, workstations) is generally safe. However, the domain trust relationship — maintained via a computer account password synchronized between the VM and the domain — may break after migration if the computer account gets out of sync.
 
-**If the DC fails to start after migration**, boot into **Directory Services Restore Mode (DSRM)** and either:
+**Symptom**: After migration, users cannot log in with domain credentials and see: `The trust relationship between this workstation and the primary domain failed.`
 
-- Re-add the DirectoryServices-DomainController role: `dism.exe /online /enable-feature /featurename:DirectoryServices-DomainController`
-- Perform a forced demotion: `Uninstall-AddsDomainController -ForceRemoval` (Windows Server 2012+) or `dcpromo.exe /forceremoval`
+**Workaround**: Log in with a local administrator account and re-establish the trust:
 
-See: [Domain controller does not start — C00002E2 error](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/domain-controller-not-start-c00002e2-error)
+```powershell
+# Option 1 — reset the computer account password (Windows Server 2008+)
+netdom resetpwd /server:<domain-controller> /userd:<domain\admin> /passwordd:*
 
-:::caution
-For **member VMs** (non-DC workstations and servers joined to a domain), migration is safe but the VM will need to be re-joined to the domain after migration using a local administrator account, as the domain trust relationship is not preserved.
-:::
+# Option 2 — re-join the domain
+Remove-Computer -WorkgroupName WORKGROUP -Force
+Add-Computer -DomainName <domain> -Credential <domain\admin> -Restart
+```
 
 ## Persist Network: Windows Server 2012 and Below
 
