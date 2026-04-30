@@ -17,7 +17,7 @@ select disk N
 convert basic
 ```
 
-If the disk contains data, back it up first. See the full troubleshooting guide: [Windows Dynamic Disk (LDM) migration issue](https://platform9.github.io/vjailbreak/guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/).
+If the disk contains data, back it up first. See the full troubleshooting guide: [Windows Dynamic Disk (LDM) migration issue](../../guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/).
 
 | Configuration | Result |
 |---|---|
@@ -83,7 +83,7 @@ The VMware Tools removal process performed by `virt-v2v` during migration may le
 
 These artifacts are typically harmless but may appear in application logs or security scans.
 
-For a full list of known residual artifacts and cleanup steps, see: [VMware Residual Artifacts](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/).
+For a full list of known residual artifacts and cleanup steps, see: [VMware Residual Artifacts](../../guides/troubleshooting/vmware_residual_artifacts/).
 
 ## Multi-Boot VMs Not Supported
 
@@ -113,17 +113,22 @@ To use hotplug after migration:
 Standard flavors without hotplug extra specs will not support live resize. The VM must be powered off for a cold resize in that case.
 :::
 
-## Low Disk Space for virt-v2v-in-place
+## Low Disk Space in the Source VM
 
-`virt-v2v-in-place` (used during cold migration disk conversion) requires free disk space on the vJailbreak VM's root volume (`/`) for temporary working files during conversion. If disk space is exhausted mid-conversion, the migration will fail and the partially converted disk may be left in an inconsistent state.
+Before starting conversion, `virt-v2v` checks that each filesystem inside the **source VM** has sufficient free space. If any filesystem is too full, the conversion fails before it begins.
 
-The minimum free space required depends on the size of the VM disks being converted. Refer to the [virt-v2v documentation](https://libguestfs.org/virt-v2v.1.html) for exact requirements — the temporary directory used is controlled by the `VIRT_V2V_TMPDIR` environment variable (defaults to `/var/tmp`).
+Minimum free space required inside the source VM ([source: virt-v2v docs](https://libguestfs.org/virt-v2v.1.html)):
 
-To check free disk space on the vJailbreak VM:
+| Filesystem | Minimum free space |
+|---|---|
+| Linux root (`/`) | 100 MB |
+| Linux `/boot` | 50 MB (needed to rebuild initramfs) |
+| Windows `C:` drive | 100 MB (virtio drivers and guest agents are copied in) |
+| Any other mountable filesystem | 10 MB |
 
-```bash
-df -h /
-```
+Each filesystem must also have at least **100 free inodes**.
+
+**Workaround**: Before migrating, free up space inside the source VM on any full partitions. Check with `df -h` (Linux) or Disk Management (Windows).
 
 ## Application Reboot During Migration
 
