@@ -29,30 +29,35 @@ If the disk contains data, back it up first. See the full troubleshooting guide:
 
 ### Domain Controllers
 
-Do **not** migrate Active Directory Domain Controller VMs directly. virt-v2v creates a snapshot-like copy of the VM, which means the migrated DC starts with an AD database that is out of sync with the rest of the domain. This triggers a **USN rollback**: other DCs in the domain detect that the migrated DC's Update Sequence Numbers have gone backwards and quarantine it, causing replication to stop or the DC to be taken offline entirely. In severe cases this can corrupt the AD environment.
+Do **not** migrate Active Directory Domain Controller VMs directly. Microsoft explicitly unsupports any non-backup-based restore of a DC, and migrating a DC VM is treated as creating an unsupported clone. The migrated DC will be quarantined by the domain:
 
-**Recommended approach**:
+- On **Windows Server 2012 and later** running on QEMU/KVM (which exposes VM-GenerationID via libvirt), the virtualization safeguards detect the hypervisor change, automatically reset the DC's invocation ID, and force a non-authoritative resync. The DC may recover if it can reach a replication partner, but the process is unreliable and unsupported in production.
+- On **older Windows Server versions** (pre-2012) without VM-GenerationID support, a genuine **USN rollback** can occur: the domain silently stops replicating from the migrated DC, and the AD environment can diverge without obvious errors. This is difficult to recover from.
 
-1. **Provision a new DC** in the target OpenStack environment.
-2. **Join it to the domain** and let AD replication populate it from an existing DC.
-3. **Decommission the source DC** normally via `dcpromo` or Server Manager once replication is complete.
+In both cases the source DC must also be **permanently removed from the domain** before or immediately after starting the migrated copy. Running both simultaneously on the same network will corrupt the domain.
+
+**Recommended approach** (from [Microsoft guidance](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/detect-and-recover-from-usn-rollback)):
+
+1. **Provision a new DC** in the target OpenStack environment using standard promotion.
+2. **Let AD replication populate it** from an existing domain controller.
+3. **Decommission the source DC** via `dcpromo` or Server Manager once replication is verified complete.
 
 ### Member Servers and Workstations
 
-Migrating domain-joined **member VMs** (non-DC servers, workstations) is generally safe. However, the domain trust relationship — maintained via a computer account password synchronized between the VM and the domain — may break after migration if the computer account gets out of sync.
+Migrating domain-joined **member VMs** (non-DC servers and workstations) is safe. Domain membership survives the migration intact: the machine account password is stored in the VM's own LSA secrets and is copied along with the disk, so it continues to match what the domain controller has on record. No domain rejoin is required after a successful migration.
 
-**Symptom**: After migration, users cannot log in with domain credentials and see: `The trust relationship between this workstation and the primary domain failed.`
-
-**Workaround**: Log in with a local administrator account and re-establish the trust:
+:::note
+If the source VM had been offline for an extended period before migration (typically 90+ days), the domain controller may have already invalidated the stale computer account. This is a pre-existing condition unrelated to the migration itself. If users see `The trust relationship between this workstation and the primary domain failed` after migration, run the following to reset the account:
 
 ```powershell
-# Option 1 — reset the computer account password (Windows Server 2008+)
+# Option 1 — reset computer account password without rejoining
 netdom resetpwd /server:<domain-controller> /userd:<domain\admin> /passwordd:*
 
-# Option 2 — re-join the domain
+# Option 2 — rejoin the domain
 Remove-Computer -WorkgroupName WORKGROUP -Force
 Add-Computer -DomainName <domain> -Credential <domain\admin> -Restart
 ```
+:::
 
 ## Persist Network: Windows Server 2012 and Below
 
