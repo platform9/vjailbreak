@@ -87,6 +87,7 @@ export interface PCDNetworkInfo {
 export interface OpenstackCredsStatus {
   openstackValidationMessage: string
   openstackValidationStatus: string
+  resourceFetchStatus?: string
   openstack?: {
     networks?: PCDNetworkInfo[]
     volumeTypes?: string[]

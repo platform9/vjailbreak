@@ -33,6 +33,7 @@ interface CredentialItem {
   name: string
   type: 'VMware' | 'OpenStack'
   status: string
+  resourceFetchStatus?: string
   credObject: VmwareCredential | OpenstackCredential
 }
 
@@ -78,19 +79,23 @@ const getColumns = (
     field: 'status',
     headerName: 'Status',
     flex: 1,
-    renderCell: (params) => (
-      <Chip
-        label={params.value || 'Unknown'}
-        variant="outlined"
-        color={getStatusColor(params.value)}
-        size="small"
-        icon={
-          params.value === 'Validating' ? (
-            <CircularProgress size={16} sx={{ marginRight: '5px' }} />
-          ) : undefined
-        }
-      />
-    )
+    renderCell: (params) => {
+      const isFetchingResources = params.row.resourceFetchStatus === 'FetchingResources'
+      const displayStatus = isFetchingResources ? 'Validating' : (params.value || 'Unknown')
+      return (
+        <Chip
+          label={displayStatus}
+          variant="outlined"
+          color={getStatusColor(displayStatus)}
+          size="small"
+          icon={
+            displayStatus === 'Validating' ? (
+              <CircularProgress size={16} sx={{ marginRight: '5px' }} />
+            ) : undefined
+          }
+        />
+      )
+    }
   },
   {
     field: 'actions',
@@ -241,7 +246,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const revalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const { mutate: revalidate } = useMutation({
+  const { mutate: revalidate, isPending: isRevalidationApiPending } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
       setTimeout(() => {
@@ -271,6 +276,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       name: cred.metadata.name,
       type: 'VMware' as const,
       status: cred.status?.vmwareValidationStatus || 'Unknown',
+      resourceFetchStatus: cred.status?.resourceFetchStatus,
       credObject: cred
     })) || []
 
@@ -280,18 +286,31 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       name: cred.metadata.name,
       type: 'OpenStack' as const,
       status: cred.status?.openstackValidationStatus || 'Unknown',
+      resourceFetchStatus: cred.status?.resourceFetchStatus,
       credObject: cred
     })) || []
 
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
   useEffect(() => {
-    if (revalidatingId) {
+    // While the API call itself is in flight, always keep the spinner — don't
+    // check status yet because resourceFetchStatus still holds the previous
+    // run's value (e.g. "ResourcesFetched") and would incorrectly stop the spinner.
+    if (revalidatingId && !isRevalidationApiPending) {
       const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
 
       if (revalidatingItem) {
         const status = revalidatingItem.status.toLowerCase()
-        if (status !== 'validating') {
+        const { resourceFetchStatus } = revalidatingItem
+
+        // Spinner stops when validation failed, or when the full resource
+        // discovery lifecycle is complete (or itself failed).
+        const isDone =
+          status === 'failed' ||
+          resourceFetchStatus === 'ResourcesFetched' ||
+          resourceFetchStatus === 'FetchFailed'
+
+        if (isDone) {
           if (revalidationTimeoutRef.current) {
             clearTimeout(revalidationTimeoutRef.current)
             revalidationTimeoutRef.current = null
@@ -313,7 +332,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         revalidationTimeoutRef.current = null
       }
     }
-  }, [allCredentials, revalidatingId])
+  }, [allCredentials, revalidatingId, isRevalidationApiPending])
 
   useEffect(() => {
     if (isVmware) {

@@ -434,6 +434,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		if result.Valid {
 			vmwcreds.Status.VMwareValidationStatus = "Succeeded"
 			vmwcreds.Status.VMwareValidationMessage = result.Message
+			vmwcreds.Status.ResourceFetchStatus = "FetchingResources"
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).Info("VMware validation succeeded")
 
 			if err := p.K8sClient.Status().Update(ctx, vmwcreds); err != nil {
@@ -464,11 +465,28 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 				}
 
 				logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).Info("Fetching VMware resources")
-				resources, err := vmwarevalidation.FetchResourcesPostValidation(bgCtx, p.K8sClient, freshVMCreds)
-				if err != nil {
-					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Warn("Failed to fetch VMware resources")
+				resources, fetchErr := vmwarevalidation.FetchResourcesPostValidation(bgCtx, p.K8sClient, freshVMCreds)
+
+				// Refetch to get latest resourceVersion before updating status
+				statusCreds := &vjailbreakv1alpha1.VMwareCreds{}
+				if err := p.K8sClient.Get(bgCtx, k8stypes.NamespacedName{
+					Name:      credName,
+					Namespace: credNamespace,
+				}, statusCreds); err != nil {
+					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to refetch VMwareCreds for resourceFetchStatus update")
+					return
+				}
+
+				if fetchErr != nil {
+					statusCreds.Status.ResourceFetchStatus = "FetchFailed"
+					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(fetchErr).Warn("Failed to fetch VMware resources")
 				} else {
+					statusCreds.Status.ResourceFetchStatus = "ResourcesFetched"
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace, "vm_count": len(resources.VMInfo)}).Info("Successfully fetched VMware resources")
+				}
+
+				if err := p.K8sClient.Status().Update(bgCtx, statusCreds); err != nil {
+					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to update VMwareCreds resourceFetchStatus")
 				}
 			}()
 
@@ -499,6 +517,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 		if result.Valid {
 			oscreds.Status.OpenStackValidationStatus = "Succeeded"
 			oscreds.Status.OpenStackValidationMessage = result.Message
+			oscreds.Status.ResourceFetchStatus = "FetchingResources"
 			logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).Info("OpenStack validation succeeded")
 
 			// Update status immediately after validation succeeds
@@ -512,6 +531,14 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 			resources, err := openstackvalidation.FetchResourcesPostValidation(ctx, p.K8sClient, oscreds)
 			if err != nil {
 				logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to fetch OpenStack resources")
+				// Mark resource fetch as failed so the UI spinner can stop
+				failedCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+				if getErr := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, failedCreds); getErr == nil {
+					failedCreds.Status.ResourceFetchStatus = "FetchFailed"
+					if statusErr := p.K8sClient.Status().Update(ctx, failedCreds); statusErr != nil {
+						logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(statusErr).Warn("Failed to update OpenstackCreds resourceFetchStatus to FetchFailed")
+					}
+				}
 			} else {
 				// Refetch the latest version before updating spec
 				freshOSCreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -531,10 +558,11 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 					if err := p.K8sClient.Get(ctx, k8stypes.NamespacedName{Name: name, Namespace: namespace}, freshOSCreds); err != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to refetch OpenstackCreds for status update")
 					} else {
-						// Update status with OpenStack info
+						// Update status with OpenStack info and mark resource fetch complete
 						if resources.OpenstackInfo != nil {
 							freshOSCreds.Status.Openstack = *resources.OpenstackInfo
 						}
+						freshOSCreds.Status.ResourceFetchStatus = "ResourcesFetched"
 
 						if err := p.K8sClient.Status().Update(ctx, freshOSCreds); err != nil {
 							logrus.WithFields(logrus.Fields{"func": fn, "name": name, "namespace": namespace}).WithError(err).Warn("Failed to update OpenstackCreds status with OpenStack info")

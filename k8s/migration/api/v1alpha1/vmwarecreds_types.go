@@ -51,6 +51,8 @@ type VMwareCredsStatus struct {
 	VMwareValidationStatus string `json:"vmwareValidationStatus,omitempty"`
 	// VMwareValidationMessage is the message associated with the VMware validation
 	VMwareValidationMessage string `json:"vmwareValidationMessage,omitempty"`
+	// ResourceFetchStatus tracks the status of post-validation resource discovery
+	ResourceFetchStatus string `json:"resourceFetchStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true

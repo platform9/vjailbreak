@@ -130,6 +130,8 @@ type OpenstackCredsStatus struct {
 	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
 	// OpenStackValidationMessage is the message associated with the OpenStack validation
 	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
+	// ResourceFetchStatus tracks the status of post-validation resource discovery
+	ResourceFetchStatus string `json:"resourceFetchStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
