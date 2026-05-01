@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  name: proxy-manager-role
 rules:
 - apiGroups:
   - ""
@@ -47,14 +47,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
-  verbs:
-  - list
-  - watch
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
+  - secrets
   verbs:
   - create
   - delete
@@ -63,6 +56,33 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
 - apiGroups:
   - apps
   resources:
@@ -91,6 +111,18 @@ rules:
   - networking.k8s.io
   resources:
   - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
   verbs:
   - create
   - delete
@@ -185,10 +217,15 @@ rules:
   - rollingmigrationplans/status
   - storagemappings/status
   - vjailbreaknodes/status
-  - vmwarecreds/status
   - vmwarehosts/status
   - vmwaremachines/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create

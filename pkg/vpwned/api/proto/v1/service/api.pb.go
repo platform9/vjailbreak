@@ -4126,6 +4126,886 @@ func (x *CheckNetworkSubnetCompatibilityResponse) GetAllCompatible() bool {
 	return false
 }
 
+type SecretData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          map[string][]byte      `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecretData) Reset() {
+	*x = SecretData{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecretData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecretData) ProtoMessage() {}
+
+func (x *SecretData) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecretData.ProtoReflect.Descriptor instead.
+func (*SecretData) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *SecretData) GetData() map[string][]byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *SecretData) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+type GetSecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSecretRequest) Reset() {
+	*x = GetSecretRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSecretRequest) ProtoMessage() {}
+
+func (x *GetSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSecretRequest.ProtoReflect.Descriptor instead.
+func (*GetSecretRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *GetSecretRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetSecretRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetSecretResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Secret        *SecretData            `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSecretResponse) Reset() {
+	*x = GetSecretResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSecretResponse) ProtoMessage() {}
+
+func (x *GetSecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSecretResponse.ProtoReflect.Descriptor instead.
+func (*GetSecretResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *GetSecretResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetSecretResponse) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetSecretResponse) GetSecret() *SecretData {
+	if x != nil {
+		return x.Secret
+	}
+	return nil
+}
+
+type CreateSecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Secret        *SecretData            `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSecretRequest) Reset() {
+	*x = CreateSecretRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSecretRequest) ProtoMessage() {}
+
+func (x *CreateSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSecretRequest.ProtoReflect.Descriptor instead.
+func (*CreateSecretRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *CreateSecretRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *CreateSecretRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateSecretRequest) GetSecret() *SecretData {
+	if x != nil {
+		return x.Secret
+	}
+	return nil
+}
+
+type CreateSecretResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSecretResponse) Reset() {
+	*x = CreateSecretResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSecretResponse) ProtoMessage() {}
+
+func (x *CreateSecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSecretResponse.ProtoReflect.Descriptor instead.
+func (*CreateSecretResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *CreateSecretResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CreateSecretResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type UpdateSecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Secret        *SecretData            `protobuf:"bytes,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSecretRequest) Reset() {
+	*x = UpdateSecretRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSecretRequest) ProtoMessage() {}
+
+func (x *UpdateSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSecretRequest.ProtoReflect.Descriptor instead.
+func (*UpdateSecretRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *UpdateSecretRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *UpdateSecretRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdateSecretRequest) GetSecret() *SecretData {
+	if x != nil {
+		return x.Secret
+	}
+	return nil
+}
+
+type UpdateSecretResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSecretResponse) Reset() {
+	*x = UpdateSecretResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSecretResponse) ProtoMessage() {}
+
+func (x *UpdateSecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSecretResponse.ProtoReflect.Descriptor instead.
+func (*UpdateSecretResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *UpdateSecretResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UpdateSecretResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type DeleteSecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSecretRequest) Reset() {
+	*x = DeleteSecretRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSecretRequest) ProtoMessage() {}
+
+func (x *DeleteSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSecretRequest.ProtoReflect.Descriptor instead.
+func (*DeleteSecretRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *DeleteSecretRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *DeleteSecretRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type DeleteSecretResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteSecretResponse) Reset() {
+	*x = DeleteSecretResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteSecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteSecretResponse) ProtoMessage() {}
+
+func (x *DeleteSecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteSecretResponse.ProtoReflect.Descriptor instead.
+func (*DeleteSecretResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *DeleteSecretResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteSecretResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type PodInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Phase         string                 `protobuf:"bytes,3,opt,name=phase,proto3" json:"phase,omitempty"`
+	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	NodeName      string                 `protobuf:"bytes,5,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	PodIp         string                 `protobuf:"bytes,6,opt,name=pod_ip,json=podIp,proto3" json:"pod_ip,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PodInfo) Reset() {
+	*x = PodInfo{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PodInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PodInfo) ProtoMessage() {}
+
+func (x *PodInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PodInfo.ProtoReflect.Descriptor instead.
+func (*PodInfo) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *PodInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PodInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *PodInfo) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *PodInfo) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *PodInfo) GetNodeName() string {
+	if x != nil {
+		return x.NodeName
+	}
+	return ""
+}
+
+func (x *PodInfo) GetPodIp() string {
+	if x != nil {
+		return x.PodIp
+	}
+	return ""
+}
+
+type ListPodsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	LabelSelector string                 `protobuf:"bytes,2,opt,name=label_selector,json=labelSelector,proto3" json:"label_selector,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPodsRequest) Reset() {
+	*x = ListPodsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPodsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPodsRequest) ProtoMessage() {}
+
+func (x *ListPodsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPodsRequest.ProtoReflect.Descriptor instead.
+func (*ListPodsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *ListPodsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ListPodsRequest) GetLabelSelector() string {
+	if x != nil {
+		return x.LabelSelector
+	}
+	return ""
+}
+
+type ListPodsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pods          []*PodInfo             `protobuf:"bytes,1,rep,name=pods,proto3" json:"pods,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPodsResponse) Reset() {
+	*x = ListPodsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPodsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPodsResponse) ProtoMessage() {}
+
+func (x *ListPodsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPodsResponse.ProtoReflect.Descriptor instead.
+func (*ListPodsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *ListPodsResponse) GetPods() []*PodInfo {
+	if x != nil {
+		return x.Pods
+	}
+	return nil
+}
+
+type GetPodRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPodRequest) Reset() {
+	*x = GetPodRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPodRequest) ProtoMessage() {}
+
+func (x *GetPodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPodRequest.ProtoReflect.Descriptor instead.
+func (*GetPodRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *GetPodRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetPodRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetPodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pod           *PodInfo               `protobuf:"bytes,1,opt,name=pod,proto3" json:"pod,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPodResponse) Reset() {
+	*x = GetPodResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPodResponse) ProtoMessage() {}
+
+func (x *GetPodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPodResponse.ProtoReflect.Descriptor instead.
+func (*GetPodResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *GetPodResponse) GetPod() *PodInfo {
+	if x != nil {
+		return x.Pod
+	}
+	return nil
+}
+
+type UpdatePodLabelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Labels        map[string]string      `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdatePodLabelsRequest) Reset() {
+	*x = UpdatePodLabelsRequest{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdatePodLabelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdatePodLabelsRequest) ProtoMessage() {}
+
+func (x *UpdatePodLabelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdatePodLabelsRequest.ProtoReflect.Descriptor instead.
+func (*UpdatePodLabelsRequest) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *UpdatePodLabelsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *UpdatePodLabelsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdatePodLabelsRequest) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type UpdatePodLabelsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdatePodLabelsResponse) Reset() {
+	*x = UpdatePodLabelsResponse{}
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdatePodLabelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdatePodLabelsResponse) ProtoMessage() {}
+
+func (x *UpdatePodLabelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdatePodLabelsResponse.ProtoReflect.Descriptor instead.
+func (*UpdatePodLabelsResponse) Descriptor() ([]byte, []int) {
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *UpdatePodLabelsResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UpdatePodLabelsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 type CleanupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -4134,7 +5014,7 @@ type CleanupRequest struct {
 
 func (x *CleanupRequest) Reset() {
 	*x = CleanupRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4146,7 +5026,7 @@ func (x *CleanupRequest) String() string {
 func (*CleanupRequest) ProtoMessage() {}
 
 func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[63]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4159,7 +5039,7 @@ func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupRequest.ProtoReflect.Descriptor instead.
 func (*CleanupRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{63}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{79}
 }
 
 type CleanupResponse struct {
@@ -4172,7 +5052,7 @@ type CleanupResponse struct {
 
 func (x *CleanupResponse) Reset() {
 	*x = CleanupResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4184,7 +5064,7 @@ func (x *CleanupResponse) String() string {
 func (*CleanupResponse) ProtoMessage() {}
 
 func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[64]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4197,7 +5077,7 @@ func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupResponse.ProtoReflect.Descriptor instead.
 func (*CleanupResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{64}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *CleanupResponse) GetSuccess() bool {
@@ -4228,7 +5108,7 @@ type StorageAccessInfo struct {
 
 func (x *StorageAccessInfo) Reset() {
 	*x = StorageAccessInfo{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4240,7 +5120,7 @@ func (x *StorageAccessInfo) String() string {
 func (*StorageAccessInfo) ProtoMessage() {}
 
 func (x *StorageAccessInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[65]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4253,7 +5133,7 @@ func (x *StorageAccessInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageAccessInfo.ProtoReflect.Descriptor instead.
 func (*StorageAccessInfo) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{65}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *StorageAccessInfo) GetHostname() string {
@@ -4304,7 +5184,7 @@ type VolumeInfo struct {
 
 func (x *VolumeInfo) Reset() {
 	*x = VolumeInfo{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4316,7 +5196,7 @@ func (x *VolumeInfo) String() string {
 func (*VolumeInfo) ProtoMessage() {}
 
 func (x *VolumeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[66]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4329,7 +5209,7 @@ func (x *VolumeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeInfo.ProtoReflect.Descriptor instead.
 func (*VolumeInfo) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{66}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *VolumeInfo) GetName() string {
@@ -4377,7 +5257,7 @@ type MappingContextEntry struct {
 
 func (x *MappingContextEntry) Reset() {
 	*x = MappingContextEntry{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4389,7 +5269,7 @@ func (x *MappingContextEntry) String() string {
 func (*MappingContextEntry) ProtoMessage() {}
 
 func (x *MappingContextEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[67]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4402,7 +5282,7 @@ func (x *MappingContextEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MappingContextEntry.ProtoReflect.Descriptor instead.
 func (*MappingContextEntry) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{67}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *MappingContextEntry) GetKey() string {
@@ -4428,7 +5308,7 @@ type ValidateStorageCredsRequest struct {
 
 func (x *ValidateStorageCredsRequest) Reset() {
 	*x = ValidateStorageCredsRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4440,7 +5320,7 @@ func (x *ValidateStorageCredsRequest) String() string {
 func (*ValidateStorageCredsRequest) ProtoMessage() {}
 
 func (x *ValidateStorageCredsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[68]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4453,7 +5333,7 @@ func (x *ValidateStorageCredsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateStorageCredsRequest.ProtoReflect.Descriptor instead.
 func (*ValidateStorageCredsRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{68}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ValidateStorageCredsRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4473,7 +5353,7 @@ type ValidateStorageCredsResponse struct {
 
 func (x *ValidateStorageCredsResponse) Reset() {
 	*x = ValidateStorageCredsResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4485,7 +5365,7 @@ func (x *ValidateStorageCredsResponse) String() string {
 func (*ValidateStorageCredsResponse) ProtoMessage() {}
 
 func (x *ValidateStorageCredsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[69]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4498,7 +5378,7 @@ func (x *ValidateStorageCredsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateStorageCredsResponse.ProtoReflect.Descriptor instead.
 func (*ValidateStorageCredsResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{69}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ValidateStorageCredsResponse) GetSuccess() bool {
@@ -4526,7 +5406,7 @@ type CreateInitiatorGroupRequest struct {
 
 func (x *CreateInitiatorGroupRequest) Reset() {
 	*x = CreateInitiatorGroupRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4538,7 +5418,7 @@ func (x *CreateInitiatorGroupRequest) String() string {
 func (*CreateInitiatorGroupRequest) ProtoMessage() {}
 
 func (x *CreateInitiatorGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[70]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4551,7 +5431,7 @@ func (x *CreateInitiatorGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInitiatorGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateInitiatorGroupRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{70}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *CreateInitiatorGroupRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4586,7 +5466,7 @@ type CreateInitiatorGroupResponse struct {
 
 func (x *CreateInitiatorGroupResponse) Reset() {
 	*x = CreateInitiatorGroupResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4598,7 +5478,7 @@ func (x *CreateInitiatorGroupResponse) String() string {
 func (*CreateInitiatorGroupResponse) ProtoMessage() {}
 
 func (x *CreateInitiatorGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[71]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4611,7 +5491,7 @@ func (x *CreateInitiatorGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInitiatorGroupResponse.ProtoReflect.Descriptor instead.
 func (*CreateInitiatorGroupResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{71}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *CreateInitiatorGroupResponse) GetSuccess() bool {
@@ -4647,7 +5527,7 @@ type MapVolumeRequest struct {
 
 func (x *MapVolumeRequest) Reset() {
 	*x = MapVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4659,7 +5539,7 @@ func (x *MapVolumeRequest) String() string {
 func (*MapVolumeRequest) ProtoMessage() {}
 
 func (x *MapVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[72]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4672,7 +5552,7 @@ func (x *MapVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MapVolumeRequest.ProtoReflect.Descriptor instead.
 func (*MapVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{72}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *MapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4714,7 +5594,7 @@ type MapVolumeResponse struct {
 
 func (x *MapVolumeResponse) Reset() {
 	*x = MapVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4726,7 +5606,7 @@ func (x *MapVolumeResponse) String() string {
 func (*MapVolumeResponse) ProtoMessage() {}
 
 func (x *MapVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[73]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4739,7 +5619,7 @@ func (x *MapVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MapVolumeResponse.ProtoReflect.Descriptor instead.
 func (*MapVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{73}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *MapVolumeResponse) GetSuccess() bool {
@@ -4775,7 +5655,7 @@ type UnmapVolumeRequest struct {
 
 func (x *UnmapVolumeRequest) Reset() {
 	*x = UnmapVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4787,7 +5667,7 @@ func (x *UnmapVolumeRequest) String() string {
 func (*UnmapVolumeRequest) ProtoMessage() {}
 
 func (x *UnmapVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[74]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4800,7 +5680,7 @@ func (x *UnmapVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmapVolumeRequest.ProtoReflect.Descriptor instead.
 func (*UnmapVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{74}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *UnmapVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4841,7 +5721,7 @@ type UnmapVolumeResponse struct {
 
 func (x *UnmapVolumeResponse) Reset() {
 	*x = UnmapVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4853,7 +5733,7 @@ func (x *UnmapVolumeResponse) String() string {
 func (*UnmapVolumeResponse) ProtoMessage() {}
 
 func (x *UnmapVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[75]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4866,7 +5746,7 @@ func (x *UnmapVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmapVolumeResponse.ProtoReflect.Descriptor instead.
 func (*UnmapVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{75}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *UnmapVolumeResponse) GetSuccess() bool {
@@ -4894,7 +5774,7 @@ type GetMappedGroupsRequest struct {
 
 func (x *GetMappedGroupsRequest) Reset() {
 	*x = GetMappedGroupsRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4906,7 +5786,7 @@ func (x *GetMappedGroupsRequest) String() string {
 func (*GetMappedGroupsRequest) ProtoMessage() {}
 
 func (x *GetMappedGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[76]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4919,7 +5799,7 @@ func (x *GetMappedGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMappedGroupsRequest.ProtoReflect.Descriptor instead.
 func (*GetMappedGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{76}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *GetMappedGroupsRequest) GetAccessInfo() *StorageAccessInfo {
@@ -4952,7 +5832,7 @@ type GetMappedGroupsResponse struct {
 
 func (x *GetMappedGroupsResponse) Reset() {
 	*x = GetMappedGroupsResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4964,7 +5844,7 @@ func (x *GetMappedGroupsResponse) String() string {
 func (*GetMappedGroupsResponse) ProtoMessage() {}
 
 func (x *GetMappedGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[77]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4977,7 +5857,7 @@ func (x *GetMappedGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMappedGroupsResponse.ProtoReflect.Descriptor instead.
 func (*GetMappedGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{77}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *GetMappedGroupsResponse) GetGroups() []string {
@@ -4997,7 +5877,7 @@ type ResolveCinderVolumeRequest struct {
 
 func (x *ResolveCinderVolumeRequest) Reset() {
 	*x = ResolveCinderVolumeRequest{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5009,7 +5889,7 @@ func (x *ResolveCinderVolumeRequest) String() string {
 func (*ResolveCinderVolumeRequest) ProtoMessage() {}
 
 func (x *ResolveCinderVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[78]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5022,7 +5902,7 @@ func (x *ResolveCinderVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveCinderVolumeRequest.ProtoReflect.Descriptor instead.
 func (*ResolveCinderVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{78}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *ResolveCinderVolumeRequest) GetAccessInfo() *StorageAccessInfo {
@@ -5050,7 +5930,7 @@ type ResolveCinderVolumeResponse struct {
 
 func (x *ResolveCinderVolumeResponse) Reset() {
 	*x = ResolveCinderVolumeResponse{}
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5062,7 +5942,7 @@ func (x *ResolveCinderVolumeResponse) String() string {
 func (*ResolveCinderVolumeResponse) ProtoMessage() {}
 
 func (x *ResolveCinderVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sdk_proto_v1_api_proto_msgTypes[79]
+	mi := &file_sdk_proto_v1_api_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5075,7 +5955,7 @@ func (x *ResolveCinderVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveCinderVolumeResponse.ProtoReflect.Descriptor instead.
 func (*ResolveCinderVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{79}
+	return file_sdk_proto_v1_api_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *ResolveCinderVolumeResponse) GetSuccess() bool {
@@ -5412,7 +6292,71 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"'CheckNetworkSubnetCompatibilityResponse\x12>\n" +
 	"\aresults\x18\x01 \x03(\v2$.api.NetworkSubnetCompatibilityEntryR\aresults\x12!\n" +
 	"\fsubnet_cidrs\x18\x02 \x03(\tR\vsubnetCidrs\x12%\n" +
-	"\x0eall_compatible\x18\x03 \x01(\bR\rallCompatible\"\x10\n" +
+	"\x0eall_compatible\x18\x03 \x01(\bR\rallCompatible\"\x88\x01\n" +
+	"\n" +
+	"SecretData\x12-\n" +
+	"\x04data\x18\x01 \x03(\v2\x19.api.SecretData.DataEntryR\x04data\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x1a7\n" +
+	"\tDataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"D\n" +
+	"\x10GetSecretRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"n\n" +
+	"\x11GetSecretResponse\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12'\n" +
+	"\x06secret\x18\x03 \x01(\v2\x0f.api.SecretDataR\x06secret\"p\n" +
+	"\x13CreateSecretRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
+	"\x06secret\x18\x03 \x01(\v2\x0f.api.SecretDataR\x06secret\"J\n" +
+	"\x14CreateSecretResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"p\n" +
+	"\x13UpdateSecretRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
+	"\x06secret\x18\x03 \x01(\v2\x0f.api.SecretDataR\x06secret\"J\n" +
+	"\x14UpdateSecretResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"G\n" +
+	"\x13DeleteSecretRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"J\n" +
+	"\x14DeleteSecretResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xf2\x01\n" +
+	"\aPodInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x14\n" +
+	"\x05phase\x18\x03 \x01(\tR\x05phase\x120\n" +
+	"\x06labels\x18\x04 \x03(\v2\x18.api.PodInfo.LabelsEntryR\x06labels\x12\x1b\n" +
+	"\tnode_name\x18\x05 \x01(\tR\bnodeName\x12\x15\n" +
+	"\x06pod_ip\x18\x06 \x01(\tR\x05podIp\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"V\n" +
+	"\x0fListPodsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12%\n" +
+	"\x0elabel_selector\x18\x02 \x01(\tR\rlabelSelector\"4\n" +
+	"\x10ListPodsResponse\x12 \n" +
+	"\x04pods\x18\x01 \x03(\v2\f.api.PodInfoR\x04pods\"A\n" +
+	"\rGetPodRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"0\n" +
+	"\x0eGetPodResponse\x12\x1e\n" +
+	"\x03pod\x18\x01 \x01(\v2\f.api.PodInfoR\x03pod\"\xc6\x01\n" +
+	"\x16UpdatePodLabelsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12?\n" +
+	"\x06labels\x18\x03 \x03(\v2'.api.UpdatePodLabelsRequest.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"M\n" +
+	"\x17UpdatePodLabelsResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x10\n" +
 	"\x0eCleanupRequest\"E\n" +
 	"\x0fCleanupResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
@@ -5526,7 +6470,15 @@ const file_sdk_proto_v1_api_proto_rawDesc = "" +
 	"\x13ValidateOpenstackIp\x12\x1f.api.ValidateOpenstackIpRequest\x1a .api.ValidateOpenstackIpResponse\"(\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/vpw/v1/validate_openstack_ip\x12\x89\x01\n" +
 	"\x15RevalidateCredentials\x12!.api.RevalidateCredentialsRequest\x1a\".api.RevalidateCredentialsResponse\")\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/vpw/v1/revalidate_credentials\x12~\n" +
 	"\x12InjectEnvVariables\x12\x1e.api.InjectEnvVariablesRequest\x1a\x1f.api.InjectEnvVariablesResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/vpw/v1/inject_env_variables\x12\xb3\x01\n" +
-	"\x1fCheckNetworkSubnetCompatibility\x12+.api.CheckNetworkSubnetCompatibilityRequest\x1a,.api.CheckNetworkSubnetCompatibilityResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/vpw/v1/check_network_subnet_compatibility2\xfd\x05\n" +
+	"\x1fCheckNetworkSubnetCompatibility\x12+.api.CheckNetworkSubnetCompatibilityRequest\x1a,.api.CheckNetworkSubnetCompatibilityResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/vpw/v1/check_network_subnet_compatibility2\xa1\x06\n" +
+	"\x10K8sResourceProxy\x12j\n" +
+	"\tGetSecret\x12\x15.api.GetSecretRequest\x1a\x16.api.GetSecretResponse\".\x82\xd3\xe4\x93\x02(\x12&/vpw/v1/k8s/secrets/{namespace}/{name}\x12o\n" +
+	"\fCreateSecret\x12\x18.api.CreateSecretRequest\x1a\x19.api.CreateSecretResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/vpw/v1/k8s/secrets/{namespace}\x12v\n" +
+	"\fUpdateSecret\x12\x18.api.UpdateSecretRequest\x1a\x19.api.UpdateSecretResponse\"1\x82\xd3\xe4\x93\x02+:\x01*\x1a&/vpw/v1/k8s/secrets/{namespace}/{name}\x12s\n" +
+	"\fDeleteSecret\x12\x18.api.DeleteSecretRequest\x1a\x19.api.DeleteSecretResponse\".\x82\xd3\xe4\x93\x02(*&/vpw/v1/k8s/secrets/{namespace}/{name}\x12]\n" +
+	"\bListPods\x12\x14.api.ListPodsRequest\x1a\x15.api.ListPodsResponse\"$\x82\xd3\xe4\x93\x02\x1e\x12\x1c/vpw/v1/k8s/pods/{namespace}\x12^\n" +
+	"\x06GetPod\x12\x12.api.GetPodRequest\x1a\x13.api.GetPodResponse\"+\x82\xd3\xe4\x93\x02%\x12#/vpw/v1/k8s/pods/{namespace}/{name}\x12\x83\x01\n" +
+	"\x0fUpdatePodLabels\x12\x1b.api.UpdatePodLabelsRequest\x1a\x1c.api.UpdatePodLabelsResponse\"5\x82\xd3\xe4\x93\x02/:\x01*2*/vpw/v1/k8s/pods/{namespace}/{name}/labels2\xfd\x05\n" +
 	"\fStorageArray\x12\x7f\n" +
 	"\x13ValidateCredentials\x12 .api.ValidateStorageCredsRequest\x1a!.api.ValidateStorageCredsResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/vpw/v1/storage/validate\x12\x8f\x01\n" +
 	"\x1cCreateOrUpdateInitiatorGroup\x12 .api.CreateInitiatorGroupRequest\x1a!.api.CreateInitiatorGroupResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/vpw/v1/storage/initiator_group\x12h\n" +
@@ -5550,7 +6502,7 @@ func file_sdk_proto_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_sdk_proto_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_sdk_proto_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 99)
 var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(PowerStatus)(0),                                // 0: api.PowerStatus
 	(BootDevice)(0),                                 // 1: api.BootDevice
@@ -5617,144 +6569,185 @@ var file_sdk_proto_v1_api_proto_goTypes = []any{
 	(*NetworkSubnetCompatibilityEntry)(nil),         // 62: api.NetworkSubnetCompatibilityEntry
 	(*CheckNetworkSubnetCompatibilityRequest)(nil),  // 63: api.CheckNetworkSubnetCompatibilityRequest
 	(*CheckNetworkSubnetCompatibilityResponse)(nil), // 64: api.CheckNetworkSubnetCompatibilityResponse
-	(*CleanupRequest)(nil),                          // 65: api.CleanupRequest
-	(*CleanupResponse)(nil),                         // 66: api.CleanupResponse
-	(*StorageAccessInfo)(nil),                       // 67: api.StorageAccessInfo
-	(*VolumeInfo)(nil),                              // 68: api.VolumeInfo
-	(*MappingContextEntry)(nil),                     // 69: api.MappingContextEntry
-	(*ValidateStorageCredsRequest)(nil),             // 70: api.ValidateStorageCredsRequest
-	(*ValidateStorageCredsResponse)(nil),            // 71: api.ValidateStorageCredsResponse
-	(*CreateInitiatorGroupRequest)(nil),             // 72: api.CreateInitiatorGroupRequest
-	(*CreateInitiatorGroupResponse)(nil),            // 73: api.CreateInitiatorGroupResponse
-	(*MapVolumeRequest)(nil),                        // 74: api.MapVolumeRequest
-	(*MapVolumeResponse)(nil),                       // 75: api.MapVolumeResponse
-	(*UnmapVolumeRequest)(nil),                      // 76: api.UnmapVolumeRequest
-	(*UnmapVolumeResponse)(nil),                     // 77: api.UnmapVolumeResponse
-	(*GetMappedGroupsRequest)(nil),                  // 78: api.GetMappedGroupsRequest
-	(*GetMappedGroupsResponse)(nil),                 // 79: api.GetMappedGroupsResponse
-	(*ResolveCinderVolumeRequest)(nil),              // 80: api.ResolveCinderVolumeRequest
-	(*ResolveCinderVolumeResponse)(nil),             // 81: api.ResolveCinderVolumeResponse
+	(*SecretData)(nil),                              // 65: api.SecretData
+	(*GetSecretRequest)(nil),                        // 66: api.GetSecretRequest
+	(*GetSecretResponse)(nil),                       // 67: api.GetSecretResponse
+	(*CreateSecretRequest)(nil),                     // 68: api.CreateSecretRequest
+	(*CreateSecretResponse)(nil),                    // 69: api.CreateSecretResponse
+	(*UpdateSecretRequest)(nil),                     // 70: api.UpdateSecretRequest
+	(*UpdateSecretResponse)(nil),                    // 71: api.UpdateSecretResponse
+	(*DeleteSecretRequest)(nil),                     // 72: api.DeleteSecretRequest
+	(*DeleteSecretResponse)(nil),                    // 73: api.DeleteSecretResponse
+	(*PodInfo)(nil),                                 // 74: api.PodInfo
+	(*ListPodsRequest)(nil),                         // 75: api.ListPodsRequest
+	(*ListPodsResponse)(nil),                        // 76: api.ListPodsResponse
+	(*GetPodRequest)(nil),                           // 77: api.GetPodRequest
+	(*GetPodResponse)(nil),                          // 78: api.GetPodResponse
+	(*UpdatePodLabelsRequest)(nil),                  // 79: api.UpdatePodLabelsRequest
+	(*UpdatePodLabelsResponse)(nil),                 // 80: api.UpdatePodLabelsResponse
+	(*CleanupRequest)(nil),                          // 81: api.CleanupRequest
+	(*CleanupResponse)(nil),                         // 82: api.CleanupResponse
+	(*StorageAccessInfo)(nil),                       // 83: api.StorageAccessInfo
+	(*VolumeInfo)(nil),                              // 84: api.VolumeInfo
+	(*MappingContextEntry)(nil),                     // 85: api.MappingContextEntry
+	(*ValidateStorageCredsRequest)(nil),             // 86: api.ValidateStorageCredsRequest
+	(*ValidateStorageCredsResponse)(nil),            // 87: api.ValidateStorageCredsResponse
+	(*CreateInitiatorGroupRequest)(nil),             // 88: api.CreateInitiatorGroupRequest
+	(*CreateInitiatorGroupResponse)(nil),            // 89: api.CreateInitiatorGroupResponse
+	(*MapVolumeRequest)(nil),                        // 90: api.MapVolumeRequest
+	(*MapVolumeResponse)(nil),                       // 91: api.MapVolumeResponse
+	(*UnmapVolumeRequest)(nil),                      // 92: api.UnmapVolumeRequest
+	(*UnmapVolumeResponse)(nil),                     // 93: api.UnmapVolumeResponse
+	(*GetMappedGroupsRequest)(nil),                  // 94: api.GetMappedGroupsRequest
+	(*GetMappedGroupsResponse)(nil),                 // 95: api.GetMappedGroupsResponse
+	(*ResolveCinderVolumeRequest)(nil),              // 96: api.ResolveCinderVolumeRequest
+	(*ResolveCinderVolumeResponse)(nil),             // 97: api.ResolveCinderVolumeResponse
+	nil,                                             // 98: api.SecretData.DataEntry
+	nil,                                             // 99: api.PodInfo.LabelsEntry
+	nil,                                             // 100: api.UpdatePodLabelsRequest.LabelsEntry
 }
 var file_sdk_proto_v1_api_proto_depIdxs = []int32{
-	5,  // 0: api.AvailableUpdatesResponse.updates:type_name -> api.ReleaseInfo
-	7,  // 1: api.UpgradeResponse.checks:type_name -> api.ValidationResult
-	0,  // 2: api.VMInfo.power_status:type_name -> api.PowerStatus
-	1,  // 3: api.VMInfo.boot_device:type_name -> api.BootDevice
-	11, // 4: api.ListHostsRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 5: api.ListHostsRequest.target:type_name -> api.Targets
-	16, // 6: api.ListHostsResponse.hosts:type_name -> api.ListHostsResponseItem
-	11, // 7: api.UnCordonHostRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 8: api.UnCordonHostRequest.target:type_name -> api.Targets
-	11, // 9: api.ListVMsRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 10: api.ListVMsRequest.target:type_name -> api.Targets
-	13, // 11: api.ListVMsResponse.vms:type_name -> api.VMInfo
-	11, // 12: api.GetVMRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 13: api.GetVMRequest.target:type_name -> api.Targets
-	13, // 14: api.GetVMResponse.vm:type_name -> api.VMInfo
-	11, // 15: api.ReclaimVMRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 16: api.ReclaimVMRequest.target:type_name -> api.Targets
-	11, // 17: api.CordonHostRequest.access_info:type_name -> api.TargetAccessInfo
-	12, // 18: api.CordonHostRequest.target:type_name -> api.Targets
-	27, // 19: api.BMListMachinesRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	2,  // 20: api.BMListMachinesResponse.machines:type_name -> api.MachineInfo
-	27, // 21: api.GetResourceInfoRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	2,  // 22: api.GetResourceInfoResponse.machine:type_name -> api.MachineInfo
-	27, // 23: api.SetResourcePowerRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	0,  // 24: api.SetResourcePowerRequest.power_status:type_name -> api.PowerStatus
-	27, // 25: api.SetResourceBM2PXEBootRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	27, // 26: api.ListBootSourceRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	39, // 27: api.ListBootSourceResponse.boot_source_selections:type_name -> api.BootsourceSelections
-	27, // 28: api.ReclaimBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	39, // 29: api.ReclaimBMRequest.boot_source:type_name -> api.BootsourceSelections
-	42, // 30: api.ReclaimBMRequest.ipmi_interface:type_name -> api.ipmi_type
-	27, // 31: api.DeployMachineRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	27, // 32: api.StartBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	42, // 33: api.StartBMRequest.ipmi_interface:type_name -> api.ipmi_type
-	27, // 34: api.StopBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	42, // 35: api.StopBMRequest.ipmi_interface:type_name -> api.ipmi_type
-	27, // 36: api.IsBMReadyRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	27, // 37: api.IsBMRunningRequest.access_info:type_name -> api.BMProvisionerAccessInfo
-	55, // 38: api.ValidateOpenstackIpRequest.access_info:type_name -> api.OpenstackAccessInfo
-	55, // 39: api.CheckNetworkSubnetCompatibilityRequest.access_info:type_name -> api.OpenstackAccessInfo
-	62, // 40: api.CheckNetworkSubnetCompatibilityResponse.results:type_name -> api.NetworkSubnetCompatibilityEntry
-	67, // 41: api.ValidateStorageCredsRequest.access_info:type_name -> api.StorageAccessInfo
-	67, // 42: api.CreateInitiatorGroupRequest.access_info:type_name -> api.StorageAccessInfo
-	69, // 43: api.CreateInitiatorGroupResponse.mapping_context:type_name -> api.MappingContextEntry
-	67, // 44: api.MapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	68, // 45: api.MapVolumeRequest.volume:type_name -> api.VolumeInfo
-	69, // 46: api.MapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
-	68, // 47: api.MapVolumeResponse.volume:type_name -> api.VolumeInfo
-	67, // 48: api.UnmapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	68, // 49: api.UnmapVolumeRequest.volume:type_name -> api.VolumeInfo
-	69, // 50: api.UnmapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
-	67, // 51: api.GetMappedGroupsRequest.access_info:type_name -> api.StorageAccessInfo
-	68, // 52: api.GetMappedGroupsRequest.volume:type_name -> api.VolumeInfo
-	69, // 53: api.GetMappedGroupsRequest.mapping_context:type_name -> api.MappingContextEntry
-	67, // 54: api.ResolveCinderVolumeRequest.access_info:type_name -> api.StorageAccessInfo
-	68, // 55: api.ResolveCinderVolumeResponse.volume:type_name -> api.VolumeInfo
-	3,  // 56: api.Version.Version:input_type -> api.VersionRequest
-	8,  // 57: api.Version.InitiateUpgrade:input_type -> api.UpgradeRequest
-	3,  // 58: api.Version.GetUpgradeProgress:input_type -> api.VersionRequest
-	3,  // 59: api.Version.GetAvailableTags:input_type -> api.VersionRequest
-	65, // 60: api.Version.Cleanup:input_type -> api.CleanupRequest
-	19, // 61: api.VCenter.ListVMs:input_type -> api.ListVMsRequest
-	21, // 62: api.VCenter.GetVM:input_type -> api.GetVMRequest
-	23, // 63: api.VCenter.ReclaimVM:input_type -> api.ReclaimVMRequest
-	25, // 64: api.VCenter.CordonHost:input_type -> api.CordonHostRequest
-	17, // 65: api.VCenter.UnCordonHost:input_type -> api.UnCordonHostRequest
-	14, // 66: api.VCenter.ListHosts:input_type -> api.ListHostsRequest
-	29, // 67: api.BMProvider.ListMachines:input_type -> api.BMListMachinesRequest
-	31, // 68: api.BMProvider.GetResourceInfo:input_type -> api.GetResourceInfoRequest
-	33, // 69: api.BMProvider.SetResourcePower:input_type -> api.SetResourcePowerRequest
-	35, // 70: api.BMProvider.SetResourceBM2PXEBoot:input_type -> api.SetResourceBM2PXEBootRequest
-	37, // 71: api.BMProvider.WhoAmI:input_type -> api.WhoAmIRequest
-	40, // 72: api.BMProvider.ListBootSource:input_type -> api.ListBootSourceRequest
-	43, // 73: api.BMProvider.ReclaimBMHost:input_type -> api.ReclaimBMRequest
-	45, // 74: api.BMProvider.DeployMachine:input_type -> api.DeployMachineRequest
-	56, // 75: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
-	58, // 76: api.VailbreakProxy.RevalidateCredentials:input_type -> api.RevalidateCredentialsRequest
-	60, // 77: api.VailbreakProxy.InjectEnvVariables:input_type -> api.InjectEnvVariablesRequest
-	63, // 78: api.VailbreakProxy.CheckNetworkSubnetCompatibility:input_type -> api.CheckNetworkSubnetCompatibilityRequest
-	70, // 79: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
-	72, // 80: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
-	74, // 81: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
-	76, // 82: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
-	78, // 83: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
-	80, // 84: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
-	4,  // 85: api.Version.Version:output_type -> api.VersionResponse
-	9,  // 86: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
-	10, // 87: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
-	6,  // 88: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
-	66, // 89: api.Version.Cleanup:output_type -> api.CleanupResponse
-	20, // 90: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
-	22, // 91: api.VCenter.GetVM:output_type -> api.GetVMResponse
-	24, // 92: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
-	26, // 93: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
-	18, // 94: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
-	15, // 95: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
-	30, // 96: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
-	32, // 97: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
-	34, // 98: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
-	36, // 99: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
-	38, // 100: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
-	41, // 101: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
-	44, // 102: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
-	46, // 103: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
-	57, // 104: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
-	59, // 105: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
-	61, // 106: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
-	64, // 107: api.VailbreakProxy.CheckNetworkSubnetCompatibility:output_type -> api.CheckNetworkSubnetCompatibilityResponse
-	71, // 108: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
-	73, // 109: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
-	75, // 110: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
-	77, // 111: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
-	79, // 112: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
-	81, // 113: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
-	85, // [85:114] is the sub-list for method output_type
-	56, // [56:85] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	5,   // 0: api.AvailableUpdatesResponse.updates:type_name -> api.ReleaseInfo
+	7,   // 1: api.UpgradeResponse.checks:type_name -> api.ValidationResult
+	0,   // 2: api.VMInfo.power_status:type_name -> api.PowerStatus
+	1,   // 3: api.VMInfo.boot_device:type_name -> api.BootDevice
+	11,  // 4: api.ListHostsRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 5: api.ListHostsRequest.target:type_name -> api.Targets
+	16,  // 6: api.ListHostsResponse.hosts:type_name -> api.ListHostsResponseItem
+	11,  // 7: api.UnCordonHostRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 8: api.UnCordonHostRequest.target:type_name -> api.Targets
+	11,  // 9: api.ListVMsRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 10: api.ListVMsRequest.target:type_name -> api.Targets
+	13,  // 11: api.ListVMsResponse.vms:type_name -> api.VMInfo
+	11,  // 12: api.GetVMRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 13: api.GetVMRequest.target:type_name -> api.Targets
+	13,  // 14: api.GetVMResponse.vm:type_name -> api.VMInfo
+	11,  // 15: api.ReclaimVMRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 16: api.ReclaimVMRequest.target:type_name -> api.Targets
+	11,  // 17: api.CordonHostRequest.access_info:type_name -> api.TargetAccessInfo
+	12,  // 18: api.CordonHostRequest.target:type_name -> api.Targets
+	27,  // 19: api.BMListMachinesRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	2,   // 20: api.BMListMachinesResponse.machines:type_name -> api.MachineInfo
+	27,  // 21: api.GetResourceInfoRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	2,   // 22: api.GetResourceInfoResponse.machine:type_name -> api.MachineInfo
+	27,  // 23: api.SetResourcePowerRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	0,   // 24: api.SetResourcePowerRequest.power_status:type_name -> api.PowerStatus
+	27,  // 25: api.SetResourceBM2PXEBootRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	27,  // 26: api.ListBootSourceRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	39,  // 27: api.ListBootSourceResponse.boot_source_selections:type_name -> api.BootsourceSelections
+	27,  // 28: api.ReclaimBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	39,  // 29: api.ReclaimBMRequest.boot_source:type_name -> api.BootsourceSelections
+	42,  // 30: api.ReclaimBMRequest.ipmi_interface:type_name -> api.ipmi_type
+	27,  // 31: api.DeployMachineRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	27,  // 32: api.StartBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	42,  // 33: api.StartBMRequest.ipmi_interface:type_name -> api.ipmi_type
+	27,  // 34: api.StopBMRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	42,  // 35: api.StopBMRequest.ipmi_interface:type_name -> api.ipmi_type
+	27,  // 36: api.IsBMReadyRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	27,  // 37: api.IsBMRunningRequest.access_info:type_name -> api.BMProvisionerAccessInfo
+	55,  // 38: api.ValidateOpenstackIpRequest.access_info:type_name -> api.OpenstackAccessInfo
+	55,  // 39: api.CheckNetworkSubnetCompatibilityRequest.access_info:type_name -> api.OpenstackAccessInfo
+	62,  // 40: api.CheckNetworkSubnetCompatibilityResponse.results:type_name -> api.NetworkSubnetCompatibilityEntry
+	98,  // 41: api.SecretData.data:type_name -> api.SecretData.DataEntry
+	65,  // 42: api.GetSecretResponse.secret:type_name -> api.SecretData
+	65,  // 43: api.CreateSecretRequest.secret:type_name -> api.SecretData
+	65,  // 44: api.UpdateSecretRequest.secret:type_name -> api.SecretData
+	99,  // 45: api.PodInfo.labels:type_name -> api.PodInfo.LabelsEntry
+	74,  // 46: api.ListPodsResponse.pods:type_name -> api.PodInfo
+	74,  // 47: api.GetPodResponse.pod:type_name -> api.PodInfo
+	100, // 48: api.UpdatePodLabelsRequest.labels:type_name -> api.UpdatePodLabelsRequest.LabelsEntry
+	83,  // 49: api.ValidateStorageCredsRequest.access_info:type_name -> api.StorageAccessInfo
+	83,  // 50: api.CreateInitiatorGroupRequest.access_info:type_name -> api.StorageAccessInfo
+	85,  // 51: api.CreateInitiatorGroupResponse.mapping_context:type_name -> api.MappingContextEntry
+	83,  // 52: api.MapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	84,  // 53: api.MapVolumeRequest.volume:type_name -> api.VolumeInfo
+	85,  // 54: api.MapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
+	84,  // 55: api.MapVolumeResponse.volume:type_name -> api.VolumeInfo
+	83,  // 56: api.UnmapVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	84,  // 57: api.UnmapVolumeRequest.volume:type_name -> api.VolumeInfo
+	85,  // 58: api.UnmapVolumeRequest.mapping_context:type_name -> api.MappingContextEntry
+	83,  // 59: api.GetMappedGroupsRequest.access_info:type_name -> api.StorageAccessInfo
+	84,  // 60: api.GetMappedGroupsRequest.volume:type_name -> api.VolumeInfo
+	85,  // 61: api.GetMappedGroupsRequest.mapping_context:type_name -> api.MappingContextEntry
+	83,  // 62: api.ResolveCinderVolumeRequest.access_info:type_name -> api.StorageAccessInfo
+	84,  // 63: api.ResolveCinderVolumeResponse.volume:type_name -> api.VolumeInfo
+	3,   // 64: api.Version.Version:input_type -> api.VersionRequest
+	8,   // 65: api.Version.InitiateUpgrade:input_type -> api.UpgradeRequest
+	3,   // 66: api.Version.GetUpgradeProgress:input_type -> api.VersionRequest
+	3,   // 67: api.Version.GetAvailableTags:input_type -> api.VersionRequest
+	81,  // 68: api.Version.Cleanup:input_type -> api.CleanupRequest
+	19,  // 69: api.VCenter.ListVMs:input_type -> api.ListVMsRequest
+	21,  // 70: api.VCenter.GetVM:input_type -> api.GetVMRequest
+	23,  // 71: api.VCenter.ReclaimVM:input_type -> api.ReclaimVMRequest
+	25,  // 72: api.VCenter.CordonHost:input_type -> api.CordonHostRequest
+	17,  // 73: api.VCenter.UnCordonHost:input_type -> api.UnCordonHostRequest
+	14,  // 74: api.VCenter.ListHosts:input_type -> api.ListHostsRequest
+	29,  // 75: api.BMProvider.ListMachines:input_type -> api.BMListMachinesRequest
+	31,  // 76: api.BMProvider.GetResourceInfo:input_type -> api.GetResourceInfoRequest
+	33,  // 77: api.BMProvider.SetResourcePower:input_type -> api.SetResourcePowerRequest
+	35,  // 78: api.BMProvider.SetResourceBM2PXEBoot:input_type -> api.SetResourceBM2PXEBootRequest
+	37,  // 79: api.BMProvider.WhoAmI:input_type -> api.WhoAmIRequest
+	40,  // 80: api.BMProvider.ListBootSource:input_type -> api.ListBootSourceRequest
+	43,  // 81: api.BMProvider.ReclaimBMHost:input_type -> api.ReclaimBMRequest
+	45,  // 82: api.BMProvider.DeployMachine:input_type -> api.DeployMachineRequest
+	56,  // 83: api.VailbreakProxy.ValidateOpenstackIp:input_type -> api.ValidateOpenstackIpRequest
+	58,  // 84: api.VailbreakProxy.RevalidateCredentials:input_type -> api.RevalidateCredentialsRequest
+	60,  // 85: api.VailbreakProxy.InjectEnvVariables:input_type -> api.InjectEnvVariablesRequest
+	63,  // 86: api.VailbreakProxy.CheckNetworkSubnetCompatibility:input_type -> api.CheckNetworkSubnetCompatibilityRequest
+	66,  // 87: api.K8sResourceProxy.GetSecret:input_type -> api.GetSecretRequest
+	68,  // 88: api.K8sResourceProxy.CreateSecret:input_type -> api.CreateSecretRequest
+	70,  // 89: api.K8sResourceProxy.UpdateSecret:input_type -> api.UpdateSecretRequest
+	72,  // 90: api.K8sResourceProxy.DeleteSecret:input_type -> api.DeleteSecretRequest
+	75,  // 91: api.K8sResourceProxy.ListPods:input_type -> api.ListPodsRequest
+	77,  // 92: api.K8sResourceProxy.GetPod:input_type -> api.GetPodRequest
+	79,  // 93: api.K8sResourceProxy.UpdatePodLabels:input_type -> api.UpdatePodLabelsRequest
+	86,  // 94: api.StorageArray.ValidateCredentials:input_type -> api.ValidateStorageCredsRequest
+	88,  // 95: api.StorageArray.CreateOrUpdateInitiatorGroup:input_type -> api.CreateInitiatorGroupRequest
+	90,  // 96: api.StorageArray.MapVolumeToGroup:input_type -> api.MapVolumeRequest
+	92,  // 97: api.StorageArray.UnmapVolumeFromGroup:input_type -> api.UnmapVolumeRequest
+	94,  // 98: api.StorageArray.GetMappedGroups:input_type -> api.GetMappedGroupsRequest
+	96,  // 99: api.StorageArray.ResolveCinderVolume:input_type -> api.ResolveCinderVolumeRequest
+	4,   // 100: api.Version.Version:output_type -> api.VersionResponse
+	9,   // 101: api.Version.InitiateUpgrade:output_type -> api.UpgradeResponse
+	10,  // 102: api.Version.GetUpgradeProgress:output_type -> api.UpgradeProgressResponse
+	6,   // 103: api.Version.GetAvailableTags:output_type -> api.AvailableUpdatesResponse
+	82,  // 104: api.Version.Cleanup:output_type -> api.CleanupResponse
+	20,  // 105: api.VCenter.ListVMs:output_type -> api.ListVMsResponse
+	22,  // 106: api.VCenter.GetVM:output_type -> api.GetVMResponse
+	24,  // 107: api.VCenter.ReclaimVM:output_type -> api.ReclaimVMResponse
+	26,  // 108: api.VCenter.CordonHost:output_type -> api.CordonHostResponse
+	18,  // 109: api.VCenter.UnCordonHost:output_type -> api.UnCordonHostResponse
+	15,  // 110: api.VCenter.ListHosts:output_type -> api.ListHostsResponse
+	30,  // 111: api.BMProvider.ListMachines:output_type -> api.BMListMachinesResponse
+	32,  // 112: api.BMProvider.GetResourceInfo:output_type -> api.GetResourceInfoResponse
+	34,  // 113: api.BMProvider.SetResourcePower:output_type -> api.SetResourcePowerResponse
+	36,  // 114: api.BMProvider.SetResourceBM2PXEBoot:output_type -> api.SetResourceBM2PXEBootResponse
+	38,  // 115: api.BMProvider.WhoAmI:output_type -> api.WhoAmIResponse
+	41,  // 116: api.BMProvider.ListBootSource:output_type -> api.ListBootSourceResponse
+	44,  // 117: api.BMProvider.ReclaimBMHost:output_type -> api.ReclaimBMResponse
+	46,  // 118: api.BMProvider.DeployMachine:output_type -> api.DeployMachineResponse
+	57,  // 119: api.VailbreakProxy.ValidateOpenstackIp:output_type -> api.ValidateOpenstackIpResponse
+	59,  // 120: api.VailbreakProxy.RevalidateCredentials:output_type -> api.RevalidateCredentialsResponse
+	61,  // 121: api.VailbreakProxy.InjectEnvVariables:output_type -> api.InjectEnvVariablesResponse
+	64,  // 122: api.VailbreakProxy.CheckNetworkSubnetCompatibility:output_type -> api.CheckNetworkSubnetCompatibilityResponse
+	67,  // 123: api.K8sResourceProxy.GetSecret:output_type -> api.GetSecretResponse
+	69,  // 124: api.K8sResourceProxy.CreateSecret:output_type -> api.CreateSecretResponse
+	71,  // 125: api.K8sResourceProxy.UpdateSecret:output_type -> api.UpdateSecretResponse
+	73,  // 126: api.K8sResourceProxy.DeleteSecret:output_type -> api.DeleteSecretResponse
+	76,  // 127: api.K8sResourceProxy.ListPods:output_type -> api.ListPodsResponse
+	78,  // 128: api.K8sResourceProxy.GetPod:output_type -> api.GetPodResponse
+	80,  // 129: api.K8sResourceProxy.UpdatePodLabels:output_type -> api.UpdatePodLabelsResponse
+	87,  // 130: api.StorageArray.ValidateCredentials:output_type -> api.ValidateStorageCredsResponse
+	89,  // 131: api.StorageArray.CreateOrUpdateInitiatorGroup:output_type -> api.CreateInitiatorGroupResponse
+	91,  // 132: api.StorageArray.MapVolumeToGroup:output_type -> api.MapVolumeResponse
+	93,  // 133: api.StorageArray.UnmapVolumeFromGroup:output_type -> api.UnmapVolumeResponse
+	95,  // 134: api.StorageArray.GetMappedGroups:output_type -> api.GetMappedGroupsResponse
+	97,  // 135: api.StorageArray.ResolveCinderVolume:output_type -> api.ResolveCinderVolumeResponse
+	100, // [100:136] is the sub-list for method output_type
+	64,  // [64:100] is the sub-list for method input_type
+	64,  // [64:64] is the sub-list for extension type_name
+	64,  // [64:64] is the sub-list for extension extendee
+	0,   // [0:64] is the sub-list for field type_name
 }
 
 func init() { file_sdk_proto_v1_api_proto_init() }
@@ -5789,9 +6782,9 @@ func file_sdk_proto_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sdk_proto_v1_api_proto_rawDesc), len(file_sdk_proto_v1_api_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   80,
+			NumMessages:   99,
 			NumExtensions: 0,
-			NumServices:   5,
+			NumServices:   6,
 		},
 		GoTypes:           file_sdk_proto_v1_api_proto_goTypes,
 		DependencyIndexes: file_sdk_proto_v1_api_proto_depIdxs,

@@ -45,24 +45,24 @@ type InterfaceAddress struct {
 type Host struct {
 	ID   string `json:"id"`
 	Info struct {
-		Hostname         string      `json:"hostname"`
-		OSFamily         string      `json:"os_family"`
-		Arch             string      `json:"arch"`
-		OSInfo           string      `json:"os_info"`
-		Responding       bool        `json:"responding"`
-		LastResponseTime interface{} `json:"last_response_time"`
+		Hostname         string          `json:"hostname"`
+		OSFamily         string          `json:"os_family"`
+		Arch             string          `json:"arch"`
+		OSInfo           string          `json:"os_info"`
+		Responding       bool            `json:"responding"`
+		LastResponseTime interface{}     `json:"last_response_time"`
 		CPUInfo          json.RawMessage `json:"cpu_info,omitempty"`
 	} `json:"info,omitempty"`
 	Roles              []string               `json:"roles,omitempty"`
 	RolesStatusDetails map[string]string      `json:"roles_status_details,omitempty"`
 	RoleStatus         string                 `json:"role_status,omitempty"`
 	RoleSettings       map[string]interface{} `json:"role_settings,omitempty"`
-	HypervisorInfo     json.RawMessage `json:"hypervisor_info,omitempty"`
-	RawExtensionData json.RawMessage   `json:"-"`
-	CAPIExtension    PF9CAPIExtensions `json:"-"`
-	Extensions       json.RawMessage `json:"extensions,omitempty"`
-	Message      interface{} `json:"message,omitempty"`
-	HostconfigID string      `json:"hostconfig_id,omitempty"`
+	HypervisorInfo     json.RawMessage        `json:"hypervisor_info,omitempty"`
+	RawExtensionData   json.RawMessage        `json:"-"`
+	CAPIExtension      PF9CAPIExtensions      `json:"-"`
+	Extensions         json.RawMessage        `json:"extensions,omitempty"`
+	Message            interface{}            `json:"message,omitempty"`
+	HostconfigID       string                 `json:"hostconfig_id,omitempty"`
 }
 
 // Cluster represents a group of hosts managed as a single entity in Platform9,

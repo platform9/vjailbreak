@@ -1152,6 +1152,336 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	K8SResourceProxy_GetSecret_FullMethodName       = "/api.K8sResourceProxy/GetSecret"
+	K8SResourceProxy_CreateSecret_FullMethodName    = "/api.K8sResourceProxy/CreateSecret"
+	K8SResourceProxy_UpdateSecret_FullMethodName    = "/api.K8sResourceProxy/UpdateSecret"
+	K8SResourceProxy_DeleteSecret_FullMethodName    = "/api.K8sResourceProxy/DeleteSecret"
+	K8SResourceProxy_ListPods_FullMethodName        = "/api.K8sResourceProxy/ListPods"
+	K8SResourceProxy_GetPod_FullMethodName          = "/api.K8sResourceProxy/GetPod"
+	K8SResourceProxy_UpdatePodLabels_FullMethodName = "/api.K8sResourceProxy/UpdatePodLabels"
+)
+
+// K8SResourceProxyClient is the client API for K8SResourceProxy service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type K8SResourceProxyClient interface {
+	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
+	CreateSecret(ctx context.Context, in *CreateSecretRequest, opts ...grpc.CallOption) (*CreateSecretResponse, error)
+	UpdateSecret(ctx context.Context, in *UpdateSecretRequest, opts ...grpc.CallOption) (*UpdateSecretResponse, error)
+	DeleteSecret(ctx context.Context, in *DeleteSecretRequest, opts ...grpc.CallOption) (*DeleteSecretResponse, error)
+	ListPods(ctx context.Context, in *ListPodsRequest, opts ...grpc.CallOption) (*ListPodsResponse, error)
+	GetPod(ctx context.Context, in *GetPodRequest, opts ...grpc.CallOption) (*GetPodResponse, error)
+	UpdatePodLabels(ctx context.Context, in *UpdatePodLabelsRequest, opts ...grpc.CallOption) (*UpdatePodLabelsResponse, error)
+}
+
+type k8SResourceProxyClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewK8SResourceProxyClient(cc grpc.ClientConnInterface) K8SResourceProxyClient {
+	return &k8SResourceProxyClient{cc}
+}
+
+func (c *k8SResourceProxyClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSecretResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_GetSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) CreateSecret(ctx context.Context, in *CreateSecretRequest, opts ...grpc.CallOption) (*CreateSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSecretResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_CreateSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) UpdateSecret(ctx context.Context, in *UpdateSecretRequest, opts ...grpc.CallOption) (*UpdateSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSecretResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_UpdateSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) DeleteSecret(ctx context.Context, in *DeleteSecretRequest, opts ...grpc.CallOption) (*DeleteSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteSecretResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_DeleteSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) ListPods(ctx context.Context, in *ListPodsRequest, opts ...grpc.CallOption) (*ListPodsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPodsResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_ListPods_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) GetPod(ctx context.Context, in *GetPodRequest, opts ...grpc.CallOption) (*GetPodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPodResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_GetPod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *k8SResourceProxyClient) UpdatePodLabels(ctx context.Context, in *UpdatePodLabelsRequest, opts ...grpc.CallOption) (*UpdatePodLabelsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdatePodLabelsResponse)
+	err := c.cc.Invoke(ctx, K8SResourceProxy_UpdatePodLabels_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// K8SResourceProxyServer is the server API for K8SResourceProxy service.
+// All implementations must embed UnimplementedK8SResourceProxyServer
+// for forward compatibility.
+type K8SResourceProxyServer interface {
+	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
+	CreateSecret(context.Context, *CreateSecretRequest) (*CreateSecretResponse, error)
+	UpdateSecret(context.Context, *UpdateSecretRequest) (*UpdateSecretResponse, error)
+	DeleteSecret(context.Context, *DeleteSecretRequest) (*DeleteSecretResponse, error)
+	ListPods(context.Context, *ListPodsRequest) (*ListPodsResponse, error)
+	GetPod(context.Context, *GetPodRequest) (*GetPodResponse, error)
+	UpdatePodLabels(context.Context, *UpdatePodLabelsRequest) (*UpdatePodLabelsResponse, error)
+	mustEmbedUnimplementedK8SResourceProxyServer()
+}
+
+// UnimplementedK8SResourceProxyServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedK8SResourceProxyServer struct{}
+
+func (UnimplementedK8SResourceProxyServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSecret not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) CreateSecret(context.Context, *CreateSecretRequest) (*CreateSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSecret not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) UpdateSecret(context.Context, *UpdateSecretRequest) (*UpdateSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSecret not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) DeleteSecret(context.Context, *DeleteSecretRequest) (*DeleteSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteSecret not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) ListPods(context.Context, *ListPodsRequest) (*ListPodsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPods not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) GetPod(context.Context, *GetPodRequest) (*GetPodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPod not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) UpdatePodLabels(context.Context, *UpdatePodLabelsRequest) (*UpdatePodLabelsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdatePodLabels not implemented")
+}
+func (UnimplementedK8SResourceProxyServer) mustEmbedUnimplementedK8SResourceProxyServer() {}
+func (UnimplementedK8SResourceProxyServer) testEmbeddedByValue()                          {}
+
+// UnsafeK8SResourceProxyServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to K8SResourceProxyServer will
+// result in compilation errors.
+type UnsafeK8SResourceProxyServer interface {
+	mustEmbedUnimplementedK8SResourceProxyServer()
+}
+
+func RegisterK8SResourceProxyServer(s grpc.ServiceRegistrar, srv K8SResourceProxyServer) {
+	// If the following call panics, it indicates UnimplementedK8SResourceProxyServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&K8SResourceProxy_ServiceDesc, srv)
+}
+
+func _K8SResourceProxy_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).GetSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_GetSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).GetSecret(ctx, req.(*GetSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_CreateSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).CreateSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_CreateSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).CreateSecret(ctx, req.(*CreateSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_UpdateSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).UpdateSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_UpdateSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).UpdateSecret(ctx, req.(*UpdateSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_DeleteSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).DeleteSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_DeleteSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).DeleteSecret(ctx, req.(*DeleteSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_ListPods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPodsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).ListPods(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_ListPods_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).ListPods(ctx, req.(*ListPodsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_GetPod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).GetPod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_GetPod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).GetPod(ctx, req.(*GetPodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _K8SResourceProxy_UpdatePodLabels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdatePodLabelsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(K8SResourceProxyServer).UpdatePodLabels(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: K8SResourceProxy_UpdatePodLabels_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(K8SResourceProxyServer).UpdatePodLabels(ctx, req.(*UpdatePodLabelsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// K8SResourceProxy_ServiceDesc is the grpc.ServiceDesc for K8SResourceProxy service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var K8SResourceProxy_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.K8sResourceProxy",
+	HandlerType: (*K8SResourceProxyServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetSecret",
+			Handler:    _K8SResourceProxy_GetSecret_Handler,
+		},
+		{
+			MethodName: "CreateSecret",
+			Handler:    _K8SResourceProxy_CreateSecret_Handler,
+		},
+		{
+			MethodName: "UpdateSecret",
+			Handler:    _K8SResourceProxy_UpdateSecret_Handler,
+		},
+		{
+			MethodName: "DeleteSecret",
+			Handler:    _K8SResourceProxy_DeleteSecret_Handler,
+		},
+		{
+			MethodName: "ListPods",
+			Handler:    _K8SResourceProxy_ListPods_Handler,
+		},
+		{
+			MethodName: "GetPod",
+			Handler:    _K8SResourceProxy_GetPod_Handler,
+		},
+		{
+			MethodName: "UpdatePodLabels",
+			Handler:    _K8SResourceProxy_UpdatePodLabels_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sdk/proto/v1/api.proto",
+}
+
+const (
 	StorageArray_ValidateCredentials_FullMethodName          = "/api.StorageArray/ValidateCredentials"
 	StorageArray_CreateOrUpdateInitiatorGroup_FullMethodName = "/api.StorageArray/CreateOrUpdateInitiatorGroup"
 	StorageArray_MapVolumeToGroup_FullMethodName             = "/api.StorageArray/MapVolumeToGroup"

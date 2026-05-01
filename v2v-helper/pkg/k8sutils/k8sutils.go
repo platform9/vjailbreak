@@ -271,25 +271,27 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 	return arrayCreds, nil
 }
 
-// GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret
-func GetESXiSSHPrivateKey(ctx context.Context, k8sClient client.Client, secretName string) ([]byte, error) {
-	secret := &corev1.Secret{}
-	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
-		Name:      secretName,
-		Namespace: constants.NamespaceMigrationSystem,
-	}, secret); err != nil {
-		return nil, errors.Wrapf(err, "failed to get ESXi SSH secret %s", secretName)
+// GetESXiSSHPrivateKey reads the ESXi SSH private key from the filesystem mount path
+// injected by the kubelet.
+func GetESXiSSHPrivateKey(_ context.Context, _ client.Client, _ string) ([]byte, error) {
+	keyFiles := []string{
+		constants.ESXiSSHKeyMountPath + "/ssh-privatekey",
+		constants.ESXiSSHKeyMountPath + "/privateKey",
+		constants.ESXiSSHKeyMountPath + "/id_rsa",
 	}
 
-	// The secret should contain a key named "ssh-privatekey"
-	privateKey, ok := secret.Data["ssh-privatekey"]
-	if !ok {
-		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
+	for _, path := range keyFiles {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if len(data) == 0 {
+				continue
+			}
+			return data, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, errors.Wrapf(err, "failed to read ESXi SSH key from %s", path)
+		}
 	}
 
-	if len(privateKey) == 0 {
-		return nil, fmt.Errorf("ESXi SSH private key in secret %s is empty", secretName)
-	}
-
-	return privateKey, nil
+	return nil, fmt.Errorf("ESXi SSH private key not found in volume mount %s (tried ssh-privatekey, privateKey, id_rsa)", constants.ESXiSSHKeyMountPath)
 }

@@ -19,6 +19,9 @@
       "name": "VailbreakProxy"
     },
     {
+      "name": "K8sResourceProxy"
+    },
+    {
       "name": "StorageArray"
     }
   ],
@@ -408,6 +411,272 @@
         ],
         "tags": [
           "VailbreakProxy"
+        ]
+      }
+    },
+    "/vpw/v1/k8s/pods/{namespace}": {
+      "get": {
+        "operationId": "K8sResourceProxy_ListPods",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiListPodsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "labelSelector",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      }
+    },
+    "/vpw/v1/k8s/pods/{namespace}/{name}": {
+      "get": {
+        "operationId": "K8sResourceProxy_GetPod",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetPodResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      }
+    },
+    "/vpw/v1/k8s/pods/{namespace}/{name}/labels": {
+      "patch": {
+        "operationId": "K8sResourceProxy_UpdatePodLabels",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpdatePodLabelsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/K8sResourceProxyUpdatePodLabelsBody"
+            }
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      }
+    },
+    "/vpw/v1/k8s/secrets/{namespace}": {
+      "post": {
+        "operationId": "K8sResourceProxy_CreateSecret",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCreateSecretResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/K8sResourceProxyCreateSecretBody"
+            }
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      }
+    },
+    "/vpw/v1/k8s/secrets/{namespace}/{name}": {
+      "get": {
+        "operationId": "K8sResourceProxy_GetSecret",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiGetSecretResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      },
+      "delete": {
+        "operationId": "K8sResourceProxy_DeleteSecret",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiDeleteSecretResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
+        ]
+      },
+      "put": {
+        "operationId": "K8sResourceProxy_UpdateSecret",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiUpdateSecretResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/K8sResourceProxyUpdateSecretBody"
+            }
+          }
+        ],
+        "tags": [
+          "K8sResourceProxy"
         ]
       }
     },
@@ -1171,6 +1440,36 @@
     }
   },
   "definitions": {
+    "K8sResourceProxyCreateSecretBody": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "secret": {
+          "$ref": "#/definitions/apiSecretData"
+        }
+      }
+    },
+    "K8sResourceProxyUpdatePodLabelsBody": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "K8sResourceProxyUpdateSecretBody": {
+      "type": "object",
+      "properties": {
+        "secret": {
+          "$ref": "#/definitions/apiSecretData"
+        }
+      }
+    },
     "apiAvailableUpdatesResponse": {
       "type": "object",
       "properties": {
@@ -1385,6 +1684,28 @@
         }
       }
     },
+    "apiCreateSecretResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiDeleteSecretResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "apiDeployMachineRequest": {
       "type": "object",
       "properties": {
@@ -1442,11 +1763,33 @@
         }
       }
     },
+    "apiGetPodResponse": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "$ref": "#/definitions/apiPodInfo"
+        }
+      }
+    },
     "apiGetResourceInfoResponse": {
       "type": "object",
       "properties": {
         "machine": {
           "$ref": "#/definitions/apiMachineInfo"
+        }
+      }
+    },
+    "apiGetSecretResponse": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "secret": {
+          "$ref": "#/definitions/apiSecretData"
         }
       }
     },
@@ -1544,6 +1887,18 @@
         },
         "serial": {
           "type": "string"
+        }
+      }
+    },
+    "apiListPodsResponse": {
+      "type": "object",
+      "properties": {
+        "pods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/apiPodInfo"
+          }
         }
       }
     },
@@ -1716,6 +2071,32 @@
         }
       }
     },
+    "apiPodInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "nodeName": {
+          "type": "string"
+        },
+        "podIp": {
+          "type": "string"
+        }
+      }
+    },
     "apiPowerStatus": {
       "type": "string",
       "enum": [
@@ -1852,6 +2233,21 @@
       "type": "object",
       "properties": {
         "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiSecretData": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "format": "byte"
+          }
+        },
+        "type": {
           "type": "string"
         }
       }
@@ -2024,6 +2420,28 @@
       }
     },
     "apiUnmapVolumeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpdatePodLabelsResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "apiUpdateSecretResponse": {
       "type": "object",
       "properties": {
         "success": {

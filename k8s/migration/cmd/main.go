@@ -37,6 +37,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/proxyclient"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -129,29 +130,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The proxyAwareClient is created inside SetupControllers; re-create a consistent
+	// instance for the remaining reconcilers set up in main().
+	mainProxyClient := proxyclient.New(os.Getenv("PROXY_SERVICE_URL"))
+	mainProxyAwareClient := proxyclient.NewProxyAwareClient(mgr.GetClient(), mainProxyClient)
+
 	if err = (&controller.ESXIMigrationReconciler{
-		Client: mgr.GetClient(),
+		Client: mainProxyAwareClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ESXIMigration")
 		os.Exit(1)
 	}
 	if err = (&controller.ClusterMigrationReconciler{
-		Client: mgr.GetClient(),
+		Client: mainProxyAwareClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMigration")
 		os.Exit(1)
 	}
 	if err = (&controller.BMConfigReconciler{
-		Client: mgr.GetClient(),
+		Client: mainProxyAwareClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BMConfig")
 		os.Exit(1)
 	}
 	if err = (&controller.RDMDiskReconciler{
-		Client:    mgr.GetClient(),
+		Client:    mainProxyAwareClient,
 		Scheme:    mgr.GetScheme(),
 		APIReader: mgr.GetAPIReader(),
 	}).SetupWithManager(mgr); err != nil {
@@ -226,8 +232,12 @@ func GetManager(metricsAddr string,
 
 // SetupControllers initializes and sets up all controllers with the manager
 func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int) error {
+	// proxyClient routes secret and pod operations through the vjailbreak proxy.
+	proxyClient := proxyclient.New(os.Getenv("PROXY_SERVICE_URL"))
+	proxyAwareClient := proxyclient.NewProxyAwareClient(mgr.GetClient(), proxyClient)
+
 	if err := (&controller.MigrationReconciler{
-		Client:                  mgr.GetClient(),
+		Client:                  proxyAwareClient,
 		Scheme:                  mgr.GetScheme(),
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
@@ -235,7 +245,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.OpenstackCredsReconciler{
-		Client:                  mgr.GetClient(),
+		Client:                  proxyAwareClient,
 		Scheme:                  mgr.GetScheme(),
 		Local:                   local,
 		MaxConcurrentReconciles: maxConcurrentReconciles,
@@ -244,14 +254,14 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.VMwareCredsReconciler{
-		Client: mgr.GetClient(),
+		Client: proxyAwareClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VMwareCreds")
 		return err
 	}
 	if err := (&controller.ArrayCredsReconciler{
-		Client:                  mgr.GetClient(),
+		Client:                  proxyAwareClient,
 		Scheme:                  mgr.GetScheme(),
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
@@ -259,7 +269,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.ESXiSSHCredsReconciler{
-		Client:                  mgr.GetClient(),
+		Client:                  proxyAwareClient,
 		Scheme:                  mgr.GetScheme(),
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
@@ -268,7 +278,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 	}
 	if err := (&controller.StorageMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
-			Client: mgr.GetClient(),
+			Client: proxyAwareClient,
 			Scheme: mgr.GetScheme(),
 		},
 	}).SetupWithManager(mgr); err != nil {
@@ -277,7 +287,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 	}
 	if err := (&controller.NetworkMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
-			Client: mgr.GetClient(),
+			Client: proxyAwareClient,
 			Scheme: mgr.GetScheme(),
 		},
 	}).SetupWithManager(mgr); err != nil {
@@ -285,7 +295,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.MigrationPlanReconciler{
-		Client:                  mgr.GetClient(),
+		Client:                  proxyAwareClient,
 		Scheme:                  mgr.GetScheme(),
 		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
@@ -293,7 +303,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.VjailbreakNodeReconciler{
-		Client: mgr.GetClient(),
+		Client: proxyAwareClient,
 		Scheme: mgr.GetScheme(),
 		Local:  local,
 	}).SetupWithManager(mgr); err != nil {
@@ -301,7 +311,7 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		return err
 	}
 	if err := (&controller.RollingMigrationPlanReconciler{
-		Client: mgr.GetClient(),
+		Client: proxyAwareClient,
 		Scheme: mgr.GetScheme(),
 		Local:  local,
 	}).SetupWithManager(mgr); err != nil {

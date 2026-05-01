@@ -48,7 +48,7 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
-      serviceAccountName: migration-controller-manager
+      serviceAccountName: proxy-manager
       terminationGracePeriodSeconds: 30
       volumes:
       - name: hosts-file

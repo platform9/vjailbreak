@@ -85,9 +85,6 @@ var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
 // The default image. This is replaced by Go linker flags in the Dockerfile
 var v2vimage = "platform9/v2v-helper:v0.1"
 
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
@@ -1129,7 +1126,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 					},
 					Spec: corev1.PodSpec{
 						RestartPolicy:                 corev1.RestartPolicyNever,
-						ServiceAccountName:            "migration-controller-manager",
+						ServiceAccountName:            constants.V2VHelperServiceAccountName,
 						TerminationGracePeriodSeconds: ptr.To(constants.TerminationPeriod),
 						HostNetwork:                   true,
 						DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
@@ -1207,6 +1204,14 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "virtio-driver",
 										MountPath: "/home/fedora/virtio-win",
 									},
+									// Mount ESXi SSH key as a read-only volume so the v2v-helper
+									// pod can read it from the filesystem without requiring
+									// direct Kubernetes secrets RBAC access.
+									{
+										Name:      "esxi-ssh-key",
+										MountPath: constants.ESXiSSHKeyMountPath,
+										ReadOnly:  true,
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -1229,6 +1234,17 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
 										Type: utils.NewHostPathType("Directory"),
+									},
+								},
+							},
+							// ESXi SSH key volume — optional so the pod starts even when no
+							// ESXiSSHCreds resource exists yet.
+							{
+								Name: "esxi-ssh-key",
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: constants.ESXiSSHSecretName,
+										Optional:   ptr.To(true),
 									},
 								},
 							},

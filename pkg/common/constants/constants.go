@@ -387,6 +387,13 @@ const (
 	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
 	ESXiSSHSecretName = "esxi-ssh-key"
 
+	// ESXiSSHKeyMountPath is the filesystem path where the ESXi SSH key secret is mounted
+	// inside v2v-helper pods.
+	ESXiSSHKeyMountPath = "/etc/vjailbreak/esxi-ssh"
+
+	// V2VHelperServiceAccountName is the dedicated ServiceAccount for v2v-helper migration worker pods.
+	V2VHelperServiceAccountName = "v2v-helper"
+
 	// AutoFstabUpdate is the default value for automatic fstab update
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update

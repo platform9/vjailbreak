@@ -566,6 +566,139 @@ service VailbreakProxy {
     }
 }
 
+service K8sResourceProxy {
+    rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/k8s/secrets/{namespace}/{name}"
+        };
+    }
+
+    rpc CreateSecret(CreateSecretRequest) returns (CreateSecretResponse) {
+        option (google.api.http) = {
+            post: "/vpw/v1/k8s/secrets/{namespace}"
+            body: "*"
+        };
+    }
+
+    rpc UpdateSecret(UpdateSecretRequest) returns (UpdateSecretResponse) {
+        option (google.api.http) = {
+            put: "/vpw/v1/k8s/secrets/{namespace}/{name}"
+            body: "*"
+        };
+    }
+
+    rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse) {
+        option (google.api.http) = {
+            delete: "/vpw/v1/k8s/secrets/{namespace}/{name}"
+        };
+    }
+
+    rpc ListPods(ListPodsRequest) returns (ListPodsResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/k8s/pods/{namespace}"
+        };
+    }
+
+    rpc GetPod(GetPodRequest) returns (GetPodResponse) {
+        option (google.api.http) = {
+            get: "/vpw/v1/k8s/pods/{namespace}/{name}"
+        };
+    }
+
+    rpc UpdatePodLabels(UpdatePodLabelsRequest) returns (UpdatePodLabelsResponse) {
+        option (google.api.http) = {
+            patch: "/vpw/v1/k8s/pods/{namespace}/{name}/labels"
+            body: "*"
+        };
+    }
+}
+
+message SecretData {
+    map<string, bytes> data = 1;
+    string type = 2;
+}
+
+message GetSecretRequest {
+    string namespace = 1;
+    string name = 2;
+}
+
+message GetSecretResponse {
+    string name = 1;
+    string namespace = 2;
+    SecretData secret = 3;
+}
+
+message CreateSecretRequest {
+    string namespace = 1;
+    string name = 2;
+    SecretData secret = 3;
+}
+
+message CreateSecretResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message UpdateSecretRequest {
+    string namespace = 1;
+    string name = 2;
+    SecretData secret = 3;
+}
+
+message UpdateSecretResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message DeleteSecretRequest {
+    string namespace = 1;
+    string name = 2;
+}
+
+message DeleteSecretResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message PodInfo {
+    string name = 1;
+    string namespace = 2;
+    string phase = 3;
+    map<string, string> labels = 4;
+    string node_name = 5;
+    string pod_ip = 6;
+}
+
+message ListPodsRequest {
+    string namespace = 1;
+    string label_selector = 2;
+}
+
+message ListPodsResponse {
+    repeated PodInfo pods = 1;
+}
+
+message GetPodRequest {
+    string namespace = 1;
+    string name = 2;
+}
+
+message GetPodResponse {
+    PodInfo pod = 1;
+}
+
+message UpdatePodLabelsRequest {
+    string namespace = 1;
+    string name = 2;
+    map<string, string> labels = 3;
+}
+
+message UpdatePodLabelsResponse {
+    bool success = 1;
+    string message = 2;
+}
+
 message CleanupRequest {
 }
 
