@@ -107,6 +107,10 @@ spec:
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
             properties:
+              resourceFetchStatus:
+                description: ResourceFetchStatus tracks the status of post-validation
+                  resource discovery
+                type: string
               vmwareValidationMessage:
                 description: VMwareValidationMessage is the message associated with
                   the VMware validation

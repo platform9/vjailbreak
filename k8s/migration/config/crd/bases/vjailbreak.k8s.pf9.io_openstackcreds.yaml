@@ -290,6 +290,10 @@ spec:
                 description: OpenStackValidationStatus is the status of the OpenStack
                   validation
                 type: string
+              resourceFetchStatus:
+                description: ResourceFetchStatus tracks the status of post-validation
+                  resource discovery
+                type: string
             type: object
         type: object
     served: true

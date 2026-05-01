@@ -1834,6 +1834,10 @@ spec:
                 description: OpenStackValidationStatus is the status of the OpenStack
                   validation
                 type: string
+              resourceFetchStatus:
+                description: ResourceFetchStatus tracks the status of post-validation
+                  resource discovery
+                type: string
             type: object
         type: object
     served: true
@@ -2929,6 +2933,10 @@ spec:
           status:
             description: VMwareCredsStatus defines the observed state of VMwareCreds
             properties:
+              resourceFetchStatus:
+                description: ResourceFetchStatus tracks the status of post-validation
+                  resource discovery
+                type: string
               vmwareValidationMessage:
                 description: VMwareValidationMessage is the message associated with
                   the VMware validation
@@ -4592,7 +4600,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.4
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4686,7 +4694,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.4
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4775,7 +4783,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.4
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
