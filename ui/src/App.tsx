@@ -22,6 +22,9 @@ import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery
 import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
+import CustomResourcesPage from './features/resources/pages/CustomResourcesPage'
+import ConfigMapsPage from './features/resources/pages/ConfigMapsPage'
+import ControllerLogsPage from './features/resources/pages/ControllerLogsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -440,6 +443,13 @@ function App() {
               <Route path="storage-management" element={<StorageManagementPage />} />
               <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
               <Route path="profiles" element={<ImageProfilesPage />} />
+              <Route
+                path="resources"
+                element={<Navigate to="/dashboard/resources/custom-resources" replace />}
+              />
+              <Route path="resources/custom-resources" element={<CustomResourcesPage />} />
+              <Route path="resources/config-maps" element={<ConfigMapsPage />} />
+              <Route path="resources/controller-logs" element={<ControllerLogsPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>

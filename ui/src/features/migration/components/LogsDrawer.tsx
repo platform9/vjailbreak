@@ -9,8 +9,6 @@ import {
   CircularProgress,
   Alert,
   Paper,
-  ToggleButton,
-  ToggleButtonGroup,
   useTheme,
   TextField,
   Tooltip,
@@ -28,7 +26,6 @@ import FilterListIcon from '@mui/icons-material/FilterList'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { DrawerShell, DrawerHeader } from 'src/components'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
-import { useDeploymentLogs } from 'src/hooks/useDeploymentLogs'
 import { fetchPodDebugLogs } from 'src/api/kubernetes/pods'
 import LogLine from './LogLine'
 import {
@@ -62,8 +59,6 @@ export default function LogsDrawer({
 
   const [follow, setFollow] = useState(true)
   const [isPaused, setIsPaused] = useState(false)
-  const [logSource, setLogSource] = useState<'pod' | 'controller'>('pod')
-  const [isTransitioning, setIsTransitioning] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [logLevelFilter, setLogLevelFilter] = useState<string>('ALL')
   const [copySuccess, setCopySuccess] = useState(false)
@@ -76,36 +71,19 @@ export default function LogsDrawer({
   const logsLengthRef = useRef(0)
 
   const {
-    logs: directPodLogs,
-    isLoading: directPodIsLoading,
-    error: directPodError
+    logs: currentLogs,
+    isLoading: currentIsLoading,
+    error: currentError
   } = useDirectPodLogs({
     podName,
     namespace,
-    enabled: open && logSource === 'pod' && !isPaused,
+    enabled: open && !isPaused,
     sessionKey
   })
-
-  const {
-    logs: controllerLogsList,
-    isLoading: controllerLogsLoading,
-    error: controllerLogsError
-  } = useDeploymentLogs({
-    deploymentName: 'migration-controller-manager',
-    namespace: 'migration-system',
-    labelSelector: 'control-plane=controller-manager',
-    enabled: open && logSource === 'controller' && !isPaused,
-    sessionKey
-  })
-
-  // Get current logs and states based on log source
-  const currentLogs = logSource === 'pod' ? directPodLogs : controllerLogsList
-  const currentIsLoading = logSource === 'pod' ? directPodIsLoading : controllerLogsLoading
-  const currentError = logSource === 'pod' ? directPodError : controllerLogsError
 
   // Auto-scroll to bottom when new logs arrive and follow is enabled
   useEffect(() => {
-    if (follow && logsEndRef.current && !isTransitioning && currentLogs.length > 0) {
+    if (follow && logsEndRef.current && currentLogs.length > 0) {
       if (logsLengthRef.current !== currentLogs.length) {
         logsLengthRef.current = currentLogs.length
         setTimeout(() => {
@@ -113,7 +91,7 @@ export default function LogsDrawer({
         }, 0)
       }
     }
-  }, [currentLogs.length, follow, isTransitioning])
+  }, [currentLogs.length, follow])
 
   const handleFollowToggle = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,33 +106,15 @@ export default function LogsDrawer({
     [logsEndRef]
   )
 
-  const handleLogSourceChange = useCallback(
-    (_event: React.MouseEvent<HTMLElement>, newLogSource: 'pod' | 'controller' | null) => {
-      if (newLogSource !== null && newLogSource !== logSource) {
-        setIsTransitioning(true)
-        setLogSource(newLogSource)
-        setSessionKey((prev) => prev + 1)
-
-        // Reset transition state after a brief delay to show loading state
-        setTimeout(() => {
-          setIsTransitioning(false)
-        }, 100)
-      }
-    },
-    [logSource]
-  )
-
   const handleReconnect = useCallback(() => {
     setSessionKey((prev) => prev + 1)
   }, [])
 
   const handleClose = useCallback(() => {
-    setFollow(true) // Reset follow state when closing
-    setIsPaused(false) // Reset pause state when closing
-    setLogSource('pod') // Reset log source when closing
-    setIsTransitioning(false) // Reset transition state when closing
-    setSearchTerm('') // Reset search term
-    setLogLevelFilter('ALL') // Reset log level filter
+    setFollow(true)
+    setIsPaused(false)
+    setSearchTerm('')
+    setLogLevelFilter('ALL')
     onClose()
   }, [onClose])
 
@@ -241,18 +201,15 @@ export default function LogsDrawer({
     setIsDownloading(true)
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const fileName = `${vmDisplayName || podName || 'logs'}-${logSource}-${timestamp}.txt`
-      
+      const fileName = `${vmDisplayName || podName || 'logs'}-${timestamp}.txt`
+
       let combinedLogs = ''
-      
-      // Add stdout/stderr logs
       combinedLogs += '='.repeat(80) + '\n'
-      combinedLogs += `STDOUT/STDERR LOGS (${logSource})\n`
+      combinedLogs += 'STDOUT/STDERR LOGS\n'
       combinedLogs += '='.repeat(80) + '\n\n'
       combinedLogs += filteredLogs.join('\n')
-      
-      // Fetch and add debug logs from /var/log/pf9 (only for pod logs, not controller)
-      if (logSource === 'pod' && podName && namespace) {
+
+      if (podName && namespace) {
         try {
           const debugLogs = await fetchPodDebugLogs(namespace, podName, migrationName)
           if (debugLogs && debugLogs.trim()) {
@@ -264,14 +221,10 @@ export default function LogsDrawer({
           }
         } catch (error) {
           console.warn('Failed to fetch debug logs:', error)
-          combinedLogs += '\n\n'
-          combinedLogs += '='.repeat(80) + '\n'
-          combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
-          combinedLogs += '='.repeat(80) + '\n\n'
-          combinedLogs += '[Failed to fetch debug logs from pod filesystem]\n'
+          combinedLogs += '\n\n[Failed to fetch debug logs from pod filesystem]\n'
         }
       }
-      
+
       const blob = new Blob([combinedLogs], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -281,7 +234,7 @@ export default function LogsDrawer({
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 2000)
     } catch (error) {
@@ -289,9 +242,9 @@ export default function LogsDrawer({
     } finally {
       setIsDownloading(false)
     }
-  }, [filteredLogs, vmDisplayName, podName, logSource, namespace, migrationName])
+  }, [filteredLogs, vmDisplayName, podName, namespace, migrationName])
 
-  const headerTitle = logSource === 'pod' ? 'Migration Pod Logs' : 'Controller Logs'
+  const headerTitle = 'Migration Pod Logs'
   const headerSubtitle = vmDisplayName || ''
 
   return (
@@ -323,34 +276,6 @@ export default function LogsDrawer({
             px: 4
           }}
         >
-          {/* Log Source Toggle */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              pb: 1,
-              borderBottom: 1,
-              borderColor: 'divider'
-            }}
-          >
-            <ToggleButtonGroup
-              value={logSource}
-              exclusive
-              onChange={handleLogSourceChange}
-              aria-label="log source"
-              size="small"
-            >
-              <ToggleButton value="pod" aria-label="migration pod logs">
-                Migration
-              </ToggleButton>
-              <ToggleButton value="controller" aria-label="controller logs">
-                Controller
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-
           {/* Controls */}
           <Box
             sx={{
@@ -539,7 +464,7 @@ export default function LogsDrawer({
         </Box>
 
           {/* Loading State */}
-          {(currentIsLoading || isTransitioning) && (
+          {currentIsLoading && (
             <Box
               sx={{
                 display: 'flex',
@@ -550,9 +475,7 @@ export default function LogsDrawer({
             >
               <CircularProgress size={24} sx={{ mr: 2 }} />
               <Typography variant="body2" color="text.secondary">
-                {isTransitioning
-                  ? `Switching to ${logSource === 'pod' ? 'pod' : 'controller'} logs...`
-                  : `Connecting to ${logSource === 'pod' ? 'pod' : 'controller'} log stream...`}
+                Connecting to pod log stream...
               </Typography>
             </Box>
           )}
@@ -570,12 +493,11 @@ export default function LogsDrawer({
                 </Tooltip>
               }
             >
-              Failed to connect to {logSource === 'pod' ? 'pod' : 'controller'} log stream:{' '}
-              {currentError}
+              Failed to connect to pod log stream: {currentError}
             </Alert>
           )}
 
-          {(currentLogs.length > 0 || currentIsLoading || isTransitioning || !currentError) && (
+          {(currentLogs.length > 0 || currentIsLoading || !currentError) && (
             <Paper
               variant="outlined"
               sx={{
@@ -604,8 +526,7 @@ export default function LogsDrawer({
               >
                 {currentLogs.length === 0 &&
                   !currentIsLoading &&
-                  !currentError &&
-                  !isTransitioning && (
+                  !currentError && (
                     <Typography
                       variant="body2"
                       sx={{
