@@ -194,6 +194,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 	}
 	if vjailbreakSettingsCM.Data["NTP_SERVERS"] == "" {
 		vjailbreakSettingsCM.Data["NTP_SERVERS"] = ""
+	}
 	if vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey] == "" {
 		vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey] = strconv.Itoa(constants.HTTPTimeoutSeconds)
 	}
