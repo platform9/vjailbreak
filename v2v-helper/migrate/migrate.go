@@ -194,6 +194,46 @@ func (migobj *Migrate) CreateVolumes(ctx context.Context, vminfo vm.VMInfo) (vm.
 	return vminfo, nil
 }
 
+// applyImageMetadataForXCOPYVolumes mirrors the metadata calls that CreateVolume
+// makes on the standard (non-accelerated) path.
+func (migobj *Migrate) applyImageMetadataForXCOPYVolumes(ctx context.Context, vminfo vm.VMInfo) error {
+	openstackops := migobj.Openstackclients
+	setRDMLabel := len(vminfo.RDMDisks) > 0
+
+	for idx := range vminfo.VMDisks {
+		vmdisk := vminfo.VMDisks[idx]
+		if vmdisk.OpenstackVol == nil {
+			return fmt.Errorf("XCOPY volume for disk %s has no OpenStack volume reference", vmdisk.Name)
+		}
+		volume := vmdisk.OpenstackVol
+
+		if vminfo.UEFI {
+			if err := openstackops.SetVolumeUEFI(ctx, volume); err != nil {
+				return errors.Wrapf(err, "failed to set UEFI metadata on XCOPY volume %s", volume.ID)
+			}
+		}
+
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+			if err := openstackops.SetVolumeImageMetadata(ctx, volume, setRDMLabel); err != nil {
+				return errors.Wrapf(err, "failed to set Windows image metadata on XCOPY volume %s", volume.ID)
+			}
+		}
+
+		if err := openstackops.EnableQGA(ctx, volume); err != nil {
+			return errors.Wrapf(err, "failed to enable QGA on XCOPY volume %s", volume.ID)
+		}
+
+		if vmdisk.Boot {
+			if err := openstackops.SetVolumeBootable(ctx, volume); err != nil {
+				return errors.Wrapf(err, "failed to set XCOPY volume %s as bootable", volume.ID)
+			}
+		}
+	}
+
+	migobj.logMessage("Applied image metadata to XCOPY-managed volumes")
+	return nil
+}
+
 func (migobj *Migrate) AttachVolume(ctx context.Context, disk vm.VMDisk) (string, error) {
 	openstackops := migobj.Openstackclients
 	migobj.logMessage(fmt.Sprintf("Attaching volumes to VM: %s", disk.Name))
@@ -570,6 +610,15 @@ func (migobj *Migrate) WaitforAdminCutover(ctx context.Context, vminfo vm.VMInfo
 			// Reset state to start fresh each cycle
 			syncCtx.CurrentState = StateCleaningSnapshots
 
+			if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+				syncCtx.LastError = err
+				syncCtx.WarningMessage = fmt.Sprintf("vCenter session refresh failed: %v. Will retry on next sync interval.", err)
+				syncCtx.CurrentState = StateIdle
+				migobj.logMessage(fmt.Sprintf("Periodic Sync: WARNING - %s", syncCtx.WarningMessage))
+				elapsed = time.Since(start)
+				continue
+			}
+
 			// State: CleaningSnapshots
 			err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
 				return vmops.CleanUpSnapshots(false)
@@ -788,6 +837,9 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				utils.PrintLog("Admin initiated cutover detected, skipping changed blocks copy")
 				if err := migobj.WaitforAdminCutover(ctx, vminfo); err != nil {
 					return vminfo, errors.Wrap(err, "failed to start VM Cutover")
+				}
+				if err := migobj.Vcclient.EnsureSessionActive(ctx); err != nil {
+					return vminfo, errors.Wrap(err, "failed to refresh vCenter session post-cutover")
 				}
 				if migobj.MigrationType == "mock" {
 					utils.PrintLog("Mock migration detected, skipping VM power off")
@@ -1844,6 +1896,10 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Perform the copy here.
 		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
 			return errors.Wrap(err, "failed to perform StorageAcceleratedCopy copy")
+		}
+		// Apply image tags to the volumes we cinder managed.
+		if err := migobj.applyImageMetadataForXCOPYVolumes(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to apply image metadata to XCOPY volumes")
 		}
 
 	} else {

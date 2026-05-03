@@ -91,7 +91,8 @@ func GetAllTags(ctx context.Context) ([]string, error) {
 
 func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, error) {
 	client := newGitHubClient(ctx)
-	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
+	// Use per_page=100 to fetch all tags in a single request (GitHub default is 30).
+	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{PerPage: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}
@@ -123,7 +124,7 @@ func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, er
 
 func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion string) ([]string, error) {
 	client := newGitHubClient(ctx)
-	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, nil)
+	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{PerPage: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
 	}

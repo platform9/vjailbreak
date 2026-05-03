@@ -71,7 +71,9 @@ func GetCurrentInstanceUUID() (string, error) {
 	// Primary: look up the VJailbreakNode for the K8s node this pod is running on.
 	// This correctly handles agent nodes — the env-var / metadata-service approach
 	// always returns the master's UUID because the ConfigMap is built on the master.
-	if uuid, err := getInstanceUUIDFromNode(context.Background()); err == nil && uuid != "" {
+	if uuid, err := getInstanceUUIDFromNode(context.Background()); err != nil {
+		PrintLog(fmt.Sprintf("Failed to get instance ID from vjailbreak node: %v", err))
+	} else if uuid != "" {
 		return uuid, nil
 	}
 
@@ -149,13 +151,27 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to list vjailbreak nodes: %w", err)
 	}
 
+	isAgent := strings.HasPrefix(strings.ToLower(nodeName), "vjailbreak-agent-")
+
 	for _, vjNode := range vjNodeList.Items {
-		if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
+		if isAgent {
+			if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
+				return vjNode.Status.OpenstackUUID, nil
+			}
+			continue
+		}
+
+		if !strings.HasPrefix(strings.ToLower(vjNode.Name), "vjailbreak-agent-") &&
+			vjNode.Status.OpenstackUUID != "" {
 			return vjNode.Status.OpenstackUUID, nil
 		}
 	}
 
-	return "", fmt.Errorf("no VjailbreakNode with OpenstackUUID found for k8s node %s", nodeName)
+	if isAgent {
+		return "", fmt.Errorf("agent VjailbreakNode %q not found or missing OpenstackUUID (pod=%s, k8s-node=%s)", nodeName, podName, nodeName)
+	}
+
+	return "", fmt.Errorf("no master VjailbreakNode with OpenstackUUID found (pod=%s, k8s-node=%s)", podName, nodeName)
 }
 
 // create a new volume
@@ -677,11 +693,13 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 		return Existingport, nil
 	}
 	PrintLog(fmt.Sprintf("Port with MAC address %s does not exist, creating new port, trying with same IP address: %v", mac, ipPerMac[mac]))
-
-	currentInstanceID := os.Getenv("CURRENT_INSTANCE_ID")
+	isL2Network, err := osclient.GetIsSimpleNetwork(ctx, network.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check if network is L2")
+	}
 
 	// Check if subnet is valid to avoid panic.
-	if len(network.Subnets) == 0 && currentInstanceID == "" {
+	if len(network.Subnets) == 0 && !isL2Network {
 		return nil, fmt.Errorf("no subnets found for network: %s", network.ID)
 	}
 
