@@ -89,13 +89,8 @@ export default function ControllerLogsDrawer({ open, onClose }: ControllerLogsDr
     }
 
     if (searchTerm.trim()) {
-      if (searchTerm.startsWith('"') && searchTerm.endsWith('"')) {
-        const exact = searchTerm.slice(1, -1).toLowerCase()
-        filtered = filtered.filter((l) => l.toLowerCase().includes(exact))
-      } else {
-        const fuse = new Fuse(filtered, { threshold: 0.4, ignoreLocation: true, isCaseSensitive: false })
-        filtered = fuse.search(searchTerm).map((r) => r.item)
-      }
+      const fuse = new Fuse(filtered, { threshold: 0.4, ignoreLocation: true, isCaseSensitive: false })
+      filtered = fuse.search(searchTerm).map((r) => r.item)
     }
 
     return filtered
@@ -146,7 +141,7 @@ export default function ControllerLogsDrawer({ open, onClose }: ControllerLogsDr
         {/* Controls */}
         <Box sx={{ flexShrink: 0, pb: 1.5, borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 1.5 }}>
               <FormControlLabel
                 control={<Switch checked={!isPaused} onChange={(e) => setIsPaused(!e.target.checked)} size="small" />}
                 label="Live"
@@ -165,7 +160,10 @@ export default function ControllerLogsDrawer({ open, onClose }: ControllerLogsDr
                   </Badge>
                 </IconButton>
               </Tooltip>
-              <Menu anchorEl={filterMenuAnchor} open={Boolean(filterMenuAnchor)} onClose={() => setFilterMenuAnchor(null)}
+              <Menu
+                anchorEl={filterMenuAnchor}
+                open={Boolean(filterMenuAnchor)}
+                onClose={() => setFilterMenuAnchor(null)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
               >
@@ -193,7 +191,7 @@ export default function ControllerLogsDrawer({ open, onClose }: ControllerLogsDr
           <TextField
             fullWidth
             size="small"
-            placeholder='Search logs... (wrap in "quotes" for exact match)'
+            placeholder="Search logs..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             slotProps={{
