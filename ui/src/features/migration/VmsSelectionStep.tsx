@@ -1956,7 +1956,8 @@ function VmsSelectionStep({
             openstackVolumeRef: {
               cinderBackendPool: config.cinderBackendPool,
               volumeType: config.volumeType,
-              openstackCreds: openstackCredName
+              openstackCreds: openstackCredName,
+              source: config.source
             }
           }
         } as Partial<RdmDisk>
