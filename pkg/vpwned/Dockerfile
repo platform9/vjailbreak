@@ -23,7 +23,7 @@ RUN make vpwctl
 FROM alpine:3.18
 
 # Install ca-certificates and tzdata for proper SSL and timezone support
-RUN apk --no-cache add ca-certificates tzdata skopeo util-linux
+RUN apk --no-cache add ca-certificates tzdata skopeo
 
 # Set working directory
 WORKDIR /root/

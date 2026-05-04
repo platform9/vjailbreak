@@ -36,7 +36,11 @@ spec:
           protocol: TCP
         resources: {}
         securityContext:
-          privileged: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsUser: 0
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -45,12 +49,22 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+        - mountPath: /run/dbus/system_bus_socket
+          name: dbus-socket
+        - mountPath: /etc/systemd/timesyncd.conf.d
+          name: timesyncd-conf-dir
+        - mountPath: /etc/localtime
+          name: host-localtime
+        - mountPath: /usr/share/zoneinfo
+          name: host-zoneinfo
+          readOnly: true
+        - mountPath: /etc/pf9
+          name: pf9-config
       dnsConfig:
         options:
         - name: ndots
           value: "1"
       dnsPolicy: ClusterFirst
-      hostPID: true
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
@@ -65,4 +79,24 @@ spec:
           path: /home/ubuntu
           type: DirectoryOrCreate
         name: vddk-storage
+      - hostPath:
+          path: /run/dbus/system_bus_socket
+          type: Socket
+        name: dbus-socket
+      - hostPath:
+          path: /etc/systemd/timesyncd.conf.d
+          type: DirectoryOrCreate
+        name: timesyncd-conf-dir
+      - hostPath:
+          path: /etc/localtime
+          type: FileOrCreate
+        name: host-localtime
+      - hostPath:
+          path: /usr/share/zoneinfo
+          type: Directory
+        name: host-zoneinfo
+      - hostPath:
+          path: /etc/pf9
+          type: Directory
+        name: pf9-config
 ---

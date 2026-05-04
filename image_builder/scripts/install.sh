@@ -209,22 +209,27 @@ update_pf9_env_timezone() {
 
   if [ -f /etc/pf9/env ]; then
     if grep -q '^TZ=' /etc/pf9/env; then
-      sudo sed -i "s#^TZ=.*#TZ=${tz}#" /etc/pf9/env || true
+      awk -v tz="$tz" '/^TZ=/{print "TZ=" tz; next} {print}' \
+        /etc/pf9/env > /etc/pf9/env.tmp && mv /etc/pf9/env.tmp /etc/pf9/env || true
     else
       printf '\nTZ=%s\n' "$tz" | sudo tee -a /etc/pf9/env >/dev/null
     fi
   fi
 
   if kubectl -n migration-system get configmap pf9-env >/dev/null 2>&1; then
-    kubectl -n migration-system patch configmap pf9-env --type merge -p "{\"data\":{\"TZ\":\"${tz}\"}}" >/dev/null 2>&1 || true
+    local env_patch
+    env_patch="$(printf '{"data":{"TZ":"%s"}}' "$tz")"
+    kubectl -n migration-system patch configmap pf9-env --type merge -p "$env_patch" >/dev/null 2>&1 || true
     for deployment in migration-controller-manager migration-vpwned-sdk vjailbreak-ui; do
       kubectl -n migration-system rollout restart deployment "$deployment" >/dev/null 2>&1 || true
     done
   fi
 
   if kubectl -n migration-system get cronjob vjailbreak-version-checker >/dev/null 2>&1; then
-    kubectl -n migration-system patch cronjob vjailbreak-version-checker --type merge \
-      -p "{\"spec\":{\"timeZone\":\"${tz}\"}}" >/dev/null 2>&1 || true
+    local cj_patch
+    cj_patch="$(printf '{"spec":{"timeZone":"%s"}}' "$tz")"
+    kubectl -n migration-system patch cronjob vjailbreak-version-checker \
+      --type merge -p "$cj_patch" >/dev/null 2>&1 || true
   fi
 }
 
