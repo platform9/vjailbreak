@@ -142,3 +142,8 @@ kubectl -n migration-system logs <migration-name>-v2v-helper
 | `deploy/` | Generated Kubernetes manifests |
 
 **Key CRDs**: Migration, MigrationPlan, VMwareCreds, OpenstackCreds, NetworkMapping, StorageMapping, MigrationTemplate
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
