@@ -6,7 +6,6 @@ import MonitoringIcon from '@mui/icons-material/Insights'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
-import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -87,29 +86,6 @@ export const navigationItems: NavigationItem[] = [
         id: 'global-settings',
         label: 'Global Settings',
         path: '/dashboard/global-settings'
-      }
-    ]
-  },
-  {
-    id: 'resources',
-    label: 'Resources',
-    path: '/dashboard/resources',
-    icon: <FolderOpenIcon />,
-    children: [
-      {
-        id: 'custom-resources',
-        label: 'Custom Resources',
-        path: '/dashboard/resources/custom-resources'
-      },
-      {
-        id: 'config-maps',
-        label: 'Config Maps',
-        path: '/dashboard/resources/config-maps'
-      },
-      {
-        id: 'controller-logs',
-        label: 'Controller Logs',
-        path: '/dashboard/resources/controller-logs'
       }
     ]
   },
