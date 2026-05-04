@@ -806,7 +806,18 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		SecurityGroups: securityGroups,
 	}
 	if len(networkIDs) == 0 {
+		// Nova's "networks":"none" sentinel was added in compute API
+		// microversion 2.37. Without this header bump the request goes out at
+		// the default microversion (2.1) and Nova rejects the body with
+		// 400 ("'none' is not of type 'array'") because pre-2.37 the
+		// networks field is schema-typed as an array. The RDM path below
+		// bumps to "2.60" when needed; "2.37" is the floor for "none".
+		osclient.ComputeClient.Microversion = "2.37"
 		serverCreateOpts.Networks = "none"
+		PrintLog(fmt.Sprintf(
+			"VM %s has no network interfaces; creating server with networks='none' at compute microversion 2.37",
+			vminfo.Name,
+		))
 	}
 	if useFlavorless {
 		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
