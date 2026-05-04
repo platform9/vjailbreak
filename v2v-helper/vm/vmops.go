@@ -139,6 +139,12 @@ func (vmops *VMOps) GetVCenterClient() *vcenter.VCenterClient {
 
 func (vmops *VMOps) RefreshVM() error {
 	if vmops.vmid != "" {
+		// Re login to Vcenter to keep the client logged in when we return via vmid branch.
+		if vmops.vcclient != nil && vmops.vcclient.Session != nil && vmops.vcclient.VCClient != nil {
+			if err := vmops.vcclient.Session.Login(vmops.ctx, vmops.vcclient.VCClient, nil); err != nil {
+				return fmt.Errorf("failed to re-login to vCenter during VM refresh: %s", err)
+			}
+		}
 		vmops.VMObj = vmops.vcclient.GetVMByMOID(vmops.vmid)
 		return nil
 	}
