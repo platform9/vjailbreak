@@ -2242,9 +2242,10 @@ function VmsSelectionStep({
           ) : rdmValidation.hasRdmVMs && rdmDisks.length > 0 ? (
             <RdmDiskConfigurationPanel
               rdmDisks={rdmDisks.filter((disk) => {
-                // Only show RDM disks that have at least one selected VM as owner
-                const selectedVMsArray = Array.from(selectedVMs)
-                return disk.spec.ownerVMs.some((ownerVM) => selectedVMsArray.includes(ownerVM))
+                const selectedVMNames = Array.from(selectedVMs)
+                  .map((vmId) => vmsWithFlavor.find((v: VmDataWithFlavor) => v.id === vmId)?.name)
+                  .filter(Boolean) as string[]
+                return disk.spec.ownerVMs.some((ownerVM) => selectedVMNames.includes(ownerVM))
               })}
               openstackCreds={openstackCredentials}
               selectedVMs={Array.from(selectedVMs)}
