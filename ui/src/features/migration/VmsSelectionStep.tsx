@@ -2077,15 +2077,18 @@ function VmsSelectionStep({
                       hasRdmVMs={rdmValidation.hasRdmVMs}
                       onAssignIP={handleOpenBulkIPAssignment}
                       selectedCount={rowSelectionModelArray.length}
-                      rdmVMsCount={
-                        rowSelectionModelArray.filter((vmId: string) => {
-                          const vm = vmsWithFlavor.find((v: VmDataWithFlavor) => v.id === vmId)
+                      rdmVMsCount={(() => {
+                        const vmIdToName = new Map<string, string>(
+                          vmsWithFlavor.map((v: VmDataWithFlavor) => [v.id, v.name] as [string, string])
+                        )
+                        return rowSelectionModelArray.filter((vmId: string) => {
+                          const name = vmIdToName.get(vmId)
                           return (
-                            vm &&
-                            rdmDisks.some((disk: RdmDisk) => disk.spec.ownerVMs.includes(vm.name))
+                            name &&
+                            rdmDisks.some((disk: RdmDisk) => disk.spec.ownerVMs.includes(name))
                           )
                         }).length
-                      }
+                      })()}
                     />
                   )
                 },
@@ -2241,12 +2244,19 @@ function VmsSelectionStep({
             </Box>
           ) : rdmValidation.hasRdmVMs && rdmDisks.length > 0 ? (
             <RdmDiskConfigurationPanel
-              rdmDisks={rdmDisks.filter((disk) => {
-                const selectedVMNames = Array.from(selectedVMs)
-                  .map((vmId) => vmsWithFlavor.find((v: VmDataWithFlavor) => v.id === vmId)?.name)
-                  .filter(Boolean) as string[]
-                return disk.spec.ownerVMs.some((ownerVM) => selectedVMNames.includes(ownerVM))
-              })}
+              rdmDisks={(() => {
+                const vmIdToName = new Map<string, string>(
+                  vmsWithFlavor.map((v: VmDataWithFlavor) => [v.id, v.name] as [string, string])
+                )
+                const selectedVMNames = new Set(
+                  Array.from(selectedVMs)
+                    .map((vmId) => vmIdToName.get(vmId as string))
+                    .filter((n): n is string => !!n)
+                )
+                return rdmDisks.filter((disk: RdmDisk) =>
+                  disk.spec.ownerVMs.some((ownerVM: string) => selectedVMNames.has(ownerVM))
+                )
+              })()}
               openstackCreds={openstackCredentials}
               selectedVMs={Array.from(selectedVMs)}
               onConfigurationChange={setRdmConfigurations}
