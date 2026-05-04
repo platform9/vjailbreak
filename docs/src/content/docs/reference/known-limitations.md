@@ -29,25 +29,45 @@ If the disk contains data, back it up first. See the full troubleshooting guide:
 
 ### Domain Controllers
 
-Do **not** migrate Active Directory Domain Controller VMs directly. Microsoft explicitly unsupports any non-backup-based restore of a DC, and migrating a DC VM is treated as creating an unsupported clone. The migrated DC will be quarantined by the domain:
+Migrating Active Directory Domain Controller VMs is **strongly not recommended**. The core risk is specific to how vJailbreak works: `virt-v2v` performs a disk-level conversion and creates a new VM on a different hypervisor. **VM-GenerationID** — the hypervisor metadata that Windows Server 2012+ uses to detect unsafe restores — is not stored on disk and is not preserved through this process. The migrated DC starts with a new (or absent) VMGenID, which Windows AD treats as an unsafe restore/clone.
 
-- On **Windows Server 2012 and later** running on QEMU/KVM (which exposes VM-GenerationID via libvirt), the virtualization safeguards detect the hypervisor change, automatically reset the DC's invocation ID, and force a non-authoritative resync. The DC may recover if it can reach a replication partner, but the process is unreliable and unsupported in production.
-- On **older Windows Server versions** (pre-2012) without VM-GenerationID support, a genuine **USN rollback** can occur: the domain silently stops replicating from the migrated DC, and the AD environment can diverge without obvious errors. This is difficult to recover from.
+What happens depends on the Windows version:
 
-In both cases the source DC must also be **permanently removed from the domain** before or immediately after starting the migrated copy. Running both simultaneously on the same network will corrupt the domain.
+- **Windows Server 2012 and later**: The lost VMGenID triggers Windows' built-in safeguards. The DC automatically resets its invocation ID and forces a non-authoritative resync against replication partners. The domain may recover if other DCs are reachable, but this is unreliable in production and is not a supported migration path.
+- **Windows Server 2008 R2 and earlier** (no VMGenID support): A genuine **USN rollback** can occur. The domain silently stops accepting replication from the migrated DC, and the AD environment can diverge without obvious errors. This is difficult to detect and hard to recover from.
+
+In both cases the **source DC must be permanently removed from the domain** before or immediately after the migrated copy is brought online. Running both simultaneously on the same domain will corrupt AD.
 
 **Recommended approach** (from [Microsoft guidance](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/detect-and-recover-from-usn-rollback)):
 
-1. **Provision a new DC** in the target OpenStack environment using standard promotion.
+1. **Provision a new DC** in the target OpenStack environment using standard AD promotion.
 2. **Let AD replication populate it** from an existing domain controller.
 3. **Decommission the source DC** via `dcpromo` or Server Manager once replication is verified complete.
 
+**If you must migrate a DC** (lab/test environments, single-DC setups with no alternative), take these precautions:
+
+- Cleanly shut down the source DC before migration — do not snapshot a running DC.
+- Migrate only one DC at a time.
+- After the migrated DC boots, verify replication health immediately:
+  ```cmd
+  repadmin /replsummary
+  dcdiag /test:replications
+  ```
+- Confirm time synchronization (Kerberos requires clocks within 5 minutes of each other).
+- Verify DNS is resolving correctly for all domain members.
+- Decommission the source DC immediately — never run the original and migrated DC on the same domain simultaneously.
+
 ### Member Servers and Workstations
 
-Migrating domain-joined **member VMs** (non-DC servers and workstations) is safe. Domain membership survives the migration intact: the machine account password is stored in the VM's own LSA secrets and is copied along with the disk, so it continues to match what the domain controller has on record. No domain rejoin is required after a successful migration.
+Migrating domain-joined **member VMs** (non-DC servers and workstations) is generally safe. The machine account password is stored in the VM's own LSA secrets and is copied with the disk, so domain membership typically survives the migration intact.
 
-:::note
-If the source VM had been offline for an extended period before migration (typically 90+ days), the domain controller may have already invalidated the stale computer account. This is a pre-existing condition unrelated to the migration itself. If users see `The trust relationship between this workstation and the primary domain failed` after migration, run the following to reset the account:
+A few edge cases can cause domain authentication to fail post-migration:
+
+- **Kerberos clock skew**: If the migrated VM's clock is more than 5 minutes off from the domain controller, Kerberos authentication will fail. Sync the VM's clock immediately after boot.
+- **DNS resolution failures**: The VM must be able to resolve the domain controller's name and locate AD SRV records. Verify DNS settings after migration.
+- **Pre-existing stale computer account**: If the source VM had been offline for an extended period (typically 90+ days) before migration, the domain controller may have already invalidated its computer account. This is a pre-existing condition unrelated to the migration itself.
+
+If users see `The trust relationship between this workstation and the primary domain failed` after migration, run the following to reset the account:
 
 ```powershell
 # Option 1 — reset computer account password without rejoining
@@ -57,7 +77,6 @@ netdom resetpwd /server:<domain-controller> /userd:<domain\admin> /passwordd:*
 Remove-Computer -WorkgroupName WORKGROUP -Force
 Add-Computer -DomainName <domain> -Credential <domain\admin> -Restart
 ```
-:::
 
 ## Persist Network: Windows Server 2012 and Below
 
