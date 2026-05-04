@@ -97,6 +97,7 @@ export default defineConfig({
 					items: [
 						{ label: 'vJailbreak CRDs', slug: 'reference/reference' },
 						{ label: 'Compatibility Matrix', slug: 'reference/compatibility' },
+						{ label: 'Known Limitations', slug: 'reference/known-limitations' },
 					],
 				},
 				{

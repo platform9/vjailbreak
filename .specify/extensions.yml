@@ -14,7 +14,7 @@ hooks:
   - extension: git
     command: speckit.git.feature
     enabled: true
-    optional: false
+    optional: true
     prompt: Execute speckit.git.feature?
     description: Create feature branch before specification
     condition: null

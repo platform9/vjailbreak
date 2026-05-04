@@ -37,63 +37,48 @@ Error signature:
 failed to run nbdcopy: exec: already started
 ```
 
-See: [Debug Logs](../../guides/Troubleshooting/debuglogs/).
+See: [Debug Logs](../../guides/troubleshooting/debuglogs/).
 
-See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/Troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
+See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
 
 ### What do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
 
-- **Symptom**
+The conversion fails because `/etc/resolv.conf` is marked **immutable** inside the source VM. `virt-v2v` cannot rename or replace immutable files during guest filesystem conversion.
 
-  `virt-v2v` or `virt-v2v-in-place` fails with an error similar to:
+**Quick fix**: Inside the source VM, remove the immutable attribute before migrating:
 
-  ```text
-  renaming /sysroot/etc/resolv.conf to /sysroot/etc/6vvk9gzd
-  guestfsd: error: rename: /sysroot/etc/resolv.conf to /sysroot/etc/6vvk9gzd: Operation not permitted
-  commandrvf: stdout=n stderr=n flags=0x0
-  commandrvf: umount /sysroot/sys
-  virt-v2v-in-place: error: libguestfs error: sh_out: rename: /sysroot/etc/resolv.conf to /sysroot/etc/6vvk9gzd: Operation not permitted
-  ```
+```bash
+chattr -i /etc/resolv.conf
+```
 
-- **Cause**
+For the full symptom description, root cause analysis, and verification steps, see: [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](../../guides/troubleshooting/troubleshooting/#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 
-  On some Linux VMs, `/etc/resolv.conf` is marked **immutable**. When `virt-v2v` tries to rename or replace this file inside the guest filesystem (for example, `/sysroot/etc/resolv.conf` during conversion), the immutable attribute prevents the operation and the conversion fails.
+### How does Vjailbreak handle flavors of the vm in the target openstack environment?
 
-  You can confirm the immutable bit with:
-
-  ```bash
-  lsattr /etc/resolv.conf
-  ----i----------------- /etc/resolv.conf
-  ```
-
-  The `i` flag indicates the file is immutable.
-
-- **Resolution**
-
-  1. Remove the immutable attribute inside the source VM:
-
-     ```bash
-     chattr -i /etc/resolv.conf
-     ```
-
-  2. Verify the attribute is gone:
-
-     ```bash
-     lsattr /etc/resolv.conf
-     ---------------------- /etc/resolv.conf
-     ```
-
-  3. Re-run the Migration.
-
-- **Notes**
-
-  - This is a known and documented `virt-v2v` issue. [See here](https://libguestfs.org/virt-v2v.1.html#linux%3A-rename%3A-sysroot-etc-resolv.conf-failure)
-  - If configuration management or security hardening marks `/etc/resolv.conf` immutable, ensure this is unset before conversion, or adjust your automation so that VMs intended for conversion do not have `/etc/resolv.conf` marked immutable.
-
-### How does Vjailbreak handle flavors of the vm in the target openstack environment? 
 vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment.
 
 If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (We always try to find the exact match if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
+
+#### Hotplug Flavor Support
+
+vJailbreak supports migrating VMs to OpenStack flavors that have **hotplug** CPU and RAM enabled. Hotplug allows live resize of vCPUs and memory without powering off the VM after migration.
+
+To use hotplug after migration:
+
+1. Ask your OpenStack administrator to create or identify a flavor with hotplug-enabled extra specs. Example:
+
+   ```bash
+   openstack flavor set <flavor-name> \
+     --property hw:cpu_policy=mixed \
+     --property hw:cpu_max_vcpus=<max-vcpus>
+   ```
+
+2. Select this hotplug-capable flavor in the vJailbreak migration form when configuring the destination VM.
+3. After migration completes, resize the VM in OpenStack using a hotplug-capable flavor to add or remove vCPUs and RAM without a reboot.
+
+:::note
+Standard flavors without hotplug extra specs require a VM power-off for resize. See [Known Limitations: Hotplug Flavor Requirements](../../reference/known-limitations/#hotplug-flavor-requirements) for details on flavor prerequisites.
+:::
 
 ### Can vJailbreak migrate VMs running Docker Engine?
 Yes, vJailbreak can migrate VMs running Docker Engine without any issues. vJailbreak performs VM-level migration and is agnostic to the workloads running inside the VM. Docker Engine is simply software running on the guest operating system, and the migration process handles it like any other application.
@@ -115,6 +100,19 @@ Users must take appropriate precautions for Docker Swarm, such as draining nodes
 
 
 ### Can vJailbreak migrate Windows VMs with GPO applied?
+
 Yes, but GPO settings may interfere with driver injection during migration. You may need to disable restrictive Group Policy settings before migrating.
- 
-See the [GPO Migration Guide](../guides/how-to/gpo_migration.md) for detailed steps on how to resolve GPO-related migration issues.
+
+See the [GPO Migration Guide](../../guides/how-to/gpo_migration/) for detailed steps on how to resolve GPO-related migration issues.
+
+### How do I migrate a Windows VM with Group Policy (GPO) applied?
+
+Group Policy Objects can block driver injection and registry changes that vJailbreak performs during conversion. The migration may succeed but produce a VM that fails to boot or has missing drivers.
+
+See the [GPO Migration Guide](../../guides/how-to/gpo_migration/) for the recommended steps to temporarily disable or scope down GPO before migration.
+
+### How do I migrate a VM with vTPM (Virtual Trusted Platform Module) enabled?
+
+VMs with vTPM and Virtualization Based Security (VBS) enabled require special handling. You must temporarily disable vTPM on the source VM before migration, then re-enable it on the destination VM post-migration.
+
+See the [vTPM Migration Guide](../../guides/how-to/vtpm_migration/) for step-by-step instructions.
