@@ -2078,9 +2078,13 @@ function VmsSelectionStep({
                       onAssignIP={handleOpenBulkIPAssignment}
                       selectedCount={rowSelectionModelArray.length}
                       rdmVMsCount={
-                        rowSelectionModelArray.filter((vmName) =>
-                          rdmDisks.some((disk) => disk.spec.ownerVMs.includes(vmName as string))
-                        ).length
+                        rowSelectionModelArray.filter((vmId: string) => {
+                          const vm = vmsWithFlavor.find((v: VmDataWithFlavor) => v.id === vmId)
+                          return (
+                            vm &&
+                            rdmDisks.some((disk: RdmDisk) => disk.spec.ownerVMs.includes(vm.name))
+                          )
+                        }).length
                       }
                     />
                   )
