@@ -793,8 +793,6 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 
 	// Create the server
 	openstacknws := []servers.Network{}
-	networkIDs = []string{}
-	portIDs = []string{}
 	for idx := range networkIDs {
 		openstacknws = append(openstacknws, servers.Network{
 			UUID: networkIDs[idx],
