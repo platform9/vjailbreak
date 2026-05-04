@@ -21,6 +21,9 @@ spec:
               - key: node-role.kubernetes.io/control-plane
                 operator: Exists
       serviceAccountName: ui-manager-sa
+      # Disable the default long-lived automounted SA token.
+      # A projected token with a bounded TTL is mounted below instead.
+      automountServiceAccountToken: false
       containers:
         - name: vjailbreak-ui-container
           image: ${UI_IMG}
@@ -33,6 +36,9 @@ spec:
           - name: pf9-logs
             mountPath: /var/log/pf9
             readOnly: true
+          - name: sa-token
+            mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+            readOnly: true
       volumes:
       - name: nginx-shadow-htpasswd
         hostPath:
@@ -42,6 +48,26 @@ spec:
         hostPath:
           path: /var/log/pf9
           type: DirectoryOrCreate
+      - name: sa-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              # Minimum: 600s (enforced by Kubernetes). Default: 86400s (24h).
+              # To change TTL: update this value and roll the Deployment.
+              # A pod restart is required for the new TTL to take effect.
+              expirationSeconds: 86400
+              path: token
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+              - key: ca.crt
+                path: ca.crt
+          - downwardAPI:
+              items:
+              - path: namespace
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
 ---
 apiVersion: v1
 kind: Service
