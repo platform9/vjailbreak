@@ -139,9 +139,7 @@ func (vmops *VMOps) GetVCenterClient() *vcenter.VCenterClient {
 
 func (vmops *VMOps) RefreshVM() error {
 	if vmops.vmid != "" {
-		// GetVMByMOID only re-wraps the MOID around the existing vim25.Client; it does
-		// not refresh the session cookie. Force an explicit re-login so subsequent
-		// calls don't keep failing with NotAuthenticated.
+		// Re login to Vcenter to keep the client logged in when we return via vmid branch.
 		if vmops.vcclient != nil && vmops.vcclient.Session != nil && vmops.vcclient.VCClient != nil {
 			if err := vmops.vcclient.Session.Login(vmops.ctx, vmops.vcclient.VCClient, nil); err != nil {
 				return fmt.Errorf("failed to re-login to vCenter during VM refresh: %s", err)
