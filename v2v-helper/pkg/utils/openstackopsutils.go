@@ -805,7 +805,9 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
-
+	if len(networkIDs) == 0 {
+		serverCreateOpts.Networks = "none"
+	}
 	if useFlavorless {
 		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
