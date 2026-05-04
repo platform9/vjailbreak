@@ -567,9 +567,6 @@ export default function MigrationFormDrawer({
     return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(stringsCompareFn)
   }, [params.vms])
 
-  // Network-mapping validation. When none of the selected VMs have an
-  // interface, network mapping is not required and the form must not block
-  // on params.networkMappings being empty.
   const networkMappingValidation = useNetworkMappingValidation({
     selectedVMs: params.vms || [],
     networkMappings: params.networkMappings || [],
@@ -1103,12 +1100,9 @@ export default function MigrationFormDrawer({
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
-    // Network mapping is only required when at least one selected VM has
-    // an interface. NIC-less VMs skip this gate entirely.
     (networkMappingRequired && isNilOrEmpty(params.networkMappings)) ||
     isNilOrEmpty(params.vmwareCluster) ||
     isNilOrEmpty(params.pcdCluster) ||
-    // Check if all networks (if any) are mapped
     availableVmwareNetworks.some(
       (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
     ) ||
@@ -1231,9 +1225,6 @@ export default function MigrationFormDrawer({
     if (!params.vms || params.vms.length === 0) return false
     if (fieldErrors['networksMapping'] || fieldErrors['storageMapping']) return false
 
-    // Treat the network mapping sub-step as complete when no source networks
-    // exist (all selected VMs are NIC-less) — there is nothing for the user
-    // to map.
     const networkMapped =
       availableVmwareNetworks.length === 0 ||
       availableVmwareNetworks.every((network) =>
