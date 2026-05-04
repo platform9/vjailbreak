@@ -7,7 +7,7 @@ import Tooltip from '@mui/material/Tooltip'
 import TerminalIcon from '@mui/icons-material/Terminal'
 import { cleanupAllResources } from 'src/api/helpers'
 import ThemeToggle from './ThemeToggle'
-import ControllerLogsDrawer from './ControllerLogsDrawer'
+import ControllerLogsDrawer from '../../features/migration/components/ControllerLogsDrawer'
 
 export default function ButtonAppBar({ hide = false }) {
   const [logsOpen, setLogsOpen] = useState(false)
@@ -40,7 +40,7 @@ export default function ButtonAppBar({ hide = false }) {
           }}
         >
           <Tooltip title="Controller Logs">
-            <IconButton size="medium" onClick={() => setLogsOpen(true)}>
+            <IconButton size="medium" onClick={() => setLogsOpen(true)} sx={{ mr: -2 }}>
               <TerminalIcon />
             </IconButton>
           </Tooltip>
