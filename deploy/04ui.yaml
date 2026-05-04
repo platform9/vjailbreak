@@ -20,6 +20,9 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
           volumeMounts:
           - name: pf9-logs
             mountPath: /var/log/pf9

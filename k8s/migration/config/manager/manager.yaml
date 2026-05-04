@@ -70,6 +70,7 @@ spec:
         envFrom:
           - configMapRef:
               name: pf9-env
+              optional: true
         args:
           - --leader-elect=false
           - --health-probe-bind-address=:8081

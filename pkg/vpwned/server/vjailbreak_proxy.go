@@ -773,6 +773,20 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 	}, nil
 }
 
+// ApplyTimeSettings applies NTP servers and timezone to the host using D-Bus and
+// hostPath-mounted filesystem paths.
+func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, _ *api.ApplyTimeSettingsRequest) (*api.ApplyTimeSettingsResponse, error) {
+	const fn = "ApplyTimeSettings"
+	logrus.WithField("func", fn).Info("applying time settings via D-Bus + host mounts")
+
+	msg, err := ApplyTimeSettingsOnHost(ctx, p.K8sClient)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("failed to apply time settings")
+		return nil, err
+	}
+	return &api.ApplyTimeSettingsResponse{Message: msg}, nil
+}
+
 // checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility
 type checkNetworkSubnetCompatibilityRequest struct {
 	Ips            []string `json:"ips"`

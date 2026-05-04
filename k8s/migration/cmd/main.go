@@ -31,6 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"time"
+
+	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -72,6 +75,9 @@ func main() {
 		"If set, the controller manager will run in local mode")
 	opts := zap.Options{
 		Development: true,
+		TimeEncoder: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format("2006-01-02T15:04:05"))
+		},
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()

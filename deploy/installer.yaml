@@ -4592,7 +4592,8 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.4
+            optional: true
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4686,13 +4687,20 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.4
+            optional: true
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
         - containerPort: 3001
           protocol: TCP
         resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsUser: 0
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -4701,6 +4709,17 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+        - mountPath: /run/dbus/system_bus_socket
+          name: dbus-socket
+        - mountPath: /etc/systemd/timesyncd.conf.d
+          name: timesyncd-conf-dir
+        - mountPath: /etc/localtime
+          name: host-localtime
+        - mountPath: /usr/share/zoneinfo
+          name: host-zoneinfo
+          readOnly: true
+        - mountPath: /etc/pf9
+          name: pf9-config
       dnsConfig:
         options:
         - name: ndots
@@ -4720,6 +4739,26 @@ spec:
           path: /home/ubuntu
           type: DirectoryOrCreate
         name: vddk-storage
+      - hostPath:
+          path: /run/dbus/system_bus_socket
+          type: Socket
+        name: dbus-socket
+      - hostPath:
+          path: /etc/systemd/timesyncd.conf.d
+          type: DirectoryOrCreate
+        name: timesyncd-conf-dir
+      - hostPath:
+          path: /etc/localtime
+          type: FileOrCreate
+        name: host-localtime
+      - hostPath:
+          path: /usr/share/zoneinfo
+          type: Directory
+        name: host-zoneinfo
+      - hostPath:
+          path: /etc/pf9
+          type: Directory
+        name: pf9-config
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -4775,10 +4814,14 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.4
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
+              optional: true
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow

@@ -84,6 +84,10 @@ func init() {
 	serverCmd.PersistentFlags().StringP("api_port", "r", "3001", "Set the REST API port to open")
 	serverCmd.PersistentFlags().StringP("api_host", "a", "0.0.0.0", "Set the REST API host to listen on")
 	logrus.SetLevel(Config.logLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		TimestampFormat: "2006-01-02T15:04:05",
+		FullTimestamp:   true,
+	})
 }
 
 func serve() {

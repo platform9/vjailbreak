@@ -24,10 +24,14 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.4
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
+              optional: true
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow
