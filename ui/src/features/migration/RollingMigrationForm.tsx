@@ -1149,9 +1149,7 @@ export default function RollingMigrationFormDrawer({
     }
   }
 
-  // Validate IP addresses for selected VMs.
-  // VMs without any network interface are exempt — there is nothing to assign
-  // an IP to, and they are valid migration targets (e.g. disk-only appliances).
+  // Validate IP addresses for selected VMs
   const vmIpValidation = useMemo(() => {
     if (selectedVMs.length === 0) {
       setVmIpValidationError('Please select VMs to assign IP addresses.')

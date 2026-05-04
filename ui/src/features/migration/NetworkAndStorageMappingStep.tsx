@@ -370,8 +370,6 @@ export default function NetworkAndStorageMappingStep({
   }, [vmWareStorage, params.storageMappings, params.arrayCredsMappings, storageCopyMethod])
 
   // Calculate completion status
-  // Selected VMs may not contribute any source networks (e.g. NIC-less VMs).
-  // In that case there is nothing to map and the sub-step is treated as N/A.
   const hasSourceNetworks = vmwareNetworks.length > 0
   const networksFullyMapped = hasSourceNetworks && unmappedNetworks.length === 0
   const storageFullyMapped = unmappedStorage.length === 0 && vmWareStorage.length > 0
