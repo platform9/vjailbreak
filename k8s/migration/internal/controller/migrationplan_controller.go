@@ -938,14 +938,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	}
 	vminfo := &vmMachine.Spec.VMInfo
 
-	// Get assigned IPs for this VM from the migration plan
-	assignedIP := ""
-	if migrationplan.Spec.AssignedIPsPerVM != nil {
-		if ips, ok := migrationplan.Spec.AssignedIPsPerVM[vm]; ok {
-			assignedIP = ips
-		}
-	}
-
 	// Get network overrides for this VM from the migration plan
 	networkOverrides := ""
 	if migrationplan.Spec.NetworkOverridesPerVM != nil {
@@ -977,7 +969,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
-				AssignedIP:              assignedIP,
 				NetworkOverrides:        networkOverrides,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 			},
@@ -1014,14 +1005,13 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			ctxlog.Info("Set migration retryable status", "retryable", retryable, "hasRDMDisks", hasRDMDisks)
 		}
 	} else if err == nil {
-		// Migration already exists — update AssignedIP and NetworkOverrides from the MigrationPlan
+		// Migration already exists — update NetworkOverrides from the MigrationPlan
 		// in case the user changed them before retrying.
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &vjailbreakv1alpha1.Migration{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, latest); getErr != nil {
 				return getErr
 			}
-			latest.Spec.AssignedIP = assignedIP
 			latest.Spec.NetworkOverrides = networkOverrides
 			if updateErr := r.Update(ctx, latest); updateErr != nil {
 				return updateErr
@@ -1032,7 +1022,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to update Migration spec for VM %s", vm)
 		}
-		ctxlog.Info("Updated migration spec from MigrationPlan", "assignedIP", assignedIP, "networkOverrides", networkOverrides)
+		ctxlog.Info("Updated migration spec from MigrationPlan", "networkOverrides", networkOverrides)
 	}
 	return migrationobj, nil
 }
@@ -1534,12 +1524,6 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 }
 
 func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[string]string, migrationobj *vjailbreakv1alpha1.Migration) {
-	if migrationobj.Spec.AssignedIP != "" {
-		configMapData["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
-	} else {
-		configMapData["ASSIGNED_IP"] = ""
-	}
-
 	if migrationobj.Spec.NetworkOverrides != "" {
 		configMapData["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	}
@@ -1716,11 +1700,6 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 
 // updateMigrationConfigMap updates the mutable fields of an existing migration ConfigMap.
 func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, configMap *corev1.ConfigMap, migrationobj *vjailbreakv1alpha1.Migration, configMapName string) error {
-	if migrationobj.Spec.AssignedIP != "" {
-		configMap.Data["ASSIGNED_IP"] = migrationobj.Spec.AssignedIP
-	} else {
-		configMap.Data["ASSIGNED_IP"] = ""
-	}
 	if migrationobj.Spec.NetworkOverrides != "" {
 		configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	} else {

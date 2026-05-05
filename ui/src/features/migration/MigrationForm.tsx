@@ -692,16 +692,6 @@ export default function MigrationFormDrawer({
 
     const vmsToMigrate = (params.vms || []).map((vm) => vm.vmKey || vm.name)
 
-    // Build AssignedIPsPerVM map for cold migration
-    const assignedIPsPerVM: Record<string, string> = {}
-    if (params.vms) {
-      params.vms.forEach((vm) => {
-        if (vm.assignedIPs && vm.assignedIPs.trim() !== '') {
-          assignedIPsPerVM[vm.vmKey || vm.name] = vm.assignedIPs
-        }
-      })
-    }
-
     const networkOverridesPerVM: Record<
       string,
       Array<{
@@ -725,10 +715,6 @@ export default function MigrationFormDrawer({
             nicAssignedIps[index] = assigned.join(',')
           }
         })
-        if (Object.keys(nicAssignedIps).length === 0 && vm.assignedIPs?.trim()) {
-          nicAssignedIps[0] = vm.assignedIPs.trim()
-        }
-
         const indices = new Set<string>([
           ...Object.keys(preserveIp),
           ...Object.keys(preserveMac),
@@ -760,7 +746,6 @@ export default function MigrationFormDrawer({
       migrationTemplateName: updatedMigrationTemplate?.metadata?.name,
       virtualMachines: vmsToMigrate,
       type: params.dataCopyMethod,
-      ...(Object.keys(assignedIPsPerVM).length > 0 && { assignedIPsPerVM }),
       ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
       ...(selectedMigrationOptions.dataCopyStartTime &&
         params?.dataCopyStartTime && {

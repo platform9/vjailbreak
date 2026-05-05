@@ -142,7 +142,6 @@ interface VmDataWithFlavor extends VmData {
   ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
   ipValidationMessage?: string
   powerState?: string // Add power state for IP editing logic
-  assignedIPs?: string
 }
 
 // Column definition moved inside component to access state
@@ -873,9 +872,6 @@ function VmsSelectionStep({
 
       preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
 
-      // If existingVm stored assignedIPs, keep them in the new object
-      const assignedIPs = existingVm?.assignedIPs ?? undefined
-
       // Use assigned OS family if available is handled by separate effect (do not include vmOSAssignments here)
       const finalOsFamily = vm.osFamily
 
@@ -893,7 +889,6 @@ function VmsSelectionStep({
         ipValidationStatus: 'pending' as const,
         ipValidationMessage: '',
         networkInterfaces: preferredNetworkInterfaces,
-        assignedIPs
       }
     })
     setVmsWithFlavor(initialVmsWithFlavor)
@@ -1515,16 +1510,10 @@ function VmsSelectionStep({
             .filter((ip) => ip && ip.trim() !== '')
         : []
       const ipDisplay = displayIPs.join(', ')
-      const assignedIPsCsv = updatedNetworkInterfaces
-        ? displayIPs.join(',')
-        : assignedIPs
-          ? assignedIPs.join(',')
-          : undefined
 
       return {
         ...vm,
         ...(updatedNetworkInterfaces && {
-          assignedIPs: assignedIPsCsv,
           ipAddress: ipDisplay || '—',
           networkInterfaces: updatedNetworkInterfaces
         }),

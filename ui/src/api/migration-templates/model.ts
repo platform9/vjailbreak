@@ -78,8 +78,6 @@ export interface VmData {
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]
   osFamily?: string
-  // User-assigned IPs for cold migration
-  assignedIPs?: string
   // RDM-related properties
   rdmDisks?: string[]
   hasSharedRdm?: boolean

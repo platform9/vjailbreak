@@ -64,7 +64,6 @@ type Migrate struct {
 	K8sClient               client.Client
 	TargetFlavorId          string
 	TargetAvailabilityZone  string
-	AssignedIP              string
 	SecurityGroups          []string
 	ServerGroup             string
 	RDMDisks                []string

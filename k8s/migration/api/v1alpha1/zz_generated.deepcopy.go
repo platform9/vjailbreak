@@ -999,13 +999,6 @@ func (in *MigrationPlanSpec) DeepCopyInto(out *MigrationPlanSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.AssignedIPsPerVM != nil {
-		in, out := &in.AssignedIPsPerVM, &out.AssignedIPsPerVM
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	if in.NetworkOverridesPerVM != nil {
 		in, out := &in.NetworkOverridesPerVM, &out.NetworkOverridesPerVM
 		*out = make(map[string][]NICOverride, len(*in))
