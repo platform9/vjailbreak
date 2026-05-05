@@ -15,6 +15,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25/methods"
@@ -141,9 +142,13 @@ func (vmops *VMOps) RefreshVM() error {
 	if vmops.vmid != "" {
 		// Re login to Vcenter to keep the client logged in when we return via vmid branch.
 		if vmops.vcclient != nil && vmops.vcclient.Session != nil && vmops.vcclient.VCClient != nil {
-			if err := vmops.vcclient.Session.Login(vmops.ctx, vmops.vcclient.VCClient, nil); err != nil {
-				return fmt.Errorf("failed to re-login to vCenter during VM refresh: %s", err)
+			login := vmops.vcclient.Session.Login
+			if err := login(context.TODO(), vmops.vcclient.VCClient, nil); err != nil {
+				return fmt.Errorf("failed to re-login during datacenter refresh: %v", err)
 			}
+
+			// Create a new finder with the refreshed client
+			vmops.vcclient.VCFinder = find.NewFinder(vmops.vcclient.VCClient, false)
 		}
 		vmops.VMObj = vmops.vcclient.GetVMByMOID(vmops.vmid)
 		return nil
