@@ -76,7 +76,6 @@ import LinuxIcon from 'src/assets/linux_icon.svg'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useClusterData } from './useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { vmHasInterface } from 'src/features/migration/utils/vmNetworking'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
@@ -1157,11 +1156,10 @@ export default function RollingMigrationFormDrawer({
     }
 
     const selectedVMsData = vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
-    const vmsRequiringIp = selectedVMsData.filter(vmHasInterface)
-    const vmsWithoutIPs = vmsRequiringIp.filter((vm) => vm.ip === '—' || !vm.ip)
+    const vmsWithoutIPs = selectedVMsData.filter((vm) => vm.ip === '—' || !vm.ip)
 
     if (vmsWithoutIPs.length > 0) {
-      const errorMessage = `Cannot proceed with Migration: ${vmsWithoutIPs.length} selected VM${vmsWithoutIPs.length === 1 ? '' : 's'} with network interfaces do not have IP addresses assigned. Please assign IP addresses to all selected VMs before continuing.`
+      const errorMessage = `Cannot proceed with Migration: ${vmsWithoutIPs.length} selected VM${vmsWithoutIPs.length === 1 ? '' : 's'} do not have IP addresses assigned. Please assign IP addresses to all selected VMs before continuing.`
       setVmIpValidationError(errorMessage)
       return { hasError: true, vmsWithoutIPs }
     } else {

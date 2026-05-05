@@ -45,7 +45,6 @@ import { flatten } from 'ramda'
 import { useClusterData } from './useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { useNetworkMappingValidation } from 'src/hooks/useNetworkMappingValidation'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
@@ -566,13 +565,6 @@ export default function MigrationFormDrawer({
     if (params.vms === undefined) return []
     return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(stringsCompareFn)
   }, [params.vms])
-
-  const networkMappingValidation = useNetworkMappingValidation({
-    selectedVMs: params.vms || [],
-    networkMappings: params.networkMappings || [],
-    availableVmwareNetworks
-  })
-  const networkMappingRequired = networkMappingValidation.required
 
   const createNetworkMapping = async (networkMappingParams) => {
     const body = createNetworkMappingJson({
@@ -1100,9 +1092,10 @@ export default function MigrationFormDrawer({
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
-    (networkMappingRequired && isNilOrEmpty(params.networkMappings)) ||
+    isNilOrEmpty(params.networkMappings) ||
     isNilOrEmpty(params.vmwareCluster) ||
     isNilOrEmpty(params.pcdCluster) ||
+    // Check if all networks are mapped
     availableVmwareNetworks.some(
       (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
     ) ||
@@ -1225,11 +1218,9 @@ export default function MigrationFormDrawer({
     if (!params.vms || params.vms.length === 0) return false
     if (fieldErrors['networksMapping'] || fieldErrors['storageMapping']) return false
 
-    const networkMapped =
-      availableVmwareNetworks.length === 0 ||
-      availableVmwareNetworks.every((network) =>
-        (params.networkMappings || []).some((m) => m.source === network)
-      )
+    const networkMapped = availableVmwareNetworks.every((network) =>
+      (params.networkMappings || []).some((m) => m.source === network)
+    )
 
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
     const storageMapped =

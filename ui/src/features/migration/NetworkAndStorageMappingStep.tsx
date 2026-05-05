@@ -370,8 +370,7 @@ export default function NetworkAndStorageMappingStep({
   }, [vmWareStorage, params.storageMappings, params.arrayCredsMappings, storageCopyMethod])
 
   // Calculate completion status
-  const hasSourceNetworks = vmwareNetworks.length > 0
-  const networksFullyMapped = hasSourceNetworks && unmappedNetworks.length === 0
+  const networksFullyMapped = unmappedNetworks.length === 0 && vmwareNetworks.length > 0
   const storageFullyMapped = unmappedStorage.length === 0 && vmWareStorage.length > 0
 
   return (
@@ -393,16 +392,8 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <FieldLabel
-                  label="Map Networks"
-                  required={hasSourceNetworks}
-                  align="flex-start"
-                />
-                {!hasSourceNetworks ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Not required
-                  </Typography>
-                ) : networksFullyMapped ? (
+                <FieldLabel label="Map Networks" required align="flex-start" />
+                {networksFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All networks mapped ✓
                   </Typography>
@@ -412,34 +403,25 @@ export default function NetworkAndStorageMappingStep({
                   </Typography>
                 )}
               </Box>
-              {hasSourceNetworks ? (
-                <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select source and target networks to automatically create mappings. All
-                    networks must be mapped to proceed.
-                  </Typography>
-                  <ResourceMappingTable
-                    sourceItems={vmwareNetworks}
-                    targetItems={openstackNetworkNames}
-                    sourceLabel="VMware Network"
-                    targetLabel="PCD Network"
-                    values={params.networkMappings || []}
-                    onChange={(value) => onChange('networkMappings')(value)}
-                    oneToManyMapping
-                    fieldPrefix="networkMapping"
-                  />
-                  {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
-                    <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
-                      <strong>{sourceNetwork}:</strong> {warning}
-                    </Alert>
-                  ))}
-                </>
-              ) : (
-                <Alert severity="info" sx={{ mt: 1 }}>
-                  None of the selected VMs have network interfaces. Network mapping is not
-                  required for this plan — you can proceed to the next step.
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select source and target networks to automatically create mappings. All networks
+                must be mapped to proceed.
+              </Typography>
+              <ResourceMappingTable
+                sourceItems={vmwareNetworks}
+                targetItems={openstackNetworkNames}
+                sourceLabel="VMware Network"
+                targetLabel="PCD Network"
+                values={params.networkMappings || []}
+                onChange={(value) => onChange('networkMappings')(value)}
+                oneToManyMapping
+                fieldPrefix="networkMapping"
+              />
+              {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
+                <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
+                  <strong>{sourceNetwork}:</strong> {warning}
                 </Alert>
-              )}
+              ))}
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
             </FormControl>
             <FormControl error={!!storageMappingError}>
