@@ -25,8 +25,8 @@ add support for additional versions. Verified implies it has been tested and con
 | Amazon Linux 2 | linux/amd64 | No | Yes |
 | CentOS 4/5  | linux/i386 | No | Yes |
 | CentOS 4/5  | linux/amd64 | No | Yes |
-| CentOS 6  | linux/amd64 | No | Yes |
-| CentOS 7 | linux/amd64 | No | Yes |
+| CentOS 6  | linux/amd64 | Yes | Yes |
+| CentOS 7 | linux/amd64 | Yes | Yes |
 | CentOS 9 | linux/amd64 | Yes | Yes |
 | CentOS Stream10 | linux/amd64 | No | Yes |
 | Debian GNU/Linux 8 (64-bit) | linux/amd64 | No | Yes |
@@ -35,6 +35,7 @@ add support for additional versions. Verified implies it has been tested and con
 | Microsoft Windows 11 | windows/amd64 | Yes | Yes |
 | Microsoft Windows 11 Enterprise | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2012 | windows/amd64 | Yes | Yes |
+| Microsoft Windows Server 2016 | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2019 | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2022 | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2025 | windows/amd64 | Yes | Yes |
@@ -48,13 +49,14 @@ add support for additional versions. Verified implies it has been tested and con
 | Red Hat Enterprise Linux 4 | linux/amd64 | No | Yes |
 | Rocky 8 | linux/amd64 | Yes | Yes |
 | Rocky 9 | linux/amd64 | Yes | Yes |
+| Rocky 10 | linux/amd64 | Yes | Yes |
 | SUSE Linux Enterprise 15 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 14 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 15 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 16 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 17 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 22.04 | linux/amd64 | Yes | Yes |
-| Ubuntu Linux 24.04 | linux/amd64 | No | Yes |
+| Ubuntu Linux 24.04 | linux/amd64 | Yes | Yes |
 | VMware Photon OS  | linux/amd64 | No | No |
 
 
