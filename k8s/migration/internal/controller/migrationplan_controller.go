@@ -2204,6 +2204,7 @@ func MergeLabels(a, b map[string]string) map[string]string {
 	return result
 }
 
+//nolint:gocyclo
 func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines map[string]*vjailbreakv1alpha1.VMwareMachine, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
@@ -2223,28 +2224,31 @@ func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migration
 				if err != nil {
 					return fmt.Errorf("failed to get RDMDisk CR: %w", err)
 				}
-				// Validate that all ownerVMs are present in parallelVMs
-				// This validation can be disabled via vjailbreak-settings ConfigMap
+				// Validate that all ownerVMs are present in parallelVMs or have
+				// already succeeded as part of this migration plan.
 				vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
 				switch err {
 				case nil:
 					if vjailbreakSettings.ValidateRDMOwnerVMs {
 						for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
 							if _, ok := vmMachines[ownerVM]; !ok {
-								log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
-								return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk)
+								if !r.isVMSucceededInPlan(ctx, migrationplan, ownerVM) {
+									log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+									return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk)
+								}
 							}
 						}
 					} else {
 						log.FromContext(ctx).Info("RDM disk owner VM validation disabled via vjailbreak-settings", "rdmDisk", rdmDisk)
 					}
 				default:
-					// Successfully retrieved settings, proceed with validation
 					log.FromContext(ctx).Error(err, "Failed to get vjailbreak settings, using default validation behavior")
-					// Fall back to default behavior (validation enabled) if we can't get settings
 					for _, ownerVM := range rdmDiskCR.Spec.OwnerVMs {
 						if _, ok := vmMachines[ownerVM]; !ok {
-							log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+							if !r.isVMSucceededInPlan(ctx, migrationplan, ownerVM) {
+								log.FromContext(ctx).Error(fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk), "verify migration plan")
+								return fmt.Errorf("ownerVM %q in RDM disk %s not found in migration plan", ownerVM, rdmDisk)
+							}
 						}
 					}
 				}
@@ -2477,6 +2481,25 @@ func (r *MigrationPlanReconciler) updateMigrationPhaseWithRetry(
 }
 
 // markMigrationValidationFailed updates a Migration status to ValidationFailed
+// isVMSucceededInPlan returns true if the given VM name has a Succeeded migration
+// in this plan. Used to allow ownerVM validation to pass for VMs that already
+// completed migration as part of the same plan.
+func (r *MigrationPlanReconciler) isVMSucceededInPlan(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmName string) bool {
+	migrationList := &vjailbreakv1alpha1.MigrationList{}
+	if err := r.List(ctx, migrationList,
+		client.InNamespace(migrationplan.Namespace),
+		client.MatchingLabels{"migrationplan": migrationplan.Name},
+	); err != nil {
+		return false
+	}
+	for _, m := range migrationList.Items {
+		if m.Spec.VMName == vmName && m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, vmName string, message string) {
 	condition := corev1.PodCondition{
 		Type:               "Validated",
