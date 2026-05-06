@@ -1,4 +1,4 @@
-import { Box, Alert, Autocomplete, Chip, TextField } from '@mui/material'
+import { Box, Alert, Autocomplete, Checkbox, Chip, TextField } from '@mui/material'
 import { useMemo, useEffect, useState } from 'react'
 import { Step, RHFAutocomplete } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components'
@@ -188,6 +188,7 @@ export default function SecurityGroupAndServerGroup({
           />
           <Autocomplete
             multiple
+            disableCloseOnSelect
             size="small"
             loading={loadingProfiles}
             options={applicableProfiles}
@@ -227,8 +228,9 @@ export default function SecurityGroupAndServerGroup({
                 />
               ))
             }
-            renderOption={(props, option) => (
+            renderOption={(props, option, { selected }) => (
               <li {...props} key={option.metadata.name}>
+                <Checkbox style={{ marginRight: 8 }} checked={selected} size="small" />
                 <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                   <Box component="span" sx={{ fontSize: 14 }}>{option.metadata.name}</Box>
                   <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
