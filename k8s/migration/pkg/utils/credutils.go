@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackcommon "github.com/platform9/vjailbreak/pkg/common/openstack"
@@ -276,34 +275,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
-	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get openstack credentials for project lookup")
-	}
-
-	identityClient, err := openstack.NewIdentityV3(openstackClients.BlockStorageClient.ProviderClient, gophercloud.EndpointOpts{})
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create identity client")
-	}
-
-	listOpts := projects.ListOpts{Name: credsInfo.TenantName}
-	allPages, err := projects.List(identityClient, listOpts).AllPages(ctx)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to list projects with name %s", credsInfo.TenantName)
-	}
-
-	allProjects, err := projects.ExtractProjects(allPages)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract projects")
-	}
-	if len(allProjects) == 0 {
-		return nil, fmt.Errorf("no project found with name %s", credsInfo.TenantName)
-	}
-	projectID := allProjects[0].ID
-
-	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{
-		TenantID: projectID,
-	}).AllPages(ctx)
+	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list security groups for project")
 	}
