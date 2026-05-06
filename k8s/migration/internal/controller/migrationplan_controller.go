@@ -2225,6 +2225,7 @@ func MergeLabels(a, b map[string]string) map[string]string {
 	return result
 }
 
+//nolint:gocyclo
 func (r *MigrationPlanReconciler) migrateRDMdisks(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan, vmMachines map[string]*vjailbreakv1alpha1.VMwareMachine, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) error {
 	allRDMDisks := []*vjailbreakv1alpha1.RDMDisk{}
 	rdmDiskCRToBeUpdated := make([]vjailbreakv1alpha1.RDMDisk, 0)
