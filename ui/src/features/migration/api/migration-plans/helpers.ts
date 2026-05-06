@@ -19,7 +19,6 @@ export const createMigrationPlanJson = (params) => {
     postMigrationScript,
     periodicSyncInterval,
     periodicSyncEnabled,
-    assignedIPsPerVM,
     networkOverridesPerVM,
     networkPersistence,
     removeVMwareTools,
@@ -84,10 +83,6 @@ export const createMigrationPlanJson = (params) => {
 
   if (serverGroup) {
     spec.serverGroup = serverGroup
-  }
-
-  if (assignedIPsPerVM && Object.keys(assignedIPsPerVM).length > 0) {
-    spec.assignedIPsPerVM = assignedIPsPerVM
   }
 
   if (networkOverridesPerVM && Object.keys(networkOverridesPerVM).length > 0) {

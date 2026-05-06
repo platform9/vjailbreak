@@ -150,13 +150,6 @@ export default function MigrationDetailModal({
   const planAdvanced = (planSpec?.advancedOptions as any) || {}
   const planPostAction = (planSpec?.postMigrationAction as any) || {}
 
-  const assignedIpRaw =
-    (migrationSpec?.assignedIP as string) ||
-    (migrationSpec?.assignedIp as string) ||
-    (migrationSpec?.assignedIpAddress as string) ||
-    ''
-  const assignedIpFromPlan =
-    ((planSpec?.assignedIPsPerVM as Record<string, string> | undefined) || {})[vmName] || ''
   const assignedIpFromOverrides = useMemo(() => {
     const rawOverrides = migrationSpec?.networkOverrides
     if (!rawOverrides) return ''
@@ -177,7 +170,7 @@ export default function MigrationDetailModal({
       .filter(Boolean)
     return ips.join(',')
   }, [migrationSpec?.networkOverrides])
-  const assignedIps = formatCommaSeparated(assignedIpRaw || assignedIpFromOverrides || assignedIpFromPlan)
+  const assignedIps = formatCommaSeparated(assignedIpFromOverrides)
 
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
