@@ -531,7 +531,6 @@ export default function MigrationDetailModal({
     () => [
       { label: 'VM Name', value: displayVmName || 'N/A' },
       { label: 'Migration Type', value: migrationType },
-      { label: 'Assigned IP(s)', value: assignedIps },
       { label: 'Created At', value: createdAt },
       { label: 'Guest OS', value: guestOS },
       { label: 'CPU', value: cpu },
@@ -542,7 +541,6 @@ export default function MigrationDetailModal({
       { label: 'RDM Disks', value: rdmDisksSummary }
     ],
     [
-      assignedIps,
       cpu,
       createdAt,
       diskCount,
