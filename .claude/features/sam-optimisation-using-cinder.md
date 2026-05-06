@@ -139,8 +139,8 @@ func (m *CinderMapper) GetMappedGroups(_ storage.Volume, _ storage.MappingContex
 
 `buildConnectorFromHBAs` consumes the same `[]string` returned by `esxiClient.GetAllHostAdapters()` (`v2v-helper/esxi-ssh/disk_ops.go:740`, format `"iqn..."` or `"fc.WWNN:WWPN"` lowercase) and emits an os-brick connector dict:
 
-- All entries iSCSI → `{initiator, host, platform: "x86_64", os_type: "esxi", multipath: true}` (use first iqn as initiator)
-- All entries FC → `{wwpns: [...], wwnns: [...], host, platform: "x86_64", os_type: "esxi", multipath: true}` (parse via `fcutil.ParseFCUID` at `pkg/vpwned/sdk/storage/fcutil/fcutil.go:22`; emit colon-stripped uppercase via `fcutil.StripWWNFormatting`).
+- All entries iSCSI → `{initiator, host, platform: "x86_64", os_type: "vmware", multipath: true}` (use first iqn as initiator)
+- All entries FC → `{wwpns: [...], wwnns: [...], host, platform: "x86_64", os_type: "vmware", multipath: true}` (parse via `fcutil.ParseFCUID` at `pkg/vpwned/sdk/storage/fcutil/fcutil.go:22`; emit colon-stripped uppercase via `fcutil.StripWWNFormatting`).
 - Mixed → emit both sets in one connector; Cinder drivers ignore unused keys.
 - `host` defaults to `"vjailbreak-xcopy"` when caller passes `""`.
 
