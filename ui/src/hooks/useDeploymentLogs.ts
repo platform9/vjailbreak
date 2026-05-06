@@ -18,7 +18,6 @@ interface UseDeploymentLogsReturn {
 }
 
 const MAX_LOG_LINES = 5000
-const RECONNECT_DELAY_MS = 3000
 
 export const useDeploymentLogs = ({
   deploymentName,
@@ -35,10 +34,9 @@ export const useDeploymentLogs = ({
   const hasInitiallyLoadedRef = useRef(false)
   const previousDeploymentRef = useRef<string>('')
   const seenLogsRef = useRef<Set<string>>(new Set())
-  const shouldReconnectRef = useRef(false)
 
   const cleanup = useCallback(() => {
-    shouldReconnectRef.current = false
+    // Abort all active connections
     abortControllersRef.current.forEach((controller) => {
       controller.abort()
     })
@@ -158,8 +156,6 @@ export const useDeploymentLogs = ({
         hasInitiallyLoadedRef.current = true
       }
 
-      shouldReconnectRef.current = true
-
       const streamPromises = pods.map((pod) =>
         streamPodLogsWithProcessing(pod.metadata.name, pod.metadata.namespace, shouldFetchHistory)
       )
@@ -168,6 +164,7 @@ export const useDeploymentLogs = ({
       streamPromises.forEach((promise) => {
         promise.catch((err) => {
           if (err instanceof Error && err.name === 'AbortError') {
+            // Aborted, ignore
             return
           }
           console.error('Log streaming error:', err)
@@ -175,18 +172,11 @@ export const useDeploymentLogs = ({
         })
       })
 
-      Promise.allSettled(streamPromises).then(() => {
-        if (shouldReconnectRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (shouldReconnectRef.current) {
-              connect()
-            }
-          }, RECONNECT_DELAY_MS)
-        }
-      })
+      // Streams run indefinitely in parallel, handled individually
     } catch (err) {
       setIsLoading(false)
       if (err instanceof Error && err.name === 'AbortError') {
+        // Aborted, don't set error
         return
       }
 
@@ -195,14 +185,6 @@ export const useDeploymentLogs = ({
           ? err.message
           : `Failed to connect to deployment ${deploymentName} logs stream`
       setError(errorMessage)
-
-      if (shouldReconnectRef.current) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (shouldReconnectRef.current) {
-            connect()
-          }
-        }, RECONNECT_DELAY_MS)
-      }
     }
   }, [
     enabled,
