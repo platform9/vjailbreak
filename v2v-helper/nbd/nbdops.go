@@ -162,6 +162,12 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 }
 
 func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int) error {
+	copyDiskStart := time.Now()
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyDisk ENTER diskindex=%d dest=%s", diskindex, dest))
+	defer func() {
+		utils.PrintLog(fmt.Sprintf("[SPEED] CopyDisk EXIT diskindex=%d dest=%s total=%v",
+			diskindex, dest, time.Since(copyDiskStart)))
+	}()
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -217,6 +223,11 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 
 func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*BlockStatusData {
 	var blocks []*BlockStatusData
+	getBlockStatusStart := time.Now()
+	blockStatusCallCount := 0
+	var blockStatusTotalDuration time.Duration
+	utils.PrintLog(fmt.Sprintf("[SPEED] getBlockStatus ENTER extent offset=%d length=%d (%.2f MiB)",
+		extent.Start, extent.Length, float64(extent.Length)/(1024*1024)))
 
 	// Callback for libnbd.BlockStatus. Needs to modify blocks list above.
 	updateBlocksCallback := func(metacontext string, nbdOffset uint64, extents []uint32, err *int) int {
@@ -268,6 +279,8 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 			Offset: extent.Start,
 			Length: extent.Length,
 			Flags:  0})
+		utils.PrintLog(fmt.Sprintf("[SPEED] getBlockStatus EXIT extent offset=%d length=%d (small-extent fast path) blocks=%d total=%v",
+			extent.Start, extent.Length, len(blocks), time.Since(getBlockStatusStart)))
 		return blocks
 	}
 
@@ -290,27 +303,43 @@ func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*Blo
 			blocks = []*BlockStatusData{block}
 			return blocks
 		}
+		blockStatusCallStart := time.Now()
 		err := handle.BlockStatus(uint64(length), uint64(lastOffset), updateBlocksCallback, &fixedOptArgs)
+		blockStatusCallDuration := time.Since(blockStatusCallStart)
+		blockStatusCallCount++
+		blockStatusTotalDuration += blockStatusCallDuration
+		utils.PrintLog(fmt.Sprintf("[SPEED] BlockStatus call #%d offset=%d length=%d (%.2f MiB) took=%v",
+			blockStatusCallCount, lastOffset, length, float64(length)/(1024*1024), blockStatusCallDuration))
 		if err != nil {
 			utils.PrintLog(fmt.Sprintf("Error getting block status at offset %d, returning whole block instead. Error was: %v", lastOffset, err))
+			utils.PrintLog(fmt.Sprintf("[SPEED] getBlockStatus EXIT extent offset=%d length=%d (error path) calls=%d block_status_total=%v total=%v",
+				extent.Start, extent.Length, blockStatusCallCount, blockStatusTotalDuration, time.Since(getBlockStatusStart)))
 			return createWholeBlock()
 		}
 		last := len(blocks) - 1
 		newOffset := blocks[last].Offset + blocks[last].Length
 		if lastOffset == newOffset {
 			utils.PrintLog(fmt.Sprintf("No new block status data at offset %d, returning whole block.", newOffset))
+			utils.PrintLog(fmt.Sprintf("[SPEED] getBlockStatus EXIT extent offset=%d length=%d (no-progress path) calls=%d block_status_total=%v total=%v",
+				extent.Start, extent.Length, blockStatusCallCount, blockStatusTotalDuration, time.Since(getBlockStatusStart)))
 			return createWholeBlock()
 		}
 		lastOffset = newOffset
 	}
 
+	utils.PrintLog(fmt.Sprintf("[SPEED] getBlockStatus EXIT extent offset=%d length=%d blocks=%d calls=%d block_status_total=%v total=%v",
+		extent.Start, extent.Length, len(blocks), blockStatusCallCount, blockStatusTotalDuration, time.Since(getBlockStatusStart)))
 	return blocks
 }
 
 // pwrite writes the given byte buffer to the sink at the given offset
 func pwrite(fd *os.File, buffer []byte, offset uint64) (int, error) {
 	blocksize := len(buffer)
+	pwriteStart := time.Now()
 	written, err := syscall.Pwrite(int(fd.Fd()), buffer, int64(offset))
+	pwriteDuration := time.Since(pwriteStart)
+	utils.PrintLog(fmt.Sprintf("[SPEED] Pwrite bytes=%d offset=%d took=%v",
+		blocksize, offset, pwriteDuration))
 	if err != nil {
 		return -1, errors.Wrapf(err, "failed to write %d bytes at offset %d", blocksize, offset)
 	}
@@ -354,15 +383,25 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 }
 
 func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error {
-	if (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0 {
+	copyRangeStart := time.Now()
+	isZeroOrHole := (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0
+	utils.PrintLog(fmt.Sprintf("[SPEED] copyRange ENTER offset=%d length=%d (%.2f MiB) zero_or_hole=%v",
+		block.Offset, block.Length, float64(block.Length)/(1024*1024), isZeroOrHole))
+
+	if isZeroOrHole {
 		err := zeroRange(fd, block.Offset, block.Length)
 		if err != nil {
 			return fmt.Errorf("failed to zero range at offset %d: %v", block.Offset, err)
 		}
+		utils.PrintLog(fmt.Sprintf("[SPEED] copyRange EXIT (zero/hole) offset=%d length=%d total=%v",
+			block.Offset, block.Length, time.Since(copyRangeStart)))
+		return nil
 	}
 
 	buffer := bytes.Repeat([]byte{0}, MaxPreadLength)
 	count := int64(0)
+	preadCallCount := 0
+	var preadTotalDuration time.Duration
 	for count < block.Length {
 		if block.Length-count < int64(MaxPreadLength) {
 			buffer = bytes.Repeat([]byte{0}, int(block.Length-count))
@@ -370,7 +409,13 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 		length := len(buffer)
 
 		offset := block.Offset + count
+		preadStart := time.Now()
 		err := handle.Pread(buffer, uint64(offset), nil)
+		preadDuration := time.Since(preadStart)
+		preadCallCount++
+		preadTotalDuration += preadDuration
+		utils.PrintLog(fmt.Sprintf("[SPEED] Pread #%d bytes=%d offset=%d took=%v",
+			preadCallCount, length, offset, preadDuration))
 		if err != nil {
 			return fmt.Errorf("error reading from source at offset %d: %v", offset, err)
 		}
@@ -381,12 +426,17 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 		}
 		count += int64(length)
 	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] copyRange EXIT offset=%d length=%d preads=%d pread_total=%v total=%v",
+		block.Offset, block.Length, preadCallCount, preadTotalDuration, time.Since(copyRangeStart)))
 	return nil
 }
 func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
 	return nbdserver.CopiedSize, nbdserver.TotalSize, nbdserver.Duration
 }
 func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
+	copyChangedBlocksStart := time.Now()
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks ENTER path=%s extents=%d",
+		path, len(changedAreas.ChangedArea)))
 	// Copy the changed blocks from source to destination
 	handle, err := libnbd.Create()
 	if err != nil {
@@ -413,6 +463,8 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	for _, extent := range changedAreas.ChangedArea {
 		totalsize += extent.Length
 	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks total_changed_bytes=%d (%.2f MiB) across %d extents",
+		totalsize, float64(totalsize)/(1024*1024), len(changedAreas.ChangedArea)))
 
 	var wg sync.WaitGroup
 	throttle_semaphore := make(chan struct{}, 100)
@@ -451,12 +503,19 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 		wg.Add(1)
 		throttle_semaphore <- struct{}{}
 		go func(extent types.DiskChangeExtent) {
+			extentStart := time.Now()
+			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker START offset=%d length=%d (%.2f MiB)",
+				extent.Start, extent.Length, float64(extent.Length)/(1024*1024)))
 			blocks := getBlockStatus(handle, extent)
+			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker got %d blocks for extent offset=%d length=%d",
+				len(blocks), extent.Start, extent.Length))
 			defer func() { <-throttle_semaphore }()
 			retries := uint64(0)
 			waitTime := 1 * time.Minute
+			copyRangeCallCount := 0
 			var err error
 			for bidx := 0; bidx < len(blocks); {
+				copyRangeCallCount++
 				if err = copyRange(fd, handle, blocks[bidx]); err != nil {
 					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
 					retries++
@@ -479,6 +538,8 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 					retries = uint64(0)
 				}
 			}
+			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker END offset=%d length=%d blocks=%d copyRange_calls=%d total=%v",
+				extent.Start, extent.Length, len(blocks), copyRangeCallCount, time.Since(extentStart)))
 			// check if context is cancelled
 			select {
 			case <-ctx.Done():
@@ -498,8 +559,12 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	select {
 	case <-retryChannel:
 		close(incrementalcopyprogress)
+		utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks EXIT path=%s extents=%d total_bytes=%d total=%v",
+			path, len(changedAreas.ChangedArea), totalsize, time.Since(copyChangedBlocksStart)))
 		return nil
 	case err := <-errorChan:
+		utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks EXIT (error) path=%s total=%v err=%v",
+			path, time.Since(copyChangedBlocksStart), err))
 		return err
 	}
 }
