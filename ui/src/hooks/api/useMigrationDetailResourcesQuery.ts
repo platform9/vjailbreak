@@ -17,7 +17,7 @@ import { getRdmDisksList } from 'src/api/rdm-disks/rdmDisks'
 import type { StorageMapping } from 'src/api/storage-mappings/model'
 import { getStorageMapping } from 'src/api/storage-mappings/storageMappings'
 import type { VMwareMachine } from 'src/api/vmware-machines/model'
-import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
+import { getVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import type { PCDCluster, PCDClusterList } from 'src/api/pcd-clusters/model'
 import { getPCDClusters } from 'src/api/pcd-clusters/pcdClusters'
 import type { Migration } from 'src/features/migration/api/migrations'
@@ -80,13 +80,6 @@ export const useMigrationDetailResourcesQuery = ({
       const namespace = migration?.metadata?.namespace
       const migrationSpec = migration?.spec as any
       const vmName = (migrationSpec?.vmName as string) || ''
-      const vmStableId =
-        (migrationSpec?.vmId as string) ||
-        (migrationSpec?.vmID as string) ||
-        (migrationSpec?.vmwareMachine as string) ||
-        (migrationSpec?.vmwareMachineName as string) ||
-        (migrationSpec?.vmwareMachineRef as string) ||
-        ''
       const migrationPlanName =
         (migrationSpec?.migrationPlan as string) ||
         (migration?.metadata as any)?.labels?.migrationplan
@@ -174,24 +167,10 @@ export const useMigrationDetailResourcesQuery = ({
           ? -1
           : 0
 
-      const vmwareMachinesList = await safeGet(() => getVMwareMachines(namespace, vmwareRef))
-      const vmwareMachines = vmwareMachinesList?.items || []
-
-      let vmwareMachine: VMwareMachine | null = null
-      if (vmwareMachines.length) {
-        vmwareMachine =
-          vmwareMachines.find((m) => vmStableId && m?.metadata?.name === vmStableId) ||
-          vmwareMachines.find((m) => {
-            const vms = (m?.spec as any)?.vms
-            const vmKey =
-              vms?.name && vms?.vmid
-                ? `${vms.name}-${String(vms.vmid).replace(/^vm-/, '')}`
-                : vms?.name
-            return vmName && vmKey === vmName
-          }) ||
-          vmwareMachines.find((m) => vmName && (m?.spec as any)?.vms?.name === vmName) ||
-          null
-      }
+      const vmwareMachineName = migration.metadata.name.replace(/^migration-/, '')
+      const vmwareMachine: VMwareMachine | null = vmwareMachineName
+        ? await safeGet(() => getVMwareMachine(vmwareMachineName, namespace))
+        : null
 
       const rdmDiskNames = ((vmwareMachine?.spec as any)?.vms?.rdmDisks as string[]) || []
       const effectiveVmName = vmName || ((vmwareMachine?.spec as any)?.vms?.name as string) || ''
