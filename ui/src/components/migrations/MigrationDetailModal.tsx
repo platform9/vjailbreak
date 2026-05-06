@@ -1,6 +1,7 @@
 import {
   Alert,
   Box,
+  Chip,
   CircularProgress,
   Divider,
   FormControlLabel,
@@ -133,7 +134,8 @@ export default function MigrationDetailModal({
   }, [open])
 
   const vmName = useMemo(() => ((migration?.spec as any)?.vmName as string) || '', [migration])
-  const vmKey = (migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string || ''
+  const vmKey =
+    ((migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) || ''
   const displayVmName = isDuplicate && vmKey ? vmKey : vmName
   const phase = migration?.status?.phase
   const phaseLabel = (phase as string) || 'Unknown'
@@ -182,6 +184,60 @@ export default function MigrationDetailModal({
 
   const vmSpec = (data?.vmwareMachine?.spec as any)?.vms || {}
   const vmMeta = (data?.vmwareMachine?.metadata as any) || {}
+
+  const networkDetails = useMemo(() => {
+    const ifaces = Array.isArray(vmSpec?.networkInterfaces)
+      ? (vmSpec.networkInterfaces as any[])
+      : []
+
+    const rawOverrides = migrationSpec?.networkOverrides
+    let parsedOverrides: any[] = []
+    try {
+      parsedOverrides = Array.isArray(rawOverrides)
+        ? rawOverrides
+        : rawOverrides
+          ? JSON.parse(String(rawOverrides))
+          : []
+    } catch {
+      parsedOverrides = []
+    }
+
+    const overridesByIndex = new Map<number, any>()
+    if (Array.isArray(parsedOverrides)) {
+      for (const o of parsedOverrides) {
+        const idx = Number(o?.interfaceIndex)
+        if (!Number.isNaN(idx)) overridesByIndex.set(idx, o)
+      }
+    }
+
+    return ifaces.map((nic, index) => {
+      const override = overridesByIndex.get(index)
+      const preserveIP =
+        override?.preserveIP !== undefined
+          ? override.preserveIP !== false
+          : nic?.preserveIP !== false
+      const type = preserveIP ? 'Preserved' : 'Assigned'
+
+      const mac = String(nic?.mac || '').trim()
+
+      const preservedIps = Array.isArray(nic?.ipAddress)
+        ? nic.ipAddress.map((ip: any) => String(ip || '').trim()).filter(Boolean)
+        : []
+
+      const assignedIps = String(override?.UserAssignedIP || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const ips = preserveIP ? preservedIps : assignedIps
+
+      return {
+        mac: mac || 'N/A',
+        type,
+        ips
+      }
+    })
+  }, [migrationSpec?.networkOverrides, vmSpec?.networkInterfaces])
   const sourceDatacenter =
     (vmMeta?.annotations?.['vjailbreak.k8s.pf9.io/datacenter'] as string) ||
     (templateSpec?.source?.datacenter as string) ||
@@ -439,9 +495,7 @@ export default function MigrationDetailModal({
   const imageProfilesForVM = useMemo(() => {
     if (!selectedImageProfileNames.length || !Array.isArray(allProfiles)) return []
     const vmOs = String(guestOS || '').trim()
-    const byName = new Map(
-      allProfiles.map((p) => [String(p?.metadata?.name || ''), p] as const)
-    )
+    const byName = new Map(allProfiles.map((p) => [String(p?.metadata?.name || ''), p] as const))
     return selectedImageProfileNames
       .map((name) => byName.get(name))
       .filter(Boolean)
@@ -639,6 +693,60 @@ export default function MigrationDetailModal({
                 <SurfaceCard variant="card" title="General Info" subtitle="VM specifications">
                   <KeyValueGrid items={generalInfoItems} />
 
+                  {networkDetails.length ? (
+                    <Box sx={{ mt: 2 }}>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <LanOutlinedIcon fontSize="small" color="action" />
+                        <Typography variant="subtitle2">Network Details</Typography>
+                      </Box>
+                      <TableContainer component={Paper} variant="outlined">
+                        <Table size="small" sx={{ tableLayout: 'fixed' }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ width: '30%' }}>MAC</TableCell>
+                              <TableCell sx={{ width: '25%' }}>Type</TableCell>
+                              <TableCell sx={{ width: '45%' }}>IP Addresses</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {networkDetails.map((row) => (
+                              <TableRow key={`${row.mac}-${row.type}`}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                                    {row.mac}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {row.type}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    {row.ips.length ? (
+                                      row.ips.map((ip) => (
+                                        <Chip
+                                          key={`${row.mac}-${ip}`}
+                                          label={ip}
+                                          size="small"
+                                          color="info"
+                                          variant="outlined"
+                                        />
+                                      ))
+                                    ) : (
+                                      <Chip label="N/A" size="small" variant="outlined" />
+                                    )}
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  ) : null}
+
                   {data?.rdmDisks?.length ? (
                     <Box sx={{ mt: 2 }}>
                       <Divider sx={{ mb: 2 }} />
@@ -715,118 +823,118 @@ export default function MigrationDetailModal({
               </Box>
             ) : (
               <Box sx={{ display: 'grid', gap: 2 }}>
-              <SurfaceCard
-                variant="card"
-                title="Migration Policies"
-                subtitle="Flags and post-migration actions"
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        size="small"
-                        checked={onlyShowOverrides}
-                        onChange={(e) => handleOnlyShowOverridesChange(e.target.checked)}
-                      />
-                    }
-                    label={<Typography variant="body2">View only enabled options</Typography>}
-                  />
-                </Box>
-
-                {visiblePolicyItems.length ? (
-                  <KeyValueGrid items={visiblePolicyItems} />
-                ) : (
-                  <Typography variant="body2">No advanced options configured.</Typography>
-                )}
-
-                {postMigrationScript || !onlyShowOverrides ? (
-                  <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 2
-                      }}
-                    >
-                      <FieldLabel label="Post-migration script" />
-                    </Box>
-
-                    {postMigrationScript ? (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          p: 2,
-                          backgroundColor: (theme) => theme.palette.action.hover
-                        }}
-                      >
-                        <Typography
-                          variant="caption"
-                          component="pre"
-                          sx={{
-                            m: 0,
-                            whiteSpace: 'pre-wrap'
-                          }}
-                        >
-                          {postMigrationScript}
-                        </Typography>
-                      </Paper>
-                    ) : (
-                      <Typography variant="body2">N/A</Typography>
-                    )}
-                  </Box>
-                ) : null}
-              </SurfaceCard>
-
-              {selectedImageProfileNames.length ? (
                 <SurfaceCard
                   variant="card"
-                  title="Image Profiles"
-                  subtitle="Cinder volume image metadata applied to the boot volume"
+                  title="Migration Policies"
+                  subtitle="Flags and post-migration actions"
                 >
-                  {imageProfilesForVM.length ? (
-                    <Box sx={{ display: 'grid', gap: 1.5 }}>
-                      {imageProfilesForVM.map((profile) => {
-                        const name = profile.metadata?.name || ''
-                        const osLabel =
-                          OS_FAMILY_LABEL[profile.spec?.osFamily as string] ||
-                          profile.spec?.osFamily ||
-                          'N/A'
-                        const description = profile.spec?.description || ''
-                        const properties = profile.spec?.properties || {}
-                        const propertyItems = Object.entries(properties).map(([k, v]) => ({
-                          label: k,
-                          value: String(v ?? '')
-                        }))
-                        return (
-                          <SurfaceCard
-                            key={name}
-                            variant="section"
-                            title={name}
-                            subtitle={description || undefined}
-                            actions={
-                              <StatusChip label={osLabel} size="small" variant="outlined" />
-                            }
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={onlyShowOverrides}
+                          onChange={(e) => handleOnlyShowOverridesChange(e.target.checked)}
+                        />
+                      }
+                      label={<Typography variant="body2">View only enabled options</Typography>}
+                    />
+                  </Box>
+
+                  {visiblePolicyItems.length ? (
+                    <KeyValueGrid items={visiblePolicyItems} />
+                  ) : (
+                    <Typography variant="body2">No advanced options configured.</Typography>
+                  )}
+
+                  {postMigrationScript || !onlyShowOverrides ? (
+                    <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 2
+                        }}
+                      >
+                        <FieldLabel label="Post-migration script" />
+                      </Box>
+
+                      {postMigrationScript ? (
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 2,
+                            backgroundColor: (theme) => theme.palette.action.hover
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            component="pre"
                             sx={{
-                              border: (theme) => `1px solid ${theme.palette.divider}`
+                              m: 0,
+                              whiteSpace: 'pre-wrap'
                             }}
                           >
-                            {propertyItems.length ? (
-                              <KeyValueGrid items={propertyItems} />
-                            ) : (
-                              <Typography variant="body2">No properties configured.</Typography>
-                            )}
-                          </SurfaceCard>
-                        )
-                      })}
+                            {postMigrationScript}
+                          </Typography>
+                        </Paper>
+                      ) : (
+                        <Typography variant="body2">N/A</Typography>
+                      )}
                     </Box>
-                  ) : (
-                    <Typography variant="body2">
-                      No image profiles apply to this VM's OS family.
-                    </Typography>
-                  )}
+                  ) : null}
                 </SurfaceCard>
-              ) : null}
+
+                {selectedImageProfileNames.length ? (
+                  <SurfaceCard
+                    variant="card"
+                    title="Image Profiles"
+                    subtitle="Cinder volume image metadata applied to the boot volume"
+                  >
+                    {imageProfilesForVM.length ? (
+                      <Box sx={{ display: 'grid', gap: 1.5 }}>
+                        {imageProfilesForVM.map((profile) => {
+                          const name = profile.metadata?.name || ''
+                          const osLabel =
+                            OS_FAMILY_LABEL[profile.spec?.osFamily as string] ||
+                            profile.spec?.osFamily ||
+                            'N/A'
+                          const description = profile.spec?.description || ''
+                          const properties = profile.spec?.properties || {}
+                          const propertyItems = Object.entries(properties).map(([k, v]) => ({
+                            label: k,
+                            value: String(v ?? '')
+                          }))
+                          return (
+                            <SurfaceCard
+                              key={name}
+                              variant="section"
+                              title={name}
+                              subtitle={description || undefined}
+                              actions={
+                                <StatusChip label={osLabel} size="small" variant="outlined" />
+                              }
+                              sx={{
+                                border: (theme) => `1px solid ${theme.palette.divider}`
+                              }}
+                            >
+                              {propertyItems.length ? (
+                                <KeyValueGrid items={propertyItems} />
+                              ) : (
+                                <Typography variant="body2">No properties configured.</Typography>
+                              )}
+                            </SurfaceCard>
+                          )
+                        })}
+                      </Box>
+                    ) : (
+                      <Typography variant="body2">
+                        No image profiles apply to this VM's OS family.
+                      </Typography>
+                    )}
+                  </SurfaceCard>
+                ) : null}
               </Box>
             )}
           </Section>
