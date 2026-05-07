@@ -33,6 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
@@ -770,6 +771,15 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 }
 
 func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
+	// When no security groups are selected, disable port security
+	if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
+		disabled := false
+		extOpts := portsecurity.PortCreateOptsExt{
+			CreateOptsBuilder:   createOpts,
+			PortSecurityEnabled: &disabled,
+		}
+		return ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
+	}
 	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 }
 

@@ -1,48 +1,64 @@
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
+import TerminalIcon from '@mui/icons-material/Terminal'
 import { cleanupAllResources } from 'src/api/helpers'
 import ThemeToggle from './ThemeToggle'
+import ControllerLogsDrawer from '../../features/migration/components/ControllerLogsDrawer'
 
 export default function ButtonAppBar({ hide = false }) {
+  const [logsOpen, setLogsOpen] = useState(false)
+
   return (
-    <Paper
-      elevation={0}
-      square
-      sx={{
-        visibility: hide ? 'hidden' : 'visible',
-        position: 'sticky',
-        top: 0,
-        zIndex: (theme) => theme.zIndex.appBar,
-        borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-        backgroundColor: 'background.paper'
-      }}
-    >
-      <Box
+    <>
+      <Paper
+        elevation={0}
+        square
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 1.5,
-          height: 64,
-          px: { xs: 2, sm: 3 },
-          maxWidth: { lg: '1600px' },
-          mx: 'auto',
-          width: '100%'
+          visibility: hide ? 'hidden' : 'visible',
+          position: 'sticky',
+          top: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+          backgroundColor: 'background.paper'
         }}
       >
-        <ThemeToggle />
-        {import.meta.env.MODE === 'development' && (
-          <Button
-            size="medium"
-            onClick={() => cleanupAllResources()}
-            color="error"
-            variant="outlined"
-          >
-            DEV ONLY: Clean Up Resources
-          </Button>
-        )}
-      </Box>
-    </Paper>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 1.5,
+            height: 64,
+            px: { xs: 2, sm: 3 },
+            maxWidth: { lg: '1600px' },
+            mx: 'auto',
+            width: '100%'
+          }}
+        >
+          <Tooltip title="Controller Logs">
+            <IconButton size="medium" onClick={() => setLogsOpen(true)} sx={{ mr: -2 }}>
+              <TerminalIcon />
+            </IconButton>
+          </Tooltip>
+          <ThemeToggle />
+          {import.meta.env.MODE === 'development' && (
+            <Button
+              size="medium"
+              onClick={() => cleanupAllResources()}
+              color="error"
+              variant="outlined"
+            >
+              DEV ONLY: Clean Up Resources
+            </Button>
+          )}
+        </Box>
+      </Paper>
+
+      <ControllerLogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
+    </>
   )
 }
