@@ -193,7 +193,7 @@ export default function MigrationDetailModal({
           : nic?.preserveMAC !== false
 
       const ipType = preserveIP ? 'Preserved' : 'User Assigned'
-      const macType = preserveMAC ? 'Preserved' : 'User Assigned'
+      const macType = preserveMAC ? 'Preserved' : 'Auto Assigned'
 
       const mac = String(nic?.mac || '').trim()
 
@@ -678,12 +678,12 @@ export default function MigrationDetailModal({
                           <Table size="small" sx={{ tableLayout: 'fixed' }}>
                             <TableHead>
                               <TableRow>
-                                <TableCell sx={{ width: '20%' }}>
+                                <TableCell sx={{ width: '22%' }}>
                                   <Box
                                     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
                                   >
                                     <Typography component="span" variant="inherit">
-                                      MAC Type
+                                      MAC Handling
                                     </Typography>
                                     <Tooltip
                                       slotProps={{
@@ -694,7 +694,7 @@ export default function MigrationDetailModal({
                                         }
                                       }}
                                       title={
-                                        "Preserved: keeps the VM's original MAC address. \nUser Assigned: uses the MAC address you provided in overrides."
+                                        "Preserved: keeps the VM's original MAC address. \nAuto Assigned: assigns a new MAC address at destination."
                                       }
                                       placement="top"
                                     >
@@ -704,13 +704,13 @@ export default function MigrationDetailModal({
                                     </Tooltip>
                                   </Box>
                                 </TableCell>
-                                <TableCell sx={{ width: '20%' }}>MAC</TableCell>
-                                <TableCell sx={{ width: '20%' }}>
+                                <TableCell sx={{ width: '20%' }}>MAC Address</TableCell>
+                                <TableCell sx={{ width: '22%' }}>
                                   <Box
                                     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
                                   >
                                     <Typography component="span" variant="inherit">
-                                      IP Type
+                                      IP Handling
                                     </Typography>
                                     <Tooltip
                                       slotProps={{
@@ -731,7 +731,7 @@ export default function MigrationDetailModal({
                                     </Tooltip>
                                   </Box>
                                 </TableCell>
-                                <TableCell sx={{ width: '40%' }}>IP Addresses</TableCell>
+                                <TableCell sx={{ width: '36%' }}>IP Addresses</TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>
