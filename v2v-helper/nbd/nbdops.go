@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -80,6 +81,123 @@ var MaxPreadLength = MaxPreadLengthESX
 var fixedOptArgs = libnbd.BlockStatusOptargs{
 	Flags:    libnbd.CMD_FLAG_REQ_ONE,
 	FlagsSet: true,
+}
+
+// HandlePoolSize is the number of libnbd handles created up-front and shared
+// across worker goroutines. libnbd serializes commands per handle, so real
+// pipelining only happens at the granularity of the pool size.
+const HandlePoolSize = 8
+
+// SubRangeSize is the chunk size used to split a single large data block into
+// independently-fetched sub-ranges that can run on different handles in parallel.
+const SubRangeSize = 256 << 20 // 256 MiB
+
+// ExtentCoalesceGap is the maximum gap (in bytes) between two adjacent
+// CBT-reported extents that we will merge into a single extent before
+// dispatching. The gap region is re-checked with BlockStatus and any holes
+// inside it are punched cheaply, so the only cost is one BlockStatus call
+// instead of many tiny ones.
+const ExtentCoalesceGap = 16 << 20 // 16 MiB
+
+// ExtentWorkerCount caps the number of concurrent extent workers. Bytes-level
+// parallelism is provided by the handle pool; this just bounds goroutine count
+// so that workloads with millions of fragmented extents don't blow up memory.
+const ExtentWorkerCount = 32
+
+// handlePool is a fixed-size pool of pre-connected libnbd handles. Workers
+// Acquire a handle for the duration of an I/O operation and Release it when
+// done. The capacity of the channel == HandlePoolSize, so Acquire blocks
+// when all handles are in use, naturally throttling parallel I/O to the
+// pool size.
+type handlePool struct {
+	handles chan *libnbd.Libnbd
+	all     []*libnbd.Libnbd
+	size    int
+}
+
+func newHandlePool(size int, sockUrl string) (*handlePool, error) {
+	utils.PrintLog(fmt.Sprintf("[SPEED] handlePool creating size=%d sockUrl=%s", size, sockUrl))
+	p := &handlePool{
+		handles: make(chan *libnbd.Libnbd, size),
+		all:     make([]*libnbd.Libnbd, 0, size),
+		size:    size,
+	}
+	for i := 0; i < size; i++ {
+		h, err := libnbd.Create()
+		if err != nil {
+			p.Close()
+			return nil, fmt.Errorf("failed to create libnbd handle %d: %v", i, err)
+		}
+		if err := h.AddMetaContext("base:allocation"); err != nil {
+			p.Close()
+			return nil, fmt.Errorf("failed to add meta context on handle %d: %v", i, err)
+		}
+		if err := h.ConnectUri(sockUrl); err != nil {
+			p.Close()
+			return nil, fmt.Errorf("failed to connect handle %d: %v", i, err)
+		}
+		p.all = append(p.all, h)
+		p.handles <- h
+	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] handlePool created size=%d", size))
+	return p, nil
+}
+
+// Acquire returns a handle from the pool, blocking until one is available
+// or the context is cancelled.
+func (p *handlePool) Acquire(ctx context.Context) (*libnbd.Libnbd, error) {
+	select {
+	case h := <-p.handles:
+		return h, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// Release returns a handle to the pool.
+func (p *handlePool) Release(h *libnbd.Libnbd) {
+	if h == nil {
+		return
+	}
+	p.handles <- h
+}
+
+// Close tears down every handle. Caller must guarantee no more Acquire calls.
+func (p *handlePool) Close() {
+	for _, h := range p.all {
+		if h != nil {
+			_ = h.Close()
+		}
+	}
+}
+
+// coalesceExtents sorts extents by offset and merges any pair whose gap is
+// <= maxGap. Inside a merged extent, getBlockStatus will discover the gap as
+// a hole and zeroRange will punch it; the only cost is one larger BlockStatus
+// call versus many smaller ones. Returns a new slice; input is not mutated.
+func coalesceExtents(extents []types.DiskChangeExtent, maxGap int64) []types.DiskChangeExtent {
+	if len(extents) <= 1 {
+		return extents
+	}
+	sorted := make([]types.DiskChangeExtent, len(extents))
+	copy(sorted, extents)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+
+	out := make([]types.DiskChangeExtent, 0, len(sorted))
+	out = append(out, sorted[0])
+	for _, e := range sorted[1:] {
+		last := &out[len(out)-1]
+		lastEnd := last.Start + last.Length
+		eEnd := e.Start + e.Length
+		if e.Start-lastEnd <= maxGap {
+			if eEnd > lastEnd {
+				last.Length = eEnd - last.Start
+			}
+		} else {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error {
@@ -430,6 +548,93 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 		block.Offset, block.Length, preadCallCount, preadTotalDuration, time.Since(copyRangeStart)))
 	return nil
 }
+// copyBlockParallel handles a single BlockStatusData. For zero/hole blocks it
+// punches a hole locally (no source read needed). For data blocks larger than
+// SubRangeSize it splits the block into sub-ranges and dispatches them across
+// the handle pool so that multiple Preads run in flight concurrently — which
+// is the only way to exceed single-stream VDDK throughput. Smaller blocks
+// take a single handle from the pool and run copyRange as before.
+func copyBlockParallel(ctx context.Context, fd *os.File, pool *handlePool, block *BlockStatusData) error {
+	start := time.Now()
+	isZeroOrHole := (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0
+	utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel ENTER offset=%d length=%d (%.2f MiB) zero_or_hole=%v",
+		block.Offset, block.Length, float64(block.Length)/(1024*1024), isZeroOrHole))
+
+	if isZeroOrHole {
+		err := zeroRange(fd, block.Offset, block.Length)
+		utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel EXIT (zero/hole) offset=%d length=%d total=%v",
+			block.Offset, block.Length, time.Since(start)))
+		return err
+	}
+
+	// Small block: keep the original single-handle path to avoid sub-range
+	// overhead when there's nothing to gain.
+	if block.Length <= int64(SubRangeSize) {
+		h, err := pool.Acquire(ctx)
+		if err != nil {
+			return fmt.Errorf("acquire handle for small block at offset %d: %v", block.Offset, err)
+		}
+		defer pool.Release(h)
+		err = copyRange(fd, h, block)
+		utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel EXIT (single-handle) offset=%d length=%d total=%v",
+			block.Offset, block.Length, time.Since(start)))
+		return err
+	}
+
+	// Plan sub-ranges. Each sub-range is treated as a fresh data block so
+	// copyRange's inner loop drives Preads sequentially within the sub-range
+	// while peers run on other handles in parallel.
+	var subRanges []*BlockStatusData
+	end := block.Offset + block.Length
+	for off := block.Offset; off < end; off += int64(SubRangeSize) {
+		srEnd := off + int64(SubRangeSize)
+		if srEnd > end {
+			srEnd = end
+		}
+		subRanges = append(subRanges, &BlockStatusData{
+			Offset: off,
+			Length: srEnd - off,
+			Flags:  0, // we already know this region is data
+		})
+	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel split offset=%d length=%d into %d sub-ranges (size=%d)",
+		block.Offset, block.Length, len(subRanges), SubRangeSize))
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(subRanges))
+	for i, sr := range subRanges {
+		wg.Add(1)
+		go func(idx int, sr *BlockStatusData) {
+			defer wg.Done()
+			subStart := time.Now()
+			h, err := pool.Acquire(ctx)
+			if err != nil {
+				errCh <- fmt.Errorf("acquire handle for sub-range %d: %v", idx, err)
+				return
+			}
+			defer pool.Release(h)
+			utils.PrintLog(fmt.Sprintf("[SPEED] sub-range %d START offset=%d length=%d (%.2f MiB)",
+				idx, sr.Offset, sr.Length, float64(sr.Length)/(1024*1024)))
+			if err := copyRange(fd, h, sr); err != nil {
+				errCh <- fmt.Errorf("sub-range %d at offset %d failed: %v", idx, sr.Offset, err)
+				return
+			}
+			utils.PrintLog(fmt.Sprintf("[SPEED] sub-range %d END offset=%d length=%d total=%v",
+				idx, sr.Offset, sr.Length, time.Since(subStart)))
+		}(i, sr)
+	}
+	wg.Wait()
+	close(errCh)
+	if err, ok := <-errCh; ok && err != nil {
+		utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel EXIT (error) offset=%d length=%d total=%v err=%v",
+			block.Offset, block.Length, time.Since(start), err))
+		return err
+	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] copyBlockParallel EXIT offset=%d length=%d sub_ranges=%d total=%v",
+		block.Offset, block.Length, len(subRanges), time.Since(start)))
+	return nil
+}
+
 func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
 	return nbdserver.CopiedSize, nbdserver.TotalSize, nbdserver.Duration
 }
@@ -437,43 +642,42 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	copyChangedBlocksStart := time.Now()
 	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks ENTER path=%s extents=%d",
 		path, len(changedAreas.ChangedArea)))
-	// Copy the changed blocks from source to destination
-	handle, err := libnbd.Create()
+
+	// Coalesce CBT-reported extents to amortize per-extent overhead. Holes
+	// inside a coalesced range will be discovered by getBlockStatus and
+	// punched cheaply via fallocate, so there's no read amplification beyond
+	// the chosen gap threshold.
+	coalesced := coalesceExtents(changedAreas.ChangedArea, int64(ExtentCoalesceGap))
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks coalesced extents %d -> %d (gap<=%d)",
+		len(changedAreas.ChangedArea), len(coalesced), ExtentCoalesceGap))
+
+	// Build the handle pool that all workers will share.
+	pool, err := newHandlePool(HandlePoolSize, generateSockUrl(nbdserver.tmp_dir))
 	if err != nil {
-		return fmt.Errorf("failed to create libnbd handle: %v", err)
+		return fmt.Errorf("failed to build handle pool: %v", err)
 	}
-	err = handle.AddMetaContext("base:allocation")
-	if err != nil {
-		return fmt.Errorf("failed to add meta context: %v", err)
-	}
-	err = handle.ConnectUri(generateSockUrl(nbdserver.tmp_dir))
-	if err != nil {
-		return fmt.Errorf("failed to connect to source: %v", err)
-	}
-	defer handle.Close()
+	defer pool.Close()
 
 	fd, err := os.OpenFile(path, os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-
 	defer fd.Close()
 
 	totalsize := int64(0)
-	for _, extent := range changedAreas.ChangedArea {
+	for _, extent := range coalesced {
 		totalsize += extent.Length
 	}
-	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks total_changed_bytes=%d (%.2f MiB) across %d extents",
-		totalsize, float64(totalsize)/(1024*1024), len(changedAreas.ChangedArea)))
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks total_changed_bytes=%d (%.2f MiB) across %d extents (post-coalesce)",
+		totalsize, float64(totalsize)/(1024*1024), len(coalesced)))
 
-	var wg sync.WaitGroup
-	throttle_semaphore := make(chan struct{}, 100)
-	incrementalcopyprogress := make(chan int64)
+	incrementalcopyprogress := make(chan int64, len(coalesced))
+	errorChan := make(chan error, ExtentWorkerCount)
+	doneChan := make(chan struct{})
 
 	maxRetries, capInterval := utils.GetRetryLimits()
-	errorChan := make(chan error)
-	retryChannel := make(chan struct{})
-	// Goroutine for updating progress
+
+	// Progress aggregator.
 	go func() {
 		copiedsize := int64(0)
 		lastLoggedPct := -1
@@ -486,81 +690,116 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			nbdserver.CopiedSize = copiedsize
 			nbdserver.Duration = time.Since(startTime)
 
-			currentPct := int(float64(copiedsize) / float64(totalsize) * 100.0)
-
+			currentPct := 0
+			if totalsize > 0 {
+				currentPct = int(float64(copiedsize) / float64(totalsize) * 100.0)
+			}
 			prog := fmt.Sprintf("Progress: %d%%", currentPct)
 
 			if (currentPct == 0 && lastLoggedPct != 0) || currentPct == 100 || (currentPct > lastLoggedPct && currentPct%logInterval == 0) {
 				utils.PrintLog(prog)
 				lastLoggedPct = currentPct
 			}
-
 			nbdserver.progresschan <- prog
 		}
 	}()
 
-	for _, extent := range changedAreas.ChangedArea {
-		wg.Add(1)
-		throttle_semaphore <- struct{}{}
-		go func(extent types.DiskChangeExtent) {
-			extentStart := time.Now()
-			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker START offset=%d length=%d (%.2f MiB)",
-				extent.Start, extent.Length, float64(extent.Length)/(1024*1024)))
-			blocks := getBlockStatus(handle, extent)
-			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker got %d blocks for extent offset=%d length=%d",
-				len(blocks), extent.Start, extent.Length))
-			defer func() { <-throttle_semaphore }()
-			retries := uint64(0)
-			waitTime := 1 * time.Minute
-			copyRangeCallCount := 0
-			var err error
-			for bidx := 0; bidx < len(blocks); {
-				copyRangeCallCount++
-				if err = copyRange(fd, handle, blocks[bidx]); err != nil {
-					utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
-					retries++
-					if retries >= maxRetries {
-						errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
-						return
-					}
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(waitTime):
-						waitTime = waitTime * 2
-						if waitTime > capInterval {
-							waitTime = capInterval
-						}
-						continue
-					}
-				} else {
-					bidx++
-					retries = uint64(0)
-				}
-			}
-			utils.PrintLog(fmt.Sprintf("[SPEED] extent worker END offset=%d length=%d blocks=%d copyRange_calls=%d total=%v",
-				extent.Start, extent.Length, len(blocks), copyRangeCallCount, time.Since(extentStart)))
-			// check if context is cancelled
+	// Fixed-size extent worker pool fed by an extent channel. Bounds goroutine
+	// fan-out for fragmented workloads while still letting bytes-level
+	// parallelism happen inside copyBlockParallel via the handle pool.
+	extentCh := make(chan types.DiskChangeExtent)
+	go func() {
+		defer close(extentCh)
+		for _, e := range coalesced {
 			select {
+			case extentCh <- e:
 			case <-ctx.Done():
-				if _, ok := <-incrementalcopyprogress; ok {
-					close(incrementalcopyprogress)
-				}
 				return
-			case incrementalcopyprogress <- extent.Length:
-				wg.Done()
 			}
-		}(extent)
+		}
+	}()
+
+	workers := ExtentWorkerCount
+	if workers > len(coalesced) && len(coalesced) > 0 {
+		workers = len(coalesced)
 	}
+	if workers < 1 {
+		workers = 1
+	}
+	utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks spawning %d extent workers (pool=%d, sub_range=%d, coalesce_gap=%d)",
+		workers, HandlePoolSize, SubRangeSize, ExtentCoalesceGap))
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for extent := range extentCh {
+				extentStart := time.Now()
+				utils.PrintLog(fmt.Sprintf("[SPEED] extent worker %d START offset=%d length=%d (%.2f MiB)",
+					workerID, extent.Start, extent.Length, float64(extent.Length)/(1024*1024)))
+
+				// getBlockStatus needs a handle for one BlockStatus walk. Hold it
+				// for that walk only, then release before doing the (longer) reads.
+				h, err := pool.Acquire(ctx)
+				if err != nil {
+					errorChan <- fmt.Errorf("worker %d acquire for BlockStatus: %v", workerID, err)
+					return
+				}
+				blocks := getBlockStatus(h, extent)
+				pool.Release(h)
+				utils.PrintLog(fmt.Sprintf("[SPEED] extent worker %d got %d blocks for extent offset=%d length=%d",
+					workerID, len(blocks), extent.Start, extent.Length))
+
+				retries := uint64(0)
+				waitTime := 1 * time.Minute
+				copyRangeCallCount := 0
+				for bidx := 0; bidx < len(blocks); {
+					copyRangeCallCount++
+					if err := copyBlockParallel(ctx, fd, pool, blocks[bidx]); err != nil {
+						utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
+						retries++
+						if retries >= maxRetries {
+							errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+							return
+						}
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(waitTime):
+							waitTime = waitTime * 2
+							if waitTime > capInterval {
+								waitTime = capInterval
+							}
+							continue
+						}
+					} else {
+						bidx++
+						retries = uint64(0)
+					}
+				}
+				utils.PrintLog(fmt.Sprintf("[SPEED] extent worker %d END offset=%d length=%d blocks=%d copyRange_calls=%d total=%v",
+					workerID, extent.Start, extent.Length, len(blocks), copyRangeCallCount, time.Since(extentStart)))
+
+				select {
+				case <-ctx.Done():
+					return
+				case incrementalcopyprogress <- extent.Length:
+				}
+			}
+		}(w)
+	}
+
 	go func() {
 		wg.Wait()
-		close(retryChannel)
+		close(doneChan)
 	}()
+
 	select {
-	case <-retryChannel:
+	case <-doneChan:
 		close(incrementalcopyprogress)
 		utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks EXIT path=%s extents=%d total_bytes=%d total=%v",
-			path, len(changedAreas.ChangedArea), totalsize, time.Since(copyChangedBlocksStart)))
+			path, len(coalesced), totalsize, time.Since(copyChangedBlocksStart)))
 		return nil
 	case err := <-errorChan:
 		utils.PrintLog(fmt.Sprintf("[SPEED] CopyChangedBlocks EXIT (error) path=%s total=%v err=%v",
