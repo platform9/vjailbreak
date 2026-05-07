@@ -48,16 +48,6 @@ export interface MigrationDetailModalProps {
   isDuplicate?: boolean
 }
 
-const formatCommaSeparated = (value: unknown) => {
-  if (!value) return 'N/A'
-  const parts = String(value)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (!parts.length) return 'N/A'
-  return parts.join(', ')
-}
-
 const enabledOrNA = (value: unknown) => {
   return value === true ? 'Enabled' : 'N/A'
 }
@@ -151,28 +141,6 @@ export default function MigrationDetailModal({
   const planStrategy = (planSpec?.migrationStrategy as any) || {}
   const planAdvanced = (planSpec?.advancedOptions as any) || {}
   const planPostAction = (planSpec?.postMigrationAction as any) || {}
-
-  const assignedIpFromOverrides = useMemo(() => {
-    const rawOverrides = migrationSpec?.networkOverrides
-    if (!rawOverrides) return ''
-
-    let parsedOverrides: any[] = []
-    try {
-      parsedOverrides = Array.isArray(rawOverrides)
-        ? rawOverrides
-        : JSON.parse(String(rawOverrides))
-    } catch {
-      return ''
-    }
-
-    if (!Array.isArray(parsedOverrides) || parsedOverrides.length === 0) return ''
-
-    const ips = parsedOverrides
-      .map((item) => String(item?.UserAssignedIP || '').trim())
-      .filter(Boolean)
-    return ips.join(',')
-  }, [migrationSpec?.networkOverrides])
-  const assignedIps = formatCommaSeparated(assignedIpFromOverrides)
 
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
