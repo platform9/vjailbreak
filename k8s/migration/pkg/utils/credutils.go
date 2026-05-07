@@ -1822,7 +1822,7 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	}
 
 	// Convert VM name to Kubernetes-safe name
-	vmName, err := netutils.GetK8sCompatibleVMWareObjectName(vmProps.Config.Name, scope.Name())
+	vmName, err := netutils.GetVMK8sCompatibleName(vmProps.Config.Name, vm.Reference().Value, scope.Name())
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to convert vm name: %w", err))
 	}
@@ -1845,6 +1845,9 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	default:
 		// Object exists
+		if vmwvm.Status.Migrated {
+			return
+		}
 		if len(guestNetworksFromVmware) > 0 {
 			// Only update if we got fresh data from vCenter
 			guestNetworks = guestNetworksFromVmware
