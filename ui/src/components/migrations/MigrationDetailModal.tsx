@@ -5,6 +5,7 @@ import {
   CircularProgress,
   Divider,
   FormControlLabel,
+  IconButton,
   Paper,
   Switch,
   Table,
@@ -13,8 +14,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography
 } from '@mui/material'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
 import { SyntheticEvent, useCallback, useEffect, useMemo, useState } from 'react'
@@ -184,7 +187,13 @@ export default function MigrationDetailModal({
         override?.preserveIP !== undefined
           ? override.preserveIP !== false
           : nic?.preserveIP !== false
-      const type = preserveIP ? 'Preserved' : 'Assigned'
+      const preserveMAC =
+        override?.preserveMAC !== undefined
+          ? override.preserveMAC !== false
+          : nic?.preserveMAC !== false
+
+      const ipType = preserveIP ? 'Preserved' : 'User Assigned'
+      const macType = preserveMAC ? 'Preserved' : 'User Assigned'
 
       const mac = String(nic?.mac || '').trim()
 
@@ -201,7 +210,8 @@ export default function MigrationDetailModal({
 
       return {
         mac: mac || 'N/A',
-        type,
+        macType,
+        ipType,
         ips
       }
     })
@@ -662,54 +672,110 @@ export default function MigrationDetailModal({
                   {networkDetails.length ? (
                     <Box sx={{ mt: 2 }}>
                       <Divider sx={{ mb: 2 }} />
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <LanOutlinedIcon fontSize="small" color="action" />
-                        <Typography variant="subtitle2">Network Details</Typography>
-                      </Box>
-                      <TableContainer component={Paper} variant="outlined">
-                        <Table size="small" sx={{ tableLayout: 'fixed' }}>
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ width: '30%' }}>MAC</TableCell>
-                              <TableCell sx={{ width: '25%' }}>Type</TableCell>
-                              <TableCell sx={{ width: '45%' }}>IP Addresses</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {networkDetails.map((row) => (
-                              <TableRow key={`${row.mac}-${row.type}`}>
-                                <TableCell>
-                                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                                    {row.mac}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell>
-                                  <Typography variant="body2" color="text.secondary">
-                                    {row.type}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell>
-                                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                    {row.ips.length ? (
-                                      row.ips.map((ip) => (
-                                        <Chip
-                                          key={`${row.mac}-${ip}`}
-                                          label={ip}
-                                          size="small"
-                                          color="info"
-                                          variant="outlined"
-                                        />
-                                      ))
-                                    ) : (
-                                      <Chip label="N/A" size="small" variant="outlined" />
-                                    )}
+                      <Box sx={{ display: 'grid', gap: 1 }}>
+                        <FieldLabel label="Network Details" />
+                        <TableContainer component={Paper} variant="outlined">
+                          <Table size="small" sx={{ tableLayout: 'fixed' }}>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell sx={{ width: '20%' }}>
+                                  <Box
+                                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                                  >
+                                    <Typography component="span" variant="inherit">
+                                      MAC Type
+                                    </Typography>
+                                    <Tooltip
+                                      slotProps={{
+                                        tooltip: {
+                                          sx: {
+                                            whiteSpace: 'pre-line'
+                                          }
+                                        }
+                                      }}
+                                      title={
+                                        "Preserved: keeps the VM's original MAC address. \nUser Assigned: uses the MAC address you provided in overrides."
+                                      }
+                                      placement="top"
+                                    >
+                                      <IconButton size="small" sx={{ p: 0.25 }}>
+                                        <InfoOutlinedIcon fontSize="inherit" />
+                                      </IconButton>
+                                    </Tooltip>
                                   </Box>
                                 </TableCell>
+                                <TableCell sx={{ width: '20%' }}>MAC</TableCell>
+                                <TableCell sx={{ width: '20%' }}>
+                                  <Box
+                                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                                  >
+                                    <Typography component="span" variant="inherit">
+                                      IP Type
+                                    </Typography>
+                                    <Tooltip
+                                      slotProps={{
+                                        tooltip: {
+                                          sx: {
+                                            whiteSpace: 'pre-line'
+                                          }
+                                        }
+                                      }}
+                                      title={
+                                        "Preserved: keeps the VM's original IP address. \nUser Assigned: uses the IP address you provided in overrides."
+                                      }
+                                      placement="top"
+                                    >
+                                      <IconButton size="small" sx={{ p: 0.25 }}>
+                                        <InfoOutlinedIcon fontSize="inherit" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                </TableCell>
+                                <TableCell sx={{ width: '40%' }}>IP Addresses</TableCell>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
+                            </TableHead>
+                            <TableBody>
+                              {networkDetails.map((row) => (
+                                <TableRow key={`${row.mac}-${row.macType}-${row.ipType}`}>
+                                  <TableCell>
+                                    <Typography variant="body2" color="text.secondary">
+                                      {row.macType}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                                      {row.mac}
+                                    </Typography>
+                                  </TableCell>
+
+                                  <TableCell>
+                                    <Typography variant="body2" color="text.secondary">
+                                      {row.ipType}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                      {row.ips.length ? (
+                                        row.ips.map((ip) => (
+                                          <Chip
+                                            key={`${row.mac}-${ip}`}
+                                            label={ip}
+                                            size="small"
+                                            color="info"
+                                            variant="outlined"
+                                          />
+                                        ))
+                                      ) : (
+                                        <Chip label="N/A" size="small" variant="outlined" />
+                                      )}
+                                    </Box>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
                     </Box>
                   ) : null}
 
