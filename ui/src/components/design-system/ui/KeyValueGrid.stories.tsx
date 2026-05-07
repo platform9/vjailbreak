@@ -29,3 +29,10 @@ export const Default: Story = {
     items: sampleItems
   }
 }
+
+export const ThreeColumnsOnMd: Story = {
+  args: {
+    items: sampleItems,
+    mdGrids: 3
+  }
+}
