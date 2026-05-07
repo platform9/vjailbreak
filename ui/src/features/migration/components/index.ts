@@ -1,4 +1,4 @@
-export { default as LogsDrawer } from './LogsDrawer'
+export { default as LogsDrawer } from './PodLogsDrawer'
 export { default as LogLine, extractLogLevel } from './LogLine'
 export { RdmDiskConfigurationPanel } from './RdmDiskConfigurationPanel'
 export { UpgradeModal } from './UpgradeModal'
