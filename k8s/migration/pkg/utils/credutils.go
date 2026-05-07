@@ -19,7 +19,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
@@ -275,29 +274,14 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
-	allSecGroupPages, err := groups.List(openstackClients.NetworkingClient, groups.ListOpts{}).AllPages(ctx)
+	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list security groups for project")
+		return nil, errors.Wrap(err, "failed to get openstack credentials for project lookup")
 	}
 
-	allSecGroups, err := groups.ExtractGroups(allSecGroupPages)
+	openstacksecuritygroups, err := openstackcommon.ListSecurityGroupInfos(ctx, openstackClients.NetworkingClient, credsInfo.TenantName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract all security groups")
-	}
-
-	nameCounts := make(map[string]int)
-	for _, group := range allSecGroups {
-		nameCounts[group.Name]++
-	}
-
-	openstacksecuritygroups := make([]vjailbreakv1alpha1.SecurityGroupInfo, 0, len(allSecGroups))
-
-	for _, group := range allSecGroups {
-		openstacksecuritygroups = append(openstacksecuritygroups, vjailbreakv1alpha1.SecurityGroupInfo{
-			Name:              group.Name,
-			ID:                group.ID,
-			RequiresIDDisplay: nameCounts[group.Name] > 1,
-		})
+		return nil, errors.Wrap(err, "failed to list accessible security groups")
 	}
 
 	// Fetch server groups
