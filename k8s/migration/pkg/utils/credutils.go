@@ -1272,6 +1272,14 @@ func FindVMwareMachinesNotInVcenter(ctx context.Context, client client.Client, v
 	}
 	var staleVMs []vjailbreakv1alpha1.VMwareMachine
 	for _, vm := range vmList.Items {
+		vmKey := k8stypes.NamespacedName{Name: vm.Name, Namespace: vm.Namespace}
+		skip, _, skipErr := ShouldSkipVMwareMachineReconciliation(ctx, client, vmKey, &vm)
+		if skipErr != nil {
+			return nil, errors.Wrap(skipErr, fmt.Sprintf("failed to decide whether VMwareMachine '%s' should be skipped during stale detection", vm.Name))
+		}
+		if skip {
+			continue
+		}
 		// skip vmware machine deletion if it is migrated
 		if !VMExistsInVcenter(vm.Spec.VMInfo.Name, vcenterVMs) && !vm.Status.Migrated {
 			staleVMs = append(staleVMs, vm)
@@ -1939,6 +1947,11 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 			return
 		}
 		if skip {
+			// Keep a marker in vminfo so stale-deletion paths that only check vcenterVMs
+			// don't treat this intentionally skipped VM as stale.
+			appendToVMInfoThreadSafe(vminfoMu, vminfo, vjailbreakv1alpha1.VMInfo{
+				Name: vmwvm.Spec.VMInfo.Name,
+			})
 			log.Info(
 				"Skipping VMwareMachine discovery because VM is already migrated",
 				"reason", reason,
