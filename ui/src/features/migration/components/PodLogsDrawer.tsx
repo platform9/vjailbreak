@@ -16,7 +16,7 @@ interface LogsDrawerProps {
   migrationPhase?: Phase
 }
 
-export default function LogsDrawer({
+export default function PodLogsDrawer({
   open,
   onClose,
   podName,
