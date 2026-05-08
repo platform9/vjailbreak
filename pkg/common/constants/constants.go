@@ -311,6 +311,13 @@ const (
 	// ValidationStatusFailed is the status value for failed validation
 	ValidationStatusFailed = "Failed"
 
+	// ResourceFetchStatusFetchingResources indicates post-validation discovery is in progress
+	ResourceFetchStatusFetchingResources = "FetchingResources"
+	// ResourceFetchStatusResourcesFetched indicates post-validation discovery completed
+	ResourceFetchStatusResourcesFetched = "ResourcesFetched"
+	// ResourceFetchStatusFetchFailed indicates post-validation discovery failed
+	ResourceFetchStatusFetchFailed = "FetchFailed"
+
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"
 

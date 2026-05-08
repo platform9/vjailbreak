@@ -268,6 +268,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
+		scope.OpenstackCreds.Status.ResourceFetchStatus = ""
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -279,6 +280,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 
 	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+	scope.OpenstackCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchingResources
 	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
 	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -287,11 +289,28 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 	ctxlog.Info("Successfully updated status to success")
 	err := handleValidatedCreds(ctx, r, scope)
 	if err != nil {
+		scope.OpenstackCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
+		if updateErr := r.Status().Update(ctx, scope.OpenstackCreds); updateErr != nil {
+			ctxlog.Error(updateErr, "Failed to update OpenstackCreds resource fetch status", "openstackcreds", scope.OpenstackCreds.Name)
+		}
 		return err
 	}
 
 	if err := r.discoverStorageArrays(ctx, scope); err != nil {
 		ctxlog.Error(err, "Failed to discover storage arrays")
+		scope.OpenstackCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
+		if updateErr := r.Status().Update(ctx, scope.OpenstackCreds); updateErr != nil {
+			ctxlog.Error(updateErr, "Failed to update OpenstackCreds resource fetch status", "openstackcreds", scope.OpenstackCreds.Name)
+		}
+		return nil
+	}
+
+	if !utils.IsOpenstackPCD(*scope.OpenstackCreds) {
+		scope.OpenstackCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusResourcesFetched
+		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+			ctxlog.Error(err, "Error updating resource fetch status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+			return err
+		}
 	}
 
 	return nil
@@ -687,12 +706,17 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 	if err != nil {
 		ctxlog.Error(err, "PCD sync failed")
 		latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
+		latestCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
 	} else {
 		ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
 		delete(latestCreds.Annotations, "pcd-sync-last-error")
+		latestCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusResourcesFetched
 	}
 
 	if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
 		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
+	}
+	if updateErr := r.Status().Update(syncCtx, latestCreds); updateErr != nil {
+		ctxlog.Error(updateErr, "Failed to update OpenstackCreds resource fetch status after sync")
 	}
 }

@@ -7,7 +7,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import SyncIcon from '@mui/icons-material/Sync'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { VmwareCredential } from './VmwareCredentialsForm'
@@ -37,6 +37,22 @@ interface CredentialItem {
   credObject: VmwareCredential | OpenstackCredential
 }
 
+const RESOURCE_FETCH_STATUS = {
+  FETCHING: 'FetchingResources',
+  FETCHED: 'ResourcesFetched',
+  FAILED: 'FetchFailed'
+} as const
+
+const getDisplayStatus = (status: string, resourceFetchStatus?: string) => {
+  if (resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING) {
+    return 'Fetching resources'
+  }
+  if (resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED) {
+    return 'Resource fetch failed'
+  }
+  return status || 'Unknown'
+}
+
 const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info' | 'default' => {
   if (!status) return 'default'
   const normalizedStatus = status.toLowerCase()
@@ -48,6 +64,12 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
   }
   if (normalizedStatus === 'validating') {
     return 'warning'
+  }
+  if (normalizedStatus === 'fetching resources') {
+    return 'info'
+  }
+  if (normalizedStatus === 'resource fetch failed') {
+    return 'error'
   }
   return 'default'
 }
@@ -80,8 +102,8 @@ const getColumns = (
     headerName: 'Status',
     flex: 1,
     renderCell: (params) => {
-      const isFetchingResources = params.row.resourceFetchStatus === 'FetchingResources'
-      const displayStatus = isFetchingResources ? 'Validating' : (params.value || 'Unknown')
+      const displayStatus = getDisplayStatus(params.value, params.row.resourceFetchStatus)
+      const showProgress = displayStatus === 'Validating' || displayStatus === 'Fetching resources'
       return (
         <Chip
           label={displayStatus}
@@ -89,7 +111,7 @@ const getColumns = (
           color={getStatusColor(displayStatus)}
           size="small"
           icon={
-            displayStatus === 'Validating' ? (
+            showProgress ? (
               <CircularProgress size={16} sx={{ marginRight: '5px' }} />
             ) : undefined
           }
@@ -104,7 +126,9 @@ const getColumns = (
     width: 100,
     sortable: false,
     renderCell: (params) => {
-      const isRowLoading = revalidatingId === params.row.id
+      const isRowLoading =
+        revalidatingId === params.row.id ||
+        params.row.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
 
       return (
         <Box>
@@ -222,7 +246,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     enabled: isVmware,
     staleTime: 0,
     refetchOnMount: true,
-    refetchInterval: revalidatingId ? 5000 : false
+    refetchInterval: (query) => {
+      const data = query.state.data as VmwareCredential[] | undefined
+      const hasResourceFetchInProgress = data?.some(
+        (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+      )
+      return revalidatingId || hasResourceFetchInProgress ? 5000 : false
+    }
   })
 
   const {
@@ -233,7 +263,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     enabled: !isVmware,
     staleTime: 0,
     refetchOnMount: true,
-    refetchInterval: revalidatingId ? 5000 : false
+    refetchInterval: (query) => {
+      const data = query.state.data as OpenstackCredential[] | undefined
+      const hasResourceFetchInProgress = data?.some(
+        (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+      )
+      return revalidatingId || hasResourceFetchInProgress ? 5000 : false
+    }
   })
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -244,9 +280,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
 
-  const revalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const { mutate: revalidate, isPending: isRevalidationApiPending } = useMutation({
+  const { mutate: revalidate } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
       setTimeout(() => {
@@ -254,18 +288,14 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
       }, 500)
     },
-    onError: (error: any, variables) => {
-      reportError(error, {
+    onError: (error: unknown, variables) => {
+      reportError(error instanceof Error ? error : new Error(String(error)), {
         context: 'credentials-revalidation',
         metadata: {
           credentialName: variables.name,
           credentialKind: variables.kind
         }
       })
-      if (revalidationTimeoutRef.current) {
-        clearTimeout(revalidationTimeoutRef.current)
-        revalidationTimeoutRef.current = null
-      }
       setRevalidatingId(null)
     }
   })
@@ -293,46 +323,26 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
   useEffect(() => {
-    // While the API call itself is in flight, always keep the spinner — don't
-    // check status yet because resourceFetchStatus still holds the previous
-    // run's value (e.g. "ResourcesFetched") and would incorrectly stop the spinner.
-    if (revalidatingId && !isRevalidationApiPending) {
+    if (revalidatingId) {
       const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
 
       if (revalidatingItem) {
         const status = revalidatingItem.status.toLowerCase()
         const { resourceFetchStatus } = revalidatingItem
 
-        // Spinner stops when validation failed, or when the full resource
-        // discovery lifecycle is complete (or itself failed).
         const isDone =
           status === 'failed' ||
-          resourceFetchStatus === 'ResourcesFetched' ||
-          resourceFetchStatus === 'FetchFailed'
+          resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHED ||
+          resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED
 
         if (isDone) {
-          if (revalidationTimeoutRef.current) {
-            clearTimeout(revalidationTimeoutRef.current)
-            revalidationTimeoutRef.current = null
-          }
           setRevalidatingId(null)
         }
       } else {
-        if (revalidationTimeoutRef.current) {
-          clearTimeout(revalidationTimeoutRef.current)
-          revalidationTimeoutRef.current = null
-        }
         setRevalidatingId(null)
       }
     }
-
-    return () => {
-      if (revalidationTimeoutRef.current) {
-        clearTimeout(revalidationTimeoutRef.current)
-        revalidationTimeoutRef.current = null
-      }
-    }
-  }, [allCredentials, revalidatingId, isRevalidationApiPending])
+  }, [allCredentials, revalidatingId])
 
   useEffect(() => {
     if (isVmware) {
@@ -369,6 +379,10 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           type === 'VMware'
             ? (credential as VmwareCredential).status?.vmwareValidationStatus || 'Unknown'
             : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
+        resourceFetchStatus:
+          type === 'VMware'
+            ? (credential as VmwareCredential).status?.resourceFetchStatus
+            : (credential as OpenstackCredential).status?.resourceFetchStatus,
         credObject: credential
       }
       setSelectedForDeletion([credItem])
@@ -386,20 +400,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       return
     }
 
-    if (revalidationTimeoutRef.current) {
-      clearTimeout(revalidationTimeoutRef.current)
-    }
-
     setRevalidatingId(row.id)
-
-    revalidationTimeoutRef.current = setTimeout(() => {
-      reportError(new Error(`Revalidation for ${row.name} timed out. Please check logs.`), {
-        context: 'credentials-revalidation-timeout',
-        metadata: { credentialName: row.name }
-      })
-      setRevalidatingId(null)
-      revalidationTimeoutRef.current = null
-    }, 120000)
 
     revalidate({
       name: credObject.metadata.name,
@@ -441,7 +442,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         const credName = cred.id.replace('vmware-', '')
         track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_DELETED, {
           credentialName: credName,
-          namespace: (cred.credObject as any)?.metadata?.namespace
+          namespace: cred.credObject.metadata.namespace
         })
       })
 
@@ -457,7 +458,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_DELETED, {
           credentialName: credName,
           isPcd: true,
-          namespace: (cred.credObject as any)?.metadata?.namespace
+          namespace: cred.credObject.metadata.namespace
         })
       })
 
@@ -477,7 +478,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         const credName = cred.id.replace('vmware-', '')
         track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_DELETE_FAILED, {
           credentialName: credName,
-          namespace: (cred.credObject as any)?.metadata?.namespace,
+          namespace: cred.credObject.metadata.namespace,
           errorMessage
         })
       })
@@ -487,7 +488,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         track(AMPLITUDE_EVENTS.PCD_CREDENTIALS_DELETE_FAILED, {
           credentialName: credName,
           isPcd: true,
-          namespace: (cred.credObject as any)?.metadata?.namespace,
+          namespace: cred.credObject.metadata.namespace,
           errorMessage
         })
       })
