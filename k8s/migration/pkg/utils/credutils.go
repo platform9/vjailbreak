@@ -1017,6 +1017,17 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
+	if err == nil && vmwvm.Status.Migrated {
+		log.FromContext(ctx).Info(
+			"Skipping VMwareMachine update because VM is already migrated",
+			"VMwareMachine", vmwvmKey.Name,
+			"vmName", vminfo.Name,
+			"vmid", vminfo.VMID,
+			"existingPowerState", vmwvm.Status.PowerState,
+			"refreshedPowerState", vminfo.VMState,
+		)
+		return nil
+	}
 
 	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
 		if !slices.Contains(vminfo.RDMDisks, data) {
@@ -1846,6 +1857,13 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	default:
 		// Object exists
 		if vmwvm.Status.Migrated {
+			log.Info(
+				"Skipping VMwareMachine discovery because VM is already migrated",
+				"VMwareMachine", vmwvmKey.Name,
+				"vmName", vmProps.Config.Name,
+				"vmid", vm.Reference().Value,
+				"powerState", vmwvm.Status.PowerState,
+			)
 			return
 		}
 		if len(guestNetworksFromVmware) > 0 {
