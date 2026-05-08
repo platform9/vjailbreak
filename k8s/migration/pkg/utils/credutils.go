@@ -1005,11 +1005,11 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwvmKey := k8stypes.NamespacedName{Name: sanitizedVMName, Namespace: vmwcreds.Namespace}
 
 	// Try to fetch existing resource
-	err = client.Get(ctx, vmwvmKey, vmwvm)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get VMwareMachine: %w", err)
+	getErr := client.Get(ctx, vmwvmKey, vmwvm)
+	if getErr != nil && !apierrors.IsNotFound(getErr) {
+		return fmt.Errorf("failed to get VMwareMachine: %w", getErr)
 	}
-	if err == nil {
+	if getErr == nil {
 		skip, reason, skipErr := ShouldSkipVMwareMachineReconciliation(ctx, client, vmwvmKey, vmwvm)
 		if skipErr != nil {
 			return skipErr
@@ -1045,7 +1045,7 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	}
 
 	// Check if the object is present or not if not present create a new object and set init to true.
-	if apierrors.IsNotFound(err) {
+	if apierrors.IsNotFound(getErr) {
 		// If not found, create a new object
 		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
 			ObjectMeta: metav1.ObjectMeta{
