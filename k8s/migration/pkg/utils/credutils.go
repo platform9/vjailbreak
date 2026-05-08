@@ -987,20 +987,12 @@ func AppendUnique(slice []string, values ...string) []string {
 }
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
+//nolint:gocyclo
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
 	sanitizedVMName, err := netutils.GetVMK8sCompatibleName(vminfo.Name, vminfo.VMID, vmwcreds.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get VM name: %w", err)
-	}
-	esxiK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
-	if err != nil {
-		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
-	}
-	clusterK8sID := GetClusterK8sID(vminfo.ClusterName, datacenter)
-	clusterK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
-	if err != nil {
-		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 	// We need this flag because, there can be multiple VMwarecreds and each will
 	// trigger its own reconciliation loop,
@@ -1017,16 +1009,32 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get VMwareMachine: %w", err)
 	}
-	if err == nil && vmwvm.Status.Migrated {
-		log.FromContext(ctx).Info(
-			"Skipping VMwareMachine update because VM is already migrated",
-			"VMwareMachine", vmwvmKey.Name,
-			"vmName", vminfo.Name,
-			"vmid", vminfo.VMID,
-			"existingPowerState", vmwvm.Status.PowerState,
-			"refreshedPowerState", vminfo.VMState,
-		)
-		return nil
+	if err == nil {
+		skip, reason, skipErr := ShouldSkipVMwareMachineReconciliation(ctx, client, vmwvmKey, vmwvm)
+		if skipErr != nil {
+			return skipErr
+		}
+		if skip {
+			log.FromContext(ctx).Info(
+				"Skipping VMwareMachine update during credentials refresh",
+				"reason", reason,
+				"VMwareMachine", vmwvmKey.Name,
+				"vmName", vminfo.Name,
+				"vmid", vminfo.VMID,
+				"existingPowerState", vmwvm.Status.PowerState,
+				"refreshedPowerState", vminfo.VMState,
+			)
+			return nil
+		}
+	}
+	esxiK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(vminfo.ESXiName, vmwcreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert ESXi name to k8s name")
+	}
+	clusterK8sID := GetClusterK8sID(vminfo.ClusterName, datacenter)
+	clusterK8sName, err := netutils.GetK8sCompatibleVMWareObjectName(clusterK8sID, vmwcreds.Name)
+	if err != nil {
+		return errors.Wrap(err, "failed to convert cluster name to k8s name")
 	}
 
 	for _, data := range vmwvm.Spec.VMInfo.RDMDisks {
@@ -1136,6 +1144,75 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 		return fmt.Errorf("failed to update VMwareMachine status: %w", err)
 	}
 	return nil
+}
+
+// ShouldSkipVMwareMachineReconciliation returns true when a VMwareMachine should not
+// be overwritten by a VMware credentials refresh.
+func ShouldSkipVMwareMachineReconciliation(ctx context.Context, k8sClient client.Client, vmwvmKey k8stypes.NamespacedName, vmwvm *vjailbreakv1alpha1.VMwareMachine) (bool, string, error) {
+	if vmwvm.Status.Migrated {
+		return true, "vmwaremachine status.migrated is true", nil
+	}
+
+	vmKey := vmKeyForVMwareMachine(vmwvm)
+	migration := &vjailbreakv1alpha1.Migration{}
+	migrationKey := k8stypes.NamespacedName{
+		Name:      MigrationNameFromVMName(vmwvmKey.Name),
+		Namespace: vmwvmKey.Namespace,
+	}
+	if err := k8sClient.Get(ctx, migrationKey, migration); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, "", fmt.Errorf("failed to get Migration %s while checking whether to skip VMwareMachine reconciliation: %w", migrationKey.Name, err)
+		}
+	} else if migrationMatchesVMwareMachine(migration, vmwvm, vmKey) {
+		log.FromContext(ctx).Info(
+			"Found Migration that prevents VMwareMachine reconciliation",
+			"VMwareMachine", vmwvmKey.Name,
+			"migration", migration.Name,
+			"migrationPhase", migration.Status.Phase,
+			"vmKey", vmKey,
+		)
+		return true, fmt.Sprintf("migration %s exists", migration.Name), nil
+	}
+
+	migrationList := &vjailbreakv1alpha1.MigrationList{}
+	if err := k8sClient.List(ctx, migrationList, client.InNamespace(vmwvmKey.Namespace)); err != nil {
+		return false, "", fmt.Errorf("failed to list Migrations while checking whether to skip VMwareMachine reconciliation: %w", err)
+	}
+	for i := range migrationList.Items {
+		migration := &migrationList.Items[i]
+		if !migrationMatchesVMwareMachine(migration, vmwvm, vmKey) {
+			continue
+		}
+		log.FromContext(ctx).Info(
+			"Found Migration that prevents VMwareMachine reconciliation",
+			"VMwareMachine", vmwvmKey.Name,
+			"migration", migration.Name,
+			"migrationPhase", migration.Status.Phase,
+			"vmKey", vmKey,
+		)
+		return true, fmt.Sprintf("migration %s exists", migration.Name), nil
+	}
+
+	return false, "", nil
+}
+
+func vmKeyForVMwareMachine(vmwvm *vjailbreakv1alpha1.VMwareMachine) string {
+	if vmwvm.Spec.VMInfo.Name == "" || vmwvm.Spec.VMInfo.VMID == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s", vmwvm.Spec.VMInfo.Name, strings.TrimPrefix(vmwvm.Spec.VMInfo.VMID, "vm-"))
+}
+
+func migrationMatchesVMwareMachine(migration *vjailbreakv1alpha1.Migration, vmwvm *vjailbreakv1alpha1.VMwareMachine, vmKey string) bool {
+	if migration == nil {
+		return false
+	}
+	if vmKey != "" && migration.Labels[constants.MigrationVMKeyLabel] == vmKey {
+		return true
+	}
+	return migration.Labels[constants.MigrationVMKeyLabel] == "" &&
+		migration.Spec.VMName != "" &&
+		migration.Spec.VMName == vmwvm.Spec.VMInfo.Name
 }
 
 // CreateOrUpdateLabel creates or updates a label on a VMwareMachine resource
@@ -1856,9 +1933,15 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 
 	default:
 		// Object exists
-		if vmwvm.Status.Migrated {
+		skip, reason, skipErr := ShouldSkipVMwareMachineReconciliation(ctx, scope.Client, vmwvmKey, vmwvm)
+		if skipErr != nil {
+			appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), skipErr)
+			return
+		}
+		if skip {
 			log.Info(
 				"Skipping VMwareMachine discovery because VM is already migrated",
+				"reason", reason,
 				"VMwareMachine", vmwvmKey.Name,
 				"vmName", vmProps.Config.Name,
 				"vmid", vm.Reference().Value,
