@@ -103,7 +103,6 @@ const getColumns = (
     flex: 1,
     renderCell: (params) => {
       const displayStatus = getDisplayStatus(params.value, params.row.resourceFetchStatus)
-      const showProgress = displayStatus === 'Validating' || displayStatus === 'Fetching resources'
       return (
         <Chip
           label={displayStatus}
@@ -111,7 +110,7 @@ const getColumns = (
           color={getStatusColor(displayStatus)}
           size="small"
           icon={
-            showProgress ? (
+            displayStatus === 'Validating' ? (
               <CircularProgress size={16} sx={{ marginRight: '5px' }} />
             ) : undefined
           }
@@ -126,9 +125,7 @@ const getColumns = (
     width: 100,
     sortable: false,
     renderCell: (params) => {
-      const isRowLoading =
-        revalidatingId === params.row.id ||
-        params.row.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+      const isRowLoading = revalidatingId === params.row.id
 
       return (
         <Box>

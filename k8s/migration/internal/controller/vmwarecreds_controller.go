@@ -120,9 +120,17 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
+
+	// Only show FetchingResources / update status if this is a fresh or user-initiated
+	// validation. Periodic reconciles of already-fetched credentials must not overwrite
+	// the status — that causes a perpetual "Fetching resources" loop in the UI.
+	alreadyFetched := scope.VMwareCreds.Status.ResourceFetchStatus == constants.ResourceFetchStatusResourcesFetched
+
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
 	scope.VMwareCreds.Status.VMwareValidationMessage = result.Message
-	scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchingResources
+	if !alreadyFetched {
+		scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchingResources
+	}
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		if apierrors.IsNotFound(err) {
 			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
@@ -133,9 +141,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
 	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 	markFetchFailed := func(err error, message string) (ctrl.Result, error) {
-		scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
-		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-			ctxlog.Error(updateErr, "Failed to update VMwareCreds resource fetch status", "name", scope.Name())
+		if !alreadyFetched {
+			scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
+			if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
+				ctxlog.Error(updateErr, "Failed to update VMwareCreds resource fetch status", "name", scope.Name())
+			}
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf(message, scope.Name()))
 	}
@@ -159,9 +169,11 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	if err != nil {
 		return markFetchFailed(err, "Error finding deleted clusters and hosts for VMwareCreds '%s'")
 	}
-	scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusResourcesFetched
-	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating resource fetch status for VMwareCreds '%s'", scope.Name()))
+	if !alreadyFetched {
+		scope.VMwareCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusResourcesFetched
+		if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating resource fetch status for VMwareCreds '%s'", scope.Name()))
+		}
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)
