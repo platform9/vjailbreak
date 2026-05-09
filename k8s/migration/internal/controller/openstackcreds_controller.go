@@ -719,23 +719,25 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 	// resources are already fetched, to avoid the perpetual-spinner problem.
 	alreadyFetched := latestCreds.Status.ResourceFetchStatus == constants.ResourceFetchStatusResourcesFetched
 
+	desiredFetchStatus := latestCreds.Status.ResourceFetchStatus
 	if err != nil {
 		ctxlog.Error(err, "PCD sync failed")
 		latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
 		if !alreadyFetched {
-			latestCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchFailed
+			desiredFetchStatus = constants.ResourceFetchStatusFetchFailed
 		}
 	} else {
 		ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
 		delete(latestCreds.Annotations, "pcd-sync-last-error")
 		if !alreadyFetched {
-			latestCreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusResourcesFetched
+			desiredFetchStatus = constants.ResourceFetchStatusResourcesFetched
 		}
 	}
 
 	if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
 		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
 	}
+	latestCreds.Status.ResourceFetchStatus = desiredFetchStatus
 	if updateErr := r.Status().Update(syncCtx, latestCreds); updateErr != nil {
 		ctxlog.Error(updateErr, "Failed to update OpenstackCreds resource fetch status after sync")
 	}

@@ -116,6 +116,71 @@ func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
 	}
 }
 
+// TestPCDSyncStatusUpdate_RegressionForUpdateResetBug guards against the bug where
+// runPCDSyncAsync called r.Update() before r.Status().Update(), causing the
+// in-memory status to be reset by the server response from Update() (which carries
+// the server-side status, since the status subresource ignores Update() writes).
+// The visible symptom was OpenStack/PCD credentials stuck in "FetchingResources"
+// forever in the UI. The fix saves the desired status to a local variable and
+// re-applies it after r.Update() but before r.Status().Update().
+func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const name = "test-pcd"
+
+	// Server starts with status=FetchingResources (set earlier by applyValidationResult).
+	oscreds := &vjailbreakv1alpha1.OpenstackCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   ns,
+			Annotations: map[string]string{"pcd-sync-in-progress": "true"},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(oscreds).
+		WithStatusSubresource(&vjailbreakv1alpha1.OpenstackCreds{}).
+		Build()
+
+	oscreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchingResources
+	if err := fakeClient.Status().Update(context.Background(), oscreds); err != nil {
+		t.Fatalf("seed status: %v", err)
+	}
+
+	// Reproduce the post-sync update sequence used by runPCDSyncAsync.
+	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, latestCreds); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	delete(latestCreds.Annotations, "pcd-sync-in-progress")
+	desiredFetchStatus := constants.ResourceFetchStatusResourcesFetched
+	latestCreds.Status.ResourceFetchStatus = desiredFetchStatus
+
+	if err := fakeClient.Update(context.Background(), latestCreds); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	// Critical: r.Update() reset latestCreds.Status to the server-side value
+	// (FetchingResources). Re-apply the desired status before Status().Update().
+	latestCreds.Status.ResourceFetchStatus = desiredFetchStatus
+	if err := fakeClient.Status().Update(context.Background(), latestCreds); err != nil {
+		t.Fatalf("status update: %v", err)
+	}
+
+	final := &vjailbreakv1alpha1.OpenstackCreds{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, final); err != nil {
+		t.Fatalf("final get: %v", err)
+	}
+	if final.Status.ResourceFetchStatus != constants.ResourceFetchStatusResourcesFetched {
+		t.Errorf("ResourceFetchStatus = %q, want %q (status was clobbered by Update() reset)",
+			final.Status.ResourceFetchStatus, constants.ResourceFetchStatusResourcesFetched)
+	}
+	if _, exists := final.Annotations["pcd-sync-in-progress"]; exists {
+		t.Errorf("pcd-sync-in-progress annotation should have been deleted")
+	}
+}
+
 var _ = ginkgo.Describe("OpenstackCreds Controller", func() {
 	ginkgo.Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
