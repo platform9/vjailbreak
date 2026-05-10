@@ -15,6 +15,18 @@ The credentials also take the Datacenter name and the VMs, Hosts being worked on
 
 Some VMware environments may be using self signed certificates, in such cases, you would need to "Allow insecure connection" option in the credentials.
 
+#### Important: VMware IP Discovery and Credential Revalidation
+VMware Tools and guest IP addresses can take some time to appear in vCenter after powering on a VM or making network changes.
+
+**Best Practice:**
+- Make all necessary configuration changes to your VMs in the vCenter UI first.
+- **Wait** until the IP addresses are clearly visible on the VM summary page in vCenter.
+- Only then click **Add Credential** or **Revalidate** in vJailbreak.
+
+Revalidating too early may result in missing IP information, which can prevent proper IP preservation on the destination and cause migration issues.
+
+> **Note**: vJailbreak will show a warning for VMs where network interfaces are detected but IPs could not be discovered.
+
 ## OpenStack/PCD Credentials
 OpenStack/PCD credentials are required to create VMs inside the OpenStack/PCD environment. The credentials are supplied via the `openstack.rc` file that is available in the PCD environment.
 
