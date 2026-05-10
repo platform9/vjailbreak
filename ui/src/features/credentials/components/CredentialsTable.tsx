@@ -77,7 +77,8 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
 const getColumns = (
   onDeleteClick: (id: string, type: 'VMware' | 'OpenStack') => void,
   onRevalidateClick: (row: CredentialItem) => void,
-  revalidatingId: string | null
+  revalidatingId: string | null,
+  validatingApiPendingId: string | null
 ): GridColDef[] => [
   {
     field: 'name',
@@ -103,17 +104,10 @@ const getColumns = (
     flex: 1,
     renderCell: (params) => {
       const fetchStatus = params.row.resourceFetchStatus
-      const isMyRevalidation = revalidatingId === params.row.id
-      const showOptimisticValidating =
-        isMyRevalidation &&
-        params.value !== 'Failed' &&
-        fetchStatus !== RESOURCE_FETCH_STATUS.FETCHING &&
-        fetchStatus !== RESOURCE_FETCH_STATUS.FAILED
-      const displayStatus = showOptimisticValidating
+      const isApiPending = validatingApiPendingId === params.row.id
+      const displayStatus = isApiPending
         ? 'Validating'
         : getDisplayStatus(params.value, fetchStatus)
-      const inProgress =
-        displayStatus === 'Validating' || displayStatus === 'Fetching resources'
       const chip = (
         <Chip
           label={displayStatus}
@@ -121,13 +115,15 @@ const getColumns = (
           color={getStatusColor(displayStatus)}
           size="small"
           icon={
-            inProgress ? (
+            displayStatus === 'Validating' ? (
               <CircularProgress size={16} sx={{ marginRight: '5px' }} />
             ) : undefined
           }
         />
       )
-      if (!inProgress) return chip
+      if (displayStatus !== 'Validating' && displayStatus !== 'Fetching resources') {
+        return chip
+      }
       const tooltipText =
         displayStatus === 'Validating'
           ? 'Authenticating credentials…'
@@ -253,6 +249,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const { track } = useAmplitude({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
+  const [validatingApiPendingId, setValidatingApiPendingId] = useState<string | null>(null)
 
   const isVmware = credentialType === 'vmware'
 
@@ -305,6 +302,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const { mutate: revalidate } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
+      setValidatingApiPendingId(null)
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
         queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
@@ -318,6 +316,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           credentialKind: variables.kind
         }
       })
+      setValidatingApiPendingId(null)
       setRevalidatingId(null)
     }
   })
@@ -468,6 +467,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
     revalidationStartRef.current = Date.now()
     setRevalidatingId(row.id)
+    setValidatingApiPendingId(row.id)
 
     revalidate({
       name: credObject.metadata.name,
@@ -582,7 +582,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     return `${baseMessage}: ${error}`
   }, [])
 
-  const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId)
+  const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId, validatingApiPendingId)
 
   const isLoading = (isVmware ? loadingVmware : loadingOpenstack) || deleting
 
