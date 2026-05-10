@@ -28,10 +28,11 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"time"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"time"
 
 	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,7 +77,7 @@ func main() {
 	opts := zap.Options{
 		Development: true,
 		TimeEncoder: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-			enc.AppendString(t.Format("2006-01-02T15:04:05"))
+			enc.AppendString(t.Format("2006-01-02T15:04:05Z07:00"))
 		},
 	}
 	opts.BindFlags(flag.CommandLine)

@@ -741,6 +741,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       if (timeSettingsChanged) {
         show('Applying time settings...', 'info')
       }
+      let stage: 'configmap' | 'env' | 'apply' = 'configmap'
 
       setSaving(true)
       try {
@@ -765,7 +766,7 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
             ...mergedData
           }
         } as any)
-
+        stage = 'env'
 
         let envInjectionFailed = false
         try {
@@ -775,8 +776,10 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           console.error('Failed to inject proxy env variables:', envErr)
         }
 
+        let timeApplyResult: { message: string; hasWarnings: boolean } | null = null
         if (timeSettingsChanged) {
-          await applyTimeSettings()
+          stage = 'apply'
+          timeApplyResult = await applyTimeSettings()
         }
 
         let nextState = form
@@ -800,6 +803,11 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
             'Settings saved, but applying proxy environment variables failed. Please verify connectivity and try again.',
             'warning'
           )
+        } else if (timeApplyResult?.hasWarnings) {
+          show(
+            `Time settings applied with warnings: ${timeApplyResult.message}. Some Kubernetes follow-ups (workload restart, ConfigMap patch) failed; check the controller logs.`,
+            'warning'
+          )
         } else {
           if (proxyChanged) {
             setProxyUpdateSuccess(true)
@@ -814,13 +822,20 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       } catch (err) {
         console.error('Failed to save Global Settings:', err)
         const msg = err instanceof Error ? err.message : String(err)
-        if (timeSettingsChanged && msg) {
+        if (stage === 'configmap') {
+          // ConfigMap update itself failed → nothing was persisted.
+          show(
+            `Failed to save Global Settings: ${msg}. No changes were applied.`,
+            'error'
+          )
+        } else if (stage === 'apply') {
+          // ConfigMap saved successfully; only the host reconcile failed.
           show(
             `Failed to apply time settings on the host: ${msg}. Settings were saved; click Save again to retry the apply.`,
             'error'
           )
         } else {
-          show('Failed to save Global Settings. No changes were applied.', 'error')
+          show(`Failed to save Global Settings: ${msg}.`, 'error')
         }
       } finally {
         setSaving(false)

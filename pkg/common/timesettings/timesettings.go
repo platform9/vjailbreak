@@ -61,14 +61,19 @@ var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 }
 
+var (
+	ipv4RE     = regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}$`)
+	hostnameRE = regexp.MustCompile(`^[a-zA-Z0-9.-]+$`)
+	labelRE    = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
+)
+
 // IsValidNTPServer returns true if s is a syntactically valid IPv4 address or
 // hostname suitable for use as an NTP server.
 func IsValidNTPServer(s string) bool {
 	if s == "" || strings.Contains(s, "://") || strings.Contains(s, "/") {
 		return false
 	}
-	ipv4 := regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}$`)
-	if ipv4.MatchString(s) {
+	if ipv4RE.MatchString(s) {
 		for _, part := range strings.Split(s, ".") {
 			v := 0
 			fmt.Sscanf(part, "%d", &v)
@@ -78,8 +83,7 @@ func IsValidNTPServer(s string) bool {
 		}
 		return true
 	}
-	labelRE := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
-	if !regexp.MustCompile(`^[a-zA-Z0-9.-]+$`).MatchString(s) || strings.HasPrefix(s, ".") || strings.Contains(s, "..") {
+	if !hostnameRE.MatchString(s) || strings.HasPrefix(s, ".") || strings.Contains(s, "..") {
 		return false
 	}
 	for _, label := range strings.Split(s, ".") {

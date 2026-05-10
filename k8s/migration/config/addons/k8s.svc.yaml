@@ -22,7 +22,10 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - image: vpwned:latest
+      - env:
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: unix:path=/run/dbus/system_bus_socket
+        image: vpwned:latest
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:

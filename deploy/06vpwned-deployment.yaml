@@ -24,7 +24,10 @@ spec:
         app: vpwned-sdk
     spec:
       containers:
-      - envFrom:
+      - env:
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: unix:path=/run/dbus/system_bus_socket
+        envFrom:
         - configMapRef:
             name: pf9-env
             optional: true

@@ -37,10 +37,17 @@ export const updateSettingsConfigMap = async (
   return response
 }
 
-export const applyTimeSettings = async (): Promise<void> => {
-  await post({
+export interface ApplyTimeSettingsResult {
+  message: string
+  hasWarnings: boolean
+}
+
+export const applyTimeSettings = async (): Promise<ApplyTimeSettingsResult> => {
+  const resp = await post<{ message?: string }>({
     endpoint: '/dev-api/sdk/vpw/v1/settings/apply-time-settings',
     data: {},
     config: { mock: false }
   })
+  const message = resp?.message ?? ''
+  return { message, hasWarnings: message.includes('with warnings') }
 }
