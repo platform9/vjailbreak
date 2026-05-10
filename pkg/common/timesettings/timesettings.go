@@ -48,15 +48,12 @@ type WorkloadRef struct {
 	Namespace string
 }
 
-// workloadsToRestart enumerates every pod that consumes TZ from the pf9-env
-// ConfigMap (or otherwise renders timestamps) and must be rolled when the
-// timezone changes. Edit this list when adding new TZ-aware workloads.
 var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "migration-controller-manager", constants.NamespaceMigrationSystem},
-	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "vjailbreak-ui", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "grafana", "monitoring"},
 	{WorkloadStatefulSet, "prometheus-k8s", "monitoring"},
+	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 }
 
 // IsValidNTPServer returns true if s is a syntactically valid IPv4 address or
