@@ -106,6 +106,7 @@ const getColumns = (
       const isMyRevalidation = revalidatingId === params.row.id
       const showOptimisticValidating =
         isMyRevalidation &&
+        params.value !== 'Failed' &&
         fetchStatus !== RESOURCE_FETCH_STATUS.FETCHING &&
         fetchStatus !== RESOURCE_FETCH_STATUS.FAILED
       const displayStatus = showOptimisticValidating
@@ -113,26 +114,25 @@ const getColumns = (
         : getDisplayStatus(params.value, fetchStatus)
       const inProgress =
         displayStatus === 'Validating' || displayStatus === 'Fetching resources'
-      const tooltipText = inProgress
-        ? displayStatus === 'Validating'
+      const chip = (
+        <Chip
+          label={displayStatus}
+          variant="outlined"
+          color={getStatusColor(displayStatus)}
+          size="small"
+          icon={
+            inProgress ? (
+              <CircularProgress size={16} sx={{ marginRight: '5px' }} />
+            ) : undefined
+          }
+        />
+      )
+      if (!inProgress) return chip
+      const tooltipText =
+        displayStatus === 'Validating'
           ? 'Authenticating credentials…'
           : 'Discovering VMs, clusters, networks, flavors…'
-        : ''
-      return (
-        <Tooltip title={tooltipText}>
-          <Chip
-            label={displayStatus}
-            variant="outlined"
-            color={getStatusColor(displayStatus)}
-            size="small"
-            icon={
-              inProgress ? (
-                <CircularProgress size={16} sx={{ marginRight: '5px' }} />
-              ) : undefined
-            }
-          />
-        </Tooltip>
-      )
+      return <Tooltip title={tooltipText}>{chip}</Tooltip>
     }
   },
   {
@@ -345,6 +345,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
   const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const revalidationStartRef = useRef<number | null>(null)
+  const legacyFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [legacyFallbackTick, setLegacyFallbackTick] = useState(0)
 
   useEffect(() => {
     if (revalidatingId) {
@@ -354,20 +357,40 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         const status = revalidatingItem.status.toLowerCase()
         const { resourceFetchStatus } = revalidatingItem
 
+        const sinceClick = revalidationStartRef.current
+          ? Date.now() - revalidationStartRef.current
+          : 0
+        const legacyTerminal =
+          status === 'succeeded' &&
+          resourceFetchStatus === undefined &&
+          sinceClick >= 3000
+
         const isDone =
           status === 'failed' ||
           resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHED ||
           resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED ||
-          (status === 'succeeded' && resourceFetchStatus === undefined)
+          legacyTerminal
 
         if (isDone) {
           setRevalidatingId(null)
+        } else if (status === 'succeeded' && resourceFetchStatus === undefined) {
+          if (legacyFallbackTimerRef.current) clearTimeout(legacyFallbackTimerRef.current)
+          legacyFallbackTimerRef.current = setTimeout(
+            () => setLegacyFallbackTick((t) => t + 1),
+            3000 - sinceClick + 50
+          )
         }
       } else {
         setRevalidatingId(null)
       }
     }
-  }, [allCredentials, revalidatingId])
+    return () => {
+      if (legacyFallbackTimerRef.current) {
+        clearTimeout(legacyFallbackTimerRef.current)
+        legacyFallbackTimerRef.current = null
+      }
+    }
+  }, [allCredentials, revalidatingId, legacyFallbackTick])
 
   useEffect(() => {
     if (revalidationTimeoutRef.current) {
@@ -443,6 +466,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       return
     }
 
+    revalidationStartRef.current = Date.now()
     setRevalidatingId(row.id)
 
     revalidate({
