@@ -121,9 +121,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 
-	// Only show FetchingResources / update status if this is a fresh or user-initiated
-	// validation. Periodic reconciles of already-fetched credentials must not overwrite
-	// the status — that causes a perpetual "Fetching resources" loop in the UI.
 	alreadyFetched := scope.VMwareCreds.Status.ResourceFetchStatus == constants.ResourceFetchStatusResourcesFetched
 
 	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"

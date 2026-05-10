@@ -278,9 +278,6 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		return nil
 	}
 
-	// Only show FetchingResources / update status if this is a fresh or user-initiated
-	// validation. Periodic reconciles of already-fetched credentials must not overwrite
-	// the status — that causes a perpetual "Fetching resources" loop in the UI.
 	alreadyFetched := scope.OpenstackCreds.Status.ResourceFetchStatus == constants.ResourceFetchStatusResourcesFetched
 
 	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
@@ -714,9 +711,6 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 
 	delete(latestCreds.Annotations, "pcd-sync-in-progress")
 
-	// Only update ResourceFetchStatus if a user-initiated revalidation is in progress
-	// (FetchingResources). Periodic controller reconciles leave the status alone once
-	// resources are already fetched, to avoid the perpetual-spinner problem.
 	alreadyFetched := latestCreds.Status.ResourceFetchStatus == constants.ResourceFetchStatusResourcesFetched
 
 	desiredFetchStatus := latestCreds.Status.ResourceFetchStatus

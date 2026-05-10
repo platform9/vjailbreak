@@ -7,7 +7,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import SyncIcon from '@mui/icons-material/Sync'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { VmwareCredential } from './VmwareCredentialsForm'
@@ -102,19 +102,36 @@ const getColumns = (
     headerName: 'Status',
     flex: 1,
     renderCell: (params) => {
-      const displayStatus = getDisplayStatus(params.value, params.row.resourceFetchStatus)
+      const fetchStatus = params.row.resourceFetchStatus
+      const isMyRevalidation = revalidatingId === params.row.id
+      const showOptimisticValidating =
+        isMyRevalidation &&
+        fetchStatus !== RESOURCE_FETCH_STATUS.FETCHING &&
+        fetchStatus !== RESOURCE_FETCH_STATUS.FAILED
+      const displayStatus = showOptimisticValidating
+        ? 'Validating'
+        : getDisplayStatus(params.value, fetchStatus)
+      const inProgress =
+        displayStatus === 'Validating' || displayStatus === 'Fetching resources'
+      const tooltipText = inProgress
+        ? displayStatus === 'Validating'
+          ? 'Authenticating credentials…'
+          : 'Discovering VMs, clusters, networks, flavors…'
+        : ''
       return (
-        <Chip
-          label={displayStatus}
-          variant="outlined"
-          color={getStatusColor(displayStatus)}
-          size="small"
-          icon={
-            displayStatus === 'Validating' ? (
-              <CircularProgress size={16} sx={{ marginRight: '5px' }} />
-            ) : undefined
-          }
-        />
+        <Tooltip title={tooltipText}>
+          <Chip
+            label={displayStatus}
+            variant="outlined"
+            color={getStatusColor(displayStatus)}
+            size="small"
+            icon={
+              inProgress ? (
+                <CircularProgress size={16} sx={{ marginRight: '5px' }} />
+              ) : undefined
+            }
+          />
+        </Tooltip>
       )
     }
   },
@@ -125,7 +142,11 @@ const getColumns = (
     width: 100,
     sortable: false,
     renderCell: (params) => {
-      const isRowLoading = revalidatingId === params.row.id
+      // Spinner active for: this user's click + any in-flight backend fetch
+      // (so concurrent revalidations from other clients also show progress).
+      const isRowLoading =
+        revalidatingId === params.row.id ||
+        params.row.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
 
       return (
         <Box>
@@ -248,7 +269,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       const hasResourceFetchInProgress = data?.some(
         (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
       )
-      return revalidatingId || hasResourceFetchInProgress ? 5000 : false
+      if (revalidatingId) return 5000
+      if (hasResourceFetchInProgress) return 10000
+      return false
     }
   })
 
@@ -265,7 +288,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       const hasResourceFetchInProgress = data?.some(
         (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
       )
-      return revalidatingId || hasResourceFetchInProgress ? 5000 : false
+      if (revalidatingId) return 5000
+      if (hasResourceFetchInProgress) return 10000
+      return false
     }
   })
 
@@ -319,6 +344,8 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
+  const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     if (revalidatingId) {
       const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
@@ -330,7 +357,8 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         const isDone =
           status === 'failed' ||
           resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHED ||
-          resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED
+          resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED ||
+          (status === 'succeeded' && resourceFetchStatus === undefined)
 
         if (isDone) {
           setRevalidatingId(null)
@@ -340,6 +368,24 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       }
     }
   }, [allCredentials, revalidatingId])
+
+  useEffect(() => {
+    if (revalidationTimeoutRef.current) {
+      clearTimeout(revalidationTimeoutRef.current)
+      revalidationTimeoutRef.current = null
+    }
+    if (revalidatingId) {
+      revalidationTimeoutRef.current = setTimeout(() => {
+        setRevalidatingId(null)
+      }, 180000)
+    }
+    return () => {
+      if (revalidationTimeoutRef.current) {
+        clearTimeout(revalidationTimeoutRef.current)
+        revalidationTimeoutRef.current = null
+      }
+    }
+  }, [revalidatingId])
 
   useEffect(() => {
     if (isVmware) {
