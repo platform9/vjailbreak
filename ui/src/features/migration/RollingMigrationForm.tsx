@@ -195,7 +195,6 @@ interface VM {
   targetFlavorId?: string
   ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
   ipValidationMessage?: string
-  assignedIPs?: string
   networkInterfaces?: VmNetworkInterface[]
   preserveIp?: Record<number, boolean>
   preserveMac?: Record<number, boolean>
@@ -1294,10 +1293,6 @@ export default function RollingMigrationFormDrawer({
               nicAssignedIps[index] = assigned.join(',')
             }
           })
-          if (Object.keys(nicAssignedIps).length === 0 && vm.assignedIPs?.trim()) {
-            nicAssignedIps[0] = vm.assignedIPs.trim()
-          }
-
           const indices = new Set<string>([
             ...Object.keys(preserveIp),
             ...Object.keys(preserveMac),

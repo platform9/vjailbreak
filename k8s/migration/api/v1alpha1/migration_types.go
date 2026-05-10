@@ -94,10 +94,6 @@ type MigrationSpec struct {
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 
-	// AssignedIP is the comma-separated list of user-assigned IPs for cold migration
-	// Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
-	AssignedIP string `json:"assignedIP,omitempty"`
-
 	// NetworkOverrides is the JSON-serialized per-NIC overrides for IP and MAC preservation
 	// +optional
 	NetworkOverrides string `json:"networkOverrides,omitempty"`

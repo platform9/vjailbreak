@@ -44,7 +44,14 @@ vJailbreak is a VMware to Platform9 Private Cloud Director (PCD) VM migration to
 - Run `make setup-hooks` once per clone before any commits to activate pre-commit validation
 - Pre-commit hooks will validate code formatting and run basic checks
 
-### Testing Requirements
+### Unit Test Requirements
+- ALWAYS write unit tests for any new code written by Claude
+- Place tests in `_test.go` files alongside the code under test (Go convention)
+- If existing code is hard to unit test (e.g., no interfaces, large functions with external deps), refactor up to 1-2 files to make it testable — **refactor must not change logic or behavior**, only restructure for testability (e.g., extract interfaces, dependency injection, split large functions into pure helpers)
+- Use table-driven tests for Go code where multiple input/output cases apply
+- Mock external dependencies (VMware, OpenStack, Kubernetes API) using interfaces — do not hit real external systems in unit tests
+
+### Integration/Build Testing Requirements
 - v2v-helper tests require `CGO_ENABLED=1 GOOS=linux GOARCH=amd64`
 - v2v-helper tests will NOT compile on macOS without Linux cross-compilation toolchain
 - Run `make test-v2v-helper` for v2v-helper tests (requires Linux or Docker)

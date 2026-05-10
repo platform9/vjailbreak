@@ -35,7 +35,6 @@ type MigrationParams struct {
 	Debug                          bool
 	TARGET_FLAVOR_ID               string
 	TargetAvailabilityZone         string
-	AssignedIP                     string
 	VMwareMachineName              string
 	DisconnectSourceNetwork        bool
 	SecurityGroups                 string
@@ -100,7 +99,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		Debug:                          string(configMap.Data["DEBUG"]) == constants.TrueString,
 		TARGET_FLAVOR_ID:               string(configMap.Data["TARGET_FLAVOR_ID"]),
 		TargetAvailabilityZone:         string(configMap.Data["TARGET_AVAILABILITY_ZONE"]),
-		AssignedIP:                     string(configMap.Data["ASSIGNED_IP"]),
 		VMwareMachineName:              string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork:        string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
 		SecurityGroups:                 string(configMap.Data["SECURITY_GROUPS"]),

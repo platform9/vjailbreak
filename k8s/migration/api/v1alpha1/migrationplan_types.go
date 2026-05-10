@@ -103,9 +103,6 @@ type MigrationPlanSpec struct {
 	SecurityGroups  []string   `json:"securityGroups,omitempty"`
 	ServerGroup     string     `json:"serverGroup,omitempty"`
 	FallbackToDHCP  bool       `json:"fallbackToDHCP,omitempty"`
-	// AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
-	// Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
-	AssignedIPsPerVM map[string]string `json:"assignedIPsPerVM,omitempty"`
 	// NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
 	// Only NICs with non-default settings (i.e., preserve=false) need to be listed
 	NetworkOverridesPerVM map[string][]NICOverride `json:"networkOverridesPerVM,omitempty"`

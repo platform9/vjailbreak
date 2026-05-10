@@ -158,7 +158,6 @@ func main() {
 		K8sClient:              client,
 		TargetFlavorId:         migrationparams.TARGET_FLAVOR_ID,
 		TargetAvailabilityZone: migrationparams.TargetAvailabilityZone,
-		AssignedIP:             migrationparams.AssignedIP,
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
 		ServerGroup:            migrationparams.ServerGroup,
 		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
@@ -221,7 +220,6 @@ OS_FAMILY=%s
 TYPE=%s
 TARGET_FLAVOR_ID=%s
 TARGET_AVAILABILITY_ZONE=%s
-ASSIGNED_IP=%s
 DISCONNECT_SOURCE_NETWORK=%s
 SECURITY_GROUPS=%s
 SERVER_GROUP=%s
@@ -240,7 +238,6 @@ ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
 		migrationparams.MigrationType,
 		migrationparams.TARGET_FLAVOR_ID,
 		migrationparams.TargetAvailabilityZone,
-		migrationparams.AssignedIP,
 		migrationparams.DisconnectSourceNetwork,
 		migrationparams.SecurityGroups,
 		migrationparams.ServerGroup,

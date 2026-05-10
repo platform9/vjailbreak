@@ -19,7 +19,6 @@ export const createMigrationPlanJson = (params) => {
     postMigrationScript,
     periodicSyncInterval,
     periodicSyncEnabled,
-    assignedIPsPerVM
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -68,11 +67,6 @@ export const createMigrationPlanJson = (params) => {
 
   if (serverGroup) {
     spec.serverGroup = serverGroup
-  }
-
-  // Add assignedIPsPerVM for cold migration if provided
-  if (assignedIPsPerVM && Object.keys(assignedIPsPerVM).length > 0) {
-    spec.assignedIPsPerVM = assignedIPsPerVM
   }
 
   return {
