@@ -766,19 +766,17 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           }
         } as any)
 
-        if (timeSettingsChanged) {
-          await applyTimeSettings()
-        }
 
         let envInjectionFailed = false
+        try {
+          await injectEnvVariables(buildEnvPayload(form))
+        } catch (envErr) {
+          envInjectionFailed = true
+          console.error('Failed to inject proxy env variables:', envErr)
+        }
 
-        if (!timeSettingsChanged) {
-          try {
-            await injectEnvVariables(buildEnvPayload(form))
-          } catch (envErr) {
-            envInjectionFailed = true
-            console.error('Failed to inject proxy env variables:', envErr)
-          }
+        if (timeSettingsChanged) {
+          await applyTimeSettings()
         }
 
         let nextState = form

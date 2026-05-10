@@ -16,6 +16,7 @@ import (
 	subnets "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	errors "github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/pkg/common/timesettings"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/common/validation/vmware"
@@ -779,7 +780,7 @@ func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, _ *api.ApplyTim
 	const fn = "ApplyTimeSettings"
 	logrus.WithField("func", fn).Info("applying time settings via D-Bus + host mounts")
 
-	msg, err := ApplyTimeSettingsOnHost(ctx, p.K8sClient)
+	msg, err := timesettings.Apply(ctx, p.K8sClient)
 	if err != nil {
 		logrus.WithField("func", fn).WithError(err).Error("failed to apply time settings")
 		return nil, err
