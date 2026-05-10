@@ -815,7 +815,10 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         console.error('Failed to save Global Settings:', err)
         const msg = err instanceof Error ? err.message : String(err)
         if (timeSettingsChanged && msg) {
-          show(`Failed to apply time settings: ${msg}`, 'error')
+          show(
+            `Failed to apply time settings on the host: ${msg}. Settings were saved; click Save again to retry the apply.`,
+            'error'
+          )
         } else {
           show('Failed to save Global Settings. No changes were applied.', 'error')
         }

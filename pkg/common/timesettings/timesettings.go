@@ -31,6 +31,11 @@ const (
 	Pf9EnvPath        = "/etc/pf9/env"
 )
 
+var (
+	timesyncdConfDirOverride  = TimesyncdConfDir
+	timesyncdConfFileOverride = TimesyncdConfFile
+)
+
 // WorkloadKind identifies which controller type owns a pod that needs to be
 // restarted to pick up TZ env changes.
 type WorkloadKind int
@@ -110,16 +115,16 @@ func FilterValidNTPServers(raw string) string {
 // This is the SYNC-layer change. After this returns, systemd-timesyncd needs
 // to be restarted via D-Bus to actually re-read the file.
 func writeTimesyncdConf(servers string) error {
-	if err := os.MkdirAll(TimesyncdConfDir, 0755); err != nil {
+	if err := os.MkdirAll(timesyncdConfDirOverride, 0755); err != nil {
 		return fmt.Errorf("create timesyncd conf dir: %w", err)
 	}
 	if servers == "" {
-		if err := os.Remove(TimesyncdConfFile); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(timesyncdConfFileOverride); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove timesyncd conf: %w", err)
 		}
 		return nil
 	}
-	return os.WriteFile(TimesyncdConfFile, []byte(fmt.Sprintf("[Time]\nNTP=%s\n", servers)), 0644)
+	return os.WriteFile(timesyncdConfFileOverride, []byte(fmt.Sprintf("[Time]\nNTP=%s\n", servers)), 0644)
 }
 
 // resolveZoneinfoPath returns the absolute path to a tzdata file for tz, but
@@ -166,7 +171,6 @@ func notifyTimedateViaDbus(tz string, ntpEnabled bool) error {
 	if err != nil {
 		return fmt.Errorf("connect to system D-Bus: %w", err)
 	}
-	defer conn.Close()
 
 	obj := conn.Object("org.freedesktop.timedate1", "/org/freedesktop/timedate1")
 	var errs []error
@@ -188,7 +192,6 @@ func restartTimesyncdViaDbus() error {
 	if err != nil {
 		return fmt.Errorf("connect to system D-Bus: %w", err)
 	}
-	defer conn.Close()
 
 	obj := conn.Object("org.freedesktop.systemd1", "/org/freedesktop/systemd1")
 	var jobPath dbus.ObjectPath
@@ -344,17 +347,32 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	rawNTP := strings.TrimSpace(settingsCM.Data["NTP_SERVERS"])
 	ntpServers := FilterValidNTPServers(rawNTP)
 
-	// Resolve target timezone. Reject values that escape the zoneinfo dir
-	// (path traversal) and fall back to UTC if the value is missing or not a
-	// real tzdata entry.
-	targetTZ := rawTZ
-	if targetTZ != "" {
-		if _, err := resolveZoneinfoPath(targetTZ); err != nil {
+	tzValid := false
+	if rawTZ != "" {
+		if _, err := resolveZoneinfoPath(rawTZ); err == nil {
+			tzValid = true
+		} else {
 			logrus.Warnf("timesettings: %v, defaulting to UTC", err)
-			targetTZ = "UTC"
 		}
 	}
-	if ntpServers != "" && targetTZ == "" {
+
+	var (
+		targetTZ    string
+		syncEnabled bool
+	)
+	switch {
+	case ntpServers != "":
+		syncEnabled = true
+		if tzValid {
+			targetTZ = rawTZ
+		} else {
+			targetTZ = "UTC"
+		}
+	case tzValid:
+		syncEnabled = true
+		targetTZ = rawTZ
+	default:
+		syncEnabled = false
 		targetTZ = "UTC"
 	}
 
@@ -364,10 +382,8 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	}
 
 	// === Display layer ===
-	if targetTZ != "" {
-		if err := setLocaltimeSymlink(targetTZ); err != nil {
-			return "", fmt.Errorf("set /etc/localtime: %w", err)
-		}
+	if err := setLocaltimeSymlink(targetTZ); err != nil {
+		return "", fmt.Errorf("set /etc/localtime: %w", err)
 	}
 
 	// === Best-effort follow-ups: aggregate, don't abort ===
@@ -376,11 +392,11 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 		errs = append(errs, fmt.Errorf("update pf9 env file: %w", err))
 	}
 
-	ntpEnabled := targetTZ != "" || ntpServers != ""
-	if err := notifyTimedateViaDbus(targetTZ, ntpEnabled); err != nil {
+	if err := notifyTimedateViaDbus(targetTZ, syncEnabled); err != nil {
 		errs = append(errs, fmt.Errorf("notify timedated: %w", err))
 	}
-	if ntpEnabled {
+
+	if syncEnabled {
 		if err := restartTimesyncdViaDbus(); err != nil {
 			errs = append(errs, fmt.Errorf("restart timesyncd: %w", err))
 		}

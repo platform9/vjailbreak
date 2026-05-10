@@ -485,8 +485,6 @@ if [ "$IS_MASTER" == "true" ]; then
       log "WARNING: VolumeImageProfile CRD not Established within timeout. Skipping default seeding (non-fatal)."
     fi
   fi
-  
-  install_time_settings_apply_script
 
 else
   log "Setting up K3s Worker..."
