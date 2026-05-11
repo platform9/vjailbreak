@@ -29,9 +29,9 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -72,20 +72,36 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, errors.Wrap(err, "failed to create ESXIMigrationScope")
 	}
 
-	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
-	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
-	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
-		if apierrors.IsNotFound(err) {
-			if !esxiMigration.DeletionTimestamp.IsZero() {
-				ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
-				return r.reconcileDelete(ctx, scope)
+	if esxiMigration.Spec.RollingMigrationPlanRef == nil {
+		// Standalone mode: BMConfigRef and PCDClusterRef must both be provided.
+		if esxiMigration.Spec.BMConfigRef == nil || esxiMigration.Spec.PCDClusterRef == nil {
+			errMsg := "standalone ESXIMigration (no rollingMigrationPlanRef) requires both bmConfigRef and pcdClusterRef to be set"
+			ctxlog.Error(fmt.Errorf("%s", errMsg), "Invalid ESXIMigration spec")
+			esxiMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+			esxiMigration.Status.Message = errMsg
+			if statusErr := r.Status().Update(ctx, esxiMigration); statusErr != nil {
+				ctxlog.Error(statusErr, "Failed to update ESXIMigration status to Failed")
+			}
+			return ctrl.Result{}, nil
+		}
+		ctxlog.Info("ESXIMigration running in standalone mode (no RollingMigrationPlan)")
+		// scope.RollingMigrationPlan remains nil; standalone reconciliation path
+		// will be implemented in a subsequent milestone.
+	} else {
+		rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+		rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
+		if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
+			if apierrors.IsNotFound(err) {
+				if !esxiMigration.DeletionTimestamp.IsZero() {
+					ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
+					return r.reconcileDelete(ctx, scope)
+				}
+				return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 			}
 			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 		}
-		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+		scope.RollingMigrationPlan = rollingMigrationPlan
 	}
-
-	scope.RollingMigrationPlan = rollingMigrationPlan
 
 	// Always close the scope when exiting this function such that we can persist any ESXIMigration changes.
 	defer func() {

@@ -156,7 +156,7 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 		},
 		Spec: vjailbreakv1alpha1.ESXIMigrationSpec{
 			ESXiName: esxi,
-			RollingMigrationPlanRef: corev1.LocalObjectReference{
+			RollingMigrationPlanRef: &corev1.LocalObjectReference{
 				Name: scope.RollingMigrationPlan.Name,
 			},
 			OpenstackCredsRef: scope.ClusterMigration.Spec.OpenstackCredsRef,

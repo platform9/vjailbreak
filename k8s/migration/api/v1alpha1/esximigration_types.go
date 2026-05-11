@@ -60,8 +60,19 @@ type ESXIMigrationSpec struct {
 	OpenstackCredsRef corev1.LocalObjectReference `json:"openstackCredsRef"`
 	// VMwareCredsRef is the reference to the VMware credentials
 	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
-	// RollingMigrationPlanRef is the reference to the RollingMigrationPlan
-	RollingMigrationPlanRef corev1.LocalObjectReference `json:"rollingMigrationPlanRef"`
+	// RollingMigrationPlanRef is an optional reference to the RollingMigrationPlan.
+	// When nil, ESXIMigration operates in standalone mode: BMConfigRef and PCDClusterRef
+	// must both be set to provide the required bare-metal and target cluster context.
+	// +optional
+	RollingMigrationPlanRef *corev1.LocalObjectReference `json:"rollingMigrationPlanRef,omitempty"`
+	// BMConfigRef is an optional reference to the BMConfig used for bare-metal provisioning.
+	// Required when RollingMigrationPlanRef is nil (standalone mode).
+	// +optional
+	BMConfigRef *corev1.LocalObjectReference `json:"bmConfigRef,omitempty"`
+	// PCDClusterRef is an optional reference to the PCDCluster that this host should join
+	// after conversion. Required when RollingMigrationPlanRef is nil (standalone mode).
+	// +optional
+	PCDClusterRef *corev1.LocalObjectReference `json:"pcdClusterRef,omitempty"`
 }
 
 // ESXIMigrationStatus defines the observed state of ESXIMigration including

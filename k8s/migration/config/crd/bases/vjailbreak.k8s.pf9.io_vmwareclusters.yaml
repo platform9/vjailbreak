@@ -43,6 +43,22 @@ spec:
           spec:
             description: VMwareClusterSpec defines the desired state of VMwareCluster
             properties:
+              bmConfigRef:
+                description: |-
+                  BMConfigRef is an optional cluster-level reference to a BMConfig, used as the default
+                  bare-metal provider config when converting hosts to PCD hosts via this cluster.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               hosts:
                 description: Hosts is the list of hosts in the VMware cluster
                 items:
@@ -51,10 +67,139 @@ spec:
               name:
                 description: Name is the name of the VMware cluster
                 type: string
+              pcdClusterRef:
+                description: |-
+                  PCDClusterRef is an optional cluster-level reference to a PCDCluster, used as the default
+                  destination when converting hosts to PCD hosts via this cluster.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              vmwareCredsRef:
+                description: |-
+                  VMwareCredsRef is a reference to the VMware credentials used to authenticate to vCenter.
+                  Required for the VMwareCluster controller to poll per-host VM counts.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
             type: object
           status:
             description: VMwareClusterStatus defines the observed state of VMwareCluster
             properties:
+              conditions:
+                description: Conditions contains standard Kubernetes status conditions
+                  for the VMwareCluster.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              hostStatuses:
+                description: |-
+                  HostStatuses contains the per-host observed state within this cluster,
+                  refreshed by the VMwareCluster controller on each reconciliation cycle.
+                items:
+                  description: |-
+                    HostStatus contains the observed state of a single ESXi host within a VMware cluster,
+                    populated by the VMwareCluster controller by polling vCenter.
+                  properties:
+                    inMaintenance:
+                      description: InMaintenance indicates whether the host is currently
+                        in maintenance mode
+                      type: boolean
+                    maintenanceState:
+                      description: MaintenanceState is the vSphere maintenance state
+                        string (e.g. "inMaintenance", "enteringMaintenance")
+                      type: string
+                    name:
+                      description: Name is the hostname of the ESXi host
+                      type: string
+                    vmCount:
+                      description: VMCount is the number of VMs currently running
+                        on this host
+                      type: integer
+                  required:
+                  - inMaintenance
+                  - name
+                  - vmCount
+                  type: object
+                type: array
+              lastPollError:
+                description: |-
+                  LastPollError records the most recent error encountered while polling vCenter.
+                  Set to empty string on successful poll. Allows distinguishing stale status from failures
+                  without overwriting the last-known HostStatuses (see EC-001 in spec).
+                type: string
               phase:
                 description: Phase is the current phase of the VMwareCluster
                 type: string
