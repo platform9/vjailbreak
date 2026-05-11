@@ -2,8 +2,8 @@ name: Nightly Build Trigger
 
 on:
   schedule:
-    # Run at 00:00 UTC every day
-    - cron: '0 0 * * *'
+    # Run at 19:30 UTC every day (01:00 IST)
+    - cron: '30 19 * * *'
   # Allow manual triggering
   workflow_dispatch:
 
