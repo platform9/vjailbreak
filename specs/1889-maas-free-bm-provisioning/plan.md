@@ -226,9 +226,12 @@ mode handler with mock host system.
 
 ---
 
-### Milestone 5 — UI: ESXi Accordion Components
+### Milestone 5 — UI: VMware Cluster Table + ESXi Host Drawer
 
-*Commit: `feat(ui): add per-ESXi host accordion to cluster conversions page`*
+*Commit: `feat(ui): add VMware cluster table and ESXi host action drawer`*
+
+Follow exact component patterns from `RollingMigrationsTable.tsx` and `ClusterDetailsDrawer`.
+No MUI Accordion — use `CommonDataGrid` + right-anchored `StyledDrawer` throughout.
 
 **New hook** `ui/src/hooks/api/useVMwareClustersQuery.ts`:
 
@@ -238,50 +241,92 @@ export const useVMwareClustersQuery = (options?: UseQueryOptions) =>
   useQuery({ queryKey: ['vmwareClusters'], queryFn: getVMwareClusters, ...options })
 ```
 
-**New component** `ESXiClusterAccordion.tsx`:
+**New component** `VMwareClustersTable.tsx`:
 
-- Fetches `VMwareCluster` list via `useVMwareClustersQuery`
-- Fetches `ESXIMigration` list via existing `useESXIMigrationsQuery`
-- Groups ESXi hosts by cluster
-- Renders `ESXiHostRow` per host
+Mirrors `RollingMigrationsTable.tsx` structure exactly:
 
-**New component** `ESXiHostRow.tsx`:
+- `CommonDataGrid` with columns:
+  - Cluster Name: `CdsIconWrapper` + `<cds-icon shape="cluster" size="md">` + name text
+  - ESXi Host Count: integer
+  - VM Count: integer
+  - Status (`StatusChip` — use same inline `Chip variant="outlined"` function)
+  - Hosts Converted: `LinearProgress variant="determinate" sx={{ height: 4, borderRadius: 5, backgroundColor: 'rgba(0,0,0,0.08)' }}` + `converted/total` caption
+  - Actions: `Button variant="text" size="small" startIcon={<VisibilityIcon />}` → opens `ESXiClusterDetailsDrawer`
+- `ListingToolbar` with `title="VMware Clusters"`, `icon={<ClusterIcon />}`, `CustomSearchToolbar`
+- `ConfirmationDialog` from `src/components/dialogs` with `icon={<WarningIcon color="warning" />}` for any destructive action
 
-- Props: `host: HostStatus`, `esxiMigration?: ESXIMigration`, `vmwareCluster: VMwareCluster`
-- Collapsible (MUI `Accordion` — reuse existing MUI pattern in codebase)
-- Header: host name, VM count progress bar, state chip, action buttons
-  - "Put in Maintenance": always shown; calls `enterMaintenanceMode` API
-  - "Migrate VMs": shown when `vmCount > 0`; opens existing migration form
-  - "Convert to PCD Host": shown when `vmCount === 0 && inMaintenanceMode`; creates standalone `ESXIMigration` CR using `VMwareCluster.Spec.BMConfigRef` and `VMwareCluster.Spec.PCDClusterRef` as defaults; if either is nil, show a selection dialog prompting the user to pick a BMConfig and PCD cluster from existing CRs
-- State chip derived from: `ESXIMigration.status.phase` if CR exists, else from `HostStatus`
+**New component** `ESXiClusterDetailsDrawer.tsx`:
 
-**New component** `ESXiVMTable.tsx`:
+Mirrors `ClusterDetailsDrawer` in `RollingMigrationsTable.tsx:196-328` exactly:
 
-- Props: `hostName: string`, `vmwareCreds: VMwareCreds`
-- Calls `listVMs` API with `host_name` filter on expand
-- Checkbox multi-select table (MUI `DataGrid` or `Table` — reuse existing migration VM table pattern)
-- "Migrate Selected (N) →" button: calls existing migration form open handler with pre-selected VMs
+```typescript
+const StyledDrawer = styled(Drawer)(() => ({
+  '& .MuiDrawer-paper': {
+    display: 'grid',
+    gridTemplateRows: 'max-content 1fr max-content',
+    width: '1200px',
+    maxWidth: '90vw'
+  }
+}))
+```
+
+- `DrawerHeader` (flex, justify-between, `borderBottom: 1px solid divider`) with cluster name + `IconButton` close
+- `DrawerContent` (overflow: auto, `padding: theme.spacing(4, 6, 4, 4)`)
+- `DrawerFooter` (flex, flex-end, `borderTop: 1px solid divider`) with "Close" `Button variant="outlined"`
+- `StatusSummary` component at top of content (reuse or copy existing `StatusSummary` from `RollingMigrationsTable.tsx:128-194`)
+- `CommonDataGrid` for ESXi host rows with columns:
+  - Host Name: `CdsIconWrapper` + `<cds-icon shape="host" size="md" badge="info">` + hostname
+  - State: `StatusChip` — extend color switch with: `'maintenance' → 'warning'`, `'converting' → 'info'`, `'succeeded'/'converted' → 'success'`, `'failed' → 'error'`
+  - VM Count: integer (value 0 + maintenance = eligible for conversion)
+  - Time Elapsed: `calculateTimeElapsed(row.creationTimestamp, row.status)` (reuse existing util)
+  - Actions: `Box sx={{ display: 'flex', gap: 1 }}` containing:
+    - `"Migrate VMs"` — `Button variant="text" size="small"`: visible when `vmCount > 0`
+    - `"Put in Maintenance"` — `Button variant="text" size="small"`: always shown; opens `ConfirmationDialog` with warning icon before API call
+    - `"Exit Maintenance"` — `Button variant="text" size="small"`: visible when `state === 'maintenance'`
+    - `"Convert to PCD Host"` — `Button variant="text" size="small"`: visible when `vmCount === 0 && state === 'maintenance'`
+
+**"Put in Maintenance" confirmation**: use `ConfirmationDialog` with
+`icon={<WarningIcon color="warning" />}`, `actionLabel="Enter Maintenance"`, `actionColor="warning"` —
+matches existing delete dialog at `RollingMigrationsTable.tsx:742-764`.
+
+**"Convert to PCD Host" flow**:
+
+1. Read `VMwareCluster.Spec.BMConfigRef` and `VMwareCluster.Spec.PCDClusterRef`
+2. If both set → `ConfirmationDialog` confirm → create `ESXIMigration` CR
+3. If either nil → `ConfirmationDialog` with embedded MUI `Select` fields for BMConfig and PCD cluster →
+   user selects → confirm → create CR; use same `ConfirmationDialog` component (it supports custom content
+   via `message` prop as ReactNode)
+
+**Notifications**: `Snackbar` + `Alert severity="success"|"error" autoHideDuration={6000}` —
+matches `BMConfigForm.tsx:617-625`.
 
 **Update** `ClusterConversionsPage.tsx`:
 
 - Add `useVMwareClustersQuery`
-- Render `<ESXiClusterAccordion />` above `<RollingMigrationsTable />`
+- Render `<VMwareClustersTable />` above `<RollingMigrationsTable />`
 - `RollingMigrationsTable` props unchanged
 
-**Credentials in UI**: `ESXiHostRow` and `ESXiVMTable` need VMware creds to call `listVMs`.
-Derive these from `VMwareCluster.Spec.VMwareCredsRef` — fetch the referenced secret name and
-pass it as a prop. Do NOT embed raw credentials; pass the secret reference name only and let
-the backend resolve it. The `enterMaintenanceMode` call passes access info via the same pattern
-as existing `listVMs` calls (see `vcenter.ts`).
+**Credentials in UI**: Derive VMware creds ref from `VMwareCluster.Spec.VMwareCredsRef`;
+pass secret reference name only to backend calls — do NOT embed raw credentials in UI state.
+The `enterMaintenanceMode` and `listVMs` calls pass access info via the same pattern as existing
+`listVMs` calls (see `vcenter.ts`).
 
-**Wire "Convert to PCD Host"**: When the user clicks "Convert to PCD Host", read
-`VMwareCluster.Spec.BMConfigRef` and `VMwareCluster.Spec.PCDClusterRef` from the cluster CR.
-If both are set, create the `ESXIMigration` CR immediately using those refs as defaults. If
-either is nil, open a selection dialog that lists existing `BMConfig` CRs and PCD cluster CRs
-so the user can choose before the `ESXIMigration` CR is created.
+**Extend** `BMConfigForm.tsx` (existing at `ui/src/features/baremetalConfig/components/BMConfigForm.tsx`):
 
-**Unit tests**: Component tests for `ESXiHostRow` state transitions (Busy/Empty/Maintenance/PCD).
-Test button visibility conditions. Mock `useVMwareClustersQuery`.
+- Add MUI `Select` for `ProviderType` (`MAAS` | `ironic` | `ipmi`) at the top of the `Section`
+- Keep `SurfaceCard` / `Section` / `SectionHeader` / `FieldBlock` / `FieldLabel` / `ActionButton`
+  structure unchanged
+- Render conditional `Section` blocks per selected provider:
+  - **MAAS** (existing fields): unchanged — API URL, API Key, OS, Insecure toggle
+  - **Ironic**: Endpoint URL, Username, Password, Project ID, Domain Name — each as `FieldBlock` +
+    `FieldLabel` + `TextField size="small" variant="outlined"` matching existing field layout
+  - **IPMI**: BMC Address, Username, Password, Interface, UseRedfish toggle (`ToggleField`) —
+    same `ConnectionGrid` layout as MAAS section
+- `Snackbar` + `Alert` for success/error — same as existing notification pattern in `BMConfigForm.tsx`
+
+**Unit tests**: Component tests for `ESXiClusterDetailsDrawer` — verify action button visibility
+per host state (Busy/Empty/Maintenance/Converting). Verify `ConfirmationDialog` shown on
+destructive actions. Mock `useVMwareClustersQuery`.
 
 ---
 

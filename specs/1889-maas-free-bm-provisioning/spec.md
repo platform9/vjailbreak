@@ -118,6 +118,19 @@ from vJailbreak HTTP endpoint.
 - **FR-009**: "Put in Maintenance" button MUST call EnterMaintenanceMode API and wait for confirmation before updating row state
 - **FR-010**: ListVMs API MUST support an optional `host_name` filter parameter; omitting it returns all VMs
 
+### UI Design Constraints
+
+These requirements ensure new UI components match the visual and behavioral patterns of the existing Cluster Conversions page.
+
+- **FR-011**: VMware cluster list MUST use `CommonDataGrid` (MUI x-data-grid wrapper at `src/components/grid/CommonDataGrid.tsx`) — no plain HTML tables or MUI Accordion inline expansion at the top level; matches `RollingMigrationsTable.tsx` structure
+- **FR-012**: ESXi host details and per-host actions MUST be presented inside a `StyledDrawer` (right-anchored, 1200px wide, 90vw max, `gridTemplateRows: 'max-content 1fr max-content'`) — NOT inline accordion expansion; matches existing `ClusterDetailsDrawer` pattern in `RollingMigrationsTable.tsx:196-328`
+- **FR-013**: Status chips MUST use MUI `Chip` with `variant="outlined" size="small" sx={{ borderRadius: '4px', height: '24px' }}` and color mapping: Maintenance → warning, Converting/Running → info, Succeeded/Converted → success, Failed → error, default → default; matches existing `StatusChip` function in `RollingMigrationsTable.tsx:82-126`
+- **FR-014**: Destructive and irreversible actions (Enter Maintenance, Convert to PCD Host) MUST display `ConfirmationDialog` (from `src/components/dialogs`) with `icon={<WarningIcon color="warning" />}` before executing; matches existing delete confirmation in `RollingMigrationsTable.tsx:742-764`
+- **FR-015**: API success/failure notifications MUST use MUI `Snackbar` + `Alert` with `autoHideDuration={6000}` — matches `BMConfigForm.tsx` notification pattern; no custom toast components
+- **FR-016**: Host row icons MUST use Clarity `<cds-icon shape="host" size="md">` wrapped in `CdsIconWrapper`; cluster row icons MUST use `<cds-icon shape="cluster" size="md">`; matches `RollingMigrationsTable.tsx:43-50, 213-215`
+- **FR-017**: Per-host action buttons inside the drawer MUST use `Button variant="text" size="small" startIcon={<Icon />}` rendered in `Box sx={{ display: 'flex', gap: 1 }}`; matches "Details" button in `clusterColumns` at `RollingMigrationsTable.tsx:681-694`
+- **FR-018**: BMConfig form extension for Ironic/IPMI providers MUST use existing design-system components — `SurfaceCard`, `Section`, `SectionHeader`, `FieldBlock`, `FieldLabel`, `ActionButton` — matching `BMConfigForm.tsx` structure; provider type MUST be a MUI `Select` at the top of the form with conditional `Section` blocks rendered per selection
+
 ### Key Entities
 
 - **VMwareCluster**: source cluster CRD; gains `status.hosts[]` with VM count + maintenance state
