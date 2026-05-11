@@ -35,6 +35,8 @@ import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
 import { CustomSearchToolbar } from 'src/components/grid'
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
+import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
 import { getVMwareHosts, patchVMwareHost } from 'src/api/vmware-hosts/vmwareHosts'
 import { getVMwareMachines, patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { VMwareHost } from 'src/api/vmware-hosts/model'
@@ -2050,6 +2052,14 @@ export default function RollingMigrationFormDrawer({
     return Array.from(new Set(availableVmwareNetworks))
   }, [availableVmwareNetworks])
 
+  const missingInterfaceIpWarnings = useMemo(
+    () =>
+      getMissingInterfaceIpWarnings(
+        vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
+      ),
+    [selectedVMs, vmsWithAssignments]
+  )
+
   const unmappedNetworksCount = useMemo(() => {
     return uniqueVmwareNetworks.filter((n) => !networkMappings.some((m) => m.source === n)).length
   }, [uniqueVmwareNetworks, networkMappings])
@@ -3575,6 +3585,10 @@ export default function RollingMigrationFormDrawer({
                       loading={loadingVMs}
                     />
                   </Paper>
+                  <MissingInterfaceIpWarningAlert
+                    warnings={missingInterfaceIpWarnings}
+                    sx={{ mt: 2 }}
+                  />
                   {vmIpValidationError && (
                     <Alert severity="warning" sx={{ mt: 2 }}>
                       {vmIpValidationError}
