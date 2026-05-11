@@ -1,0 +1,253 @@
+<h2>3 Approaches — Visual Comparison</h2>
+<p class="subtitle">Click to select your preferred approach</p>
+
+<style>
+.approach-cards { display: flex; flex-direction: column; gap: 28px; margin-top: 16px; }
+.approach-card { border: 2px solid rgba(255,255,255,0.12); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color 0.2s; }
+.approach-card:hover { border-color: rgba(255,255,255,0.3); }
+.approach-card.selected { border-color: #6C8EF5; }
+.approach-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.05); }
+.approach-letter { width: 32px; height: 32px; border-radius: 50%; background: #6C8EF5; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.approach-title { font-weight: 600; font-size: 15px; }
+.approach-subtitle { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+.approach-body { padding: 16px 20px; }
+.mock-screen { background: #1a1f2e; border-radius: 8px; padding: 0; overflow: hidden; font-size: 12px; border: 1px solid rgba(255,255,255,0.08); }
+.mock-topbar { background: #242938; padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 11px; opacity: 0.8; }
+.mock-topbar .breadcrumb { opacity: 0.5; font-size: 10px; }
+.mock-content { padding: 14px; }
+.mock-section-title { font-size: 11px; font-weight: 600; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.esxi-row { background: rgba(255,255,255,0.04); border-radius: 6px; margin-bottom: 6px; overflow: hidden; }
+.esxi-row-header { padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.esxi-name { font-weight: 600; font-size: 12px; flex: 1; }
+.vm-chip { background: rgba(108,142,245,0.2); color: #6C8EF5; border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; }
+.vm-chip.zero { background: rgba(72,199,142,0.2); color: #48c78e; }
+.vm-chip.warn { background: rgba(255,185,0,0.2); color: #ffb900; }
+.state-chip { border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; }
+.state-chip.busy { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+.state-chip.empty { background: rgba(72,199,142,0.15); color: #48c78e; }
+.state-chip.maint { background: rgba(255,185,0,0.15); color: #ffb900; }
+.state-chip.ready { background: rgba(108,142,245,0.15); color: #6C8EF5; }
+.action-btn { border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 600; border: none; cursor: pointer; }
+.btn-primary { background: #6C8EF5; color: #fff; }
+.btn-warn { background: #ffb900; color: #111; }
+.btn-success { background: #48c78e; color: #111; }
+.btn-ghost { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+.esxi-expanded { background: rgba(255,255,255,0.03); border-top: 1px solid rgba(255,255,255,0.06); padding: 10px 12px; }
+.vm-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+.vm-table td { padding: 4px 6px; opacity: 0.8; }
+.vm-table tr:hover td { background: rgba(255,255,255,0.04); }
+.vm-select { width: 12px; height: 12px; accent-color: #6C8EF5; }
+.progress-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.progress-fill { height: 100%; border-radius: 2px; }
+/* Kanban */
+.kanban { display: flex; gap: 10px; padding: 0; }
+.kanban-col { flex: 1; min-width: 0; }
+.kanban-col-header { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.5; padding: 6px 0; margin-bottom: 8px; border-bottom: 2px solid rgba(255,255,255,0.08); }
+.kanban-card { background: rgba(255,255,255,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
+.kanban-card-title { font-size: 11px; font-weight: 600; }
+.kanban-card-sub { font-size: 10px; opacity: 0.5; margin-top: 2px; }
+.kanban-card-action { margin-top: 7px; }
+/* Sidebar highlight */
+.mock-sidebar-layout { display: flex; gap: 0; }
+.mock-sidebar { background: #1e2333; width: 130px; flex-shrink: 0; padding: 10px 0; border-right: 1px solid rgba(255,255,255,0.08); }
+.sidebar-item { padding: 7px 12px; font-size: 11px; opacity: 0.5; }
+.sidebar-item.active { background: rgba(108,142,245,0.12); color: #6C8EF5; opacity: 1; font-weight: 600; border-left: 2px solid #6C8EF5; }
+.sidebar-item.new-item { color: #48c78e; opacity: 0.8; }
+</style>
+
+<div class="approach-cards">
+
+  <!-- APPROACH A -->
+  <div class="approach-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="approach-header">
+      <div class="approach-letter">A</div>
+      <div>
+        <div class="approach-title">Evolve Existing Cluster Conversions Page</div>
+        <div class="approach-subtitle">Expandable ESXi rows in current cluster detail view</div>
+      </div>
+    </div>
+    <div class="approach-body">
+      <div class="mock-screen">
+        <div class="mock-topbar">
+          <span>Cluster Conversions</span>
+          <span class="breadcrumb">› prod-cluster-01</span>
+        </div>
+        <div class="mock-content">
+          <div class="mock-section-title">ESXi Hosts — prod-cluster-01</div>
+
+          <!-- ESXi busy row -->
+          <div class="esxi-row">
+            <div class="esxi-row-header">
+              <span style="font-size:11px;opacity:0.4">▶</span>
+              <span class="esxi-name">esxi-01.prod.local</span>
+              <span class="vm-chip">12 VMs</span>
+              <span class="state-chip busy">Busy</span>
+              <button class="action-btn btn-ghost">Migrate VMs</button>
+            </div>
+          </div>
+
+          <!-- ESXi expanded row -->
+          <div class="esxi-row">
+            <div class="esxi-row-header">
+              <span style="font-size:11px;opacity:0.8">▼</span>
+              <span class="esxi-name">esxi-02.prod.local</span>
+              <span class="vm-chip warn">3 VMs</span>
+              <span class="state-chip busy">Busy</span>
+              <button class="action-btn btn-primary">Migrate VMs</button>
+            </div>
+            <div class="esxi-expanded">
+              <table class="vm-table">
+                <tr><td><input type="checkbox" class="vm-select" checked></td><td>web-server-01</td><td style="opacity:0.4">Ubuntu 22.04</td><td style="opacity:0.4">4 vCPU / 8GB</td><td><span class="state-chip busy" style="font-size:9px">Pending</span></td></tr>
+                <tr><td><input type="checkbox" class="vm-select" checked></td><td>db-primary-01</td><td style="opacity:0.4">CentOS 7</td><td style="opacity:0.4">8 vCPU / 32GB</td><td><span class="state-chip busy" style="font-size:9px">Pending</span></td></tr>
+                <tr><td><input type="checkbox" class="vm-select"></td><td>monitoring-01</td><td style="opacity:0.4">Ubuntu 20.04</td><td style="opacity:0.4">2 vCPU / 4GB</td><td><span class="state-chip maint" style="font-size:9px">Migrating</span></td></tr>
+              </table>
+              <div style="margin-top:8px;display:flex;gap:6px">
+                <button class="action-btn btn-primary">Migrate Selected (2)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ESXi empty row -->
+          <div class="esxi-row">
+            <div class="esxi-row-header">
+              <span style="font-size:11px;opacity:0.4">▶</span>
+              <span class="esxi-name">esxi-03.prod.local</span>
+              <span class="vm-chip zero">0 VMs ✓</span>
+              <span class="state-chip empty">Empty</span>
+              <button class="action-btn btn-warn">Put in Maintenance</button>
+            </div>
+          </div>
+
+          <!-- ESXi in maintenance -->
+          <div class="esxi-row">
+            <div class="esxi-row-header">
+              <span style="font-size:11px;opacity:0.4">▶</span>
+              <span class="esxi-name">esxi-04.prod.local</span>
+              <span class="vm-chip zero">0 VMs</span>
+              <span class="state-chip maint">Maintenance</span>
+              <button class="action-btn btn-success">Convert to PCD Host</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPROACH B -->
+  <div class="approach-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="approach-header">
+      <div class="approach-letter" style="background:#48c78e;">B</div>
+      <div>
+        <div class="approach-title">New "Host Readiness" Section in Sidebar</div>
+        <div class="approach-subtitle">New page alongside existing cluster flow — safe parallel rollout</div>
+      </div>
+    </div>
+    <div class="approach-body">
+      <div class="mock-screen">
+        <div class="mock-sidebar-layout">
+          <div class="mock-sidebar">
+            <div class="sidebar-item">Migrations</div>
+            <div class="sidebar-item">Migration Plans</div>
+            <div class="sidebar-item">Cluster Conversions</div>
+            <div class="sidebar-item active new-item">Host Readiness ✦</div>
+            <div class="sidebar-item">Credentials</div>
+          </div>
+          <div style="flex:1; padding:12px;">
+            <div class="mock-section-title">Host Readiness — prod-cluster-01</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px;border-left:3px solid #ff6b6b">
+                <div style="font-size:11px;font-weight:600">esxi-01.prod.local</div>
+                <div style="font-size:10px;opacity:0.5;margin-top:2px">12 VMs remaining</div>
+                <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:15%;background:#ff6b6b"></div></div>
+                <div style="margin-top:8px"><button class="action-btn btn-ghost" style="font-size:10px">Migrate VMs</button></div>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px;border-left:3px solid #ffb900">
+                <div style="font-size:11px;font-weight:600">esxi-02.prod.local</div>
+                <div style="font-size:10px;opacity:0.5;margin-top:2px">3 VMs remaining</div>
+                <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:75%;background:#ffb900"></div></div>
+                <div style="margin-top:8px"><button class="action-btn btn-primary" style="font-size:10px">Migrate VMs</button></div>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px;border-left:3px solid #48c78e">
+                <div style="font-size:11px;font-weight:600">esxi-03.prod.local</div>
+                <div style="font-size:10px;color:#48c78e;margin-top:2px">✓ 0 VMs — Eligible</div>
+                <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:100%;background:#48c78e"></div></div>
+                <div style="margin-top:8px"><button class="action-btn btn-warn" style="font-size:10px">Put in Maintenance</button></div>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px;border-left:3px solid #6C8EF5">
+                <div style="font-size:11px;font-weight:600">esxi-04.prod.local</div>
+                <div style="font-size:10px;color:#6C8EF5;margin-top:2px">⚡ In Maintenance Mode</div>
+                <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:100%;background:#6C8EF5"></div></div>
+                <div style="margin-top:8px"><button class="action-btn btn-success" style="font-size:10px">Convert to PCD Host</button></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPROACH C -->
+  <div class="approach-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="approach-header">
+      <div class="approach-letter" style="background:#f5a623;">C</div>
+      <div>
+        <div class="approach-title">Kanban Pipeline View</div>
+        <div class="approach-subtitle">ESXi hosts as cards moving through conversion stages</div>
+      </div>
+    </div>
+    <div class="approach-body">
+      <div class="mock-screen">
+        <div class="mock-topbar"><span>Cluster Conversions</span><span class="breadcrumb">› prod-cluster-01</span></div>
+        <div class="mock-content">
+          <div class="kanban">
+            <div class="kanban-col">
+              <div class="kanban-col-header" style="border-color:#ff6b6b;color:#ff6b6b">VMs Present</div>
+              <div class="kanban-card">
+                <div class="kanban-card-title">esxi-01</div>
+                <div class="kanban-card-sub">12 VMs running</div>
+                <div class="progress-bar" style="margin-top:5px"><div class="progress-fill" style="width:15%;background:#ff6b6b"></div></div>
+                <div class="kanban-card-action"><button class="action-btn btn-ghost" style="font-size:10px;width:100%">Migrate VMs</button></div>
+              </div>
+              <div class="kanban-card">
+                <div class="kanban-card-title">esxi-02</div>
+                <div class="kanban-card-sub">3 VMs running</div>
+                <div class="progress-bar" style="margin-top:5px"><div class="progress-fill" style="width:75%;background:#ffb900"></div></div>
+                <div class="kanban-card-action"><button class="action-btn btn-primary" style="font-size:10px;width:100%">Migrate VMs</button></div>
+              </div>
+            </div>
+            <div class="kanban-col">
+              <div class="kanban-col-header" style="border-color:#48c78e;color:#48c78e">Empty</div>
+              <div class="kanban-card">
+                <div class="kanban-card-title">esxi-03</div>
+                <div class="kanban-card-sub" style="color:#48c78e">✓ 0 VMs</div>
+                <div class="kanban-card-action" style="margin-top:7px"><button class="action-btn btn-warn" style="font-size:10px;width:100%">→ Maintenance</button></div>
+              </div>
+            </div>
+            <div class="kanban-col">
+              <div class="kanban-col-header" style="border-color:#ffb900;color:#ffb900">Maintenance</div>
+              <div class="kanban-card">
+                <div class="kanban-card-title">esxi-04</div>
+                <div class="kanban-card-sub" style="color:#ffb900">⚙ In maintenance</div>
+                <div class="kanban-card-action" style="margin-top:7px"><button class="action-btn btn-success" style="font-size:10px;width:100%">→ Convert to PCD</button></div>
+              </div>
+            </div>
+            <div class="kanban-col">
+              <div class="kanban-col-header" style="border-color:#6C8EF5;color:#6C8EF5">PCD Host</div>
+              <div class="kanban-card">
+                <div class="kanban-card-title">esxi-05</div>
+                <div class="kanban-card-sub" style="color:#6C8EF5">✓ Converted</div>
+                <div class="kanban-card-action" style="margin-top:7px"><button class="action-btn btn-ghost" style="font-size:10px;width:100%">View in PCD</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,35 @@
+<h2>How does the user reach an ESXi host page?</h2>
+<p class="subtitle">This determines the top-level navigation structure for the redesigned cluster conversion flow.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Cluster → ESXi Hosts (drill-down)</h3>
+      <p>User picks a VMware cluster first. The cluster page lists all its ESXi hosts with capacity bars. Clicking a host opens the per-ESXi detail page.</p>
+      <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:13px">
+        <strong>Cluster Conversions</strong> › <span style="opacity:0.6">my-cluster</span> › <span style="opacity:0.6">esxi-01</span>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Flat ESXi host list (no cluster grouping)</h3>
+      <p>One page shows all ESXi hosts across all clusters, sorted by eligibility (empty hosts first). Clicking a host opens the per-ESXi detail page.</p>
+      <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:13px">
+        <strong>Host Migrations</strong> › <span style="opacity:0.6">esxi-01</span>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Cluster page with expandable ESXi rows (no separate drill-down)</h3>
+      <p>Cluster page shows collapsible rows — expand an ESXi row in-place to see its VMs, capacity, and actions. No separate page per host.</p>
+      <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:13px">
+        <strong>Cluster Conversions</strong> › <span style="opacity:0.6">my-cluster</span> <span style="opacity:0.4">[▼ esxi-01 expanded]</span>
+      </div>
+    </div>
+  </div>
+</div>

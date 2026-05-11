@@ -1,0 +1,213 @@
+<h2>Approach A — Detailed Design</h2>
+<p class="subtitle">Full cluster detail view with ESXi accordion rows. Click any row to see it expanded.</p>
+
+<style>
+* { box-sizing: border-box; }
+.screen-wrap { background: #12151f; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); font-size: 12px; }
+.topbar { background: #1d2132; padding: 9px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.topbar-title { font-weight: 700; font-size: 13px; }
+.topbar-breadcrumb { opacity: 0.4; font-size: 11px; }
+.topbar-badge { background: rgba(108,142,245,0.2); color: #6C8EF5; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600; margin-left: auto; }
+.body { padding: 16px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4; }
+.progress-summary { display: flex; gap: 14px; }
+.prog-item { font-size: 10px; display: flex; align-items: center; gap: 5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+
+/* ESXi accordion */
+.esxi-accordion { display: flex; flex-direction: column; gap: 5px; }
+.esxi-item { border-radius: 7px; overflow: hidden; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); transition: border-color 0.15s; }
+.esxi-item.expanded { border-color: rgba(108,142,245,0.3); }
+.esxi-item:hover { border-color: rgba(255,255,255,0.15); cursor:pointer; }
+.esxi-header { padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.chevron { font-size: 9px; opacity: 0.4; width: 14px; transition: transform 0.15s; }
+.expanded .chevron { transform: rotate(90deg); opacity: 0.8; }
+.esxi-name { font-weight: 600; font-size: 12px; flex: 1; font-family: monospace; }
+.vm-count-bar { display: flex; align-items: center; gap: 6px; }
+.vm-count-bg { width: 60px; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+.vm-count-fill { height: 100%; border-radius: 3px; }
+.vm-count-label { font-size: 10px; min-width: 42px; text-align: right; }
+.chip { border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 600; }
+.chip-busy { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+.chip-empty { background: rgba(72,199,142,0.15); color: #48c78e; }
+.chip-maint { background: rgba(255,185,0,0.15); color: #ffb900; }
+.chip-pcd { background: rgba(108,142,245,0.15); color: #6C8EF5; }
+.action-area { display: flex; gap: 6px; align-items: center; }
+.btn { border-radius: 5px; padding: 4px 10px; font-size: 10px; font-weight: 600; border: none; cursor: pointer; }
+.btn-primary { background: #6C8EF5; color: #fff; }
+.btn-secondary { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+.btn-warn { background: #f5a623; color: #111; }
+.btn-success { background: #48c78e; color: #111; }
+.btn-muted { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); font-size:10px; padding:3px 8px; border-radius:4px; border:none; cursor:default; }
+
+/* Expanded content */
+.esxi-expanded { border-top: 1px solid rgba(255,255,255,0.06); padding: 12px 14px; background: rgba(0,0,0,0.2); }
+.vm-table-wrap { overflow: hidden; border-radius: 5px; border: 1px solid rgba(255,255,255,0.07); }
+.vm-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.vm-table thead td { padding: 6px 8px; background: rgba(255,255,255,0.04); opacity: 0.5; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.vm-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+.vm-table td { padding: 7px 8px; border-top: 1px solid rgba(255,255,255,0.04); }
+.vm-check { width: 13px; height: 13px; accent-color: #6C8EF5; }
+.vm-name { font-weight: 600; }
+.vm-os { opacity: 0.4; font-size: 10px; }
+.vm-res { opacity: 0.45; font-size: 10px; font-family: monospace; }
+.migrating-badge { background: rgba(255,185,0,0.12); color: #ffb900; border-radius: 3px; padding: 1px 6px; font-size: 9px; }
+.migrated-badge { background: rgba(72,199,142,0.12); color: #48c78e; border-radius: 3px; padding: 1px 6px; font-size: 9px; }
+.pending-badge { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.45); border-radius: 3px; padding: 1px 6px; font-size: 9px; }
+
+.expanded-actions { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+.select-all-label { font-size: 10px; opacity: 0.5; cursor: pointer; }
+.spacer { flex: 1; }
+.note { font-size: 10px; opacity: 0.35; }
+
+/* State callout */
+.state-callout { background: rgba(108,142,245,0.06); border: 1px solid rgba(108,142,245,0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 11px; color: rgba(108,142,245,0.9); }
+.state-callout.warn { background: rgba(255,185,0,0.06); border-color: rgba(255,185,0,0.2); color: rgba(255,185,0,0.9); }
+.state-callout.success { background: rgba(72,199,142,0.06); border-color: rgba(72,199,142,0.2); color: rgba(72,199,142,0.9); }
+</style>
+
+<div class="screen-wrap">
+  <div class="topbar">
+    <span class="topbar-title">Cluster Conversions</span>
+    <span class="topbar-breadcrumb">› prod-vcenter › prod-cluster-01</span>
+    <div class="topbar-badge">4 hosts · 1 eligible</div>
+  </div>
+  <div class="body">
+    <div class="section-header">
+      <span class="section-label">ESXi Hosts</span>
+      <div class="progress-summary">
+        <div class="prog-item"><div class="dot" style="background:#ff6b6b"></div>2 Busy</div>
+        <div class="prog-item"><div class="dot" style="background:#48c78e"></div>1 Empty</div>
+        <div class="prog-item"><div class="dot" style="background:#ffb900"></div>1 Maintenance</div>
+        <div class="prog-item"><div class="dot" style="background:#6C8EF5"></div>0 Converted</div>
+      </div>
+    </div>
+
+    <div class="esxi-accordion">
+
+      <!-- Row 1: Busy, collapsed -->
+      <div class="esxi-item">
+        <div class="esxi-header">
+          <span class="chevron">▶</span>
+          <span class="esxi-name">esxi-01.prod.local</span>
+          <div class="vm-count-bar">
+            <div class="vm-count-bg"><div class="vm-count-fill" style="width:20%;background:#ff6b6b"></div></div>
+            <span class="vm-count-label" style="color:#ff6b6b">12 VMs</span>
+          </div>
+          <span class="chip chip-busy">Busy</span>
+          <div class="action-area">
+            <button class="btn btn-secondary">Migrate VMs</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Busy, EXPANDED with VM table -->
+      <div class="esxi-item expanded">
+        <div class="esxi-header">
+          <span class="chevron">▶</span>
+          <span class="esxi-name">esxi-02.prod.local</span>
+          <div class="vm-count-bar">
+            <div class="vm-count-bg"><div class="vm-count-fill" style="width:70%;background:#ffb900"></div></div>
+            <span class="vm-count-label" style="color:#ffb900">3 VMs</span>
+          </div>
+          <span class="chip chip-busy">Busy</span>
+          <div class="action-area">
+            <button class="btn btn-primary">Migrate VMs</button>
+          </div>
+        </div>
+        <div class="esxi-expanded">
+          <div class="vm-table-wrap">
+            <table class="vm-table">
+              <thead>
+                <tr>
+                  <td style="width:28px"><input type="checkbox" class="vm-check" checked></td>
+                  <td>VM Name</td>
+                  <td>OS</td>
+                  <td>Resources</td>
+                  <td>Status</td>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox" class="vm-check" checked></td>
+                  <td><span class="vm-name">web-server-01</span></td>
+                  <td><span class="vm-os">Ubuntu 22.04</span></td>
+                  <td><span class="vm-res">4 vCPU · 8 GB</span></td>
+                  <td><span class="pending-badge">Pending</span></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="vm-check" checked></td>
+                  <td><span class="vm-name">db-primary-01</span></td>
+                  <td><span class="vm-os">CentOS 7</span></td>
+                  <td><span class="vm-res">8 vCPU · 32 GB</span></td>
+                  <td><span class="pending-badge">Pending</span></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="vm-check"></td>
+                  <td><span class="vm-name">monitoring-01</span></td>
+                  <td><span class="vm-os">Ubuntu 20.04</span></td>
+                  <td><span class="vm-res">2 vCPU · 4 GB</span></td>
+                  <td><span class="migrating-badge">⟳ Migrating</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="expanded-actions">
+            <span class="select-all-label">Select all</span>
+            <span class="spacer"></span>
+            <span class="note">2 selected</span>
+            <button class="btn btn-primary">Migrate Selected (2) →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Empty, show maintenance button -->
+      <div class="esxi-item">
+        <div class="esxi-header">
+          <span class="chevron">▶</span>
+          <span class="esxi-name">esxi-03.prod.local</span>
+          <div class="vm-count-bar">
+            <div class="vm-count-bg"><div class="vm-count-fill" style="width:100%;background:#48c78e"></div></div>
+            <span class="vm-count-label" style="color:#48c78e">0 VMs ✓</span>
+          </div>
+          <span class="chip chip-empty">Empty</span>
+          <div class="action-area">
+            <button class="btn btn-warn">Put in Maintenance</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Maintenance mode, show Convert button -->
+      <div class="esxi-item">
+        <div class="esxi-header">
+          <span class="chevron">▶</span>
+          <span class="esxi-name">esxi-04.prod.local</span>
+          <div class="vm-count-bar">
+            <div class="vm-count-bg"><div class="vm-count-fill" style="width:100%;background:#6C8EF5"></div></div>
+            <span class="vm-count-label" style="color:#6C8EF5">0 VMs</span>
+          </div>
+          <span class="chip chip-maint">Maintenance</span>
+          <div class="action-area">
+            <button class="btn btn-success">Convert to PCD Host</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Legend callouts -->
+    <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 6px;">
+      <div class="state-callout">
+        <strong>Migrate Selected →</strong> opens existing Migration form pre-populated with selected VMs and source host. No new form needed.
+      </div>
+      <div class="state-callout warn">
+        <strong>Put in Maintenance</strong> calls vCenter maintenance mode API via existing CordonHost endpoint. Button disabled until VM count = 0.
+      </div>
+      <div class="state-callout success">
+        <strong>Convert to PCD Host</strong> creates a standalone <code>ESXIMigration</code> CR (decoupled from ClusterMigration). Tracks conversion progress in this row.
+      </div>
+    </div>
+
+  </div>
+</div>
