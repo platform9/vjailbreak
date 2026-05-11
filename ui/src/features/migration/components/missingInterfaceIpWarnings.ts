@@ -1,6 +1,4 @@
 type NetworkInterfaceWithIp = {
-  mac?: string
-  network?: string
   ipAddress?: string[] | string | null
 }
 
@@ -13,10 +11,7 @@ type VmWithNetworkInterfaces = {
 }
 
 export type MissingInterfaceIpWarning = {
-  key: string
   vmName: string
-  macAddress: string
-  networkName?: string
 }
 
 const hasDiscoveredIp = (ipAddress?: string[] | string | null) => {
@@ -34,22 +29,13 @@ const isPoweredOnVm = (vm: VmWithNetworkInterfaces) => {
 export const getMissingInterfaceIpWarnings = (
   selectedVms: VmWithNetworkInterfaces[]
 ): MissingInterfaceIpWarning[] => {
-  return selectedVms.filter(isPoweredOnVm).flatMap((vm) => {
-    const vmName = vm.name || vm.id || 'Unknown VM'
-    const interfaces = Array.isArray(vm.networkInterfaces) ? vm.networkInterfaces : []
+  const vmNames = selectedVms
+    .filter(isPoweredOnVm)
+    .filter((vm) => {
+      const interfaces = Array.isArray(vm.networkInterfaces) ? vm.networkInterfaces : []
+      return interfaces.some((networkInterface) => !hasDiscoveredIp(networkInterface.ipAddress))
+    })
+    .map((vm) => vm.name || vm.id || 'Unknown VM')
 
-    return interfaces
-      .map((networkInterface, interfaceIndex) => ({ networkInterface, interfaceIndex }))
-      .filter(({ networkInterface }) => !hasDiscoveredIp(networkInterface.ipAddress))
-      .map(({ networkInterface, interfaceIndex }) => {
-        const macAddress = networkInterface.mac || 'MAC unavailable'
-
-        return {
-          key: `${vm.id || vmName}-${interfaceIndex}-${macAddress}`,
-          vmName,
-          macAddress,
-          networkName: networkInterface.network
-        }
-      })
-  })
+  return Array.from(new Set(vmNames)).map((vmName) => ({ vmName }))
 }
