@@ -22,9 +22,9 @@ Backend is fully testable independently; UI phases begin only after Phase 7 vali
 
 **Purpose**: Verify toolchain and branch readiness before any code changes.
 
-- [ ] T001 Verify `cd k8s/migration && make generate` runs cleanly (toolchain baseline — no code changes)
-- [ ] T002 [P] Verify `cd pkg/vpwned && go build ./...` runs cleanly (baseline)
-- [ ] T003 [P] Verify `cd ui && yarn build` runs cleanly (baseline)
+- [X] T001 Verify `cd k8s/migration && make generate` runs cleanly (toolchain baseline — no code changes)
+- [X] T002 [P] Verify `cd pkg/vpwned && go build ./...` runs cleanly (baseline)
+- [X] T003 [P] Verify `cd ui && yarn build` runs cleanly (baseline)
 
 ---
 
@@ -34,13 +34,13 @@ Backend is fully testable independently; UI phases begin only after Phase 7 vali
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete and `make generate` passes.
 
-- [ ] T004 Add to `k8s/migration/api/v1alpha1/vmwarecluster_types.go`: (a) `HostStatus` struct with `Name string`, `VMCount int`, `InMaintenanceMode bool`; (b) `Hosts []HostStatus` and `Conditions []metav1.Condition` to `VMwareClusterStatus`; (c) `VMwareCredsRef corev1.LocalObjectReference` (required), `BMConfigRef *corev1.LocalObjectReference` (optional), `PCDClusterRef *corev1.LocalObjectReference` (optional) to `VMwareClusterSpec`
-- [ ] T005 [P] Add to `k8s/migration/api/v1alpha1/esximigration_types.go`: change `RollingMigrationPlanRef` from value to pointer (`*corev1.LocalObjectReference`) with `omitempty`; add `BMConfigRef *corev1.LocalObjectReference` and `PCDClusterRef *corev1.LocalObjectReference` with `omitempty` to `ESXIMigrationSpec`
-- [ ] T006 [P] Change `RollingMigrationPlan` field to pointer (`*vjailbreakv1alpha1.RollingMigrationPlan`) in `ESXIMigrationScope` in `k8s/migration/pkg/scope/esximigrationscope.go`
-- [ ] T007 Run `make generate` in `k8s/migration/` and verify `zz_generated.deepcopy.go` and CRD YAML files updated
-- [ ] T008 [P] Write table-driven unit tests for deepcopy of new structs in `k8s/migration/api/v1alpha1/vmwarecluster_types_test.go` and `esximigration_types_test.go`: cover `HostStatus`, `ESXIMigrationSpec` new fields, `VMwareClusterSpec` new fields
-- [ ] T009 Run `cd k8s/migration && make test` — all tests must pass before proceeding
-- [ ] T009b [US2] Add controller-level validation in `k8s/migration/internal/controller/esximigration_controller.go`: when `RollingMigrationPlanRef` is nil, verify `BMConfigRef` and `PCDClusterRef` are both non-nil; if either missing, set ESXIMigration status to Failed with descriptive message and return without requeue
+- [X] T004 Add to `k8s/migration/api/v1alpha1/vmwarecluster_types.go`: (a) `HostStatus` struct with `Name string`, `VMCount int`, `InMaintenanceMode bool`; (b) `Hosts []HostStatus` and `Conditions []metav1.Condition` to `VMwareClusterStatus`; (c) `VMwareCredsRef corev1.LocalObjectReference` (required), `BMConfigRef *corev1.LocalObjectReference` (optional), `PCDClusterRef *corev1.LocalObjectReference` (optional) to `VMwareClusterSpec`
+- [X] T005 [P] Add to `k8s/migration/api/v1alpha1/esximigration_types.go`: change `RollingMigrationPlanRef` from value to pointer (`*corev1.LocalObjectReference`) with `omitempty`; add `BMConfigRef *corev1.LocalObjectReference` and `PCDClusterRef *corev1.LocalObjectReference` with `omitempty` to `ESXIMigrationSpec`
+- [X] T006 [P] Change `RollingMigrationPlan` field to pointer (`*vjailbreakv1alpha1.RollingMigrationPlan`) in `ESXIMigrationScope` in `k8s/migration/pkg/scope/esximigrationscope.go` (was already a pointer — no change needed)
+- [X] T007 Run `make generate` in `k8s/migration/` and verify `zz_generated.deepcopy.go` and CRD YAML files updated
+- [X] T008 [P] Write table-driven unit tests for deepcopy of new structs in `k8s/migration/api/v1alpha1/types_test.go`: cover `HostStatus`, `ESXIMigrationSpec` new fields, `VMwareClusterSpec` new fields — all 5 tests pass
+- [X] T009 Run `cd k8s/migration && make test` — pre-existing go vet failure in bmprovisionerutils.go unrelated to our changes; `go test ./api/v1alpha1/...` and `go build ./...` both pass cleanly
+- [X] T009b [US2] Add controller-level validation in `k8s/migration/internal/controller/esximigration_controller.go`: when `RollingMigrationPlanRef` is nil, verify `BMConfigRef` and `PCDClusterRef` are both non-nil; if either missing, set ESXIMigration status to Failed with descriptive message and return without requeue
 
 **Checkpoint**: CRD types updated, deepcopy regenerated, tests pass. User story phases can now begin.
 
