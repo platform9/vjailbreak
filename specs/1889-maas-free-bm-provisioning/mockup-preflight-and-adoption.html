@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vJailbreak — UX Improvements: Pre-flight + Adoption Ideas</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1017; color: #e0e4f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; }
+
+h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.page-sub { font-size: 12px; opacity: 0.4; margin-bottom: 28px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.panel { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; }
+.panel h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.4; margin-bottom: 14px; }
+.panel .panel-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.panel .panel-sub { font-size: 11px; opacity: 0.4; margin-bottom: 16px; }
+
+/* Pre-flight dialog mockup */
+.dialog { background: #1a1f2e; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 20px; max-width: 400px; }
+.dialog-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.dialog-sub { font-size: 11px; opacity: 0.4; margin-bottom: 16px; }
+.check-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.check-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12px; }
+.check-pass { background: rgba(72,199,142,0.07); border: 1px solid rgba(72,199,142,0.2); }
+.check-fail { background: rgba(255,107,107,0.07); border: 1px solid rgba(255,107,107,0.2); }
+.check-warn { background: rgba(255,185,0,0.07); border: 1px solid rgba(255,185,0,0.2); }
+.check-icon { font-size: 14px; min-width: 20px; text-align: center; }
+.check-pass .check-icon { color: #48c78e; }
+.check-fail .check-icon { color: #ff7070; }
+.check-warn .check-icon { color: #ffb900; }
+.check-label { flex: 1; }
+.check-detail { font-size: 10px; opacity: 0.5; }
+.dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.btn { padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; }
+.btn-primary { background: #6C8EF5; color: #fff; }
+.btn-secondary { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+.btn-disabled { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.25); cursor: not-allowed; }
+
+/* BMC config inline selector */
+.config-row { display: flex; flex-direction: column; gap: 8px; }
+.config-item { display: flex; align-items: center; gap: 8px; }
+.config-label { font-size: 11px; opacity: 0.5; min-width: 100px; }
+.select-mock { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 5px; padding: 5px 10px; font-size: 11px; display: flex; align-items: center; justify-content: space-between; min-width: 160px; cursor: pointer; }
+.select-mock:hover { border-color: rgba(108,142,245,0.4); }
+
+/* Adoption ideas list */
+.idea-list { display: flex; flex-direction: column; gap: 10px; }
+.idea { display: flex; gap: 12px; align-items: flex-start; }
+.idea-num { width: 22px; height: 22px; border-radius: 50%; background: rgba(108,142,245,0.15); color: #6C8EF5; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.idea-body {}
+.idea-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.idea-desc { font-size: 11px; opacity: 0.45; line-height: 1.5; }
+.idea-tag { display: inline-block; background: rgba(72,199,142,0.1); color: #48c78e; border-radius: 3px; padding: 1px 6px; font-size: 9px; font-weight: 700; margin-left: 4px; text-transform: uppercase; }
+.idea-tag.phase2 { background: rgba(255,185,0,0.1); color: #ffb900; }
+
+/* Notification preview */
+.notif { background: #1d2132; border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(255,255,255,0.07); margin-bottom: 8px; }
+.notif-icon { font-size: 16px; }
+.notif-body { flex: 1; }
+.notif-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.notif-sub { font-size: 11px; opacity: 0.4; }
+.notif-time { font-size: 10px; opacity: 0.25; }
+.notif-action { font-size: 10px; color: #6C8EF5; cursor: pointer; margin-top: 4px; }
+
+/* Smart suggestion banner */
+.suggestion { background: linear-gradient(135deg, rgba(72,199,142,0.07), rgba(108,142,245,0.05)); border: 1px solid rgba(72,199,142,0.2); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.sug-title { font-size: 12px; font-weight: 600; color: #48c78e; margin-bottom: 4px; }
+.sug-body { font-size: 11px; opacity: 0.6; margin-bottom: 8px; }
+.sug-actions { display: flex; gap: 8px; }
+.sug-btn { padding: 4px 12px; border-radius: 5px; font-size: 10px; font-weight: 600; border: none; cursor: pointer; }
+.sug-btn-yes { background: rgba(72,199,142,0.2); color: #48c78e; }
+.sug-btn-no { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
+
+/* Provider cards */
+.provider-cards { display: flex; gap: 8px; }
+.provider-card { flex: 1; border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; padding: 12px; cursor: pointer; transition: border-color 0.15s; }
+.provider-card:hover { border-color: rgba(108,142,245,0.35); }
+.provider-card.selected { border-color: #6C8EF5; background: rgba(108,142,245,0.07); }
+.pc-icon { font-size: 20px; margin-bottom: 6px; }
+.pc-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.pc-sub { font-size: 10px; opacity: 0.4; }
+.pc-badge { display: inline-block; background: rgba(72,199,142,0.1); color: #48c78e; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 700; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>vJailbreak UX Improvements — Mockups & Adoption Ideas</h1>
+<p class="page-sub">Spec folder reference · Feature 1889-maas-free-bm-provisioning</p>
+
+<div class="grid">
+
+  <!-- PANEL 1: Pre-flight check dialog -->
+  <div class="panel">
+    <h2>Improvement ①</h2>
+    <div class="panel-title">Pre-flight Check Dialog</div>
+    <div class="panel-sub">Shown before "Convert to PCD Host" — prevents failed conversions by checking all conditions first</div>
+    <div class="dialog">
+      <div class="dialog-title">Convert esxi-03 to PCD Host</div>
+      <div class="dialog-sub">Checking prerequisites…</div>
+      <div class="check-list">
+        <div class="check-item check-pass">
+          <span class="check-icon">✓</span>
+          <div>
+            <div class="check-label">VM count = 0</div>
+            <div class="check-detail">No VMs running on this host</div>
+          </div>
+        </div>
+        <div class="check-item check-pass">
+          <span class="check-icon">✓</span>
+          <div>
+            <div class="check-label">Host in maintenance mode</div>
+            <div class="check-detail">vCenter maintenance active</div>
+          </div>
+        </div>
+        <div class="check-item check-pass">
+          <span class="check-icon">✓</span>
+          <div>
+            <div class="check-label">BMC reachable</div>
+            <div class="check-detail">IPMI at 192.168.10.53 responded in 42ms</div>
+          </div>
+        </div>
+        <div class="check-item check-warn">
+          <span class="check-icon">!</span>
+          <div>
+            <div class="check-label">PCD cluster not configured</div>
+            <div class="check-detail">Select a target PCD cluster below</div>
+          </div>
+        </div>
+      </div>
+      <div class="config-row" style="margin-bottom:16px">
+        <div class="config-item">
+          <span class="config-label">PCD Cluster</span>
+          <div class="select-mock">prod-pcd-cluster-01 <span style="opacity:0.3">▾</span></div>
+        </div>
+        <div class="config-item">
+          <span class="config-label">BMC Config</span>
+          <div class="select-mock" style="border-color:rgba(108,142,245,0.4)">ipmi-default <span style="opacity:0.3">▾</span></div>
+        </div>
+      </div>
+      <div class="dialog-buttons">
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-primary">Start Conversion</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: Smart suggestion -->
+  <div class="panel">
+    <h2>Improvement ②</h2>
+    <div class="panel-title">Smart Suggestions + Auto-sort</div>
+    <div class="panel-sub">Surface the next best action. Sort hosts by conversion readiness.</div>
+
+    <div class="suggestion">
+      <div class="sug-title">💡 esxi-02 is almost ready to drain</div>
+      <div class="sug-body">Only 3 VMs remain. 2 are already migrating. Suggest migrating <strong>monitoring-01</strong> (2 vCPU, 4 GB — smallest) to unblock this host.</div>
+      <div class="sug-actions">
+        <button class="sug-btn sug-btn-yes">Migrate monitoring-01 →</button>
+        <button class="sug-btn sug-btn-no">Dismiss</button>
+      </div>
+    </div>
+
+    <div style="font-size:11px;opacity:0.5;margin-bottom:8px">Adoption impact:</div>
+    <div class="idea-list">
+      <div class="idea">
+        <div class="idea-num">A</div>
+        <div class="idea-body">
+          <div class="idea-title">Sort by readiness by default</div>
+          <div class="idea-desc">Empty hosts first → fewer VMs → busy. Operators see what to do next without scrolling.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">B</div>
+        <div class="idea-body">
+          <div class="idea-title">"What's blocking?" tooltip</div>
+          <div class="idea-desc">Hover VM count chip → list of blocking VM names. No expand needed to understand state.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">C</div>
+        <div class="idea-body">
+          <div class="idea-title">Auto-prompt maintenance when VM count hits 0</div>
+          <div class="idea-desc">Banner: "esxi-02 is now empty. Put it in maintenance mode?" Removes manual polling.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: BMC Provider selection -->
+  <div class="panel">
+    <h2>Improvement ③ — Phase 2 (MAAS-free)</h2>
+    <div class="panel-title">Inline BMC Provider Selection</div>
+    <div class="panel-sub">Visual provider picker instead of YAML-only BMConfig. Lowers barrier for operators without Kubernetes experience.</div>
+
+    <div style="font-size:11px;opacity:0.4;margin-bottom:10px">Choose how to provision this host's bare metal:</div>
+    <div class="provider-cards">
+      <div class="provider-card selected">
+        <div class="pc-icon">⚡</div>
+        <div class="pc-title">Direct IPMI</div>
+        <div class="pc-sub">Use BMC IP directly. No extra infra required.</div>
+        <div class="pc-badge">Simplest</div>
+      </div>
+      <div class="provider-card">
+        <div class="pc-icon">🔥</div>
+        <div class="pc-title">OpenStack Ironic</div>
+        <div class="pc-sub">Managed provisioning via existing PCD Ironic service.</div>
+      </div>
+      <div class="provider-card">
+        <div class="pc-icon">🧱</div>
+        <div class="pc-title">MAAS</div>
+        <div class="pc-sub">Existing MAAS deployment handles provisioning.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;padding:12px;background:rgba(108,142,245,0.06);border:1px solid rgba(108,142,245,0.15);border-radius:6px">
+      <div style="font-size:11px;font-weight:600;margin-bottom:8px;color:#7ca0f0">IPMI Configuration</div>
+      <div class="config-row">
+        <div class="config-item">
+          <span class="config-label">BMC Address</span>
+          <div class="select-mock" style="min-width:140px;font-family:monospace">192.168.10.53</div>
+        </div>
+        <div class="config-item">
+          <span class="config-label">Username</span>
+          <div class="select-mock" style="min-width:140px">admin</div>
+        </div>
+        <div class="config-item">
+          <span class="config-label">Use Redfish?</span>
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="checkbox" checked style="accent-color:#6C8EF5"> Auto-detect
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 4: Notification & adoption ideas -->
+  <div class="panel">
+    <h2>Adoption Ideas</h2>
+    <div class="panel-title">Reduce friction across the conversion journey</div>
+    <div class="panel-sub">Key ideas to drive adoption with minimal development effort</div>
+
+    <div style="font-size:11px;opacity:0.4;margin-bottom:10px">In-app notifications (new)</div>
+    <div class="notif">
+      <div class="notif-icon">✅</div>
+      <div class="notif-body">
+        <div class="notif-title">esxi-03 is now a PCD host</div>
+        <div class="notif-sub">prod-cluster-01 · Conversion completed in 8m 42s</div>
+        <div class="notif-action">View in PCD dashboard →</div>
+      </div>
+      <div class="notif-time">just now</div>
+    </div>
+    <div class="notif">
+      <div class="notif-icon">🎯</div>
+      <div class="notif-body">
+        <div class="notif-title">esxi-02 is now empty</div>
+        <div class="notif-sub">All 3 VMs migrated · Ready for maintenance</div>
+        <div class="notif-action">Put in Maintenance →</div>
+      </div>
+      <div class="notif-time">2m ago</div>
+    </div>
+
+    <div style="font-size:11px;opacity:0.4;margin:14px 0 10px">High-impact adoption improvements</div>
+    <div class="idea-list">
+      <div class="idea">
+        <div class="idea-num">1</div>
+        <div class="idea-body">
+          <div class="idea-title">Guided setup wizard <span class="idea-tag">phase 1</span></div>
+          <div class="idea-desc">First-visit wizard: connect vCenter → see clusters → click a host → follow 3-step drain/maintain/convert flow. Removes "where do I start?" confusion.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">2</div>
+        <div class="idea-body">
+          <div class="idea-title">Cluster conversion ETA <span class="idea-tag">phase 1</span></div>
+          <div class="idea-desc">Show "~4h to convert full cluster" based on average migration time per VM × remaining VM count. Helps operators plan maintenance windows.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">3</div>
+        <div class="idea-body">
+          <div class="idea-title">Batch host operations <span class="idea-tag phase2">phase 2</span></div>
+          <div class="idea-desc">Checkbox-select multiple empty+maintenance hosts → "Convert All (3) to PCD". Speeds up final phase of large cluster migrations.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">4</div>
+        <div class="idea-body">
+          <div class="idea-title">No-MAAS "quick start" badge <span class="idea-tag phase2">phase 2</span></div>
+          <div class="idea-desc">Prominently show "Works without MAAS" when IPMI provider is selected. Key adoption message for customers blocked on MAAS installation.</div>
+        </div>
+      </div>
+      <div class="idea">
+        <div class="idea-num">5</div>
+        <div class="idea-body">
+          <div class="idea-title">Rollback / re-add to VMware hint <span class="idea-tag">phase 1</span></div>
+          <div class="idea-desc">On conversion failure, show "Exit Maintenance and re-add to VMware cluster" as recovery action. Reduces fear of irreversibility.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
