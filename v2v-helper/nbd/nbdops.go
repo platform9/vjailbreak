@@ -86,7 +86,7 @@ var fixedOptArgs = libnbd.BlockStatusOptargs{
 // HandlePoolSize is the number of libnbd handles created up-front and shared
 // across worker goroutines. libnbd serializes commands per handle, so real
 // pipelining only happens at the granularity of the pool size.
-const HandlePoolSize = 8
+const HandlePoolSize = 16
 
 // SubRangeSize is the chunk size used to split a single large data block into
 // independently-fetched sub-ranges that can run on different handles in parallel.
@@ -211,7 +211,7 @@ func (nbdserver *NBDServer) StartNBDServer(vm *object.VirtualMachine, server, us
 	// Ref: https://tecblog.au.de/veeam-v12-12-1-double-your-nbd-backup-performance/
 	configFile := "/home/fedora/vddk.conf"
 	configContent := `vixDiskLib.nfcAio.Session.BufSizeIn64KB=16
-vixDiskLib.nfcAio.Session.BufCount=4`
+vixDiskLib.nfcAio.Session.BufCount=8`
 	err = os.WriteFile(configFile, []byte(configContent), 0644)
 	if err != nil {
 		return err
