@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, Collapse, IconButton, InputAdornment, Tooltip } from '@mui/material'
+import { Alert, Box, Collapse, IconButton, InputAdornment, Link, Tooltip } from '@mui/material'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 import CheckIcon from '@mui/icons-material/Check'
 import InfoOutlined from '@mui/icons-material/InfoOutlined'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 
 import { useForm } from 'react-hook-form'
 
@@ -97,7 +98,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
   const [submitting, setSubmitting] = useState(false)
   const [validatingVmwareCreds, setValidatingVmwareCreds] = useState(false)
   const [vmwareCredsValidated, setVmwareCredsValidated] = useState<boolean | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<React.ReactNode | null>(null)
   const [createdCredentialName, setCreatedCredentialName] = useState<string | null>(null)
   const [promptAddPcdOpen, setPromptAddPcdOpen] = useState(false)
 
@@ -142,6 +143,44 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     insecureValue
   ])
 
+  const buildVmwareCredsError = useCallback((rawMessage?: string) => {
+    const msg = (rawMessage || '').trim()
+    const lowered = msg.toLowerCase()
+
+    const isConnectivityOrDnsIssue =
+      lowered.includes('no route to host') ||
+      lowered.includes('dial tcp') ||
+      lowered.includes('i/o timeout') ||
+      lowered.includes('connection refused') ||
+      lowered.includes('no such host') ||
+      lowered.includes('server misbehaving') ||
+      lowered.includes('temporary failure in name resolution')
+
+    if (!isConnectivityOrDnsIssue) return msg || 'Validation failed'
+
+    return (
+      <Box sx={{ display: 'grid', gap: 0.5 }}>
+        <span>
+          Cannot connect to the vCenter server. Check the vCenter FQDN/IP and DNS/network routing.
+        </span>
+        <span>
+          Learn more:{' '}
+          <Link
+            href="https://platform9.github.io/vjailbreak/introduction/getting_started/#configure-dns-resolution"
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="always"
+          >
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+              Configure DNS resolution
+              <OpenInNewIcon fontSize="inherit" />
+            </Box>
+          </Link>
+        </span>
+      </Box>
+    )
+  }, [])
+
   const handleValidationStatus = useCallback(
     (status: string, message?: string) => {
       if (status === 'Succeeded') {
@@ -171,7 +210,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       } else if (status === 'Failed') {
         setVmwareCredsValidated(false)
         setValidatingVmwareCreds(false)
-        setFormError(message || 'Validation failed')
+        setFormError(buildVmwareCredsError(message))
 
         track(AMPLITUDE_EVENTS.VMWARE_CREDENTIALS_FAILED, {
           credentialName: createdCredentialName,
@@ -208,6 +247,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
       setSubmitting(false)
     },
     [
+      buildVmwareCredsError,
       createdCredentialName,
       refetchOpenstackCreds,
       refetchVmwareCreds,
@@ -290,14 +330,18 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
 
         setVmwareCredsValidated(false)
         setValidatingVmwareCreds(false)
-        setFormError(
-          'Error creating VMware credentials: ' +
-            (axios.isAxiosError(error) ? error?.response?.data?.message : String(error))
-        )
+
+        const backendMessage = axios.isAxiosError(error)
+          ? error?.response?.data?.message
+          : error instanceof Error
+            ? error.message
+            : String(error)
+
+        setFormError(buildVmwareCredsError(backendMessage))
         setSubmitting(false)
       }
     },
-    [reportError, track]
+    [buildVmwareCredsError, reportError, track]
   )
 
   const isSubmitDisabled = submitting || validatingVmwareCreds || !isValid
