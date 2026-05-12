@@ -987,7 +987,6 @@ func AppendUnique(slice []string, values ...string) []string {
 }
 
 // CreateOrUpdateVMwareMachine creates or updates a VMwareMachine object for the given VM
-//nolint:gocyclo
 func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo, datacenter string) error {
 	sanitizedVMName, err := netutils.GetVMK8sCompatibleName(vminfo.Name, vminfo.VMID, vmwcreds.Name)
@@ -1046,84 +1045,114 @@ func CreateOrUpdateVMwareMachine(ctx context.Context, client client.Client,
 
 	// Check if the object is present or not if not present create a new object and set init to true.
 	if apierrors.IsNotFound(getErr) {
-		// If not found, create a new object
-		vmwvm = &vjailbreakv1alpha1.VMwareMachine{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      vmwvmKey.Name,
-				Namespace: vmwcreds.Namespace,
-				Labels: map[string]string{
-					constants.VMwareCredsLabel:   vmwcreds.Name,
-					constants.ESXiNameLabel:      esxiK8sName,
-					constants.VMwareClusterLabel: clusterK8sName,
-				},
-				Annotations: map[string]string{
-					constants.VMwareDatacenterLabel: datacenter,
-				},
-			},
-			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-				VMInfo: *vminfo,
-			},
+		newVM, createErr := createNewVMwareMachine(ctx, client, vmwcreds, vminfo, vmwvmKey, esxiK8sName, clusterK8sName, datacenter)
+		if createErr != nil {
+			return createErr
 		}
-		// Create the new object
-		if err := client.Create(ctx, vmwvm); err != nil {
-			return fmt.Errorf("failed to create VMwareMachine: %w", err)
-		}
+		vmwvm = newVM
 		init = true
 	} else {
-		// Initialize labels map if needed
-		label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
-		currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
-		// Check if label already exists with same value
-		if vmwvm.Labels == nil || vmwvm.Labels[label] != trueString {
-			// Initialize labels map if needed
-			if vmwvm.Labels == nil {
-				vmwvm.Labels = make(map[string]string)
-			}
-			vmwvm.Labels[label] = trueString
-			// Update only if we made changes
-			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine label: %w", err)
-			}
-		}
-		// Set the new label
-		vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
-
-		if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
-			// update vminfo in case the VM has been moved by vMotion
-			assignedIP := ""
-			osType := ""
-
-			if vmwvm.Spec.VMInfo.AssignedIP != "" {
-				assignedIP = vmwvm.Spec.VMInfo.AssignedIP
-			}
-			if vmwvm.Spec.VMInfo.OSFamily != "" {
-				osType = vmwvm.Spec.VMInfo.OSFamily
-			}
-			vmwvm.Spec.VMInfo = *vminfo
-			if assignedIP != "" {
-				vmwvm.Spec.VMInfo.AssignedIP = assignedIP
-			}
-			if osType != "" && vmwvm.Spec.VMInfo.OSFamily == "" {
-				vmwvm.Spec.VMInfo.OSFamily = osType
-			}
-			vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
-			vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
-
-			if vmwvm.Annotations == nil {
-				vmwvm.Annotations = make(map[string]string)
-			}
-			vmwvm.Annotations[constants.VMwareDatacenterLabel] = datacenter
-
-			if vmwvm.Spec.VMInfo.OSFamily == "" {
-				vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
-			}
-			// Update only if we made changes
-			if err = client.Update(ctx, vmwvm); err != nil {
-				return fmt.Errorf("failed to update VMwareMachine: %w", err)
-			}
+		if err := updateExistingVMwareMachine(ctx, client, vmwcreds, vminfo, vmwvm, esxiK8sName, clusterK8sName, datacenter); err != nil {
+			return err
 		}
 	}
 
+	return updateVMwareMachineStatus(ctx, client, vmwvm, vminfo, init)
+}
+
+// createNewVMwareMachine constructs and creates a new VMwareMachine object.
+func createNewVMwareMachine(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo,
+	vmwvmKey k8stypes.NamespacedName, esxiK8sName, clusterK8sName, datacenter string,
+) (*vjailbreakv1alpha1.VMwareMachine, error) {
+	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vmwvmKey.Name,
+			Namespace: vmwcreds.Namespace,
+			Labels: map[string]string{
+				constants.VMwareCredsLabel:   vmwcreds.Name,
+				constants.ESXiNameLabel:      esxiK8sName,
+				constants.VMwareClusterLabel: clusterK8sName,
+			},
+			Annotations: map[string]string{
+				constants.VMwareDatacenterLabel: datacenter,
+			},
+		},
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: *vminfo,
+		},
+	}
+	// Create the new object
+	if err := client.Create(ctx, vmwvm); err != nil {
+		return nil, fmt.Errorf("failed to create VMwareMachine: %w", err)
+	}
+	return vmwvm, nil
+}
+
+// updateExistingVMwareMachine refreshes labels, annotations and spec on an existing VMwareMachine.
+func updateExistingVMwareMachine(ctx context.Context, client client.Client,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vminfo *vjailbreakv1alpha1.VMInfo,
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, esxiK8sName, clusterK8sName, datacenter string,
+) error {
+	// Initialize labels map if needed
+	label := fmt.Sprintf("%s-%s", constants.VMwareCredsLabel, vmwcreds.Name)
+	currentOSFamily := vmwvm.Spec.VMInfo.OSFamily
+	// Check if label already exists with same value
+	if vmwvm.Labels == nil || vmwvm.Labels[label] != trueString {
+		// Initialize labels map if needed
+		if vmwvm.Labels == nil {
+			vmwvm.Labels = make(map[string]string)
+		}
+		vmwvm.Labels[label] = trueString
+		// Update only if we made changes
+		if err := client.Update(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to update VMwareMachine label: %w", err)
+		}
+	}
+	// Set the new label
+	vmwvm.Labels[constants.VMwareCredsLabel] = vmwcreds.Name
+
+	if !reflect.DeepEqual(vmwvm.Spec.VMInfo, *vminfo) || !reflect.DeepEqual(vmwvm.Labels[constants.ESXiNameLabel], esxiK8sName) || !reflect.DeepEqual(vmwvm.Labels[constants.VMwareClusterLabel], clusterK8sName) {
+		// update vminfo in case the VM has been moved by vMotion
+		assignedIP := ""
+		osType := ""
+
+		if vmwvm.Spec.VMInfo.AssignedIP != "" {
+			assignedIP = vmwvm.Spec.VMInfo.AssignedIP
+		}
+		if vmwvm.Spec.VMInfo.OSFamily != "" {
+			osType = vmwvm.Spec.VMInfo.OSFamily
+		}
+		vmwvm.Spec.VMInfo = *vminfo
+		if assignedIP != "" {
+			vmwvm.Spec.VMInfo.AssignedIP = assignedIP
+		}
+		if osType != "" && vmwvm.Spec.VMInfo.OSFamily == "" {
+			vmwvm.Spec.VMInfo.OSFamily = osType
+		}
+		vmwvm.Labels[constants.ESXiNameLabel] = esxiK8sName
+		vmwvm.Labels[constants.VMwareClusterLabel] = clusterK8sName
+
+		if vmwvm.Annotations == nil {
+			vmwvm.Annotations = make(map[string]string)
+		}
+		vmwvm.Annotations[constants.VMwareDatacenterLabel] = datacenter
+
+		if vmwvm.Spec.VMInfo.OSFamily == "" {
+			vmwvm.Spec.VMInfo.OSFamily = currentOSFamily
+		}
+		// Update only if we made changes
+		if err := client.Update(ctx, vmwvm); err != nil {
+			return fmt.Errorf("failed to update VMwareMachine: %w", err)
+		}
+	}
+	return nil
+}
+
+// updateVMwareMachineStatus writes status.powerState/migrated, preserving migrated for existing objects.
+func updateVMwareMachineStatus(ctx context.Context, client client.Client,
+	vmwvm *vjailbreakv1alpha1.VMwareMachine, vminfo *vjailbreakv1alpha1.VMInfo, init bool,
+) error {
 	// Assumption is if init is true, the object is new and it is not migrated hence mark migrated to false.
 	if init {
 		vmwvm.Status = vjailbreakv1alpha1.VMwareMachineStatus{
