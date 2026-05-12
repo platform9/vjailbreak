@@ -279,6 +279,8 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 
 func (osclient *OpenStackClients) AttachVolumeToVM(ctx context.Context, volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
+
+	osclient.ComputeClient.Microversion = "2.60"
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
