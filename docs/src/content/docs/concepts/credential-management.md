@@ -15,17 +15,6 @@ The credentials also take the Datacenter name and the VMs, Hosts being worked on
 
 Some VMware environments may be using self signed certificates, in such cases, you would need to "Allow insecure connection" option in the credentials.
 
-#### Important: VMware IP Discovery and Credential Revalidation
-VMware Tools and guest IP addresses can take some time to appear in vCenter after powering on a VM or making network changes.
-
-**Best Practice:**
-- Make all necessary configuration changes to your VMs in the vCenter UI first.
-- **Wait** until the IP addresses are clearly visible on the VM summary page in vCenter.
-- Only then click **Add Credential** or **Revalidate** in vJailbreak.
-
-Revalidating too early may result in missing IP information, which can prevent proper IP preservation on the destination and cause migration issues.
-
-> **Note**: vJailbreak will show a warning for VMs where network interfaces are detected but IPs could not be discovered.
 
 ## OpenStack/PCD Credentials
 OpenStack/PCD credentials are required to create VMs inside the OpenStack/PCD environment. The credentials are supplied via the `openstack.rc` file that is available in the PCD environment.
@@ -138,3 +127,48 @@ export OS_AUTH_TYPE=token
 * The `OS_AUTH_TOKEN` must be generated in your OpenStack environment and must be valid at the time of migration.
 * Token expiration is controlled by Keystone. If the token expires, the migration will fail and a new token must be provided.
 * The `openstack.rc` must contain both the `Domain` and the `Project`/`Tenant` information. When using the OpenStack credentials, the `Domain` and `Project`/`Tenant` information is used as the destination `domain` and `project`/`tenant` for the OpenStack/PCD environment.
+
+### Credential Revalidation
+
+Revalidation re-runs the same flow that runs on credential creation. It is triggered automatically by the controller and can also be initiated manually from the UI.
+
+![img1](../../../../public/images/revalidate_openstack_cred.png)
+![img1](../../../../public/images/revalidate_vmware_cred.png)
+
+#### What Revalidation Does
+
+When a credential is revalidated, vJailbreak performs two steps:
+
+1. **Authentication check** — verifies the credentials are still valid against the target environment (vCenter for VMware, Keystone for OpenStack/PCD). If authentication fails, the credential is marked invalid and migrations using it will be blocked.
+2. **Resource resync** — if authentication succeeds, vJailbreak re-fetches the full inventory of resources tied to that credential.
+
+**For VMware credentials**, revalidation refreshes:
+- Virtual Machines (CPU, memory, disks, networks, datastores, power state, guest IPs)
+- vCenter clusters and ESXi hosts
+- Stale VMs, clusters, and hosts removed from the source are also pruned from vJailbreak
+
+**For OpenStack/PCD credentials**, revalidation refreshes:
+- Compute flavors
+- Networks
+- Volume types
+- For PCD credentials: PCD clusters, hosts, and host configs
+
+#### When Revalidation Runs
+
+- **On credential creation** — initial validation + resource fetch.
+- **Periodically** — the controller reconciles every 1 hour by default to keep resources in sync. Default time to requeue creds can be changed in global setting page.
+- **Manually** — click the refresh button on the Credentials page to trigger an immediate revalidation.
+
+
+#### Important: VMware IP Discovery and Credential Revalidation
+
+VMware Tools and guest IP addresses can take some time to appear in vCenter after powering on a VM or making network changes.
+
+**Best Practice:**
+- Make all necessary configuration changes to your VMs in the vCenter UI first.
+- **Wait** until the IP addresses are clearly visible on the VM summary page in vCenter.
+- Only then click **Add Credential** or **Revalidate** in vJailbreak.
+
+Revalidating too early may result in missing IP information, which can prevent proper IP preservation on the destination and cause migration issues.
+
+> **Note**: vJailbreak will show a warning for VMs where network interfaces are detected but IPs could not be discovered.
