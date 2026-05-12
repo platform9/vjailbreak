@@ -90,10 +90,7 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // ensureFinalizer persists the finalizer via r.Update before any Status().Update
-// runs. Status().Update refreshes the in-memory object from the server response;
-// if the finalizer were added inline later, that refresh would clobber it before
-// scope.Close() ran, and the finalizer would never reach the server. Requeuing
-// after the spec write keeps state transitions clean.
+// runs. Status().Update refreshes the in-memory object from the server response.
 func (r *VMwareCredsReconciler) ensureFinalizer(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, bool, error) {
 	ctxlog := log.FromContext(ctx)
 	if controllerutil.ContainsFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer) {

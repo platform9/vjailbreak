@@ -702,7 +702,7 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 	}
 
 	// Annotation update — re-Get inside retry so each attempt operates on the
-	// freshest ResourceVersion. Get does not return Conflict; dropped from predicate.
+	// freshest ResourceVersion.
 	if updateErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
 		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
 		if err := r.Get(syncCtx, client.ObjectKey{Name: name, Namespace: namespace}, latestCreds); err != nil {
