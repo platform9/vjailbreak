@@ -114,25 +114,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		return res, err
 	}
 
-	scope.VMwareCreds.Status.VMwareValidationStatus = constants.ValidationStatusRevalidating
-	scope.VMwareCreds.Status.VMwareValidationMessage = "Revalidating VMware credentials"
-	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-		if apierrors.IsNotFound(err) {
-			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
-	}
-
-	markFailed := func(err error, message string) (ctrl.Result, error) {
-		scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodFailed)
-		scope.VMwareCreds.Status.VMwareValidationMessage = err.Error()
-		if updateErr := r.Status().Update(ctx, scope.VMwareCreds); updateErr != nil {
-			ctxlog.Error(updateErr, "Failed to update VMwareCreds status to Failed", "name", scope.Name())
-		}
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf(message, scope.Name()))
-	}
-
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
 	result := vmwarevalidation.Validate(ctx, r.Client, scope.VMwareCreds)
@@ -157,31 +138,36 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-
-	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return markFailed(err, "Error creating VMs for VMwareCreds '%s'")
-	}
-	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
-	if err != nil {
-		return markFailed(err, "Error getting info of all VMs for VMwareCreds '%s'")
-	}
-	err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
-	if err != nil {
-		return markFailed(err, "Error creating RDM disk CR for VMwareCreds '%s'")
-	}
-	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
-	if err != nil {
-		return markFailed(err, "Error finding deleted VMs for VMwareCreds '%s'")
-	}
-	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
-	if err != nil {
-		return markFailed(err, "Error finding deleted clusters and hosts for VMwareCreds '%s'")
-	}
 	scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
 	scope.VMwareCreds.Status.VMwareValidationMessage = result.Message
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status for VMwareCreds '%s'", scope.Name()))
+		if apierrors.IsNotFound(err) {
+			ctxlog.Info("VMwareCreds object was deleted before status update, stopping reconciliation", "name", scope.Name())
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
+	}
+	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
+
+	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	vminfo, rdmDiskMap, err := utils.GetAndCreateAllVMs(ctx, scope, scope.VMwareCreds.Spec.DataCenter)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error getting info of all VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	err = utils.CreateOrUpdateRDMDisks(ctx, r.Client, scope.VMwareCreds, rdmDiskMap)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating RDM disk CR for VMwareCreds '%s'", scope.Name()))
+	}
+	err = utils.DeleteStaleVMwareMachines(ctx, r.Client, scope.VMwareCreds, vminfo)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted VMs for VMwareCreds '%s'", scope.Name()))
+	}
+	err = utils.DeleteStaleVMwareClustersAndHosts(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error finding deleted clusters and hosts for VMwareCreds '%s'", scope.Name()))
 	}
 	// Get vjailbreak settings to get requeue after time
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, r.Client)

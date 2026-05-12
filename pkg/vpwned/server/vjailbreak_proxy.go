@@ -501,6 +501,13 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 				defer cancel()
 
 				bgCtx = ctrlLog.IntoContext(bgCtx, reqLogger)
+				updateTerminalStatus := func(validationStatus, validationMessage string) error {
+					statusCtx, statusCancel := context.WithTimeout(context.Background(), time.Minute)
+					defer statusCancel()
+
+					statusCtx = ctrlLog.IntoContext(statusCtx, reqLogger)
+					return p.updateVMwareValidationStatus(statusCtx, credName, credNamespace, validationStatus, validationMessage)
+				}
 
 				freshVMCreds := &vjailbreakv1alpha1.VMwareCreds{}
 				if err := p.K8sClient.Get(bgCtx, k8stypes.NamespacedName{
@@ -508,7 +515,7 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 					Namespace: credNamespace,
 				}, freshVMCreds); err != nil {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to fetch VMwareCreds in background")
-					if statusErr := p.updateVMwareValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodFailed), fmt.Sprintf("Failed to fetch VMwareCreds before resource discovery: %s", err.Error())); statusErr != nil {
+					if statusErr := updateTerminalStatus(string(corev1.PodFailed), fmt.Sprintf("Failed to fetch VMwareCreds before resource discovery: %s", err.Error())); statusErr != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(statusErr).Error("Failed to update VMwareCreds status to Failed")
 					}
 					return
@@ -519,12 +526,12 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 
 				if fetchErr != nil {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(fetchErr).Warn("Failed to fetch VMware resources")
-					if err := p.updateVMwareValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodFailed), fetchErr.Error()); err != nil {
+					if err := updateTerminalStatus(string(corev1.PodFailed), fetchErr.Error()); err != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to update VMwareCreds status to Failed")
 					}
 				} else {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace, "vm_count": len(resources.VMInfo)}).Info("Successfully fetched VMware resources")
-					if err := p.updateVMwareValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodSucceeded), result.Message); err != nil {
+					if err := updateTerminalStatus(string(corev1.PodSucceeded), result.Message); err != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to update VMwareCreds status to Succeeded")
 					}
 				}
@@ -568,11 +575,18 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 				defer cancel()
 
 				bgCtx = ctrlLog.IntoContext(bgCtx, reqLogger)
+				updateTerminalStatus := func(validationStatus, validationMessage string, openstackInfo *vjailbreakv1alpha1.OpenstackInfo) error {
+					statusCtx, statusCancel := context.WithTimeout(context.Background(), time.Minute)
+					defer statusCancel()
+
+					statusCtx = ctrlLog.IntoContext(statusCtx, reqLogger)
+					return p.updateOpenstackValidationStatus(statusCtx, credName, credNamespace, validationStatus, validationMessage, openstackInfo)
+				}
 
 				freshOSCreds := &vjailbreakv1alpha1.OpenstackCreds{}
 				if err := p.K8sClient.Get(bgCtx, k8stypes.NamespacedName{Name: credName, Namespace: credNamespace}, freshOSCreds); err != nil {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Error("Failed to fetch OpenstackCreds in background")
-					if statusErr := p.updateOpenstackValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodFailed), fmt.Sprintf("Failed to fetch OpenstackCreds before resource discovery: %s", err.Error()), nil); statusErr != nil {
+					if statusErr := updateTerminalStatus(string(corev1.PodFailed), fmt.Sprintf("Failed to fetch OpenstackCreds before resource discovery: %s", err.Error()), nil); statusErr != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(statusErr).Warn("Failed to update OpenstackCreds status to Failed")
 					}
 					return
@@ -598,13 +612,13 @@ func (p *vjailbreakProxy) RevalidateCredentials(ctx context.Context, in *api.Rev
 
 				if fetchErr != nil {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(fetchErr).Warn("Failed to fetch OpenStack resources")
-					if err := p.updateOpenstackValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodFailed), fetchErr.Error(), nil); err != nil {
+					if err := updateTerminalStatus(string(corev1.PodFailed), fetchErr.Error(), nil); err != nil {
 						logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Warn("Failed to update OpenstackCreds status to Failed")
 					}
 					return
 				}
 
-				if err := p.updateOpenstackValidationStatus(bgCtx, credName, credNamespace, string(corev1.PodSucceeded), result.Message, resources.OpenstackInfo); err != nil {
+				if err := updateTerminalStatus(string(corev1.PodSucceeded), result.Message, resources.OpenstackInfo); err != nil {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace}).WithError(err).Warn("Failed to update OpenstackCreds status with fetched resources")
 				} else {
 					logrus.WithFields(logrus.Fields{"func": fn, "name": credName, "namespace": credNamespace, "flavor_count": len(resources.Flavors)}).Info("Successfully fetched and updated OpenStack resources")

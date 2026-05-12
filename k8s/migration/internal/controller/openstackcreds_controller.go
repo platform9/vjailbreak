@@ -124,13 +124,6 @@ func (r *OpenstackCredsReconciler) reconcileNormal(ctx context.Context,
 		return res, err
 	}
 
-	scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusRevalidating
-	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Revalidating OpenStack credentials"
-	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		return ctrl.Result{}, err
-	}
-
 	result := openstackvalidation.Validate(ctx, r.Client, scope.OpenstackCreds)
 	if err := r.applyValidationResult(ctx, scope, result); err != nil {
 		return ctrl.Result{}, err
@@ -285,33 +278,22 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		return nil
 	}
 
+	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
+	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
+		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
+		return err
+	}
+	ctxlog.Info("Successfully updated status to success")
+
 	err := handleValidatedCreds(ctx, r, scope)
 	if err != nil {
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = err.Error()
-		if updateErr := r.Status().Update(ctx, scope.OpenstackCreds); updateErr != nil {
-			ctxlog.Error(updateErr, "Failed to update OpenstackCreds status", "openstackcreds", scope.OpenstackCreds.Name)
-		}
 		return err
 	}
 
 	if err := r.discoverStorageArrays(ctx, scope); err != nil {
 		ctxlog.Error(err, "Failed to discover storage arrays")
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = err.Error()
-		if updateErr := r.Status().Update(ctx, scope.OpenstackCreds); updateErr != nil {
-			ctxlog.Error(updateErr, "Failed to update OpenstackCreds status", "openstackcreds", scope.OpenstackCreds.Name)
-		}
-		return nil
-	}
-
-	if !utils.IsOpenstackPCD(*scope.OpenstackCreds) {
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
-		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
-			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-			return err
-		}
 	}
 
 	return nil
@@ -691,17 +673,13 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 
 	syncErr := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
 
-	desiredValidationStatus := string(corev1.PodSucceeded)
-	desiredValidationMessage := "Successfully authenticated to Openstack"
 	if syncErr != nil {
 		ctxlog.Error(syncErr, "PCD sync failed")
-		desiredValidationStatus = constants.ValidationStatusFailed
-		desiredValidationMessage = syncErr.Error()
 	} else {
 		ctxlog.Info("PCD sync completed successfully", "openstackcreds", name)
 	}
 
-	// Annotation update — re-Get inside retry so each attempt operates on the
+	// Annotation update: re-Get inside retry so each attempt operates on the
 	// freshest ResourceVersion.
 	if updateErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
 		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
@@ -719,22 +697,7 @@ func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsSco
 		}
 		return r.Update(syncCtx, latestCreds)
 	}); updateErr != nil {
-		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync — pcd-sync-in-progress may be stuck",
-			"openstackcreds", name)
-	}
-
-	// Status update — same pattern. If this fails, UI stays Revalidating until
-	// the controller's periodic reconcile overrides it.
-	if statusErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
-		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
-		if err := r.Get(syncCtx, client.ObjectKey{Name: name, Namespace: namespace}, latestCreds); err != nil {
-			return err
-		}
-		latestCreds.Status.OpenStackValidationStatus = desiredValidationStatus
-		latestCreds.Status.OpenStackValidationMessage = desiredValidationMessage
-		return r.Status().Update(syncCtx, latestCreds)
-	}); statusErr != nil {
-		ctxlog.Error(statusErr, "Failed to update OpenstackCreds status after sync — UI may stay Revalidating until next reconcile",
+		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync; pcd-sync-in-progress may be stuck",
 			"openstackcreds", name)
 	}
 }

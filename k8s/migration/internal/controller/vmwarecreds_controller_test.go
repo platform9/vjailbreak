@@ -36,7 +36,7 @@ import (
 
 // TestReconcileNormal_VMware_ValidationFailure tests that when VMware credential
 // validation fails (e.g. no secret, bad host), VMwareValidationStatus is set to
-// Failed. VMware validation with empty creds fails immediately at secret lookup —
+// Failed. VMware validation with empty creds fails immediately at secret lookup
 // no real vCenter connection is attempted.
 func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -74,7 +74,7 @@ func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 	if updated.Status.VMwareValidationStatus != "Failed" {
 		t.Errorf("VMwareValidationStatus = %q, want %q", updated.Status.VMwareValidationStatus, "Failed")
 	}
-	// Finalizer must be persisted — guards against the clobber-by-Status().Update bug.
+	// Finalizer must be persisted; this guards against the clobber-by-Status().Update bug.
 	if !controllerutil.ContainsFinalizer(updated, constants.VMwareCredsFinalizer) {
 		t.Errorf("expected finalizer %q to be persisted, got finalizers=%v",
 			constants.VMwareCredsFinalizer, updated.Finalizers)
