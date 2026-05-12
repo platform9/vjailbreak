@@ -5,6 +5,8 @@ import { fetchMigrationResourceBundle } from 'src/api/kubernetes/migrationResour
 import { Phase } from '../api/migrations'
 import BaseLogsDrawer from './BaseLogsDrawer'
 
+const STREAM_END_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed]
+
 interface LogsDrawerProps {
   open: boolean
   onClose: () => void
@@ -25,11 +27,14 @@ export default function LogsDrawer({
   const [isPaused, setIsPaused] = useState(false)
   const [sessionKey, setSessionKey] = useState(0)
 
+  const useLiveFollow =
+    migrationPhase === undefined ? true : !STREAM_END_PHASES.includes(migrationPhase)
+
   const { logs, isLoading, error } = useDirectPodLogs({
     podName,
     namespace,
     enabled: open && !isPaused,
-    follow: migrationPhase !== Phase.Succeeded,
+    follow: useLiveFollow,
     sessionKey
   })
 
