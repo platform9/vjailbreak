@@ -36,11 +36,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// TestApplyValidationResult_ResourceFetchStatus tests that applyValidationResult
-// correctly manages the ResourceFetchStatus field through the validation lifecycle.
-// The success path cannot be unit-tested here because handleValidatedCreds makes
-// external OpenStack API calls; the failure and "transitioning" states are testable.
-func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
+// TestApplyValidationResult_ValidationFailure tests that applyValidationResult
+// marks validation failures with the single terminal Failed status.
+func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = vjailbreakv1alpha1.AddToScheme(scheme)
 
@@ -48,32 +46,19 @@ func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
 	const name = "test-oscreds"
 
 	tests := []struct {
-		name                    string
-		initialResourceFetch    string
-		result                  openstackvalidation.ValidationResult
-		wantResourceFetchStatus string
-		wantValidationStatus    string
+		name                 string
+		result               openstackvalidation.ValidationResult
+		wantValidationStatus string
 	}{
 		{
-			name:                    "validation failure clears ResourceFetchStatus",
-			initialResourceFetch:    constants.ResourceFetchStatusFetchingResources,
-			result:                  openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("auth failed"), Message: "auth failed"},
-			wantResourceFetchStatus: "",
-			wantValidationStatus:    constants.ValidationStatusFailed,
+			name:                 "auth failure marks failed",
+			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("auth failed"), Message: "auth failed"},
+			wantValidationStatus: constants.ValidationStatusFailed,
 		},
 		{
-			name:                    "validation failure clears ResourceFetchStatus even when already fetched",
-			initialResourceFetch:    constants.ResourceFetchStatusResourcesFetched,
-			result:                  openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("token expired"), Message: "token expired"},
-			wantResourceFetchStatus: "",
-			wantValidationStatus:    constants.ValidationStatusFailed,
-		},
-		{
-			name:                    "validation failure on fresh creds leaves ResourceFetchStatus empty",
-			initialResourceFetch:    "",
-			result:                  openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("connection refused"), Message: "connection refused"},
-			wantResourceFetchStatus: "",
-			wantValidationStatus:    constants.ValidationStatusFailed,
+			name:                 "connection failure marks failed",
+			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("connection refused"), Message: "connection refused"},
+			wantValidationStatus: constants.ValidationStatusFailed,
 		},
 	}
 
@@ -88,12 +73,6 @@ func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
 				WithStatusSubresource(&vjailbreakv1alpha1.OpenstackCreds{}).
 				Build()
 
-			// Pre-set the ResourceFetchStatus to simulate a previous successful cycle.
-			if tt.initialResourceFetch != "" {
-				oscreds.Status.ResourceFetchStatus = tt.initialResourceFetch
-				_ = fakeClient.Status().Update(context.Background(), oscreds)
-			}
-
 			credScope, _ := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
 				Client:         fakeClient,
 				OpenstackCreds: oscreds,
@@ -106,9 +85,6 @@ func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
 			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, updated); err != nil {
 				t.Fatalf("failed to get updated OpenstackCreds: %v", err)
 			}
-			if updated.Status.ResourceFetchStatus != tt.wantResourceFetchStatus {
-				t.Errorf("ResourceFetchStatus = %q, want %q", updated.Status.ResourceFetchStatus, tt.wantResourceFetchStatus)
-			}
 			if updated.Status.OpenStackValidationStatus != tt.wantValidationStatus {
 				t.Errorf("OpenStackValidationStatus = %q, want %q", updated.Status.OpenStackValidationStatus, tt.wantValidationStatus)
 			}
@@ -120,7 +96,7 @@ func TestApplyValidationResult_ResourceFetchStatus(t *testing.T) {
 // runPCDSyncAsync called r.Update() before r.Status().Update(), causing the
 // in-memory status to be reset by the server response from Update() (which carries
 // the server-side status, since the status subresource ignores Update() writes).
-// The visible symptom was OpenStack/PCD credentials stuck in "FetchingResources"
+// The visible symptom was OpenStack/PCD credentials stuck in "Revalidating"
 // forever in the UI. The fix saves the desired status to a local variable and
 // re-applies it after r.Update() but before r.Status().Update().
 func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
@@ -130,7 +106,7 @@ func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
 	const ns = "migration-system"
 	const name = "test-pcd"
 
-	// Server starts with status=FetchingResources (set earlier by applyValidationResult).
+	// Server starts with status=Revalidating (set earlier by applyValidationResult).
 	oscreds := &vjailbreakv1alpha1.OpenstackCreds{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -144,7 +120,7 @@ func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
 		WithStatusSubresource(&vjailbreakv1alpha1.OpenstackCreds{}).
 		Build()
 
-	oscreds.Status.ResourceFetchStatus = constants.ResourceFetchStatusFetchingResources
+	oscreds.Status.OpenStackValidationStatus = constants.ValidationStatusRevalidating
 	if err := fakeClient.Status().Update(context.Background(), oscreds); err != nil {
 		t.Fatalf("seed status: %v", err)
 	}
@@ -155,15 +131,15 @@ func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	delete(latestCreds.Annotations, "pcd-sync-in-progress")
-	desiredFetchStatus := constants.ResourceFetchStatusResourcesFetched
-	latestCreds.Status.ResourceFetchStatus = desiredFetchStatus
+	desiredValidationStatus := "Succeeded"
+	latestCreds.Status.OpenStackValidationStatus = desiredValidationStatus
 
 	if err := fakeClient.Update(context.Background(), latestCreds); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	// Critical: r.Update() reset latestCreds.Status to the server-side value
-	// (FetchingResources). Re-apply the desired status before Status().Update().
-	latestCreds.Status.ResourceFetchStatus = desiredFetchStatus
+	// (Revalidating). Re-apply the desired status before Status().Update().
+	latestCreds.Status.OpenStackValidationStatus = desiredValidationStatus
 	if err := fakeClient.Status().Update(context.Background(), latestCreds); err != nil {
 		t.Fatalf("status update: %v", err)
 	}
@@ -172,9 +148,9 @@ func TestPCDSyncStatusUpdate_RegressionForUpdateResetBug(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, final); err != nil {
 		t.Fatalf("final get: %v", err)
 	}
-	if final.Status.ResourceFetchStatus != constants.ResourceFetchStatusResourcesFetched {
-		t.Errorf("ResourceFetchStatus = %q, want %q (status was clobbered by Update() reset)",
-			final.Status.ResourceFetchStatus, constants.ResourceFetchStatusResourcesFetched)
+	if final.Status.OpenStackValidationStatus != desiredValidationStatus {
+		t.Errorf("OpenStackValidationStatus = %q, want %q (status was clobbered by Update() reset)",
+			final.Status.OpenStackValidationStatus, desiredValidationStatus)
 	}
 	if _, exists := final.Annotations["pcd-sync-in-progress"]; exists {
 		t.Errorf("pcd-sync-in-progress annotation should have been deleted")

@@ -21,7 +21,6 @@ export interface OpenstackCredential {
   status?: {
     openstackValidationStatus?: string
     openstackValidationMessage?: string
-    resourceFetchStatus?: string
   }
 }
 

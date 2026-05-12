@@ -45,5 +45,4 @@ export interface GetVmwareCredsListMetadata {
 export interface VMwareCredsStatus {
   vmwareValidationMessage: string
   vmwareValidationStatus: string
-  resourceFetchStatus?: string
 }

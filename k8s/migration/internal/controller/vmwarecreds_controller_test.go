@@ -23,7 +23,6 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,9 +33,9 @@ import (
 )
 
 // TestReconcileNormal_VMware_ValidationFailure tests that when VMware credential
-// validation fails (e.g. no secret, bad host), ResourceFetchStatus is cleared and
-// VMwareValidationStatus is set to Failed. VMware validation with empty creds fails
-// immediately at secret lookup — no real vCenter connection is attempted.
+// validation fails (e.g. no secret, bad host), VMwareValidationStatus is set to
+// Failed. VMware validation with empty creds fails immediately at secret lookup —
+// no real vCenter connection is attempted.
 func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = vjailbreakv1alpha1.AddToScheme(scheme)
@@ -44,61 +43,31 @@ func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 	const ns = "default"
 	const name = "test-vmwcreds"
 
-	tests := []struct {
-		name                 string
-		initialResourceFetch string
-	}{
-		{
-			name:                 "validation failure clears ResourceFetchStatus when previously fetching",
-			initialResourceFetch: constants.ResourceFetchStatusFetchingResources,
-		},
-		{
-			name:                 "validation failure leaves ResourceFetchStatus empty on fresh creds",
-			initialResourceFetch: "",
-		},
-		{
-			name:                 "validation failure clears ResourceFetchStatus when previously fetched",
-			initialResourceFetch: constants.ResourceFetchStatusResourcesFetched,
-		},
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		// Spec intentionally empty: SecretRef.Name is "" so getCredentialsFromSecret
+		// will fail immediately with "secret not found", returning Valid=false.
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(vmwcreds).
+		WithStatusSubresource(&vjailbreakv1alpha1.VMwareCreds{}).
+		Build()
+
+	r := &VMwareCredsReconciler{Client: fakeClient, Scheme: scheme}
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: name, Namespace: ns},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned unexpected error: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-				// Spec intentionally empty: SecretRef.Name is "" so getCredentialsFromSecret
-				// will fail immediately with "secret not found", returning Valid=false.
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(vmwcreds).
-				WithStatusSubresource(&vjailbreakv1alpha1.VMwareCreds{}).
-				Build()
-
-			if tt.initialResourceFetch != "" {
-				vmwcreds.Status.ResourceFetchStatus = tt.initialResourceFetch
-				_ = fakeClient.Status().Update(context.Background(), vmwcreds)
-			}
-
-			r := &VMwareCredsReconciler{Client: fakeClient, Scheme: scheme}
-			_, err := r.Reconcile(context.Background(), reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: name, Namespace: ns},
-			})
-			if err != nil {
-				t.Fatalf("Reconcile returned unexpected error: %v", err)
-			}
-
-			updated := &vjailbreakv1alpha1.VMwareCreds{}
-			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, updated); err != nil {
-				t.Fatalf("failed to get updated VMwareCreds: %v", err)
-			}
-			if updated.Status.ResourceFetchStatus != "" {
-				t.Errorf("ResourceFetchStatus = %q, want empty string after validation failure", updated.Status.ResourceFetchStatus)
-			}
-			if updated.Status.VMwareValidationStatus != "Failed" {
-				t.Errorf("VMwareValidationStatus = %q, want %q", updated.Status.VMwareValidationStatus, "Failed")
-			}
-		})
+	updated := &vjailbreakv1alpha1.VMwareCreds{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, updated); err != nil {
+		t.Fatalf("failed to get updated VMwareCreds: %v", err)
+	}
+	if updated.Status.VMwareValidationStatus != "Failed" {
+		t.Errorf("VMwareValidationStatus = %q, want %q", updated.Status.VMwareValidationStatus, "Failed")
 	}
 }
 

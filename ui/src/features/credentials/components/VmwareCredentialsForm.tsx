@@ -17,7 +17,6 @@ export interface VmwareCredential {
   status?: {
     vmwareValidationStatus?: string
     vmwareValidationMessage?: string
-    resourceFetchStatus?: string
   }
 }
 

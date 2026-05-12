@@ -33,24 +33,12 @@ interface CredentialItem {
   name: string
   type: 'VMware' | 'OpenStack'
   status: string
-  resourceFetchStatus?: string
   credObject: VmwareCredential | OpenstackCredential
 }
 
-const RESOURCE_FETCH_STATUS = {
-  FETCHING: 'FetchingResources',
-  FETCHED: 'ResourcesFetched',
-  FAILED: 'FetchFailed'
-} as const
-
-const getDisplayStatus = (status: string, resourceFetchStatus?: string) => {
-  if (resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING) {
-    return 'Fetching resources'
-  }
-  if (resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED) {
-    return 'Resource fetch failed'
-  }
-  return status || 'Unknown'
+const normalizeCredentialStatus = (status?: string) => {
+  if (!status) return 'Unknown'
+  return status === 'Validating' ? 'Revalidating' : status
 }
 
 const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info' | 'default' => {
@@ -62,14 +50,8 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
   if (normalizedStatus === 'failed') {
     return 'error'
   }
-  if (normalizedStatus === 'validating') {
-    return 'warning'
-  }
-  if (normalizedStatus === 'fetching resources') {
+  if (normalizedStatus === 'revalidating') {
     return 'info'
-  }
-  if (normalizedStatus === 'resource fetch failed') {
-    return 'error'
   }
   return 'default'
 }
@@ -77,8 +59,7 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
 const getColumns = (
   onDeleteClick: (id: string, type: 'VMware' | 'OpenStack') => void,
   onRevalidateClick: (row: CredentialItem) => void,
-  revalidatingId: string | null,
-  validatingApiPendingId: string | null
+  revalidatingId: string | null
 ): GridColDef[] => [
   {
     field: 'name',
@@ -103,32 +84,16 @@ const getColumns = (
     headerName: 'Status',
     flex: 1,
     renderCell: (params) => {
-      const fetchStatus = params.row.resourceFetchStatus
-      const isApiPending = validatingApiPendingId === params.row.id
-      const displayStatus = isApiPending
-        ? 'Validating'
-        : getDisplayStatus(params.value, fetchStatus)
-      const chip = (
+      const displayStatus =
+        revalidatingId === params.row.id ? 'Revalidating' : normalizeCredentialStatus(params.value)
+      return (
         <Chip
           label={displayStatus}
           variant="outlined"
           color={getStatusColor(displayStatus)}
           size="small"
-          icon={
-            displayStatus === 'Validating' ? (
-              <CircularProgress size={16} sx={{ marginRight: '5px' }} />
-            ) : undefined
-          }
         />
       )
-      if (displayStatus !== 'Validating' && displayStatus !== 'Fetching resources') {
-        return chip
-      }
-      const tooltipText =
-        displayStatus === 'Validating'
-          ? 'Authenticating credentials…'
-          : 'Discovering VMs, clusters, networks, flavors…'
-      return <Tooltip title={tooltipText}>{chip}</Tooltip>
     }
   },
   {
@@ -138,11 +103,9 @@ const getColumns = (
     width: 100,
     sortable: false,
     renderCell: (params) => {
-      // Spinner active for: this user's click + any in-flight backend fetch
-      // (so concurrent revalidations from other clients also show progress).
       const isRowLoading =
         revalidatingId === params.row.id ||
-        params.row.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+        normalizeCredentialStatus(params.row.status) === 'Revalidating'
 
       return (
         <Box>
@@ -249,45 +212,43 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const { track } = useAmplitude({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
-  const [validatingApiPendingId, setValidatingApiPendingId] = useState<string | null>(null)
 
   const isVmware = credentialType === 'vmware'
 
   const {
     data: vmwareCredentials,
     isLoading: loadingVmware,
-    refetch: refetchVmware
+    refetch: refetchVmware,
+    dataUpdatedAt: vmwareDataUpdatedAt
   } = useVmwareCredentialsQuery(undefined, {
     enabled: isVmware,
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: (query) => {
       const data = query.state.data as VmwareCredential[] | undefined
-      const hasResourceFetchInProgress = data?.some(
-        (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+      const hasRevalidationInProgress = data?.some(
+        (cred) => normalizeCredentialStatus(cred.status?.vmwareValidationStatus) === 'Revalidating'
       )
-      if (revalidatingId) return 5000
-      if (hasResourceFetchInProgress) return 10000
-      return false
+      return revalidatingId || hasRevalidationInProgress ? 5000 : false
     }
   })
 
   const {
     data: openstackCredentials,
     isLoading: loadingOpenstack,
-    refetch: refetchOpenstack
+    refetch: refetchOpenstack,
+    dataUpdatedAt: openstackDataUpdatedAt
   } = useOpenstackCredentialsQuery(undefined, {
     enabled: !isVmware,
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: (query) => {
       const data = query.state.data as OpenstackCredential[] | undefined
-      const hasResourceFetchInProgress = data?.some(
-        (cred) => cred.status?.resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHING
+      const hasRevalidationInProgress = data?.some(
+        (cred) =>
+          normalizeCredentialStatus(cred.status?.openstackValidationStatus) === 'Revalidating'
       )
-      if (revalidatingId) return 5000
-      if (hasResourceFetchInProgress) return 10000
-      return false
+      return revalidatingId || hasRevalidationInProgress ? 5000 : false
     }
   })
 
@@ -299,10 +260,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
 
-  const { mutate: revalidate } = useMutation({
+  const { mutate: revalidate, isPending: isRevalidationApiPending } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
-      setValidatingApiPendingId(null)
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
         queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
@@ -316,7 +276,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           credentialKind: variables.kind
         }
       })
-      setValidatingApiPendingId(null)
       setRevalidatingId(null)
     }
   })
@@ -327,7 +286,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       name: cred.metadata.name,
       type: 'VMware' as const,
       status: cred.status?.vmwareValidationStatus || 'Unknown',
-      resourceFetchStatus: cred.status?.resourceFetchStatus,
       credObject: cred
     })) || []
 
@@ -337,77 +295,37 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       name: cred.metadata.name,
       type: 'OpenStack' as const,
       status: cred.status?.openstackValidationStatus || 'Unknown',
-      resourceFetchStatus: cred.status?.resourceFetchStatus,
       credObject: cred
     })) || []
 
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
-  const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const revalidationStartRef = useRef<number | null>(null)
-  const legacyFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [legacyFallbackTick, setLegacyFallbackTick] = useState(0)
+  const revalidationStartDataUpdatedAtRef = useRef(0)
 
   useEffect(() => {
     if (revalidatingId) {
       const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
+      const currentDataUpdatedAt = isVmware ? vmwareDataUpdatedAt : openstackDataUpdatedAt
 
       if (revalidatingItem) {
-        const status = revalidatingItem.status.toLowerCase()
-        const { resourceFetchStatus } = revalidatingItem
+        const status = normalizeCredentialStatus(revalidatingItem.status)
+        const hasFreshStatus = currentDataUpdatedAt > revalidationStartDataUpdatedAtRef.current
 
-        const sinceClick = revalidationStartRef.current
-          ? Date.now() - revalidationStartRef.current
-          : 0
-        const legacyTerminal =
-          status === 'succeeded' &&
-          resourceFetchStatus === undefined &&
-          sinceClick >= 3000
-
-        const isDone =
-          status === 'failed' ||
-          resourceFetchStatus === RESOURCE_FETCH_STATUS.FETCHED ||
-          resourceFetchStatus === RESOURCE_FETCH_STATUS.FAILED ||
-          legacyTerminal
-
-        if (isDone) {
+        if (!isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating') {
           setRevalidatingId(null)
-        } else if (status === 'succeeded' && resourceFetchStatus === undefined) {
-          if (legacyFallbackTimerRef.current) clearTimeout(legacyFallbackTimerRef.current)
-          legacyFallbackTimerRef.current = setTimeout(
-            () => setLegacyFallbackTick((t) => t + 1),
-            3000 - sinceClick + 50
-          )
         }
       } else {
         setRevalidatingId(null)
       }
     }
-    return () => {
-      if (legacyFallbackTimerRef.current) {
-        clearTimeout(legacyFallbackTimerRef.current)
-        legacyFallbackTimerRef.current = null
-      }
-    }
-  }, [allCredentials, revalidatingId, legacyFallbackTick])
-
-  useEffect(() => {
-    if (revalidationTimeoutRef.current) {
-      clearTimeout(revalidationTimeoutRef.current)
-      revalidationTimeoutRef.current = null
-    }
-    if (revalidatingId) {
-      revalidationTimeoutRef.current = setTimeout(() => {
-        setRevalidatingId(null)
-      }, 180000)
-    }
-    return () => {
-      if (revalidationTimeoutRef.current) {
-        clearTimeout(revalidationTimeoutRef.current)
-        revalidationTimeoutRef.current = null
-      }
-    }
-  }, [revalidatingId])
+  }, [
+    allCredentials,
+    isRevalidationApiPending,
+    isVmware,
+    openstackDataUpdatedAt,
+    revalidatingId,
+    vmwareDataUpdatedAt
+  ])
 
   useEffect(() => {
     if (isVmware) {
@@ -444,10 +362,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           type === 'VMware'
             ? (credential as VmwareCredential).status?.vmwareValidationStatus || 'Unknown'
             : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
-        resourceFetchStatus:
-          type === 'VMware'
-            ? (credential as VmwareCredential).status?.resourceFetchStatus
-            : (credential as OpenstackCredential).status?.resourceFetchStatus,
         credObject: credential
       }
       setSelectedForDeletion([credItem])
@@ -465,9 +379,10 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       return
     }
 
-    revalidationStartRef.current = Date.now()
+    revalidationStartDataUpdatedAtRef.current = isVmware
+      ? vmwareDataUpdatedAt
+      : openstackDataUpdatedAt
     setRevalidatingId(row.id)
-    setValidatingApiPendingId(row.id)
 
     revalidate({
       name: credObject.metadata.name,
@@ -582,7 +497,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     return `${baseMessage}: ${error}`
   }, [])
 
-  const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId, validatingApiPendingId)
+  const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId)
 
   const isLoading = (isVmware ? loadingVmware : loadingOpenstack) || deleting
 
