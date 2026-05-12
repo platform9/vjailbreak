@@ -33,9 +33,9 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	vmwarevalidation "github.com/platform9/vjailbreak/pkg/common/validation/vmware"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 )

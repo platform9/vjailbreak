@@ -23,9 +23,9 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	storagesdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"

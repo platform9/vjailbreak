@@ -23,8 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
