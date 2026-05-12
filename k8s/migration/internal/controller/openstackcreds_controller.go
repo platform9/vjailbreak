@@ -686,49 +686,62 @@ func handlePCDSync(ctx context.Context, r *OpenstackCredsReconciler, scope *scop
 func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) {
 	ctxlog := scope.Logger
 	syncCtx := context.Background()
+	name := scope.OpenstackCreds.Name
+	namespace := scope.OpenstackCreds.Namespace
 
-	err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
-
-	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if getErr := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return apierrors.IsConflict(err) ||
-			apierrors.IsServerTimeout(err) ||
-			apierrors.IsTimeout(err) ||
-			apierrors.IsTooManyRequests(err)
-	}, func() error {
-		return r.Get(syncCtx, client.ObjectKey{
-			Name:      scope.OpenstackCreds.Name,
-			Namespace: scope.OpenstackCreds.Namespace,
-		}, latestCreds)
-	}); getErr != nil {
-		ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
-		return
-	}
-
-	if latestCreds.Annotations == nil {
-		latestCreds.Annotations = make(map[string]string)
-	}
-
-	delete(latestCreds.Annotations, "pcd-sync-in-progress")
+	syncErr := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
 
 	desiredValidationStatus := string(corev1.PodSucceeded)
 	desiredValidationMessage := "Successfully authenticated to Openstack"
-	if err != nil {
-		ctxlog.Error(err, "PCD sync failed")
-		latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
+	if syncErr != nil {
+		ctxlog.Error(syncErr, "PCD sync failed")
 		desiredValidationStatus = constants.ValidationStatusFailed
-		desiredValidationMessage = err.Error()
+		desiredValidationMessage = syncErr.Error()
 	} else {
-		ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
-		delete(latestCreds.Annotations, "pcd-sync-last-error")
+		ctxlog.Info("PCD sync completed successfully", "openstackcreds", name)
 	}
 
-	if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
-		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
+	// Annotation update — re-Get inside retry so each attempt operates on the
+	// freshest ResourceVersion. Get does not return Conflict; dropped from predicate.
+	if updateErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
+		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+		if err := r.Get(syncCtx, client.ObjectKey{Name: name, Namespace: namespace}, latestCreds); err != nil {
+			return err
+		}
+		if latestCreds.Annotations == nil {
+			latestCreds.Annotations = make(map[string]string)
+		}
+		delete(latestCreds.Annotations, "pcd-sync-in-progress")
+		if syncErr != nil {
+			latestCreds.Annotations["pcd-sync-last-error"] = syncErr.Error()
+		} else {
+			delete(latestCreds.Annotations, "pcd-sync-last-error")
+		}
+		return r.Update(syncCtx, latestCreds)
+	}); updateErr != nil {
+		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync — pcd-sync-in-progress may be stuck",
+			"openstackcreds", name)
 	}
-	latestCreds.Status.OpenStackValidationStatus = desiredValidationStatus
-	latestCreds.Status.OpenStackValidationMessage = desiredValidationMessage
-	if updateErr := r.Status().Update(syncCtx, latestCreds); updateErr != nil {
-		ctxlog.Error(updateErr, "Failed to update OpenstackCreds status after sync")
+
+	// Status update — same pattern. If this fails, UI stays Revalidating until
+	// the controller's periodic reconcile overrides it.
+	if statusErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
+		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+		if err := r.Get(syncCtx, client.ObjectKey{Name: name, Namespace: namespace}, latestCreds); err != nil {
+			return err
+		}
+		latestCreds.Status.OpenStackValidationStatus = desiredValidationStatus
+		latestCreds.Status.OpenStackValidationMessage = desiredValidationMessage
+		return r.Status().Update(syncCtx, latestCreds)
+	}); statusErr != nil {
+		ctxlog.Error(statusErr, "Failed to update OpenstackCreds status after sync — UI may stay Revalidating until next reconcile",
+			"openstackcreds", name)
 	}
+}
+
+func isRetryableUpdateError(err error) bool {
+	return apierrors.IsConflict(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err)
 }

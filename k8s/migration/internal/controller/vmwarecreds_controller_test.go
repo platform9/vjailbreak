@@ -23,10 +23,12 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,11 +57,14 @@ func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 		Build()
 
 	r := &VMwareCredsReconciler{Client: fakeClient, Scheme: scheme}
-	_, err := r.Reconcile(context.Background(), reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: name, Namespace: ns},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned unexpected error: %v", err)
+	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}
+
+	// First reconcile: ensureFinalizer adds the finalizer and requeues.
+	// Validation only runs on the second reconcile (post-requeue).
+	for i := 0; i < 2; i++ {
+		if _, err := r.Reconcile(context.Background(), req); err != nil {
+			t.Fatalf("Reconcile #%d returned unexpected error: %v", i+1, err)
+		}
 	}
 
 	updated := &vjailbreakv1alpha1.VMwareCreds{}
@@ -68,6 +73,11 @@ func TestReconcileNormal_VMware_ValidationFailure(t *testing.T) {
 	}
 	if updated.Status.VMwareValidationStatus != "Failed" {
 		t.Errorf("VMwareValidationStatus = %q, want %q", updated.Status.VMwareValidationStatus, "Failed")
+	}
+	// Finalizer must be persisted — guards against the clobber-by-Status().Update bug.
+	if !controllerutil.ContainsFinalizer(updated, constants.VMwareCredsFinalizer) {
+		t.Errorf("expected finalizer %q to be persisted, got finalizers=%v",
+			constants.VMwareCredsFinalizer, updated.Finalizers)
 	}
 }
 

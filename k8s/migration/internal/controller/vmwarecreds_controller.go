@@ -89,11 +89,33 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return r.reconcileDelete(ctx, scope)
 }
 
+// ensureFinalizer persists the finalizer via r.Update before any Status().Update
+// runs. Status().Update refreshes the in-memory object from the server response;
+// if the finalizer were added inline later, that refresh would clobber it before
+// scope.Close() ran, and the finalizer would never reach the server. Requeuing
+// after the spec write keeps state transitions clean.
+func (r *VMwareCredsReconciler) ensureFinalizer(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, bool, error) {
+	ctxlog := log.FromContext(ctx)
+	if controllerutil.ContainsFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer) {
+		return ctrl.Result{}, false, nil
+	}
+	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		ctxlog.Error(err, "failed to add VMwareCreds finalizer", "name", scope.Name())
+		return ctrl.Result{}, true, err
+	}
+	return ctrl.Result{Requeue: true}, true, nil
+}
+
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
 	var err error
+
+	if res, done, err := r.ensureFinalizer(ctx, scope); done {
+		return res, err
+	}
 
 	scope.VMwareCreds.Status.VMwareValidationStatus = constants.ValidationStatusRevalidating
 	scope.VMwareCreds.Status.VMwareValidationMessage = "Revalidating VMware credentials"
@@ -139,8 +161,6 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
 
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
 	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return markFailed(err, "Error creating VMs for VMwareCreds '%s'")
