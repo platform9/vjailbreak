@@ -161,7 +161,7 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     return (
       <Box sx={{ display: 'grid', gap: 0.5 }}>
         <span>
-          Cannot connect to the vCenter server. Check the vCenter FQDN/IP and DNS/network routing.
+          Ensure the vCenter FQDN/IP and DNS/network routing are correct so the vCenter server can be reached.
         </span>
         <span>
           Learn more:{' '}
