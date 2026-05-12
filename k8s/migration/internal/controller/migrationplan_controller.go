@@ -457,7 +457,7 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
 	}
 
-	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
+	vmidSuffixed := commonutils.GetVMUniqueKey(vmMachine.Spec.VMInfo.Name, vmMachine.Spec.VMInfo.VMID)
 	if vmidSuffixed != vm {
 		return nil, errors.Errorf("VMwareMachine %s VM key mismatch: expected %s, got %s", vmMachine.Name, vm, vmidSuffixed)
 	}
@@ -640,7 +640,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name+"-"+strings.TrimPrefix(v.Spec.VMInfo.VMID, "vm-") == vmName {
+			if commonutils.GetVMUniqueKey(v.Spec.VMInfo.Name, v.Spec.VMInfo.VMID) == vmName {
 				isValid = true
 				break
 			}
@@ -1455,8 +1455,7 @@ func (r *MigrationPlanReconciler) processAdvancedOptions(ctx context.Context,
 // to disambiguate (e.g. "vmname-31090")
 func computeSourceVMKey(vmMachine *vjailbreakv1alpha1.VMwareMachine, allGroups [][]string) string {
 	displayName := vmMachine.Spec.VMInfo.Name
-	moid := strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
-	currentKey := displayName + "-" + moid
+	currentKey := commonutils.GetVMUniqueKey(displayName, vmMachine.Spec.VMInfo.VMID)
 	for _, group := range allGroups {
 		for _, vmKey := range group {
 			if vmKey == currentKey {
