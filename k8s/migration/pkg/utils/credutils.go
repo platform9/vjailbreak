@@ -1182,7 +1182,7 @@ func ShouldSkipVMwareMachineReconciliation(ctx context.Context, k8sClient client
 		return true, "vmwaremachine status.migrated is true", nil
 	}
 
-	vmKey := vmKeyForVMwareMachine(vmwvm)
+	vmKey := netutils.GetVMUniqueKey(vmwvm.Spec.VMInfo.Name, vmwvm.Spec.VMInfo.VMID)
 	migration := &vjailbreakv1alpha1.Migration{}
 	migrationKey := k8stypes.NamespacedName{
 		Name:      MigrationNameFromVMName(vmwvmKey.Name),
@@ -1223,13 +1223,6 @@ func ShouldSkipVMwareMachineReconciliation(ctx context.Context, k8sClient client
 	}
 
 	return false, "", nil
-}
-
-func vmKeyForVMwareMachine(vmwvm *vjailbreakv1alpha1.VMwareMachine) string {
-	if vmwvm.Spec.VMInfo.Name == "" || vmwvm.Spec.VMInfo.VMID == "" {
-		return ""
-	}
-	return fmt.Sprintf("%s-%s", vmwvm.Spec.VMInfo.Name, strings.TrimPrefix(vmwvm.Spec.VMInfo.VMID, "vm-"))
 }
 
 func migrationMatchesVMwareMachine(migration *vjailbreakv1alpha1.Migration, vmwvm *vjailbreakv1alpha1.VMwareMachine, vmKey string) bool {

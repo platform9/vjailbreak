@@ -84,9 +84,17 @@ func GetK8sCompatibleVMWareObjectName(vCenterObjectName, credName string) (strin
 	return name[:min(len(name), constants.K8sNameMaxLength)], nil
 }
 
+// GetVMUniqueKey returns the stable VM key in "name-<moid>" format.
+func GetVMUniqueKey(vmName, vmid string) string {
+	if vmName == "" || vmid == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s", vmName, strings.TrimPrefix(vmid, "vm-"))
+}
+
 // GetVMK8sCompatibleName returns a k8s compatible name for a VM, using name-<moid> as
 // the stable unique key before hashing. This ensures uniqueness even when two VMs share the same display name.
 func GetVMK8sCompatibleName(vmName, vmid, credName string) (string, error) {
-	vmNameForK8s := fmt.Sprintf("%s-%s", vmName, strings.TrimPrefix(vmid, "vm-"))
+	vmNameForK8s := GetVMUniqueKey(vmName, vmid)
 	return GetK8sCompatibleVMWareObjectName(vmNameForK8s, credName)
 }
