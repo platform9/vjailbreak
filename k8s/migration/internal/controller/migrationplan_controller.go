@@ -1544,6 +1544,14 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 		return errors.Wrap(err, "failed to list all flavors")
 	}
 
+	// Restrict to flavors that can schedule onto the user-selected target PCD
+	// cluster. In PCD the cluster name is the availability zone, and a flavor
+	// is bound to a cluster via its `availability_zone` extra_spec property.
+	// Flavors without that property are global and remain eligible.
+	if utils.IsOpenstackPCD(*openstackcreds) {
+		allFlavors = openstackpkg.FilterFlavorsByAvailabilityZone(allFlavors, migrationtemplate.Spec.TargetPCDClusterName)
+	}
+
 	useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
 	passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
 	vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
