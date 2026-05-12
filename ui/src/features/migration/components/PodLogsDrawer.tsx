@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { fetchPodDebugLogs } from 'src/api/kubernetes/pods'
 import { fetchMigrationResourceBundle } from 'src/api/kubernetes/migrationResourceBundle'
+import { Phase } from '../api/migrations'
 import BaseLogsDrawer from './BaseLogsDrawer'
 
 interface LogsDrawerProps {
@@ -10,6 +11,7 @@ interface LogsDrawerProps {
   podName: string
   namespace: string
   migrationName?: string
+  migrationPhase?: Phase
 }
 
 export default function LogsDrawer({
@@ -17,7 +19,8 @@ export default function LogsDrawer({
   onClose,
   podName,
   namespace,
-  migrationName
+  migrationName,
+  migrationPhase
 }: LogsDrawerProps) {
   const [isPaused, setIsPaused] = useState(false)
   const [sessionKey, setSessionKey] = useState(0)
@@ -26,6 +29,7 @@ export default function LogsDrawer({
     podName,
     namespace,
     enabled: open && !isPaused,
+    follow: migrationPhase !== Phase.Succeeded,
     sessionKey
   })
 
@@ -66,25 +70,6 @@ export default function LogsDrawer({
       combinedLogs += '='.repeat(80) + '\n\n'
       combinedLogs += filteredLogs.join('\n')
 
-      if (podName && namespace) {
-        try {
-          const debugLogs = await fetchPodDebugLogs(namespace, podName, migrationName)
-          if (debugLogs && debugLogs.trim()) {
-            combinedLogs += '\n\n'
-            combinedLogs += '='.repeat(80) + '\n'
-            combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
-            combinedLogs += '='.repeat(80) + '\n\n'
-            combinedLogs += debugLogs
-          }
-        } catch {
-          combinedLogs += '\n\n'
-          combinedLogs += '='.repeat(80) + '\n'
-          combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
-          combinedLogs += '='.repeat(80) + '\n\n'
-          combinedLogs += '[Failed to fetch debug logs from pod filesystem]\n'
-        }
-      }
-
       if (namespace && migrationName) {
         try {
           const resourceBundle = await fetchMigrationResourceBundle({
@@ -106,6 +91,25 @@ export default function LogsDrawer({
           combinedLogs += 'RELATED KUBERNETES RESOURCES\n'
           combinedLogs += '='.repeat(80) + '\n\n'
           combinedLogs += '[Failed to fetch related Kubernetes resources]\n'
+        }
+      }
+
+      if (namespace && migrationName) {
+        try {
+          const debugLogs = await fetchPodDebugLogs(namespace, podName, migrationName)
+          if (debugLogs && debugLogs.trim()) {
+            combinedLogs += '\n\n'
+            combinedLogs += '='.repeat(80) + '\n'
+            combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
+            combinedLogs += '='.repeat(80) + '\n\n'
+            combinedLogs += debugLogs
+          }
+        } catch {
+          combinedLogs += '\n\n'
+          combinedLogs += '='.repeat(80) + '\n'
+          combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
+          combinedLogs += '='.repeat(80) + '\n\n'
+          combinedLogs += '[Failed to fetch debug logs from pod filesystem]\n'
         }
       }
 

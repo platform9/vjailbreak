@@ -5,6 +5,7 @@ interface UseDirectPodLogsParams {
   podName: string
   namespace: string
   enabled: boolean
+  follow?: boolean
   sessionKey: number
 }
 
@@ -24,6 +25,7 @@ export const useDirectPodLogs = ({
   podName,
   namespace,
   enabled,
+  follow = true,
   sessionKey
 }: UseDirectPodLogsParams): UseDirectPodLogsReturn => {
   const [logs, setLogs] = useState<string[]>([])
@@ -89,7 +91,7 @@ export const useDirectPodLogs = ({
 
       const shouldFetchHistory = !hasInitiallyLoadedRef.current
       const response = await streamPodLogs(namespace, podName, {
-        follow: true,
+        follow,
         tailLines: shouldFetchHistory ? '2000' : '200',
         limitBytes: 8 * 1024 * 1024,
         signal: abortController.signal
@@ -131,7 +133,9 @@ export const useDirectPodLogs = ({
               })
             }
 
-            queueReconnect()
+            if (follow) {
+              queueReconnect()
+            }
             return
           }
 
@@ -184,9 +188,11 @@ export const useDirectPodLogs = ({
       
       const isTransient = !errorMessage.includes('not found') && !errorMessage.includes('unauthorized')
       setError(errorMessage)
-      queueReconnect(isTransient)
+      if (follow) {
+        queueReconnect(isTransient)
+      }
     }
-  }, [enabled, podName, namespace, cleanup])
+  }, [enabled, podName, namespace, follow, cleanup])
 
   const reconnect = useCallback(() => {
     setLogs([])

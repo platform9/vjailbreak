@@ -249,6 +249,7 @@ export default function MigrationsTable({
     name: string
     namespace: string
     migrationName?: string
+    migrationPhase?: Phase
   } | null>(null)
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
@@ -510,7 +511,8 @@ export default function MigrationsTable({
                       params.row.setSelectedPod({
                         name: params.row.spec.podRef,
                         namespace: params.row.metadata?.namespace || '',
-                        migrationName: params.row.metadata?.name || ''
+                        migrationName: params.row.metadata?.name || '',
+                        migrationPhase: params.row.status?.phase
                       })
                       params.row.setLogsDrawerOpen(true)
                     }}
@@ -740,6 +742,7 @@ export default function MigrationsTable({
         podName={selectedPod?.name || ''}
         namespace={selectedPod?.namespace || ''}
         migrationName={selectedPod?.migrationName || ''}
+        migrationPhase={selectedPod?.migrationPhase}
       />
 
       <MigrationDetailModal
