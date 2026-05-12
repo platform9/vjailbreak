@@ -21,11 +21,11 @@ export function MissingInterfaceIpWarningAlert({
           Some selected VMs are missing IP addresses from vCenter.
         </Typography>
         <Typography variant="body2">
-          If these selected VMs have IPs on the source, wait until they appear in the vCenter UI,
-          then revalidate the VMware credential so the latest IP details sync before migration.
+          IP addresses are not found for the following VMs: {vmNames}
         </Typography>
         <Typography variant="body2">
-          IP addresses are not found for the following VMs: {vmNames}
+          If these selected VMs have IPs on the source, wait until they appear in the vCenter UI,
+          then revalidate the VMware credential so the latest IP details sync before migration.
         </Typography>
       </Box>
     </Alert>
