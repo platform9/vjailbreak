@@ -1,5 +1,6 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip, CircularProgress } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip } from '@mui/material'
+import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
 import AddIcon from '@mui/icons-material/Add'
@@ -36,6 +37,17 @@ interface CredentialItem {
   credObject: VmwareCredential | OpenstackCredential
 }
 
+const REVALIDATION_TIMEOUT_MS = 31 * 60 * 1000
+
+const syncIconSpin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`
+
 const normalizeCredentialStatus = (status?: string) => {
   if (!status) return 'Unknown'
   return status === 'Validating' ? 'Revalidating' : status
@@ -59,7 +71,8 @@ const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info
 const getColumns = (
   onDeleteClick: (id: string, type: 'VMware' | 'OpenStack') => void,
   onRevalidateClick: (row: CredentialItem) => void,
-  revalidatingId: string | null
+  revalidatingId: string | null,
+  timedOutRevalidatingId: string | null
 ): GridColDef[] => [
   {
     field: 'name',
@@ -103,9 +116,10 @@ const getColumns = (
     width: 100,
     sortable: false,
     renderCell: (params) => {
+      const backendRevalidating = normalizeCredentialStatus(params.row.status) === 'Revalidating'
       const isRowLoading =
         revalidatingId === params.row.id ||
-        normalizeCredentialStatus(params.row.status) === 'Revalidating'
+        (backendRevalidating && timedOutRevalidatingId !== params.row.id)
 
       return (
         <Box>
@@ -119,7 +133,15 @@ const getColumns = (
                 disabled={isRowLoading}
                 aria-label="revalidate credential"
               >
-                {isRowLoading ? <CircularProgress size={20} /> : <SyncIcon />}
+                <SyncIcon
+                  sx={
+                    isRowLoading
+                      ? {
+                          animation: `${syncIconSpin} 1s linear infinite`
+                        }
+                      : undefined
+                  }
+                />
               </IconButton>
             </span>
           </Tooltip>
@@ -212,8 +234,23 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const { track } = useAmplitude({ component: 'CredentialsTable' })
   const queryClient = useQueryClient()
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null)
+  const [timedOutRevalidatingId, setTimedOutRevalidatingId] = useState<string | null>(null)
+  const revalidationStartDataUpdatedAtRef = useRef(0)
+  const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isVmware = credentialType === 'vmware'
+
+  const clearRevalidationTimeout = useCallback(() => {
+    if (revalidationTimeoutRef.current) {
+      clearTimeout(revalidationTimeoutRef.current)
+      revalidationTimeoutRef.current = null
+    }
+  }, [])
+
+  const clearActiveRevalidation = useCallback(() => {
+    clearRevalidationTimeout()
+    setRevalidatingId(null)
+  }, [clearRevalidationTimeout])
 
   const {
     data: vmwareCredentials,
@@ -226,9 +263,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     refetchOnMount: true,
     refetchInterval: (query) => {
       const data = query.state.data as VmwareCredential[] | undefined
-      const hasRevalidationInProgress = data?.some(
-        (cred) => normalizeCredentialStatus(cred.status?.vmwareValidationStatus) === 'Revalidating'
-      )
+      const hasRevalidationInProgress = data?.some((cred) => {
+        const credentialId = `vmware-${cred.metadata.name}`
+        return (
+          credentialId !== timedOutRevalidatingId &&
+          normalizeCredentialStatus(cred.status?.vmwareValidationStatus) === 'Revalidating'
+        )
+      })
       return revalidatingId || hasRevalidationInProgress ? 5000 : false
     }
   })
@@ -244,10 +285,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     refetchOnMount: true,
     refetchInterval: (query) => {
       const data = query.state.data as OpenstackCredential[] | undefined
-      const hasRevalidationInProgress = data?.some(
-        (cred) =>
+      const hasRevalidationInProgress = data?.some((cred) => {
+        const credentialId = `openstack-${cred.metadata.name}`
+        return (
+          credentialId !== timedOutRevalidatingId &&
           normalizeCredentialStatus(cred.status?.openstackValidationStatus) === 'Revalidating'
-      )
+        )
+      })
       return revalidatingId || hasRevalidationInProgress ? 5000 : false
     }
   })
@@ -276,7 +320,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           credentialKind: variables.kind
         }
       })
-      setRevalidatingId(null)
+      clearActiveRevalidation()
     }
   })
 
@@ -300,8 +344,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
-  const revalidationStartDataUpdatedAtRef = useRef(0)
-
   useEffect(() => {
     if (revalidatingId) {
       const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
@@ -312,20 +354,25 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         const hasFreshStatus = currentDataUpdatedAt > revalidationStartDataUpdatedAtRef.current
 
         if (!isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating') {
-          setRevalidatingId(null)
+          clearActiveRevalidation()
+          setTimedOutRevalidatingId((current) => (current === revalidatingId ? null : current))
         }
       } else {
-        setRevalidatingId(null)
+        clearActiveRevalidation()
+        setTimedOutRevalidatingId((current) => (current === revalidatingId ? null : current))
       }
     }
   }, [
     allCredentials,
+    clearActiveRevalidation,
     isRevalidationApiPending,
     isVmware,
     openstackDataUpdatedAt,
     revalidatingId,
     vmwareDataUpdatedAt
   ])
+
+  useEffect(() => clearRevalidationTimeout, [clearRevalidationTimeout])
 
   useEffect(() => {
     if (isVmware) {
@@ -382,7 +429,26 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     revalidationStartDataUpdatedAtRef.current = isVmware
       ? vmwareDataUpdatedAt
       : openstackDataUpdatedAt
+    clearRevalidationTimeout()
+    setTimedOutRevalidatingId(null)
     setRevalidatingId(row.id)
+    revalidationTimeoutRef.current = setTimeout(() => {
+      revalidationTimeoutRef.current = null
+      setTimedOutRevalidatingId(row.id)
+      setRevalidatingId((current) => (current === row.id ? null : current))
+      reportError(
+        new Error('Credential revalidation is still in progress after 31 minutes. You can retry.'),
+        {
+          context: 'credentials-revalidation-timeout',
+          metadata: {
+            credentialName: credObject.metadata.name,
+            credentialKind: row.type === 'VMware' ? 'VmwareCreds' : 'OpenstackCreds'
+          }
+        }
+      )
+      queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: OPENSTACK_CREDS_QUERY_KEY })
+    }, REVALIDATION_TIMEOUT_MS)
 
     revalidate({
       name: credObject.metadata.name,
@@ -497,7 +563,12 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     return `${baseMessage}: ${error}`
   }, [])
 
-  const tableColumns = getColumns(handleDeleteCredential, handleRevalidateClick, revalidatingId)
+  const tableColumns = getColumns(
+    handleDeleteCredential,
+    handleRevalidateClick,
+    revalidatingId,
+    timedOutRevalidatingId
+  )
 
   const isLoading = (isVmware ? loadingVmware : loadingOpenstack) || deleting
 
