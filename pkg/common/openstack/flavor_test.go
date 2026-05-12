@@ -126,6 +126,69 @@ func TestGetVGPUCount(t *testing.T) {
 	}
 }
 
+func TestFilterFlavorsByAvailabilityZone(t *testing.T) {
+	global := flavors.Flavor{ID: "global"}
+	gpuOnly := flavors.Flavor{
+		ID:         "gpu-only",
+		ExtraSpecs: map[string]string{"resources:VGPU": "1"},
+	}
+	azTest := flavors.Flavor{
+		ID:         "az-test",
+		ExtraSpecs: map[string]string{"availability_zone": "vjb-test"},
+	}
+	azProd := flavors.Flavor{
+		ID:         "az-prod",
+		ExtraSpecs: map[string]string{"availability_zone": "vjb-prod", "pf9-managed": "true"},
+	}
+	all := []flavors.Flavor{global, gpuOnly, azTest, azProd}
+
+	tests := []struct {
+		name     string
+		targetAZ string
+		want     []string
+	}{
+		{
+			name:     "vjb-test target keeps global, gpu-only, and az-test",
+			targetAZ: "vjb-test",
+			want:     []string{"global", "gpu-only", "az-test"},
+		},
+		{
+			name:     "vjb-prod target keeps global, gpu-only, and az-prod",
+			targetAZ: "vjb-prod",
+			want:     []string{"global", "gpu-only", "az-prod"},
+		},
+		{
+			name:     "unknown AZ keeps only AZ-less flavors",
+			targetAZ: "vjb-other",
+			want:     []string{"global", "gpu-only"},
+		},
+		{
+			name:     "empty targetAZ disables filtering",
+			targetAZ: "",
+			want:     []string{"global", "gpu-only", "az-test", "az-prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FilterFlavorsByAvailabilityZone(all, tt.targetAZ)
+			gotIDs := make([]string, len(got))
+			for i, f := range got {
+				gotIDs[i] = f.ID
+			}
+			if len(gotIDs) != len(tt.want) {
+				t.Fatalf("got %v, want %v", gotIDs, tt.want)
+			}
+			for i := range gotIDs {
+				if gotIDs[i] != tt.want[i] {
+					t.Errorf("got %v, want %v", gotIDs, tt.want)
+					return
+				}
+			}
+		})
+	}
+}
+
 func TestGetClosestFlavourWithGPU(t *testing.T) {
 	allFlavors := []flavors.Flavor{
 		{

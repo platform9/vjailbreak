@@ -11,6 +11,31 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
+// AvailabilityZoneExtraSpecKey is the flavor property PCD uses to bind a
+// flavor to a target cluster (the cluster name is the availability zone).
+// A flavor without this property is global and can land on any cluster.
+const AvailabilityZoneExtraSpecKey = "availability_zone"
+
+// FilterFlavorsByAvailabilityZone returns the subset of flavors that can
+// schedule onto targetAZ. A flavor is kept when it has no `availability_zone`
+// property (global) or its property equals targetAZ. Flavors bound to a
+// different AZ are dropped — Nova would otherwise reject placement on the
+// target cluster's hosts. An empty targetAZ disables filtering.
+func FilterFlavorsByAvailabilityZone(allFlavors []flavors.Flavor, targetAZ string) []flavors.Flavor {
+	if targetAZ == "" {
+		return allFlavors
+	}
+	filtered := make([]flavors.Flavor, 0, len(allFlavors))
+	for _, flavor := range allFlavors {
+		flavorAZ, hasAZ := flavor.ExtraSpecs[AvailabilityZoneExtraSpecKey]
+		if hasAZ && flavorAZ != targetAZ {
+			continue
+		}
+		filtered = append(filtered, flavor)
+	}
+	return filtered
+}
+
 // GetClosestFlavour gets the closest flavor for the given CPU, memory, and GPU requirements.
 // useGPUFlavor controls GPU flavor filtering:
 //   - true: Only consider GPU-enabled flavors (even if GPU count = 0)

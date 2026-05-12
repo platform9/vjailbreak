@@ -53,6 +53,8 @@ import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
 import axios from 'axios'
 import { RdmDiskConfigurationPanel } from './components'
+import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
+import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
@@ -2000,6 +2002,11 @@ function VmsSelectionStep({
     [selectedVMs, vmsWithFlavor]
   )
 
+  const missingInterfaceIpWarnings = React.useMemo(
+    () => getMissingInterfaceIpWarnings(vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))),
+    [selectedVMs, vmsWithFlavor]
+  )
+
   return (
     <VmsSelectionStepContainer>
       {showHeader ? <Step stepNumber="2" label="Select Virtual Machines to Migrate" /> : null}
@@ -2116,6 +2123,7 @@ function VmsSelectionStep({
             />
           </Paper>
         </Box>
+        <MissingInterfaceIpWarningAlert warnings={missingInterfaceIpWarnings} sx={{ mt: 2 }} />
         {error && <FormHelperText error>{error}</FormHelperText>}
         {/* Separate RDM Error Messages */}
         {rdmValidation.hasSelectionError && (

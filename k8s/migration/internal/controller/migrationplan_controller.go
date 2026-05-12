@@ -457,7 +457,7 @@ func GetVMwareMachineForVM(ctx context.Context, r *MigrationPlanReconciler, vm s
 		return nil, errors.Errorf("VMwareMachine %s has incorrect VMwareCreds label: expected %s, got %s", vmMachine.Name, expectedLabel, actualLabel)
 	}
 
-	vmidSuffixed := vmMachine.Spec.VMInfo.Name + "-" + strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
+	vmidSuffixed := commonutils.GetVMUniqueKey(vmMachine.Spec.VMInfo.Name, vmMachine.Spec.VMInfo.VMID)
 	if vmidSuffixed != vm {
 		return nil, errors.Errorf("VMwareMachine %s VM key mismatch: expected %s, got %s", vmMachine.Name, vm, vmidSuffixed)
 	}
@@ -640,7 +640,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 		isValid := false
 		for _, v := range validVMs {
-			if v.Spec.VMInfo.Name+"-"+strings.TrimPrefix(v.Spec.VMInfo.VMID, "vm-") == vmName {
+			if commonutils.GetVMUniqueKey(v.Spec.VMInfo.Name, v.Spec.VMInfo.VMID) == vmName {
 				isValid = true
 				break
 			}
@@ -1455,8 +1455,7 @@ func (r *MigrationPlanReconciler) processAdvancedOptions(ctx context.Context,
 // to disambiguate (e.g. "vmname-31090")
 func computeSourceVMKey(vmMachine *vjailbreakv1alpha1.VMwareMachine, allGroups [][]string) string {
 	displayName := vmMachine.Spec.VMInfo.Name
-	moid := strings.TrimPrefix(vmMachine.Spec.VMInfo.VMID, "vm-")
-	currentKey := displayName + "-" + moid
+	currentKey := commonutils.GetVMUniqueKey(displayName, vmMachine.Spec.VMInfo.VMID)
 	for _, group := range allGroups {
 		for _, vmKey := range group {
 			if vmKey == currentKey {
@@ -1543,6 +1542,14 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 	allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
 	if err != nil {
 		return errors.Wrap(err, "failed to list all flavors")
+	}
+
+	// Restrict to flavors that can schedule onto the user-selected target PCD
+	// cluster. In PCD the cluster name is the availability zone, and a flavor
+	// is bound to a cluster via its `availability_zone` extra_spec property.
+	// Flavors without that property are global and remain eligible.
+	if utils.IsOpenstackPCD(*openstackcreds) {
+		allFlavors = openstackpkg.FilterFlavorsByAvailabilityZone(allFlavors, migrationtemplate.Spec.TargetPCDClusterName)
 	}
 
 	useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)

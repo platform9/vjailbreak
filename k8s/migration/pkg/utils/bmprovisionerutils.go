@@ -15,11 +15,11 @@ import (
 
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
-	"github.com/platform9/vjailbreak/pkg/common/constants"
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/keystone"
 	pcd "github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/pcd"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	"github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	providers "github.com/platform9/vjailbreak/pkg/vpwned/sdk/providers"
