@@ -1,5 +1,5 @@
 import axios from '../axios'
-import { VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { K8S_PROXY_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 import { Secret, SecretList } from './model'
 import { encodeUtf8ToBase64, decodeBase64ToUtf8 } from '../../utils/base64encoding'
 
@@ -36,8 +36,7 @@ export const createSecret = async (
 ) => {
   const secretBody = buildSecretBody(name, data, namespace)
 
-  // Use the Kubernetes API endpoint for secrets
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets`
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets`
 
   const response = await axios.post({
     endpoint,
@@ -55,7 +54,7 @@ export const replaceSecret = async (
   try {
     const secretBody = buildSecretBody(name, data, namespace)
 
-    const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+    const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets/${name}`
     const response = await axios.put({
       endpoint,
       data: secretBody
@@ -220,7 +219,7 @@ export const getSecret = async (
   name: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<Secret> => {
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets/${name}`
 
   try {
     const response: Secret = await axios.get({
@@ -258,19 +257,19 @@ export const getSecret = async (
 }
 
 export const deleteSecret = async (name: string, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets/${name}`
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets/${name}`
   const response = await axios.del({ endpoint })
   return response
 }
 
 export const getSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets`
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets`
   const response = await axios.get({ endpoint })
   return response
 }
 
 export const listSecrets = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE): Promise<Secret[]> => {
-  const endpoint = `/api/v1/namespaces/${namespace}/secrets`
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/secrets`
   const response = await axios.get<SecretList>({ endpoint })
 
   const items = Array.isArray(response?.items) ? response.items : []
