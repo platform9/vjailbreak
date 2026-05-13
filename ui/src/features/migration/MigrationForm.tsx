@@ -45,6 +45,7 @@ import { flatten } from 'ramda'
 import { useClusterData } from './useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
+import { useNetworkMappingValidation } from 'src/hooks/useNetworkMappingValidation'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
@@ -566,6 +567,13 @@ export default function MigrationFormDrawer({
     return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(stringsCompareFn)
   }, [params.vms])
 
+  const networkMappingValidation = useNetworkMappingValidation({
+    selectedVMs: params.vms || [],
+    networkMappings: params.networkMappings || [],
+    availableVmwareNetworks
+  })
+  const networkMappingRequired = networkMappingValidation.required
+
   const createNetworkMapping = async (networkMappingParams) => {
     const body = createNetworkMappingJson({
       networkMappings: networkMappingParams
@@ -653,9 +661,16 @@ export default function MigrationFormDrawer({
 
     const updatedMigrationTemplateFields: any = {
       spec: {
-        networkMapping: networkMappings.metadata.name,
         storageCopyMethod
       }
+    }
+
+    // Only include networkMapping if one was actually created.
+    // When networkMappingRequired is false (no VMware networks to map),
+    // networkMappings will be null/undefined and the backend treats the
+    // networkMapping field as optional.
+    if (networkMappings?.metadata?.name) {
+      updatedMigrationTemplateFields.spec.networkMapping = networkMappings.metadata.name
     }
 
     // Add either arrayCredsMapping or storageMapping based on method
@@ -914,12 +929,18 @@ export default function MigrationFormDrawer({
 
     const storageCopyMethod = params.storageCopyMethod || 'normal'
 
-    // Create NetworkMapping
-    const networkMappings = await createNetworkMapping(params.networkMappings)
-
-    if (!networkMappings) {
-      setSubmitting(false)
-      return
+    // Create NetworkMapping only if required.
+    // When networkMappingRequired is false (no VMware networks attached to the
+    // selected VMs), there is nothing to map, so we skip creating the
+    // NetworkMapping resource entirely and pass null through to
+    // updateMigrationTemplate.
+    let networkMappings: any = null
+    if (networkMappingRequired) {
+      networkMappings = await createNetworkMapping(params.networkMappings)
+      if (!networkMappings) {
+        setSubmitting(false)
+        return
+      }
     }
 
     let storageMappings: any = null
@@ -967,6 +988,7 @@ export default function MigrationFormDrawer({
     params.storageMappings,
     params.arrayCredsMappings,
     params.storageCopyMethod,
+    networkMappingRequired,
     migrationTemplate,
     createNetworkMapping,
     createStorageMapping,
@@ -1077,10 +1099,9 @@ export default function MigrationFormDrawer({
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
-    isNilOrEmpty(params.networkMappings) ||
+    (networkMappingRequired && isNilOrEmpty(params.networkMappings)) ||
     isNilOrEmpty(params.vmwareCluster) ||
     isNilOrEmpty(params.pcdCluster) ||
-    // Check if all networks are mapped
     availableVmwareNetworks.some(
       (network) => !params.networkMappings?.some((mapping) => mapping.source === network)
     ) ||
@@ -1203,9 +1224,11 @@ export default function MigrationFormDrawer({
     if (!params.vms || params.vms.length === 0) return false
     if (fieldErrors['networksMapping'] || fieldErrors['storageMapping']) return false
 
-    const networkMapped = availableVmwareNetworks.every((network) =>
-      (params.networkMappings || []).some((m) => m.source === network)
-    )
+    const networkMapped =
+      availableVmwareNetworks.length === 0 ||
+      availableVmwareNetworks.every((network) =>
+        (params.networkMappings || []).some((m) => m.source === network)
+      )
 
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
     const storageMapped =

@@ -39,8 +39,11 @@ type MigrationTemplateSpec struct {
 	OSFamily string `json:"osFamily,omitempty"`
 	// VirtioWinDriver is the driver to be used for the virtual machine
 	VirtioWinDriver string `json:"virtioWinDriver,omitempty"`
-	// NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings
-	NetworkMapping string `json:"networkMapping"`
+	// NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings.
+	// Optional: when the selected VMs have no attached VMware networks, no NetworkMapping is required and this field
+	// may be empty. The controller will skip network reconciliation in that case.
+	// +optional
+	NetworkMapping string `json:"networkMapping,omitempty"`
 	// StorageMapping is the reference to the StorageMapping resource that defines source to destination storage mappings
 	// This is used for normal data copy method
 	StorageMapping string `json:"storageMapping,omitempty"`
