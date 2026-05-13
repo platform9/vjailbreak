@@ -26,7 +26,6 @@ import (
 const (
 	TimesyncdConfDir  = "/etc/systemd/timesyncd.conf.d"
 	TimesyncdConfFile = "/etc/systemd/timesyncd.conf.d/99-vjailbreak.conf"
-	LocaltimePath     = "/etc/localtime"
 	ZoneinfoBase      = "/usr/share/zoneinfo"
 	Pf9EnvPath        = "/etc/pf9/env"
 )
@@ -58,7 +57,6 @@ var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "vjailbreak-ui", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "grafana", "monitoring"},
 	{WorkloadStatefulSet, "prometheus-k8s", "monitoring"},
-	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 }
 
 var (
@@ -131,10 +129,11 @@ func writeTimesyncdConf(servers string) error {
 	return os.WriteFile(timesyncdConfFileOverride, []byte(fmt.Sprintf("[Time]\nNTP=%s\n", servers)), 0644)
 }
 
-// resolveZoneinfoPath returns the absolute path to a tzdata file for tz, but
-// only if the resolved path stays inside ZoneinfoBase. This blocks values like
-// "../../etc/shadow" that would otherwise let a ConfigMap writer point
-// /etc/localtime at an arbitrary host file.
+// resolveZoneinfoPath validates a timezone string by checking that the
+// corresponding zoneinfo file exists and that the resolved path stays inside
+// ZoneinfoBase. We never write to this path — it's used purely to validate
+// the user-supplied timezone before passing it to systemd-timedated via D-Bus
+// (timedated does the actual /etc/localtime update on the host).
 func resolveZoneinfoPath(tz string) (string, error) {
 	if tz == "" {
 		tz = "UTC"
@@ -154,22 +153,10 @@ func resolveZoneinfoPath(tz string) (string, error) {
 	return target, nil
 }
 
-// setLocaltimeSymlink updates /etc/localtime to point at the chosen zoneinfo
-// file. This is the DISPLAY-layer change — the absolute clock value is
-// untouched, only how it gets rendered.
-func setLocaltimeSymlink(tz string) error {
-	target, err := resolveZoneinfoPath(tz)
-	if err != nil {
-		return err
-	}
-	_ = os.Remove(LocaltimePath)
-	return os.Symlink(target, LocaltimePath)
-}
-
 // notifyTimedateViaDbus calls org.freedesktop.timedate1 over the host's system
-// bus to keep systemd-timedated's in-memory state consistent with the file
-// changes we made directly. Failures here are non-fatal: the file changes
-// already took effect.
+// bus so timedated updates host timezone/NTP state. Failures here are returned
+// as warnings by Apply so the caller can distinguish hard config failures from
+// host reconciliation issues.
 func notifyTimedateViaDbus(tz string, ntpEnabled bool) error {
 	conn, err := dbus.SystemBus()
 	if err != nil {
@@ -383,11 +370,6 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	// === Sync layer ===
 	if err := writeTimesyncdConf(ntpServers); err != nil {
 		return "", fmt.Errorf("write timesyncd config: %w", err)
-	}
-
-	// === Display layer ===
-	if err := setLocaltimeSymlink(targetTZ); err != nil {
-		return "", fmt.Errorf("set /etc/localtime: %w", err)
 	}
 
 	// === Best-effort follow-ups: aggregate, don't abort ===

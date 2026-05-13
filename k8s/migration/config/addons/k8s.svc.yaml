@@ -36,7 +36,10 @@ spec:
           runAsUser: 0
           allowPrivilegeEscalation: false
           capabilities:
-            drop: ["ALL"]
+            add:
+            - DAC_OVERRIDE
+            drop:
+            - ALL
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -49,8 +52,6 @@ spec:
           name: dbus-socket
         - mountPath: /etc/systemd/timesyncd.conf.d
           name: timesyncd-conf-dir
-        - mountPath: /etc/localtime
-          name: host-localtime
         - mountPath: /usr/share/zoneinfo
           name: host-zoneinfo
           readOnly: true
@@ -87,10 +88,6 @@ spec:
         hostPath:
           path: /etc/systemd/timesyncd.conf.d
           type: DirectoryOrCreate
-      - name: host-localtime
-        hostPath:
-          path: /etc/localtime
-          type: FileOrCreate
       - name: host-zoneinfo
         hostPath:
           path: /usr/share/zoneinfo

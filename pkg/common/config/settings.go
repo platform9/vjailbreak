@@ -39,8 +39,6 @@ type VjailbreakSettings struct {
 	V2VHelperPodMemoryLimit             string
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
-	Timezone                            string
-	NTPServers                          string
 	HTTPTimeoutSeconds                  int
 }
 
@@ -88,8 +86,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			V2VHelperPodMemoryLimit:             constants.V2VHelperPodMemoryLimit,
 			V2VHelperPodEphemeralStorageRequest: constants.V2VHelperPodEphemeralStorageRequest,
 			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
-			Timezone:                            "",
-			NTPServers:                          "",
 			HTTPTimeoutSeconds:                  constants.HTTPTimeoutSeconds,
 		}, nil
 	}
@@ -219,8 +215,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		V2VHelperPodMemoryLimit:             vjailbreakSettingsCM.Data[constants.V2VHelperPodMemoryLimitKey],
 		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
-		Timezone:                            strings.TrimSpace(vjailbreakSettingsCM.Data["TIMEZONE"]),
-		NTPServers:                          strings.TrimSpace(vjailbreakSettingsCM.Data["NTP_SERVERS"]),
 		HTTPTimeoutSeconds:                  Atoi(vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey]),
 	}, nil
 }

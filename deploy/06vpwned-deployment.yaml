@@ -41,6 +41,8 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
+            add:
+            - DAC_OVERRIDE
             drop:
             - ALL
           runAsUser: 0
@@ -56,8 +58,6 @@ spec:
           name: dbus-socket
         - mountPath: /etc/systemd/timesyncd.conf.d
           name: timesyncd-conf-dir
-        - mountPath: /etc/localtime
-          name: host-localtime
         - mountPath: /usr/share/zoneinfo
           name: host-zoneinfo
           readOnly: true
@@ -90,10 +90,6 @@ spec:
           path: /etc/systemd/timesyncd.conf.d
           type: DirectoryOrCreate
         name: timesyncd-conf-dir
-      - hostPath:
-          path: /etc/localtime
-          type: FileOrCreate
-        name: host-localtime
       - hostPath:
           path: /usr/share/zoneinfo
           type: Directory
