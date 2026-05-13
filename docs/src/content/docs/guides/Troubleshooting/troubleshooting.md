@@ -11,7 +11,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 
 - [Windows Dynamic Disk (LDM) migration issue](windows-dynamic-disk-ldm-migration-issue/)
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
-- [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrooteresolvconf-operation-not-permitted)
+- [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 
 vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
