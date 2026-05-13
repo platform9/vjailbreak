@@ -716,7 +716,12 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	select {
 	case <-doneChan:
 		close(incrementalcopyprogress)
-		return nil
+		select {
+		case err := <-errorChan:
+			return err
+		default:
+			return nil
+		}
 	case err := <-errorChan:
 		return err
 	}
