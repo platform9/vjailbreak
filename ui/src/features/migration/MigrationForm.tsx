@@ -661,9 +661,16 @@ export default function MigrationFormDrawer({
 
     const updatedMigrationTemplateFields: any = {
       spec: {
-        networkMapping: networkMappings.metadata.name,
         storageCopyMethod
       }
+    }
+
+    // Only include networkMapping if one was actually created.
+    // When networkMappingRequired is false (no VMware networks to map),
+    // networkMappings will be null/undefined and the backend treats the
+    // networkMapping field as optional.
+    if (networkMappings?.metadata?.name) {
+      updatedMigrationTemplateFields.spec.networkMapping = networkMappings.metadata.name
     }
 
     // Add either arrayCredsMapping or storageMapping based on method
@@ -922,12 +929,18 @@ export default function MigrationFormDrawer({
 
     const storageCopyMethod = params.storageCopyMethod || 'normal'
 
-    // Create NetworkMapping
-    const networkMappings = await createNetworkMapping(params.networkMappings)
-
-    if (!networkMappings) {
-      setSubmitting(false)
-      return
+    // Create NetworkMapping only if required.
+    // When networkMappingRequired is false (no VMware networks attached to the
+    // selected VMs), there is nothing to map, so we skip creating the
+    // NetworkMapping resource entirely and pass null through to
+    // updateMigrationTemplate.
+    let networkMappings: any = null
+    if (networkMappingRequired) {
+      networkMappings = await createNetworkMapping(params.networkMappings)
+      if (!networkMappings) {
+        setSubmitting(false)
+        return
+      }
     }
 
     let storageMappings: any = null
@@ -975,6 +988,7 @@ export default function MigrationFormDrawer({
     params.storageMappings,
     params.arrayCredsMappings,
     params.storageCopyMethod,
+    networkMappingRequired,
     migrationTemplate,
     createNetworkMapping,
     createStorageMapping,

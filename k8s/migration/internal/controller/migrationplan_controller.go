@@ -1828,6 +1828,22 @@ func (r *MigrationPlanReconciler) reconcileNetwork(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmnws []string,
 ) ([]string, error) {
+	// If the VM has no networks attached and no NetworkMapping is configured on
+	// the template, there is nothing to reconcile. This supports submitting
+	// migrations for VMs with no NICs where the UI also skipped creating a
+	// NetworkMapping resource.
+	if len(vmnws) == 0 && migrationtemplate.Spec.NetworkMapping == "" {
+		return []string{}, nil
+	}
+
+	// A NetworkMapping must exist if the VM has at least one network.
+	if migrationtemplate.Spec.NetworkMapping == "" {
+		return nil, errors.Errorf(
+			"VM has %d network(s) but MigrationTemplate %s has no NetworkMapping configured",
+			len(vmnws), migrationtemplate.Name,
+		)
+	}
+
 	var err error
 	// Fetch the networkmap
 	networkmap := &vjailbreakv1alpha1.NetworkMapping{}
