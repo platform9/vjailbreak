@@ -280,11 +280,11 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 func (osclient *OpenStackClients) AttachVolumeToVM(ctx context.Context, volumeID string) error {
 	instanceID, err := GetCurrentInstanceUUID()
 
-	osclient.ComputeClient.Microversion = "2.60"
 	if err != nil {
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Attaching volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
+	osclient.ComputeClient.Microversion = "2.60"
 
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
 	if err != nil {
