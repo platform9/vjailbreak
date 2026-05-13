@@ -358,16 +358,19 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		}
 	}
 
+	hostEntries, heErr := GetAgentHostEntries(ctx, k3sclient)
+	if heErr != nil {
+		log.Error(heErr, "Failed to get agent host entries, provisioning without custom hosts")
+		hostEntries = []commonutils.HostEntry{}
+	}
+
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
 		Name:           vjNode.Name,
 		FlavorRef:      vjNode.Spec.OpenstackFlavorID,
 		Networks:       networkIDs,
 		SecurityGroups: securityGroups,
-		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
-			constants.ENVFileLocation,
-			"false", GetNodeInternalIP(masterNode),
-			token)),
+		UserData:       []byte(commonutils.BuildUserData(constants.ENVFileLocation, GetNodeInternalIP(masterNode), string(token), hostEntries)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
 		AvailabilityZone: availabilityZone,
 	}
@@ -1148,4 +1151,21 @@ func IsNodeReady(node *corev1.Node) bool {
 		}
 	}
 	return false
+}
+
+// GetAgentHostEntries reads custom host entries from the vjailbreak-settings ConfigMap.
+// Returns empty slice (not error) if the key is absent or empty.
+func GetAgentHostEntries(ctx context.Context, k8sClient client.Client) ([]commonutils.HostEntry, error) {
+	cm := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      constants.VjailbreakSettingsConfigMapName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, cm); err != nil {
+		return nil, errors.Wrap(err, "failed to get vjailbreak-settings configmap")
+	}
+	raw := cm.Data[constants.AgentHostEntriesKey]
+	if raw == "" {
+		return []commonutils.HostEntry{}, nil
+	}
+	return commonutils.ParseHostEntries(raw)
 }

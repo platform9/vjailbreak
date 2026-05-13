@@ -328,6 +328,9 @@ const (
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
 
+	// AgentHostEntriesKey is the ConfigMap key for custom host entries injected into agent node VMs
+	AgentHostEntriesKey = "AGENT_HOST_ENTRIES"
+
 	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
 	AutoPXEBootOnConversionDefault = false
 	// AutoPXEBootOnConversionKey is the key for enabling/disabling automatic PXE boot during cluster conversion

@@ -121,6 +121,15 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
+	// Handle reprovision annotation before normal UUID lookup
+	if reprovisioned, repErr := r.reconcileReprovision(ctx, vjNode); repErr != nil {
+		log.Error(repErr, "Failed to handle reprovision annotation")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, repErr
+	} else if reprovisioned {
+		log.Info("Reprovision triggered, requeueing to create new VM", "name", vjNode.Name)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
 	if err != nil {
 		log.Error(err, "Failed to get OpenStack VM by name, setting node to error state")
@@ -258,6 +267,52 @@ func (r *VjailbreakNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VjailbreakNode{}).
 		Complete(r)
+}
+
+const (
+	reprovisionAnnotation = "vjailbreak.io/reprovision"
+	reprovisionRequested  = "requested"
+	reprovisionBlocked    = "blocked"
+)
+
+// reprovisionAllowed returns true when no active migrations block node reprovisioning.
+func reprovisionAllowed(activeMigrations []string) bool {
+	return len(activeMigrations) == 0
+}
+
+// reconcileReprovision handles the reprovision annotation lifecycle.
+// Returns (true, nil) when reprovisioning was triggered (UUID cleared, annotation removed).
+// Returns (false, nil) when no action was needed or reprovision was blocked by active migrations.
+func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
+	vjNode *vjailbreakv1alpha1.VjailbreakNode) (bool, error) {
+	if vjNode.Annotations[reprovisionAnnotation] != reprovisionRequested {
+		return false, nil
+	}
+
+	if !reprovisionAllowed(vjNode.Status.ActiveMigrations) {
+		// Block reprovision — node is busy
+		patch := client.MergeFrom(vjNode.DeepCopy())
+		if vjNode.Annotations == nil {
+			vjNode.Annotations = map[string]string{}
+		}
+		vjNode.Annotations[reprovisionAnnotation] = reprovisionBlocked
+		return false, r.Patch(ctx, vjNode, patch)
+	}
+
+	// Clear UUID to trigger re-provisioning on next reconcile
+	metaPatch := client.MergeFrom(vjNode.DeepCopy())
+	delete(vjNode.Annotations, reprovisionAnnotation)
+	if err := r.Patch(ctx, vjNode, metaPatch); err != nil {
+		return false, errors.Wrap(err, "failed to remove reprovision annotation")
+	}
+
+	statusPatch := client.MergeFrom(vjNode.DeepCopy())
+	vjNode.Status.OpenstackUUID = ""
+	if err := r.Client.Status().Patch(ctx, vjNode, statusPatch); err != nil {
+		return false, errors.Wrap(err, "failed to clear OpenstackUUID for reprovision")
+	}
+
+	return true, nil
 }
 
 // updateActiveMigrations efficiently updates just the ActiveMigrations field
