@@ -62,8 +62,10 @@ spec:
                 - openstackRef
                 type: object
               networkMapping:
-                description: NetworkMapping is the reference to the NetworkMapping
-                  resource that defines source to destination network mappings
+                description: |-
+                  NetworkMapping is the reference to the NetworkMapping resource that defines source to destination network mappings.
+                  Optional: when the selected VMs have no attached VMware networks, no NetworkMapping is required and this field
+                  may be empty. The controller will skip network reconciliation in that case.
                 type: string
               osFamily:
                 description: OSFamily is the OS type of the virtual machine
@@ -113,7 +115,6 @@ spec:
                 type: string
             required:
             - destination
-            - networkMapping
             - source
             type: object
         type: object
