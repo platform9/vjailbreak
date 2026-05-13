@@ -3,7 +3,6 @@ package timesettings
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -78,8 +77,7 @@ func TestFilterValidNTPServers(t *testing.T) {
 	}
 }
 
-func TestResolveZoneinfoPath_TraversalRejected(t *testing.T) {
-	// These must be rejected without touching the filesystem.
+func TestSanitizeTimezone_TraversalRejected(t *testing.T) {
 	bad := []string{
 		"../../etc/shadow",
 		"..",
@@ -90,32 +88,33 @@ func TestResolveZoneinfoPath_TraversalRejected(t *testing.T) {
 		"UTC\x00",
 	}
 	for _, tz := range bad {
-		if _, err := resolveZoneinfoPath(tz); err == nil {
-			t.Errorf("resolveZoneinfoPath(%q) accepted; want rejection", tz)
+		if _, err := sanitizeTimezone(tz); err == nil {
+			t.Errorf("sanitizeTimezone(%q) accepted; want rejection", tz)
 		}
 	}
 }
 
-func TestResolveZoneinfoPath_ValidStaysInBase(t *testing.T) {
-	// Skip on platforms without a real zoneinfo dir (CI macOS sometimes lacks it).
-	if _, err := os.Stat(ZoneinfoBase); err != nil {
-		t.Skipf("zoneinfo base %s not present: %v", ZoneinfoBase, err)
+func TestSanitizeTimezone_ValidPassesThrough(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"UTC", "UTC"},
+		{"Etc/UTC", "Etc/UTC"},
+		// Backward-compat aliases must NOT be rejected — D-Bus validates.
+		{"Asia/Calcutta", "Asia/Calcutta"},
+		{"Asia/Kolkata", "Asia/Kolkata"},
+		{"America/New_York", "America/New_York"},
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("zoneinfo layout is unix-specific")
-	}
-	cases := []string{"UTC", "Etc/UTC", ""}
-	for _, tz := range cases {
-		got, err := resolveZoneinfoPath(tz)
+	for _, c := range cases {
+		got, err := sanitizeTimezone(c.in)
 		if err != nil {
-			// Some distros lack a specific entry; only fail if UTC itself is missing.
-			if tz == "" || tz == "UTC" {
-				t.Errorf("resolveZoneinfoPath(%q) error = %v", tz, err)
-			}
+			t.Errorf("sanitizeTimezone(%q) error = %v", c.in, err)
 			continue
 		}
-		if !strings.HasPrefix(got, ZoneinfoBase+string(filepath.Separator)) && got != ZoneinfoBase {
-			t.Errorf("resolveZoneinfoPath(%q) = %q escapes %s", tz, got, ZoneinfoBase)
+		if got != c.want {
+			t.Errorf("sanitizeTimezone(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

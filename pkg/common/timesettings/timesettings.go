@@ -130,28 +130,19 @@ func writeTimesyncdConf(servers string) error {
 	return os.WriteFile(timesyncdConfFileOverride, []byte(fmt.Sprintf("[Time]\nNTP=%s\n", servers)), 0644)
 }
 
-// resolveZoneinfoPath validates a timezone string by checking that the
-// corresponding zoneinfo file exists and that the resolved path stays inside
-// ZoneinfoBase. We never write to this path — it's used purely to validate
-// the user-supplied timezone before passing it to systemd-timedated via D-Bus
-// (timedated does the actual /etc/localtime update on the host).
-func resolveZoneinfoPath(tz string) (string, error) {
+func sanitizeTimezone(tz string) (string, error) {
 	if tz == "" {
-		tz = "UTC"
+		return "", nil
 	}
 	if strings.Contains(tz, "..") || strings.HasPrefix(tz, "/") || strings.ContainsRune(tz, 0) {
 		return "", fmt.Errorf("timezone %q contains invalid characters", tz)
 	}
 	target := filepath.Join(ZoneinfoBase, tz)
-	// filepath.Join cleans ".."; verify the cleaned path is still under base.
 	rel, err := filepath.Rel(ZoneinfoBase, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("timezone %q resolves outside zoneinfo directory", tz)
 	}
-	if _, err := os.Stat(target); err != nil {
-		return "", fmt.Errorf("timezone %q not found in zoneinfo: %w", tz, err)
-	}
-	return target, nil
+	return tz, nil
 }
 
 // notifyTimedateViaDbus calls org.freedesktop.timedate1 over the host's system
@@ -339,13 +330,10 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	rawNTP := strings.TrimSpace(settingsCM.Data["NTP_SERVERS"])
 	ntpServers := FilterValidNTPServers(rawNTP)
 
-	tzValid := false
-	if rawTZ != "" {
-		if _, err := resolveZoneinfoPath(rawTZ); err == nil {
-			tzValid = true
-		} else {
-			logrus.Warnf("timesettings: %v, defaulting to UTC", err)
-		}
+	cleanTZ, tzErr := sanitizeTimezone(rawTZ)
+	if tzErr != nil {
+		logrus.Warnf("timesettings: %v, defaulting to UTC", tzErr)
+		cleanTZ = ""
 	}
 
 	var (
@@ -355,14 +343,14 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	switch {
 	case ntpServers != "":
 		syncEnabled = true
-		if tzValid {
-			targetTZ = rawTZ
+		if cleanTZ != "" {
+			targetTZ = cleanTZ
 		} else {
 			targetTZ = "UTC"
 		}
-	case tzValid:
+	case cleanTZ != "":
 		syncEnabled = true
-		targetTZ = rawTZ
+		targetTZ = cleanTZ
 	default:
 		syncEnabled = false
 		targetTZ = "UTC"
@@ -401,8 +389,9 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	logrus.Infof("timesettings: applied TIMEZONE=%q NTP_SERVERS=%q", targetTZ, ntpServers)
 	msg := fmt.Sprintf("Time settings applied (timezone=%s, ntp=%s)", targetTZ, ntpServers)
 	if joined := errors.Join(errs...); joined != nil {
-		// Host-level config landed; report partial-success in the body.
-		return msg + " (with warnings)", joined
+		msg = fmt.Sprintf("%s (with warnings): %s", msg, joined.Error())
+		logrus.Warnf("timesettings: %s", msg)
+		return msg, joined
 	}
 	return msg, nil
 }
