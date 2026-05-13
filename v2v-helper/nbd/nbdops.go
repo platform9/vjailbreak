@@ -128,10 +128,12 @@ func newHandlePool(size int, sockUrl string) (*handlePool, error) {
 			return nil, fmt.Errorf("failed to create libnbd handle %d: %v", handleIdx, err)
 		}
 		if err := handle.AddMetaContext("base:allocation"); err != nil {
+			handle.Close()
 			pool.Close()
 			return nil, fmt.Errorf("failed to add meta context on handle %d: %v", handleIdx, err)
 		}
 		if err := handle.ConnectUri(sockUrl); err != nil {
+			handle.Close()
 			pool.Close()
 			return nil, fmt.Errorf("failed to connect handle %d: %v", handleIdx, err)
 		}
