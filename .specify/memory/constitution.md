@@ -1,50 +1,39 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# vJailbreak Constitution (v1.2.0)
+
+This document establishes governance principles for the vJailbreak migration orchestration project.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Kubernetes-Native Architecture
+All migration state must be represented as Kubernetes Custom Resources within k3s — no external state management allowed.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. External Documentation First
+Developers must consult official documentation for dependencies (virt-v2v, libguestfs, controller-runtime, etc.) before implementing features.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Generated Code Protection (NON-NEGOTIABLE)
+Files like `deploy/installer.yaml` and `zz_generated.deepcopy.go` must never be hand-edited. Regenerate via `make generate` inside `k8s/migration/` after any CRD type changes.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Test-First Development (NON-NEGOTIABLE)
+All new Go code requires unit tests with mocked external dependencies. No live system contact in tests. TDD sequence: tests written → approved → fail → implement (Red-Green-Refactor).
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Module Independence
+Four independent Go modules must maintain separate dependency graphs. Commands run from module directories only. No shared `go.sum` files. Cross-module imports use full module paths.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### VI. AI-Assisted Development (NON-NEGOTIABLE)
+AI agents must invoke relevant skills before coding. `superpowers:using-superpowers` invoked at session start.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### VII. Code Reuse and Simplicity (NEW)
+Logic-preserving refactors reducing complexity are permitted at the point of need without dedicated tickets. Three similar lines is better than a premature abstraction.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Critical Requirements
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Pre-commit hooks must activate via `make setup-hooks`
+- Controller tests run via `cd k8s/migration && make test`
+- ESXi DNS resolution is required during VM copy phases
+- All PRs must pass tests and include new code coverage
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Constitution supersedes all other documentation. Amendments require maintainer approval.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.2.0 | **Source**: branch `1889-maas-free-bm-provisioning`

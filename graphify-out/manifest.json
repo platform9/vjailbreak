@@ -763,6 +763,14 @@
     "mtime": 1778664135.6782565,
     "hash": "45bf19771351c5485cc6764d02afd56a"
   },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/spec.md": {
+    "mtime": 1778672418.0499623,
+    "hash": "c7f1541f297247a83e63e163e0d2bac9"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/checklists/requirements.md": {
+    "mtime": 1778672426.4217722,
+    "hash": "d4f690fbddaf22cd22c227bec5f86036"
+  },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/05controller-deployment.yaml": {
     "mtime": 1778671202.4926672,
     "hash": "499bb969c450a32a9f466dc9fbefd4d6"
