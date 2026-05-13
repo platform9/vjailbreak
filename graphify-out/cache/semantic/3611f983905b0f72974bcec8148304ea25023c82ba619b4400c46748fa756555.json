@@ -1,0 +1,1 @@
+{"nodes": [{"id": "nodeexporter_clusterrole", "label": "NodeExporter ClusterRole", "file_type": "document", "source_file": "k8s/kube-prometheus/manifests/nodeExporter-clusterRole.yaml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

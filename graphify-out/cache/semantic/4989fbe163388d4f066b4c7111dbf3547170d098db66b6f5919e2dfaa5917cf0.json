@@ -1,0 +1,1 @@
+{"nodes": [{"id": "arraycredsmappings_crd", "label": "ArrayCredsMapping CRD", "file_type": "document", "source_file": "k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_arraycredsmappings.yaml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
