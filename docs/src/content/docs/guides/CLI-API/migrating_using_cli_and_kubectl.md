@@ -65,9 +65,6 @@ Before we start, ensure the following prerequisites are fulfilled:
 
 Ensure that you follow the steps in sequence to gather information and create respective Kubernetes objects in sequence to initiate migration for a VM from VMware to PCD.
 
-You can perform the same steps using APIs instead of using kubectl commands. The structure of the objects would remain the same but the format would be JSON. Read more in the [API reference documentation](https://platform9.github.io/vjailbreak/guides/using_apis/).
-
-
 ### Gather Information
 
 For creating the resources, we will need some values to put into the YAML manifests. Let’s gather those values first.
@@ -307,9 +304,9 @@ metadata:
   name: migrationtemplate
   namespace: migration-system
 spec:
-  networkMapping: networkmapping 
+  networkMapping: networkmapping
   storageMapping: storagemapping
-  osFamily: linuxGuest 
+  osFamily: linux        # valid values: linux, windows (optional — auto-detected when VM is powered on)
   source:
     vmwareRef: vcenter-a
   destination:
@@ -355,6 +352,50 @@ spec:
 
 To know more about all the supported fields for advanced use-cases, refer to the [MigrationPlan section of the CRD reference document](https://platform9.github.io/vjailbreak/reference/reference/#migrationplan).
 
+##### Optional MigrationPlan Fields
+
+The example above shows the minimum required fields. The following optional fields are also supported:
+
+```yaml
+spec:
+  migrationTemplate: migrationtemplate
+
+  # Retry the migration automatically if it fails
+  retry: false
+
+  # Shell script executed on first boot of the destination VM
+  firstBootScript: |
+    echo "Add your startup script here!"
+
+  # Schedule data copy and cutover windows (RFC 3339 datetime)
+  migrationStrategy:
+    type: hot
+    dataCopyStart: "2024-06-01T02:00:00Z"    # when to start copying data
+    vmCutoverStart: "2024-06-01T04:00:00Z"   # start of cutover window
+    vmCutoverEnd: "2024-06-01T05:00:00Z"     # end of cutover window
+    adminInitiatedCutOver: false
+    performHealthChecks: false
+    healthCheckPort: "443"
+
+  # Post-migration actions on the source VM in VMware
+  postMigrationAction:
+    renameVm: true
+    suffix: "_migrated_to_pcd"   # appended to source VM name
+    moveToFolder: true
+    folderName: "migrated"       # VMware folder to move source VM into
+
+  # Advanced: override volume types, networks, or ports per VM
+  advancedOptions:
+    granularVolumeTypes:
+      - lvm
+    granularNetworks:
+      - vlan1
+    granularPorts:
+      - "port-uuid-1"
+
+  virtualMachines:
+    - - vm-1
+```
 
 ##### How to apply this configuration?
 
