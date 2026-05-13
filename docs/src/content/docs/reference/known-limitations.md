@@ -82,7 +82,7 @@ Add-Computer -DomainName <domain> -Credential <domain\admin> -Restart
 
 The **Persist source network interfaces** option does not work for Windows Server 2012 and earlier (including Windows Server 2008 R2 and Windows Server 2008).
 
-Static network interface name persistence relies on driver injection capabilities not available in these older Windows versions.
+Network interface name persistence depends on PowerShell capabilities, the Windows registry structure for network adapters, and a compatible version of `pnputil`. These prerequisites are not met on Windows Server 2012 and earlier.
 
 **Workaround**: Manually reconfigure network interface names and static IP settings inside the VM after migration.
 
@@ -95,9 +95,9 @@ The **Assign IP** and **Persist Network** (Persist source network interfaces) op
 - Use **Assign IP** when you need to set a specific IP address on the destination VM.
 - Use **Persist Network** when you need to preserve the source VM's interface names and static routes.
 
-## Multi-IP Assignment: Only First IP Preserved
+## Multi-IP Assignment Not Supported
 
-When configuring multiple IP addresses in the **Assign IPs** field, only the **first IP** is preserved on the destination VM. Subsequent IPs in the list are silently ignored.
+Only one IP address per network interface is supported in the **Assign IPs** field. The UI enforces this — the field accepts a single IP per interface. If multiple IPs are specified via CLI, the migration will fail.
 
 **Workaround**: Assign additional IPs manually inside the VM after migration, or use OpenStack port configuration to attach additional floating IPs post-migration.
 
