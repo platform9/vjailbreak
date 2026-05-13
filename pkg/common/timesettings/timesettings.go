@@ -57,6 +57,7 @@ var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "vjailbreak-ui", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "grafana", "monitoring"},
 	{WorkloadStatefulSet, "prometheus-k8s", "monitoring"},
+	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 }
 
 var (
