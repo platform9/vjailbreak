@@ -310,6 +310,8 @@ const (
 
 	// ValidationStatusFailed is the status value for failed validation
 	ValidationStatusFailed = "Failed"
+	// ValidationStatusRevalidating is the status value while credential revalidation is in progress
+	ValidationStatusRevalidating = "Revalidating"
 
 	// VjailbreakSettingsConfigMapName is the name of the vjailbreak settings configmap
 	VjailbreakSettingsConfigMapName = "vjailbreak-settings"

@@ -24,7 +24,9 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -138,5 +140,109 @@ func TestGetDatastoresForVolumeMapping_PreservesBlankDiskDatastore(t *testing.T)
 	want := []string{"", "nfs"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected datastore mapping for blank datastore disks: got %v, want %v", got, want)
+	}
+}
+
+func TestIsVMSucceededInPlan(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const planName = "test-plan"
+
+	makeMigration := func(name, vmName, phase string, labels map[string]string) *vjailbreakv1alpha1.Migration {
+		m := &vjailbreakv1alpha1.Migration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns,
+				Labels:    labels,
+			},
+			Spec: vjailbreakv1alpha1.MigrationSpec{
+				VMName: vmName,
+			},
+		}
+		m.Status.Phase = vjailbreakv1alpha1.VMMigrationPhase(phase)
+		return m
+	}
+
+	planLabels := map[string]string{"migrationplan": planName}
+	otherPlanLabels := map[string]string{"migrationplan": "other-plan"}
+
+	tests := []struct {
+		name       string
+		migrations []*vjailbreakv1alpha1.Migration
+		vmName     string
+		want       bool
+	}{
+		{
+			name: "VM succeeded in this plan",
+			migrations: []*vjailbreakv1alpha1.Migration{
+				makeMigration("m1", "vm-a", string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded), planLabels),
+			},
+			vmName: "vm-a",
+			want:   true,
+		},
+		{
+			name: "VM succeeded but in a different plan",
+			migrations: []*vjailbreakv1alpha1.Migration{
+				makeMigration("m1", "vm-a", string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded), otherPlanLabels),
+			},
+			vmName: "vm-a",
+			want:   false,
+		},
+		{
+			name: "VM in this plan but not yet succeeded",
+			migrations: []*vjailbreakv1alpha1.Migration{
+				makeMigration("m1", "vm-a", "Migrating", planLabels),
+			},
+			vmName: "vm-a",
+			want:   false,
+		},
+		{
+			name:       "no migrations at all",
+			migrations: nil,
+			vmName:     "vm-a",
+			want:       false,
+		},
+		{
+			name: "different VM succeeded in same plan",
+			migrations: []*vjailbreakv1alpha1.Migration{
+				makeMigration("m1", "vm-b", string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded), planLabels),
+			},
+			vmName: "vm-a",
+			want:   false,
+		},
+		{
+			name: "VM failed in this plan",
+			migrations: []*vjailbreakv1alpha1.Migration{
+				makeMigration("m1", "vm-a", "Failed", planLabels),
+			},
+			vmName: "vm-a",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objs := make([]runtime.Object, len(tt.migrations))
+			for i, m := range tt.migrations {
+				objs[i] = m
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(objs...).
+				WithStatusSubresource(&vjailbreakv1alpha1.Migration{}).
+				Build()
+
+			r := &MigrationPlanReconciler{Client: fakeClient, Scheme: scheme}
+			plan := &vjailbreakv1alpha1.MigrationPlan{
+				ObjectMeta: metav1.ObjectMeta{Name: planName, Namespace: ns},
+			}
+
+			got := r.isVMSucceededInPlan(context.Background(), plan, tt.vmName)
+			if got != tt.want {
+				t.Errorf("isVMSucceededInPlan(%q) = %v, want %v", tt.vmName, got, tt.want)
+			}
+		})
 	}
 }
