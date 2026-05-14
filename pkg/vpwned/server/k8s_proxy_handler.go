@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,12 @@ import (
 const (
 	allowedServiceAccount = "system:serviceaccount:migration-system:ui-manager-sa"
 	tokenCacheTTL         = 60 * time.Second
+)
+
+// allowedK8sPath restricts proxy access to pods and pod logs in migration-system only.
+// Allowed: GET /api/v1/namespaces/migration-system/pods[/{podName}[/log]]
+var allowedK8sPath = regexp.MustCompile(
+	`^/api/v1/namespaces/migration-system/pods(/[^/?]+(/log)?)?$`,
 )
 
 var (
@@ -124,6 +131,17 @@ func HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	if err := validateUIToken(token); err != nil {
 		logrus.Warnf("k8s proxy: rejected request: %v", err)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	k8sPath := strings.TrimPrefix(r.URL.Path, "/vpw/v1/k8s")
+	if !allowedK8sPath.MatchString(k8sPath) {
+		logrus.Warnf("k8s proxy: forbidden path: %s", k8sPath)
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 

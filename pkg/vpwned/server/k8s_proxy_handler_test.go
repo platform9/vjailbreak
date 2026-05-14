@@ -199,6 +199,59 @@ func TestHandleK8sProxy_ValidToken_ProxiesToBackend(t *testing.T) {
 	}
 }
 
+// --- Path allowlist tests ---
+
+func TestHandleK8sProxy_AllowedPaths(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{"list pods", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusOK},
+		{"get pod", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusOK},
+		{"stream pod logs", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod/log", http.StatusOK},
+		{"post forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusMethodNotAllowed},
+		{"delete forbidden", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusMethodNotAllowed},
+		{"secrets forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/secrets", http.StatusForbidden},
+		{"other namespace forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/default/pods", http.StatusForbidden},
+		{"clusterroles forbidden", http.MethodGet, "/vpw/v1/k8s/apis/rbac.authorization.k8s.io/v1/clusterroles", http.StatusForbidden},
+		{"path traversal forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/../secrets", http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearTokenCache()
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer backend.Close()
+
+			fakeClient := fake.NewSimpleClientset()
+			fakeClient.PrependReactor("create", "tokenreviews",
+				makeTokenReviewReactor(true, allowedServiceAccount))
+
+			origProxy := k8sReverseProxy
+			origClient := k8sAuthClient
+			k8sReverseProxy = makeTestProxy(backend)
+			k8sAuthClient = fakeClient
+			defer func() {
+				k8sReverseProxy = origProxy
+				k8sAuthClient = origClient
+			}()
+
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			req.Header.Set("Authorization", "Bearer valid-token")
+			w := httptest.NewRecorder()
+			HandleK8sProxy(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("path %s method %s: expected %d, got %d", tt.path, tt.method, tt.wantStatus, w.Code)
+			}
+		})
+	}
+}
+
 // --- validateUIToken tests ---
 
 func TestValidateUIToken_ClientNotInitialized(t *testing.T) {
