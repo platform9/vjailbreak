@@ -81,8 +81,10 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.reconcileDelete(ctx, vjailbreakNodeScope)
 	}
 
-	// Quick path for just updating ActiveMigrations if node is ready
-	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
+	// Quick path for just updating ActiveMigrations if node is ready.
+	// Skip fast path when reprovision is requested so reconcileNormal can handle it.
+	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady &&
+		vjailbreakNode.Annotations[reprovisionAnnotation] != reprovisionRequested {
 		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
 	}
 
