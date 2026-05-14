@@ -14,6 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// labelInvalidCharsRe matches characters not allowed in Kubernetes label values.
+var labelInvalidCharsRe = regexp.MustCompile(`[^A-Za-z0-9\-_.]`)
+
 // ConvertToK8sName converts a name to be Kubernetes-compatible
 func ConvertToK8sName(name string) (string, error) {
 	// Convert to lowercase
@@ -106,8 +109,7 @@ func SanitizeLabelValue(s string) string {
 	// Replace spaces with hyphens (primary offender for VM names with spaces)
 	s = strings.ReplaceAll(s, " ", "-")
 	// Remove any character not in [A-Za-z0-9-_.]
-	re := regexp.MustCompile(`[^A-Za-z0-9\-_.]`)
-	s = re.ReplaceAllString(s, "")
+	s = labelInvalidCharsRe.ReplaceAllString(s, "")
 	// Trim leading and trailing non-alphanumeric chars (hyphens, underscores, dots)
 	s = strings.Trim(s, "-_.")
 	// Enforce 63-char limit, then re-trim trailing non-alphanumeric introduced by truncation

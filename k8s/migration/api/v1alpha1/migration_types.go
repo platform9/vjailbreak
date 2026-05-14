@@ -86,9 +86,10 @@ type MigrationSpec struct {
 	// VMName is the name of the VM getting migrated from VMWare to Openstack
 	VMName string `json:"vmName"`
 
-	// DisplayName is the original VM display name including any special characters (spaces, etc.).
-	// VMName holds the same value; this field ensures the original name is accessible via spec
-	// even when the label value has been sanitized for Kubernetes compatibility.
+	// DisplayName is the original VM unique key (name-<moid> format) including any special characters
+	// such as spaces. Unlike VMName (which holds only the plain VM name), this field preserves the
+	// full unique key so it remains accessible via spec even when the label value has been sanitized
+	// for Kubernetes compatibility.
 	// +optional
 	DisplayName string `json:"displayName,omitempty"`
 
