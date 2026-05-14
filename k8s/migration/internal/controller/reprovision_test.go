@@ -164,4 +164,7 @@ func TestReconcileReprovision_RequestedIdleNode(t *testing.T) {
 	if updated.Status.OpenstackUUID != "" {
 		t.Errorf("OpenstackUUID should be cleared, got %q", updated.Status.OpenstackUUID)
 	}
+	if updated.Status.Phase != "" {
+		t.Errorf("Phase should be reset, got %q", updated.Status.Phase)
+	}
 }
