@@ -23,11 +23,33 @@ const (
 	tokenCacheTTL         = 60 * time.Second
 )
 
-// allowedK8sPath restricts proxy access to pods and pod logs in migration-system only.
-// Allowed: GET /api/v1/namespaces/migration-system/pods[/{podName}[/log]]
-var allowedK8sPath = regexp.MustCompile(
-	`^/api/v1/namespaces/migration-system/pods(/[^/?]+(/log)?)?$`,
-)
+// allowedRoute pairs an HTTP method with a path pattern.
+// All patterns are anchored to migration-system namespace.
+type allowedRoute struct {
+	method  string
+	pattern *regexp.Regexp
+}
+
+// allowedRoutes is the exact set of K8s API calls the UI makes through this proxy.
+var allowedRoutes = []allowedRoute{
+	// Pods — read and admin-cutover patch
+	{http.MethodGet, regexp.MustCompile(`^/api/v1/namespaces/migration-system/pods(/[^/?]+(/log)?)?$`)},
+	{http.MethodPatch, regexp.MustCompile(`^/api/v1/namespaces/migration-system/pods/[^/?]+$`)},
+	// Secrets — full CRUD, migration-system only
+	{http.MethodGet, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets(/[^/?]+)?$`)},
+	{http.MethodPost, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets$`)},
+	{http.MethodPut, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets/[^/?]+$`)},
+	{http.MethodDelete, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets/[^/?]+$`)},
+}
+
+func isAllowedRoute(method, k8sPath string) bool {
+	for _, r := range allowedRoutes {
+		if r.method == method && r.pattern.MatchString(k8sPath) {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	k8sReverseProxy *httputil.ReverseProxy
@@ -134,13 +156,9 @@ func HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	k8sPath := strings.TrimPrefix(r.URL.Path, "/vpw/v1/k8s")
-	if !allowedK8sPath.MatchString(k8sPath) {
-		logrus.Warnf("k8s proxy: forbidden path: %s", k8sPath)
+	if !isAllowedRoute(r.Method, k8sPath) {
+		logrus.Warnf("k8s proxy: forbidden %s %s", r.Method, k8sPath)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

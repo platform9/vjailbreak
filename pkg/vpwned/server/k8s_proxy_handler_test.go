@@ -208,14 +208,26 @@ func TestHandleK8sProxy_AllowedPaths(t *testing.T) {
 		path       string
 		wantStatus int
 	}{
+		// pods — allowed
 		{"list pods", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusOK},
 		{"get pod", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusOK},
 		{"stream pod logs", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod/log", http.StatusOK},
-		{"post forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusMethodNotAllowed},
-		{"delete forbidden", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusMethodNotAllowed},
-		{"secrets forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/secrets", http.StatusForbidden},
-		{"other namespace forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/default/pods", http.StatusForbidden},
+		{"patch pod (admin cutover)", http.MethodPatch, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusOK},
+		// secrets — allowed CRUD
+		{"list secrets", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets", http.StatusOK},
+		{"get secret", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
+		{"create secret", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets", http.StatusOK},
+		{"replace secret", http.MethodPut, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
+		{"delete secret", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
+		// blocked — wrong namespace
+		{"secrets kube-system forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/secrets", http.StatusForbidden},
+		{"pods default ns forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/default/pods", http.StatusForbidden},
+		// blocked — disallowed methods on pods
+		{"post pods forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusForbidden},
+		{"delete pod forbidden", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusForbidden},
+		// blocked — entirely different resource
 		{"clusterroles forbidden", http.MethodGet, "/vpw/v1/k8s/apis/rbac.authorization.k8s.io/v1/clusterroles", http.StatusForbidden},
+		// blocked — path traversal
 		{"path traversal forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/../secrets", http.StatusForbidden},
 	}
 
