@@ -56,7 +56,13 @@ export const streamPodLogs = async (
   const basePrefix = import.meta.env.MODE === 'development' ? '/dev-api' : ''
   const fullUrl = `${basePrefix}${endpoint}?${params.toString()}`
 
-  const response = await fetch(fullUrl, { signal })
+  const authToken = import.meta.env.VITE_API_TOKEN
+  const response = await fetch(fullUrl, {
+    signal,
+    headers: {
+      ...(authToken && { Authorization: `Bearer ${authToken}` })
+    }
+  })
 
   if (!response.ok) {
     throw new Error(
