@@ -77,7 +77,11 @@ export default function MigrationsPage() {
               migrationsToDelete: new Set<string>()
             }
           }
-          const vmKey = migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] || migration.spec.vmName
+          const vmKey =
+            migration.spec.displayName ||
+            migration.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] ||
+            migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] ||
+            migration.spec.vmName
           acc[planId].vmsToRemove.add(vmKey)
           acc[planId].migrationsToDelete.add(migration.metadata.name)
           return acc

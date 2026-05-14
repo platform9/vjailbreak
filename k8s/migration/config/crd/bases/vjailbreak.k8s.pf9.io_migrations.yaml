@@ -63,6 +63,12 @@ spec:
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
                   after a successful migration to prevent network conflicts. Defaults to false.
                 type: boolean
+              displayName:
+                description: |-
+                  DisplayName is the original VM display name including any special characters (spaces, etc.).
+                  VMName holds the same value; this field ensures the original name is accessible via spec
+                  even when the label value has been sanitized for Kubernetes compatibility.
+                type: string
               imageMetadata:
                 additionalProperties:
                   type: string

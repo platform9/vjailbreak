@@ -362,7 +362,11 @@ export default function MigrationsTable({
           const syncedPulse = `${pulse} 2s ease-in-out -20s infinite`
 
           const isDuplicate = duplicateVmNames.has(vmName)
-          const vmKey = (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) || ''
+          const vmKey =
+            (params.row?.spec?.displayName as string) ||
+            (params.row?.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] as string) ||
+            (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
+            ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
 
           return (

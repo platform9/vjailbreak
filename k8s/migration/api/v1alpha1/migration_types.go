@@ -86,6 +86,12 @@ type MigrationSpec struct {
 	// VMName is the name of the VM getting migrated from VMWare to Openstack
 	VMName string `json:"vmName"`
 
+	// DisplayName is the original VM display name including any special characters (spaces, etc.).
+	// VMName holds the same value; this field ensures the original name is accessible via spec
+	// even when the label value has been sanitized for Kubernetes compatibility.
+	// +optional
+	DisplayName string `json:"displayName,omitempty"`
+
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
 
