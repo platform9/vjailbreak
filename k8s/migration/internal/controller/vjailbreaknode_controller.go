@@ -301,7 +301,35 @@ func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
 		return false, r.Patch(ctx, vjNode, patch)
 	}
 
-	// Clear UUID to trigger re-provisioning on next reconcile
+	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
+
+	// Resolve UUID: prefer stored value, fall back to name lookup
+	uuid := vjNode.Status.OpenstackUUID
+	if uuid == "" {
+		var lookupErr error
+		uuid, lookupErr = utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
+		if lookupErr != nil {
+			log.Error(lookupErr, "reprovision: failed to look up VM by name, continuing without VM deletion")
+		}
+	}
+
+	// Delete the existing OpenStack VM so a fresh one can be created
+	if uuid != "" {
+		if delErr := utils.DeleteOpenstackVM(ctx, uuid, r.Client, vjNode); delErr != nil {
+			log.Error(delErr, "reprovision: failed to delete OpenStack VM, continuing", "uuid", uuid)
+		} else {
+			log.Info("reprovision: deleted OpenStack VM", "uuid", uuid)
+		}
+	}
+
+	// Remove the Kubernetes node entry so k3s re-joins cleanly
+	if vjNode.Name != "" {
+		if delErr := utils.DeleteNodeByName(ctx, r.Client, vjNode.Name); delErr != nil && !apierrors.IsNotFound(delErr) {
+			log.Error(delErr, "reprovision: failed to delete K8s node, continuing", "nodeName", vjNode.Name)
+		}
+	}
+
+	// Remove annotation and reset status so reconcileNormal creates a new VM
 	metaPatch := client.MergeFrom(vjNode.DeepCopy())
 	delete(vjNode.Annotations, reprovisionAnnotation)
 	if err := r.Patch(ctx, vjNode, metaPatch); err != nil {
