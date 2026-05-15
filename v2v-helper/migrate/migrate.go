@@ -742,7 +742,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		}
 		// Verify VM is actually powered off
 		if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-			currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+			currState, stateErr := vmops.GetVmPowerState()
 			if stateErr != nil {
 				return stateErr
 			}
@@ -850,7 +850,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					}
 					// Verify VM is actually powered off
 					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						currState, stateErr := vmops.GetVmPowerState()
 						if stateErr != nil {
 							return stateErr
 						}
@@ -950,7 +950,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 					}
 					// Verify VM is actually powered off
 					if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-						currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+						currState, stateErr := vmops.GetVmPowerState()
 						if stateErr != nil {
 							return stateErr
 						}

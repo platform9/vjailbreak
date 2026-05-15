@@ -153,7 +153,6 @@ func TestEnableCBTWrapper(t *testing.T) {
 }
 
 func TestLiveReplicateDisks(t *testing.T) {
-	t.Skip("TODO: test setup does not mock vmops.GetVMObj().PowerState(); panics after the post-poweroff verification block added in #1927/#1932. Tracked in follow-up issue.")
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -210,6 +209,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 	mockVMOps.EXPECT().GetSnapshot("migration-snap").Return(&types.ManagedObjectReference{}, nil).AnyTimes()
 	mockVMOps.EXPECT().CleanUpSnapshots(false).Return(nil).AnyTimes()
 	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).AnyTimes()
+	mockVMOps.EXPECT().GetVmPowerState().Return(types.VirtualMachinePowerStatePoweredOff, nil).AnyTimes()
 
 	gomock.InOrder(
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
