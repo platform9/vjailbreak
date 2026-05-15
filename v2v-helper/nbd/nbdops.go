@@ -446,28 +446,36 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 		return syscall.Fallocate(int(fd.Fd()), flags, offset, length)
 	}
 
-	err := punch(offset, length)
-	if err != nil {
-		// Fall back to regular pwrite if punch fails
-		utils.PrintLog(fmt.Sprintf("Failed to punch hole at offset %d, falling back to pwrite: %v", offset, err))
-		utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, err))
-		count := int64(0)
-		const blocksize = 16 << 20
-		buffer := bytes.Repeat([]byte{0}, blocksize)
-		for count < length {
-			remaining := length - count
-			if remaining < blocksize {
-				buffer = bytes.Repeat([]byte{0}, int(remaining))
-			}
-			written, err := pwrite(fd, buffer, uint64(offset))
-			if err != nil {
-				utils.PrintLog(fmt.Sprintf("Unable to write %d zeroes at offset %d: %v", length, offset, err))
-				break
-			}
-			count += int64(written)
-		}
+	punchErr := punch(offset, length)
+	if punchErr == nil {
+		return nil
 	}
+	// Fall back to writing zeros directly. This is the slow path; it
+	// triggers on filesystems that don't support FALLOC_FL_PUNCH_HOLE
+	// (some NFS configurations, tmpfs, certain block-backed targets).
+	utils.PrintLog(fmt.Sprintf("Failed to punch hole at offset %d, falling back to pwrite: %v", offset, punchErr))
+	utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, punchErr))
 
+	count := int64(0)
+	const blocksize = 16 << 20
+	buffer := bytes.Repeat([]byte{0}, blocksize)
+	for count < length {
+		remaining := length - count
+		if remaining < blocksize {
+			buffer = bytes.Repeat([]byte{0}, int(remaining))
+		}
+		// Use offset+count, not offset, so the writes actually advance
+		// through the range instead of repeatedly overwriting the first
+		// chunk. Returning the wrapped error (instead of breaking and
+		// returning nil) makes the failure visible to callers — without
+		// this, a partial zero of the destination would be silently
+		// reported as a successful migration.
+		written, err := pwrite(fd, buffer, uint64(offset+count))
+		if err != nil {
+			return errors.Wrapf(err, "zeroRange fallback pwrite failed at offset %d (%d/%d bytes written before failure)", offset+count, count, length)
+		}
+		count += int64(written)
+	}
 	return nil
 }
 
