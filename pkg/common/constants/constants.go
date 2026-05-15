@@ -603,7 +603,7 @@ write_files:
     export IS_MASTER=%s
     export MASTER_IP=%s
     export K3S_TOKEN=%s
-runcmd:
+%sruncmd:
   - echo "Created k3s env variables!" > /home/ubuntu/cloud-init.log
 `
 
