@@ -588,13 +588,25 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	if err != nil {
 		return fmt.Errorf("failed to build handle pool: %v", err)
 	}
-	defer pool.Close()
 
 	fd, err := os.OpenFile(path, os.O_WRONLY, 0644)
 	if err != nil {
+		pool.Close()
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-	defer fd.Close()
+
+	// Derived context so the first worker error can fan-out cancellation to
+	// every goroutine we spawn (workers, sub-range goroutines, feeder, progress
+	// aggregator) without disturbing the caller's ctx. cancel() runs first in
+	// the deferred cleanup as a safety net; the *invariant* the function body
+	// enforces is that pool.Close() / fd.Close() never execute while any
+	// goroutine could still be using them.
+	copyCtx, cancel := context.WithCancel(ctx)
+	defer func() {
+		cancel()
+		pool.Close()
+		fd.Close()
+	}()
 
 	totalsize := int64(0)
 	for _, extent := range coalesced {
@@ -604,11 +616,14 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	incrementalcopyprogress := make(chan int64, len(coalesced))
 	errorChan := make(chan error, ExtentWorkerCount)
 	doneChan := make(chan struct{})
+	progressDone := make(chan struct{})
 
 	maxRetries, capInterval := utils.GetRetryLimits()
 
-	// Progress aggregator.
+	// Progress aggregator. Drains incrementalcopyprogress until it is closed
+	// (which the function body only does after all workers have returned).
 	go func() {
+		defer close(progressDone)
 		copiedsize := int64(0)
 		lastLoggedPct := -1
 		const logInterval = 5
@@ -630,7 +645,16 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 				utils.PrintLog(prog)
 				lastLoggedPct = currentPct
 			}
-			nbdserver.progresschan <- prog
+			// Non-blocking send: progresschan is unbuffered. If the consumer
+			// is not reading right now, drop the update — progress is monotonic
+			// and frequent, so the next update will get through. The cancel
+			// case ensures we exit promptly on shutdown.
+			select {
+			case nbdserver.progresschan <- prog:
+			case <-copyCtx.Done():
+				return
+			default:
+			}
 		}
 	}()
 
@@ -643,7 +667,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 		for _, extent := range coalesced {
 			select {
 			case extentCh <- extent:
-			case <-ctx.Done():
+			case <-copyCtx.Done():
 				return
 			}
 		}
@@ -665,9 +689,10 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 			for extent := range extentCh {
 				// getBlockStatus needs a handle for one BlockStatus walk. Hold it
 				// for that walk only, then release before doing the (longer) reads.
-				handle, err := pool.Acquire(ctx)
+				handle, err := pool.Acquire(copyCtx)
 				if err != nil {
-					errorChan <- fmt.Errorf("worker %d acquire for BlockStatus: %v", workerID, err)
+					// copyCtx was cancelled; the originating error is already
+					// in errorChan. Exit quietly.
 					return
 				}
 				blocks := getBlockStatus(handle, extent)
@@ -676,15 +701,27 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 				retries := uint64(0)
 				waitTime := 1 * time.Minute
 				for blockIdx := 0; blockIdx < len(blocks); {
-					if err := copyBlockParallel(ctx, fd, pool, blocks[blockIdx]); err != nil {
+					if err := copyBlockParallel(copyCtx, fd, pool, blocks[blockIdx]); err != nil {
+						// If we were cancelled (peer worker errored), don't
+						// log a confusing failure or burn retries — just exit.
+						if copyCtx.Err() != nil {
+							return
+						}
 						utils.PrintLog(fmt.Sprintf("Failed to copy block: %v | attempt %d", err, retries))
 						retries++
 						if retries >= maxRetries {
-							errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries")
+							// errorChan has capacity ExtentWorkerCount so this
+							// send shouldn't block, but be defensive: use a
+							// non-blocking select so a future buffer-size
+							// reduction can't deadlock the worker.
+							select {
+							case errorChan <- errors.Wrap(err, "failed to copy changed blocks, exceeded retries"):
+							default:
+							}
 							return
 						}
 						select {
-						case <-ctx.Done():
+						case <-copyCtx.Done():
 							return
 						case <-time.After(waitTime):
 							waitTime = waitTime * 2
@@ -700,7 +737,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 				}
 
 				select {
-				case <-ctx.Done():
+				case <-copyCtx.Done():
 					return
 				case incrementalcopyprogress <- extent.Length:
 				}
@@ -713,18 +750,32 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 		close(doneChan)
 	}()
 
+	// Wait for either clean completion or the first error. On error we
+	// cancel() and wait for every worker (and its sub-range goroutines via
+	// copyBlockParallel's internal wg.Wait()) to return before tearing down
+	// the handle pool and file descriptor in the deferred cleanup.
+	var firstErr error
 	select {
 	case <-doneChan:
-		close(incrementalcopyprogress)
+		// Happy path: every worker exited cleanly. Drain errorChan to catch
+		// the race where the last errored worker's wg.Done() fired in the
+		// same instant doneChan closed.
 		select {
-		case err := <-errorChan:
-			return err
+		case firstErr = <-errorChan:
 		default:
-			return nil
 		}
-	case err := <-errorChan:
-		return err
+	case firstErr = <-errorChan:
+		cancel()
+		<-doneChan
 	}
+
+	// All workers have returned. It is now safe to close the progress channel
+	// (no more senders) and wait for the aggregator to drain whatever was
+	// buffered and exit.
+	close(incrementalcopyprogress)
+	<-progressDone
+
+	return firstErr
 }
 
 func generateSockUrl(tmp_dir string) string {
