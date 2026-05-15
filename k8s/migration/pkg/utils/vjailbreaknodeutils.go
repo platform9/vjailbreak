@@ -217,6 +217,14 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		return "", errors.Wrap(err, "failed to read k3s token file")
 	}
 
+	hostsContent, err := os.ReadFile("/etc/hosts")
+	hostsEntry := ""
+	if err != nil {
+		log.Info("Could not read /etc/hosts from master, worker will not inherit DNS entries", "error", err)
+	} else {
+		hostsEntry = buildHostsWriteFilesEntry(hostsContent)
+	}
+
 	masterNode, err := GetMasterK8sNode(ctx, k3sclient)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get master node")
@@ -367,7 +375,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		UserData: []byte(fmt.Sprintf(constants.K3sCloudInitScript,
 			constants.ENVFileLocation,
 			"false", GetNodeInternalIP(masterNode),
-			token)),
+			token, hostsEntry)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
 		AvailabilityZone: availabilityZone,
 	}
@@ -1018,6 +1026,40 @@ func DeleteNodeByName(ctx context.Context, k3sclient client.Client, nodeName str
 		return errors.Wrap(err, "failed to delete node")
 	}
 	return nil
+}
+
+// buildHostsWriteFilesEntry parses hostsContent and returns a cloud-init write_files
+// entry that appends custom (non-standard) entries to /etc/hosts on the worker node.
+// Standard loopback and IPv6 multicast entries are excluded. Returns empty string if
+// no custom entries are found.
+func buildHostsWriteFilesEntry(hostsContent []byte) string {
+	lines := strings.Split(string(hostsContent), "\n")
+	custom := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "127.") ||
+			strings.HasPrefix(trimmed, "::1") ||
+			strings.HasPrefix(trimmed, "fe00::") ||
+			strings.HasPrefix(trimmed, "ff00::") ||
+			strings.HasPrefix(trimmed, "ff02::") {
+			continue
+		}
+		custom = append(custom, trimmed)
+	}
+	if len(custom) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("- path: /etc/hosts\n  append: true\n  content: |\n")
+	for _, entry := range custom {
+		sb.WriteString("    ")
+		sb.WriteString(entry)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }
 
 // GetVMMigration retrieves a Migration resource for a specific VM in a rolling migration plan.
