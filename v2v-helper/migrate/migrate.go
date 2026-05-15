@@ -1237,29 +1237,48 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
-	// Add first boot scripts for RHEL family
-	if virtv2v.IsRHELFamily(osRelease) {
-		versionID := parseVersionID(osRelease)
-		if versionID == "" {
-			return errors.Errorf("failed to get version ID")
-		}
-		if !persisNetwork {
+	// Collect Linux firstboot scripts — scheduler handles ordering, retry, and failure semantics
+	firstbootlinuxscripts := []virtv2v.FirstBootLinux{}
 
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
+		// VMware tools cleanup: async, applies to ALL Linux families.
+		// vmware-tools-cleanup.sh detects apt/dnf/zypper/yum at runtime so it works on
+		// Ubuntu, RHEL, SUSE, Debian, etc. without any family check here.
+		if removeVMwareTools {
+			firstbootlinuxscripts = append(firstbootlinuxscripts, virtv2v.FirstBootLinux{
+				Script: "vmware-tools-cleanup.sh",
+				Async:  true,
+			})
+			utils.PrintLog("VMware tools cleanup firstboot script queued (all Linux families)")
+		}
+
+		// RHEL DHCP enablement: sync (critical — RHEL 7+ needs NM reconfiguration after migration).
+		// Only applies to RHEL family and only when network persistence is not requested.
+		if virtv2v.IsRHELFamily(osRelease) && !persisNetwork {
+			versionID := parseVersionID(osRelease)
+			if versionID == "" {
+				return errors.Errorf("failed to get version ID")
+			}
 			majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
 			if err != nil {
 				return fmt.Errorf("failed to parse major version: %v", err)
 			}
-
 			if majorVersion >= 7 {
-				firstbootscriptname := "rhel_enable_dhcp"
-				firstbootscript := constants.RhelFirstBootScript
-				firstbootscripts = append(firstbootscripts, firstbootscriptname)
-
-				if err := virtv2v.AddFirstBootScript(firstbootscript, firstbootscriptname); err != nil {
-					return errors.Wrap(err, "failed to add first boot script")
+				if err := virtv2v.AddFirstBootScript(constants.RhelFirstBootScript, "rhel_enable_dhcp"); err != nil {
+					return errors.Wrap(err, "failed to write rhel_enable_dhcp script")
 				}
-				utils.PrintLog("First boot script added successfully")
+				firstbootlinuxscripts = append(firstbootlinuxscripts, virtv2v.FirstBootLinux{
+					Script: "rhel_enable_dhcp.sh",
+					Async:  false,
+				})
+				utils.PrintLog("RHEL DHCP firstboot script queued")
 			}
+		}
+
+		// Embed the init entry point as the virt-v2v firstboot (mirrors Firstboot-Init-Windows.bat).
+		// It calls /linux-firstboot/firstboot-scheduler.sh which is injected offline into the guest disk.
+		if len(firstbootlinuxscripts) > 0 {
+			firstbootscripts = append(firstbootscripts, "firstboot-init-linux")
 		}
 	}
 
@@ -1277,6 +1296,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 
 		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
 			return errors.Wrap(err, "failed to inject first boot scripts")
+		}
+	}
+
+	if strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux && len(firstbootlinuxscripts) > 0 {
+		if err := virtv2v.InjectLinuxFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootlinuxscripts); err != nil {
+			return errors.Wrap(err, "failed to inject linux first boot scripts")
 		}
 	}
 
