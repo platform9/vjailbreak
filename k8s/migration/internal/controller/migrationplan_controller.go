@@ -2045,9 +2045,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		// Storage-accelerated copy uses the array's native copy path (Pure XCOPY / NetApp)
+		// and does not require VDDK on the appliance, so skip the VDDK validation entirely.
+		if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2182,7 +2186,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			}
 		}
 
-		return errors.Wrap(err, "VDDK_MISSING: directory is empty")
+		return errors.New("VDDK_MISSING: directory is empty")
 	}
 
 	// Clear previous VDDKCheck condition if directory is valid
