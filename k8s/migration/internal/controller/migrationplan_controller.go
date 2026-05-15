@@ -975,7 +975,6 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			Spec: vjailbreakv1alpha1.MigrationSpec{
 				MigrationPlan: migrationplan.Name,
 				VMName:        vmMachine.Spec.VMInfo.Name,
-				DisplayName:   vm,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,

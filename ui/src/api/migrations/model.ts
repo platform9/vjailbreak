@@ -63,7 +63,6 @@ export interface Spec {
   migrationPlan: MigrationPlan
   podRef: PodRef
   vmName: VMName
-  displayName?: string
   migrationType?: string
   initiateCutover?: boolean
   disconnectSourceNetwork?: boolean

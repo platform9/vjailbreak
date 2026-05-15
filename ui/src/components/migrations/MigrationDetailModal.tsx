@@ -128,7 +128,6 @@ export default function MigrationDetailModal({
 
   const vmName = useMemo(() => ((migration?.spec as any)?.vmName as string) || '', [migration])
   const vmKey =
-    migration?.spec?.displayName ||
     ((migration?.metadata as any)?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] as string) ||
     ((migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
     ''
