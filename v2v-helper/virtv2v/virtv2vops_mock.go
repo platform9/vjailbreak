@@ -152,18 +152,31 @@ func (mr *MockVirtV2VOperationsMockRecorder) GetPartitions(disk interface{}) *go
 }
 
 // IsRHELFamily mocks base method.
-func (m *MockVirtV2VOperations) IsRHELFamily(osRelease string) (bool, error) {
+func (m *MockVirtV2VOperations) IsRHELFamily(osRelease string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsRHELFamily", osRelease)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // IsRHELFamily indicates an expected call of IsRHELFamily.
 func (mr *MockVirtV2VOperationsMockRecorder) IsRHELFamily(osRelease interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRHELFamily", reflect.TypeOf((*MockVirtV2VOperations)(nil).IsRHELFamily), osRelease)
+}
+
+// IsSUSEFamily mocks base method.
+func (m *MockVirtV2VOperations) IsSUSEFamily(osRelease string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsSUSEFamily", osRelease)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsSUSEFamily indicates an expected call of IsSUSEFamily.
+func (mr *MockVirtV2VOperationsMockRecorder) IsSUSEFamily(osRelease interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSUSEFamily", reflect.TypeOf((*MockVirtV2VOperations)(nil).IsSUSEFamily), osRelease)
 }
 
 // NTFSFix mocks base method.
