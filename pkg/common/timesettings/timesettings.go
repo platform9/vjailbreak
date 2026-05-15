@@ -57,7 +57,6 @@ var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "vjailbreak-ui", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "grafana", "monitoring"},
 	{WorkloadStatefulSet, "prometheus-k8s", "monitoring"},
-	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 }
 
 var (
@@ -150,9 +149,16 @@ func sanitizeTimezone(tz string) (string, error) {
 // as warnings by Apply so the caller can distinguish hard config failures from
 // host reconciliation issues.
 func notifyTimedateViaDbus(tz string, ntpEnabled bool) error {
-	conn, err := dbus.SystemBus()
+	conn, err := dbus.SystemBusPrivate()
 	if err != nil {
 		return fmt.Errorf("connect to system D-Bus: %w", err)
+	}
+	defer conn.Close()
+	if err := conn.Auth(nil); err != nil {
+		return fmt.Errorf("D-Bus auth: %w", err)
+	}
+	if err := conn.Hello(); err != nil {
+		return fmt.Errorf("D-Bus hello: %w", err)
 	}
 
 	obj := conn.Object("org.freedesktop.timedate1", "/org/freedesktop/timedate1")
@@ -171,9 +177,16 @@ func notifyTimedateViaDbus(tz string, ntpEnabled bool) error {
 // restartTimesyncdViaDbus restarts systemd-timesyncd via the systemd manager
 // D-Bus interface so it re-reads the timesyncd.conf.d/ override.
 func restartTimesyncdViaDbus() error {
-	conn, err := dbus.SystemBus()
+	conn, err := dbus.SystemBusPrivate()
 	if err != nil {
 		return fmt.Errorf("connect to system D-Bus: %w", err)
+	}
+	defer conn.Close()
+	if err := conn.Auth(nil); err != nil {
+		return fmt.Errorf("D-Bus auth: %w", err)
+	}
+	if err := conn.Hello(); err != nil {
+		return fmt.Errorf("D-Bus hello: %w", err)
 	}
 
 	obj := conn.Object("org.freedesktop.systemd1", "/org/freedesktop/systemd1")
@@ -288,6 +301,27 @@ func restartTZWorkloads(ctx context.Context, k8sClient client.Client) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func RestartDeployment(ctx context.Context, k8sClient client.Client, name, namespace string) error {
+	now := time.Now().Format(time.RFC3339)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		obj := &appsv1.Deployment{}
+		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		}, obj); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if obj.Spec.Template.Annotations == nil {
+			obj.Spec.Template.Annotations = make(map[string]string)
+		}
+		obj.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = now
+		return k8sClient.Update(ctx, obj)
+	})
 }
 
 // patchVersionCheckerTZ sets spec.timeZone on the version-checker CronJob so

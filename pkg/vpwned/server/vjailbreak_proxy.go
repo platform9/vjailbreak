@@ -788,6 +788,12 @@ func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, _ *api.ApplyTim
 		}
 		logrus.WithField("func", fn).WithError(err).Warn("time settings applied with partial-success warnings")
 	}
+	go func() {
+		time.Sleep(10 * time.Second)
+		if restartErr := timesettings.RestartDeployment(context.Background(), p.K8sClient, "migration-vpwned-sdk", "migration-system"); restartErr != nil {
+			logrus.WithField("func", fn).WithError(restartErr).Warn("deferred restart of migration-vpwned-sdk failed")
+		}
+	}()
 	return &api.ApplyTimeSettingsResponse{Message: msg}, nil
 }
 
