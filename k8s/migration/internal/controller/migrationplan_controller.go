@@ -2080,9 +2080,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 	}
 
-	if hotplugFlavorMissing {
-		return nil
-	}
 	return nil
 }
 
@@ -2162,7 +2159,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 		}
 
-		return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
+		return errors.New("VDDK_MISSING: directory could not be read")
 	}
 
 	if len(files) == 0 {
