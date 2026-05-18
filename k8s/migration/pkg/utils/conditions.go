@@ -8,6 +8,7 @@
 package utils
 
 import (
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -74,14 +75,16 @@ const (
 	ReasonActive  = "Active"
 )
 
-// SetCondition is a stub. It is intended to wrap meta.SetStatusCondition for
-// the common case where the caller supplies Type, Status, Reason, and Message.
-// Implementation lives in a follow-up commit; this stub exists only to allow
-// the test file to compile during the TDD red phase.
+// SetCondition wraps meta.SetStatusCondition for the common case where the
+// caller supplies Type, Status, Reason, and Message. LastTransitionTime is
+// managed by meta.SetStatusCondition: it advances only when Status changes
+// for a given Type. ObservedGeneration must be set by the caller separately
+// if needed (this helper does not touch it).
 func SetCondition(conditions *[]metav1.Condition, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	_ = conditions
-	_ = conditionType
-	_ = status
-	_ = reason
-	_ = message
+	meta.SetStatusCondition(conditions, metav1.Condition{
+		Type:    conditionType,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
+	})
 }

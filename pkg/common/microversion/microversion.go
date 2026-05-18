@@ -11,15 +11,82 @@
 // the operation requires.
 package microversion
 
+import (
+	"math"
+	"strconv"
+	"strings"
+)
+
+const latestSentinel = "latest"
+
 // Floor returns the higher of two OpenStack microversion strings of the form
-// "MAJOR.MINOR". The literal value "latest" is treated as greater than any
-// specific version. An empty configValue is treated as "no operator override".
+// "MAJOR.MINOR" or "MAJOR". The literal value "latest" is treated as greater
+// than any specific version. An empty or unparseable value is treated as "no
+// override" and loses to any valid version.
 //
-// Stub implementation: always returns the empty string so the package tests
-// fail until Floor is implemented properly. See [[research.md R-5]] for the
-// semantics this function must satisfy.
+// The returned string is the original (un-normalized) form of whichever input
+// wins.
 func Floor(configValue, hardcodedValue string) string {
-	_ = configValue
-	_ = hardcodedValue
-	return ""
+	if compareVersions(configValue, hardcodedValue) >= 0 {
+		return configValue
+	}
+	return hardcodedValue
+}
+
+// compareVersions returns -1, 0, or 1 if a is less than, equal to, or greater
+// than b. Unparseable values are treated as "no version" and rank below any
+// valid version (and equal to each other).
+func compareVersions(a, b string) int {
+	aMajor, aMinor, aOK := parseVersion(a)
+	bMajor, bMinor, bOK := parseVersion(b)
+
+	switch {
+	case !aOK && !bOK:
+		return 0
+	case !aOK:
+		return -1
+	case !bOK:
+		return 1
+	}
+
+	if aMajor != bMajor {
+		return signInt(aMajor - bMajor)
+	}
+	return signInt(aMinor - bMinor)
+}
+
+func signInt(n int) int {
+	switch {
+	case n < 0:
+		return -1
+	case n > 0:
+		return 1
+	}
+	return 0
+}
+
+// parseVersion returns (major, minor, true) for valid "MAJOR.MINOR", "MAJOR",
+// or the "latest" sentinel. For "latest" it returns max int values so any
+// numeric comparison ranks it highest.
+func parseVersion(s string) (major, minor int, ok bool) {
+	if s == "" {
+		return 0, 0, false
+	}
+	if s == latestSentinel {
+		return math.MaxInt32, math.MaxInt32, true
+	}
+
+	parts := strings.SplitN(s, ".", 2)
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, false
+	}
+	if len(parts) == 1 {
+		return major, 0, true
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	return major, minor, true
 }
