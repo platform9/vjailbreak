@@ -142,6 +142,22 @@ type OpenstackCredsStatus struct {
 
 	// Openstack is the OpenStack configuration for the openstackcreds
 	Openstack OpenstackInfo `json:"openstack,omitempty"`
+
+	// OpenStackValidationStatus is the legacy summary status string. It is
+	// superseded by Conditions (the "CredentialsValidated" Type). The
+	// controller continues to populate this field as a derived view of
+	// Conditions so existing UI and API consumers (UI components reading
+	// openstackValidationStatus, pkg/vpwned proxy, etc.) keep working through
+	// the Conditions migration window. New consumers should read Conditions;
+	// this field will be removed in a future release once downstream
+	// consumers migrate.
+	// +optional
+	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
+	// OpenStackValidationMessage is the legacy summary message string,
+	// superseded by Conditions[*].Message. Populated as a derived view for
+	// back-compat alongside OpenStackValidationStatus.
+	// +optional
+	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

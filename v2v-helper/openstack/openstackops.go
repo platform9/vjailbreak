@@ -67,6 +67,19 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_AUTH_URL")
 	}
 
+	// Application Credentials (v3applicationcredential) carry their own scope;
+	// project name / domain are not required from env. Detect this path first.
+	appCredID := strings.TrimSpace(os.Getenv("OS_APPLICATION_CREDENTIAL_ID"))
+	appCredSecret := strings.TrimSpace(os.Getenv("OS_APPLICATION_CREDENTIAL_SECRET"))
+	if appCredID != "" && appCredSecret != "" {
+		return gophercloud.AuthOptions{
+			IdentityEndpoint:            authURL,
+			ApplicationCredentialID:     appCredID,
+			ApplicationCredentialSecret: appCredSecret,
+			AllowReauth:                 true,
+		}, nil
+	}
+
 	tenantName := strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
 	if tenantName == "" {
 		tenantName = strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -106,7 +119,7 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	}
 
 	if username == "" && userID == "" {
-		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_USERID, OS_USERNAME]")
+		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_USERID, OS_USERNAME, OS_APPLICATION_CREDENTIAL_ID]")
 	}
 	if password == "" {
 		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_PASSWORD")

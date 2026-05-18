@@ -356,6 +356,23 @@ spec:
                       type: string
                     type: array
                 type: object
+              openstackValidationMessage:
+                description: |-
+                  OpenStackValidationMessage is the legacy summary message string,
+                  superseded by Conditions[*].Message. Populated as a derived view for
+                  back-compat alongside OpenStackValidationStatus.
+                type: string
+              openstackValidationStatus:
+                description: |-
+                  OpenStackValidationStatus is the legacy summary status string. It is
+                  superseded by Conditions (the "CredentialsValidated" Type). The
+                  controller continues to populate this field as a derived view of
+                  Conditions so existing UI and API consumers (UI components reading
+                  openstackValidationStatus, pkg/vpwned proxy, etc.) keep working through
+                  the Conditions migration window. New consumers should read Conditions;
+                  this field will be removed in a future release once downstream
+                  consumers migrate.
+                type: string
             type: object
         type: object
     served: true
