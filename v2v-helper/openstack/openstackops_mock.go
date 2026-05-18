@@ -436,3 +436,17 @@ func (mr *MockOpenstackOperationsMockRecorder) WaitUntilVMActive(ctx, vmID inter
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilVMActive", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitUntilVMActive), ctx, vmID)
 }
+
+// StopServer mocks base method.
+func (m *MockOpenstackOperations) StopServer(ctx context.Context, serverID string, vjailbreakSettings k8sutils.VjailbreakSettings) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopServer", ctx, serverID, vjailbreakSettings)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopServer indicates an expected call of StopServer.
+func (mr *MockOpenstackOperationsMockRecorder) StopServer(ctx, serverID, vjailbreakSettings interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopServer", reflect.TypeOf((*MockOpenstackOperations)(nil).StopServer), ctx, serverID, vjailbreakSettings)
+}

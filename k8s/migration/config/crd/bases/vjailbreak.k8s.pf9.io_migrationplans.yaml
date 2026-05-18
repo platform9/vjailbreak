@@ -130,6 +130,12 @@ spec:
                   performHealthChecks:
                     default: false
                     type: boolean
+                  powerOffTargetVm:
+                    default: false
+                    description: |-
+                      PowerOffTargetVM, when true, leaves the migrated VM powered off in the
+                      target cloud instead of starting it after creation.
+                    type: boolean
                   type:
                     enum:
                     - hot
