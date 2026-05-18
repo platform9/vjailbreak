@@ -141,121 +141,229 @@
   },
   "nodes": [
     {
+      "label": "conditions.go",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions.go",
+      "source_location": "L1",
+      "id": "k8s_migration_pkg_utils_conditions_go",
+      "community": 217,
+      "norm_label": "conditions.go"
+    },
+    {
+      "label": "SetCondition()",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions.go",
+      "source_location": "L78",
+      "id": "utils_conditions_setcondition",
+      "community": 217,
+      "norm_label": "setcondition()"
+    },
+    {
+      "label": "conditions_test.go",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L1",
+      "id": "k8s_migration_pkg_utils_conditions_test_go",
+      "community": 217,
+      "norm_label": "conditions_test.go"
+    },
+    {
+      "label": "TestConditionTypeConstants()",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L12",
+      "id": "utils_conditions_test_testconditiontypeconstants",
+      "community": 217,
+      "norm_label": "testconditiontypeconstants()"
+    },
+    {
+      "label": "TestReasonConstants()",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L35",
+      "id": "utils_conditions_test_testreasonconstants",
+      "community": 217,
+      "norm_label": "testreasonconstants()"
+    },
+    {
+      "label": "TestSetCondition_AddsNewEntry()",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L75",
+      "id": "utils_conditions_test_testsetcondition_addsnewentry",
+      "community": 217,
+      "norm_label": "testsetcondition_addsnewentry()"
+    },
+    {
+      "label": "TestSetCondition_UpdatesExistingEntry()",
+      "file_type": "code",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L102",
+      "id": "utils_conditions_test_testsetcondition_updatesexistingentry",
+      "community": 217,
+      "norm_label": "testsetcondition_updatesexistingentry()"
+    },
+    {
+      "label": "microversion.go",
+      "file_type": "code",
+      "source_file": "pkg/common/microversion/microversion.go",
+      "source_location": "L1",
+      "id": "pkg_common_microversion_microversion_go",
+      "community": 223,
+      "norm_label": "microversion.go"
+    },
+    {
+      "label": "Floor()",
+      "file_type": "code",
+      "source_file": "pkg/common/microversion/microversion.go",
+      "source_location": "L21",
+      "id": "microversion_microversion_floor",
+      "community": 223,
+      "norm_label": "floor()"
+    },
+    {
+      "label": "microversion_test.go",
+      "file_type": "code",
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L1",
+      "id": "pkg_common_microversion_microversion_test_go",
+      "community": 223,
+      "norm_label": "microversion_test.go"
+    },
+    {
+      "label": "TestFloor()",
+      "file_type": "code",
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L5",
+      "id": "microversion_microversion_test_testfloor",
+      "community": 223,
+      "norm_label": "testfloor()"
+    },
+    {
+      "label": "TestFloor_InvalidInputs()",
+      "file_type": "code",
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L90",
+      "id": "microversion_microversion_test_testfloor_invalidinputs",
+      "community": 223,
+      "norm_label": "testfloor_invalidinputs()"
+    },
+    {
       "label": "openstackcreds_types.go",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L1",
-      "id": "openstackcreds_types_go",
       "community": 67,
-      "norm_label": "openstackcreds_types.go"
+      "norm_label": "openstackcreds_types.go",
+      "id": "openstackcreds_types_go"
     },
     {
       "label": "HostConfig",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L26",
-      "id": "v1alpha1_hostconfig",
       "community": 67,
-      "norm_label": "hostconfig"
+      "norm_label": "hostconfig",
+      "id": "v1alpha1_hostconfig"
     },
     {
       "label": "OpenStackCredsInfo",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L39",
-      "id": "v1alpha1_openstackcredsinfo",
       "community": 67,
-      "norm_label": "openstackcredsinfo"
+      "norm_label": "openstackcredsinfo",
+      "id": "v1alpha1_openstackcredsinfo"
     },
     {
       "label": "SecurityGroupInfo",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L59",
-      "id": "v1alpha1_securitygroupinfo",
       "community": 67,
-      "norm_label": "securitygroupinfo"
+      "norm_label": "securitygroupinfo",
+      "id": "v1alpha1_securitygroupinfo"
     },
     {
       "label": "ServerGroupInfo",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L66",
-      "id": "v1alpha1_servergroupinfo",
       "community": 67,
-      "norm_label": "servergroupinfo"
+      "norm_label": "servergroupinfo",
+      "id": "v1alpha1_servergroupinfo"
     },
     {
       "label": "PCDNetworkInfo",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L74",
-      "id": "v1alpha1_pcdnetworkinfo",
       "community": 67,
-      "norm_label": "pcdnetworkinfo"
+      "norm_label": "pcdnetworkinfo",
+      "id": "v1alpha1_pcdnetworkinfo"
     },
     {
       "label": "OpenstackInfo",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L80",
-      "id": "v1alpha1_openstackinfo",
       "community": 67,
-      "norm_label": "openstackinfo"
+      "norm_label": "openstackinfo",
+      "id": "v1alpha1_openstackinfo"
     },
     {
       "label": "OpenstackCredsSpec",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L90",
-      "id": "v1alpha1_openstackcredsspec",
       "community": 67,
-      "norm_label": "openstackcredsspec"
+      "norm_label": "openstackcredsspec",
+      "id": "v1alpha1_openstackcredsspec"
     },
     {
       "label": "OpenstackCredsStatus",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L134",
-      "id": "v1alpha1_openstackcredsstatus",
       "community": 67,
-      "norm_label": "openstackcredsstatus"
+      "norm_label": "openstackcredsstatus",
+      "id": "v1alpha1_openstackcredsstatus"
     },
     {
       "label": "OpenstackCreds",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L168",
-      "id": "v1alpha1_openstackcreds",
       "community": 67,
-      "norm_label": "openstackcreds"
+      "norm_label": "openstackcreds",
+      "id": "v1alpha1_openstackcreds"
     },
     {
       "label": "OpenstackCredsList",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L179",
-      "id": "v1alpha1_openstackcredslist",
       "community": 67,
-      "norm_label": "openstackcredslist"
+      "norm_label": "openstackcredslist",
+      "id": "v1alpha1_openstackcredslist"
     },
     {
       "label": ".DeepCopyInto()",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L187",
-      "id": "v1alpha1_openstackcredsspec_deepcopyinto",
       "community": 67,
-      "norm_label": ".deepcopyinto()"
+      "norm_label": ".deepcopyinto()",
+      "id": "v1alpha1_openstackcredsspec_deepcopyinto"
     },
     {
       "label": "init()",
       "file_type": "code",
       "source_file": "openstackcreds_types.go",
       "source_location": "L204",
-      "id": "v1alpha1_openstackcreds_types_init",
       "community": 67,
-      "norm_label": "init()"
+      "norm_label": "init()",
+      "id": "v1alpha1_openstackcreds_types_init"
     },
     {
       "label": "feature.json",
@@ -2035,7 +2143,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L1028",
-      "community": 203,
+      "community": 218,
       "norm_label": "getvmmigration()",
       "id": "utils_vjailbreaknodeutils_getvmmigration"
     },
@@ -3583,7 +3691,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1",
-      "community": 210,
+      "community": 207,
       "norm_label": "migrationplan_controller.go",
       "id": "k8s_migration_internal_controller_migrationplan_controller_go"
     },
@@ -3592,7 +3700,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L76",
-      "community": 208,
+      "community": 1,
       "norm_label": "migrationplanreconciler",
       "id": "controller_migrationplanreconciler"
     },
@@ -3601,7 +3709,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L105",
-      "community": 213,
+      "community": 1,
       "norm_label": ".reconcile()",
       "id": "controller_migrationplanreconciler_reconcile"
     },
@@ -3610,7 +3718,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L160",
-      "community": 213,
+      "community": 1,
       "norm_label": ".reconcilenormal()",
       "id": "controller_migrationplanreconciler_reconcilenormal"
     },
@@ -3619,7 +3727,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L176",
-      "community": 213,
+      "community": 1,
       "norm_label": ".reconciledelete()",
       "id": "controller_migrationplanreconciler_reconciledelete"
     },
@@ -3781,7 +3889,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1410",
-      "community": 210,
+      "community": 207,
       "norm_label": "resolvevirtiodriverurl()",
       "id": "controller_migrationplan_controller_resolvevirtiodriverurl"
     },
@@ -3790,7 +3898,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1417",
-      "community": 208,
+      "community": 220,
       "norm_label": ".processadvancedoptions()",
       "id": "controller_migrationplanreconciler_processadvancedoptions"
     },
@@ -3799,7 +3907,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1456",
-      "community": 210,
+      "community": 207,
       "norm_label": "computesourcevmkey()",
       "id": "controller_migrationplan_controller_computesourcevmkey"
     },
@@ -3808,7 +3916,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1474",
-      "community": 210,
+      "community": 207,
       "norm_label": "vmkeydisplayname()",
       "id": "controller_migrationplan_controller_vmkeydisplayname"
     },
@@ -3898,7 +4006,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1775",
-      "community": 208,
+      "community": 220,
       "norm_label": ".reconcilemapping()",
       "id": "controller_migrationplanreconciler_reconcilemapping"
     },
@@ -3916,7 +4024,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1826",
-      "community": 208,
+      "community": 220,
       "norm_label": ".reconcilenetwork()",
       "id": "controller_migrationplanreconciler_reconcilenetwork"
     },
@@ -3925,7 +4033,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1899",
-      "community": 208,
+      "community": 220,
       "norm_label": ".reconcilestorage()",
       "id": "controller_migrationplanreconciler_reconcilestorage"
     },
@@ -3943,7 +4051,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2087",
-      "community": 208,
+      "community": 1,
       "norm_label": ".setupwithmanager()",
       "id": "controller_migrationplanreconciler_setupwithmanager"
     },
@@ -3961,7 +4069,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2219",
-      "community": 203,
+      "community": 207,
       "norm_label": "mergelabels()",
       "id": "controller_migrationplan_controller_mergelabels"
     },
@@ -3970,7 +4078,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2231",
-      "community": 208,
+      "community": 1,
       "norm_label": ".migraterdmdisks()",
       "id": "controller_migrationplanreconciler_migraterdmdisks"
     },
@@ -3997,7 +4105,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2456",
-      "community": 208,
+      "community": 1,
       "norm_label": ".updatemigrationphasewithretry()",
       "id": "controller_migrationplanreconciler_updatemigrationphasewithretry"
     },
@@ -4006,7 +4114,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2510",
-      "community": 208,
+      "community": 1,
       "norm_label": ".isvmsucceededinplan()",
       "id": "controller_migrationplanreconciler_isvmsucceededinplan"
     },
@@ -4024,7 +4132,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2540",
-      "community": 208,
+      "community": 1,
       "norm_label": ".markmigrationfailed()",
       "id": "controller_migrationplanreconciler_markmigrationfailed"
     },
@@ -4816,7 +4924,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/esximigration_controller.go",
       "source_location": "L255",
-      "community": 44,
+      "community": 31,
       "norm_label": ".handleesxiconfiguringpcdhost()",
       "id": "controller_esximigrationreconciler_handleesxiconfiguringpcdhost"
     },
@@ -4870,7 +4978,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L1",
-      "community": 4,
+      "community": 86,
       "norm_label": "migration_controller.go",
       "id": "k8s_migration_internal_controller_migration_controller_go"
     },
@@ -4879,7 +4987,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L53",
-      "community": 4,
+      "community": 86,
       "norm_label": "getvmkeyfrommigration()",
       "id": "controller_migration_controller_getvmkeyfrommigration"
     },
@@ -4888,7 +4996,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L61",
-      "community": 4,
+      "community": 86,
       "norm_label": "migrationreconciler",
       "id": "controller_migrationreconciler"
     },
@@ -4906,7 +5014,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L291",
-      "community": 4,
+      "community": 86,
       "norm_label": ".reconciledelete()",
       "id": "controller_migrationreconciler_reconciledelete"
     },
@@ -4915,7 +5023,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L338",
-      "community": 4,
+      "community": 86,
       "norm_label": ".setupwithmanager()",
       "id": "controller_migrationreconciler_setupwithmanager"
     },
@@ -4924,7 +5032,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L369",
-      "community": 4,
+      "community": 86,
       "norm_label": ".setupmigrationphase()",
       "id": "controller_migrationreconciler_setupmigrationphase"
     },
@@ -4933,7 +5041,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L468",
-      "community": 4,
+      "community": 86,
       "norm_label": ".markmigrationsuccessful()",
       "id": "controller_migrationreconciler_markmigrationsuccessful"
     },
@@ -4942,7 +5050,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L489",
-      "community": 4,
+      "community": 86,
       "norm_label": ".geteventssorted()",
       "id": "controller_migrationreconciler_geteventssorted"
     },
@@ -4951,7 +5059,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L520",
-      "community": 4,
+      "community": 86,
       "norm_label": ".getpod()",
       "id": "controller_migrationreconciler_getpod"
     },
@@ -4960,7 +5068,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L542",
-      "community": 4,
+      "community": 86,
       "norm_label": ".extractcurrentdisk()",
       "id": "controller_migrationreconciler_extractcurrentdisk"
     },
@@ -4969,7 +5077,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migration_controller.go",
       "source_location": "L582",
-      "community": 4,
+      "community": 86,
       "norm_label": ".extractsyncwarning()",
       "id": "controller_migrationreconciler_extractsyncwarning"
     },
@@ -5041,7 +5149,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/rdmdisk_controller.go",
       "source_location": "L302",
-      "community": 208,
+      "community": 1,
       "norm_label": "validaterdmdiskfields()",
       "id": "controller_rdmdisk_controller_validaterdmdiskfields"
     },
@@ -6661,7 +6769,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/metrics/migration_metrics.go",
       "source_location": "L160",
-      "community": 4,
+      "community": 86,
       "norm_label": "cleanupmigrationmetrics()",
       "id": "metrics_migration_metrics_cleanupmigrationmetrics"
     },
@@ -6724,7 +6832,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L116",
-      "community": 19,
+      "community": 117,
       "norm_label": "getopenstackcredentialsfromsecret()",
       "id": "utils_credutils_getopenstackcredentialsfromsecret"
     },
@@ -6733,7 +6841,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L121",
-      "community": 208,
+      "community": 220,
       "norm_label": "verifynetworks()",
       "id": "utils_credutils_verifynetworks"
     },
@@ -6742,7 +6850,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L152",
-      "community": 19,
+      "community": 117,
       "norm_label": "verifyports()",
       "id": "utils_credutils_verifyports"
     },
@@ -6751,7 +6859,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L184",
-      "community": 208,
+      "community": 220,
       "norm_label": "verifystorage()",
       "id": "utils_credutils_verifystorage"
     },
@@ -6760,7 +6868,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L215",
-      "community": 19,
+      "community": 117,
       "norm_label": "getopenstackinfo()",
       "id": "utils_credutils_getopenstackinfo"
     },
@@ -6769,7 +6877,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L315",
-      "community": 19,
+      "community": 117,
       "norm_label": "getopenstackclients()",
       "id": "utils_credutils_getopenstackclients"
     },
@@ -6778,7 +6886,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L358",
-      "community": 19,
+      "community": 117,
       "norm_label": "validateandgetproviderclient()",
       "id": "utils_credutils_validateandgetproviderclient"
     },
@@ -6787,7 +6895,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L429",
-      "community": 117,
+      "community": 32,
       "norm_label": "validatevmwarecreds()",
       "id": "utils_credutils_validatevmwarecreds"
     },
@@ -6814,7 +6922,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L612",
-      "community": 117,
+      "community": 58,
       "norm_label": "getandcreateallvms()",
       "id": "utils_credutils_getandcreateallvms"
     },
@@ -6967,7 +7075,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1261",
-      "community": 58,
+      "community": 19,
       "norm_label": "filtervmwaremachinesforcreds()",
       "id": "utils_credutils_filtervmwaremachinesforcreds"
     },
@@ -6976,7 +7084,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1272",
-      "community": 86,
+      "community": 19,
       "norm_label": "filtervmwarehostsforcreds()",
       "id": "utils_credutils_filtervmwarehostsforcreds"
     },
@@ -7003,7 +7111,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1314",
-      "community": 86,
+      "community": 19,
       "norm_label": "findvmwarehostsnotinvcenter()",
       "id": "utils_credutils_findvmwarehostsnotinvcenter"
     },
@@ -7030,7 +7138,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1355",
-      "community": 86,
+      "community": 19,
       "norm_label": "hostexistsinvcenter()",
       "id": "utils_credutils_hostexistsinvcenter"
     },
@@ -7039,7 +7147,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1367",
-      "community": 58,
+      "community": 19,
       "norm_label": "deletedependantobjectsforvmwarecreds()",
       "id": "utils_credutils_deletedependantobjectsforvmwarecreds"
     },
@@ -7048,7 +7156,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1388",
-      "community": 58,
+      "community": 19,
       "norm_label": "deletevmwarecredssecret()",
       "id": "utils_credutils_deletevmwarecredssecret"
     },
@@ -7057,7 +7165,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1404",
-      "community": 58,
+      "community": 19,
       "norm_label": "deletevmwaremachinesforvmwarecreds()",
       "id": "utils_credutils_deletevmwaremachinesforvmwarecreds"
     },
@@ -7075,7 +7183,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1436",
-      "community": 86,
+      "community": 19,
       "norm_label": "deletevmwarehostsforvmwarecreds()",
       "id": "utils_credutils_deletevmwarehostsforvmwarecreds"
     },
@@ -7138,7 +7246,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1696",
-      "community": 19,
+      "community": 58,
       "norm_label": "createorupdaterdmdisks()",
       "id": "utils_credutils_createorupdaterdmdisks"
     },
@@ -7147,7 +7255,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1718",
-      "community": 19,
+      "community": 117,
       "norm_label": "getcindervolumebackendpools()",
       "id": "utils_credutils_getcindervolumebackendpools"
     },
@@ -7201,7 +7309,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2083",
-      "community": 117,
+      "community": 32,
       "norm_label": "logoutvmwareclient()",
       "id": "utils_credutils_logoutvmwareclient"
     },
@@ -7219,7 +7327,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2124",
-      "community": 19,
+      "community": 117,
       "norm_label": "getbackendpools()",
       "id": "utils_credutils_getbackendpools"
     },
@@ -7228,7 +7336,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2218",
-      "community": 19,
+      "community": 117,
       "norm_label": "parsepoolname()",
       "id": "utils_credutils_parsepoolname"
     },
@@ -7237,7 +7345,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2240",
-      "community": 19,
+      "community": 117,
       "norm_label": "extractcinderhost()",
       "id": "utils_credutils_extractcinderhost"
     },
@@ -7246,7 +7354,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2250",
-      "community": 19,
+      "community": 117,
       "norm_label": "buildbackendtovolumetypemap()",
       "id": "utils_credutils_buildbackendtovolumetypemap"
     },
@@ -7255,7 +7363,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2288",
-      "community": 19,
+      "community": 117,
       "norm_label": "getcindervolumeservicehosts()",
       "id": "utils_credutils_getcindervolumeservicehosts"
     },
@@ -7516,7 +7624,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/bmprovisionerutils.go",
       "source_location": "L696",
-      "community": 4,
+      "community": 86,
       "norm_label": "getvmwarecredsnamefrommigration()",
       "id": "utils_bmprovisionerutils_getvmwarecredsnamefrommigration"
     },
@@ -7579,7 +7687,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L99",
-      "community": 25,
+      "community": 36,
       "norm_label": "getclustermigration()",
       "id": "utils_rollingmigrationutils_getclustermigration"
     },
@@ -7588,7 +7696,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L109",
-      "community": 41,
+      "community": 36,
       "norm_label": "getesximigration()",
       "id": "utils_rollingmigrationutils_getesximigration"
     },
@@ -7615,7 +7723,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L137",
-      "community": 41,
+      "community": 36,
       "norm_label": "createesximigration()",
       "id": "utils_rollingmigrationutils_createesximigration"
     },
@@ -7642,7 +7750,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L217",
-      "community": 36,
+      "community": 32,
       "norm_label": "getesxihostsystem()",
       "id": "utils_rollingmigrationutils_getesxihostsystem"
     },
@@ -7660,7 +7768,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L324",
-      "community": 36,
+      "community": 44,
       "norm_label": "checkesxiinmaintenancemode()",
       "id": "utils_rollingmigrationutils_checkesxiinmaintenancemode"
     },
@@ -7678,7 +7786,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L367",
-      "community": 36,
+      "community": 44,
       "norm_label": "removeesxifromvcenter()",
       "id": "utils_rollingmigrationutils_removeesxifromvcenter"
     },
@@ -7687,7 +7795,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L408",
-      "community": 36,
+      "community": 44,
       "norm_label": "countvmsonesxi()",
       "id": "utils_rollingmigrationutils_countvmsonesxi"
     },
@@ -7732,7 +7840,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L479",
-      "community": 36,
+      "community": 25,
       "norm_label": "updateesxinamesinrollingmigrationplan()",
       "id": "utils_rollingmigrationutils_updateesxinamesinrollingmigrationplan"
     },
@@ -7804,7 +7912,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L657",
-      "community": 41,
+      "community": 36,
       "norm_label": "pauserollingmigrationplan()",
       "id": "utils_rollingmigrationutils_pauserollingmigrationplan"
     },
@@ -7822,7 +7930,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L752",
-      "community": 25,
+      "community": 36,
       "norm_label": "resumerollingmigrationplan()",
       "id": "utils_rollingmigrationutils_resumerollingmigrationplan"
     },
@@ -7831,7 +7939,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L837",
-      "community": 32,
+      "community": 36,
       "norm_label": "validaterollingmigrationplan()",
       "id": "utils_rollingmigrationutils_validaterollingmigrationplan"
     },
@@ -7840,7 +7948,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L906",
-      "community": 32,
+      "community": 36,
       "norm_label": "isbmconfigvalid()",
       "id": "utils_rollingmigrationutils_isbmconfigvalid"
     },
@@ -8173,7 +8281,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L1",
-      "community": 127,
+      "community": 77,
       "norm_label": "metadata_utils.go",
       "id": "k8s_migration_pkg_utils_metadata_utils_go"
     },
@@ -8182,7 +8290,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L36",
-      "community": 127,
+      "community": 77,
       "norm_label": "getmasterinstanceuuidfromdmi()",
       "id": "utils_metadata_utils_getmasterinstanceuuidfromdmi"
     },
@@ -8191,7 +8299,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L69",
-      "community": 127,
+      "community": 77,
       "norm_label": "getmasterinstanceuuid()",
       "id": "utils_metadata_utils_getmasterinstanceuuid"
     },
@@ -8200,7 +8308,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L89",
-      "community": 127,
+      "community": 77,
       "norm_label": "instancemetadata",
       "id": "utils_instancemetadata"
     },
@@ -8209,7 +8317,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L102",
-      "community": 127,
+      "community": 77,
       "norm_label": "getcurrentinstancemetadata()",
       "id": "utils_metadata_utils_getcurrentinstancemetadata"
     },
@@ -8218,7 +8326,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/metadata_utils.go",
       "source_location": "L173",
-      "community": 127,
+      "community": 77,
       "norm_label": "verifycredentialsmatchcurrentenvironment()",
       "id": "utils_metadata_utils_verifycredentialsmatchcurrentenvironment"
     },
@@ -8353,7 +8461,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/pcdutils.go",
       "source_location": "L399",
-      "community": 44,
+      "community": 31,
       "norm_label": "getvmwarehostfromesxiname()",
       "id": "utils_pcdutils_getvmwarehostfromesxiname"
     },
@@ -8398,7 +8506,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L1",
-      "community": 117,
+      "community": 25,
       "norm_label": "maintenance_mode.go",
       "id": "k8s_migration_pkg_utils_maintenance_mode_go"
     },
@@ -8407,7 +8515,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L28",
-      "community": 117,
+      "community": 25,
       "norm_label": "canentermaintenancemode()",
       "id": "utils_maintenance_mode_canentermaintenancemode"
     },
@@ -8416,7 +8524,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L186",
-      "community": 117,
+      "community": 25,
       "norm_label": "checkclustercapacityafterhostremoval()",
       "id": "utils_maintenance_mode_checkclustercapacityafterhostremoval"
     },
@@ -8425,7 +8533,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L294",
-      "community": 117,
+      "community": 32,
       "norm_label": "getmaintenancemodeoptions()",
       "id": "utils_maintenance_mode_getmaintenancemodeoptions"
     },
@@ -8434,7 +8542,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L353",
-      "community": 117,
+      "community": 25,
       "norm_label": "checkvmformaintenancemode()",
       "id": "utils_maintenance_mode_checkvmformaintenancemode"
     },
@@ -8452,7 +8560,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L444",
-      "community": 32,
+      "community": 25,
       "norm_label": "getrollingmigrationplanvalidationconfigfromconfigmap()",
       "id": "utils_maintenance_mode_getrollingmigrationplanvalidationconfigfromconfigmap"
     },
@@ -8542,7 +8650,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vmwareutils.go",
       "source_location": "L388",
-      "community": 32,
+      "community": 36,
       "norm_label": "filtervmwarehostsforcluster()",
       "id": "utils_vmwareutils_filtervmwarehostsforcluster"
     },
@@ -8569,7 +8677,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L1",
-      "community": 203,
+      "community": 218,
       "norm_label": "migrationplanutils.go",
       "id": "k8s_migration_pkg_utils_migrationplanutils_go"
     },
@@ -8578,7 +8686,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L21",
-      "community": 203,
+      "community": 218,
       "norm_label": "migrationnamefromvmname()",
       "id": "utils_migrationplanutils_migrationnamefromvmname"
     },
@@ -8587,7 +8695,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L26",
-      "community": 203,
+      "community": 218,
       "norm_label": "getmigrationconfigmapname()",
       "id": "utils_migrationplanutils_getmigrationconfigmapname"
     },
@@ -8596,7 +8704,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L31",
-      "community": 203,
+      "community": 218,
       "norm_label": "getfirstbootconfigmapname()",
       "id": "utils_migrationplanutils_getfirstbootconfigmapname"
     },
@@ -8605,7 +8713,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L36",
-      "community": 203,
+      "community": 218,
       "norm_label": "newhostpathtype()",
       "id": "utils_migrationplanutils_newhostpathtype"
     },
@@ -8614,7 +8722,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L42",
-      "community": 203,
+      "community": 218,
       "norm_label": "validatemigrationplan()",
       "id": "utils_migrationplanutils_validatemigrationplan"
     },
@@ -8758,7 +8866,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L1",
-      "community": 119,
+      "community": 58,
       "norm_label": "vmwarecredsscope.go",
       "id": "k8s_migration_pkg_scope_vmwarecredsscope_go"
     },
@@ -8767,7 +8875,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L15",
-      "community": 119,
+      "community": 58,
       "norm_label": "vmwarecredsscopeparams",
       "id": "scope_vmwarecredsscopeparams"
     },
@@ -8776,7 +8884,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L23",
-      "community": 119,
+      "community": 58,
       "norm_label": "newvmwarecredsscope()",
       "id": "scope_vmwarecredsscope_newvmwarecredsscope"
     },
@@ -8785,7 +8893,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L36",
-      "community": 119,
+      "community": 58,
       "norm_label": "vmwarecredsscope",
       "id": "scope_vmwarecredsscope"
     },
@@ -8794,7 +8902,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L43",
-      "community": 119,
+      "community": 58,
       "norm_label": ".close()",
       "id": "scope_vmwarecredsscope_close"
     },
@@ -8803,7 +8911,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L52",
-      "community": 119,
+      "community": 58,
       "norm_label": ".name()",
       "id": "scope_vmwarecredsscope_name"
     },
@@ -8812,7 +8920,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L57",
-      "community": 119,
+      "community": 58,
       "norm_label": ".namespace()",
       "id": "scope_vmwarecredsscope_namespace"
     },
@@ -8884,7 +8992,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L1",
-      "community": 25,
+      "community": 222,
       "norm_label": "rollingmigrationplanscope.go",
       "id": "k8s_migration_pkg_scope_rollingmigrationplanscope_go"
     },
@@ -8893,7 +9001,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L15",
-      "community": 25,
+      "community": 222,
       "norm_label": "rollingmigrationplanscopeparams",
       "id": "scope_rollingmigrationplanscopeparams"
     },
@@ -8911,7 +9019,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L36",
-      "community": 25,
+      "community": 222,
       "norm_label": "rollingmigrationplanscope",
       "id": "scope_rollingmigrationplanscope"
     },
@@ -8920,7 +9028,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L43",
-      "community": 25,
+      "community": 222,
       "norm_label": ".close()",
       "id": "scope_rollingmigrationplanscope_close"
     },
@@ -8929,7 +9037,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L52",
-      "community": 25,
+      "community": 222,
       "norm_label": ".name()",
       "id": "scope_rollingmigrationplanscope_name"
     },
@@ -8938,7 +9046,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L57",
-      "community": 25,
+      "community": 222,
       "norm_label": ".namespace()",
       "id": "scope_rollingmigrationplanscope_namespace"
     },
@@ -9190,7 +9298,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L1",
-      "community": 4,
+      "community": 127,
       "norm_label": "migrationscope.go",
       "id": "k8s_migration_pkg_scope_migrationscope_go"
     },
@@ -9199,7 +9307,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L15",
-      "community": 4,
+      "community": 127,
       "norm_label": "migrationscopeparams",
       "id": "scope_migrationscopeparams"
     },
@@ -9208,7 +9316,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L23",
-      "community": 4,
+      "community": 127,
       "norm_label": "newmigrationscope()",
       "id": "scope_migrationscope_newmigrationscope"
     },
@@ -9217,7 +9325,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L36",
-      "community": 4,
+      "community": 127,
       "norm_label": "migrationscope",
       "id": "scope_migrationscope"
     },
@@ -9226,7 +9334,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L43",
-      "community": 4,
+      "community": 127,
       "norm_label": ".close()",
       "id": "scope_migrationscope_close"
     },
@@ -9235,7 +9343,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L52",
-      "community": 4,
+      "community": 127,
       "norm_label": ".name()",
       "id": "scope_migrationscope_name"
     },
@@ -9244,7 +9352,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/migrationscope.go",
       "source_location": "L57",
-      "community": 4,
+      "community": 127,
       "norm_label": ".namespace()",
       "id": "scope_migrationscope_namespace"
     },
@@ -10477,7 +10585,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/sdk/resmgr/resmgr.go",
       "source_location": "L1",
-      "community": 31,
+      "community": 224,
       "norm_label": "resmgr.go",
       "id": "k8s_migration_pkg_sdk_resmgr_resmgr_go"
     },
@@ -10486,7 +10594,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/sdk/resmgr/resmgr.go",
       "source_location": "L22",
-      "community": 31,
+      "community": 224,
       "norm_label": "resmgr",
       "id": "resmgr_resmgr"
     },
@@ -10495,7 +10603,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/sdk/resmgr/resmgr.go",
       "source_location": "L39",
-      "community": 31,
+      "community": 224,
       "norm_label": "newresmgrclient()",
       "id": "resmgr_resmgr_newresmgrclient"
     },
@@ -11800,7 +11908,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/client.go",
       "source_location": "L296",
-      "community": 46,
+      "community": 9,
       "norm_label": ".startvmkfstoolsrdmclone()",
       "id": "esxi_ssh_client_startvmkfstoolsrdmclone"
     },
@@ -11935,7 +12043,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/client.go",
       "source_location": "L587",
-      "community": 9,
+      "community": 46,
       "norm_label": "parseesxclixmloutput()",
       "id": "esxi_ssh_client_parseesxclixmloutput"
     },
@@ -12016,7 +12124,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/disk_ops.go",
       "source_location": "L313",
-      "community": 9,
+      "community": 28,
       "norm_label": ".liststoragedevices()",
       "id": "esxi_ssh_client_liststoragedevices"
     },
@@ -12043,7 +12151,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/disk_ops.go",
       "source_location": "L451",
-      "community": 9,
+      "community": 28,
       "norm_label": ".poweroffvm()",
       "id": "esxi_ssh_client_poweroffvm"
     },
@@ -12052,7 +12160,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/disk_ops.go",
       "source_location": "L476",
-      "community": 9,
+      "community": 28,
       "norm_label": ".poweronvm()",
       "id": "esxi_ssh_client_poweronvm"
     },
@@ -12061,7 +12169,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/disk_ops.go",
       "source_location": "L501",
-      "community": 9,
+      "community": 28,
       "norm_label": ".getvmpowerstate()",
       "id": "esxi_ssh_client_getvmpowerstate"
     },
@@ -12097,7 +12205,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/esxi-ssh/disk_ops.go",
       "source_location": "L638",
-      "community": 9,
+      "community": 28,
       "norm_label": ".getdatastorepath()",
       "id": "esxi_ssh_client_getdatastorepath"
     },
@@ -12277,7 +12385,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/vm/vmops.go",
       "source_location": "L164",
-      "community": 28,
+      "community": 90,
       "norm_label": ".getvminfo()",
       "id": "vm_vmops_getvminfo"
     },
@@ -12286,7 +12394,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/vm/vmops.go",
       "source_location": "L336",
-      "community": 91,
+      "community": 28,
       "norm_label": "parsechangeid()",
       "id": "vm_vmops_parsechangeid"
     },
@@ -12295,7 +12403,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/vm/vmops.go",
       "source_location": "L349",
-      "community": 91,
+      "community": 28,
       "norm_label": "getchangeid()",
       "id": "vm_vmops_getchangeid"
     },
@@ -13348,7 +13456,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/nbd/nbdops_test.go",
       "source_location": "L1",
-      "community": 217,
+      "community": 28,
       "norm_label": "nbdops_test.go",
       "id": "v2v_helper_nbd_nbdops_test_go"
     },
@@ -13357,7 +13465,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/nbd/nbdops_test.go",
       "source_location": "L44",
-      "community": 217,
+      "community": 28,
       "norm_label": "testpasswordredactionlogic()",
       "id": "nbd_nbdops_test_testpasswordredactionlogic"
     },
@@ -19072,7 +19180,7 @@
       "file_type": "code",
       "source_file": "pkg/common/utils/net.go",
       "source_location": "L214",
-      "community": 117,
+      "community": 32,
       "norm_label": "normalizevcenterurl()",
       "id": "utils_net_normalizevcenterurl"
     },
@@ -19369,7 +19477,7 @@
       "file_type": "code",
       "source_file": "pkg/common/validation/vmware/validate.go",
       "source_location": "L240",
-      "community": 119,
+      "community": 58,
       "norm_label": "fetchresourcespostvalidation()",
       "id": "vmware_validate_fetchresourcespostvalidation"
     },
@@ -22870,12 +22978,136 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/pkg/utils/conditions.go",
+      "source_location": "L78",
+      "weight": 1.0,
+      "source": "k8s_migration_pkg_utils_conditions_go",
+      "target": "utils_conditions_setcondition",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L77",
+      "weight": 1.0,
+      "source": "utils_conditions_test_testsetcondition_addsnewentry",
+      "target": "utils_conditions_setcondition"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L104",
+      "weight": 1.0,
+      "source": "utils_conditions_test_testsetcondition_updatesexistingentry",
+      "target": "utils_conditions_setcondition"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "k8s_migration_pkg_utils_conditions_test_go",
+      "target": "utils_conditions_test_testconditiontypeconstants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "k8s_migration_pkg_utils_conditions_test_go",
+      "target": "utils_conditions_test_testreasonconstants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L75",
+      "weight": 1.0,
+      "source": "k8s_migration_pkg_utils_conditions_test_go",
+      "target": "utils_conditions_test_testsetcondition_addsnewentry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/pkg/utils/conditions_test.go",
+      "source_location": "L102",
+      "weight": 1.0,
+      "source": "k8s_migration_pkg_utils_conditions_test_go",
+      "target": "utils_conditions_test_testsetcondition_updatesexistingentry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "pkg/common/microversion/microversion.go",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "pkg_common_microversion_microversion_go",
+      "target": "microversion_microversion_floor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "microversion_microversion_test_testfloor",
+      "target": "microversion_microversion_floor"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L113",
+      "weight": 1.0,
+      "source": "microversion_microversion_test_testfloor_invalidinputs",
+      "target": "microversion_microversion_floor"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "pkg_common_microversion_microversion_test_go",
+      "target": "microversion_microversion_test_testfloor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "pkg/common/microversion/microversion_test.go",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "pkg_common_microversion_microversion_test_go",
+      "target": "microversion_microversion_test_testfloor_invalidinputs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "openstackcreds_types.go",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_hostconfig",
-      "confidence_score": 1.0
+      "target": "v1alpha1_hostconfig"
     },
     {
       "relation": "contains",
@@ -22883,9 +23115,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsinfo",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcredsinfo"
     },
     {
       "relation": "contains",
@@ -22893,9 +23125,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L59",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_securitygroupinfo",
-      "confidence_score": 1.0
+      "target": "v1alpha1_securitygroupinfo"
     },
     {
       "relation": "contains",
@@ -22903,9 +23135,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L66",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_servergroupinfo",
-      "confidence_score": 1.0
+      "target": "v1alpha1_servergroupinfo"
     },
     {
       "relation": "contains",
@@ -22913,9 +23145,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L74",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_pcdnetworkinfo",
-      "confidence_score": 1.0
+      "target": "v1alpha1_pcdnetworkinfo"
     },
     {
       "relation": "contains",
@@ -22923,9 +23155,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L80",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackinfo",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackinfo"
     },
     {
       "relation": "contains",
@@ -22933,9 +23165,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L90",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsspec",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcredsspec"
     },
     {
       "relation": "contains",
@@ -22943,9 +23175,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L134",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsstatus",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcredsstatus"
     },
     {
       "relation": "contains",
@@ -22953,9 +23185,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L168",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcreds",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcreds"
     },
     {
       "relation": "contains",
@@ -22963,9 +23195,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L179",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredslist",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcredslist"
     },
     {
       "relation": "contains",
@@ -22973,9 +23205,9 @@
       "source_file": "openstackcreds_types.go",
       "source_location": "L204",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "openstackcreds_types_go",
-      "target": "v1alpha1_openstackcreds_types_init",
-      "confidence_score": 1.0
+      "target": "v1alpha1_openstackcreds_types_init"
     },
     {
       "relation": "method",
@@ -65155,5 +65387,5 @@
       "source_file": "k8s/migration/config/samples/vjailbreak_v1alpha1_esxisshcreds.yaml"
     }
   ],
-  "built_at_commit": "a1bbdfcbfaceee99418cc2b0609ec95bcf2f4e93"
+  "built_at_commit": "d1ac3f4e397f7a179c5f2b98f35b2acd512645ac"
 }
