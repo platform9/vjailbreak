@@ -50,6 +50,47 @@ func SecretContainsCloudsYAML(secretData map[string][]byte) bool {
 	return ok && len(v) > 0
 }
 
+// MicroversionsToEnvVars converts the per-service microversion map produced by
+// ParseCloudsYAML into the corresponding OS_*_API_VERSION env var name/value
+// pairs that v2v-helper reads (see pkg/common/microversion.Floor). Returns
+// pairs in a deterministic order (sorted by env var name) so the resulting
+// job spec is stable across reconciles.
+//
+// For example, microversions["compute"] = "2.95" yields
+// {Name: "OS_COMPUTE_API_VERSION", Value: "2.95"}. Service names that do not
+// map to a known OS_*_API_VERSION env var are silently skipped (clouds.yaml
+// fields like compute_api_version, volume_api_version, image_api_version,
+// network_api_version, identity_api_version are the documented set).
+func MicroversionsToEnvVars(microversions map[string]string) []EnvVarPair {
+	if len(microversions) == 0 {
+		return nil
+	}
+	pairs := make([]EnvVarPair, 0, len(microversions))
+	for _, svc := range []string{"compute", "volume", "image", "network", "identity"} {
+		v, ok := microversions[svc]
+		if !ok || v == "" {
+			continue
+		}
+		pairs = append(pairs, EnvVarPair{
+			Name:  serviceMicroversionEnvName(svc),
+			Value: v,
+		})
+	}
+	return pairs
+}
+
+// EnvVarPair is a name/value tuple for an env var. Mirrors corev1.EnvVar's
+// shape without pulling the Kubernetes API types into this package; callers
+// adapt to corev1.EnvVar at use site.
+type EnvVarPair struct {
+	Name  string
+	Value string
+}
+
+func serviceMicroversionEnvName(service string) string {
+	return "OS_" + strings.ToUpper(service) + "_API_VERSION"
+}
+
 // CloudConfig is the parsed representation of a single cloud entry from
 // clouds.yaml, mapped into the values vjailbreak's controller needs.
 type CloudConfig struct {
