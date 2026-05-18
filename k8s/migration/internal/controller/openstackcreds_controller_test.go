@@ -24,20 +24,22 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
-	constants "github.com/platform9/vjailbreak/pkg/common/constants"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // TestApplyValidationResult_ValidationFailure tests that applyValidationResult
-// marks validation failures with the single terminal Failed status.
+// surfaces validation failures via the CredentialsValidated Condition with an
+// appropriate Reason.
 func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = vjailbreakv1alpha1.AddToScheme(scheme)
@@ -46,19 +48,19 @@ func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 	const name = "test-oscreds"
 
 	tests := []struct {
-		name                 string
-		result               openstackvalidation.ValidationResult
-		wantValidationStatus string
+		name       string
+		result     openstackvalidation.ValidationResult
+		wantReason string
 	}{
 		{
-			name:                 "auth failure marks failed",
-			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("auth failed"), Message: "auth failed"},
-			wantValidationStatus: constants.ValidationStatusFailed,
+			name:       "auth failure -> CredentialInvalidOrRevoked",
+			result:     openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("401 auth failed"), Message: "401 auth failed"},
+			wantReason: utils.ReasonCredentialInvalidOrRevoked,
 		},
 		{
-			name:                 "connection failure marks failed",
-			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("connection refused"), Message: "connection refused"},
-			wantValidationStatus: constants.ValidationStatusFailed,
+			name:       "timeout -> KeystoneUnreachable",
+			result:     openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("connection timeout"), Message: "connection timeout"},
+			wantReason: utils.ReasonKeystoneUnreachable,
 		},
 	}
 
@@ -85,8 +87,15 @@ func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, updated); err != nil {
 				t.Fatalf("failed to get updated OpenstackCreds: %v", err)
 			}
-			if updated.Status.OpenStackValidationStatus != tt.wantValidationStatus {
-				t.Errorf("OpenStackValidationStatus = %q, want %q", updated.Status.OpenStackValidationStatus, tt.wantValidationStatus)
+			cond := meta.FindStatusCondition(updated.Status.Conditions, utils.ConditionCredentialsValidated)
+			if cond == nil {
+				t.Fatalf("expected %q Condition on resource; got none", utils.ConditionCredentialsValidated)
+			}
+			if cond.Status != metav1.ConditionFalse {
+				t.Errorf("Condition Status = %q; want False", cond.Status)
+			}
+			if cond.Reason != tt.wantReason {
+				t.Errorf("Condition Reason = %q; want %q", cond.Reason, tt.wantReason)
 			}
 		})
 	}

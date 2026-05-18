@@ -437,6 +437,27 @@ func (p *vjailbreakProxy) updateOpenstackValidationStatus(ctx context.Context, n
 		}
 		creds.Status.OpenStackValidationStatus = validationStatus
 		creds.Status.OpenStackValidationMessage = validationMessage
+
+		// Mirror the flat status into the Conditions slice. Without this, a
+		// vpwned write of "Failed" (e.g. from RevalidateCredentials after a
+		// password rotation) would leave stale CredentialsValidated=True from
+		// the controller's last reconcile, and downstream checks that prefer
+		// Conditions would allow migrations against known-bad credentials.
+		switch validationStatus {
+		case string(corev1.PodSucceeded):
+			migrationutils.SetCondition(&creds.Status.Conditions,
+				migrationutils.ConditionCredentialsValidated, metav1.ConditionTrue,
+				migrationutils.ReasonAuthSucceeded, validationMessage)
+		case constants.ValidationStatusFailed:
+			migrationutils.SetCondition(&creds.Status.Conditions,
+				migrationutils.ConditionCredentialsValidated, metav1.ConditionFalse,
+				migrationutils.ReasonCredentialInvalidOrRevoked, validationMessage)
+		case constants.ValidationStatusRevalidating:
+			migrationutils.SetCondition(&creds.Status.Conditions,
+				migrationutils.ConditionCredentialsValidated, metav1.ConditionUnknown,
+				constants.ValidationStatusRevalidating, validationMessage)
+		}
+
 		return p.K8sClient.Status().Update(ctx, creds)
 	})
 }
