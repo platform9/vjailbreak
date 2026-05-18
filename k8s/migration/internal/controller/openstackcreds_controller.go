@@ -37,11 +37,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // OpenstackCredsReconciler reconciles a OpenstackCreds object
@@ -269,6 +272,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
 		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
 		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
+		setConditionsForInvalidResult(&scope.OpenstackCreds.Status.Conditions, errMsg)
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -280,6 +284,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 
 	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
 	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
+	setConditionsForValidResult(&scope.OpenstackCreds.Status.Conditions)
 	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
 	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -473,13 +478,83 @@ func generateArrayCredsName(volumeType, backendName string) string {
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// In addition to watching the OpenstackCreds resource itself, the controller
+// watches every referenced credential Secret (via mapSecretToOpenstackCreds)
+// so credential rotation — particularly Application Credential rotation in
+// the clouds.yaml-backed format — is observed and re-validated automatically
+// within seconds. This satisfies FR-018.
 func (r *OpenstackCredsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Get max concurrent reconciles from vjailbreak settings configmap
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&vjailbreakv1alpha1.OpenstackCreds{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		For(&vjailbreakv1alpha1.OpenstackCreds{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapSecretToOpenstackCreds),
+		).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
+}
+
+// mapSecretToOpenstackCreds returns reconcile requests for all OpenstackCreds
+// resources whose SecretRef points to the given Secret. The map function is
+// called by controller-runtime on every Secret create/update/delete event in
+// the namespaces the controller has access to.
+func (r *OpenstackCredsReconciler) mapSecretToOpenstackCreds(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+	credsList := &vjailbreakv1alpha1.OpenstackCredsList{}
+	if err := r.List(ctx, credsList, client.InNamespace(secret.GetNamespace())); err != nil {
+		log.FromContext(ctx).Error(err, "mapSecretToOpenstackCreds: failed to list OpenstackCreds")
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(credsList.Items))
+	for i := range credsList.Items {
+		creds := &credsList.Items[i]
+		if creds.Spec.SecretRef.Name != secret.GetName() {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKey{
+				Name:      creds.GetName(),
+				Namespace: creds.GetNamespace(),
+			},
+		})
+	}
+	return requests
+}
+
+// setConditionsForValidResult populates the OpenstackCreds Conditions for the
+// authenticated-and-validated case. Reasons specific to Application Credentials
+// (expiration, missing roles) are populated in the follow-up sub-issue #1953.
+func setConditionsForValidResult(conditions *[]metav1.Condition) {
+	utils.SetCondition(conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
+	utils.SetCondition(conditions, utils.ConditionCredentialsValidated, metav1.ConditionTrue, utils.ReasonAuthSucceeded, "Authenticated to destination Keystone")
+	utils.SetCondition(conditions, utils.ConditionExpiring, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
+	utils.SetCondition(conditions, utils.ConditionExpired, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
+}
+
+// setConditionsForInvalidResult populates the OpenstackCreds Conditions for the
+// validation-failure case. The Reason is heuristically derived from the error
+// message; precise mapping for Application Credential errors lands with #1953.
+func setConditionsForInvalidResult(conditions *[]metav1.Condition, errMsg string) {
+	reason := utils.ReasonCredentialInvalidOrRevoked
+	switch {
+	case strings.Contains(errMsg, "401"), strings.Contains(errMsg, "invalid username"), strings.Contains(errMsg, "rejected or revoked"):
+		reason = utils.ReasonCredentialInvalidOrRevoked
+	case strings.Contains(errMsg, "404"), strings.Contains(errMsg, "Auth URL"), strings.Contains(errMsg, "auth_url"):
+		reason = utils.ReasonKeystoneUnreachable
+	case strings.Contains(errMsg, "timeout"):
+		reason = utils.ReasonKeystoneUnreachable
+	case strings.Contains(errMsg, "x509"), strings.Contains(errMsg, "certificate"):
+		reason = utils.ReasonTLSVerificationFailed
+	}
+	utils.SetCondition(conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
+	utils.SetCondition(conditions, utils.ConditionCredentialsValidated, metav1.ConditionFalse, reason, errMsg)
 }
 
 func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
