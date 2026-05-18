@@ -1056,14 +1056,21 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
-// buildMicroversionEnvVars reads the credential Secret referenced by an
+// buildCloudsYAMLEnvVars reads the credential Secret referenced by an
 // OpenstackCreds resource and, when it carries a clouds.yaml key, returns the
-// OS_*_API_VERSION env vars derived from the per-service api_version fields
-// in the selected cloud entry. Returns an empty slice for legacy OS_*-keyed
-// Secrets (those env vars, if set, are auto-loaded by EnvFrom in the pod spec
-// below). Errors are non-fatal at the call site; the legacy path remains
-// available even when this helper returns an error.
-func buildMicroversionEnvVars(ctx context.Context, k3sclient client.Client, secretName, cloudName string) ([]corev1.EnvVar, error) {
+// full set of OS_* env vars (auth, microversion floor, region/interface/TLS
+// settings) derived from the selected cloud entry.
+//
+// Without this, a clouds.yaml-keyed Secret mounted via EnvFrom on the v2v-helper
+// pod produces no usable env vars — the only key in the Secret is the literal
+// "clouds.yaml" string, which is not a valid POSIX env var name, so Kubernetes
+// silently skips it. The v2v-helper's authOptionsFromEnv then fails immediately
+// with "Missing environment variable OS_AUTH_URL".
+//
+// For legacy OS_*-keyed Secrets, returns nil — those env vars are auto-loaded
+// by the EnvFrom block in the pod spec. Errors are non-fatal at the call site;
+// the legacy path remains available even when this helper returns an error.
+func buildCloudsYAMLEnvVars(ctx context.Context, k3sclient client.Client, secretName, cloudName string) ([]corev1.EnvVar, error) {
 	secret := &corev1.Secret{}
 	if err := k3sclient.Get(ctx, types.NamespacedName{
 		Namespace: constants.NamespaceMigrationSystem,
@@ -1078,14 +1085,44 @@ func buildMicroversionEnvVars(ctx context.Context, k3sclient client.Client, secr
 	if err != nil {
 		return nil, fmt.Errorf("parse clouds.yaml in Secret %s: %w", secretName, err)
 	}
-	pairs := utils.MicroversionsToEnvVars(cfg.Microversions)
-	if len(pairs) == 0 {
-		return nil, nil
+
+	envVars := []corev1.EnvVar{}
+	addIfNonEmpty := func(name, value string) {
+		if value != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: name, Value: value})
+		}
 	}
-	envVars := make([]corev1.EnvVar, 0, len(pairs))
-	for _, p := range pairs {
+
+	// Core auth fields — always present for any auth_type.
+	addIfNonEmpty("OS_AUTH_URL", cfg.AuthOptions.IdentityEndpoint)
+	addIfNonEmpty("OS_REGION_NAME", cfg.RegionName)
+	addIfNonEmpty("OS_INTERFACE", cfg.Interface)
+	if cfg.Verify != nil && !*cfg.Verify {
+		envVars = append(envVars, corev1.EnvVar{Name: "OS_INSECURE", Value: "true"})
+	}
+
+	// Auth-method-specific fields.
+	switch cfg.AuthType {
+	case "v3applicationcredential":
+		addIfNonEmpty("OS_APPLICATION_CREDENTIAL_ID", cfg.AuthOptions.ApplicationCredentialID)
+		addIfNonEmpty("OS_APPLICATION_CREDENTIAL_SECRET", cfg.AuthOptions.ApplicationCredentialSecret)
+	default:
+		// v3password / password / empty: user + password + project scope.
+		addIfNonEmpty("OS_USERNAME", cfg.AuthOptions.Username)
+		addIfNonEmpty("OS_USERID", cfg.AuthOptions.UserID)
+		addIfNonEmpty("OS_PASSWORD", cfg.AuthOptions.Password)
+		addIfNonEmpty("OS_DOMAIN_NAME", cfg.AuthOptions.DomainName)
+		addIfNonEmpty("OS_USER_DOMAIN_NAME", cfg.AuthOptions.DomainName)
+		addIfNonEmpty("OS_PROJECT_NAME", cfg.AuthOptions.TenantName)
+		addIfNonEmpty("OS_TENANT_NAME", cfg.AuthOptions.TenantName)
+		addIfNonEmpty("OS_PROJECT_ID", cfg.AuthOptions.TenantID)
+	}
+
+	// Operator-configured microversion floor values.
+	for _, p := range utils.MicroversionsToEnvVars(cfg.Microversions) {
 		envVars = append(envVars, corev1.EnvVar{Name: p.Name, Value: p.Value})
 	}
+
 	return envVars, nil
 }
 
@@ -1145,19 +1182,21 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 		})
 	}
 
-	// When the credential Secret is clouds.yaml-keyed, the per-service
-	// microversion floor values configured by the operator are not auto-loaded
-	// via EnvFrom (the only Secret key is "clouds.yaml"). Parse them out and
-	// inject OS_*_API_VERSION env vars explicitly so v2v-helper's
-	// pkg/common/microversion.Floor can honor the operator-configured floor on
-	// every service client.
+	// When the credential Secret is clouds.yaml-keyed, EnvFrom silently
+	// skips the "clouds.yaml" key (not a valid POSIX env var name), so the
+	// v2v-helper pod receives no OS_* env vars and authOptionsFromEnv fails
+	// immediately. Parse the clouds.yaml here and inject the full set of
+	// OS_* env vars (auth fields per auth_type, region/interface/TLS, and
+	// the per-service microversion floor values) explicitly. For legacy
+	// OS_*-keyed Secrets this is a no-op — those env vars are auto-loaded
+	// by EnvFrom.
 	if openstackSecretRef != "" {
-		microversionEnvVars, err := buildMicroversionEnvVars(ctx, r.Client, openstackSecretRef, openstackCloudName)
+		cloudsEnvVars, err := buildCloudsYAMLEnvVars(ctx, r.Client, openstackSecretRef, openstackCloudName)
 		if err != nil {
-			r.ctxlog.Info("could not derive OS_*_API_VERSION env vars from credential Secret; legacy OS_* path will still be honored via EnvFrom",
+			r.ctxlog.Info("could not derive OS_* env vars from credential Secret; legacy OS_* path will still be honored via EnvFrom",
 				"secret", openstackSecretRef, "err", err.Error())
 		} else {
-			envVars = append(envVars, microversionEnvVars...)
+			envVars = append(envVars, cloudsEnvVars...)
 		}
 	}
 

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -270,7 +271,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		setConditionsForInvalidResult(&scope.OpenstackCreds.Status.Conditions, errMsg)
+		setConditionsForInvalidResult(&scope.OpenstackCreds.Status, result.Error, errMsg)
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 			ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -280,7 +281,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		return nil
 	}
 
-	setConditionsForValidResult(&scope.OpenstackCreds.Status.Conditions)
+	setConditionsForValidResult(&scope.OpenstackCreds.Status)
 	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
 	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
 		ctxlog.Error(err, "Error updating status of OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
@@ -527,30 +528,76 @@ func (r *OpenstackCredsReconciler) mapSecretToOpenstackCreds(ctx context.Context
 // setConditionsForValidResult populates the OpenstackCreds Conditions for the
 // authenticated-and-validated case. Reasons specific to Application Credentials
 // (expiration, missing roles) are populated in the follow-up sub-issue #1953.
-func setConditionsForValidResult(conditions *[]metav1.Condition) {
-	utils.SetCondition(conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
-	utils.SetCondition(conditions, utils.ConditionCredentialsValidated, metav1.ConditionTrue, utils.ReasonAuthSucceeded, "Authenticated to destination Keystone")
-	utils.SetCondition(conditions, utils.ConditionExpiring, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
-	utils.SetCondition(conditions, utils.ConditionExpired, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
+//
+// Also writes the deprecated flat OpenStackValidationStatus/Message fields as a
+// derived view so the existing UI and pkg/vpwned proxy keep working through the
+// Conditions migration window.
+func setConditionsForValidResult(status *vjailbreakv1alpha1.OpenstackCredsStatus) {
+	utils.SetCondition(&status.Conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
+	utils.SetCondition(&status.Conditions, utils.ConditionCredentialsValidated, metav1.ConditionTrue, utils.ReasonAuthSucceeded, "Authenticated to destination Keystone")
+	utils.SetCondition(&status.Conditions, utils.ConditionExpiring, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
+	utils.SetCondition(&status.Conditions, utils.ConditionExpired, metav1.ConditionFalse, utils.ReasonNotApplicable, "Credential is not an Application Credential")
+	status.OpenStackValidationStatus = string(corev1.PodSucceeded)
+	status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 }
 
 // setConditionsForInvalidResult populates the OpenstackCreds Conditions for the
-// validation-failure case. The Reason is heuristically derived from the error
-// message; precise mapping for Application Credential errors lands with #1953.
-func setConditionsForInvalidResult(conditions *[]metav1.Condition, errMsg string) {
+// validation-failure case. Distinguishes parse failures (CredentialsParsed=False
+// with a parse-specific Reason mapped from the sentinel error type returned by
+// utils.ParseCloudsYAML) from authentication failures (CredentialsParsed=True,
+// CredentialsValidated=False with an auth-specific Reason). Also writes the
+// deprecated flat OpenStackValidationStatus/Message fields as a derived view
+// for back-compat.
+func setConditionsForInvalidResult(status *vjailbreakv1alpha1.OpenstackCredsStatus, rawErr error, errMsg string) {
+	if parsedFalseReason := parseFailureReason(rawErr); parsedFalseReason != "" {
+		utils.SetCondition(&status.Conditions, utils.ConditionCredentialsParsed, metav1.ConditionFalse, parsedFalseReason, errMsg)
+		utils.SetCondition(&status.Conditions, utils.ConditionCredentialsValidated, metav1.ConditionUnknown, parsedFalseReason, "Not evaluated: credential data could not be parsed")
+		status.OpenStackValidationStatus = constants.ValidationStatusFailed
+		status.OpenStackValidationMessage = errMsg
+		return
+	}
+
+	// Not a parse failure: parsing succeeded, authentication or environment
+	// check is what failed. Heuristic Reason mapping on the error message.
 	reason := utils.ReasonCredentialInvalidOrRevoked
 	switch {
 	case strings.Contains(errMsg, "401"), strings.Contains(errMsg, "invalid username"), strings.Contains(errMsg, "rejected or revoked"):
 		reason = utils.ReasonCredentialInvalidOrRevoked
-	case strings.Contains(errMsg, "404"), strings.Contains(errMsg, "Auth URL"), strings.Contains(errMsg, "auth_url"):
+	case strings.Contains(errMsg, "404"), strings.Contains(errMsg, "Auth URL"):
 		reason = utils.ReasonKeystoneUnreachable
 	case strings.Contains(errMsg, "timeout"):
 		reason = utils.ReasonKeystoneUnreachable
 	case strings.Contains(errMsg, "x509"), strings.Contains(errMsg, "certificate"):
 		reason = utils.ReasonTLSVerificationFailed
 	}
-	utils.SetCondition(conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
-	utils.SetCondition(conditions, utils.ConditionCredentialsValidated, metav1.ConditionFalse, reason, errMsg)
+	utils.SetCondition(&status.Conditions, utils.ConditionCredentialsParsed, metav1.ConditionTrue, utils.ReasonParsed, "Credential data parsed successfully")
+	utils.SetCondition(&status.Conditions, utils.ConditionCredentialsValidated, metav1.ConditionFalse, reason, errMsg)
+	status.OpenStackValidationStatus = constants.ValidationStatusFailed
+	status.OpenStackValidationMessage = errMsg
+}
+
+// parseFailureReason returns the appropriate ReasonInvalid* code when err
+// wraps one of the ParseCloudsYAML sentinel errors. Returns "" when err is not
+// a parse failure (caller treats as authentication-stage failure).
+func parseFailureReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	switch {
+	case stderrors.Is(err, utils.ErrInvalidYAML):
+		return utils.ReasonInvalidYAML
+	case stderrors.Is(err, utils.ErrAmbiguousCloudName):
+		return utils.ReasonAmbiguousCloudName
+	case stderrors.Is(err, utils.ErrCloudNotFound):
+		return utils.ReasonAmbiguousCloudName
+	case stderrors.Is(err, utils.ErrMissingRequiredField):
+		return utils.ReasonMissingRequiredField
+	case stderrors.Is(err, utils.ErrUnknownAuthType):
+		return utils.ReasonUnknownAuthType
+	case stderrors.Is(err, utils.ErrCacertPathUnresolvable):
+		return utils.ReasonCacertPathUnresolvable
+	}
+	return ""
 }
 
 func handleValidatedCreds(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
