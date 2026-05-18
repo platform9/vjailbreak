@@ -35,27 +35,27 @@ import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
 import { CustomSearchToolbar } from 'src/components/grid'
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
-import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
+import { MissingInterfaceIpWarningAlert } from '../components/MissingInterfaceIpWarningAlert'
+import { getMissingInterfaceIpWarnings } from '../components/missingInterfaceIpWarnings'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
-import MaasConfigDetailsModal from './components/MaasConfigDetailsModal'
-import NetworkAndStorageMappingStep, { ResourceMap } from './NetworkAndStorageMappingStep'
-import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
+import MaasConfigDetailsModal from '../components/MaasConfigDetailsModal'
+import NetworkAndStorageMappingStep, { ResourceMap } from '../steps/NetworkAndStorageMappingStep'
+import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
 import useParams from 'src/hooks/useParams'
-import MigrationOptions from './MigrationOptionsAlt'
-import { CUTOVER_TYPES } from './constants'
+import MigrationOptions from '../steps/MigrationOptionsAlt'
+import { CUTOVER_TYPES } from '../constants'
 import WindowsIcon from 'src/assets/windows_icon.svg'
 import LinuxIcon from 'src/assets/linux_icon.svg'
 import WarningIcon from '@mui/icons-material/Warning'
-import { useClusterData } from './useClusterData'
+import { useClusterData } from '../hooks/useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { useBulkIPHandlers } from './hooks/useBulkIPHandlers'
-import { useFlavorHandlers } from './hooks/useFlavorHandlers'
-import { useHostConfigHandlers } from './hooks/useHostConfigHandlers'
-import { useRollingFormData } from './hooks/useRollingFormData'
-import { useRollingFormValidation } from './hooks/useRollingFormValidation'
-import { useRollingFormSubmit } from './hooks/useRollingFormSubmit'
+import { useBulkIPHandlers } from '../hooks/useBulkIPHandlers'
+import { useFlavorHandlers } from '../hooks/useFlavorHandlers'
+import { useHostConfigHandlers } from '../hooks/useHostConfigHandlers'
+import { useRollingFormData } from '../hooks/useRollingFormData'
+import { useRollingFormValidation } from '../hooks/useRollingFormValidation'
+import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
@@ -75,11 +75,11 @@ import type {
   RollingMigrationFormDrawerProps,
   FieldErrors,
   RollingFormParams,
-} from './types'
+} from '../types'
 import {
   extractFirstIPv4,
   hasMultipleIPv4,
-} from './utils/ipValidation'
+} from '../utils/ipValidation'
 
 // RollingMigration includes osFamily which the shared SelectedMigrationOptionsType does not
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {

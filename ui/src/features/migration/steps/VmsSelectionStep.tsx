@@ -45,23 +45,23 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
 import { RdmDisk } from 'src/api/rdm-disks/model'
-import { RdmDiskConfigurationPanel } from './components'
-import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
-import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
+import { RdmDiskConfigurationPanel } from '../components'
+import { MissingInterfaceIpWarningAlert } from '../components/MissingInterfaceIpWarningAlert'
+import { getMissingInterfaceIpWarnings } from '../components/missingInterfaceIpWarnings'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
-import type { VmDataWithFlavor, VmsSelectionStepProps, RdmConfiguration } from './types'
-import { useOsAssignment } from './hooks/useOsAssignment'
-import { useVmSelection } from './hooks/useVmSelection'
-import { useFlavorAssignment } from './hooks/useFlavorAssignment'
-import { useRdmConfiguration } from './hooks/useRdmConfiguration'
-import { useBulkIPEdit } from './hooks/useBulkIPEdit'
+import type { VmDataWithFlavor, VmsSelectionStepProps, RdmConfiguration } from '../types'
+import { useOsAssignment } from '../hooks/useOsAssignment'
+import { useVmSelection } from '../hooks/useVmSelection'
+import { useFlavorAssignment } from '../hooks/useFlavorAssignment'
+import { useRdmConfiguration } from '../hooks/useRdmConfiguration'
+import { useBulkIPEdit } from '../hooks/useBulkIPEdit'
 import {
   extractFirstIPv4,
   hasMultipleIPv4,
   parseIpList,
-} from './utils/ipValidation'
+} from '../utils/ipValidation'
 
 const { useCallback, useEffect, useState } = React
 

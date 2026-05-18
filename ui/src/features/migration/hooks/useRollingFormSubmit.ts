@@ -26,7 +26,7 @@ import { CUTOVER_TYPES } from '../constants'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import type { AmplitudeEventName, EventProperties } from 'src/types/amplitude'
 import type { VM, ESXHost, ResourceMap, SelectedMigrationOptionsType, RollingFormParams } from '../types'
-import type { SourceDataItem, PcdDataItem } from '../useClusterData'
+import type { SourceDataItem, PcdDataItem } from './useClusterData'
 import type { ErrorContext } from 'src/services/errorReporting'
 
 interface UseRollingFormSubmitParams {

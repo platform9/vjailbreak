@@ -11,17 +11,17 @@ import {
   Chip
 } from '@mui/material'
 import { useMemo } from 'react'
-import { useNetworkIPsMap } from './hooks/useNetworkIPsMap'
-import { useFilteredMappings } from './hooks/useFilteredMappings'
-import { useNetworkSubnetCompatibility } from './hooks/useNetworkSubnetCompatibility'
-import { ResourceMappingTableNew as ResourceMappingTable } from './components'
+import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
+import { useFilteredMappings } from '../hooks/useFilteredMappings'
+import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
+import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
-import type { NetworkAndStorageMappingStepProps } from './types'
-import { STORAGE_COPY_METHOD_OPTIONS } from './constants'
+import type { NetworkAndStorageMappingStepProps } from '../types'
+import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 
-export type { ResourceMap, StorageCopyMethod } from './types'
+export type { ResourceMap, StorageCopyMethod } from '../types'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',

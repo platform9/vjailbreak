@@ -9,7 +9,7 @@ import { getBMConfigList, getBMConfig } from 'src/api/bmconfig/bmconfig'
 import { BMConfig } from 'src/api/bmconfig/model'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
-import { SourceDataItem } from '../useClusterData'
+import { SourceDataItem } from './useClusterData'
 import type { ESXHost, VM } from '../types'
 
 interface UseRollingFormDataParams {

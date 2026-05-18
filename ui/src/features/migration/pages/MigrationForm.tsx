@@ -4,16 +4,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useParams from 'src/hooks/useParams'
-import MigrationOptions from './MigrationOptionsAlt'
-import NetworkAndStorageMappingStep from './NetworkAndStorageMappingStep'
-import SecurityGroupAndServerGroupStep from './SecurityGroupAndServerGroup'
-import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
-import VmsSelectionStep from './VmsSelectionStep'
-import { useClusterData } from './useClusterData'
+import MigrationOptions from '../steps/MigrationOptionsAlt'
+import NetworkAndStorageMappingStep from '../steps/NetworkAndStorageMappingStep'
+import SecurityGroupAndServerGroupStep from '../steps/SecurityGroupAndServerGroup'
+import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
+import VmsSelectionStep from '../steps/VmsSelectionStep'
+import { useClusterData } from '../hooks/useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
-import { useFormValidation } from './hooks/useFormValidation'
+import { useFormValidation } from '../hooks/useFormValidation'
 import {
   ActionButton,
   DrawerFooter,
@@ -33,11 +33,11 @@ import type {
   FieldErrors,
   MigrationDrawerRHFValues,
   MigrationFormDrawerProps,
-} from './types'
-import { useSectionTracking } from './hooks/useSectionTracking'
-import { useFormSync } from './hooks/useFormSync'
-import { useCredentialFetching } from './hooks/useCredentialFetching'
-import { useMigrationFormSubmit } from './hooks/useMigrationFormSubmit'
+} from '../types'
+import { useSectionTracking } from '../hooks/useSectionTracking'
+import { useFormSync } from '../hooks/useFormSync'
+import { useCredentialFetching } from '../hooks/useCredentialFetching'
+import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
 
 const drawerWidth = 1400
 

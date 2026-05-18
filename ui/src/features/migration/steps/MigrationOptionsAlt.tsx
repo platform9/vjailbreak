@@ -11,20 +11,20 @@ import {
   Typography
 } from '@mui/material'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import customTypography from '../../theme/typography'
+import customTypography from '../../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { RHFDateTimeField, RHFTextField, Step, TextField } from 'src/shared/components/forms'
-import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from './constants'
+import { CUTOVER_TYPES, DATA_COPY_OPTIONS, VM_CUTOVER_OPTIONS } from '../constants'
 import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 import { hasSelectedLayer2Network } from 'src/shared/utils/network'
-import type { MigrationOptionsPropsInterface } from './types'
+import type { MigrationOptionsPropsInterface } from '../types'
 
-export type { MigrationOptionsPropsInterface } from './types'
+export type { MigrationOptionsPropsInterface } from '../types'
 
 const SectionBlock = styled(Box)(({ theme }) => ({
   display: 'grid',
