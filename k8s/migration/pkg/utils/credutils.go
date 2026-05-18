@@ -112,9 +112,57 @@ func GetVMwareCredentialsFromSecret(ctx context.Context, k3sclient client.Client
 	return vmwarecommon.GetVMwareCredentialsFromSecret(ctx, k3sclient, secretName)
 }
 
-// GetOpenstackCredentialsFromSecret retrieves and checks the secret
+// GetOpenstackCredentialsFromSecret retrieves and checks the secret. Handles
+// only the legacy OS_*-keyed Secret format. Callers that may encounter a
+// clouds.yaml-backed Secret must use GetOpenstackCredsInfoFromCreds (which
+// branches on Secret content and uses the OpenstackCreds.Spec.CloudName for
+// multi-entry clouds.yaml selection).
 func GetOpenstackCredentialsFromSecret(ctx context.Context, k3sclient client.Client, secretName string) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
 	return openstackcommon.GetOpenstackCredentialsFromSecret(ctx, k3sclient, secretName)
+}
+
+// GetOpenstackCredsInfoFromCreds returns an OpenStackCredsInfo for the given
+// OpenstackCreds resource, supporting both clouds.yaml-keyed Secrets (the new
+// path that consults Spec.CloudName for multi-entry selection) and legacy
+// OS_*-keyed Secrets (the existing path).
+//
+// Post-validation enrichment functions (flavor discovery, network/volume-type
+// listing, security group listing, project name sync, Cinder backend pool
+// discovery) must use this helper rather than GetOpenstackCredentialsFromSecret
+// directly so they work for clouds.yaml-backed credentials. For
+// auth_type=v3applicationcredential, the returned info has empty
+// Username/Password/TenantName since Application Credentials carry scope at
+// creation time; consumers that require those fields must check explicitly.
+func GetOpenstackCredsInfoFromCreds(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (vjailbreakv1alpha1.OpenStackCredsInfo, error) {
+	if openstackcreds == nil {
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.New("openstackcreds cannot be nil")
+	}
+	secret := &corev1.Secret{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      openstackcreds.Spec.SecretRef.Name,
+	}, secret); err != nil {
+		return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrapf(err, "failed to get secret %q", openstackcreds.Spec.SecretRef.Name)
+	}
+	if SecretContainsCloudsYAML(secret.Data) {
+		cfg, err := ParseCloudsYAML(secret.Data["clouds.yaml"], openstackcreds.Spec.CloudName)
+		if err != nil {
+			return vjailbreakv1alpha1.OpenStackCredsInfo{}, errors.Wrap(err, "failed to parse clouds.yaml")
+		}
+		info := vjailbreakv1alpha1.OpenStackCredsInfo{
+			AuthURL:    cfg.AuthOptions.IdentityEndpoint,
+			Username:   cfg.AuthOptions.Username,
+			Password:   cfg.AuthOptions.Password,
+			RegionName: cfg.RegionName,
+			TenantName: cfg.AuthOptions.TenantName,
+			DomainName: cfg.AuthOptions.DomainName,
+		}
+		if cfg.Verify != nil && !*cfg.Verify {
+			info.Insecure = true
+		}
+		return info, nil
+	}
+	return openstackcommon.GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 }
 
 // VerifyNetworks verifies the existence of specified networks in OpenStack
@@ -274,7 +322,7 @@ func GetOpenstackInfo(ctx context.Context, k3sclient client.Client, openstackcre
 		})
 	}
 
-	credsInfo, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	credsInfo, err := GetOpenstackCredsInfoFromCreds(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials for project lookup")
 	}
@@ -317,7 +365,7 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 		return nil, errors.New("openstackcreds cannot be nil")
 	}
 
-	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredsInfoFromCreds(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
 	}
@@ -2209,7 +2257,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	ctxlog.Info("Discovering backend pools from OpenStack Cinder")
 
 	// Get OpenStack credentials to extract region
-	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
+	openstackCredential, err := GetOpenstackCredsInfoFromCreds(ctx, k3sclient, openstackcreds)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get OpenStack credentials from secret")
 	}
