@@ -1097,6 +1097,73 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 		return errors.Wrap(err, "failed to get vjailbreak settings for pod resources")
 	}
 
+	// Storage-accelerated copy uses the array's native copy path and does not need
+	// the VDDK libraries inside the v2v-helper pod. Skip mounting the VDDK hostPath
+	// so kubelet doesn't fail the pod when /home/ubuntu/vmware-vix-disklib-distrib is absent.
+	isStorageAccelerated := migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod
+
+	volumeMounts := []corev1.VolumeMount{
+		{Name: "dev", MountPath: "/dev"},
+		{Name: "firstboot", MountPath: "/home/fedora/scripts"},
+		{Name: "logs", MountPath: "/var/log/pf9"},
+		{Name: "virtio-driver", MountPath: "/home/fedora/virtio-win"},
+	}
+	volumes := []corev1.Volume{
+		{
+			Name: "dev",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/dev",
+					Type: utils.NewHostPathType("Directory"),
+				},
+			},
+		},
+		{
+			Name: "firstboot",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: firstbootconfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: "logs",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/pf9",
+					Type: utils.NewHostPathType("DirectoryOrCreate"),
+				},
+			},
+		},
+		{
+			Name: "virtio-driver",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/home/ubuntu/virtio-win",
+					Type: utils.NewHostPathType("DirectoryOrCreate"),
+				},
+			},
+		},
+	}
+	if !isStorageAccelerated {
+		volumeMounts = append([]corev1.VolumeMount{
+			{Name: "vddk", MountPath: "/home/fedora/vmware-vix-disklib-distrib"},
+		}, volumeMounts...)
+		volumes = append([]corev1.Volume{
+			{
+				Name: "vddk",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: VDDKDirectory,
+						Type: utils.NewHostPathType("Directory"),
+					},
+				},
+			},
+		}, volumes...)
+	}
+
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
 	if err != nil && apierrors.IsNotFound(err) {
@@ -1185,28 +1252,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									})
 									return envFrom
 								}(),
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "vddk",
-										MountPath: "/home/fedora/vmware-vix-disklib-distrib",
-									},
-									{
-										Name:      "dev",
-										MountPath: "/dev",
-									},
-									{
-										Name:      "firstboot",
-										MountPath: "/home/fedora/scripts",
-									},
-									{
-										Name:      "logs",
-										MountPath: "/var/log/pf9",
-									},
-									{
-										Name:      "virtio-driver",
-										MountPath: "/home/fedora/virtio-win",
-									},
-								},
+								VolumeMounts: volumeMounts,
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPURequest),
@@ -1221,54 +1267,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								},
 							},
 						},
-						Volumes: []corev1.Volume{
-							{
-								Name: "vddk",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-										Type: utils.NewHostPathType("Directory"),
-									},
-								},
-							},
-							{
-								Name: "dev",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/dev",
-										Type: utils.NewHostPathType("Directory"),
-									},
-								},
-							},
-							{
-								Name: "firstboot",
-								VolumeSource: corev1.VolumeSource{
-									ConfigMap: &corev1.ConfigMapVolumeSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: firstbootconfigMapName,
-										},
-									},
-								},
-							},
-							{
-								Name: "logs",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/var/log/pf9",
-										Type: utils.NewHostPathType("DirectoryOrCreate"),
-									},
-								},
-							},
-							{
-								Name: "virtio-driver",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/home/ubuntu/virtio-win",
-										Type: utils.NewHostPathType("DirectoryOrCreate"),
-									},
-								},
-							},
-						},
+						Volumes: volumes,
 					},
 				},
 			},
@@ -2054,9 +2053,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		// Storage-accelerated copy uses the array's native copy path (Pure XCOPY / NetApp)
+		// and does not require VDDK on the appliance, so skip the VDDK validation entirely.
+		if migrationtemplate.Spec.StorageCopyMethod != StorageCopyMethod {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2086,9 +2089,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 	}
 
-	if hotplugFlavorMissing {
-		return nil
-	}
 	return nil
 }
 
@@ -2168,7 +2168,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
 		}
 
-		return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
+		return errors.New("VDDK_MISSING: directory could not be read")
 	}
 
 	if len(files) == 0 {
@@ -2191,7 +2191,7 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			}
 		}
 
-		return errors.Wrap(err, "VDDK_MISSING: directory is empty")
+		return errors.New("VDDK_MISSING: directory is empty")
 	}
 
 	// Clear previous VDDKCheck condition if directory is valid
