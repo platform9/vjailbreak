@@ -116,6 +116,7 @@ For information about alternative licensing arrangements, contact info@platform9
 - **OpenStack Environment**:
   - OpenStack-compliant cloud target
   - Network and storage access
+  - Credentials can be supplied as either standard `clouds.yaml` (preferred — supports OpenStack Application Credentials and per-service microversion configuration) or the legacy per-field `OS_*` Secret keys. See [`docs/credentials.md`](docs/credentials.md) for the operator runbook.
 
 - **Network Connectivity**:
   - Access to vCenter, ESXi, and OpenStack API endpoints
