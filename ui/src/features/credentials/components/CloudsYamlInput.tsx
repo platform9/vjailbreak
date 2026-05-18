@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { ChangeEvent, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   parseCloudsYAML,
   detectAuthMethod,
@@ -80,13 +80,19 @@ export default function CloudsYamlInput({
     effectiveCloud !== '' &&
     authMethod !== 'unsupported'
 
-  // Emit upstream whenever effective state changes.
-  useMemoOnChange(() => {
+  // Emit upstream whenever effective state changes. useEffect (not useMemo)
+  // because this is a side effect — calling the parent's onChange during
+  // render violates React rules and risks render-loop warnings in React 18.
+  useEffect(() => {
     onChange({
       cloudsYaml: raw,
       cloudName: effectiveCloud,
       isValid,
     })
+    // onChange intentionally excluded: it's a parent-supplied callback whose
+    // identity may change every render. Including it would re-fire the effect
+    // on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raw, effectiveCloud, isValid])
 
   const onTextChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -212,14 +218,3 @@ export default function CloudsYamlInput({
   )
 }
 
-/**
- * Tiny effect helper: call `fn` whenever any of `deps` changes. Avoids
- * pulling React useEffect's lint dependency check noise into this file by
- * keeping the dep list explicit.
- */
-function useMemoOnChange(fn: () => void, deps: unknown[]) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useMemo(() => {
-    fn()
-  }, deps)
-}
