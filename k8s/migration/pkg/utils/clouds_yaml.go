@@ -40,6 +40,16 @@ var (
 	ErrCacertPathUnresolvable = errors.New("clouds.yaml: cacert references a filesystem path; inline content required")
 )
 
+// SecretContainsCloudsYAML reports whether the credential Secret's data
+// indicates the new clouds.yaml-backed credential format. The function returns
+// true if the Secret contains a non-empty value under the "clouds.yaml" key.
+// Callers branch on this result to dispatch between the clouds.yaml parser
+// and the legacy OS_*-keyed path.
+func SecretContainsCloudsYAML(secretData map[string][]byte) bool {
+	v, ok := secretData["clouds.yaml"]
+	return ok && len(v) > 0
+}
+
 // CloudConfig is the parsed representation of a single cloud entry from
 // clouds.yaml, mapped into the values vjailbreak's controller needs.
 type CloudConfig struct {

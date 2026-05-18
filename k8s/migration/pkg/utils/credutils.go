@@ -358,6 +358,19 @@ func GetOpenStackClients(ctx context.Context, k3sclient client.Client, openstack
 func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 ) (*gophercloud.ProviderClient, error) {
+	// Branch on credential Secret content: clouds.yaml takes precedence over
+	// legacy OS_* keys when both are present.
+	secret := &corev1.Secret{}
+	if err := k3sclient.Get(ctx, k8stypes.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      openstackcreds.Spec.SecretRef.Name,
+	}, secret); err != nil {
+		return nil, errors.Wrapf(err, "failed to get secret %q", openstackcreds.Spec.SecretRef.Name)
+	}
+	if SecretContainsCloudsYAML(secret.Data) {
+		return validateProviderClientFromCloudsYAML(ctx, k3sclient, secret.Data["clouds.yaml"], openstackcreds.Spec.CloudName)
+	}
+
 	openstackCredential, err := GetOpenstackCredentialsFromSecret(ctx, k3sclient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get openstack credentials from secret")
@@ -418,6 +431,68 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 			return nil, err
 		}
 		return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
+	}
+
+	return providerClient, nil
+}
+
+// validateProviderClientFromCloudsYAML is the clouds.yaml-backed credential
+// validation path. It parses the YAML, constructs the provider client, applies
+// TLS settings, and authenticates against Keystone. See [[clouds_yaml.go]] for
+// the parser contract and the sentinel errors returned on failure.
+//
+// Cacert inline content from clouds.yaml is parsed and validated against
+// filesystem-path misuse, but the inline content is not yet wired into the
+// HTTP client (TODO: integrate with netutils CA pool). For now, operators
+// requiring a custom CA must use `verify: false` until that wiring lands.
+func validateProviderClientFromCloudsYAML(ctx context.Context, k3sclient client.Client,
+	cloudsYAML []byte, cloudName string,
+) (*gophercloud.ProviderClient, error) {
+	cfg, err := ParseCloudsYAML(cloudsYAML, cloudName)
+	if err != nil {
+		return nil, err
+	}
+
+	providerClient, err := openstack.NewClient(cfg.AuthOptions.IdentityEndpoint)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create openstack client")
+	}
+
+	vjbNet := netutils.NewVjbNet()
+	if cfg.Verify != nil && !*cfg.Verify {
+		vjbNet.Insecure = true
+	}
+	if vjbSettings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient); err != nil {
+		log.FromContext(ctx).Error(err, "failed to get vjailbreak settings, using default HTTP timeout")
+	} else {
+		vjbNet.SetTimeout(time.Duration(vjbSettings.HTTPTimeoutSeconds) * time.Second)
+	}
+	if vjbNet.CreateSecureHTTPClient() == nil {
+		providerClient.HTTPClient = *vjbNet.GetClient()
+	} else {
+		return nil, fmt.Errorf("failed to create secure HTTP client")
+	}
+
+	if err := openstack.Authenticate(ctx, providerClient, cfg.AuthOptions); err != nil {
+		switch {
+		case strings.Contains(err.Error(), "401"):
+			return nil, fmt.Errorf("authentication failed: credential rejected or revoked")
+		case strings.Contains(err.Error(), "404"):
+			return nil, fmt.Errorf("authentication failed: the authentication URL or project name is incorrect")
+		case strings.Contains(err.Error(), "timeout"):
+			return nil, fmt.Errorf("connection timeout: unable to reach the OpenStack authentication service. Please check your network connection and auth_url")
+		default:
+			return nil, fmt.Errorf("authentication failed: %w", err)
+		}
+	}
+
+	if cfg.RegionName != "" {
+		if _, err := VerifyCredentialsMatchCurrentEnvironment(providerClient, cfg.RegionName); err != nil {
+			if strings.Contains(err.Error(), "Credentials are valid but for a different OpenStack environment") {
+				return nil, err
+			}
+			return nil, fmt.Errorf("failed to verify credentials against current environment: %w", err)
+		}
 	}
 
 	return providerClient, nil

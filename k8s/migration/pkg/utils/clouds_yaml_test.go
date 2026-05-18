@@ -269,3 +269,35 @@ func TestCloudNames_InvalidYAML(t *testing.T) {
 		t.Fatalf("error = %v; want %v", err, ErrInvalidYAML)
 	}
 }
+
+func TestSecretContainsCloudsYAML(t *testing.T) {
+	cases := []struct {
+		name string
+		data map[string][]byte
+		want bool
+	}{
+		{name: "nil data", data: nil, want: false},
+		{name: "empty data", data: map[string][]byte{}, want: false},
+		{name: "OS_* keys only", data: map[string][]byte{
+			"OS_AUTH_URL": []byte("https://k.example.com:5000/v3"),
+			"OS_USERNAME": []byte("admin"),
+		}, want: false},
+		{name: "clouds.yaml present", data: map[string][]byte{
+			"clouds.yaml": []byte("clouds:\n  destination: {}\n"),
+		}, want: true},
+		{name: "clouds.yaml present plus OS_* keys (clouds.yaml wins)", data: map[string][]byte{
+			"clouds.yaml": []byte("clouds:\n  destination: {}\n"),
+			"OS_AUTH_URL": []byte("https://k.example.com:5000/v3"),
+		}, want: true},
+		{name: "clouds.yaml key present but empty value", data: map[string][]byte{
+			"clouds.yaml": []byte{},
+		}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SecretContainsCloudsYAML(tc.data); got != tc.want {
+				t.Errorf("SecretContainsCloudsYAML(%v) = %v; want %v", tc.data, got, tc.want)
+			}
+		})
+	}
+}
