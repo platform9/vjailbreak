@@ -45,6 +45,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1815,7 +1816,9 @@ func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 		if !ok {
 			return false, errors.Wrap(err, "failed to convert credentials to OpenstackCreds")
 		}
-		if openstackCreds.Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
+		// Check the standard Kubernetes Condition rather than the retired flat
+		// status fields. A resource is ready when CredentialsValidated=True.
+		if !meta.IsStatusConditionTrue(openstackCreds.Status.Conditions, utils.ConditionCredentialsValidated) {
 			return false, errors.Errorf("openstackcreds '%s' CR is not validated", openstackCreds.Name)
 		}
 	}
