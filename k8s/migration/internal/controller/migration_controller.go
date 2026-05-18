@@ -51,7 +51,7 @@ import (
 
 // getVMKeyFromMigration returns the VM key (name-moid) used for k8s resource lookups.
 func getVMKeyFromMigration(migration *vjailbreakv1alpha1.Migration) string {
-	if vmKey, ok := migration.Labels[constants.MigrationVMKeyLabel]; ok && vmKey != "" {
+	if vmKey, ok := migration.Annotations[constants.MigrationVMKeyAnnotation]; ok && vmKey != "" {
 		return vmKey
 	}
 	return migration.Spec.VMName

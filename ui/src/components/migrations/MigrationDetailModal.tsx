@@ -128,7 +128,7 @@ export default function MigrationDetailModal({
 
   const vmName = useMemo(() => ((migration?.spec as any)?.vmName as string) || '', [migration])
   const vmKey =
-    ((migration?.metadata as any)?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) || ''
+    ((migration?.metadata as any)?.annotations?.['vjailbreak.k8s.pf9.io/vm-key'] as string) || ''
   const displayVmName = isDuplicate && vmKey ? vmKey : vmName
   const phase = migration?.status?.phase
   const phaseLabel = (phase as string) || 'Unknown'

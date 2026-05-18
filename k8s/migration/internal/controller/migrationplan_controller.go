@@ -500,7 +500,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		existingMigrationMap := make(map[string]bool)
 		hasExistingFailures := false
 		for _, m := range migrationList.Items {
-			vmKey := m.Labels[constants.MigrationVMKeyLabel]
+			vmKey := m.Annotations[constants.MigrationVMKeyAnnotation]
 			if vmKey == "" {
 				vmKey = m.Spec.VMName
 			}
@@ -799,7 +799,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			}
 
 			r.ctxlog.Info("Migration succeeded for VM, applying post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
-			vmKey := migration.Labels[constants.MigrationVMKeyLabel]
+			vmKey := migration.Annotations[constants.MigrationVMKeyAnnotation]
 			if vmKey == "" {
 				vmKey = migration.Spec.VMName
 			}
@@ -960,7 +960,9 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				Labels: map[string]string{
 					"migrationplan":               migrationplan.Name,
 					constants.NumberOfDisksLabel:  strconv.Itoa(len(vminfo.Disks)),
-					constants.MigrationVMKeyLabel: vm,
+				},
+				Annotations: map[string]string{
+					constants.MigrationVMKeyAnnotation: vm,
 				},
 			},
 			Spec: vjailbreakv1alpha1.MigrationSpec{

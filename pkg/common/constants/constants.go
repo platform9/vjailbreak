@@ -120,9 +120,14 @@ const (
 	// VMNameLabel is the label for vm name
 	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
 
-	// MigrationVMKeyLabel stores the name-<moid> VM key on Migration objects,
-	// used for internal K8s lookups while spec.VMName holds the plain display name.
-	MigrationVMKeyLabel = "vjailbreak.k8s.pf9.io/vm-key"
+	// MigrationVMKeyAnnotation stores the raw "<displayName>-<moid>" VM unique
+	// key on Migration objects. It is an annotation, not a label, because
+	// vCenter VM display names can contain spaces and other characters that
+	// Kubernetes label values reject. The raw value must be preserved intact:
+	// readers feed it to commonutils.GetK8sCompatibleVMWareObjectName, whose
+	// SHA256 suffix depends on the exact input bytes. spec.VMName holds the
+	// plain display name.
+	MigrationVMKeyAnnotation = "vjailbreak.k8s.pf9.io/vm-key"
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
