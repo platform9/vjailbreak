@@ -49,8 +49,15 @@ import (
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 )
 
-// getVMKeyFromMigration returns the VM key (name-moid) used for k8s resource lookups.
+// getVMKeyFromMigration returns the raw VM key (name-moid) used for k8s resource lookups.
+// The annotation holds the original unsanitized key; the label holds a sanitized copy for selectors.
 func getVMKeyFromMigration(migration *vjailbreakv1alpha1.Migration) string {
+	if migration.Annotations != nil {
+		if vmKey := migration.Annotations[constants.OriginalVMNameAnnotation]; vmKey != "" {
+			return vmKey
+		}
+	}
+	// backward compat: pre-fix CRs stored the key only in the label
 	if vmKey, ok := migration.Labels[constants.MigrationVMKeyLabel]; ok && vmKey != "" {
 		return vmKey
 	}
