@@ -112,6 +112,14 @@ type OpenstackCredsSpec struct {
 	// +optional
 	OsInterface string `json:"osInterface,omitempty"`
 
+	// CloudName selects which cloud entry to use when SecretRef points to a Secret
+	// containing a clouds.yaml key. Ignored when the Secret contains only legacy
+	// OS_* keys. When omitted with a single-entry clouds.yaml, that entry is used.
+	// When omitted with a multi-entry clouds.yaml, the resource reports
+	// CredentialsParsed=False with Reason=AmbiguousCloudName.
+	// +optional
+	CloudName string `json:"cloudName,omitempty"`
+
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`
 
@@ -124,11 +132,26 @@ type OpenstackCredsSpec struct {
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
+	// Conditions represent the latest available observations of an OpenstackCreds's state.
+	// Standard Condition Types include CredentialsParsed, CredentialsValidated,
+	// RolesSufficient, Expiring, and Expired.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
 	// Openstack is the OpenStack configuration for the openstackcreds
 	Openstack OpenstackInfo `json:"openstack,omitempty"`
-	// OpenStackValidationStatus is the status of the OpenStack validation
+
+	// OpenStackValidationStatus is the status of the OpenStack validation.
+	// Deprecated: superseded by Conditions; will be removed once all controller
+	// write paths migrate to the Conditions API in this PR.
+	// +optional
 	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
-	// OpenStackValidationMessage is the message associated with the OpenStack validation
+	// OpenStackValidationMessage is the message associated with the OpenStack validation.
+	// Deprecated: superseded by Conditions; will be removed once all controller
+	// write paths migrate to the Conditions API in this PR.
+	// +optional
 	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
 

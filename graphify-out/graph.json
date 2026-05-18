@@ -141,1354 +141,1471 @@
   },
   "nodes": [
     {
+      "label": "openstackcreds_types.go",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L1",
+      "id": "openstackcreds_types_go",
+      "community": 67,
+      "norm_label": "openstackcreds_types.go"
+    },
+    {
+      "label": "HostConfig",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L26",
+      "id": "v1alpha1_hostconfig",
+      "community": 67,
+      "norm_label": "hostconfig"
+    },
+    {
+      "label": "OpenStackCredsInfo",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L39",
+      "id": "v1alpha1_openstackcredsinfo",
+      "community": 67,
+      "norm_label": "openstackcredsinfo"
+    },
+    {
+      "label": "SecurityGroupInfo",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L59",
+      "id": "v1alpha1_securitygroupinfo",
+      "community": 67,
+      "norm_label": "securitygroupinfo"
+    },
+    {
+      "label": "ServerGroupInfo",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L66",
+      "id": "v1alpha1_servergroupinfo",
+      "community": 67,
+      "norm_label": "servergroupinfo"
+    },
+    {
+      "label": "PCDNetworkInfo",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L74",
+      "id": "v1alpha1_pcdnetworkinfo",
+      "community": 67,
+      "norm_label": "pcdnetworkinfo"
+    },
+    {
+      "label": "OpenstackInfo",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L80",
+      "id": "v1alpha1_openstackinfo",
+      "community": 67,
+      "norm_label": "openstackinfo"
+    },
+    {
+      "label": "OpenstackCredsSpec",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L90",
+      "id": "v1alpha1_openstackcredsspec",
+      "community": 67,
+      "norm_label": "openstackcredsspec"
+    },
+    {
+      "label": "OpenstackCredsStatus",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L134",
+      "id": "v1alpha1_openstackcredsstatus",
+      "community": 67,
+      "norm_label": "openstackcredsstatus"
+    },
+    {
+      "label": "OpenstackCreds",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L168",
+      "id": "v1alpha1_openstackcreds",
+      "community": 67,
+      "norm_label": "openstackcreds"
+    },
+    {
+      "label": "OpenstackCredsList",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L179",
+      "id": "v1alpha1_openstackcredslist",
+      "community": 67,
+      "norm_label": "openstackcredslist"
+    },
+    {
+      "label": ".DeepCopyInto()",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L187",
+      "id": "v1alpha1_openstackcredsspec_deepcopyinto",
+      "community": 67,
+      "norm_label": ".deepcopyinto()"
+    },
+    {
+      "label": "init()",
+      "file_type": "code",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L204",
+      "id": "v1alpha1_openstackcreds_types_init",
+      "community": 67,
+      "norm_label": "init()"
+    },
+    {
       "label": "feature.json",
       "file_type": "code",
       "source_file": ".specify/feature.json",
       "source_location": "L1",
-      "id": "specify_feature_json",
       "community": 221,
-      "norm_label": "feature.json"
+      "norm_label": "feature.json",
+      "id": "specify_feature_json"
     },
     {
       "label": "feature_directory",
       "file_type": "code",
       "source_file": ".specify/feature.json",
       "source_location": "L2",
-      "id": "specify_feature_feature_directory",
       "community": 221,
-      "norm_label": "feature_directory"
+      "norm_label": "feature_directory",
+      "id": "specify_feature_feature_directory"
     },
     {
       "label": "CLAUDE.md",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L1",
-      "id": "claude_md",
       "community": 38,
-      "norm_label": "claude.md"
+      "norm_label": "claude.md",
+      "id": "claude_md"
     },
     {
       "label": "vJailbreak Development Instructions",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L1",
-      "id": "vjailbreak_claude_vjailbreak_development_instructions",
       "community": 38,
-      "norm_label": "vjailbreak development instructions"
+      "norm_label": "vjailbreak development instructions",
+      "id": "vjailbreak_claude_vjailbreak_development_instructions"
     },
     {
       "label": "Quick References",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L5",
-      "id": "vjailbreak_claude_quick_references",
       "community": 38,
-      "norm_label": "quick references"
+      "norm_label": "quick references",
+      "id": "vjailbreak_claude_quick_references"
     },
     {
       "label": "External Documentation",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L14",
-      "id": "vjailbreak_claude_external_documentation",
       "community": 38,
-      "norm_label": "external documentation"
+      "norm_label": "external documentation",
+      "id": "vjailbreak_claude_external_documentation"
     },
     {
       "label": "Development Rules",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L31",
-      "id": "vjailbreak_claude_development_rules",
       "community": 38,
-      "norm_label": "development rules"
+      "norm_label": "development rules",
+      "id": "vjailbreak_claude_development_rules"
     },
     {
       "label": "CRD Changes",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L35",
-      "id": "vjailbreak_claude_crd_changes",
       "community": 38,
-      "norm_label": "crd changes"
+      "norm_label": "crd changes",
+      "id": "vjailbreak_claude_crd_changes"
     },
     {
       "label": "Generated Files",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L39",
-      "id": "vjailbreak_claude_generated_files",
       "community": 38,
-      "norm_label": "generated files"
+      "norm_label": "generated files",
+      "id": "vjailbreak_claude_generated_files"
     },
     {
       "label": "Git Workflow",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L43",
-      "id": "vjailbreak_claude_git_workflow",
       "community": 38,
-      "norm_label": "git workflow"
+      "norm_label": "git workflow",
+      "id": "vjailbreak_claude_git_workflow"
     },
     {
       "label": "Unit Test Requirements",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L47",
-      "id": "vjailbreak_claude_unit_test_requirements",
       "community": 38,
-      "norm_label": "unit test requirements"
+      "norm_label": "unit test requirements",
+      "id": "vjailbreak_claude_unit_test_requirements"
     },
     {
       "label": "Integration/Build Testing Requirements",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L54",
-      "id": "vjailbreak_claude_integration_build_testing_requirements",
       "community": 38,
-      "norm_label": "integration/build testing requirements"
+      "norm_label": "integration/build testing requirements",
+      "id": "vjailbreak_claude_integration_build_testing_requirements"
     },
     {
       "label": "Module Structure",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L61",
-      "id": "vjailbreak_claude_module_structure",
       "community": 38,
-      "norm_label": "module structure"
+      "norm_label": "module structure",
+      "id": "vjailbreak_claude_module_structure"
     },
     {
       "label": "Repository Layout",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L72",
-      "id": "vjailbreak_claude_repository_layout",
       "community": 38,
-      "norm_label": "repository layout"
+      "norm_label": "repository layout",
+      "id": "vjailbreak_claude_repository_layout"
     },
     {
       "label": "Quick Commands",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L89",
-      "id": "vjailbreak_claude_quick_commands",
       "community": 38,
-      "norm_label": "quick commands"
+      "norm_label": "quick commands",
+      "id": "vjailbreak_claude_quick_commands"
     },
     {
       "label": "code:bash (# One-time setup)",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L91",
-      "id": "vjailbreak_claude_codeblock_1",
       "community": 38,
-      "norm_label": "code:bash (# one-time setup)"
+      "norm_label": "code:bash (# one-time setup)",
+      "id": "vjailbreak_claude_codeblock_1"
     },
     {
       "label": "Common Pitfalls",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L113",
-      "id": "vjailbreak_claude_common_pitfalls",
       "community": 38,
-      "norm_label": "common pitfalls"
+      "norm_label": "common pitfalls",
+      "id": "vjailbreak_claude_common_pitfalls"
     },
     {
       "label": "Debugging",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L122",
-      "id": "vjailbreak_claude_debugging",
       "community": 38,
-      "norm_label": "debugging"
+      "norm_label": "debugging",
+      "id": "vjailbreak_claude_debugging"
     },
     {
       "label": "code:bash (# Controller logs)",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L124",
-      "id": "vjailbreak_claude_codeblock_2",
       "community": 38,
-      "norm_label": "code:bash (# controller logs)"
+      "norm_label": "code:bash (# controller logs)",
+      "id": "vjailbreak_claude_codeblock_2"
     },
     {
       "label": "Repository Structure",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L139",
-      "id": "vjailbreak_claude_repository_structure",
       "community": 38,
-      "norm_label": "repository structure"
+      "norm_label": "repository structure",
+      "id": "vjailbreak_claude_repository_structure"
     },
     {
       "label": "graphify",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L159",
-      "id": "vjailbreak_claude_graphify",
       "community": 38,
-      "norm_label": "graphify"
+      "norm_label": "graphify",
+      "id": "vjailbreak_claude_graphify"
     },
     {
       "label": "requirements.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_checklists_requirements_md",
       "community": 123,
-      "norm_label": "requirements.md"
+      "norm_label": "requirements.md",
+      "id": "specs_003_clouds_yaml_credentials_checklists_requirements_md"
     },
     {
       "label": "Specification Quality Checklist: clouds.yaml credentials for OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L1",
-      "id": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
       "community": 123,
-      "norm_label": "specification quality checklist: clouds.yaml credentials for openstackcreds"
+      "norm_label": "specification quality checklist: clouds.yaml credentials for openstackcreds",
+      "id": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "label": "Content Quality",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L7",
-      "id": "checklists_requirements_content_quality",
       "community": 123,
-      "norm_label": "content quality"
+      "norm_label": "content quality",
+      "id": "checklists_requirements_content_quality"
     },
     {
       "label": "Requirement Completeness",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L14",
-      "id": "checklists_requirements_requirement_completeness",
       "community": 123,
-      "norm_label": "requirement completeness"
+      "norm_label": "requirement completeness",
+      "id": "checklists_requirements_requirement_completeness"
     },
     {
       "label": "Feature Readiness",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L25",
-      "id": "checklists_requirements_feature_readiness",
       "community": 123,
-      "norm_label": "feature readiness"
+      "norm_label": "feature readiness",
+      "id": "checklists_requirements_feature_readiness"
     },
     {
       "label": "Notes",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L32",
-      "id": "checklists_requirements_notes",
       "community": 123,
-      "norm_label": "notes"
+      "norm_label": "notes",
+      "id": "checklists_requirements_notes"
     },
     {
       "label": "conditions.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_contracts_conditions_md",
       "community": 206,
-      "norm_label": "conditions.md"
+      "norm_label": "conditions.md",
+      "id": "specs_003_clouds_yaml_credentials_contracts_conditions_md"
     },
     {
       "label": "Condition Types and Reasons \u2014 OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L1",
-      "id": "contracts_conditions_condition_types_and_reasons_openstackcreds",
       "community": 206,
-      "norm_label": "condition types and reasons \u2014 openstackcreds"
+      "norm_label": "condition types and reasons \u2014 openstackcreds",
+      "id": "contracts_conditions_condition_types_and_reasons_openstackcreds"
     },
     {
       "label": "CredentialsParsed",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L3",
-      "id": "contracts_conditions_credentialsparsed",
       "community": 206,
-      "norm_label": "credentialsparsed"
+      "norm_label": "credentialsparsed",
+      "id": "contracts_conditions_credentialsparsed"
     },
     {
       "label": "CredentialsValidated",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L14",
-      "id": "contracts_conditions_credentialsvalidated",
       "community": 206,
-      "norm_label": "credentialsvalidated"
+      "norm_label": "credentialsvalidated",
+      "id": "contracts_conditions_credentialsvalidated"
     },
     {
       "label": "RolesSufficient",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L23",
-      "id": "contracts_conditions_rolessufficient",
       "community": 206,
-      "norm_label": "rolessufficient"
+      "norm_label": "rolessufficient",
+      "id": "contracts_conditions_rolessufficient"
     },
     {
       "label": "Expiring",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L31",
-      "id": "contracts_conditions_expiring",
       "community": 206,
-      "norm_label": "expiring"
+      "norm_label": "expiring",
+      "id": "contracts_conditions_expiring"
     },
     {
       "label": "Expired",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L40",
-      "id": "contracts_conditions_expired",
       "community": 206,
-      "norm_label": "expired"
+      "norm_label": "expired",
+      "id": "contracts_conditions_expired"
     },
     {
       "label": "Aggregate readiness",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L48",
-      "id": "contracts_conditions_aggregate_readiness",
       "community": 206,
-      "norm_label": "aggregate readiness"
+      "norm_label": "aggregate readiness",
+      "id": "contracts_conditions_aggregate_readiness"
     },
     {
       "label": "Message conventions",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L58",
-      "id": "contracts_conditions_message_conventions",
       "community": 206,
-      "norm_label": "message conventions"
+      "norm_label": "message conventions",
+      "id": "contracts_conditions_message_conventions"
     },
     {
       "label": "Standard Reason code stability",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L65",
-      "id": "contracts_conditions_standard_reason_code_stability",
       "community": 206,
-      "norm_label": "standard reason code stability"
+      "norm_label": "standard reason code stability",
+      "id": "contracts_conditions_standard_reason_code_stability"
     },
     {
       "label": "openstackcreds-crd.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_contracts_openstackcreds_crd_md",
       "community": 209,
-      "norm_label": "openstackcreds-crd.md"
+      "norm_label": "openstackcreds-crd.md",
+      "id": "specs_003_clouds_yaml_credentials_contracts_openstackcreds_crd_md"
     },
     {
       "label": "OpenstackCreds CRD \u2014 schema delta (informative)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L1",
-      "id": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
       "community": 209,
-      "norm_label": "openstackcreds crd \u2014 schema delta (informative)"
+      "norm_label": "openstackcreds crd \u2014 schema delta (informative)",
+      "id": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative"
     },
     {
       "label": "Spec \u2014 added field",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L5",
-      "id": "contracts_openstackcreds_crd_spec_added_field",
       "community": 209,
-      "norm_label": "spec \u2014 added field"
+      "norm_label": "spec \u2014 added field",
+      "id": "contracts_openstackcreds_crd_spec_added_field"
     },
     {
       "label": "code:yaml (spec:)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L7",
-      "id": "contracts_openstackcreds_crd_codeblock_1",
       "community": 209,
-      "norm_label": "code:yaml (spec:)"
+      "norm_label": "code:yaml (spec:)",
+      "id": "contracts_openstackcreds_crd_codeblock_1"
     },
     {
       "label": "Status \u2014 replaced",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L22",
-      "id": "contracts_openstackcreds_crd_status_replaced",
       "community": 209,
-      "norm_label": "status \u2014 replaced"
+      "norm_label": "status \u2014 replaced",
+      "id": "contracts_openstackcreds_crd_status_replaced"
     },
     {
       "label": "code:yaml (status:)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L24",
-      "id": "contracts_openstackcreds_crd_codeblock_2",
       "community": 209,
-      "norm_label": "code:yaml (status:)"
+      "norm_label": "code:yaml (status:)",
+      "id": "contracts_openstackcreds_crd_codeblock_2"
     },
     {
       "label": "Go struct delta (informative)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L60",
-      "id": "contracts_openstackcreds_crd_go_struct_delta_informative",
       "community": 209,
-      "norm_label": "go struct delta (informative)"
+      "norm_label": "go struct delta (informative)",
+      "id": "contracts_openstackcreds_crd_go_struct_delta_informative"
     },
     {
       "label": "code:go (// k8s/migration/api/v1alpha1/openstackcreds_types.go)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L62",
-      "id": "contracts_openstackcreds_crd_codeblock_3",
       "community": 209,
-      "norm_label": "code:go (// k8s/migration/api/v1alpha1/openstackcreds_types.go)"
+      "norm_label": "code:go (// k8s/migration/api/v1alpha1/openstackcreds_types.go)",
+      "id": "contracts_openstackcreds_crd_codeblock_3"
     },
     {
       "label": "Upgrade behavior",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L88",
-      "id": "contracts_openstackcreds_crd_upgrade_behavior",
       "community": 209,
-      "norm_label": "upgrade behavior"
+      "norm_label": "upgrade behavior",
+      "id": "contracts_openstackcreds_crd_upgrade_behavior"
     },
     {
       "label": "data-model.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_data_model_md",
       "community": 158,
-      "norm_label": "data-model.md"
+      "norm_label": "data-model.md",
+      "id": "specs_003_clouds_yaml_credentials_data_model_md"
     },
     {
       "label": "Data Model \u2014 clouds.yaml credentials",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L1",
-      "id": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
       "community": 158,
-      "norm_label": "data model \u2014 clouds.yaml credentials"
+      "norm_label": "data model \u2014 clouds.yaml credentials",
+      "id": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials"
     },
     {
       "label": "OpenstackCreds CRD (extended)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L3",
-      "id": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended",
       "community": 158,
-      "norm_label": "openstackcreds crd (extended)"
+      "norm_label": "openstackcreds crd (extended)",
+      "id": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended"
     },
     {
       "label": "Spec \u2014 added field",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L5",
-      "id": "003_clouds_yaml_credentials_data_model_spec_added_field",
       "community": 158,
-      "norm_label": "spec \u2014 added field"
+      "norm_label": "spec \u2014 added field",
+      "id": "003_clouds_yaml_credentials_data_model_spec_added_field"
     },
     {
       "label": "Spec \u2014 existing fields (unchanged, documented as legacy)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L11",
-      "id": "003_clouds_yaml_credentials_data_model_spec_existing_fields_unchanged_documented_as_legacy",
       "community": 158,
-      "norm_label": "spec \u2014 existing fields (unchanged, documented as legacy)"
+      "norm_label": "spec \u2014 existing fields (unchanged, documented as legacy)",
+      "id": "003_clouds_yaml_credentials_data_model_spec_existing_fields_unchanged_documented_as_legacy"
     },
     {
       "label": "Status \u2014 replaced",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L21",
-      "id": "003_clouds_yaml_credentials_data_model_status_replaced",
       "community": 158,
-      "norm_label": "status \u2014 replaced"
+      "norm_label": "status \u2014 replaced",
+      "id": "003_clouds_yaml_credentials_data_model_status_replaced"
     },
     {
       "label": "Condition Types",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L30",
-      "id": "003_clouds_yaml_credentials_data_model_condition_types",
       "community": 158,
-      "norm_label": "condition types"
+      "norm_label": "condition types",
+      "id": "003_clouds_yaml_credentials_data_model_condition_types"
     },
     {
       "label": "Credential Secret data keys",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L47",
-      "id": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys",
       "community": 158,
-      "norm_label": "credential secret data keys"
+      "norm_label": "credential secret data keys",
+      "id": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys"
     },
     {
       "label": "Mode A: clouds.yaml (preferred)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L49",
-      "id": "003_clouds_yaml_credentials_data_model_mode_a_clouds_yaml_preferred",
       "community": 158,
-      "norm_label": "mode a: clouds.yaml (preferred)"
+      "norm_label": "mode a: clouds.yaml (preferred)",
+      "id": "003_clouds_yaml_credentials_data_model_mode_a_clouds_yaml_preferred"
     },
     {
       "label": "Mode B: legacy OS_* (back-compat)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L55",
-      "id": "003_clouds_yaml_credentials_data_model_mode_b_legacy_os_back_compat",
       "community": 158,
-      "norm_label": "mode b: legacy os_* (back-compat)"
+      "norm_label": "mode b: legacy os_* (back-compat)",
+      "id": "003_clouds_yaml_credentials_data_model_mode_b_legacy_os_back_compat"
     },
     {
       "label": "Resolution precedence",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L68",
-      "id": "003_clouds_yaml_credentials_data_model_resolution_precedence",
       "community": 158,
-      "norm_label": "resolution precedence"
+      "norm_label": "resolution precedence",
+      "id": "003_clouds_yaml_credentials_data_model_resolution_precedence"
     },
     {
       "label": "clouds.yaml \u2014 consumed subset",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L73",
-      "id": "003_clouds_yaml_credentials_data_model_clouds_yaml_consumed_subset",
       "community": 158,
-      "norm_label": "clouds.yaml \u2014 consumed subset"
+      "norm_label": "clouds.yaml \u2014 consumed subset",
+      "id": "003_clouds_yaml_credentials_data_model_clouds_yaml_consumed_subset"
     },
     {
       "label": "Sharing semantics",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L90",
-      "id": "003_clouds_yaml_credentials_data_model_sharing_semantics",
       "community": 158,
-      "norm_label": "sharing semantics"
+      "norm_label": "sharing semantics",
+      "id": "003_clouds_yaml_credentials_data_model_sharing_semantics"
     },
     {
       "label": "State transitions",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L95",
-      "id": "003_clouds_yaml_credentials_data_model_state_transitions",
       "community": 158,
-      "norm_label": "state transitions"
+      "norm_label": "state transitions",
+      "id": "003_clouds_yaml_credentials_data_model_state_transitions"
     },
     {
       "label": "code:text (OpenstackCreds created or referenced Secret changed)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L97",
-      "id": "003_clouds_yaml_credentials_data_model_codeblock_1",
       "community": 158,
-      "norm_label": "code:text (openstackcreds created or referenced secret changed)"
+      "norm_label": "code:text (openstackcreds created or referenced secret changed)",
+      "id": "003_clouds_yaml_credentials_data_model_codeblock_1"
     },
     {
       "label": "plan.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_plan_md",
       "community": 205,
-      "norm_label": "plan.md"
+      "norm_label": "plan.md",
+      "id": "specs_003_clouds_yaml_credentials_plan_md"
     },
     {
       "label": "Implementation Plan: clouds.yaml credentials for OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L1",
-      "id": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
       "community": 205,
-      "norm_label": "implementation plan: clouds.yaml credentials for openstackcreds"
+      "norm_label": "implementation plan: clouds.yaml credentials for openstackcreds",
+      "id": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "label": "Summary",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L6",
-      "id": "003_clouds_yaml_credentials_plan_summary",
       "community": 205,
-      "norm_label": "summary"
+      "norm_label": "summary",
+      "id": "003_clouds_yaml_credentials_plan_summary"
     },
     {
       "label": "Technical Context",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L16",
-      "id": "003_clouds_yaml_credentials_plan_technical_context",
       "community": 205,
-      "norm_label": "technical context"
+      "norm_label": "technical context",
+      "id": "003_clouds_yaml_credentials_plan_technical_context"
     },
     {
       "label": "Constitution Check",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L31",
-      "id": "003_clouds_yaml_credentials_plan_constitution_check",
       "community": 205,
-      "norm_label": "constitution check"
+      "norm_label": "constitution check",
+      "id": "003_clouds_yaml_credentials_plan_constitution_check"
     },
     {
       "label": "Project Structure",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L47",
-      "id": "003_clouds_yaml_credentials_plan_project_structure",
       "community": 205,
-      "norm_label": "project structure"
+      "norm_label": "project structure",
+      "id": "003_clouds_yaml_credentials_plan_project_structure"
     },
     {
       "label": "Documentation (this feature)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L49",
-      "id": "003_clouds_yaml_credentials_plan_documentation_this_feature",
       "community": 205,
-      "norm_label": "documentation (this feature)"
+      "norm_label": "documentation (this feature)",
+      "id": "003_clouds_yaml_credentials_plan_documentation_this_feature"
     },
     {
       "label": "code:text (specs/003-clouds-yaml-credentials/)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L51",
-      "id": "003_clouds_yaml_credentials_plan_codeblock_1",
       "community": 205,
-      "norm_label": "code:text (specs/003-clouds-yaml-credentials/)"
+      "norm_label": "code:text (specs/003-clouds-yaml-credentials/)",
+      "id": "003_clouds_yaml_credentials_plan_codeblock_1"
     },
     {
       "label": "Source Code (repository root)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L66",
-      "id": "003_clouds_yaml_credentials_plan_source_code_repository_root",
       "community": 205,
-      "norm_label": "source code (repository root)"
+      "norm_label": "source code (repository root)",
+      "id": "003_clouds_yaml_credentials_plan_source_code_repository_root"
     },
     {
       "label": "code:text (k8s/migration/                                          # Co)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L68",
-      "id": "003_clouds_yaml_credentials_plan_codeblock_2",
       "community": 205,
-      "norm_label": "code:text (k8s/migration/                                          # co)"
+      "norm_label": "code:text (k8s/migration/                                          # co)",
+      "id": "003_clouds_yaml_credentials_plan_codeblock_2"
     },
     {
       "label": "quickstart.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_quickstart_md",
       "community": 89,
-      "norm_label": "quickstart.md"
+      "norm_label": "quickstart.md",
+      "id": "specs_003_clouds_yaml_credentials_quickstart_md"
     },
     {
       "label": "Quickstart \u2014 clouds.yaml credentials for vjailbreak",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L1",
-      "id": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
       "community": 89,
-      "norm_label": "quickstart \u2014 clouds.yaml credentials for vjailbreak"
+      "norm_label": "quickstart \u2014 clouds.yaml credentials for vjailbreak",
+      "id": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak"
     },
     {
       "label": "Prerequisites",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L5",
-      "id": "003_clouds_yaml_credentials_quickstart_prerequisites",
       "community": 89,
-      "norm_label": "prerequisites"
+      "norm_label": "prerequisites",
+      "id": "003_clouds_yaml_credentials_quickstart_prerequisites"
     },
     {
       "label": "Step 1 \u2014 Create a vjailbreak-scoped role (if not already present)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L12",
-      "id": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present",
       "community": 89,
-      "norm_label": "step 1 \u2014 create a vjailbreak-scoped role (if not already present)"
+      "norm_label": "step 1 \u2014 create a vjailbreak-scoped role (if not already present)",
+      "id": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present"
     },
     {
       "label": "code:bash (openstack role create vjailbreak-migrator)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L14",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_1",
       "community": 89,
-      "norm_label": "code:bash (openstack role create vjailbreak-migrator)"
+      "norm_label": "code:bash (openstack role create vjailbreak-migrator)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_1"
     },
     {
       "label": "code:bash (openstack role add --project <migration-project> \\)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L20",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_2",
       "community": 89,
-      "norm_label": "code:bash (openstack role add --project <migration-project> \\)"
+      "norm_label": "code:bash (openstack role add --project <migration-project> \\)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_2"
     },
     {
       "label": "Step 2 \u2014 Create the Application Credential",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L29",
-      "id": "003_clouds_yaml_credentials_quickstart_step_2_create_the_application_credential",
       "community": 89,
-      "norm_label": "step 2 \u2014 create the application credential"
+      "norm_label": "step 2 \u2014 create the application credential",
+      "id": "003_clouds_yaml_credentials_quickstart_step_2_create_the_application_credential"
     },
     {
       "label": "code:bash (openstack application credential create vjailbreak-svc \\)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L31",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_3",
       "community": 89,
-      "norm_label": "code:bash (openstack application credential create vjailbreak-svc \\)"
+      "norm_label": "code:bash (openstack application credential create vjailbreak-svc \\)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_3"
     },
     {
       "label": "Step 3 \u2014 Build clouds.yaml",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L42",
-      "id": "003_clouds_yaml_credentials_quickstart_step_3_build_clouds_yaml",
       "community": 89,
-      "norm_label": "step 3 \u2014 build clouds.yaml"
+      "norm_label": "step 3 \u2014 build clouds.yaml",
+      "id": "003_clouds_yaml_credentials_quickstart_step_3_build_clouds_yaml"
     },
     {
       "label": "code:yaml (# clouds.yaml)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L44",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_4",
       "community": 89,
-      "norm_label": "code:yaml (# clouds.yaml)"
+      "norm_label": "code:yaml (# clouds.yaml)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_4"
     },
     {
       "label": "Step 4 \u2014 Create the Kubernetes Secret",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L59",
-      "id": "003_clouds_yaml_credentials_quickstart_step_4_create_the_kubernetes_secret",
       "community": 89,
-      "norm_label": "step 4 \u2014 create the kubernetes secret"
+      "norm_label": "step 4 \u2014 create the kubernetes secret",
+      "id": "003_clouds_yaml_credentials_quickstart_step_4_create_the_kubernetes_secret"
     },
     {
       "label": "code:bash (kubectl create secret generic openstack-creds-clouds \\)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L61",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_5",
       "community": 89,
-      "norm_label": "code:bash (kubectl create secret generic openstack-creds-clouds \\)"
+      "norm_label": "code:bash (kubectl create secret generic openstack-creds-clouds \\)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_5"
     },
     {
       "label": "Step 5 \u2014 Create the OpenstackCreds resource",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L67",
-      "id": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource",
       "community": 89,
-      "norm_label": "step 5 \u2014 create the openstackcreds resource"
+      "norm_label": "step 5 \u2014 create the openstackcreds resource",
+      "id": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource"
     },
     {
       "label": "code:yaml (apiVersion: vjailbreak.k8s.pf9.io/v1alpha1)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L69",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_6",
       "community": 89,
-      "norm_label": "code:yaml (apiversion: vjailbreak.k8s.pf9.io/v1alpha1)"
+      "norm_label": "code:yaml (apiversion: vjailbreak.k8s.pf9.io/v1alpha1)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_6"
     },
     {
       "label": "code:bash (kubectl apply -f openstackcreds.yaml)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L82",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_7",
       "community": 89,
-      "norm_label": "code:bash (kubectl apply -f openstackcreds.yaml)"
+      "norm_label": "code:bash (kubectl apply -f openstackcreds.yaml)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_7"
     },
     {
       "label": "Step 6 \u2014 Verify validation",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L86",
-      "id": "003_clouds_yaml_credentials_quickstart_step_6_verify_validation",
       "community": 89,
-      "norm_label": "step 6 \u2014 verify validation"
+      "norm_label": "step 6 \u2014 verify validation",
+      "id": "003_clouds_yaml_credentials_quickstart_step_6_verify_validation"
     },
     {
       "label": "code:bash (kubectl -n migration-system get openstackcreds destination-c)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L88",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_8",
       "community": 89,
-      "norm_label": "code:bash (kubectl -n migration-system get openstackcreds destination-c)"
+      "norm_label": "code:bash (kubectl -n migration-system get openstackcreds destination-c)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_8"
     },
     {
       "label": "Step 7 \u2014 Rotate the Application Credential",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L102",
-      "id": "003_clouds_yaml_credentials_quickstart_step_7_rotate_the_application_credential",
       "community": 89,
-      "norm_label": "step 7 \u2014 rotate the application credential"
+      "norm_label": "step 7 \u2014 rotate the application credential",
+      "id": "003_clouds_yaml_credentials_quickstart_step_7_rotate_the_application_credential"
     },
     {
       "label": "code:bash (# Create a replacement Application Credential)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L104",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_9",
       "community": 89,
-      "norm_label": "code:bash (# create a replacement application credential)"
+      "norm_label": "code:bash (# create a replacement application credential)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_9"
     },
     {
       "label": "Step 8 \u2014 Revoke after migration completion",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L121",
-      "id": "003_clouds_yaml_credentials_quickstart_step_8_revoke_after_migration_completion",
       "community": 89,
-      "norm_label": "step 8 \u2014 revoke after migration completion"
+      "norm_label": "step 8 \u2014 revoke after migration completion",
+      "id": "003_clouds_yaml_credentials_quickstart_step_8_revoke_after_migration_completion"
     },
     {
       "label": "code:bash (openstack application credential delete vjailbreak-svc)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L123",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_10",
       "community": 89,
-      "norm_label": "code:bash (openstack application credential delete vjailbreak-svc)"
+      "norm_label": "code:bash (openstack application credential delete vjailbreak-svc)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_10"
     },
     {
       "label": "Multi-cloud clouds.yaml",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L129",
-      "id": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml",
       "community": 89,
-      "norm_label": "multi-cloud clouds.yaml"
+      "norm_label": "multi-cloud clouds.yaml",
+      "id": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml"
     },
     {
       "label": "code:yaml (# clouds.yaml in one shared Secret)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L133",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_11",
       "community": 89,
-      "norm_label": "code:yaml (# clouds.yaml in one shared secret)"
+      "norm_label": "code:yaml (# clouds.yaml in one shared secret)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_11"
     },
     {
       "label": "code:yaml (# OpenstackCreds resources picking different entries)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L146",
-      "id": "003_clouds_yaml_credentials_quickstart_codeblock_12",
       "community": 89,
-      "norm_label": "code:yaml (# openstackcreds resources picking different entries)"
+      "norm_label": "code:yaml (# openstackcreds resources picking different entries)",
+      "id": "003_clouds_yaml_credentials_quickstart_codeblock_12"
     },
     {
       "label": "UI path (after PR #3)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L166",
-      "id": "003_clouds_yaml_credentials_quickstart_ui_path_after_pr_3",
       "community": 89,
-      "norm_label": "ui path (after pr #3)"
+      "norm_label": "ui path (after pr #3)",
+      "id": "003_clouds_yaml_credentials_quickstart_ui_path_after_pr_3"
     },
     {
       "label": "research.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_research_md",
       "community": 204,
-      "norm_label": "research.md"
+      "norm_label": "research.md",
+      "id": "specs_003_clouds_yaml_credentials_research_md"
     },
     {
       "label": "Phase 0 Research \u2014 clouds.yaml credentials",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L1",
-      "id": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
       "community": 204,
-      "norm_label": "phase 0 research \u2014 clouds.yaml credentials"
+      "norm_label": "phase 0 research \u2014 clouds.yaml credentials",
+      "id": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials"
     },
     {
       "label": "R-1: clouds.yaml parsing library",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L3",
-      "id": "003_clouds_yaml_credentials_research_r_1_clouds_yaml_parsing_library",
       "community": 204,
-      "norm_label": "r-1: clouds.yaml parsing library"
+      "norm_label": "r-1: clouds.yaml parsing library",
+      "id": "003_clouds_yaml_credentials_research_r_1_clouds_yaml_parsing_library"
     },
     {
       "label": "R-2: Kubernetes Conditions API for OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L20",
-      "id": "003_clouds_yaml_credentials_research_r_2_kubernetes_conditions_api_for_openstackcreds",
       "community": 204,
-      "norm_label": "r-2: kubernetes conditions api for openstackcreds"
+      "norm_label": "r-2: kubernetes conditions api for openstackcreds",
+      "id": "003_clouds_yaml_credentials_research_r_2_kubernetes_conditions_api_for_openstackcreds"
     },
     {
       "label": "R-3: Controller-runtime Secret watch",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L36",
-      "id": "003_clouds_yaml_credentials_research_r_3_controller_runtime_secret_watch",
       "community": 204,
-      "norm_label": "r-3: controller-runtime secret watch"
+      "norm_label": "r-3: controller-runtime secret watch",
+      "id": "003_clouds_yaml_credentials_research_r_3_controller_runtime_secret_watch"
     },
     {
       "label": "R-4: Application Credentials auth flow",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L50",
-      "id": "003_clouds_yaml_credentials_research_r_4_application_credentials_auth_flow",
       "community": 204,
-      "norm_label": "r-4: application credentials auth flow"
+      "norm_label": "r-4: application credentials auth flow",
+      "id": "003_clouds_yaml_credentials_research_r_4_application_credentials_auth_flow"
     },
     {
       "label": "R-5: Microversion floor semantics",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L66",
-      "id": "003_clouds_yaml_credentials_research_r_5_microversion_floor_semantics",
       "community": 204,
-      "norm_label": "r-5: microversion floor semantics"
+      "norm_label": "r-5: microversion floor semantics",
+      "id": "003_clouds_yaml_credentials_research_r_5_microversion_floor_semantics"
     },
     {
       "label": "R-6: Client-side YAML parsing in the UI",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L83",
-      "id": "003_clouds_yaml_credentials_research_r_6_client_side_yaml_parsing_in_the_ui",
       "community": 204,
-      "norm_label": "r-6: client-side yaml parsing in the ui"
+      "norm_label": "r-6: client-side yaml parsing in the ui",
+      "id": "003_clouds_yaml_credentials_research_r_6_client_side_yaml_parsing_in_the_ui"
     },
     {
       "label": "R-7: Upgrade and back-compat behavior",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L98",
-      "id": "003_clouds_yaml_credentials_research_r_7_upgrade_and_back_compat_behavior",
       "community": 204,
-      "norm_label": "r-7: upgrade and back-compat behavior"
+      "norm_label": "r-7: upgrade and back-compat behavior",
+      "id": "003_clouds_yaml_credentials_research_r_7_upgrade_and_back_compat_behavior"
     },
     {
       "label": "R-8: Validation cadence",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L111",
-      "id": "003_clouds_yaml_credentials_research_r_8_validation_cadence",
       "community": 204,
-      "norm_label": "r-8: validation cadence"
+      "norm_label": "r-8: validation cadence",
+      "id": "003_clouds_yaml_credentials_research_r_8_validation_cadence"
     },
     {
       "label": "R-9: Log redaction and observability",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L126",
-      "id": "003_clouds_yaml_credentials_research_r_9_log_redaction_and_observability",
       "community": 204,
-      "norm_label": "r-9: log redaction and observability"
+      "norm_label": "r-9: log redaction and observability",
+      "id": "003_clouds_yaml_credentials_research_r_9_log_redaction_and_observability"
     },
     {
       "label": "spec.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_spec_md",
       "community": 202,
-      "norm_label": "spec.md"
+      "norm_label": "spec.md",
+      "id": "specs_003_clouds_yaml_credentials_spec_md"
     },
     {
       "label": "Feature Specification: clouds.yaml credentials for OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L1",
-      "id": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
       "community": 202,
-      "norm_label": "feature specification: clouds.yaml credentials for openstackcreds"
+      "norm_label": "feature specification: clouds.yaml credentials for openstackcreds",
+      "id": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "label": "Clarifications",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L8",
-      "id": "003_clouds_yaml_credentials_spec_clarifications",
       "community": 202,
-      "norm_label": "clarifications"
+      "norm_label": "clarifications",
+      "id": "003_clouds_yaml_credentials_spec_clarifications"
     },
     {
       "label": "Session 2026-05-18",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L10",
-      "id": "003_clouds_yaml_credentials_spec_session_2026_05_18",
       "community": 202,
-      "norm_label": "session 2026-05-18"
+      "norm_label": "session 2026-05-18",
+      "id": "003_clouds_yaml_credentials_spec_session_2026_05_18"
     },
     {
       "label": "User Scenarios & Testing *(mandatory)*",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L17",
-      "id": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
       "community": 202,
-      "norm_label": "user scenarios & testing *(mandatory)*"
+      "norm_label": "user scenarios & testing *(mandatory)*",
+      "id": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory"
     },
     {
       "label": "User Story 1 \u2014 Use clouds.yaml as the credential source (Priority: P1)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L19",
-      "id": "003_clouds_yaml_credentials_spec_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1",
       "community": 202,
-      "norm_label": "user story 1 \u2014 use clouds.yaml as the credential source (priority: p1)"
+      "norm_label": "user story 1 \u2014 use clouds.yaml as the credential source (priority: p1)",
+      "id": "003_clouds_yaml_credentials_spec_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1"
     },
     {
       "label": "User Story 2 \u2014 Authenticate via OpenStack Application Credentials (Priority: P2)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L37",
-      "id": "003_clouds_yaml_credentials_spec_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
       "community": 202,
-      "norm_label": "user story 2 \u2014 authenticate via openstack application credentials (priority: p2)"
+      "norm_label": "user story 2 \u2014 authenticate via openstack application credentials (priority: p2)",
+      "id": "003_clouds_yaml_credentials_spec_user_story_2_authenticate_via_openstack_application_credentials_priority_p2"
     },
     {
       "label": "User Story 3 \u2014 Enter clouds.yaml through the web UI (Priority: P3)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L54",
-      "id": "003_clouds_yaml_credentials_spec_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
       "community": 202,
-      "norm_label": "user story 3 \u2014 enter clouds.yaml through the web ui (priority: p3)"
+      "norm_label": "user story 3 \u2014 enter clouds.yaml through the web ui (priority: p3)",
+      "id": "003_clouds_yaml_credentials_spec_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3"
     },
     {
       "label": "Edge Cases",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L71",
-      "id": "003_clouds_yaml_credentials_spec_edge_cases",
       "community": 202,
-      "norm_label": "edge cases"
+      "norm_label": "edge cases",
+      "id": "003_clouds_yaml_credentials_spec_edge_cases"
     },
     {
       "label": "Requirements *(mandatory)*",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L83",
-      "id": "003_clouds_yaml_credentials_spec_requirements_mandatory",
       "community": 202,
-      "norm_label": "requirements *(mandatory)*"
+      "norm_label": "requirements *(mandatory)*",
+      "id": "003_clouds_yaml_credentials_spec_requirements_mandatory"
     },
     {
       "label": "Functional Requirements",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L85",
-      "id": "003_clouds_yaml_credentials_spec_functional_requirements",
       "community": 202,
-      "norm_label": "functional requirements"
+      "norm_label": "functional requirements",
+      "id": "003_clouds_yaml_credentials_spec_functional_requirements"
     },
     {
       "label": "Key Entities",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L106",
-      "id": "003_clouds_yaml_credentials_spec_key_entities",
       "community": 202,
-      "norm_label": "key entities"
+      "norm_label": "key entities",
+      "id": "003_clouds_yaml_credentials_spec_key_entities"
     },
     {
       "label": "Success Criteria *(mandatory)*",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L114",
-      "id": "003_clouds_yaml_credentials_spec_success_criteria_mandatory",
       "community": 202,
-      "norm_label": "success criteria *(mandatory)*"
+      "norm_label": "success criteria *(mandatory)*",
+      "id": "003_clouds_yaml_credentials_spec_success_criteria_mandatory"
     },
     {
       "label": "Measurable Outcomes",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L116",
-      "id": "003_clouds_yaml_credentials_spec_measurable_outcomes",
       "community": 202,
-      "norm_label": "measurable outcomes"
+      "norm_label": "measurable outcomes",
+      "id": "003_clouds_yaml_credentials_spec_measurable_outcomes"
     },
     {
       "label": "Assumptions",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L126",
-      "id": "003_clouds_yaml_credentials_spec_assumptions",
       "community": 202,
-      "norm_label": "assumptions"
+      "norm_label": "assumptions",
+      "id": "003_clouds_yaml_credentials_spec_assumptions"
     },
     {
       "label": "tasks.md",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L1",
-      "id": "specs_003_clouds_yaml_credentials_tasks_md",
       "community": 74,
-      "norm_label": "tasks.md"
+      "norm_label": "tasks.md",
+      "id": "specs_003_clouds_yaml_credentials_tasks_md"
     },
     {
       "label": "Tasks: clouds.yaml credentials for OpenstackCreds",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L6",
-      "id": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
       "community": 74,
-      "norm_label": "tasks: clouds.yaml credentials for openstackcreds"
+      "norm_label": "tasks: clouds.yaml credentials for openstackcreds",
+      "id": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "label": "Format: `[ID] [P?] [Story] Description`",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L19",
-      "id": "003_clouds_yaml_credentials_tasks_format_id_p_story_description",
       "community": 74,
-      "norm_label": "format: `[id] [p?] [story] description`"
+      "norm_label": "format: `[id] [p?] [story] description`",
+      "id": "003_clouds_yaml_credentials_tasks_format_id_p_story_description"
     },
     {
       "label": "Path Conventions",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L25",
-      "id": "003_clouds_yaml_credentials_tasks_path_conventions",
       "community": 74,
-      "norm_label": "path conventions"
+      "norm_label": "path conventions",
+      "id": "003_clouds_yaml_credentials_tasks_path_conventions"
     },
     {
       "label": "Phase 1: Setup (Shared Infrastructure)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L35",
-      "id": "003_clouds_yaml_credentials_tasks_phase_1_setup_shared_infrastructure",
       "community": 74,
-      "norm_label": "phase 1: setup (shared infrastructure)"
+      "norm_label": "phase 1: setup (shared infrastructure)",
+      "id": "003_clouds_yaml_credentials_tasks_phase_1_setup_shared_infrastructure"
     },
     {
       "label": "Phase 2: Foundational (Blocking Prerequisites)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L46",
-      "id": "003_clouds_yaml_credentials_tasks_phase_2_foundational_blocking_prerequisites",
       "community": 74,
-      "norm_label": "phase 2: foundational (blocking prerequisites)"
+      "norm_label": "phase 2: foundational (blocking prerequisites)",
+      "id": "003_clouds_yaml_credentials_tasks_phase_2_foundational_blocking_prerequisites"
     },
     {
       "label": "Phase 3: User Story 1 \u2014 Use clouds.yaml as the credential source (Priority: P1) \ud83c\udfaf MVP",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L61",
-      "id": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp",
       "community": 74,
-      "norm_label": "phase 3: user story 1 \u2014 use clouds.yaml as the credential source (priority: p1) \ud83c\udfaf mvp"
+      "norm_label": "phase 3: user story 1 \u2014 use clouds.yaml as the credential source (priority: p1) \ud83c\udfaf mvp",
+      "id": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp"
     },
     {
       "label": "Tests for User Story 1 (write first; must FAIL before implementation)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L69",
-      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_1_write_first_must_fail_before_implementation",
       "community": 74,
-      "norm_label": "tests for user story 1 (write first; must fail before implementation)"
+      "norm_label": "tests for user story 1 (write first; must fail before implementation)",
+      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_1_write_first_must_fail_before_implementation"
     },
     {
       "label": "Implementation for User Story 1",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L85",
-      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_1",
       "community": 74,
-      "norm_label": "implementation for user story 1"
+      "norm_label": "implementation for user story 1",
+      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_1"
     },
     {
       "label": "Phase 4: User Story 2 \u2014 Authenticate via OpenStack Application Credentials (Priority: P2)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L106",
-      "id": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
       "community": 74,
-      "norm_label": "phase 4: user story 2 \u2014 authenticate via openstack application credentials (priority: p2)"
+      "norm_label": "phase 4: user story 2 \u2014 authenticate via openstack application credentials (priority: p2)",
+      "id": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2"
     },
     {
       "label": "Tests for User Story 2 (write first; must FAIL before implementation)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L114",
-      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_2_write_first_must_fail_before_implementation",
       "community": 74,
-      "norm_label": "tests for user story 2 (write first; must fail before implementation)"
+      "norm_label": "tests for user story 2 (write first; must fail before implementation)",
+      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_2_write_first_must_fail_before_implementation"
     },
     {
       "label": "Implementation for User Story 2",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L121",
-      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_2",
       "community": 74,
-      "norm_label": "implementation for user story 2"
+      "norm_label": "implementation for user story 2",
+      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_2"
     },
     {
       "label": "Phase 5: User Story 3 \u2014 Enter clouds.yaml through the web UI (Priority: P3)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L133",
-      "id": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
       "community": 74,
-      "norm_label": "phase 5: user story 3 \u2014 enter clouds.yaml through the web ui (priority: p3)"
+      "norm_label": "phase 5: user story 3 \u2014 enter clouds.yaml through the web ui (priority: p3)",
+      "id": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3"
     },
     {
       "label": "Tests for User Story 3 (write first; must FAIL before implementation)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L141",
-      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_3_write_first_must_fail_before_implementation",
       "community": 74,
-      "norm_label": "tests for user story 3 (write first; must fail before implementation)"
+      "norm_label": "tests for user story 3 (write first; must fail before implementation)",
+      "id": "003_clouds_yaml_credentials_tasks_tests_for_user_story_3_write_first_must_fail_before_implementation"
     },
     {
       "label": "Implementation for User Story 3",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L149",
-      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_3",
       "community": 74,
-      "norm_label": "implementation for user story 3"
+      "norm_label": "implementation for user story 3",
+      "id": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_3"
     },
     {
       "label": "Phase 6: Polish & Cross-Cutting Concerns",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L162",
-      "id": "003_clouds_yaml_credentials_tasks_phase_6_polish_cross_cutting_concerns",
       "community": 74,
-      "norm_label": "phase 6: polish & cross-cutting concerns"
+      "norm_label": "phase 6: polish & cross-cutting concerns",
+      "id": "003_clouds_yaml_credentials_tasks_phase_6_polish_cross_cutting_concerns"
     },
     {
       "label": "Dependencies & Execution Order",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L174",
-      "id": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
       "community": 74,
-      "norm_label": "dependencies & execution order"
+      "norm_label": "dependencies & execution order",
+      "id": "003_clouds_yaml_credentials_tasks_dependencies_execution_order"
     },
     {
       "label": "Phase Dependencies",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L176",
-      "id": "003_clouds_yaml_credentials_tasks_phase_dependencies",
       "community": 74,
-      "norm_label": "phase dependencies"
+      "norm_label": "phase dependencies",
+      "id": "003_clouds_yaml_credentials_tasks_phase_dependencies"
     },
     {
       "label": "User Story Dependencies",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L185",
-      "id": "003_clouds_yaml_credentials_tasks_user_story_dependencies",
       "community": 74,
-      "norm_label": "user story dependencies"
+      "norm_label": "user story dependencies",
+      "id": "003_clouds_yaml_credentials_tasks_user_story_dependencies"
     },
     {
       "label": "Within Each User Story (TDD discipline)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L192",
-      "id": "003_clouds_yaml_credentials_tasks_within_each_user_story_tdd_discipline",
       "community": 74,
-      "norm_label": "within each user story (tdd discipline)"
+      "norm_label": "within each user story (tdd discipline)",
+      "id": "003_clouds_yaml_credentials_tasks_within_each_user_story_tdd_discipline"
     },
     {
       "label": "Parallel Opportunities",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L198",
-      "id": "003_clouds_yaml_credentials_tasks_parallel_opportunities",
       "community": 74,
-      "norm_label": "parallel opportunities"
+      "norm_label": "parallel opportunities",
+      "id": "003_clouds_yaml_credentials_tasks_parallel_opportunities"
     },
     {
       "label": "Parallel Example: User Story 1",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L209",
-      "id": "003_clouds_yaml_credentials_tasks_parallel_example_user_story_1",
       "community": 74,
-      "norm_label": "parallel example: user story 1"
+      "norm_label": "parallel example: user story 1",
+      "id": "003_clouds_yaml_credentials_tasks_parallel_example_user_story_1"
     },
     {
       "label": "code:bash (# Phase 3, after Phase 2 checkpoint, on PR #1's branch:)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L211",
-      "id": "003_clouds_yaml_credentials_tasks_codeblock_1",
       "community": 74,
-      "norm_label": "code:bash (# phase 3, after phase 2 checkpoint, on pr #1's branch:)"
+      "norm_label": "code:bash (# phase 3, after phase 2 checkpoint, on pr #1's branch:)",
+      "id": "003_clouds_yaml_credentials_tasks_codeblock_1"
     },
     {
       "label": "Implementation Strategy",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L228",
-      "id": "003_clouds_yaml_credentials_tasks_implementation_strategy",
       "community": 74,
-      "norm_label": "implementation strategy"
+      "norm_label": "implementation strategy",
+      "id": "003_clouds_yaml_credentials_tasks_implementation_strategy"
     },
     {
       "label": "MVP First (PR #1 \u2014 User Story 1 only)",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L230",
-      "id": "003_clouds_yaml_credentials_tasks_mvp_first_pr_1_user_story_1_only",
       "community": 74,
-      "norm_label": "mvp first (pr #1 \u2014 user story 1 only)"
+      "norm_label": "mvp first (pr #1 \u2014 user story 1 only)",
+      "id": "003_clouds_yaml_credentials_tasks_mvp_first_pr_1_user_story_1_only"
     },
     {
       "label": "Incremental Delivery",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L238",
-      "id": "003_clouds_yaml_credentials_tasks_incremental_delivery",
       "community": 74,
-      "norm_label": "incremental delivery"
+      "norm_label": "incremental delivery",
+      "id": "003_clouds_yaml_credentials_tasks_incremental_delivery"
     },
     {
       "label": "Parallel Team Strategy",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L246",
-      "id": "003_clouds_yaml_credentials_tasks_parallel_team_strategy",
       "community": 74,
-      "norm_label": "parallel team strategy"
+      "norm_label": "parallel team strategy",
+      "id": "003_clouds_yaml_credentials_tasks_parallel_team_strategy"
     },
     {
       "label": "Notes",
       "file_type": "document",
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L258",
-      "id": "003_clouds_yaml_credentials_tasks_notes",
       "community": 74,
-      "norm_label": "notes"
+      "norm_label": "notes",
+      "id": "003_clouds_yaml_credentials_tasks_notes"
     },
     {
       "label": "reprovision_test.go",
@@ -1567,7 +1684,7 @@
       "file_type": "code",
       "source_file": "vjailbreaknode_controller.go",
       "source_location": "L1",
-      "community": 82,
+      "community": 81,
       "norm_label": "vjailbreaknode_controller.go",
       "id": "vjailbreaknode_controller_go"
     },
@@ -1666,7 +1783,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L109",
-      "community": 218,
+      "community": 23,
       "norm_label": "updatemasternodeimageid()",
       "id": "utils_vjailbreaknodeutils_updatemasternodeimageid"
     },
@@ -1711,7 +1828,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L201",
-      "community": 23,
+      "community": 98,
       "norm_label": "createopenstackvmforworkernode()",
       "id": "utils_vjailbreaknodeutils_createopenstackvmforworkernode"
     },
@@ -1720,7 +1837,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L404",
-      "community": 23,
+      "community": 98,
       "norm_label": "createportforl2network()",
       "id": "utils_vjailbreaknodeutils_createportforl2network"
     },
@@ -1738,7 +1855,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L455",
-      "community": 23,
+      "community": 98,
       "norm_label": "getsecuritygroupsfrommetadata()",
       "id": "utils_vjailbreaknodeutils_getsecuritygroupsfrommetadata"
     },
@@ -1747,7 +1864,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L488",
-      "community": 23,
+      "community": 98,
       "norm_label": "getcurrentinstancenetworkinfo()",
       "id": "utils_vjailbreaknodeutils_getcurrentinstancenetworkinfo"
     },
@@ -1756,7 +1873,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L541",
-      "community": 23,
+      "community": 98,
       "norm_label": "getinstancenetworkinfobyid()",
       "id": "utils_vjailbreaknodeutils_getinstancenetworkinfobyid"
     },
@@ -1783,7 +1900,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L688",
-      "community": 218,
+      "community": 23,
       "norm_label": "getflavoridfromvm()",
       "id": "utils_vjailbreaknodeutils_getflavoridfromvm"
     },
@@ -1792,7 +1909,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L710",
-      "community": 218,
+      "community": 23,
       "norm_label": "getimageidfromvm()",
       "id": "utils_vjailbreaknodeutils_getimageidfromvm"
     },
@@ -1801,7 +1918,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L742",
-      "community": 218,
+      "community": 23,
       "norm_label": "getimageidofvmbootfromvolume()",
       "id": "utils_vjailbreaknodeutils_getimageidofvmbootfromvolume"
     },
@@ -1828,7 +1945,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L822",
-      "community": 23,
+      "community": 98,
       "norm_label": "getvolumetypeandavailabilityzonefromvm()",
       "id": "utils_vjailbreaknodeutils_getvolumetypeandavailabilityzonefromvm"
     },
@@ -1837,7 +1954,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L858",
-      "community": 12,
+      "community": 77,
       "norm_label": "listallflavors()",
       "id": "utils_vjailbreaknodeutils_listallflavors"
     },
@@ -1855,7 +1972,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L914",
-      "community": 23,
+      "community": 98,
       "norm_label": "getimageid()",
       "id": "utils_vjailbreaknodeutils_getimageid"
     },
@@ -1918,7 +2035,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/vjailbreaknodeutils.go",
       "source_location": "L1028",
-      "community": 215,
+      "community": 203,
       "norm_label": "getvmmigration()",
       "id": "utils_vjailbreaknodeutils_getvmmigration"
     },
@@ -3376,7 +3493,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/openstackcreds_controller.go",
       "source_location": "L518",
-      "community": 218,
+      "community": 12,
       "norm_label": "setupmasternode()",
       "id": "controller_openstackcreds_controller_setupmasternode"
     },
@@ -3466,7 +3583,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1",
-      "community": 207,
+      "community": 210,
       "norm_label": "migrationplan_controller.go",
       "id": "k8s_migration_internal_controller_migrationplan_controller_go"
     },
@@ -3475,7 +3592,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L76",
-      "community": 1,
+      "community": 208,
       "norm_label": "migrationplanreconciler",
       "id": "controller_migrationplanreconciler"
     },
@@ -3484,7 +3601,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L105",
-      "community": 1,
+      "community": 213,
       "norm_label": ".reconcile()",
       "id": "controller_migrationplanreconciler_reconcile"
     },
@@ -3493,7 +3610,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L160",
-      "community": 1,
+      "community": 213,
       "norm_label": ".reconcilenormal()",
       "id": "controller_migrationplanreconciler_reconcilenormal"
     },
@@ -3502,7 +3619,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L176",
-      "community": 1,
+      "community": 213,
       "norm_label": ".reconciledelete()",
       "id": "controller_migrationplanreconciler_reconciledelete"
     },
@@ -3664,7 +3781,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1410",
-      "community": 207,
+      "community": 210,
       "norm_label": "resolvevirtiodriverurl()",
       "id": "controller_migrationplan_controller_resolvevirtiodriverurl"
     },
@@ -3673,7 +3790,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1417",
-      "community": 217,
+      "community": 208,
       "norm_label": ".processadvancedoptions()",
       "id": "controller_migrationplanreconciler_processadvancedoptions"
     },
@@ -3682,7 +3799,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1456",
-      "community": 207,
+      "community": 210,
       "norm_label": "computesourcevmkey()",
       "id": "controller_migrationplan_controller_computesourcevmkey"
     },
@@ -3691,7 +3808,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1474",
-      "community": 207,
+      "community": 210,
       "norm_label": "vmkeydisplayname()",
       "id": "controller_migrationplan_controller_vmkeydisplayname"
     },
@@ -3781,7 +3898,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1775",
-      "community": 217,
+      "community": 208,
       "norm_label": ".reconcilemapping()",
       "id": "controller_migrationplanreconciler_reconcilemapping"
     },
@@ -3799,7 +3916,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1826",
-      "community": 217,
+      "community": 208,
       "norm_label": ".reconcilenetwork()",
       "id": "controller_migrationplanreconciler_reconcilenetwork"
     },
@@ -3808,7 +3925,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L1899",
-      "community": 217,
+      "community": 208,
       "norm_label": ".reconcilestorage()",
       "id": "controller_migrationplanreconciler_reconcilestorage"
     },
@@ -3826,7 +3943,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2087",
-      "community": 1,
+      "community": 208,
       "norm_label": ".setupwithmanager()",
       "id": "controller_migrationplanreconciler_setupwithmanager"
     },
@@ -3844,7 +3961,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2219",
-      "community": 207,
+      "community": 203,
       "norm_label": "mergelabels()",
       "id": "controller_migrationplan_controller_mergelabels"
     },
@@ -3853,7 +3970,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2231",
-      "community": 1,
+      "community": 208,
       "norm_label": ".migraterdmdisks()",
       "id": "controller_migrationplanreconciler_migraterdmdisks"
     },
@@ -3880,7 +3997,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2456",
-      "community": 1,
+      "community": 208,
       "norm_label": ".updatemigrationphasewithretry()",
       "id": "controller_migrationplanreconciler_updatemigrationphasewithretry"
     },
@@ -3889,7 +4006,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2510",
-      "community": 1,
+      "community": 208,
       "norm_label": ".isvmsucceededinplan()",
       "id": "controller_migrationplanreconciler_isvmsucceededinplan"
     },
@@ -3907,7 +4024,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/migrationplan_controller.go",
       "source_location": "L2540",
-      "community": 1,
+      "community": 208,
       "norm_label": ".markmigrationfailed()",
       "id": "controller_migrationplanreconciler_markmigrationfailed"
     },
@@ -4924,7 +5041,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/internal/controller/rdmdisk_controller.go",
       "source_location": "L302",
-      "community": 1,
+      "community": 208,
       "norm_label": "validaterdmdiskfields()",
       "id": "controller_rdmdisk_controller_validaterdmdiskfields"
     },
@@ -5188,123 +5305,6 @@
       "community": 97,
       "norm_label": "init()",
       "id": "v1alpha1_migration_types_init"
-    },
-    {
-      "label": "openstackcreds_types.go",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L1",
-      "community": 67,
-      "norm_label": "openstackcreds_types.go",
-      "id": "k8s_migration_api_v1alpha1_openstackcreds_types_go"
-    },
-    {
-      "label": "HostConfig",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L26",
-      "community": 67,
-      "norm_label": "hostconfig",
-      "id": "v1alpha1_hostconfig"
-    },
-    {
-      "label": "OpenStackCredsInfo",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L39",
-      "community": 67,
-      "norm_label": "openstackcredsinfo",
-      "id": "v1alpha1_openstackcredsinfo"
-    },
-    {
-      "label": "SecurityGroupInfo",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L59",
-      "community": 67,
-      "norm_label": "securitygroupinfo",
-      "id": "v1alpha1_securitygroupinfo"
-    },
-    {
-      "label": "ServerGroupInfo",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L66",
-      "community": 67,
-      "norm_label": "servergroupinfo",
-      "id": "v1alpha1_servergroupinfo"
-    },
-    {
-      "label": "PCDNetworkInfo",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L74",
-      "community": 67,
-      "norm_label": "pcdnetworkinfo",
-      "id": "v1alpha1_pcdnetworkinfo"
-    },
-    {
-      "label": "OpenstackInfo",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L80",
-      "community": 67,
-      "norm_label": "openstackinfo",
-      "id": "v1alpha1_openstackinfo"
-    },
-    {
-      "label": "OpenstackCredsSpec",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L90",
-      "community": 67,
-      "norm_label": "openstackcredsspec",
-      "id": "v1alpha1_openstackcredsspec"
-    },
-    {
-      "label": "OpenstackCredsStatus",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L126",
-      "community": 67,
-      "norm_label": "openstackcredsstatus",
-      "id": "v1alpha1_openstackcredsstatus"
-    },
-    {
-      "label": "OpenstackCreds",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L145",
-      "community": 67,
-      "norm_label": "openstackcreds",
-      "id": "v1alpha1_openstackcreds"
-    },
-    {
-      "label": "OpenstackCredsList",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L156",
-      "community": 67,
-      "norm_label": "openstackcredslist",
-      "id": "v1alpha1_openstackcredslist"
-    },
-    {
-      "label": ".DeepCopyInto()",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L164",
-      "community": 67,
-      "norm_label": ".deepcopyinto()",
-      "id": "v1alpha1_openstackcredsspec_deepcopyinto"
-    },
-    {
-      "label": "init()",
-      "file_type": "code",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L181",
-      "community": 67,
-      "norm_label": "init()",
-      "id": "v1alpha1_openstackcreds_types_init"
     },
     {
       "label": "migrationtemplate_types.go",
@@ -6724,7 +6724,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L116",
-      "community": 76,
+      "community": 19,
       "norm_label": "getopenstackcredentialsfromsecret()",
       "id": "utils_credutils_getopenstackcredentialsfromsecret"
     },
@@ -6733,7 +6733,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L121",
-      "community": 217,
+      "community": 208,
       "norm_label": "verifynetworks()",
       "id": "utils_credutils_verifynetworks"
     },
@@ -6742,7 +6742,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L152",
-      "community": 76,
+      "community": 19,
       "norm_label": "verifyports()",
       "id": "utils_credutils_verifyports"
     },
@@ -6751,7 +6751,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L184",
-      "community": 217,
+      "community": 208,
       "norm_label": "verifystorage()",
       "id": "utils_credutils_verifystorage"
     },
@@ -6760,7 +6760,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L215",
-      "community": 76,
+      "community": 19,
       "norm_label": "getopenstackinfo()",
       "id": "utils_credutils_getopenstackinfo"
     },
@@ -6769,7 +6769,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L315",
-      "community": 76,
+      "community": 19,
       "norm_label": "getopenstackclients()",
       "id": "utils_credutils_getopenstackclients"
     },
@@ -6778,7 +6778,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L358",
-      "community": 76,
+      "community": 19,
       "norm_label": "validateandgetproviderclient()",
       "id": "utils_credutils_validateandgetproviderclient"
     },
@@ -6787,7 +6787,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L429",
-      "community": 32,
+      "community": 117,
       "norm_label": "validatevmwarecreds()",
       "id": "utils_credutils_validatevmwarecreds"
     },
@@ -6814,7 +6814,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L612",
-      "community": 58,
+      "community": 117,
       "norm_label": "getandcreateallvms()",
       "id": "utils_credutils_getandcreateallvms"
     },
@@ -6967,7 +6967,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1261",
-      "community": 220,
+      "community": 58,
       "norm_label": "filtervmwaremachinesforcreds()",
       "id": "utils_credutils_filtervmwaremachinesforcreds"
     },
@@ -6985,7 +6985,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1281",
-      "community": 58,
+      "community": 19,
       "norm_label": "filtervmwareclustersforcreds()",
       "id": "utils_credutils_filtervmwareclustersforcreds"
     },
@@ -6994,7 +6994,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1290",
-      "community": 220,
+      "community": 96,
       "norm_label": "findvmwaremachinesnotinvcenter()",
       "id": "utils_credutils_findvmwaremachinesnotinvcenter"
     },
@@ -7012,7 +7012,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1329",
-      "community": 220,
+      "community": 96,
       "norm_label": "deletestalevmwaremachines()",
       "id": "utils_credutils_deletestalevmwaremachines"
     },
@@ -7021,7 +7021,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1345",
-      "community": 220,
+      "community": 96,
       "norm_label": "vmexistsinvcenter()",
       "id": "utils_credutils_vmexistsinvcenter"
     },
@@ -7057,7 +7057,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1404",
-      "community": 220,
+      "community": 58,
       "norm_label": "deletevmwaremachinesforvmwarecreds()",
       "id": "utils_credutils_deletevmwaremachinesforvmwarecreds"
     },
@@ -7066,7 +7066,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1420",
-      "community": 58,
+      "community": 19,
       "norm_label": "deletevmwareclustersforvmwarecreds()",
       "id": "utils_credutils_deletevmwareclustersforvmwarecreds"
     },
@@ -7147,7 +7147,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L1718",
-      "community": 76,
+      "community": 19,
       "norm_label": "getcindervolumebackendpools()",
       "id": "utils_credutils_getcindervolumebackendpools"
     },
@@ -7201,7 +7201,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2083",
-      "community": 32,
+      "community": 117,
       "norm_label": "logoutvmwareclient()",
       "id": "utils_credutils_logoutvmwareclient"
     },
@@ -7219,7 +7219,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2124",
-      "community": 76,
+      "community": 19,
       "norm_label": "getbackendpools()",
       "id": "utils_credutils_getbackendpools"
     },
@@ -7228,7 +7228,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2218",
-      "community": 76,
+      "community": 19,
       "norm_label": "parsepoolname()",
       "id": "utils_credutils_parsepoolname"
     },
@@ -7237,7 +7237,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2240",
-      "community": 76,
+      "community": 19,
       "norm_label": "extractcinderhost()",
       "id": "utils_credutils_extractcinderhost"
     },
@@ -7246,7 +7246,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2250",
-      "community": 76,
+      "community": 19,
       "norm_label": "buildbackendtovolumetypemap()",
       "id": "utils_credutils_buildbackendtovolumetypemap"
     },
@@ -7255,7 +7255,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/credutils.go",
       "source_location": "L2288",
-      "community": 76,
+      "community": 19,
       "norm_label": "getcindervolumeservicehosts()",
       "id": "utils_credutils_getcindervolumeservicehosts"
     },
@@ -7462,7 +7462,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/bmprovisionerutils.go",
       "source_location": "L624",
-      "community": 44,
+      "community": 24,
       "norm_label": "getopenstackcredsfromrollingmigrationplan()",
       "id": "utils_bmprovisionerutils_getopenstackcredsfromrollingmigrationplan"
     },
@@ -7579,7 +7579,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L99",
-      "community": 36,
+      "community": 25,
       "norm_label": "getclustermigration()",
       "id": "utils_rollingmigrationutils_getclustermigration"
     },
@@ -7588,7 +7588,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L109",
-      "community": 36,
+      "community": 41,
       "norm_label": "getesximigration()",
       "id": "utils_rollingmigrationutils_getesximigration"
     },
@@ -7615,7 +7615,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L137",
-      "community": 36,
+      "community": 41,
       "norm_label": "createesximigration()",
       "id": "utils_rollingmigrationutils_createesximigration"
     },
@@ -7669,7 +7669,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L344",
-      "community": 36,
+      "community": 32,
       "norm_label": "getesxisummary()",
       "id": "utils_rollingmigrationutils_getesxisummary"
     },
@@ -7696,7 +7696,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L426",
-      "community": 23,
+      "community": 98,
       "norm_label": "boolptr()",
       "id": "utils_rollingmigrationutils_boolptr"
     },
@@ -7705,7 +7705,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L430",
-      "community": 24,
+      "community": 36,
       "norm_label": "deepmerge()",
       "id": "utils_rollingmigrationutils_deepmerge"
     },
@@ -7732,7 +7732,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L479",
-      "community": 25,
+      "community": 36,
       "norm_label": "updateesxinamesinrollingmigrationplan()",
       "id": "utils_rollingmigrationutils_updateesxinamesinrollingmigrationplan"
     },
@@ -7804,7 +7804,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L657",
-      "community": 36,
+      "community": 41,
       "norm_label": "pauserollingmigrationplan()",
       "id": "utils_rollingmigrationutils_pauserollingmigrationplan"
     },
@@ -7822,7 +7822,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L752",
-      "community": 36,
+      "community": 25,
       "norm_label": "resumerollingmigrationplan()",
       "id": "utils_rollingmigrationutils_resumerollingmigrationplan"
     },
@@ -7849,7 +7849,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L921",
-      "community": 24,
+      "community": 36,
       "norm_label": "ensureesxiinmass()",
       "id": "utils_rollingmigrationutils_ensureesxiinmass"
     },
@@ -7858,7 +7858,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/rollingmigrationutils.go",
       "source_location": "L1096",
-      "community": 24,
+      "community": 36,
       "norm_label": "ensurepcdhasclusterconfigured()",
       "id": "utils_rollingmigrationutils_ensurepcdhasclusterconfigured"
     },
@@ -8263,7 +8263,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/pcdutils.go",
       "source_location": "L113",
-      "community": 12,
+      "community": 77,
       "norm_label": "createdummypcdclusterforstandalonepcdhosts()",
       "id": "utils_pcdutils_createdummypcdclusterforstandalonepcdhosts"
     },
@@ -8398,7 +8398,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L1",
-      "community": 32,
+      "community": 117,
       "norm_label": "maintenance_mode.go",
       "id": "k8s_migration_pkg_utils_maintenance_mode_go"
     },
@@ -8407,7 +8407,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L28",
-      "community": 32,
+      "community": 117,
       "norm_label": "canentermaintenancemode()",
       "id": "utils_maintenance_mode_canentermaintenancemode"
     },
@@ -8416,7 +8416,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L186",
-      "community": 32,
+      "community": 117,
       "norm_label": "checkclustercapacityafterhostremoval()",
       "id": "utils_maintenance_mode_checkclustercapacityafterhostremoval"
     },
@@ -8425,7 +8425,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L294",
-      "community": 32,
+      "community": 117,
       "norm_label": "getmaintenancemodeoptions()",
       "id": "utils_maintenance_mode_getmaintenancemodeoptions"
     },
@@ -8434,7 +8434,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/maintenance_mode.go",
       "source_location": "L353",
-      "community": 32,
+      "community": 117,
       "norm_label": "checkvmformaintenancemode()",
       "id": "utils_maintenance_mode_checkvmformaintenancemode"
     },
@@ -8569,7 +8569,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L1",
-      "community": 215,
+      "community": 203,
       "norm_label": "migrationplanutils.go",
       "id": "k8s_migration_pkg_utils_migrationplanutils_go"
     },
@@ -8578,7 +8578,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L21",
-      "community": 215,
+      "community": 203,
       "norm_label": "migrationnamefromvmname()",
       "id": "utils_migrationplanutils_migrationnamefromvmname"
     },
@@ -8587,7 +8587,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L26",
-      "community": 215,
+      "community": 203,
       "norm_label": "getmigrationconfigmapname()",
       "id": "utils_migrationplanutils_getmigrationconfigmapname"
     },
@@ -8596,7 +8596,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L31",
-      "community": 215,
+      "community": 203,
       "norm_label": "getfirstbootconfigmapname()",
       "id": "utils_migrationplanutils_getfirstbootconfigmapname"
     },
@@ -8605,7 +8605,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L36",
-      "community": 215,
+      "community": 203,
       "norm_label": "newhostpathtype()",
       "id": "utils_migrationplanutils_newhostpathtype"
     },
@@ -8614,7 +8614,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/utils/migrationplanutils.go",
       "source_location": "L42",
-      "community": 215,
+      "community": 203,
       "norm_label": "validatemigrationplan()",
       "id": "utils_migrationplanutils_validatemigrationplan"
     },
@@ -8758,7 +8758,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L1",
-      "community": 214,
+      "community": 119,
       "norm_label": "vmwarecredsscope.go",
       "id": "k8s_migration_pkg_scope_vmwarecredsscope_go"
     },
@@ -8767,7 +8767,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L15",
-      "community": 214,
+      "community": 119,
       "norm_label": "vmwarecredsscopeparams",
       "id": "scope_vmwarecredsscopeparams"
     },
@@ -8776,7 +8776,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L23",
-      "community": 214,
+      "community": 119,
       "norm_label": "newvmwarecredsscope()",
       "id": "scope_vmwarecredsscope_newvmwarecredsscope"
     },
@@ -8785,7 +8785,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L36",
-      "community": 214,
+      "community": 119,
       "norm_label": "vmwarecredsscope",
       "id": "scope_vmwarecredsscope"
     },
@@ -8794,7 +8794,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L43",
-      "community": 214,
+      "community": 119,
       "norm_label": ".close()",
       "id": "scope_vmwarecredsscope_close"
     },
@@ -8803,7 +8803,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L52",
-      "community": 214,
+      "community": 119,
       "norm_label": ".name()",
       "id": "scope_vmwarecredsscope_name"
     },
@@ -8812,7 +8812,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/vmwarecredsscope.go",
       "source_location": "L57",
-      "community": 214,
+      "community": 119,
       "norm_label": ".namespace()",
       "id": "scope_vmwarecredsscope_namespace"
     },
@@ -8884,7 +8884,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L1",
-      "community": 117,
+      "community": 25,
       "norm_label": "rollingmigrationplanscope.go",
       "id": "k8s_migration_pkg_scope_rollingmigrationplanscope_go"
     },
@@ -8893,7 +8893,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L15",
-      "community": 117,
+      "community": 25,
       "norm_label": "rollingmigrationplanscopeparams",
       "id": "scope_rollingmigrationplanscopeparams"
     },
@@ -8911,7 +8911,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L36",
-      "community": 117,
+      "community": 25,
       "norm_label": "rollingmigrationplanscope",
       "id": "scope_rollingmigrationplanscope"
     },
@@ -8920,7 +8920,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L43",
-      "community": 117,
+      "community": 25,
       "norm_label": ".close()",
       "id": "scope_rollingmigrationplanscope_close"
     },
@@ -8929,7 +8929,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L52",
-      "community": 117,
+      "community": 25,
       "norm_label": ".name()",
       "id": "scope_rollingmigrationplanscope_name"
     },
@@ -8938,7 +8938,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/rollingmigrationplanscope.go",
       "source_location": "L57",
-      "community": 117,
+      "community": 25,
       "norm_label": ".namespace()",
       "id": "scope_rollingmigrationplanscope_namespace"
     },
@@ -8947,7 +8947,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L1",
-      "community": 118,
+      "community": 214,
       "norm_label": "clustermigrationscope.go",
       "id": "k8s_migration_pkg_scope_clustermigrationscope_go"
     },
@@ -8956,7 +8956,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L15",
-      "community": 118,
+      "community": 214,
       "norm_label": "clustermigrationscopeparams",
       "id": "scope_clustermigrationscopeparams"
     },
@@ -8965,7 +8965,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L24",
-      "community": 118,
+      "community": 214,
       "norm_label": "newclustermigrationscope()",
       "id": "scope_clustermigrationscope_newclustermigrationscope"
     },
@@ -8974,7 +8974,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L38",
-      "community": 118,
+      "community": 214,
       "norm_label": "clustermigrationscope",
       "id": "scope_clustermigrationscope"
     },
@@ -8983,7 +8983,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L46",
-      "community": 118,
+      "community": 214,
       "norm_label": ".close()",
       "id": "scope_clustermigrationscope_close"
     },
@@ -8992,7 +8992,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L55",
-      "community": 118,
+      "community": 214,
       "norm_label": ".name()",
       "id": "scope_clustermigrationscope_name"
     },
@@ -9001,7 +9001,7 @@
       "file_type": "code",
       "source_file": "k8s/migration/pkg/scope/clustermigrationscope.go",
       "source_location": "L60",
-      "community": 118,
+      "community": 214,
       "norm_label": ".namespace()",
       "id": "scope_clustermigrationscope_namespace"
     },
@@ -11161,7 +11161,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/virtv2v/virtv2vops.go",
       "source_location": "L647",
-      "community": 2,
+      "community": 139,
       "norm_label": "runcommandinguest()",
       "id": "virtv2v_virtv2vops_runcommandinguest"
     },
@@ -11215,7 +11215,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/virtv2v/virtv2vops.go",
       "source_location": "L780",
-      "community": 2,
+      "community": 139,
       "norm_label": "getnetworkinterfacenames()",
       "id": "virtv2v_virtv2vops_getnetworkinterfacenames"
     },
@@ -11224,7 +11224,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/virtv2v/virtv2vops.go",
       "source_location": "L800",
-      "community": 2,
+      "community": 139,
       "norm_label": "getinterfacenames()",
       "id": "virtv2v_virtv2vops_getinterfacenames"
     },
@@ -11233,7 +11233,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/virtv2v/virtv2vops.go",
       "source_location": "L836",
-      "community": 2,
+      "community": 139,
       "norm_label": "extractkeyvalue()",
       "id": "virtv2v_virtv2vops_extractkeyvalue"
     },
@@ -13195,7 +13195,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/migrate/vaai_copy.go",
       "source_location": "L384",
-      "community": 90,
+      "community": 92,
       "norm_label": ".managevolumetocinder()",
       "id": "migrate_migrate_managevolumetocinder"
     },
@@ -13213,7 +13213,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/migrate/vaai_copy.go",
       "source_location": "L476",
-      "community": 90,
+      "community": 92,
       "norm_label": ".autodiscovercinderhost()",
       "id": "migrate_migrate_autodiscovercinderhost"
     },
@@ -13348,7 +13348,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/nbd/nbdops_test.go",
       "source_location": "L1",
-      "community": 28,
+      "community": 217,
       "norm_label": "nbdops_test.go",
       "id": "v2v_helper_nbd_nbdops_test_go"
     },
@@ -13357,7 +13357,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/nbd/nbdops_test.go",
       "source_location": "L44",
-      "community": 28,
+      "community": 217,
       "norm_label": "testpasswordredactionlogic()",
       "id": "nbd_nbdops_test_testpasswordredactionlogic"
     },
@@ -13366,7 +13366,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/utils/vcenterutils.go",
       "source_location": "L1",
-      "community": 39,
+      "community": 6,
       "norm_label": "vcenterutils.go",
       "id": "v2v_helper_pkg_utils_vcenterutils_go"
     },
@@ -13375,7 +13375,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/utils/vcenterutils.go",
       "source_location": "L15",
-      "community": 39,
+      "community": 6,
       "norm_label": "migrationparams",
       "id": "utils_migrationparams"
     },
@@ -13384,7 +13384,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/utils/vcenterutils.go",
       "source_location": "L63",
-      "community": 39,
+      "community": 6,
       "norm_label": "getmigrationparams()",
       "id": "utils_vcenterutils_getmigrationparams"
     },
@@ -13816,7 +13816,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/utils/utils.go",
       "source_location": "L156",
-      "community": 39,
+      "community": 2,
       "norm_label": "getnetworkpersistance()",
       "id": "utils_utils_getnetworkpersistance"
     },
@@ -13825,7 +13825,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/utils/utils.go",
       "source_location": "L165",
-      "community": 39,
+      "community": 2,
       "norm_label": "getremovevmwaretools()",
       "id": "utils_utils_getremovevmwaretools"
     },
@@ -14140,7 +14140,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/k8sutils/k8sutils.go",
       "source_location": "L258",
-      "community": 90,
+      "community": 92,
       "norm_label": "getarraycredsmapping()",
       "id": "k8sutils_k8sutils_getarraycredsmapping"
     },
@@ -14149,7 +14149,7 @@
       "file_type": "code",
       "source_file": "v2v-helper/pkg/k8sutils/k8sutils.go",
       "source_location": "L266",
-      "community": 90,
+      "community": 92,
       "norm_label": "getarraycreds()",
       "id": "k8sutils_k8sutils_getarraycreds"
     },
@@ -15427,7 +15427,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L1",
-      "community": 101,
+      "community": 39,
       "norm_label": "server.go",
       "id": "pkg_vpwned_server_server_go"
     },
@@ -15436,7 +15436,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L27",
-      "community": 101,
+      "community": 39,
       "norm_label": "openapiserver()",
       "id": "server_server_openapiserver"
     },
@@ -15445,7 +15445,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L59",
-      "community": 101,
+      "community": 39,
       "norm_label": "startgrpcserver()",
       "id": "server_server_startgrpcserver"
     },
@@ -15454,7 +15454,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L90",
-      "community": 101,
+      "community": 39,
       "norm_label": "grpcerrhandler()",
       "id": "server_server_grpcerrhandler"
     },
@@ -15463,7 +15463,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L100",
-      "community": 101,
+      "community": 39,
       "norm_label": "apilogger()",
       "id": "server_server_apilogger"
     },
@@ -15472,7 +15472,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L107",
-      "community": 101,
+      "community": 39,
       "norm_label": "gethttpserver()",
       "id": "server_server_gethttpserver"
     },
@@ -15481,7 +15481,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L169",
-      "community": 101,
+      "community": 39,
       "norm_label": "startserver()",
       "id": "server_server_startserver"
     },
@@ -15490,7 +15490,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/server/server.go",
       "source_location": "L199",
-      "community": 44,
+      "community": 39,
       "norm_label": "shutdown()",
       "id": "server_server_shutdown"
     },
@@ -16057,7 +16057,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/cli/serve.go",
       "source_location": "L1",
-      "community": 44,
+      "community": 39,
       "norm_label": "serve.go",
       "id": "pkg_vpwned_cli_serve_go"
     },
@@ -16066,7 +16066,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/cli/serve.go",
       "source_location": "L36",
-      "community": 44,
+      "community": 39,
       "norm_label": "initcfg()",
       "id": "cli_serve_initcfg"
     },
@@ -16075,7 +16075,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/cli/serve.go",
       "source_location": "L65",
-      "community": 44,
+      "community": 39,
       "norm_label": "init()",
       "id": "cli_serve_init"
     },
@@ -16084,7 +16084,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/cli/serve.go",
       "source_location": "L89",
-      "community": 44,
+      "community": 39,
       "norm_label": "serve()",
       "id": "cli_serve_serve"
     },
@@ -18109,7 +18109,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L175",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_listvms_0()",
       "id": "service_api_pb_gw_local_request_vcenter_listvms_0"
     },
@@ -18127,7 +18127,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L210",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_getvm_0()",
       "id": "service_api_pb_gw_local_request_vcenter_getvm_0"
     },
@@ -18145,7 +18145,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L240",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_reclaimvm_0()",
       "id": "service_api_pb_gw_local_request_vcenter_reclaimvm_0"
     },
@@ -18163,7 +18163,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L267",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_cordonhost_0()",
       "id": "service_api_pb_gw_local_request_vcenter_cordonhost_0"
     },
@@ -18181,7 +18181,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L294",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_uncordonhost_0()",
       "id": "service_api_pb_gw_local_request_vcenter_uncordonhost_0"
     },
@@ -18199,7 +18199,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L326",
-      "community": 26,
+      "community": 215,
       "norm_label": "local_request_vcenter_listhosts_0()",
       "id": "service_api_pb_gw_local_request_vcenter_listhosts_0"
     },
@@ -18424,7 +18424,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L683",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_validatecredentials_0()",
       "id": "service_api_pb_gw_request_storagearray_validatecredentials_0"
     },
@@ -18442,7 +18442,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L710",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_createorupdateinitiatorgroup_0()",
       "id": "service_api_pb_gw_request_storagearray_createorupdateinitiatorgroup_0"
     },
@@ -18460,7 +18460,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L737",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_mapvolumetogroup_0()",
       "id": "service_api_pb_gw_request_storagearray_mapvolumetogroup_0"
     },
@@ -18478,7 +18478,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L764",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_unmapvolumefromgroup_0()",
       "id": "service_api_pb_gw_request_storagearray_unmapvolumefromgroup_0"
     },
@@ -18496,7 +18496,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L791",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_getmappedgroups_0()",
       "id": "service_api_pb_gw_request_storagearray_getmappedgroups_0"
     },
@@ -18514,7 +18514,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L818",
-      "community": 98,
+      "community": 26,
       "norm_label": "request_storagearray_resolvecindervolume_0()",
       "id": "service_api_pb_gw_request_storagearray_resolvecindervolume_0"
     },
@@ -18541,7 +18541,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L960",
-      "community": 26,
+      "community": 215,
       "norm_label": "registervcenterhandlerserver()",
       "id": "service_api_pb_gw_registervcenterhandlerserver"
     },
@@ -18685,7 +18685,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L2094",
-      "community": 98,
+      "community": 26,
       "norm_label": "registerstoragearrayhandlerfromendpoint()",
       "id": "service_api_pb_gw_registerstoragearrayhandlerfromendpoint"
     },
@@ -18694,7 +18694,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L2118",
-      "community": 98,
+      "community": 26,
       "norm_label": "registerstoragearrayhandler()",
       "id": "service_api_pb_gw_registerstoragearrayhandler"
     },
@@ -18703,7 +18703,7 @@
       "file_type": "code",
       "source_file": "pkg/vpwned/api/proto/v1/service/api.pb.gw.go",
       "source_location": "L2127",
-      "community": 98,
+      "community": 26,
       "norm_label": "registerstoragearrayhandlerclient()",
       "id": "service_api_pb_gw_registerstoragearrayhandlerclient"
     },
@@ -18757,7 +18757,7 @@
       "file_type": "code",
       "source_file": "pkg/common/openstack/network.go",
       "source_location": "L1",
-      "community": 23,
+      "community": 98,
       "norm_label": "network.go",
       "id": "pkg_common_openstack_network_go"
     },
@@ -18766,7 +18766,7 @@
       "file_type": "code",
       "source_file": "pkg/common/openstack/network.go",
       "source_location": "L14",
-      "community": 23,
+      "community": 98,
       "norm_label": "issimplenetwork()",
       "id": "openstack_network_issimplenetwork"
     },
@@ -19072,7 +19072,7 @@
       "file_type": "code",
       "source_file": "pkg/common/utils/net.go",
       "source_location": "L214",
-      "community": 32,
+      "community": 117,
       "norm_label": "normalizevcenterurl()",
       "id": "utils_net_normalizevcenterurl"
     },
@@ -22870,12 +22870,132 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_hostconfig",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcredsinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_securitygroupinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L66",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_servergroupinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L74",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_pcdnetworkinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcredsspec",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L134",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcredsstatus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L168",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcreds",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L179",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcredslist",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "openstackcreds_types.go",
+      "source_location": "L204",
+      "weight": 1.0,
+      "source": "openstackcreds_types_go",
+      "target": "v1alpha1_openstackcreds_types_init",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
+      "source_location": "L164",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "v1alpha1_openstackcredsspec",
+      "target": "v1alpha1_openstackcredsspec_deepcopyinto"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": ".specify/feature.json",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specify_feature_json",
-      "target": "specify_feature_feature_directory",
-      "confidence_score": 1.0
+      "target": "specify_feature_feature_directory"
     },
     {
       "relation": "contains",
@@ -23063,9 +23183,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_checklists_requirements_md",
-      "target": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
-      "confidence_score": 1.0
+      "target": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "relation": "contains",
@@ -23073,9 +23193,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
-      "target": "checklists_requirements_content_quality",
-      "confidence_score": 1.0
+      "target": "checklists_requirements_content_quality"
     },
     {
       "relation": "contains",
@@ -23083,9 +23203,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
-      "target": "checklists_requirements_requirement_completeness",
-      "confidence_score": 1.0
+      "target": "checklists_requirements_requirement_completeness"
     },
     {
       "relation": "contains",
@@ -23093,9 +23213,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
-      "target": "checklists_requirements_feature_readiness",
-      "confidence_score": 1.0
+      "target": "checklists_requirements_feature_readiness"
     },
     {
       "relation": "contains",
@@ -23103,9 +23223,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/checklists/requirements.md",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "checklists_requirements_specification_quality_checklist_clouds_yaml_credentials_for_openstackcreds",
-      "target": "checklists_requirements_notes",
-      "confidence_score": 1.0
+      "target": "checklists_requirements_notes"
     },
     {
       "relation": "contains",
@@ -23153,9 +23273,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_contracts_conditions_md",
-      "target": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_condition_types_and_reasons_openstackcreds"
     },
     {
       "relation": "contains",
@@ -23163,9 +23283,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_credentialsparsed",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_credentialsparsed"
     },
     {
       "relation": "contains",
@@ -23173,9 +23293,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_credentialsvalidated",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_credentialsvalidated"
     },
     {
       "relation": "contains",
@@ -23183,9 +23303,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L23",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_rolessufficient",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_rolessufficient"
     },
     {
       "relation": "contains",
@@ -23193,9 +23313,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_expiring",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_expiring"
     },
     {
       "relation": "contains",
@@ -23203,9 +23323,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L40",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_expired",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_expired"
     },
     {
       "relation": "contains",
@@ -23213,9 +23333,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L48",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_aggregate_readiness",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_aggregate_readiness"
     },
     {
       "relation": "contains",
@@ -23223,9 +23343,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L58",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_message_conventions",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_message_conventions"
     },
     {
       "relation": "contains",
@@ -23233,9 +23353,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/conditions.md",
       "source_location": "L65",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_conditions_condition_types_and_reasons_openstackcreds",
-      "target": "contracts_conditions_standard_reason_code_stability",
-      "confidence_score": 1.0
+      "target": "contracts_conditions_standard_reason_code_stability"
     },
     {
       "relation": "contains",
@@ -23243,9 +23363,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_contracts_openstackcreds_crd_md",
-      "target": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative"
     },
     {
       "relation": "contains",
@@ -23253,9 +23373,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
-      "target": "contracts_openstackcreds_crd_spec_added_field",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_spec_added_field"
     },
     {
       "relation": "contains",
@@ -23263,9 +23383,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L22",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
-      "target": "contracts_openstackcreds_crd_status_replaced",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_status_replaced"
     },
     {
       "relation": "contains",
@@ -23273,9 +23393,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L60",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
-      "target": "contracts_openstackcreds_crd_go_struct_delta_informative",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_go_struct_delta_informative"
     },
     {
       "relation": "contains",
@@ -23283,9 +23403,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L88",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_openstackcreds_crd_schema_delta_informative",
-      "target": "contracts_openstackcreds_crd_upgrade_behavior",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_upgrade_behavior"
     },
     {
       "relation": "contains",
@@ -23293,9 +23413,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_spec_added_field",
-      "target": "contracts_openstackcreds_crd_codeblock_1",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_codeblock_1"
     },
     {
       "relation": "contains",
@@ -23303,9 +23423,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_status_replaced",
-      "target": "contracts_openstackcreds_crd_codeblock_2",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_codeblock_2"
     },
     {
       "relation": "contains",
@@ -23313,9 +23433,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/contracts/openstackcreds-crd.md",
       "source_location": "L62",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "contracts_openstackcreds_crd_go_struct_delta_informative",
-      "target": "contracts_openstackcreds_crd_codeblock_3",
-      "confidence_score": 1.0
+      "target": "contracts_openstackcreds_crd_codeblock_3"
     },
     {
       "relation": "contains",
@@ -23323,9 +23443,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_data_model_md",
-      "target": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials"
     },
     {
       "relation": "contains",
@@ -23333,9 +23453,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended"
     },
     {
       "relation": "contains",
@@ -23343,9 +23463,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_condition_types",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_condition_types"
     },
     {
       "relation": "contains",
@@ -23353,9 +23473,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L47",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys"
     },
     {
       "relation": "contains",
@@ -23363,9 +23483,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L73",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_clouds_yaml_consumed_subset",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_clouds_yaml_consumed_subset"
     },
     {
       "relation": "contains",
@@ -23373,9 +23493,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L90",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_sharing_semantics",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_sharing_semantics"
     },
     {
       "relation": "contains",
@@ -23383,9 +23503,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L95",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_data_model_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_data_model_state_transitions",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_state_transitions"
     },
     {
       "relation": "contains",
@@ -23393,9 +23513,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended",
-      "target": "003_clouds_yaml_credentials_data_model_spec_added_field",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_spec_added_field"
     },
     {
       "relation": "contains",
@@ -23403,9 +23523,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended",
-      "target": "003_clouds_yaml_credentials_data_model_spec_existing_fields_unchanged_documented_as_legacy",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_spec_existing_fields_unchanged_documented_as_legacy"
     },
     {
       "relation": "contains",
@@ -23413,9 +23533,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_openstackcreds_crd_extended",
-      "target": "003_clouds_yaml_credentials_data_model_status_replaced",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_status_replaced"
     },
     {
       "relation": "contains",
@@ -23423,9 +23543,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L49",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys",
-      "target": "003_clouds_yaml_credentials_data_model_mode_a_clouds_yaml_preferred",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_mode_a_clouds_yaml_preferred"
     },
     {
       "relation": "contains",
@@ -23433,9 +23553,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L55",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys",
-      "target": "003_clouds_yaml_credentials_data_model_mode_b_legacy_os_back_compat",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_mode_b_legacy_os_back_compat"
     },
     {
       "relation": "contains",
@@ -23443,9 +23563,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_credential_secret_data_keys",
-      "target": "003_clouds_yaml_credentials_data_model_resolution_precedence",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_resolution_precedence"
     },
     {
       "relation": "contains",
@@ -23453,9 +23573,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/data-model.md",
       "source_location": "L97",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_data_model_state_transitions",
-      "target": "003_clouds_yaml_credentials_data_model_codeblock_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_data_model_codeblock_1"
     },
     {
       "relation": "contains",
@@ -23463,9 +23583,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_plan_md",
-      "target": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "relation": "contains",
@@ -23473,9 +23593,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_plan_summary",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_summary"
     },
     {
       "relation": "contains",
@@ -23483,9 +23603,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_plan_technical_context",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_technical_context"
     },
     {
       "relation": "contains",
@@ -23493,9 +23613,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_plan_constitution_check",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_constitution_check"
     },
     {
       "relation": "contains",
@@ -23503,9 +23623,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L47",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_implementation_plan_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_plan_project_structure",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_project_structure"
     },
     {
       "relation": "contains",
@@ -23513,9 +23633,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L49",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_project_structure",
-      "target": "003_clouds_yaml_credentials_plan_documentation_this_feature",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_documentation_this_feature"
     },
     {
       "relation": "contains",
@@ -23523,9 +23643,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L66",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_project_structure",
-      "target": "003_clouds_yaml_credentials_plan_source_code_repository_root",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_source_code_repository_root"
     },
     {
       "relation": "contains",
@@ -23533,9 +23653,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L51",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_documentation_this_feature",
-      "target": "003_clouds_yaml_credentials_plan_codeblock_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_codeblock_1"
     },
     {
       "relation": "contains",
@@ -23543,9 +23663,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/plan.md",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_plan_source_code_repository_root",
-      "target": "003_clouds_yaml_credentials_plan_codeblock_2",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_plan_codeblock_2"
     },
     {
       "relation": "contains",
@@ -23553,9 +23673,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_quickstart_md",
-      "target": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak"
     },
     {
       "relation": "contains",
@@ -23563,9 +23683,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_prerequisites",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_prerequisites"
     },
     {
       "relation": "contains",
@@ -23573,9 +23693,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present"
     },
     {
       "relation": "contains",
@@ -23583,9 +23703,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_2_create_the_application_credential",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_2_create_the_application_credential"
     },
     {
       "relation": "contains",
@@ -23593,9 +23713,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L42",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_3_build_clouds_yaml",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_3_build_clouds_yaml"
     },
     {
       "relation": "contains",
@@ -23603,9 +23723,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L59",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_4_create_the_kubernetes_secret",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_4_create_the_kubernetes_secret"
     },
     {
       "relation": "contains",
@@ -23613,9 +23733,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L67",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource"
     },
     {
       "relation": "contains",
@@ -23623,9 +23743,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L86",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_6_verify_validation",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_6_verify_validation"
     },
     {
       "relation": "contains",
@@ -23633,9 +23753,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L102",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_7_rotate_the_application_credential",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_7_rotate_the_application_credential"
     },
     {
       "relation": "contains",
@@ -23643,9 +23763,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L121",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_step_8_revoke_after_migration_completion",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_step_8_revoke_after_migration_completion"
     },
     {
       "relation": "contains",
@@ -23653,9 +23773,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L129",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml"
     },
     {
       "relation": "contains",
@@ -23663,9 +23783,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L166",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_quickstart_clouds_yaml_credentials_for_vjailbreak",
-      "target": "003_clouds_yaml_credentials_quickstart_ui_path_after_pr_3",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_ui_path_after_pr_3"
     },
     {
       "relation": "contains",
@@ -23673,9 +23793,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_1"
     },
     {
       "relation": "contains",
@@ -23683,9 +23803,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_1_create_a_vjailbreak_scoped_role_if_not_already_present",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_2",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_2"
     },
     {
       "relation": "contains",
@@ -23693,9 +23813,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_2_create_the_application_credential",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_3",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_3"
     },
     {
       "relation": "contains",
@@ -23703,9 +23823,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L44",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_3_build_clouds_yaml",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_4",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_4"
     },
     {
       "relation": "contains",
@@ -23713,9 +23833,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L61",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_4_create_the_kubernetes_secret",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_5",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_5"
     },
     {
       "relation": "contains",
@@ -23723,9 +23843,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L69",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_6",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_6"
     },
     {
       "relation": "contains",
@@ -23733,9 +23853,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L82",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_5_create_the_openstackcreds_resource",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_7",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_7"
     },
     {
       "relation": "contains",
@@ -23743,9 +23863,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L88",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_6_verify_validation",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_8",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_8"
     },
     {
       "relation": "contains",
@@ -23753,9 +23873,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L104",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_7_rotate_the_application_credential",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_9",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_9"
     },
     {
       "relation": "contains",
@@ -23763,9 +23883,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L123",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_step_8_revoke_after_migration_completion",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_10",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_10"
     },
     {
       "relation": "contains",
@@ -23773,9 +23893,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L133",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_11",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_11"
     },
     {
       "relation": "contains",
@@ -23783,9 +23903,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/quickstart.md",
       "source_location": "L146",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_quickstart_multi_cloud_clouds_yaml",
-      "target": "003_clouds_yaml_credentials_quickstart_codeblock_12",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_quickstart_codeblock_12"
     },
     {
       "relation": "contains",
@@ -23793,9 +23913,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_research_md",
-      "target": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials"
     },
     {
       "relation": "contains",
@@ -23803,9 +23923,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_1_clouds_yaml_parsing_library",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_1_clouds_yaml_parsing_library"
     },
     {
       "relation": "contains",
@@ -23813,9 +23933,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_2_kubernetes_conditions_api_for_openstackcreds",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_2_kubernetes_conditions_api_for_openstackcreds"
     },
     {
       "relation": "contains",
@@ -23823,9 +23943,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_3_controller_runtime_secret_watch",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_3_controller_runtime_secret_watch"
     },
     {
       "relation": "contains",
@@ -23833,9 +23953,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L50",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_4_application_credentials_auth_flow",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_4_application_credentials_auth_flow"
     },
     {
       "relation": "contains",
@@ -23843,9 +23963,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L66",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_5_microversion_floor_semantics",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_5_microversion_floor_semantics"
     },
     {
       "relation": "contains",
@@ -23853,9 +23973,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L83",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_6_client_side_yaml_parsing_in_the_ui",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_6_client_side_yaml_parsing_in_the_ui"
     },
     {
       "relation": "contains",
@@ -23863,9 +23983,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L98",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_7_upgrade_and_back_compat_behavior",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_7_upgrade_and_back_compat_behavior"
     },
     {
       "relation": "contains",
@@ -23873,9 +23993,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L111",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_8_validation_cadence",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_8_validation_cadence"
     },
     {
       "relation": "contains",
@@ -23883,9 +24003,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/research.md",
       "source_location": "L126",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_research_phase_0_research_clouds_yaml_credentials",
-      "target": "003_clouds_yaml_credentials_research_r_9_log_redaction_and_observability",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_research_r_9_log_redaction_and_observability"
     },
     {
       "relation": "contains",
@@ -23893,9 +24013,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_spec_md",
-      "target": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "relation": "contains",
@@ -23903,9 +24023,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_spec_clarifications",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_clarifications"
     },
     {
       "relation": "contains",
@@ -23913,9 +24033,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory"
     },
     {
       "relation": "contains",
@@ -23923,9 +24043,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L83",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_spec_requirements_mandatory",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_requirements_mandatory"
     },
     {
       "relation": "contains",
@@ -23933,9 +24053,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L114",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_spec_success_criteria_mandatory",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_success_criteria_mandatory"
     },
     {
       "relation": "contains",
@@ -23943,9 +24063,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L126",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_feature_specification_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_spec_assumptions",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_assumptions"
     },
     {
       "relation": "contains",
@@ -23953,9 +24073,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_clarifications",
-      "target": "003_clouds_yaml_credentials_spec_session_2026_05_18",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_session_2026_05_18"
     },
     {
       "relation": "contains",
@@ -23963,9 +24083,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1"
     },
     {
       "relation": "contains",
@@ -23973,9 +24093,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L37",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_user_story_2_authenticate_via_openstack_application_credentials_priority_p2"
     },
     {
       "relation": "contains",
@@ -23983,9 +24103,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L54",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3"
     },
     {
       "relation": "contains",
@@ -23993,9 +24113,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L71",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_user_scenarios_testing_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_edge_cases",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_edge_cases"
     },
     {
       "relation": "contains",
@@ -24003,9 +24123,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L85",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_requirements_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_functional_requirements",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_functional_requirements"
     },
     {
       "relation": "contains",
@@ -24013,9 +24133,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L106",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_requirements_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_key_entities",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_key_entities"
     },
     {
       "relation": "contains",
@@ -24023,9 +24143,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/spec.md",
       "source_location": "L116",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_spec_success_criteria_mandatory",
-      "target": "003_clouds_yaml_credentials_spec_measurable_outcomes",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_spec_measurable_outcomes"
     },
     {
       "relation": "contains",
@@ -24033,9 +24153,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "specs_003_clouds_yaml_credentials_tasks_md",
-      "target": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds"
     },
     {
       "relation": "contains",
@@ -24043,9 +24163,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_format_id_p_story_description",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_format_id_p_story_description"
     },
     {
       "relation": "contains",
@@ -24053,9 +24173,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_path_conventions",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_path_conventions"
     },
     {
       "relation": "contains",
@@ -24063,9 +24183,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L35",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_1_setup_shared_infrastructure",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_1_setup_shared_infrastructure"
     },
     {
       "relation": "contains",
@@ -24073,9 +24193,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L46",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_2_foundational_blocking_prerequisites",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_2_foundational_blocking_prerequisites"
     },
     {
       "relation": "contains",
@@ -24083,9 +24203,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L61",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp"
     },
     {
       "relation": "contains",
@@ -24093,9 +24213,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L106",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2"
     },
     {
       "relation": "contains",
@@ -24103,9 +24223,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L133",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3"
     },
     {
       "relation": "contains",
@@ -24113,9 +24233,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L162",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_phase_6_polish_cross_cutting_concerns",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_6_polish_cross_cutting_concerns"
     },
     {
       "relation": "contains",
@@ -24123,9 +24243,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L174",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_dependencies_execution_order"
     },
     {
       "relation": "contains",
@@ -24133,9 +24253,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L209",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_parallel_example_user_story_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_parallel_example_user_story_1"
     },
     {
       "relation": "contains",
@@ -24143,9 +24263,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L228",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_implementation_strategy",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_implementation_strategy"
     },
     {
       "relation": "contains",
@@ -24153,9 +24273,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L258",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_tasks_clouds_yaml_credentials_for_openstackcreds",
-      "target": "003_clouds_yaml_credentials_tasks_notes",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_notes"
     },
     {
       "relation": "contains",
@@ -24163,9 +24283,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L69",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp",
-      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_1_write_first_must_fail_before_implementation",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_1_write_first_must_fail_before_implementation"
     },
     {
       "relation": "contains",
@@ -24173,9 +24293,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L85",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_3_user_story_1_use_clouds_yaml_as_the_credential_source_priority_p1_mvp",
-      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_1"
     },
     {
       "relation": "contains",
@@ -24183,9 +24303,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L114",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
-      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_2_write_first_must_fail_before_implementation",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_2_write_first_must_fail_before_implementation"
     },
     {
       "relation": "contains",
@@ -24193,9 +24313,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L121",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_4_user_story_2_authenticate_via_openstack_application_credentials_priority_p2",
-      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_2",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_2"
     },
     {
       "relation": "contains",
@@ -24203,9 +24323,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L141",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
-      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_3_write_first_must_fail_before_implementation",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_tests_for_user_story_3_write_first_must_fail_before_implementation"
     },
     {
       "relation": "contains",
@@ -24213,9 +24333,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L149",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_phase_5_user_story_3_enter_clouds_yaml_through_the_web_ui_priority_p3",
-      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_3",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_implementation_for_user_story_3"
     },
     {
       "relation": "contains",
@@ -24223,9 +24343,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L176",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
-      "target": "003_clouds_yaml_credentials_tasks_phase_dependencies",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_phase_dependencies"
     },
     {
       "relation": "contains",
@@ -24233,9 +24353,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L185",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
-      "target": "003_clouds_yaml_credentials_tasks_user_story_dependencies",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_user_story_dependencies"
     },
     {
       "relation": "contains",
@@ -24243,9 +24363,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L192",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
-      "target": "003_clouds_yaml_credentials_tasks_within_each_user_story_tdd_discipline",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_within_each_user_story_tdd_discipline"
     },
     {
       "relation": "contains",
@@ -24253,9 +24373,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L198",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_dependencies_execution_order",
-      "target": "003_clouds_yaml_credentials_tasks_parallel_opportunities",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_parallel_opportunities"
     },
     {
       "relation": "contains",
@@ -24263,9 +24383,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L211",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_parallel_example_user_story_1",
-      "target": "003_clouds_yaml_credentials_tasks_codeblock_1",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_codeblock_1"
     },
     {
       "relation": "contains",
@@ -24273,9 +24393,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L230",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_implementation_strategy",
-      "target": "003_clouds_yaml_credentials_tasks_mvp_first_pr_1_user_story_1_only",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_mvp_first_pr_1_user_story_1_only"
     },
     {
       "relation": "contains",
@@ -24283,9 +24403,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L238",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_implementation_strategy",
-      "target": "003_clouds_yaml_credentials_tasks_incremental_delivery",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_incremental_delivery"
     },
     {
       "relation": "contains",
@@ -24293,9 +24413,9 @@
       "source_file": "specs/003-clouds-yaml-credentials/tasks.md",
       "source_location": "L246",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "003_clouds_yaml_credentials_tasks_implementation_strategy",
-      "target": "003_clouds_yaml_credentials_tasks_parallel_team_strategy",
-      "confidence_score": 1.0
+      "target": "003_clouds_yaml_credentials_tasks_parallel_team_strategy"
     },
     {
       "relation": "contains",
@@ -32446,126 +32566,6 @@
       "confidence_score": 1.0,
       "source": "k8s_migration_api_v1alpha1_migration_types_go",
       "target": "v1alpha1_migration_types_init"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L26",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_hostconfig"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L39",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsinfo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L59",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_securitygroupinfo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L66",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_servergroupinfo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L74",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_pcdnetworkinfo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L80",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackinfo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L90",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsspec"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L126",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredsstatus"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L145",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcreds"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L156",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcredslist"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L181",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "k8s_migration_api_v1alpha1_openstackcreds_types_go",
-      "target": "v1alpha1_openstackcreds_types_init"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "k8s/migration/api/v1alpha1/openstackcreds_types.go",
-      "source_location": "L164",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "v1alpha1_openstackcredsspec",
-      "target": "v1alpha1_openstackcredsspec_deepcopyinto"
     },
     {
       "relation": "contains",
@@ -65155,5 +65155,5 @@
       "source_file": "k8s/migration/config/samples/vjailbreak_v1alpha1_esxisshcreds.yaml"
     }
   ],
-  "built_at_commit": "61d15b24f8edaa98b5d90c73f03423e5ce6ead07"
+  "built_at_commit": "a1bbdfcbfaceee99418cc2b0609ec95bcf2f4e93"
 }
