@@ -31,6 +31,12 @@ type ValidationResult struct {
 	Valid   bool
 	Message string
 	Error   error
+	// AppCred carries Application Credential metadata fetched after successful
+	// authentication when auth_type is v3applicationcredential and the
+	// credential's metadata could be retrieved. Nil for non-AppCred auth or
+	// when the metadata fetch was unavailable. Drives the Expiring / Expired
+	// Conditions on OpenstackCreds.status.
+	AppCred *utils.AppCredentialDetails
 }
 
 func authErrorMessage(err error, isTokenAuth bool) string {
@@ -254,11 +260,27 @@ func validateFromCloudsYAML(ctx context.Context, k8sClient client.Client, openst
 		}
 	}
 
-	return ValidationResult{
+	result := ValidationResult{
 		Valid:   true,
 		Message: "Successfully authenticated to Openstack",
 		Error:   nil,
 	}
+
+	// For v3applicationcredential auth, try to fetch the credential's metadata
+	// so the controller can populate the Expiring / Expired Conditions. A
+	// failure here is non-fatal: the credential itself authenticated, and
+	// the controller treats nil AppCred as "details unavailable".
+	if cfg.AuthType == "v3applicationcredential" && cfg.AuthOptions.ApplicationCredentialID != "" {
+		details, err := utils.FetchAppCredentialDetails(ctx, providerClient, cfg.AuthOptions.ApplicationCredentialID)
+		if err != nil {
+			ctrllog.FromContext(ctx).Info("could not fetch Application Credential details for status reporting",
+				"credentialID", cfg.AuthOptions.ApplicationCredentialID, "err", err.Error())
+		} else {
+			result.AppCred = details
+		}
+	}
+
+	return result
 }
 
 // getCredentialsFromSecret retrieves OpenStack credentials from a Kubernetes secret
