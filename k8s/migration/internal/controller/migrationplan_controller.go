@@ -1037,6 +1037,39 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+// buildMicroversionEnvVars reads the credential Secret referenced by an
+// OpenstackCreds resource and, when it carries a clouds.yaml key, returns the
+// OS_*_API_VERSION env vars derived from the per-service api_version fields
+// in the selected cloud entry. Returns an empty slice for legacy OS_*-keyed
+// Secrets (those env vars, if set, are auto-loaded by EnvFrom in the pod spec
+// below). Errors are non-fatal at the call site; the legacy path remains
+// available even when this helper returns an error.
+func buildMicroversionEnvVars(ctx context.Context, k3sclient client.Client, secretName, cloudName string) ([]corev1.EnvVar, error) {
+	secret := &corev1.Secret{}
+	if err := k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      secretName,
+	}, secret); err != nil {
+		return nil, fmt.Errorf("get credential Secret %s: %w", secretName, err)
+	}
+	if !utils.SecretContainsCloudsYAML(secret.Data) {
+		return nil, nil
+	}
+	cfg, err := utils.ParseCloudsYAML(secret.Data["clouds.yaml"], cloudName)
+	if err != nil {
+		return nil, fmt.Errorf("parse clouds.yaml in Secret %s: %w", secretName, err)
+	}
+	pairs := utils.MicroversionsToEnvVars(cfg.Microversions)
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	envVars := make([]corev1.EnvVar, 0, len(pairs))
+	for _, p := range pairs {
+		envVars = append(envVars, corev1.EnvVar{Name: p.Name, Value: p.Value})
+	}
+	return envVars, nil
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1046,6 +1079,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
+	openstackCloudName string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arrayCredsSecretRef string,
 ) error {
@@ -1090,6 +1124,22 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "FLAVORLESS_FLAVOR_ID",
 			Value: vmMachine.Spec.TargetFlavorID,
 		})
+	}
+
+	// When the credential Secret is clouds.yaml-keyed, the per-service
+	// microversion floor values configured by the operator are not auto-loaded
+	// via EnvFrom (the only Secret key is "clouds.yaml"). Parse them out and
+	// inject OS_*_API_VERSION env vars explicitly so v2v-helper's
+	// pkg/common/microversion.Floor can honor the operator-configured floor on
+	// every service client.
+	if openstackSecretRef != "" {
+		microversionEnvVars, err := buildMicroversionEnvVars(ctx, r.Client, openstackSecretRef, openstackCloudName)
+		if err != nil {
+			r.ctxlog.Info("could not derive OS_*_API_VERSION env vars from credential Secret; legacy OS_* path will still be honored via EnvFrom",
+				"secret", openstackSecretRef, "err", err.Error())
+		} else {
+			envVars = append(envVars, microversionEnvVars...)
+		}
 	}
 
 	// Get vjailbreak settings for pod resource configuration
@@ -2075,6 +2125,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
+			openstackcreds.Spec.CloudName,
 			vmMachineObj,
 			arraycredsSecretRef)
 		if err != nil {

@@ -270,6 +270,69 @@ func TestCloudNames_InvalidYAML(t *testing.T) {
 	}
 }
 
+func TestMicroversionsToEnvVars(t *testing.T) {
+	cases := []struct {
+		name string
+		in   map[string]string
+		want []EnvVarPair
+	}{
+		{name: "nil map -> nil", in: nil, want: nil},
+		{name: "empty map -> nil", in: map[string]string{}, want: nil},
+		{
+			name: "compute and volume",
+			in:   map[string]string{"compute": "2.95", "volume": "3.70"},
+			want: []EnvVarPair{
+				{Name: "OS_COMPUTE_API_VERSION", Value: "2.95"},
+				{Name: "OS_VOLUME_API_VERSION", Value: "3.70"},
+			},
+		},
+		{
+			name: "all five services",
+			in: map[string]string{
+				"compute":  "2.95",
+				"volume":   "3.70",
+				"image":    "2.16",
+				"network":  "2.0",
+				"identity": "3",
+			},
+			want: []EnvVarPair{
+				{Name: "OS_COMPUTE_API_VERSION", Value: "2.95"},
+				{Name: "OS_VOLUME_API_VERSION", Value: "3.70"},
+				{Name: "OS_IMAGE_API_VERSION", Value: "2.16"},
+				{Name: "OS_NETWORK_API_VERSION", Value: "2.0"},
+				{Name: "OS_IDENTITY_API_VERSION", Value: "3"},
+			},
+		},
+		{
+			name: "empty values skipped",
+			in:   map[string]string{"compute": "2.95", "volume": ""},
+			want: []EnvVarPair{
+				{Name: "OS_COMPUTE_API_VERSION", Value: "2.95"},
+			},
+		},
+		{
+			name: "unknown service silently skipped",
+			in:   map[string]string{"compute": "2.95", "object-storage": "1.0"},
+			want: []EnvVarPair{
+				{Name: "OS_COMPUTE_API_VERSION", Value: "2.95"},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := MicroversionsToEnvVars(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d pairs, want %d (got=%v want=%v)", len(got), len(tc.want), got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("pair %d = %+v; want %+v", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestSecretContainsCloudsYAML(t *testing.T) {
 	cases := []struct {
 		name string
