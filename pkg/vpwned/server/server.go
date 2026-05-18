@@ -117,6 +117,14 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// Register subnet compatibility check handler
 	mux.HandleFunc("/vpw/v1/check_network_subnet_compatibility", HandleCheckNetworkSubnetCompatibility)
 
+	// Register K8s reverse proxy — forwards /vpw/v1/k8s/* to the K8s API server
+	// using the pod ServiceAccount token.  UI secret/pod calls route through here
+	// instead of holding direct RBAC permissions on ui-manager-sa.
+	if err := InitK8sProxy(); err != nil {
+		logrus.Warnf("k8s proxy init skipped (non-cluster env): %v", err)
+	}
+	mux.HandleFunc("/vpw/v1/k8s/", HandleK8sProxy)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -158,6 +166,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// Skip subnet compatibility check - handled by plain HTTP handler
 		if r.URL.Path == "/vpw/v1/check_network_subnet_compatibility" {
 			HandleCheckNetworkSubnetCompatibility(w, r)
+			return
+		}
+		// Skip k8s proxy - registered with its own prefix handler above
+		if strings.HasPrefix(r.URL.Path, "/vpw/v1/k8s/") {
+			HandleK8sProxy(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)
