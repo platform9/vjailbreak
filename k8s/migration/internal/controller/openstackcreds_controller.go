@@ -670,7 +670,7 @@ func fetchAndUpdateFlavors(ctx context.Context, r *OpenstackCredsReconciler, sco
 
 func syncProjectName(ctx context.Context, r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) error {
 	ctxlog := scope.Logger
-	openstackCredential, err := utils.GetOpenstackCredentialsFromSecret(ctx, r.Client, scope.OpenstackCreds.Spec.SecretRef.Name)
+	openstackCredential, err := utils.GetOpenstackCredsInfoFromCreds(ctx, r.Client, scope.OpenstackCreds)
 	if err != nil {
 		ctxlog.Error(err, "Failed to get OpenStack credentials from secret", "secretName", scope.OpenstackCreds.Spec.SecretRef.Name)
 		return errors.Wrap(err, "failed to get Openstack credentials from secret")

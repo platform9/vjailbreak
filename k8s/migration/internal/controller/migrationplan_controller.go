@@ -1905,9 +1905,15 @@ func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 		if !ok {
 			return false, errors.Wrap(err, "failed to convert credentials to OpenstackCreds")
 		}
-		// Check the standard Kubernetes Condition rather than the retired flat
-		// status fields. A resource is ready when CredentialsValidated=True.
-		if !meta.IsStatusConditionTrue(openstackCreds.Status.Conditions, utils.ConditionCredentialsValidated) {
+		// Prefer the Kubernetes Condition (CredentialsValidated=True). Fall
+		// back to the legacy flat OpenStackValidationStatus field for
+		// resources that haven't been re-reconciled by the upgraded
+		// OpenstackCreds controller yet — those resources still carry the
+		// old flat status but no Conditions slice, and we shouldn't block
+		// MigrationPlan reconciliation on the upgrade window.
+		conditionReady := meta.IsStatusConditionTrue(openstackCreds.Status.Conditions, utils.ConditionCredentialsValidated)
+		legacyReady := openstackCreds.Status.OpenStackValidationStatus == string(corev1.PodSucceeded)
+		if !conditionReady && !legacyReady {
 			return false, errors.Errorf("openstackcreds '%s' CR is not validated", openstackCreds.Name)
 		}
 	}
