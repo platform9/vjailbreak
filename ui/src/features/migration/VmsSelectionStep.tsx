@@ -26,13 +26,10 @@ import {
   DataGrid,
   GridColDef,
   GridToolbarColumnsButton,
-  GridRowSelectionModel,
   GridRow
 } from '@mui/x-data-grid'
-import { useQueryClient } from '@tanstack/react-query'
 import { VmData } from 'src/features/migration/api/migration-templates/model'
-import { OpenStackFlavor, OpenstackCreds } from 'src/api/openstack-creds/model'
-import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
+import { OpenStackFlavor } from 'src/api/openstack-creds/model'
 import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
 import { Step } from 'src/shared/components/forms'
 import * as React from 'react'
@@ -45,21 +42,28 @@ import ErrorIcon from '@mui/icons-material/Error'
 import WindowsIcon from 'src/assets/windows_icon.svg'
 import LinuxIcon from 'src/assets/linux_icon.svg'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { validateOpenstackIPs } from 'src/api/openstack-creds/openstackCreds'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { useRdmDisksQuery, RDM_DISKS_BASE_KEY } from 'src/hooks/api/useRdmDisksQuery'
-import { patchRdmDisk } from 'src/api/rdm-disks/rdmDisks'
 import { RdmDisk } from 'src/api/rdm-disks/model'
-import axios from 'axios'
 import { RdmDiskConfigurationPanel } from './components'
 import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
 import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
 import { FieldLabel } from 'src/components'
 import { ActionButton } from 'src/components'
 import { TextField as SharedTextField } from 'src/shared/components/forms'
+import type { VmDataWithFlavor, VmsSelectionStepProps, RdmConfiguration } from './types'
+import { useOsAssignment } from './hooks/useOsAssignment'
+import { useVmSelection } from './hooks/useVmSelection'
+import { useFlavorAssignment } from './hooks/useFlavorAssignment'
+import { useRdmConfiguration } from './hooks/useRdmConfiguration'
+import { useBulkIPEdit } from './hooks/useBulkIPEdit'
+import {
+  extractFirstIPv4,
+  hasMultipleIPv4,
+  parseIpList,
+} from './utils/ipValidation'
 
-const { useCallback, useEffect, useRef, useState } = React
+const { useCallback, useEffect, useState } = React
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -137,15 +141,6 @@ const CustomToolbarWithActions = (props) => {
   )
 }
 
-interface VmDataWithFlavor extends VmData {
-  isMigrated?: boolean
-  flavorName?: string // Add a field to store the flavor name
-  flavorNotFound?: boolean // Add a flag to indicate if a flavor wasn't found
-  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
-  ipValidationMessage?: string
-  powerState?: string // Add power state for IP editing logic
-}
-
 // Column definition moved inside component to access state
 
 const paginationModel = { page: 0, pageSize: 5 }
@@ -153,22 +148,6 @@ const paginationModel = { page: 0, pageSize: 5 }
 const MIGRATED_TOOLTIP_MESSAGE = 'This VM is migrating or already has been migrated.'
 const FLAVOR_NOT_FOUND_MESSAGE =
   'Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.'
-
-interface VmsSelectionStepProps {
-  onChange: (id: string) => (value: unknown) => void
-  error: string
-  open?: boolean
-  vmwareCredsValidated: boolean
-  openstackCredsValidated: boolean
-  sessionId?: string
-  openstackFlavors?: OpenStackFlavor[]
-  vmwareCredName?: string
-  openstackCredName?: string
-  openstackCredentials?: OpenstackCreds
-  vmwareCluster?: string
-  useGPU?: boolean
-  showHeader?: boolean
-}
 
 function VmsSelectionStep({
   onChange,
@@ -187,10 +166,6 @@ function VmsSelectionStep({
 }: VmsSelectionStepProps) {
   const { reportError } = useErrorHandler({ component: 'VmsSelectionStep' })
   const { track } = useAmplitude({ component: 'VmsSelectionStep' })
-  const queryClient = useQueryClient()
-
-  const IPV4_REGEX =
-    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
 
   const normalizeNetworkInterfaces = (networkInterfaces?: VmData['networkInterfaces']) => {
     if (!networkInterfaces || networkInterfaces.length === 0) return networkInterfaces
@@ -204,60 +179,9 @@ function VmsSelectionStep({
     }))
   }
 
-  const parseIpList = (value: string): string[] => {
-    const trimmed = value.trim()
-    if (!trimmed) return []
-    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
-  }
-
-  const isValidIPAddressList = (value: string): boolean => {
-    const ips = parseIpList(value)
-    if (ips.length === 0) return false
-    return ips.every((ip) => isValidIPAddress(ip))
-  }
-
-  const hasMultipleIpEntries = (value: string): boolean => {
-    return parseIpList(value).length > 1
-  }
-
-  const flattenBulkIps = (items: BulkIpEdit[]) => {
-    const flattened: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
-    items.forEach((item) => {
-      const parsed = parseIpList(item.ip)
-      if (parsed.length === 0) {
-        flattened.push({ ...item, ip: '' })
-        return
-      }
-      parsed.forEach((ip) =>
-        flattened.push({ vmName: item.vmName, interfaceIndex: item.interfaceIndex, ip })
-      )
-    })
-    return flattened
-  }
-
-  const extractFirstIPv4 = (value: string): string => {
-    if (!value) return ''
-    const matches = value.match(IPV4_REGEX)
-    return matches?.[0] || ''
-  }
-
-  const hasMultipleIPv4 = (value: string): boolean => {
-    if (!value) return false
-    const matches = value.match(IPV4_REGEX)
-    return (matches?.length || 0) > 1
-  }
-
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
-  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
-  const [selectedFlavor, setSelectedFlavor] = useState<string>('')
-  const [rdmConfigDialogOpen, setRdmConfigDialogOpen] = useState(false)
-  const [rdmConfirmDialogOpen, setRdmConfirmDialogOpen] = useState(false)
-  const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set())
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
-  const [snackbarOpen, setSnackbarOpen] = useState(false)
-  const [snackbarMessage, setSnackbarMessage] = useState('')
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success')
 
   // Toast notification for IP assignments
   const [toastOpen, setToastOpen] = useState(false)
@@ -265,7 +189,6 @@ function VmsSelectionStep({
   const [toastSeverityIp, setToastSeverityIp] = useState<'success' | 'error' | 'warning' | 'info'>(
     'success'
   )
-  const [updating, setUpdating] = useState(false)
 
   // Toast notification helper
   const showToast = useCallback(
@@ -284,10 +207,48 @@ function VmsSelectionStep({
     setToastOpen(false)
   }, [])
 
-  // OS assignment state
-  const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
+  // rdmConfigurations hoisted before useVmSelection (selectedVMs dep ordering)
+  const [rdmConfigurations, setRdmConfigurations] = useState<RdmConfiguration[]>([])
 
-  const { data: rdmDisks = [], isLoading: rdmDisksLoading } = useRdmDisksQuery()
+  const setFormVms = React.useMemo(() => onChange('vms'), [onChange])
+  const setFormRdmConfigurations = React.useMemo(() => onChange('rdmConfigurations'), [onChange])
+
+  const { selectedVMs, setSelectedVMs, handleVmSelection, isRowSelectable, rowSelectionModelArray } =
+    useVmSelection({
+      vmsWithFlavor,
+      rdmConfigurations,
+      setFormVms,
+      setFormRdmConfigurations,
+    })
+
+  const { vmOSAssignments, handleOSAssignment } = useOsAssignment({
+    vmsWithFlavor,
+    setVmsWithFlavor,
+    showToast,
+    track,
+    reportError,
+  })
+
+  const {
+    rdmDisks,
+    rdmDisksLoading,
+    rdmConfigDialogOpen,
+    rdmConfirmDialogOpen,
+    setRdmConfirmDialogOpen,
+    rdmUpdating,
+    handleOpenRdmConfigurationDialog,
+    handleCloseRdmConfigurationDialog,
+    handleApplyRdmConfigurations,
+    handleApplyRdmConfigurationsClick,
+  } = useRdmConfiguration({
+    selectedVMs,
+    rdmConfigurations,
+    openstackCredName,
+    openstackCredentials,
+    showToast,
+    track,
+    reportError,
+  })
 
   // RDM validation logic
   const rdmValidation = useRdmConfigValidation({
@@ -298,140 +259,35 @@ function VmsSelectionStep({
     backendVolumeTypeMap: openstackCredentials?.status?.openstack?.backendVolumeTypeMap
   })
 
-  // RDM configuration state
-  const [rdmConfigurations, setRdmConfigurations] = useState<
-    Array<{
-      uuid: string
-      diskName: string
-      cinderBackendPool: string
-      volumeType: string
-      source: Record<string, string>
-    }>
-  >([])
-  const lastSelectedVmsPayloadRef = useRef<string>('__initial__')
-  const lastRdmConfigPayloadRef = useRef<string>('__initial__')
-
-  const setFormVms = React.useMemo(() => onChange('vms'), [onChange])
-  const setFormRdmConfigurations = React.useMemo(() => onChange('rdmConfigurations'), [onChange])
-
-  const syncSelectedVmSelection = useCallback(
-    (selectedVmData: VmDataWithFlavor[]) => {
-      const payload = JSON.stringify(selectedVmData)
-      if (payload === lastSelectedVmsPayloadRef.current) {
-        return
-      }
-      lastSelectedVmsPayloadRef.current = payload
-      setFormVms(selectedVmData)
-    },
-    [setFormVms]
-  )
-
-  const syncRdmConfigurations = useCallback(
-    (
-      configs: Array<{
-        uuid: string
-        diskName: string
-        cinderBackendPool: string
-        volumeType: string
-        source: Record<string, string>
-      }>
-    ) => {
-      const payload = JSON.stringify(configs)
-      if (payload === lastRdmConfigPayloadRef.current) {
-        return
-      }
-      lastRdmConfigPayloadRef.current = payload
-      setFormRdmConfigurations(configs)
-    },
-    [setFormRdmConfigurations]
-  )
-
-  const areSetsEqual = useCallback((a: Set<string>, b: Set<string>) => {
-    if (a.size !== b.size) {
-      return false
-    }
-    for (const value of a) {
-      if (!b.has(value)) {
-        return false
-      }
-    }
-    return true
-  }, [])
-
-  // IP editing and validation state - similar to RollingMigrationForm
-
-  // Bulk IP editing state (kept for potential future use but not accessible via UI)
-  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
-  const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkPreserveIp, setBulkPreserveIp] = useState<Record<string, Record<number, boolean>>>({})
-  const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
-    {}
-  )
-  const [bulkCurrentIPs, setBulkCurrentIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
-  const [originalIPsPerVM, setOriginalIPsPerVM] = useState<Record<string, Record<number, string>>>(
-    {}
-  )
-  const [bulkValidationStatus, setBulkValidationStatus] = useState<
-    Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
-  >({})
-  const [bulkValidationMessages, setBulkValidationMessages] = useState<
-    Record<string, Record<number, string>>
-  >({})
-  const [assigningIPs, setAssigningIPs] = useState(false)
-  const [bulkEditOverrides, setBulkEditOverrides] = useState<
-    Record<string, Record<number, { preserveIP: boolean; preserveMAC: boolean }>>
-  >({})
-
-  const hasBulkOverrideChanges = React.useMemo(() => {
-    return Object.values(bulkEditOverrides).some((interfaces) =>
-      Object.values(interfaces || {}).some((o) => o.preserveIP === false || o.preserveMAC === false)
-    )
-  }, [bulkEditOverrides])
-
-  useEffect(() => {
-    setOriginalIPsPerVM((prev) => {
-      const next = { ...prev }
-      vmsWithFlavor.forEach((vm) => {
-        if (!next[vm.id]) next[vm.id] = {}
-        if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-          vm.networkInterfaces.forEach((nic, index) => {
-            if (next[vm.id][index] !== undefined) return
-            const discovered = (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-              .filter((v: string) => v && v.trim() !== '')
-              .join(', ')
-            if (discovered.trim() !== '') {
-              next[vm.id][index] = discovered
-            }
-          })
-        } else {
-          if (next[vm.id][0] !== undefined) return
-          const discovered = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-          if (discovered.trim() !== '') {
-            next[vm.id][0] = discovered
-          }
-        }
-      })
-      return next
-    })
-  }, [vmsWithFlavor])
-  const hasBulkIpValidationErrors = React.useMemo(() => {
-    return Object.values(bulkValidationStatus).some((interfaces) =>
-      Object.values(interfaces || {}).some((status) => status === 'invalid')
-    )
-  }, [bulkValidationStatus])
-  const hasBulkIpsToApply = React.useMemo(() => {
-    const anyTypedIp = Object.values(bulkEditIPs).some((interfaces) =>
-      Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
-    )
-    const anyPreserveIpOff = Object.values(bulkPreserveIp).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    const anyPreserveMacOff = Object.values(bulkPreserveMac).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    return anyTypedIp || anyPreserveIpOff || anyPreserveMacOff || hasBulkOverrideChanges
-  }, [bulkEditIPs, bulkPreserveIp, bulkPreserveMac, hasBulkOverrideChanges])
+  const {
+    originalIPsPerVM,
+    bulkEditDialogOpen,
+    bulkEditIPs,
+    bulkValidationStatus,
+    bulkValidationMessages,
+    bulkPreserveIp,
+    bulkPreserveMac,
+    bulkExistingIPs,
+    bulkCurrentIPs,
+    assigningIPs,
+    hasBulkIpsToApply,
+    hasBulkIpValidationErrors,
+    handleOpenBulkIPAssignment,
+    handleCloseBulkEditDialog,
+    handleApplyBulkIPs,
+    handleBulkPreserveIpChange,
+    handleBulkPreserveMacChange,
+    handleBulkIpChange,
+    handleClearAllIPs,
+  } = useBulkIPEdit({
+    vmsWithFlavor,
+    setVmsWithFlavor,
+    selectedVMs,
+    setFormVms,
+    openstackCredentials,
+    showToast,
+    reportError,
+  })
 
   const clusterName = React.useMemo(() => {
     if (!vmwareCluster) return undefined
@@ -765,13 +621,6 @@ function VmsSelectionStep({
     }
   ]
 
-  // IP validation and utility functions
-  const isValidIPAddress = (ip: string): boolean => {
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-    return ipRegex.test(ip)
-  }
-
   // Removed getOpenstackAccessInfo - no longer needed with new API
 
   useEffect(() => {
@@ -792,6 +641,29 @@ function VmsSelectionStep({
     vmwareCredName,
     clusterName,
     datacenterName
+  })
+
+  const {
+    flavorDialogOpen,
+    selectedFlavor,
+    setSelectedFlavor,
+    snackbarOpen,
+    snackbarMessage,
+    snackbarSeverity,
+    updating: flavorUpdating,
+    handleOpenFlavorDialog,
+    handleCloseFlavorDialog,
+    handleCloseSnackbar,
+    handleApplyFlavor,
+  } = useFlavorAssignment({
+    selectedVMs,
+    vmsWithFlavor,
+    setVmsWithFlavor,
+    openstackFlavors: openstackFlavors ?? [],
+    vmList,
+    refreshVMList,
+    onChange,
+    reportError,
   })
 
   useEffect(() => {
@@ -903,341 +775,7 @@ function VmsSelectionStep({
     vmsWithFlavor.length
   ])
 
-  // New small effect — apply local OS assignments to existing vmsWithFlavor without remapping from vmList.
-  useEffect(() => {
-    if (Object.keys(vmOSAssignments).length === 0) return
 
-    setVmsWithFlavor((prev) =>
-      prev.map((vm) => {
-        if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.id)) {
-          return {
-            ...vm,
-            osFamily: vmOSAssignments[vm.id]
-          }
-        }
-        return vm
-      })
-    )
-  }, [vmOSAssignments])
-
-  // Separate effect for cleaning up selections when VM list changes
-  useEffect(() => {
-    if (vmsWithFlavor.length === 0) return
-
-    // Clean up selection - remove VMs that no longer exist
-    const availableVmIds = new Set(vmsWithFlavor.map((vm) => vm.id))
-    const cleanedSelection = new Set(
-      Array.from(selectedVMs).filter((vmId) => availableVmIds.has(vmId))
-    )
-
-    if (!areSetsEqual(cleanedSelection, selectedVMs)) {
-      setSelectedVMs(cleanedSelection)
-
-      const selectedVmData = vmsWithFlavor.filter((vm) => cleanedSelection.has(vm.id))
-      syncSelectedVmSelection(selectedVmData)
-
-      if (rdmConfigurations.length > 0) {
-        syncRdmConfigurations(rdmConfigurations)
-      }
-    }
-  }, [
-    vmsWithFlavor,
-    selectedVMs,
-    rdmConfigurations,
-    areSetsEqual,
-    syncSelectedVmSelection,
-    syncRdmConfigurations
-  ])
-
-  useEffect(() => {
-    const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
-    syncSelectedVmSelection(selectedVmData)
-
-    if (selectedVmData.length > 0 && rdmConfigurations.length > 0) {
-      syncRdmConfigurations(rdmConfigurations)
-    }
-  }, [
-    vmsWithFlavor,
-    selectedVMs,
-    rdmConfigurations,
-    syncSelectedVmSelection,
-    syncRdmConfigurations
-  ])
-
-  const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
-    const newSelection = new Set<string>(selectedRowIds as string[])
-
-    if (areSetsEqual(newSelection, selectedVMs)) {
-      return
-    }
-
-    setSelectedVMs(newSelection)
-
-    const selectedVmData = vmsWithFlavor.filter((vm) => newSelection.has(vm.id))
-    syncSelectedVmSelection(selectedVmData)
-
-    if (rdmConfigurations.length > 0) {
-      syncRdmConfigurations(rdmConfigurations)
-    }
-  }
-
-  // OS assignment handler
-  const handleOSAssignment = async (vmId: string, osFamily: string) => {
-    try {
-      // Update local state first for immediate UI feedback
-      setVmOSAssignments((prev) => ({ ...prev, [vmId]: osFamily }))
-
-      const vm = vmsWithFlavor.find((v) => v.id === vmId)
-      if (vm?.vmWareMachineName) {
-        await patchVMwareMachine(vm.vmWareMachineName, {
-          spec: {
-            vms: {
-              osFamily: osFamily
-            }
-          }
-        })
-      }
-
-      // Track the analytics event
-      track('os_family_assigned', {
-        vm_name: vmId,
-        os_family: osFamily,
-        action: 'os-family-assignment'
-      })
-
-      showToast(`OS family successfully assigned for VM "${vmId}"`)
-    } catch (error) {
-      reportError(error as Error, {
-        context: 'os-family-assignment',
-        metadata: {
-          vmId: vmId,
-          osFamily: osFamily,
-          action: 'os-family-assignment'
-        }
-      })
-      // Revert local state on error
-      setVmOSAssignments((prev) => {
-        const newState = { ...prev }
-        delete newState[vmId]
-        return newState
-      })
-      showToast(
-        `Failed to assign OS family for VM "${vmId}": ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-        'error'
-      )
-    }
-  }
-
-  // Bulk IP editing functions (removed - not accessible via UI anymore)
-
-  const handleCloseBulkEditDialog = () => {
-    setBulkEditDialogOpen(false)
-    setBulkEditIPs({})
-    setBulkPreserveIp({})
-    setBulkPreserveMac({})
-    setBulkCurrentIPs({})
-    setBulkEditOverrides({})
-    setBulkValidationStatus({})
-    setBulkValidationMessages({})
-  }
-
-  const handleBulkPreserveIpChange = (
-    vmName: string,
-    interfaceIndex: number,
-    preserveIp: boolean
-  ) => {
-    setBulkPreserveIp((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: preserveIp }
-    }))
-
-    if (preserveIp) {
-      const originalIp = bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
-      setBulkEditIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: originalIp }
-      }))
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: originalIp.trim() ? 'valid' : 'empty' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-      }))
-    } else {
-      const currentIp = bulkCurrentIPs?.[vmName]?.[interfaceIndex] || ''
-      setBulkEditIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
-      }))
-      setBulkCurrentIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: currentIp }
-      }))
-      const trimmed = currentIp.trim()
-      if (!trimmed) {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-        }))
-      } else if (hasMultipleIpEntries(trimmed)) {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: {
-            ...prev[vmName],
-            [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
-          }
-        }))
-      } else if (!isValidIPAddressList(trimmed)) {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'Invalid IP format' }
-        }))
-      } else {
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-        }))
-      }
-    }
-    if (!preserveIp) {
-      const current = bulkCurrentIPs?.[vmName]?.[interfaceIndex] ?? ''
-      const trimmed = current.trim()
-      const { status, message } = !trimmed
-        ? { status: 'empty' as const, message: '' }
-        : hasMultipleIpEntries(trimmed)
-          ? ({
-              status: 'invalid' as const,
-              message: 'Multiple IPs are not supported when Preserve IP is disabled'
-            } as const)
-          : !isValidIPAddressList(trimmed)
-            ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
-            : ({ status: 'valid' as const, message: '' } as const)
-
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: status }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: message }
-      }))
-    }
-  }
-
-  const handleBulkPreserveMacChange = (vmName: string, interfaceIndex: number, value: boolean) => {
-    setBulkPreserveMac((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-    }))
-  }
-
-  const handleBulkIpChange = (vmName: string, interfaceIndex: number, value: string) => {
-    setBulkEditIPs((prev) => ({
-      ...prev,
-      [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-    }))
-
-    // Track latest user-entered value as "current" when Preserve IP is disabled.
-    if (bulkPreserveIp?.[vmName]?.[interfaceIndex] === false) {
-      setBulkCurrentIPs((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: value }
-      }))
-    }
-
-    if (!value.trim()) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-      }))
-    } else if (
-      bulkPreserveIp?.[vmName]?.[interfaceIndex] === false &&
-      hasMultipleIpEntries(value)
-    ) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: {
-          ...prev[vmName],
-          [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
-        }
-      }))
-    } else if (!isValidIPAddressList(value.trim())) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'invalid' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: {
-          ...prev[vmName],
-          [interfaceIndex]: 'Invalid IP format'
-        }
-      }))
-    } else {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmName]: {
-          ...prev[vmName],
-          [interfaceIndex]: ''
-        }
-      }))
-    }
-  }
-
-  const handleClearAllIPs = () => {
-    const clearedIPs: Record<string, Record<number, string>> = {}
-    const clearedStatus: Record<
-      string,
-      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
-    > = {}
-
-    Object.keys(bulkEditIPs).forEach((vmName) => {
-      clearedIPs[vmName] = {}
-      clearedStatus[vmName] = {}
-
-      Object.keys(bulkEditIPs[vmName]).forEach((interfaceIndexStr) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        clearedIPs[vmName][interfaceIndex] = ''
-        clearedStatus[vmName][interfaceIndex] = 'empty'
-      })
-    })
-
-    setBulkEditIPs(clearedIPs)
-    setBulkValidationStatus(clearedStatus)
-    setBulkValidationMessages({})
-  }
 
   const renderValidationAdornment = (status?: 'empty' | 'valid' | 'invalid' | 'validating') => {
     if (!status || status === 'empty') return null
@@ -1269,738 +807,10 @@ function VmsSelectionStep({
     return null
   }
 
-  type BulkIpEdit = { vmName: string; interfaceIndex: number; ip: string }
-
-  const getPreserveIpFlag = (vmName: string, interfaceIndex: number) =>
-    bulkPreserveIp?.[vmName]?.[interfaceIndex] !== false
-
-  const getExistingIp = (vmName: string, interfaceIndex: number) =>
-    bulkExistingIPs?.[vmName]?.[interfaceIndex] || ''
-
-  const validateRequiredIpsForPreserveEnabled = () => {
-    let missingRequiredIp = false
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-
-        // Preserve IP can be enabled even when the discovered/original IP is empty.
-        // In that case, we should not block Apply Changes or show a validation error.
-        if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
-          setBulkValidationStatus((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: 'empty' }
-          }))
-          setBulkValidationMessages((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: '' }
-          }))
-        }
-      })
-    })
-    return !missingRequiredIp
-  }
-
-  const collectIpsToApply = (): BulkIpEdit[] => {
-    const ipsToApply: BulkIpEdit[] = []
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-        const typedIp = ip.trim()
-
-        if (typedIp === '') return
-
-        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
-          return
-        }
-
-        ipsToApply.push({ vmName, interfaceIndex, ip: typedIp })
-      })
-    })
-    return ipsToApply
-  }
-
-  type BulkIpClear = { vmName: string; interfaceIndex: number }
-
-  const collectIpsToClear = (): BulkIpClear[] => {
-    const clears: BulkIpClear[] = []
-    Object.entries(bulkEditIPs).forEach(([vmName, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = getPreserveIpFlag(vmName, interfaceIndex)
-        const existingIp = getExistingIp(vmName, interfaceIndex)
-        const typedIp = ip.trim()
-
-        // Rolling migration behavior: if Preserve IP is disabled and the user clears the field,
-        // treat it as an explicit clear for that interface.
-        if (!preserveIp && typedIp === '' && existingIp.trim() !== '') {
-          clears.push({ vmName, interfaceIndex })
-        }
-      })
-    })
-    return clears
-  }
-
-  const applyClearsToAssignedIpsMap = (
-    assignedIPsPerVM: Record<string, string[]>,
-    clears: BulkIpClear[]
-  ) => {
-    clears.forEach(({ vmName, interfaceIndex }) => {
-      if (!assignedIPsPerVM[vmName]) {
-        assignedIPsPerVM[vmName] = []
-      }
-      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-        assignedIPsPerVM[vmName].push('')
-      }
-      assignedIPsPerVM[vmName][interfaceIndex] = ''
-    })
-  }
-
-  const updateVmRowsAndForm = (updatedVms: VmDataWithFlavor[]) => {
-    setVmsWithFlavor(updatedVms)
-    setFormVms(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
-  }
-
-  const applyPreserveFlagsOnly = () => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
-      const hasAnyPreserveFlags = Boolean(preserveIp) || Boolean(preserveMac)
-      if (!hasAnyPreserveFlags) return vm
-
-      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-        const preserveIP = preserveIp?.[index] !== false
-        const preserveMAC = preserveMac?.[index] !== false
-        return {
-          ...nic,
-          preserveIP,
-          preserveMAC
-        }
-      })
-
-      return {
-        ...vm,
-        networkInterfaces: updatedNetworkInterfaces,
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-    showToast('Preserve settings saved.', 'success')
-    handleCloseBulkEditDialog()
-  }
-
-  const applyOverrideChangesOnly = () => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const vmOverrides = bulkEditOverrides[vm.id]
-      if (!vmOverrides) return vm
-      const updatedNetworkInterfaces = vm.networkInterfaces?.map((nic, index) => {
-        const overrides = vmOverrides[index]
-        return overrides
-          ? { ...nic, preserveIP: overrides.preserveIP, preserveMAC: overrides.preserveMAC }
-          : nic
-      })
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
-      return {
-        ...vm,
-        networkInterfaces: updatedNetworkInterfaces,
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-    showToast('Network override settings applied', 'success')
-    handleCloseBulkEditDialog()
-  }
-
-  const markBulkValidationFailure = (ips: BulkIpEdit[], message: string) => {
-    setBulkValidationStatus((prev) => {
-      const newStatus = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!newStatus[vmName]) newStatus[vmName] = {}
-        newStatus[vmName][interfaceIndex] = 'invalid'
-      })
-      return newStatus
-    })
-    setBulkValidationMessages((prev) => {
-      const newMessages = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!newMessages[vmName]) newMessages[vmName] = {}
-        newMessages[vmName][interfaceIndex] = message
-      })
-      return newMessages
-    })
-  }
-
-  const setBulkStatusForIps = (
-    ips: BulkIpEdit[],
-    status: 'empty' | 'valid' | 'invalid' | 'validating'
-  ) => {
-    setBulkValidationStatus((prev) => {
-      const next = { ...prev }
-      ips.forEach(({ vmName, interfaceIndex }) => {
-        if (!next[vmName]) next[vmName] = {}
-        next[vmName][interfaceIndex] = status
-      })
-      return next
-    })
-  }
-
-  const buildAssignedIpsPerVm = (ips: BulkIpEdit[]) => {
-    const assignedIPsPerVM: Record<string, string[]> = {}
-    ips.forEach(({ vmName, interfaceIndex, ip }) => {
-      if (!assignedIPsPerVM[vmName]) {
-        assignedIPsPerVM[vmName] = []
-      }
-      while (assignedIPsPerVM[vmName].length <= interfaceIndex) {
-        assignedIPsPerVM[vmName].push('')
-      }
-      if (assignedIPsPerVM[vmName].length > interfaceIndex) {
-        assignedIPsPerVM[vmName][interfaceIndex] = ip
-      }
-    })
-    return assignedIPsPerVM
-  }
-
-  const applyIpAssignmentsToRows = (assignedIPsPerVM: Record<string, string[]>) => {
-    const updatedVms = vmsWithFlavor.map((vm) => {
-      const assignedIPs = assignedIPsPerVM[vm.id]
-      const preserveIp = bulkPreserveIp[vm.id]
-      const preserveMac = bulkPreserveMac[vm.id]
-      if (!assignedIPs && !preserveIp && !preserveMac) return vm
-
-      const vmOverrides = bulkEditOverrides[vm.id]
-
-      let updatedNetworkInterfaces = vm.networkInterfaces
-      if (updatedNetworkInterfaces && updatedNetworkInterfaces.length > 0) {
-        updatedNetworkInterfaces = updatedNetworkInterfaces.map((nic, index) => {
-          const assignedIP = assignedIPs?.[index]
-          const overrides = vmOverrides?.[index]
-          const preserveIP = bulkPreserveIp?.[vm.id]?.[index] !== false
-          const preserveMAC = bulkPreserveMac?.[vm.id]?.[index] !== false
-          const parsed = assignedIP !== undefined ? parseIpList(assignedIP) : undefined
-          return {
-            ...nic,
-            ...(assignedIP !== undefined
-              ? parsed && parsed.length > 0
-                ? { ipAddress: parsed }
-                : !preserveIP
-                  ? { ipAddress: [] }
-                  : {}
-              : {}),
-            ...(overrides
-              ? {
-                  preserveIP: overrides.preserveIP,
-                  preserveMAC: overrides.preserveMAC
-                }
-              : { preserveIP, preserveMAC })
-          }
-        })
-      }
-
-      if (!assignedIPs && !vmOverrides) return vm
-
-      const displayIPs = updatedNetworkInterfaces
-        ? updatedNetworkInterfaces
-            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
-            .filter((ip) => ip && ip.trim() !== '')
-        : []
-      const ipDisplay = displayIPs.join(', ')
-
-      return {
-        ...vm,
-        ...(updatedNetworkInterfaces && {
-          ipAddress: ipDisplay || '—',
-          networkInterfaces: updatedNetworkInterfaces
-        }),
-        ...(preserveIp && { preserveIp }),
-        ...(preserveMac && { preserveMac })
-      }
-    })
-
-    updateVmRowsAndForm(updatedVms)
-  }
-
-  const handleApplyBulkIPs = async () => {
-    // Collect all IPs to apply with their VM and interface info
-    const hasRequiredIps = validateRequiredIpsForPreserveEnabled()
-    if (!hasRequiredIps) {
-      showToast('Provide an IP address for all interfaces where Preserve IP is enabled.', 'error')
-      return
-    }
-
-    const ipsToApply = collectIpsToApply()
-    const ipsToClear = collectIpsToClear()
-
-    if (ipsToApply.length === 0 && ipsToClear.length === 0) {
-      // No IPs to validate/apply.
-      // Apply overrides if present, otherwise persist preserve flags.
-      if (hasBulkOverrideChanges) {
-        applyOverrideChangesOnly()
-      } else {
-        applyPreserveFlagsOnly()
-      }
-      return
-    }
-    if (hasBulkIpValidationErrors) {
-      showToast('Resolve invalid IP addresses before applying changes.', 'error')
-      return
-    }
-
-    setAssigningIPs(true)
-
-    try {
-      // Batch validation before applying any changes
-      if (openstackCredentials) {
-        const flattenedIps = flattenBulkIps(ipsToApply)
-        const ipList = flattenedIps.map((item) => item.ip)
-
-        // Set validating status for all IPs
-        setBulkStatusForIps(ipsToApply, 'validating')
-
-        let validationResult
-        try {
-          validationResult = await validateOpenstackIPs({
-            ip: ipList,
-            accessInfo: {
-              secret_name: `${openstackCredentials.metadata.name}-openstack-secret`,
-              secret_namespace: openstackCredentials.metadata.namespace
-            }
-          })
-        } catch (error) {
-          if (axios.isAxiosError(error) && error.response?.status === 500) {
-            const responseData = error.response?.data as { message?: string } | string | undefined
-            const apiMessage =
-              typeof responseData === 'string' ? responseData : responseData?.message
-            const validationErrorMessage =
-              apiMessage ||
-              'PCD IP validation service is unavailable (500). Please verify credentials or try again later.'
-
-            markBulkValidationFailure(ipsToApply, validationErrorMessage)
-            showToast(validationErrorMessage, 'error')
-            reportError(error as Error, {
-              context: 'bulk-ip-validation-request',
-              metadata: {
-                bulkEditIPs: bulkEditIPs,
-                action: 'bulk-ip-validation-assignment',
-                status: error.response?.status
-              }
-            })
-            setAssigningIPs(false)
-            return
-          }
-
-          throw error
-        }
-
-        // Process validation results
-        const validIPs: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
-        let hasInvalidIPs = false
-
-        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
-        flattenedIps.forEach((flatItem, index) => {
-          const key = `${flatItem.vmName}__${flatItem.interfaceIndex}`
-          const isValid = validationResult.isValid[index]
-          const reason = validationResult.reason[index]
-          const current = byInterfaceKey.get(key)
-          if (!current) {
-            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
-          } else if (current.ok && !isValid) {
-            byInterfaceKey.set(key, { ok: false, reason })
-          }
-        })
-
-        ipsToApply.forEach((item) => {
-          const key = `${item.vmName}__${item.interfaceIndex}`
-          const result = byInterfaceKey.get(key)
-          const ok = result?.ok !== false
-          if (ok) {
-            validIPs.push(item)
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'valid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'Valid' }
-            }))
-          } else {
-            hasInvalidIPs = true
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [item.vmName]: { ...prev[item.vmName], [item.interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [item.vmName]: {
-                ...prev[item.vmName],
-                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
-              }
-            }))
-          }
-        })
-
-        // Only proceed if ALL IPs are valid
-        if (hasInvalidIPs) {
-          setAssigningIPs(false)
-          return
-        }
-
-        // Group IPs by VM name
-        const assignedIPsPerVM = buildAssignedIpsPerVm(validIPs)
-        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
-        applyIpAssignmentsToRows(assignedIPsPerVM)
-
-        // Mark all as successfully applied
-        validIPs.forEach(({ vmName, interfaceIndex }) => {
-          setBulkValidationStatus((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: 'valid' }
-          }))
-          setBulkValidationMessages((prev) => ({
-            ...prev,
-            [vmName]: { ...prev[vmName], [interfaceIndex]: 'IP assigned locally' }
-          }))
-        })
-
-        // Notify success
-        showToast(
-          `Successfully applied network changes to ${validIPs.length + ipsToClear.length} interface(s)`,
-          'success'
-        )
-
-        handleCloseBulkEditDialog()
-      } else {
-        // No OpenStack credentials available for remote validation; apply locally.
-        const assignedIPsPerVM = buildAssignedIpsPerVm(ipsToApply)
-        applyClearsToAssignedIpsMap(assignedIPsPerVM, ipsToClear)
-        applyIpAssignmentsToRows(assignedIPsPerVM)
-        showToast(
-          `Successfully applied network changes to ${ipsToApply.length + ipsToClear.length} interface(s)`,
-          'success'
-        )
-        handleCloseBulkEditDialog()
-      }
-    } catch (error) {
-      reportError(error as Error, {
-        context: 'bulk-ip-validation-assignment',
-        metadata: {
-          bulkEditIPs: bulkEditIPs,
-          action: 'bulk-ip-validation-assignment'
-        }
-      })
-    } finally {
-      setAssigningIPs(false)
-    }
-  }
-
-  const handleOpenFlavorDialog = () => {
-    if (selectedVMs.size === 0) return
-    setFlavorDialogOpen(true)
-  }
-
-  const handleOpenRdmConfigurationDialog = () => {
-    if (selectedVMs.size === 0) return
-    setRdmConfigDialogOpen(true)
-  }
-
-  const handleOpenBulkIPAssignment = () => {
-    if (selectedVMs.size === 0) return
-
-    // Initialize bulk edit IPs for selected VMs
-    const initialBulkEditIPs: Record<string, Record<number, string>> = {}
-    const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
-    const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
-    const initialBulkCurrentIPs: Record<string, Record<number, string>> = {}
-    const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
-    const initialBulkEditOverrides: Record<
-      string,
-      Record<number, { preserveIP: boolean; preserveMAC: boolean }>
-    > = {}
-    const initialValidationStatus: Record<
-      string,
-      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
-    > = {}
-
-    Array.from(selectedVMs).forEach((vmId) => {
-      const vm = vmsWithFlavor.find((v) => v.id === vmId)
-      if (!vm) return
-
-      initialBulkEditIPs[vmId] = {}
-      initialBulkPreserveIp[vmId] = {}
-      initialBulkPreserveMac[vmId] = {}
-      initialBulkCurrentIPs[vmId] = {}
-      initialBulkExistingIPs[vmId] = {}
-      initialBulkEditOverrides[vmId] = {}
-      initialValidationStatus[vmId] = {}
-
-      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-        vm.networkInterfaces.forEach((nic, index) => {
-          const originalIp =
-            originalIPsPerVM?.[vmId]?.[index] !== undefined
-              ? originalIPsPerVM[vmId][index]
-              : (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-                  .filter((ip: string) => ip && ip.trim() !== '')
-                  .join(', ')
-          const currentIp = (Array.isArray((nic as any).ipAddress) ? (nic as any).ipAddress : [])
-            .filter((ip: string) => ip && ip.trim() !== '')
-            .join(', ')
-
-          initialBulkExistingIPs[vmId][index] = originalIp
-          initialBulkCurrentIPs[vmId][index] = currentIp
-
-          const initialPreserveIp = vm.preserveIp?.[index] !== false
-          const initialPreserveMac = vm.preserveMac?.[index] !== false
-
-          const isPoweredOff = vm.vmState !== 'running'
-          const effectivePreserveIp = isPoweredOff ? false : initialPreserveIp
-          initialBulkPreserveIp[vmId][index] = effectivePreserveIp
-          initialBulkPreserveMac[vmId][index] = initialPreserveMac
-
-          initialBulkEditIPs[vmId][index] = effectivePreserveIp ? originalIp : currentIp
-          initialBulkEditOverrides[vmId][index] = {
-            preserveIP: effectivePreserveIp,
-            preserveMAC: initialPreserveMac
-          }
-
-          const initialValue = initialBulkEditIPs[vmId][index]
-          initialValidationStatus[vmId][index] = initialValue.trim() ? 'valid' : 'empty'
-        })
-      } else {
-        const tableIp = vm.ipAddress && vm.ipAddress !== '—' ? vm.ipAddress : ''
-        const originalIp =
-          originalIPsPerVM?.[vmId]?.[0] !== undefined ? originalIPsPerVM[vmId][0] : tableIp
-        const currentIp = tableIp
-
-        initialBulkExistingIPs[vmId][0] = originalIp
-        initialBulkCurrentIPs[vmId][0] = currentIp
-
-        const isPoweredOff = vm.vmState !== 'running'
-        const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[0] !== false
-        const initialPreserveMac = vm.preserveMac?.[0] !== false
-
-        initialBulkPreserveIp[vmId][0] = effectivePreserveIp
-        initialBulkPreserveMac[vmId][0] = initialPreserveMac
-        initialBulkEditIPs[vmId][0] = effectivePreserveIp ? originalIp : currentIp
-        initialBulkEditOverrides[vmId][0] = {
-          preserveIP: effectivePreserveIp,
-          preserveMAC: initialPreserveMac
-        }
-        initialValidationStatus[vmId][0] = initialBulkEditIPs[vmId][0].trim() ? 'valid' : 'empty'
-      }
-    })
-
-    setBulkEditIPs(initialBulkEditIPs)
-    setBulkPreserveIp(initialBulkPreserveIp)
-    setBulkPreserveMac(initialBulkPreserveMac)
-    setBulkExistingIPs(initialBulkExistingIPs)
-    setBulkCurrentIPs(initialBulkCurrentIPs)
-    setBulkEditOverrides(initialBulkEditOverrides)
-    setBulkValidationStatus(initialValidationStatus)
-    setBulkValidationMessages({})
-    setBulkEditDialogOpen(true)
-  }
-
-  const handleCloseRdmConfigurationDialog = () => {
-    setRdmConfigDialogOpen(false)
-  }
-
-  const handleCloseFlavorDialog = () => {
-    setFlavorDialogOpen(false)
-    setSelectedFlavor('')
-  }
-
-  const handleApplyFlavor = async () => {
-    if (!selectedFlavor) {
-      handleCloseFlavorDialog()
-      return
-    }
-
-    setUpdating(true)
-
-    try {
-      const isAutoAssign = selectedFlavor === 'auto-assign'
-      const selectedFlavorObj = !isAutoAssign
-        ? openstackFlavors.find((f) => f.id === selectedFlavor)
-        : null
-      const flavorName = isAutoAssign
-        ? 'auto-assign'
-        : selectedFlavorObj
-          ? selectedFlavorObj.name
-          : selectedFlavor
-
-      const updatedVms = vmsWithFlavor.map((vm) => {
-        if (selectedVMs.has(vm.id)) {
-          return {
-            ...vm,
-            targetFlavorId: isAutoAssign ? '' : selectedFlavor,
-            flavorName,
-            // If a flavor is assigned, the VM no longer has a flavor not found issue
-            flavorNotFound: isAutoAssign ? vm.flavorNotFound : false
-          }
-        }
-        return vm
-      })
-      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
-      const selectedVmIds = Array.from(selectedVMs)
-
-      const updatePromises = selectedVmIds.map((vmId) => {
-        const vmwareMachineName = vmList.find((vm) => vm.id === vmId)?.vmWareMachineName
-        const payload = {
-          spec: {
-            targetFlavorId: isAutoAssign ? '' : selectedFlavor
-          }
-        }
-        if (!vmwareMachineName) {
-          return
-        }
-        return patchVMwareMachine(vmwareMachineName, payload)
-      })
-
-      await Promise.all(updatePromises)
-
-      setVmsWithFlavor(updatedVms)
-      onChange('vms')(updatedVms.filter((vm) => selectedVMs.has(vm.id)))
-
-      const actionText = isAutoAssign ? 'cleared flavor assignment for' : 'assigned flavor to'
-      setSnackbarMessage(
-        `Successfully ${actionText} ${selectedVmIds.length} VM${
-          selectedVmIds.length > 1 ? 's' : ''
-        }`
-      )
-      setSnackbarSeverity('success')
-      setSnackbarOpen(true)
-
-      refreshVMList()
-
-      handleCloseFlavorDialog()
-    } catch (error) {
-      reportError(error as Error, {
-        context: 'vm-flavors-update',
-        metadata: {
-          selectedVMs: Array.from(selectedVMs),
-          selectedFlavor: selectedFlavor,
-          isAutoAssign: selectedFlavor === 'auto-assign',
-          action: 'vm-flavors-bulk-update'
-        }
-      })
-      setSnackbarMessage('Failed to assign flavor to VMs')
-      setSnackbarSeverity('error')
-      setSnackbarOpen(true)
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  // Check if any RDM configuration has volume type warnings
-  const hasRdmVolumeTypeWarnings = React.useMemo(() => {
-    if (!rdmConfigurations || rdmConfigurations.length === 0) return false
-    const backendVolumeTypeMap = openstackCredentials?.status?.openstack?.backendVolumeTypeMap || {}
-    return rdmConfigurations.some((config) => {
-      if (!config.cinderBackendPool || !config.volumeType) return false
-      const expectedType = backendVolumeTypeMap[config.cinderBackendPool]
-      return expectedType && expectedType !== config.volumeType
-    })
-  }, [rdmConfigurations, openstackCredentials?.status?.openstack?.backendVolumeTypeMap])
-
-  // Handle apply button click - show confirmation if there are warnings
-  const handleApplyRdmConfigurationsClick = () => {
-    if (hasRdmVolumeTypeWarnings) {
-      setRdmConfirmDialogOpen(true)
-    } else {
-      handleApplyRdmConfigurations()
-    }
-  }
-
-  // RDM disk configuration functions
-  const handleApplyRdmConfigurations = async () => {
-    setRdmConfirmDialogOpen(false)
-    if (!rdmConfigurations || rdmConfigurations.length === 0) {
-      showToast('No RDM configurations to apply', 'warning')
-      return
-    }
-
-    setUpdating(true)
-
-    try {
-      track('rdm_configuration_applied', {
-        rdmDisksCount: rdmConfigurations.length,
-        selectedVMsCount: selectedVMs.size
-      })
-
-      const updatePromises = rdmConfigurations.map(async (config) => {
-        // Find the RDM disk by uuid
-        const rdmDisk = rdmDisks.find((disk) => disk.spec.uuid === config.uuid)
-        if (!rdmDisk) {
-          console.warn(`RDM disk not found for diskName: ${config.diskName}`)
-          return
-        }
-
-        const payload = {
-          spec: {
-            openstackVolumeRef: {
-              cinderBackendPool: config.cinderBackendPool,
-              volumeType: config.volumeType,
-              openstackCreds: openstackCredName
-            }
-          }
-        } as Partial<RdmDisk>
-
-        return patchRdmDisk(rdmDisk.metadata.name, payload)
-      })
-
-      await Promise.all(updatePromises)
-
-      showToast(
-        `Successfully configured ${rdmConfigurations.length} RDM disk${
-          rdmConfigurations.length > 1 ? 's' : ''
-        }`,
-        'success'
-      )
-
-      // Close the dialog after successful configuration
-      handleCloseRdmConfigurationDialog()
-
-      // Invalidate RDM disks query to refetch updated configuration and re-run validation
-      queryClient.invalidateQueries({ queryKey: [RDM_DISKS_BASE_KEY] })
-    } catch (error) {
-      reportError(error as Error, {
-        context: 'rdm-disk-configuration',
-        metadata: {
-          rdmConfigurationsCount: rdmConfigurations.length,
-          action: 'apply-rdm-configurations'
-        }
-      })
-      showToast('Failed to configure RDM disks', 'error')
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false)
-  }
-
-  const isRowSelectable = (params) => {
-    // Allow selection for both running and stopped VMs for cold migration
-    // Only disable if VM is already migrated
-    return !params.row.isMigrated
-  }
 
   const getNoRowsLabel = () => {
     return 'No VMs discovered'
   }
-
-  const rowSelectionModelArray = React.useMemo(
-    () => Array.from(selectedVMs).filter((vmId) => vmsWithFlavor.some((vm) => vm.id === vmId)),
-    [selectedVMs, vmsWithFlavor]
-  )
 
   const missingInterfaceIpWarnings = React.useMemo(
     () => getMissingInterfaceIpWarnings(vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))),
@@ -2202,14 +1012,14 @@ function VmsSelectionStep({
         <DialogActions
           sx={{ justifyContent: 'flex-end', alignItems: 'center', gap: 1, px: 3, py: 2 }}
         >
-          <ActionButton tone="secondary" onClick={handleCloseFlavorDialog} disabled={updating}>
+          <ActionButton tone="secondary" onClick={handleCloseFlavorDialog} disabled={flavorUpdating}>
             Cancel
           </ActionButton>
           <ActionButton
             tone="primary"
             onClick={handleApplyFlavor}
-            disabled={!selectedFlavor || updating}
-            loading={updating}
+            disabled={!selectedFlavor || flavorUpdating}
+            loading={flavorUpdating}
           >
             Apply to selected VMs
           </ActionButton>
@@ -2274,7 +1084,7 @@ function VmsSelectionStep({
           <ActionButton
             tone="secondary"
             onClick={handleCloseRdmConfigurationDialog}
-            disabled={updating}
+            disabled={rdmUpdating}
           >
             Close
           </ActionButton>
@@ -2283,12 +1093,12 @@ function VmsSelectionStep({
               tone="primary"
               onClick={handleApplyRdmConfigurationsClick}
               disabled={
-                updating ||
+                rdmUpdating ||
                 !rdmConfigurations ||
                 rdmConfigurations.length === 0 ||
                 rdmConfigurations.some((config) => !config.cinderBackendPool || !config.volumeType)
               }
-              loading={updating}
+              loading={rdmUpdating}
             >
               Apply RDM Configuration
             </ActionButton>

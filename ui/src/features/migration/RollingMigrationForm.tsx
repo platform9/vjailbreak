@@ -37,39 +37,11 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { MissingInterfaceIpWarningAlert } from './components/MissingInterfaceIpWarningAlert'
 import { getMissingInterfaceIpWarnings } from './components/missingInterfaceIpWarnings'
-import { getVMwareHosts, patchVMwareHost } from 'src/api/vmware-hosts/vmwareHosts'
-import { getVMwareMachines, patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
-import { VMwareHost } from 'src/api/vmware-hosts/model'
-import { VMwareMachine } from 'src/api/vmware-machines/model'
+import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
-import { getBMConfigList, getBMConfig } from 'src/api/bmconfig/bmconfig'
-import { BMConfig } from 'src/api/bmconfig/model'
 import MaasConfigDetailsModal from './components/MaasConfigDetailsModal'
-import {
-  getOpenstackCredentials,
-  validateOpenstackIPs
-} from 'src/api/openstack-creds/openstackCreds'
-import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import NetworkAndStorageMappingStep, { ResourceMap } from './NetworkAndStorageMappingStep'
-import {
-  createRollingMigrationPlanJson,
-  postRollingMigrationPlan,
-  VMSequence,
-  ClusterMapping
-} from 'src/api/rolling-migration-plans'
 import SourceDestinationClusterSelection from './SourceDestinationClusterSelection'
-// Import required APIs for creating migration resources
-import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
-import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
-import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
-import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
-import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
-import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
-import { createMigrationTemplateJson } from 'src/features/migration/api/migration-templates/helpers'
-import {
-  patchMigrationTemplate,
-  postMigrationTemplate
-} from 'src/features/migration/api/migration-templates/migrationTemplates'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from './MigrationOptionsAlt'
 import { CUTOVER_TYPES } from './constants'
@@ -78,7 +50,12 @@ import LinuxIcon from 'src/assets/linux_icon.svg'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useClusterData } from './useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
-import { vmHasInterface } from 'src/features/migration/utils/vmNetworking'
+import { useBulkIPHandlers } from './hooks/useBulkIPHandlers'
+import { useFlavorHandlers } from './hooks/useFlavorHandlers'
+import { useHostConfigHandlers } from './hooks/useHostConfigHandlers'
+import { useRollingFormData } from './hooks/useRollingFormData'
+import { useRollingFormValidation } from './hooks/useRollingFormValidation'
+import { useRollingFormSubmit } from './hooks/useRollingFormSubmit'
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
@@ -87,38 +64,24 @@ import ErrorIcon from '@mui/icons-material/Error'
 import '@cds/core/icon/register.js'
 import { ClarityIcons, buildingIcon, clusterIcon, hostIcon, vmIcon } from '@cds/core/icon'
 import { useAmplitude } from 'src/hooks/useAmplitude'
-import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 import { DrawerShell, DrawerHeader, DrawerFooter, SectionNav, SurfaceCard } from 'src/components'
 import type { SectionNavItem } from 'src/components'
 import { styled, useTheme } from '@mui/material/styles'
 import { FormProvider, useForm, useWatch } from 'react-hook-form'
+import type {
+  VM,
+  RollingMigrationRHFValues,
+  RollingMigrationFormDrawerProps,
+  FieldErrors,
+  RollingFormParams,
+} from './types'
+import {
+  extractFirstIPv4,
+  hasMultipleIPv4,
+} from './utils/ipValidation'
 
-// Define types for MigrationOptions
-interface FormValues extends Record<string, unknown> {
-  dataCopyMethod?: string
-  dataCopyStartTime?: string
-  cutoverOption?: string
-  cutoverStartTime?: string
-  cutoverEndTime?: string
-  postMigrationScript?: string
-  osFamily?: string
-  useGPU?: boolean
-  useFlavorless?: boolean
-  disconnectSourceNetwork?: boolean
-  fallbackToDHCP?: boolean
-  networkPersistence?: boolean
-  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
-}
-
-type RollingMigrationRHFValues = {
-  dataCopyStartTime: string
-  cutoverStartTime: string
-  cutoverEndTime: string
-  postMigrationActionSuffix: string
-  postMigrationActionFolderName: string
-}
-
+// RollingMigration includes osFamily which the shared SelectedMigrationOptionsType does not
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   dataCopyMethod: boolean
   dataCopyStartTime: boolean
@@ -156,8 +119,6 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   }
 }
 
-type FieldErrors = { [formId: string]: string }
-
 // Register clarity icons
 ClarityIcons.addIcons(buildingIcon, clusterIcon, hostIcon, vmIcon)
 
@@ -170,44 +131,6 @@ const CdsIconWrapper = styled('div')({
 })
 
 const drawerWidth = 1400
-
-interface ESXHost {
-  id: string
-  name: string
-  ip: string
-  bmcIp: string
-  maasState: string
-  vms: number
-  state: string
-  pcdHostConfigName?: string
-  pcdHostConfigId?: string
-}
-
-interface VM {
-  id: string
-  name: string
-  ip: string
-  esxHost: string
-  networks?: string[]
-  datastores?: string[]
-  cpu?: number
-  memory?: number
-  powerState: string
-  osFamily?: string
-  flavor?: string
-  targetFlavorId?: string
-  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
-  ipValidationMessage?: string
-  networkInterfaces?: VmNetworkInterface[]
-  preserveIp?: Record<number, boolean>
-  preserveMac?: Record<number, boolean>
-}
-
-export interface VmNetworkInterface {
-  mac: string
-  network: string
-  ipAddress: string[]
-}
 
 // ESX columns will be defined inside the component
 
@@ -318,11 +241,6 @@ const CodeEditorContainer = styled(Box)(({ theme }) => ({
   }
 }))
 
-interface RollingMigrationFormDrawerProps {
-  open: boolean
-  onClose: () => void
-}
-
 export default function RollingMigrationFormDrawer({
   open,
   onClose
@@ -332,27 +250,12 @@ export default function RollingMigrationFormDrawer({
   const { track } = useAmplitude({ component: 'RollingMigrationForm' })
   const [sourceCluster, setSourceCluster] = useState('')
   const [destinationPCD, setDestinationPCD] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
   const [selectedVMwareCredName, setSelectedVMwareCredName] = useState('')
 
   const [selectedPcdCredName, setSelectedPcdCredName] = useState('')
 
   const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([])
-  const [pcdHostConfigDialogOpen, setPcdHostConfigDialogOpen] = useState(false)
-  const [selectedPcdHostConfig, setSelectedPcdHostConfig] = useState('')
-  const [updatingPcdMapping, setUpdatingPcdMapping] = useState(false)
-
-  const [loadingHosts, setLoadingHosts] = useState(false)
-  const [loadingVMs, setLoadingVMs] = useState(false)
-
-  const [orderedESXHosts, setOrderedESXHosts] = useState<ESXHost[]>([])
-  const [vmsWithAssignments, setVmsWithAssignments] = useState<VM[]>([])
-
   const [maasConfigDialogOpen, setMaasConfigDialogOpen] = useState(false)
-  const [maasConfigs, setMaasConfigs] = useState<BMConfig[]>([])
-  const [selectedMaasConfig, setSelectedMaasConfig] = useState<BMConfig | null>(null)
-  const [loadingMaasConfig, setLoadingMaasConfig] = useState(false)
   const [maasDetailsModalOpen, setMaasDetailsModalOpen] = useState(false)
 
   const [networkMappings, setNetworkMappings] = useState<ResourceMap[]>([])
@@ -361,18 +264,14 @@ export default function RollingMigrationFormDrawer({
   const [networkMappingError, setNetworkMappingError] = useState<string>('')
   const [storageMappingError, setStorageMappingError] = useState<string>('')
 
-  const [openstackCredData, setOpenstackCredData] = useState<OpenstackCreds | null>(null)
-  const [loadingOpenstackDetails, setLoadingOpenstackDetails] = useState(false)
-
   // IP editing and validation state - updated for multiple interfaces
   // IP editing and validation state removed - using bulk assignment instead
 
   // OS assignment state
   const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
-  const [osValidationError, setOsValidationError] = useState<string>('')
 
   // Migration Options state
-  const { params, getParamsUpdater } = useParams<FormValues>({})
+  const { params, getParamsUpdater } = useParams<RollingFormParams>({})
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const getFieldErrorsUpdater = useCallback(
     (key: string | number) => (value: string) => {
@@ -406,52 +305,55 @@ export default function RollingMigrationFormDrawer({
     useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
   const { sourceData, pcdData, loadingVMware: loading, loadingPCD } = useClusterData()
-  const [assigningIPs, setAssigningIPs] = useState(false)
 
-  // IP validation error state
-  const [vmIpValidationError, setVmIpValidationError] = useState<string>('')
+  const {
+    loadingHosts,
+    loadingVMs,
+    orderedESXHosts,
+    setOrderedESXHosts,
+    vmsWithAssignments,
+    setVmsWithAssignments,
+    maasConfigs,
+    selectedMaasConfig,
+    loadingMaasConfig,
+    openstackCredData,
+    loadingOpenstackDetails,
+    fetchClusterVMs,
+    fetchOpenstackCredentialDetails,
+    clearOpenstackCredData
+  } = useRollingFormData({
+    open,
+    sourceCluster,
+    sourceData,
+    selectedVMs,
+    setSelectedVMs
+  })
 
-  // ESX host config validation error state
-  const [esxHostConfigValidationError, setEsxHostConfigValidationError] = useState<string>('')
-
-  // Bulk IP editing state - updated for multiple interfaces
-  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
-  const [bulkEditIPs, setBulkEditIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkPreserveIp, setBulkPreserveIp] = useState<Record<string, Record<number, boolean>>>({})
-  const [bulkPreserveMac, setBulkPreserveMac] = useState<Record<string, Record<number, boolean>>>(
-    {}
-  )
-  const [bulkExistingIPs, setBulkExistingIPs] = useState<Record<string, Record<number, string>>>({})
-  const [bulkValidationStatus, setBulkValidationStatus] = useState<
-    Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
-  >({})
-  const [bulkValidationMessages, setBulkValidationMessages] = useState<
-    Record<string, Record<number, string>>
-  >({}) // Updated for multiple interfaces
-
-  const hasBulkIpValidationErrors = useMemo(() => {
-    return Object.values(bulkValidationStatus).some((interfaces) =>
-      Object.values(interfaces || {}).some((status) => status === 'invalid')
-    )
-  }, [bulkValidationStatus])
-
-  const hasBulkIpsToApply = useMemo(() => {
-    const anyTypedIp = Object.values(bulkEditIPs).some((interfaces) =>
-      Object.values(interfaces || {}).some((ip) => Boolean(ip?.trim()))
-    )
-    const anyPreserveIpOff = Object.values(bulkPreserveIp).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    const anyPreserveMacOff = Object.values(bulkPreserveMac).some((interfaces) =>
-      Object.values(interfaces || {}).some((flag) => flag === false)
-    )
-    return anyTypedIp || anyPreserveIpOff || anyPreserveMacOff
-  }, [bulkEditIPs, bulkPreserveIp, bulkPreserveMac])
-
-  // Flavor assignment state
-  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false)
-  const [selectedFlavor, setSelectedFlavor] = useState('')
-  const [updating, setUpdating] = useState(false)
+  const {
+    assigningIPs,
+    bulkEditDialogOpen,
+    bulkEditIPs,
+    bulkPreserveIp,
+    bulkPreserveMac,
+    bulkExistingIPs,
+    bulkValidationStatus,
+    bulkValidationMessages,
+    hasBulkIpValidationErrors,
+    hasBulkIpsToApply,
+    handleCloseBulkEditDialog,
+    handleBulkPreserveIpChange,
+    handleBulkPreserveMacChange,
+    handleBulkIpChange,
+    handleClearAllIPs,
+    handleApplyBulkIPs,
+    handleOpenBulkIPAssignment
+  } = useBulkIPHandlers({
+    vmsWithAssignments,
+    setVmsWithAssignments,
+    selectedVMs,
+    openstackCredData,
+    reportError
+  })
 
   // Toast notification state
   const [toastOpen, setToastOpen] = useState(false)
@@ -471,12 +373,6 @@ export default function RollingMigrationFormDrawer({
   useEffect(() => {
     if (!open) {
       setSelectedVMs([])
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (open) {
-      fetchMaasConfigs()
     }
   }, [open])
 
@@ -581,175 +477,6 @@ export default function RollingMigrationFormDrawer({
     selectedMigrationOptions?.postMigrationAction?.moveToFolder
   ])
 
-  const fetchMaasConfigs = async () => {
-    try {
-      setLoadingMaasConfig(true)
-      const configs = await getBMConfigList(VJAILBREAK_DEFAULT_NAMESPACE)
-      if (configs && configs.length > 0) {
-        setMaasConfigs(configs)
-        try {
-          const config = await getBMConfig(configs[0].metadata.name, VJAILBREAK_DEFAULT_NAMESPACE)
-          setSelectedMaasConfig(config)
-        } catch (error) {
-          console.error(`Failed to fetch Bare Metal config:`, error)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch Bare Metal configs:', error)
-    } finally {
-      setLoadingMaasConfig(false)
-    }
-  }
-
-  useEffect(() => {
-    if (sourceCluster) {
-      fetchClusterHosts()
-      fetchClusterVMs()
-    }
-  }, [sourceCluster])
-
-  const fetchClusterHosts = async () => {
-    if (!sourceCluster) return
-
-    setLoadingHosts(true)
-    try {
-      const parts = sourceCluster.split(':')
-      const credName = parts[0]
-
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
-      const clusterName = clusterObj?.name
-
-      if (!clusterName) {
-        setOrderedESXHosts([])
-        setLoadingHosts(false)
-        return
-      }
-
-      const hostsResponse = await getVMwareHosts(
-        VJAILBREAK_DEFAULT_NAMESPACE,
-        // credName,
-        '',
-        clusterName
-      )
-
-      const mappedHosts: ESXHost[] = hostsResponse.items.map((host: VMwareHost) => ({
-        id: host.metadata.name,
-        name: host.spec.name,
-        ip: '',
-        bmcIp: '',
-        maasState: 'Unknown',
-        vms: host.status?.vmCount || 0,
-        state: host.status?.state || 'Active',
-        pcdHostConfigId: host.spec.hostConfigId
-      }))
-
-      setOrderedESXHosts(mappedHosts)
-    } catch (error) {
-      console.error('Failed to fetch cluster hosts:', error)
-    } finally {
-      setLoadingHosts(false)
-    }
-  }
-
-  const fetchClusterVMs = async () => {
-    if (!sourceCluster) return
-
-    setLoadingVMs(true)
-    try {
-      const parts = sourceCluster.split(':')
-      const credName = parts[0]
-
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
-      const clusterName = clusterObj?.name
-
-      if (!clusterName) {
-        setVmsWithAssignments([])
-        setLoadingVMs(false)
-        return
-      }
-
-      const vmsResponse = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, credName)
-
-      const filteredVMs = vmsResponse.items.filter((vm: VMwareMachine) => {
-        const clusterLabel = vm.metadata?.labels?.[`vjailbreak.k8s.pf9.io/vmware-cluster`]
-        return clusterLabel === clusterName
-      })
-
-      const mappedVMs: VM[] = filteredVMs.map((vm: VMwareMachine) => {
-        const esxiHost = vm.metadata?.labels?.[`vjailbreak.k8s.pf9.io/esxi-name`] || ''
-
-        // Get flavor information from the VM spec
-        const targetFlavorId = vm.spec.targetFlavorId || ''
-        // We'll resolve flavor names later when openstackFlavors is available
-        const flavorName = targetFlavorId || 'auto-assign'
-
-        if (vm.spec.vms.name == 'nvidia-bcm-router') {
-          console.log(vm.spec.vms.networkInterfaces)
-        }
-
-        // Get all IP addresses from network interfaces in comma-separated format
-        const allIPs =
-          vm.spec.vms.networkInterfaces && vm.spec.vms.networkInterfaces.length > 0
-            ? vm.spec.vms.networkInterfaces
-                .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
-                .filter((ip) => ip && ip.trim() !== '') // Filter out empty/null IPs
-                .join(', ')
-            : vm.spec.vms.ipAddress || vm.spec.vms.assignedIp || '—'
-
-        return {
-          id: vm.metadata.name,
-          name: vm.spec.vms.name || vm.metadata.name,
-          ip: allIPs || '—',
-          esxHost: esxiHost,
-          networks: vm.spec.vms.networks,
-          datastores: vm.spec.vms.datastores,
-          cpu: vm.spec.vms.cpu,
-          memory: vm.spec.vms.memory,
-          osFamily: vm.spec.vms.osFamily,
-          flavor: flavorName,
-          targetFlavorId: targetFlavorId,
-          powerState: vm.status.powerState === 'running' ? 'powered-on' : 'powered-off',
-          ipValidationStatus: 'pending',
-          ipValidationMessage: '',
-          networkInterfaces: vm.spec.vms.networkInterfaces
-        }
-      })
-
-      setVmsWithAssignments(mappedVMs)
-
-      // Clean up persistent selection - remove VMs that no longer exist
-      const availableVmIds = new Set(mappedVMs.map((vm) => vm.id))
-      const cleanedSelection = selectedVMs.filter((vmId) => availableVmIds.has(String(vmId)))
-
-      if (cleanedSelection.length !== selectedVMs.length) {
-        setSelectedVMs(cleanedSelection)
-      }
-    } catch (error) {
-      console.error('Failed to fetch cluster VMs:', error)
-      setVmsWithAssignments([])
-    } finally {
-      setLoadingVMs(false)
-    }
-  }
-
-  useEffect(() => {
-    if (orderedESXHosts.length > 0 && vmsWithAssignments.length > 0) {
-      const esxHostOrder = new Map()
-      orderedESXHosts.forEach((host, index) => {
-        esxHostOrder.set(host.id, index)
-      })
-
-      const sortedVMs = [...vmsWithAssignments].sort((a, b) => {
-        const aHostIndex = esxHostOrder.get(a.esxHost) ?? 999
-        const bHostIndex = esxHostOrder.get(b.esxHost) ?? 999
-        return aHostIndex - bHostIndex
-      })
-
-      setVmsWithAssignments(sortedVMs)
-    }
-  }, [orderedESXHosts])
 
   const handleCloseMaasConfig = () => {
     setMaasConfigDialogOpen(false)
@@ -780,56 +507,8 @@ export default function RollingMigrationFormDrawer({
       }
     } else {
       setSelectedPcdCredName('')
-      setOpenstackCredData(null)
+      clearOpenstackCredData()
     }
-  }
-
-  const fetchOpenstackCredentialDetails = async (credName) => {
-    if (!credName) return
-
-    setLoadingOpenstackDetails(true)
-    try {
-      const response = await getOpenstackCredentials(credName)
-      setOpenstackCredData(response)
-    } catch (error) {
-      console.error('Failed to fetch OpenStack credential details:', error)
-    } finally {
-      setLoadingOpenstackDetails(false)
-    }
-  }
-
-  // IP validation and editing functions
-  const IPV4_MATCH_REGEX =
-    /(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g
-  const IPV4_FULL_REGEX =
-    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-
-  const extractFirstIPv4 = (value: string): string => {
-    if (!value) return ''
-    const matches = value.match(IPV4_MATCH_REGEX)
-    return matches?.[0] || ''
-  }
-
-  const hasMultipleIPv4 = (value: string): boolean => {
-    if (!value) return false
-    const matches = value.match(IPV4_MATCH_REGEX)
-    return (matches?.length || 0) > 1
-  }
-
-  const parseIpList = (value: string): string[] => {
-    const trimmed = value.trim()
-    if (!trimmed) return []
-    return trimmed.split(/\s*,\s*/).filter((v) => v !== '')
-  }
-
-  const hasMultipleIpEntries = (value: string): boolean => {
-    return parseIpList(value).length > 1
-  }
-
-  const isValidIPAddressList = (value: string): boolean => {
-    const ips = parseIpList(value)
-    if (ips.length === 0) return false
-    return ips.every((ip) => IPV4_FULL_REGEX.test(ip))
   }
 
   // Modal functions for multi-NIC IP editing removed - using bulk assignment instead
@@ -1017,16 +696,6 @@ export default function RollingMigrationFormDrawer({
     }
   ]
 
-  // Calculate ESX host to PCD config mapping status
-  const esxHostMappingStatus = useMemo(() => {
-    const mappedHostsCount = orderedESXHosts.filter((host) => host.pcdHostConfigName).length
-    return {
-      mapped: mappedHostsCount,
-      total: orderedESXHosts.length,
-      fullyMapped: mappedHostsCount === orderedESXHosts.length
-    }
-  }, [orderedESXHosts])
-
   const openstackNetworks = useMemo(() => {
     if (!openstackCredData) return []
 
@@ -1046,6 +715,24 @@ export default function RollingMigrationFormDrawer({
 
     return openstackCredData?.spec?.flavors || []
   }, [openstackCredData])
+
+  const {
+    flavorDialogOpen,
+    selectedFlavor,
+    updating,
+    handleOpenFlavorDialog,
+    handleCloseFlavorDialog,
+    handleFlavorChange,
+    handleIndividualFlavorChange,
+    handleApplyFlavor
+  } = useFlavorHandlers({
+    vmsWithAssignments,
+    setVmsWithAssignments,
+    selectedVMs,
+    openstackFlavors,
+    reportError,
+    fetchClusterVMs
+  })
 
   // Update VM flavor names when OpenStack flavors become available
   useEffect(() => {
@@ -1150,515 +837,52 @@ export default function RollingMigrationFormDrawer({
     }
   }
 
-  // Validate IP addresses for selected VMs
-  const vmIpValidation = useMemo(() => {
-    if (selectedVMs.length === 0) {
-      setVmIpValidationError('Please select VMs to assign IP addresses.')
-      return { hasError: true, vmsWithoutIPs: [] }
-    }
+  const { submitting, handleSubmit, handleClose } = useRollingFormSubmit({
+    selectedVMs,
+    vmsWithAssignments,
+    sourceCluster,
+    destinationPCD,
+    selectedMaasConfig,
+    orderedESXHosts,
+    openstackCredData,
+    sourceData,
+    pcdData,
+    networkMappings,
+    storageMappings,
+    arrayCredsMappings,
+    availableVmwareNetworks,
+    availableVmwareDatastores,
+    params,
+    selectedMigrationOptions,
+    selectedVMwareCredName,
+    selectedPcdCredName,
+    onClose,
+    navigate,
+    track,
+    reportError,
+    setNetworkMappingError,
+    setStorageMappingError
+  })
 
-    const selectedVMsData = vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
-    const vmsRequiringIp = selectedVMsData.filter(vmHasInterface)
-    const vmsWithoutIPs = vmsRequiringIp.filter((vm) => vm.ip === '—' || !vm.ip)
 
-    if (vmsWithoutIPs.length > 0) {
-      const errorMessage = `Cannot proceed with Migration: ${vmsWithoutIPs.length} selected VM${vmsWithoutIPs.length === 1 ? '' : 's'} with network interfaces do not have IP addresses assigned. Please assign IP addresses to all selected VMs before continuing.`
-      setVmIpValidationError(errorMessage)
-      return { hasError: true, vmsWithoutIPs }
-    } else {
-      setVmIpValidationError('')
-      return { hasError: false, vmsWithoutIPs: [] }
-    }
-  }, [selectedVMs, vmsWithAssignments])
-
-  // Validate ESX host configs for all hosts
-  const esxHostConfigValidation = useMemo(() => {
-    if (orderedESXHosts.length === 0) {
-      setEsxHostConfigValidationError('Please select VMs to migrate.')
-      return { hasError: true, hostsWithoutConfigs: [] }
-    }
-
-    const hostsWithoutConfigs = orderedESXHosts.filter((host) => !host.pcdHostConfigName)
-
-    if (hostsWithoutConfigs.length > 0) {
-      const errorMessage = `Cannot proceed with Migration: ${hostsWithoutConfigs.length} ESXi host${hostsWithoutConfigs.length === 1 ? '' : 's'} do not have Host Config assigned. Please assign Host Config to all ESXi hosts before continuing.`
-      setEsxHostConfigValidationError(errorMessage)
-      return { hasError: true, hostsWithoutConfigs }
-    } else {
-      setEsxHostConfigValidationError('')
-      return { hasError: false, hostsWithoutConfigs: [] }
-    }
-  }, [orderedESXHosts])
-
-  // Validate OS assignment for selected powered-off VMs
-  const osValidation = useMemo(() => {
-    if (selectedVMs.length === 0) {
-      setOsValidationError('Please select VMs to assign OS.')
-      return { hasError: true, vmsWithoutOS: [] }
-    }
-
-    const selectedVMsData = vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
-    const poweredOffVMsWithoutOS = selectedVMsData.filter((vm) => {
-      const assignedOS = vmOSAssignments[vm.id]
-      const currentOS = assignedOS || vm.osFamily
-      return vm.powerState === 'powered-off' && (!currentOS || currentOS === 'Unknown')
-    })
-
-    if (poweredOffVMsWithoutOS.length > 0) {
-      const errorMessage = `Cannot proceed with Migration: ${poweredOffVMsWithoutOS.length} powered-off VM${poweredOffVMsWithoutOS.length === 1 ? '' : 's'} do not have Operating System assigned. Please assign OS to all powered-off VMs before continuing.`
-      setOsValidationError(errorMessage)
-      return { hasError: true, vmsWithoutOS: poweredOffVMsWithoutOS }
-    } else {
-      setOsValidationError('')
-      return { hasError: false, vmsWithoutOS: [] }
-    }
-  }, [selectedVMs, vmsWithAssignments, vmOSAssignments])
-
-  const handleSubmit = async () => {
-    setSubmitting(true)
-
-    const storageCopyMethod = (params.storageCopyMethod || 'normal') as
-      | 'normal'
-      | 'StorageAcceleratedCopy'
-
-    if (selectedVMs.length > 0) {
-      if (
-        availableVmwareNetworks.some(
-          (network) => !networkMappings.some((mapping) => mapping.source === network)
-        )
-      ) {
-        setNetworkMappingError('All networks from selected VMs must be mapped')
-        setSubmitting(false)
-        return
-      }
-
-      if (storageCopyMethod === 'StorageAcceleratedCopy') {
-        if (
-          availableVmwareDatastores.some(
-            (datastore) => !arrayCredsMappings.some((mapping) => mapping.source === datastore)
-          )
-        ) {
-          setStorageMappingError('All datastores from selected VMs must be mapped')
-          setSubmitting(false)
-          return
-        }
-      } else {
-        if (
-          availableVmwareDatastores.some(
-            (datastore) => !storageMappings.some((mapping) => mapping.source === datastore)
-          )
-        ) {
-          setStorageMappingError('All datastores from selected VMs must be mapped')
-          setSubmitting(false)
-          return
-        }
-      }
-    } else if (sourceCluster && destinationPCD) {
-      alert('Please select at least one VM to migrate')
-      setSubmitting(false)
-      return
-    }
-
-    try {
-      const parts = sourceCluster.split(':')
-      const credName = parts[0]
-
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
-      const clusterName = clusterObj?.name || ''
-
-      const selectedVMsData = vmsWithAssignments
-        .filter((vm) => selectedVMs.includes(vm.id))
-        .map((vm) => ({
-          vmName: vm.name
-        })) as VMSequence[]
-
-      const networkOverridesPerVM: Record<
-        string,
-        Array<{
-          interfaceIndex: number
-          preserveIP: boolean
-          preserveMAC: boolean
-          UserAssignedIP?: string
-        }>
-      > = {}
-      vmsWithAssignments
-        .filter((vm) => selectedVMs.includes(vm.id))
-        .forEach((vm) => {
-          const preserveIp = vm.preserveIp || {}
-          const preserveMac = vm.preserveMac || {}
-          const nicAssignedIps: Record<number, string> = {}
-
-          ;(vm.networkInterfaces || []).forEach((nic, index) => {
-            const assigned = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
-              .map((ip) => ip?.trim())
-              .filter((ip): ip is string => Boolean(ip))
-            if (assigned.length > 0) {
-              nicAssignedIps[index] = assigned.join(',')
-            }
-          })
-          const indices = new Set<string>([
-            ...Object.keys(preserveIp),
-            ...Object.keys(preserveMac),
-            ...Object.keys(nicAssignedIps)
-          ])
-
-          if (indices.size === 0) return
-
-          networkOverridesPerVM[vm.name] = Array.from(indices)
-            .map((indexStr) => {
-              const interfaceIndex = Number(indexStr)
-              const ipFlag = preserveIp[interfaceIndex]
-              const macFlag = preserveMac[interfaceIndex]
-              const preserveIP = ipFlag !== false
-              const preserveMAC = macFlag !== false
-              const userAssigned = !preserveIP ? nicAssignedIps[interfaceIndex] : undefined
-              return {
-                interfaceIndex,
-                preserveIP,
-                preserveMAC,
-                ...(userAssigned ? { UserAssignedIP: userAssigned } : {})
-              }
-            })
-            .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
-        })
-
-      // Create cluster mapping between VMware cluster and PCD cluster
-      const selectedPCD = pcdData.find((p) => p.id === destinationPCD)
-      const pcdClusterName = selectedPCD?.name || ''
-      const targetPCDClusterName = selectedPCD?.name
-
-      const clusterMapping: ClusterMapping[] = [
-        {
-          vmwareClusterName: clusterName,
-          pcdClusterName: pcdClusterName
-        }
-      ]
-
-      // Update VMware hosts with their host config IDs
-      const hostsToUpdate = orderedESXHosts.filter((host) => host.pcdHostConfigName)
-
-      for (const host of hostsToUpdate) {
-        try {
-          // Find the config ID from the name
-          const availablePcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
-          const selectedPcdConfig = availablePcdHostConfigs.find(
-            (config) => config.name === host.pcdHostConfigName
-          )
-          const hostConfigId = selectedPcdConfig ? selectedPcdConfig.id : host.pcdHostConfigName
-
-          if (hostConfigId) {
-            console.log(`Updating host ${host.name} with hostConfigId: ${hostConfigId}`)
-            await patchVMwareHost(host.id, hostConfigId, VJAILBREAK_DEFAULT_NAMESPACE)
-          }
-        } catch (error) {
-          console.error(`Failed to update host config for ${host.name}:`, error)
-          reportError(error as Error, {
-            context: 'host-config-update',
-            metadata: {
-              hostId: host.id,
-              hostName: host.name,
-              hostConfigId: host.pcdHostConfigName,
-              action: 'host-config-update'
-            }
-          })
-          // Continue with other hosts even if one fails
-        }
-      }
-
-      // 1. Create network mapping
-      const networkMappingJson = createNetworkMappingJson({
-        networkMappings: networkMappings.map((mapping) => ({
-          source: mapping.source,
-          target: mapping.target
-        }))
-      })
-      const networkMappingResponse = await postNetworkMapping(networkMappingJson)
-
-      // 2. Create storage mapping
-      let storageMappingResponse: any = null
-      let arrayCredsMappingResponse: any = null
-
-      if (storageCopyMethod === 'StorageAcceleratedCopy') {
-        const arrayCredsMappingJson = createArrayCredsMappingJson({
-          mappings: arrayCredsMappings.map((mapping) => ({
-            source: mapping.source,
-            target: mapping.target
-          }))
-        })
-        arrayCredsMappingResponse = await postArrayCredsMapping(arrayCredsMappingJson)
-      } else {
-        const storageMappingJson = createStorageMappingJson({
-          storageMappings: storageMappings.map((mapping) => ({
-            source: mapping.source,
-            target: mapping.target
-          }))
-        })
-        storageMappingResponse = await postStorageMapping(storageMappingJson)
-      }
-
-      // 3. Create migration template
-      const migrationTemplateJson = createMigrationTemplateJson({
-        vmwareRef: selectedVMwareCredName,
-        openstackRef: selectedPcdCredName,
-        networkMapping: networkMappingResponse.metadata.name,
-        ...(storageMappingResponse?.metadata?.name && {
-          storageMapping: storageMappingResponse.metadata.name
-        }),
-        targetPCDClusterName: targetPCDClusterName
-      })
-      const migrationTemplateResponse = await postMigrationTemplate(migrationTemplateJson)
-
-      // Update template to include storageCopyMethod and mapping selection
-      if (migrationTemplateResponse?.metadata?.name) {
-        await patchMigrationTemplate(migrationTemplateResponse.metadata.name, {
-          spec: {
-            networkMapping: networkMappingResponse.metadata.name,
-            storageCopyMethod,
-            ...(storageCopyMethod === 'StorageAcceleratedCopy' &&
-              arrayCredsMappingResponse?.metadata?.name && {
-                arrayCredsMapping: arrayCredsMappingResponse.metadata.name
-              }),
-            ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
-              storageMappingResponse?.metadata?.name && {
-                storageMapping: storageMappingResponse.metadata.name
-              })
-          }
-        })
-      }
-
-      // 4. Create rolling migration plan with the template
-      const migrationPlanJson = createRollingMigrationPlanJson({
-        clusterName,
-        vms: selectedVMsData,
-        clusterMapping,
-        bmConfigRef: {
-          name: selectedMaasConfig?.metadata.name || ''
-        },
-        ...(Object.keys(networkOverridesPerVM).length > 0 && { networkOverridesPerVM }),
-        migrationStrategy: {
-          adminInitiatedCutOver:
-            selectedMigrationOptions.cutoverOption &&
-            params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
-          healthCheckPort: '443',
-          performHealthChecks: false,
-          type: selectedMigrationOptions.dataCopyMethod
-            ? (params.dataCopyMethod as string)
-            : 'cold',
-          ...(selectedMigrationOptions.dataCopyStartTime &&
-            params.dataCopyStartTime && {
-              dataCopyStart: params.dataCopyStartTime
-            }),
-          ...(selectedMigrationOptions.cutoverOption &&
-            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-            params.cutoverStartTime && {
-              vmCutoverStart: params.cutoverStartTime
-            }),
-          ...(selectedMigrationOptions.cutoverOption &&
-            params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
-            params.cutoverEndTime && {
-              vmCutoverEnd: params.cutoverEndTime
-            })
-        },
-        migrationTemplate: migrationTemplateResponse.metadata.name,
-        namespace: VJAILBREAK_DEFAULT_NAMESPACE
-      })
-
-      await postRollingMigrationPlan(migrationPlanJson, VJAILBREAK_DEFAULT_NAMESPACE)
-
-      const regionName = openstackCredData?.metadata?.labels?.['vjailbreak.k8s.pf9.io/region-name']
-
-      // Track successful cluster conversion creation
-      track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_CREATED, {
-        clusterMigrationName: clusterName,
-        sourceCluster: clusterObj?.name,
-        destinationCluster: selectedPCD?.name,
-        vmwareCredential: selectedVMwareCredName,
-        pcdCredential: selectedPcdCredName,
-        maasConfig: selectedMaasConfig?.metadata.name,
-        virtualMachineCount: selectedVMsData?.length || 0,
-        esxHostCount: orderedESXHosts?.length || 0,
-        networkMappingCount: networkMappings?.length || 0,
-        storageMappingCount:
-          storageCopyMethod === 'StorageAcceleratedCopy'
-            ? arrayCredsMappings?.length || 0
-            : storageMappings?.length || 0,
-        migrationType: params.dataCopyMethod || 'cold',
-        hasAdminInitiatedCutover:
-          selectedMigrationOptions.cutoverOption &&
-          params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
-        hasTimedCutover:
-          selectedMigrationOptions.cutoverOption &&
-          params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW,
-        migrationTemplate: migrationTemplateResponse.metadata.name,
-        regionName,
-        namespace: VJAILBREAK_DEFAULT_NAMESPACE
-      })
-
-      onClose()
-      navigate('/dashboard/cluster-conversions')
-    } catch (error) {
-      console.error('Failed to submit rolling migration plan:', error)
-
-      // Track cluster conversion failure
-      const parts = sourceCluster.split(':')
-      const credName = parts[0]
-      const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
-      const selectedPCD = pcdData.find((p) => p.id === destinationPCD)
-      const selectedVMsData = vmsWithAssignments.filter((vm) => selectedVMs.includes(vm.id))
-
-      const regionName = openstackCredData?.metadata?.labels?.['vjailbreak.k8s.pf9.io/region-name']
-
-      track(AMPLITUDE_EVENTS.ROLLING_MIGRATION_SUBMISSION_FAILED, {
-        clusterMigrationName: clusterObj?.name,
-        sourceCluster: clusterObj?.name,
-        destinationCluster: selectedPCD?.name,
-        vmwareCredential: selectedVMwareCredName,
-        pcdCredential: selectedPcdCredName,
-        virtualMachineCount: selectedVMsData?.length || 0,
-        esxHostCount: orderedESXHosts?.length || 0,
-        regionName,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        stage: 'creation'
-      })
-
-      reportError(error as Error, {
-        context: 'rolling-migration-plan-submission',
-        metadata: {
-          sourceCluster: sourceCluster,
-          destinationPCD: destinationPCD,
-          selectedVMwareCredName: selectedVMwareCredName,
-          selectedPcdCredName: selectedPcdCredName,
-          action: 'rolling-migration-plan-submission'
-        }
-      })
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to submit rolling migration plan: ${errorMessage}`)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleClose = () => {
-    if (!submitting) {
-      onClose()
-    }
-  }
-
-  const isSubmitDisabled = useMemo(() => {
-    const basicRequirementsMissing =
-      !sourceCluster || !destinationPCD || !selectedMaasConfig || !selectedVMs.length || submitting
-
-    const storageMappingComplete =
-      params.storageCopyMethod === 'StorageAcceleratedCopy'
-        ? availableVmwareDatastores.every((d) => arrayCredsMappings.some((m) => m.source === d))
-        : availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
-
-    const mappingsValid = !(
-      availableVmwareNetworks.some(
-        (network) => !networkMappings.some((mapping) => mapping.source === network)
-      ) || !storageMappingComplete
-    )
-
-    const postMigrationAction = selectedMigrationOptions.postMigrationAction
-    const postMigrationActionSelected = Boolean(
-      postMigrationAction &&
-        typeof postMigrationAction === 'object' &&
-        Object.values(postMigrationAction as Record<string, unknown>).some(Boolean)
-    )
-
-    const hasAnyMigrationOptionSelected =
-      Boolean(selectedMigrationOptions.dataCopyMethod) ||
-      Boolean(selectedMigrationOptions.dataCopyStartTime) ||
-      Boolean(selectedMigrationOptions.cutoverOption) ||
-      Boolean(selectedMigrationOptions.postMigrationScript) ||
-      Boolean(selectedMigrationOptions.osFamily) ||
-      Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
-      postMigrationActionSelected
-
-    const dataCopyMethodOk =
-      !selectedMigrationOptions.dataCopyMethod || Boolean(params.dataCopyMethod)
-
-    const dataCopyStartTimeValue = String(params.dataCopyStartTime ?? '').trim()
-    const dataCopyStartTimeOk =
-      !selectedMigrationOptions.dataCopyStartTime ||
-      (Boolean(dataCopyStartTimeValue) &&
-        dataCopyStartTimeValue !== 'undefined' &&
-        dataCopyStartTimeValue !== 'null' &&
-        !fieldErrors['dataCopyStartTime'])
-
-    const cutoverOk = !selectedMigrationOptions.cutoverOption
-      ? true
-      : Boolean(
-          params.cutoverOption &&
-            !fieldErrors['cutoverOption'] &&
-            (params.cutoverOption !== CUTOVER_TYPES.TIME_WINDOW ||
-              (params.cutoverStartTime &&
-                params.cutoverEndTime &&
-                !fieldErrors['cutoverStartTime'] &&
-                !fieldErrors['cutoverEndTime']))
-        )
-
-    const postMigrationScriptOk =
-      !selectedMigrationOptions.postMigrationScript ||
-      (Boolean(params.postMigrationScript) && !fieldErrors['postMigrationScript'])
-
-    const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
-
-    const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
-
-    const postMigrationActionOk = !postMigrationActionSelected
-      ? true
-      : Boolean(
-          postMigrationAction &&
-            typeof postMigrationAction === 'object' &&
-            (Boolean(postMigrationAction.renameVm) ||
-              Boolean(postMigrationAction.moveToFolder) ||
-              !postMigrationAction.suffix ||
-              Boolean((params as any)?.postMigrationActionSuffix) ||
-              !postMigrationAction.folderName ||
-              Boolean((params as any)?.postMigrationActionFolderName))
-        )
-
-    const migrationOptionValidated =
-      !hasAnyMigrationOptionSelected ||
-      (dataCopyMethodOk &&
-        dataCopyStartTimeOk &&
-        cutoverOk &&
-        postMigrationScriptOk &&
-        osFamilyOk &&
-        pcdOptionsOk &&
-        postMigrationActionOk)
-
-    // PCD host config validation - not needed anymore since validation is handled by esxHostConfigValid
-
-    // ESX host config validation - ensure all ESX hosts have host configs assigned
-    const esxHostConfigValid = !esxHostConfigValidation.hasError
-
-    // IP validation - ensure all selected VMs have IP addresses assigned
-    const ipValidationPassed = !vmIpValidation.hasError
-
-    // OS validation - ensure all selected powered-off VMs have OS assigned
-    const osValidationPassed = !osValidation.hasError
-
-    return (
-      basicRequirementsMissing ||
-      !mappingsValid ||
-      !migrationOptionValidated ||
-      !esxHostConfigValid ||
-      !ipValidationPassed ||
-      !osValidationPassed
-    )
-  }, [
+  const {
+    vmIpValidationError,
+    esxHostConfigValidationError,
+    osValidationError,
+    esxHostMappingStatus,
+    vmIpValidation,
+    esxHostConfigValidation,
+    osValidation,
+    isSubmitDisabled
+  } = useRollingFormValidation({
+    selectedVMs,
+    vmsWithAssignments,
+    orderedESXHosts,
+    vmOSAssignments,
     sourceCluster,
     destinationPCD,
     selectedMaasConfig,
     submitting,
-    selectedVMs,
     availableVmwareNetworks,
     networkMappings,
     availableVmwareDatastores,
@@ -1666,12 +890,8 @@ export default function RollingMigrationFormDrawer({
     arrayCredsMappings,
     selectedMigrationOptions,
     params,
-    fieldErrors,
-    orderedESXHosts,
-    vmIpValidation.hasError,
-    esxHostConfigValidation.hasError,
-    osValidation.hasError
-  ])
+    fieldErrors
+  })
 
   useKeyboardSubmit({
     open,
@@ -1699,6 +919,23 @@ export default function RollingMigrationFormDrawer({
     },
     [setTouchedSections]
   )
+
+  const {
+    pcdHostConfigDialogOpen,
+    selectedPcdHostConfig,
+    updatingPcdMapping,
+    handleOpenPcdHostConfigDialog,
+    handleClosePcdHostConfigDialog,
+    handlePcdHostConfigChange,
+    handleApplyPcdHostConfig,
+    handleIndividualHostConfigChange
+  } = useHostConfigHandlers({
+    orderedESXHosts,
+    setOrderedESXHosts,
+    openstackCredData,
+    markTouched,
+    reportError
+  })
 
   useEffect(() => {
     if (!open) return
@@ -2080,59 +1317,6 @@ export default function RollingMigrationFormDrawer({
     setMaasDetailsModalOpen(false)
   }
 
-  const handleOpenPcdHostConfigDialog = () => {
-    setPcdHostConfigDialogOpen(true)
-  }
-
-  const handleClosePcdHostConfigDialog = () => {
-    setPcdHostConfigDialogOpen(false)
-    setSelectedPcdHostConfig('')
-  }
-
-  const handlePcdHostConfigChange = (event) => {
-    setSelectedPcdHostConfig(event.target.value)
-  }
-
-  const handleApplyPcdHostConfig = async () => {
-    if (!selectedPcdHostConfig) {
-      handleClosePcdHostConfigDialog()
-      return
-    }
-
-    markTouched('hosts')
-
-    setUpdatingPcdMapping(true)
-
-    try {
-      const availablePcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
-      const selectedPcdConfig = availablePcdHostConfigs.find(
-        (config) => config.id === selectedPcdHostConfig
-      )
-      const pcdConfigName = selectedPcdConfig ? selectedPcdConfig.name : selectedPcdHostConfig
-
-      // Update ALL ESX hosts with the selected host config
-      const updatedESXHosts = orderedESXHosts.map((host) => ({
-        ...host,
-        pcdHostConfigName: pcdConfigName
-      }))
-
-      setOrderedESXHosts(updatedESXHosts)
-
-      handleClosePcdHostConfigDialog()
-    } catch (error) {
-      console.error('Error updating PCD host config mapping:', error)
-      reportError(error as Error, {
-        context: 'pcd-host-config-mapping',
-        metadata: {
-          selectedPcdHostConfig: selectedPcdHostConfig,
-          action: 'update-pcd-host-config-mapping'
-        }
-      })
-    } finally {
-      setUpdatingPcdMapping(false)
-    }
-  }
-
   // Define VM columns inside component to access state
   const vmColumns: GridColDef[] = [
     {
@@ -2472,145 +1656,6 @@ export default function RollingMigrationFormDrawer({
     }
   ]
 
-  const handleCloseBulkEditDialog = () => {
-    setBulkEditDialogOpen(false)
-    setBulkEditIPs({})
-    setBulkPreserveIp({})
-    setBulkPreserveMac({})
-    setBulkExistingIPs({})
-    setBulkValidationStatus({})
-    setBulkValidationMessages({})
-  }
-
-  const handleBulkPreserveIpChange = (vmId: string, interfaceIndex: number, value: boolean) => {
-    setBulkPreserveIp((prev) => ({
-      ...prev,
-      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
-    }))
-
-    if (value) {
-      const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
-      if (existingIp.trim() !== '') {
-        setBulkEditIPs((prev) => ({
-          ...prev,
-          [vmId]: { ...prev[vmId], [interfaceIndex]: existingIp }
-        }))
-        setBulkValidationStatus((prev) => ({
-          ...prev,
-          [vmId]: { ...prev[vmId], [interfaceIndex]: 'valid' }
-        }))
-        setBulkValidationMessages((prev) => ({
-          ...prev,
-          [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
-        }))
-      }
-    }
-
-    if (!value) {
-      // Preserve IP disabled: keep the current value so the user can edit/override it.
-      const current = bulkEditIPs?.[vmId]?.[interfaceIndex] ?? ''
-      const trimmed = current.trim()
-
-      const { status, message } = !trimmed
-        ? { status: 'empty' as const, message: '' }
-        : hasMultipleIpEntries(trimmed)
-          ? ({
-              status: 'invalid' as const,
-              message: 'Multiple IPs are not supported when Preserve IP is disabled'
-            } as const)
-          : !isValidIPAddressList(trimmed)
-            ? ({ status: 'invalid' as const, message: 'Invalid IP format' } as const)
-            : ({ status: 'valid' as const, message: '' } as const)
-
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: status }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: message }
-      }))
-    }
-  }
-
-  const handleBulkPreserveMacChange = (vmId: string, interfaceIndex: number, value: boolean) => {
-    setBulkPreserveMac((prev) => ({
-      ...prev,
-      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
-    }))
-  }
-
-  const handleBulkIpChange = (vmId: string, interfaceIndex: number, value: string) => {
-    setBulkEditIPs((prev) => ({
-      ...prev,
-      [vmId]: { ...prev[vmId], [interfaceIndex]: value }
-    }))
-
-    if (!value.trim()) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'empty' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
-      }))
-    } else if (bulkPreserveIp?.[vmId]?.[interfaceIndex] === false && hasMultipleIpEntries(value)) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmId]: {
-          ...prev[vmId],
-          [interfaceIndex]: 'Multiple IPs are not supported when Preserve IP is disabled'
-        }
-      }))
-    } else if (!isValidIPAddressList(value.trim())) {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'Invalid IP format' }
-      }))
-    } else {
-      setBulkValidationStatus((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: 'empty' }
-      }))
-      setBulkValidationMessages((prev) => ({
-        ...prev,
-        [vmId]: { ...prev[vmId], [interfaceIndex]: '' }
-      }))
-    }
-  }
-
-  const handleClearAllIPs = () => {
-    const clearedIPs: Record<string, Record<number, string>> = {}
-    const clearedStatus: Record<
-      string,
-      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
-    > = {}
-
-    Object.keys(bulkEditIPs).forEach((vmId) => {
-      clearedIPs[vmId] = {}
-      clearedStatus[vmId] = {}
-
-      Object.keys(bulkEditIPs[vmId]).forEach((interfaceIndexStr) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        clearedIPs[vmId][interfaceIndex] = ''
-        clearedStatus[vmId][interfaceIndex] = 'empty'
-      })
-    })
-
-    setBulkEditIPs(clearedIPs)
-    setBulkValidationStatus(clearedStatus)
-    setBulkValidationMessages({})
-  }
-
   const renderValidationAdornment = (status?: 'empty' | 'valid' | 'invalid' | 'validating') => {
     if (!status || status === 'empty') return null
 
@@ -2639,639 +1684,6 @@ export default function RollingMigrationFormDrawer({
     }
 
     return null
-  }
-
-  const handleApplyBulkIPs = async () => {
-    // Collect all IPs to apply with their VM and interface info
-    const ipsToApply: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
-    const clearIpsToApply: Array<{ vmId: string; interfaceIndex: number }> = []
-
-    let missingRequiredIp = false
-    Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
-        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
-
-        if (preserveIp && existingIp.trim() === '' && ip.trim() === '') {
-          missingRequiredIp = true
-          setBulkValidationStatus((prev) => ({
-            ...prev,
-            [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
-          }))
-          setBulkValidationMessages((prev) => ({
-            ...prev,
-            [vmId]: {
-              ...prev[vmId],
-              [interfaceIndex]: 'IP is required when Preserve IP is enabled'
-            }
-          }))
-        }
-      })
-    })
-
-    if (missingRequiredIp) {
-      return
-    }
-
-    Object.entries(bulkEditIPs).forEach(([vmId, interfaces]) => {
-      Object.entries(interfaces).forEach(([interfaceIndexStr, ip]) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        const preserveIp = bulkPreserveIp?.[vmId]?.[interfaceIndex] !== false
-        const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
-        const typedIp = ip.trim()
-
-        // When Preserve IP is disabled, allow clearing the IP (empty value)
-        if (!preserveIp && typedIp === '') {
-          if (existingIp.trim() !== '') {
-            clearIpsToApply.push({ vmId, interfaceIndex })
-          }
-          return
-        }
-
-        if (typedIp === '') return
-
-        // If Preserve IP is enabled and an existing IP is present, we keep it as-is.
-        if (preserveIp && existingIp.trim() !== '' && typedIp === existingIp.trim()) {
-          return
-        }
-
-        ipsToApply.push({
-          vmId,
-          interfaceIndex,
-          ip: typedIp
-        })
-      })
-    })
-
-    if (ipsToApply.length === 0 && clearIpsToApply.length === 0) {
-      const updatedVMs = vmsWithAssignments.map((vm) => {
-        const preserveIp = bulkPreserveIp[vm.id]
-        const preserveMac = bulkPreserveMac[vm.id]
-        if (!preserveIp && !preserveMac) return vm
-        return {
-          ...vm,
-          ...(preserveIp && { preserveIp }),
-          ...(preserveMac && { preserveMac })
-        }
-      })
-      setVmsWithAssignments(updatedVMs)
-      handleCloseBulkEditDialog()
-      return
-    }
-
-    setAssigningIPs(true)
-
-    try {
-      // Batch validation before applying any changes
-      if (openstackCredData) {
-        const flattenedIps: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
-        ipsToApply.forEach((item) => {
-          const parsed = parseIpList(item.ip)
-          if (parsed.length === 0) {
-            flattenedIps.push({ ...item, ip: '' })
-            return
-          }
-          parsed.forEach((ip) =>
-            flattenedIps.push({ vmId: item.vmId, interfaceIndex: item.interfaceIndex, ip })
-          )
-        })
-
-        const ipList = flattenedIps.map((item) => item.ip)
-
-        // Set validating status for all IPs
-        setBulkValidationStatus((prev) => {
-          const newStatus = { ...prev }
-          ipsToApply.forEach(({ vmId, interfaceIndex }) => {
-            if (!newStatus[vmId]) newStatus[vmId] = {}
-            newStatus[vmId][interfaceIndex] = 'validating'
-          })
-          return newStatus
-        })
-
-        const validationResult =
-          ipList.length > 0
-            ? await validateOpenstackIPs({
-                ip: ipList,
-                accessInfo: {
-                  secret_name: `${openstackCredData.metadata.name}-openstack-secret`,
-                  secret_namespace: openstackCredData.metadata.namespace
-                }
-              })
-            : { isValid: [], reason: [] }
-
-        // Process validation results
-        const validIPs: Array<{ vmId: string; interfaceIndex: number; ip: string }> = []
-        let hasInvalidIPs = false
-
-        const byInterfaceKey = new Map<string, { ok: boolean; reason?: string }>()
-        flattenedIps.forEach((flatItem, index) => {
-          const key = `${flatItem.vmId}__${flatItem.interfaceIndex}`
-          const isValid = validationResult.isValid[index]
-          const reason = validationResult.reason[index]
-          const current = byInterfaceKey.get(key)
-          if (!current) {
-            byInterfaceKey.set(key, { ok: Boolean(isValid), reason: isValid ? undefined : reason })
-          } else if (current.ok && !isValid) {
-            byInterfaceKey.set(key, { ok: false, reason })
-          }
-        })
-
-        ipsToApply.forEach((item) => {
-          const key = `${item.vmId}__${item.interfaceIndex}`
-          const result = byInterfaceKey.get(key)
-          const ok = result?.ok !== false
-          if (ok) {
-            validIPs.push(item)
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [item.vmId]: { ...prev[item.vmId], [item.interfaceIndex]: 'valid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [item.vmId]: { ...prev[item.vmId], [item.interfaceIndex]: 'Valid' }
-            }))
-          } else {
-            hasInvalidIPs = true
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [item.vmId]: { ...prev[item.vmId], [item.interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [item.vmId]: {
-                ...prev[item.vmId],
-                [item.interfaceIndex]: result?.reason || 'Invalid IP format'
-              }
-            }))
-          }
-        })
-
-        // Only proceed if ALL IPs are valid
-        if (hasInvalidIPs) {
-          setAssigningIPs(false)
-          return
-        }
-
-        const updatePromises = validIPs.map(async ({ vmId, interfaceIndex, ip }) => {
-          try {
-            const vm = vmsWithAssignments.find((v) => v.id === vmId)
-            if (!vm) throw new Error('VM not found')
-
-            // Update network interfaces
-            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
-              const updatedInterfaces = [...vm.networkInterfaces]
-              updatedInterfaces[interfaceIndex] = {
-                ...updatedInterfaces[interfaceIndex],
-                ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
-              }
-
-              await patchVMwareMachine(
-                vm.id,
-                {
-                  spec: {
-                    vms: {
-                      networkInterfaces: updatedInterfaces
-                    }
-                  }
-                },
-                VJAILBREAK_DEFAULT_NAMESPACE
-              )
-            } else {
-              // Fallback for single IP assignment
-              await patchVMwareMachine(
-                vmId,
-                {
-                  spec: {
-                    vms: {
-                      assignedIp: ip
-                    }
-                  }
-                },
-                VJAILBREAK_DEFAULT_NAMESPACE
-              )
-            }
-
-            return { success: true, vmId, interfaceIndex, ip }
-          } catch (error) {
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [vmId]: {
-                ...prev[vmId],
-                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to apply IP'
-              }
-            }))
-            return { success: false, vmId, interfaceIndex, error }
-          }
-        })
-
-        const clearPromises = clearIpsToApply.map(async ({ vmId, interfaceIndex }) => {
-          try {
-            const vm = vmsWithAssignments.find((v) => v.id === vmId)
-            if (!vm) throw new Error('VM not found')
-
-            if (vm.networkInterfaces && vm.networkInterfaces[interfaceIndex]) {
-              const existingIp = bulkExistingIPs?.[vmId]?.[interfaceIndex] || ''
-              const parsedExisting = existingIp.trim() !== '' ? parseIpList(existingIp) : []
-              const updatedInterfaces = [...vm.networkInterfaces]
-              updatedInterfaces[interfaceIndex] = {
-                ...updatedInterfaces[interfaceIndex],
-                ipAddress: parsedExisting
-              }
-
-              await patchVMwareMachine(
-                vm.id,
-                {
-                  spec: {
-                    vms: {
-                      networkInterfaces: updatedInterfaces
-                    }
-                  }
-                },
-                VJAILBREAK_DEFAULT_NAMESPACE
-              )
-            } else {
-              await patchVMwareMachine(
-                vmId,
-                {
-                  spec: {
-                    vms: {
-                      assignedIp: ''
-                    }
-                  }
-                },
-                VJAILBREAK_DEFAULT_NAMESPACE
-              )
-            }
-
-            return { success: true, vmId, interfaceIndex }
-          } catch (error) {
-            setBulkValidationStatus((prev) => ({
-              ...prev,
-              [vmId]: { ...prev[vmId], [interfaceIndex]: 'invalid' }
-            }))
-            setBulkValidationMessages((prev) => ({
-              ...prev,
-              [vmId]: {
-                ...prev[vmId],
-                [interfaceIndex]: error instanceof Error ? error.message : 'Failed to clear IP'
-              }
-            }))
-            return { success: false, vmId, interfaceIndex, error }
-          }
-        })
-
-        const results = await Promise.all([...updatePromises, ...clearPromises])
-
-        // Check if any updates failed
-        const failedUpdates = results.filter((result) => !result.success)
-        if (failedUpdates.length > 0) {
-          setAssigningIPs(false)
-          return // Don't close modal if any updates failed
-        }
-
-        // Update bulk validation status
-        const newBulkValidationStatus = { ...bulkValidationStatus }
-        const newBulkValidationMessages = { ...bulkValidationMessages }
-
-        validIPs.forEach(({ vmId, interfaceIndex }) => {
-          if (!newBulkValidationStatus[vmId]) newBulkValidationStatus[vmId] = {}
-          if (!newBulkValidationMessages[vmId]) newBulkValidationMessages[vmId] = {}
-
-          newBulkValidationStatus[vmId][interfaceIndex] = 'valid'
-          newBulkValidationMessages[vmId][interfaceIndex] = 'IP validated and applied successfully'
-        })
-
-        setBulkValidationStatus(newBulkValidationStatus)
-        setBulkValidationMessages(newBulkValidationMessages)
-
-        // Update local VM state so the table immediately reflects Auto IP/Auto MAC chips
-        setVmsWithAssignments((prev) =>
-          prev.map((vm) => {
-            const preserveIp = bulkPreserveIp[vm.id]
-            const preserveMac = bulkPreserveMac[vm.id]
-            const vmUpdates = validIPs.filter((item) => item.vmId === vm.id)
-            const vmClears = clearIpsToApply.filter((item) => item.vmId === vm.id)
-
-            if (vmUpdates.length === 0 && vmClears.length === 0 && !preserveIp && !preserveMac) {
-              return vm
-            }
-
-            const updatedVM: any = {
-              ...vm,
-              ...(preserveIp && { preserveIp }),
-              ...(preserveMac && { preserveMac })
-            }
-
-            if (vm.networkInterfaces) {
-              const updatedInterfaces = [...vm.networkInterfaces]
-              vmUpdates.forEach(({ interfaceIndex, ip }) => {
-                if (updatedInterfaces[interfaceIndex]) {
-                  updatedInterfaces[interfaceIndex] = {
-                    ...updatedInterfaces[interfaceIndex],
-                    ipAddress: ip.trim() !== '' ? parseIpList(ip) : []
-                  }
-                }
-              })
-              vmClears.forEach(({ interfaceIndex }) => {
-                if (updatedInterfaces[interfaceIndex]) {
-                  updatedInterfaces[interfaceIndex] = {
-                    ...updatedInterfaces[interfaceIndex],
-                    ipAddress: []
-                  }
-                }
-              })
-              updatedVM.networkInterfaces = updatedInterfaces
-
-              const allIPs = updatedInterfaces
-                .flatMap((nic: any) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
-                .filter((ip: string) => ip && ip.trim() !== '')
-                .join(', ')
-              updatedVM.ip = allIPs || '—'
-            } else {
-              const firstUpdate = vmUpdates[0]
-              if (firstUpdate) {
-                updatedVM.ip = firstUpdate.ip
-              }
-              const hasClear = vmClears.some((c) => c.interfaceIndex === 0)
-              if (hasClear) {
-                updatedVM.ip = '—'
-              }
-            }
-
-            return updatedVM
-          })
-        )
-
-        handleCloseBulkEditDialog()
-      }
-    } catch (error) {
-      console.error('Error in bulk IP validation/assignment:', error)
-      reportError(error as Error, {
-        context: 'bulk-ip-validation-assignment',
-        metadata: {
-          bulkEditIPs: bulkEditIPs,
-          action: 'bulk-ip-validation-assignment'
-        }
-      })
-    } finally {
-      setAssigningIPs(false)
-    }
-  }
-
-  // Flavor assignment handlers
-  const handleOpenFlavorDialog = () => {
-    if (selectedVMs.length === 0) return
-    setFlavorDialogOpen(true)
-  }
-
-  const handleCloseFlavorDialog = () => {
-    setFlavorDialogOpen(false)
-    setSelectedFlavor('')
-  }
-
-  const handleOpenBulkIPAssignment = () => {
-    if (selectedVMs.length === 0) return
-
-    // Initialize bulk edit IPs for selected VMs
-    const initialBulkEditIPs: Record<string, Record<number, string>> = {}
-    const initialBulkPreserveIp: Record<string, Record<number, boolean>> = {}
-    const initialBulkPreserveMac: Record<string, Record<number, boolean>> = {}
-    const initialBulkExistingIPs: Record<string, Record<number, string>> = {}
-    const initialValidationStatus: Record<
-      string,
-      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
-    > = {}
-
-    selectedVMs.forEach((vmId) => {
-      const vm = vmsWithAssignments.find((v) => v.id === vmId)
-      if (!vm) return
-
-      initialBulkEditIPs[vm.id] = {}
-      initialBulkPreserveIp[vm.id] = {}
-      initialBulkPreserveMac[vm.id] = {}
-      initialBulkExistingIPs[vm.id] = {}
-      initialValidationStatus[vm.id] = {}
-
-      const isPoweredOff = vm.powerState !== 'powered-on'
-
-      if (vm.networkInterfaces && vm.networkInterfaces.length > 0) {
-        vm.networkInterfaces.forEach((nic, index) => {
-          const existingIp = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
-            .filter((ip) => ip && ip.trim() !== '')
-            .join(', ')
-          initialBulkExistingIPs[vm.id][index] = existingIp
-          initialBulkEditIPs[vm.id][index] = existingIp
-
-          const effectivePreserveIp = isPoweredOff ? false : vm.preserveIp?.[index] !== false
-          initialBulkPreserveIp[vm.id][index] = effectivePreserveIp
-          initialBulkPreserveMac[vm.id][index] = vm.preserveMac?.[index] !== false
-          initialValidationStatus[vm.id][index] = existingIp ? 'valid' : 'empty'
-        })
-      } else {
-        const existingIp = extractFirstIPv4(vm.ip && vm.ip !== '—' ? vm.ip : '')
-        initialBulkExistingIPs[vm.id][0] = existingIp
-        initialBulkEditIPs[vm.id][0] = existingIp
-        initialBulkPreserveIp[vm.id][0] = isPoweredOff ? false : vm.preserveIp?.[0] !== false
-        initialBulkPreserveMac[vm.id][0] = vm.preserveMac?.[0] !== false
-        initialValidationStatus[vm.id][0] = existingIp ? 'valid' : 'empty'
-      }
-    })
-
-    setBulkEditIPs(initialBulkEditIPs)
-    setBulkPreserveIp(initialBulkPreserveIp)
-    setBulkPreserveMac(initialBulkPreserveMac)
-    setBulkExistingIPs(initialBulkExistingIPs)
-    setBulkValidationStatus(initialValidationStatus)
-    setBulkValidationMessages({})
-    setBulkEditDialogOpen(true)
-  }
-
-  const handleFlavorChange = (event) => {
-    setSelectedFlavor(event.target.value)
-  }
-
-  const handleIndividualFlavorChange = async (vmId: string, flavorValue: string) => {
-    try {
-      const isAutoAssign = flavorValue === 'auto-assign'
-      const selectedFlavorObj = !isAutoAssign
-        ? openstackFlavors.find((f) => f.id === flavorValue)
-        : null
-      const flavorName = isAutoAssign
-        ? 'auto-assign'
-        : selectedFlavorObj
-          ? selectedFlavorObj.name
-          : flavorValue
-
-      // Update VM via API
-      const payload = {
-        spec: {
-          targetFlavorId: isAutoAssign ? '' : flavorValue
-        }
-      }
-
-      await patchVMwareMachine(vmId, payload, VJAILBREAK_DEFAULT_NAMESPACE)
-
-      // Update local state
-      const updatedVMs = vmsWithAssignments.map((vm) => {
-        if (vm.id === vmId) {
-          return {
-            ...vm,
-            flavor: flavorName,
-            targetFlavorId: isAutoAssign ? '' : flavorValue
-          }
-        }
-        return vm
-      })
-      setVmsWithAssignments(updatedVMs)
-
-      console.log(`Successfully assigned flavor "${flavorName}" to VM ${vmId}`)
-    } catch (error) {
-      console.error(`Failed to update flavor for VM ${vmId}:`, error)
-      reportError(error as Error, {
-        context: 'individual-vm-flavor-update',
-        metadata: {
-          vmId: vmId,
-          flavorValue: flavorValue,
-          isAutoAssign: flavorValue === 'auto-assign',
-          action: 'individual-vm-flavor-update'
-        }
-      })
-      alert(
-        `Failed to assign flavor to VM: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
-    }
-  }
-
-  const handleIndividualHostConfigChange = async (hostId: string, configName: string) => {
-    try {
-      markTouched('hosts')
-      // Update the ESX host with the selected host config
-      const updatedESXHosts = orderedESXHosts.map((host) => {
-        if (host.id === hostId) {
-          return {
-            ...host,
-            pcdHostConfigName: configName
-          }
-        }
-        return host
-      })
-
-      setOrderedESXHosts(updatedESXHosts)
-
-      console.log(`Successfully assigned host config "${configName}" to ESX host ${hostId}`)
-    } catch (error) {
-      console.error(`Failed to update host config for ESX host ${hostId}:`, error)
-      reportError(error as Error, {
-        context: 'individual-host-config-update',
-        metadata: {
-          hostId: hostId,
-          configName: configName,
-          action: 'individual-host-config-update'
-        }
-      })
-      alert(
-        `Failed to assign host config to ESX host: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
-    }
-  }
-
-  const handleApplyFlavor = async () => {
-    if (!selectedFlavor) {
-      handleCloseFlavorDialog()
-      return
-    }
-
-    setUpdating(true)
-
-    try {
-      const isAutoAssign = selectedFlavor === 'auto-assign'
-      const selectedFlavorObj = !isAutoAssign
-        ? openstackFlavors.find((f) => f.id === selectedFlavor)
-        : null
-      const flavorName = isAutoAssign
-        ? 'auto-assign'
-        : selectedFlavorObj
-          ? selectedFlavorObj.name
-          : selectedFlavor
-
-      // Update VMs via API
-      const updatePromises = selectedVMs.map(async (vmId) => {
-        try {
-          const payload = {
-            spec: {
-              targetFlavorId: isAutoAssign ? '' : selectedFlavor
-            }
-          }
-
-          await patchVMwareMachine(vmId as string, payload, VJAILBREAK_DEFAULT_NAMESPACE)
-          return { success: true, vmId }
-        } catch (error) {
-          console.error(`Failed to update flavor for VM ${vmId}:`, error)
-          return { success: false, vmId, error }
-        }
-      })
-
-      const results = await Promise.all(updatePromises)
-      const failedUpdates = results.filter((result) => !result.success)
-
-      if (failedUpdates.length > 0) {
-        console.error(`Failed to update flavor for ${failedUpdates.length} VMs`)
-        reportError(new Error(`Failed to update flavor for ${failedUpdates.length} VMs`), {
-          context: 'vm-flavor-batch-update-failures',
-          metadata: {
-            failedUpdates: failedUpdates,
-            totalVMs: selectedVMs.length,
-            successCount: results.length - failedUpdates.length,
-            failedCount: failedUpdates.length,
-            action: 'vm-flavor-batch-update'
-          }
-        })
-        alert(
-          `Failed to assign flavor to ${failedUpdates.length} VM${failedUpdates.length > 1 ? 's' : ''}`
-        )
-      } else {
-        // Update local state only if all API calls succeeded
-        const updatedVMs = vmsWithAssignments.map((vm) => {
-          if (selectedVMs.includes(vm.id)) {
-            return {
-              ...vm,
-              flavor: flavorName,
-              targetFlavorId: isAutoAssign ? '' : selectedFlavor
-            }
-          }
-          return vm
-        })
-        setVmsWithAssignments(updatedVMs)
-
-        const actionText = isAutoAssign ? 'cleared flavor assignment for' : 'assigned flavor to'
-        console.log(
-          `Successfully ${actionText} ${selectedVMs.length} VM${selectedVMs.length > 1 ? 's' : ''}`
-        )
-
-        // Refresh VM list to get updated flavor information from API
-        await fetchClusterVMs()
-      }
-
-      handleCloseFlavorDialog()
-    } catch (error) {
-      console.error('Error updating flavors:', error)
-      reportError(error as Error, {
-        context: 'vm-flavor-assignment',
-        metadata: {
-          selectedVMs: selectedVMs,
-          selectedFlavor: selectedFlavor,
-          action: 'vm-flavor-assignment'
-        }
-      })
-      alert('Failed to assign flavor to VMs')
-    } finally {
-      setUpdating(false)
-    }
   }
 
   return (
