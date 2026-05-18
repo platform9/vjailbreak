@@ -15,8 +15,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.openstackValidationStatus
-      name: Status
+    - jsonPath: .status.conditions[?(@.type=="CredentialsValidated")].status
+      name: Validated
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="CredentialsValidated")].reason
+      name: Reason
       type: string
     - jsonPath: .spec.secretRef.name
       name: Secret Name
@@ -353,18 +356,6 @@ spec:
                       type: string
                     type: array
                 type: object
-              openstackValidationMessage:
-                description: |-
-                  OpenStackValidationMessage is the message associated with the OpenStack validation.
-                  Deprecated: superseded by Conditions; will be removed once all controller
-                  write paths migrate to the Conditions API in this PR.
-                type: string
-              openstackValidationStatus:
-                description: |-
-                  OpenStackValidationStatus is the status of the OpenStack validation.
-                  Deprecated: superseded by Conditions; will be removed once all controller
-                  write paths migrate to the Conditions API in this PR.
-                type: string
             type: object
         type: object
     served: true

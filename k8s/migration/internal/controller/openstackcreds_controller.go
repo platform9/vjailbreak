@@ -270,8 +270,6 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 			errMsg = "Creds are valid but for a different OpenStack environment. Enter creds of same OpenStack environment"
 		}
 		ctxlog.Error(result.Error, "Error validating OpenstackCreds", "openstackcreds", scope.OpenstackCreds.Name)
-		scope.OpenstackCreds.Status.OpenStackValidationStatus = constants.ValidationStatusFailed
-		scope.OpenstackCreds.Status.OpenStackValidationMessage = errMsg
 		setConditionsForInvalidResult(&scope.OpenstackCreds.Status.Conditions, errMsg)
 		ctxlog.Info("Updating status to failed", "openstackcreds", scope.OpenstackCreds.Name, "message", errMsg)
 		if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {
@@ -282,8 +280,6 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		return nil
 	}
 
-	scope.OpenstackCreds.Status.OpenStackValidationStatus = string(corev1.PodSucceeded)
-	scope.OpenstackCreds.Status.OpenStackValidationMessage = "Successfully authenticated to Openstack"
 	setConditionsForValidResult(&scope.OpenstackCreds.Status.Conditions)
 	ctxlog.Info("Updating status to success", "openstackcreds", scope.OpenstackCreds.Name)
 	if err := r.Status().Update(ctx, scope.OpenstackCreds); err != nil {

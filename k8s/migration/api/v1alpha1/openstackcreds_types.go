@@ -142,22 +142,12 @@ type OpenstackCredsStatus struct {
 
 	// Openstack is the OpenStack configuration for the openstackcreds
 	Openstack OpenstackInfo `json:"openstack,omitempty"`
-
-	// OpenStackValidationStatus is the status of the OpenStack validation.
-	// Deprecated: superseded by Conditions; will be removed once all controller
-	// write paths migrate to the Conditions API in this PR.
-	// +optional
-	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
-	// OpenStackValidationMessage is the message associated with the OpenStack validation.
-	// Deprecated: superseded by Conditions; will be removed once all controller
-	// write paths migrate to the Conditions API in this PR.
-	// +optional
-	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.openstackValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.conditions[?(@.type=="CredentialsValidated")].status`,name=Validated,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.conditions[?(@.type=="CredentialsValidated")].reason`,name=Reason,type=string
 // +kubebuilder:printcolumn:name="Secret Name",type="string",JSONPath=".spec.secretRef.name"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
