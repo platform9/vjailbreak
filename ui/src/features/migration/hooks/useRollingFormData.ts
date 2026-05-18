@@ -9,21 +9,25 @@ import { getBMConfigList, getBMConfig } from 'src/api/bmconfig/bmconfig'
 import { BMConfig } from 'src/api/bmconfig/model'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
-import { SourceDataItem } from './useClusterData'
+import { SourceDataItem, PcdDataItem } from './useClusterData'
 import type { ESXHost, VM } from '../types'
 
 interface UseRollingFormDataParams {
   open: boolean
-  sourceCluster: string
+  vmwareCluster: string
+  pcdCluster: string
   sourceData: SourceDataItem[]
+  pcdData: PcdDataItem[]
   selectedVMs: GridRowSelectionModel
   setSelectedVMs: React.Dispatch<React.SetStateAction<GridRowSelectionModel>>
 }
 
 export function useRollingFormData({
   open,
-  sourceCluster,
+  vmwareCluster,
+  pcdCluster,
   sourceData,
+  pcdData,
   selectedVMs,
   setSelectedVMs
 }: UseRollingFormDataParams) {
@@ -60,16 +64,19 @@ export function useRollingFormData({
     }
   }
 
+  const [selectedVMwareCredName, setSelectedVMwareCredName] = useState('')
+  const [selectedPcdCredName, setSelectedPcdCredName] = useState('')
+
   const fetchClusterHosts = async () => {
-    if (!sourceCluster) return
+    if (!vmwareCluster) return
 
     setLoadingHosts(true)
     try {
-      const parts = sourceCluster.split(':')
+      const parts = vmwareCluster.split(':')
       const credName = parts[0]
 
       const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
+      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === vmwareCluster)
       const clusterName = clusterObj?.name
 
       if (!clusterName) {
@@ -105,15 +112,15 @@ export function useRollingFormData({
   }
 
   const fetchClusterVMs = async () => {
-    if (!sourceCluster) return
+    if (!vmwareCluster) return
 
     setLoadingVMs(true)
     try {
-      const parts = sourceCluster.split(':')
+      const parts = vmwareCluster.split(':')
       const credName = parts[0]
 
       const sourceItem = sourceData.find((item) => item.credName === credName)
-      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === sourceCluster)
+      const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === vmwareCluster)
       const clusterName = clusterObj?.name
 
       if (!clusterName) {
@@ -211,11 +218,28 @@ export function useRollingFormData({
   }, [open])
 
   useEffect(() => {
-    if (sourceCluster) {
+    if (vmwareCluster) {
+      const credName = vmwareCluster.split(':')[0]
+      setSelectedVMwareCredName(credName)
       fetchClusterHosts()
       fetchClusterVMs()
+    } else {
+      setSelectedVMwareCredName('')
     }
-  }, [sourceCluster])
+  }, [vmwareCluster])
+
+  useEffect(() => {
+    if (pcdCluster) {
+      const selectedPCD = pcdData.find((p) => p.id === pcdCluster)
+      if (selectedPCD) {
+        setSelectedPcdCredName(selectedPCD.openstackCredName)
+        fetchOpenstackCredentialDetails(selectedPCD.openstackCredName)
+      }
+    } else {
+      setSelectedPcdCredName('')
+      clearOpenstackCredData()
+    }
+  }, [pcdCluster])
 
   useEffect(() => {
     if (orderedESXHosts.length > 0 && vmsWithAssignments.length > 0) {
@@ -246,6 +270,8 @@ export function useRollingFormData({
     loadingMaasConfig,
     openstackCredData,
     loadingOpenstackDetails,
+    selectedVMwareCredName,
+    selectedPcdCredName,
     fetchMaasConfigs,
     fetchClusterHosts,
     fetchClusterVMs,

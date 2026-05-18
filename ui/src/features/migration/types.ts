@@ -118,6 +118,13 @@ export interface ResourceMap {
 export type StorageCopyMethod = 'normal' | 'StorageAcceleratedCopy'
 
 export interface RollingFormParams extends Record<string, unknown> {
+  vmwareCluster?: string
+  pcdCluster?: string
+  networkMappings?: ResourceMap[]
+  storageMappings?: ResourceMap[]
+  arrayCredsMappings?: ResourceMap[]
+  securityGroups?: string[]
+  serverGroup?: string
   dataCopyMethod?: string
   dataCopyStartTime?: string
   cutoverOption?: string
@@ -203,6 +210,8 @@ export interface VM {
 }
 
 export type RollingMigrationRHFValues = {
+  securityGroups: string[]
+  serverGroup: string
   dataCopyStartTime: string
   cutoverStartTime: string
   cutoverEndTime: string

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { GridRowSelectionModel } from '@mui/x-data-grid'
 import { NavigateFunction } from 'react-router-dom'
 import { BMConfig } from 'src/api/bmconfig/model'
@@ -25,29 +24,26 @@ import {
 import { CUTOVER_TYPES } from '../constants'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import type { AmplitudeEventName, EventProperties } from 'src/types/amplitude'
-import type { VM, ESXHost, ResourceMap, SelectedMigrationOptionsType, RollingFormParams } from '../types'
+import type { VM, ESXHost, SelectedMigrationOptionsType, RollingFormParams } from '../types'
 import type { SourceDataItem, PcdDataItem } from './useClusterData'
 import type { ErrorContext } from 'src/services/errorReporting'
 
 interface UseRollingFormSubmitParams {
   selectedVMs: GridRowSelectionModel
   vmsWithAssignments: VM[]
-  sourceCluster: string
-  destinationPCD: string
   selectedMaasConfig: BMConfig | null
   orderedESXHosts: ESXHost[]
   openstackCredData: OpenstackCreds | null
   sourceData: SourceDataItem[]
   pcdData: PcdDataItem[]
-  networkMappings: ResourceMap[]
-  storageMappings: ResourceMap[]
-  arrayCredsMappings: ResourceMap[]
   availableVmwareNetworks: string[]
   availableVmwareDatastores: string[]
   params: RollingFormParams
   selectedMigrationOptions: SelectedMigrationOptionsType
   selectedVMwareCredName: string
   selectedPcdCredName: string
+  submitting: boolean
+  setSubmitting: (v: boolean) => void
   onClose: () => void
   navigate: NavigateFunction
   track: (eventName: AmplitudeEventName, properties?: EventProperties) => void
@@ -59,22 +55,19 @@ interface UseRollingFormSubmitParams {
 export function useRollingFormSubmit({
   selectedVMs,
   vmsWithAssignments,
-  sourceCluster,
-  destinationPCD,
   selectedMaasConfig,
   orderedESXHosts,
   openstackCredData,
   sourceData,
   pcdData,
-  networkMappings,
-  storageMappings,
-  arrayCredsMappings,
   availableVmwareNetworks,
   availableVmwareDatastores,
   params,
   selectedMigrationOptions,
   selectedVMwareCredName,
   selectedPcdCredName,
+  submitting,
+  setSubmitting,
   onClose,
   navigate,
   track,
@@ -82,10 +75,15 @@ export function useRollingFormSubmit({
   setNetworkMappingError,
   setStorageMappingError
 }: UseRollingFormSubmitParams) {
-  const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     setSubmitting(true)
+
+    const sourceCluster = params.vmwareCluster ?? ''
+    const destinationPCD = params.pcdCluster ?? ''
+    const networkMappings = params.networkMappings ?? []
+    const storageMappings = params.storageMappings ?? []
+    const arrayCredsMappings = params.arrayCredsMappings ?? []
 
     const storageCopyMethod = (params.storageCopyMethod || 'normal') as
       | 'normal'
@@ -416,7 +414,6 @@ export function useRollingFormSubmit({
   }
 
   return {
-    submitting,
     handleSubmit,
     handleClose
   }
