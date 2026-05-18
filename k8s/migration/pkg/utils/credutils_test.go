@@ -70,8 +70,8 @@ func TestShouldSkipVMwareMachineReconciliation_WhenMigrationExists(t *testing.T)
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "migration-sarika-centos7-vj-test-4369-cf786",
 			Namespace: constants.NamespaceMigrationSystem,
-			Labels: map[string]string{
-				constants.MigrationVMKeyLabel: "sarika-centos7-vj-test-4369",
+			Annotations: map[string]string{
+				constants.MigrationVMKeyAnnotation: "sarika-centos7-vj-test-4369",
 			},
 		},
 	}
@@ -130,8 +130,8 @@ func TestFindVMwareMachinesNotInVcenter_SkipsMachineWithMigration(t *testing.T) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "migration-sarika-centos7-vj-test-4369-cf786",
 			Namespace: constants.NamespaceMigrationSystem,
-			Labels: map[string]string{
-				constants.MigrationVMKeyLabel: "sarika-centos7-vj-test-4369",
+			Annotations: map[string]string{
+				constants.MigrationVMKeyAnnotation: "sarika-centos7-vj-test-4369",
 			},
 		},
 	}

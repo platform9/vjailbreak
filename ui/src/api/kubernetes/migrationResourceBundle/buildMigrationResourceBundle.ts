@@ -62,7 +62,7 @@ export const fetchMigrationResourceBundle = async ({
   const vmNames = new Set<string>()
   addValue(vmNames, vmK8sName)
   addValue(vmNames, field(migration.spec, 'vmName'))
-  addValue(vmNames, migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'])
+  addValue(vmNames, migration.metadata?.annotations?.['vjailbreak.k8s.pf9.io/vm-key'])
 
   const planNames = new Set<string>()
   addValue(planNames, field(migration.spec, 'migrationPlan'))
