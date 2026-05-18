@@ -2,21 +2,21 @@
 
 ## Project
 **Repo:** `/home/abhijeet/Projects/Platform9/vjailbreak/ui`
-**Branch:** `private/main/sarika/add-more-to-logs`
+**Branch:** `587-ui-refactor-migration`
 **Goal:** Break 6 large files (4000+ lines total) in `src/features/migration/` into focused modules. Zero behavior change.
 
 ---
 
-## Files — Current Line Counts
+## Files — Line Counts
 
 | File | Before | After |
 |------|--------|-------|
 | `RollingMigrationForm.tsx` | 4,264 | 2,678 ✅ |
-| `VmsSelectionStep.tsx` | 2,687 | ~2,633 (hooks pending) |
-| `MigrationForm.tsx` | 1,827 | ~1,737 (hooks pending) |
-| `MigrationOptionsAlt.tsx` | 947 | ~940 |
-| `components/MigrationsTable.tsx` | 760 | ~750 |
-| `NetworkAndStorageMappingStep.tsx` | 556 | 304 ✅ |
+| `VmsSelectionStep.tsx` | 2,687 | 1,497 ✅ |
+| `MigrationForm.tsx` | 1,827 | 510 ✅ |
+| `NetworkAndStorageMappingStep.tsx` | 556 | 322 ✅ |
+| `MigrationOptionsAlt.tsx` | 947 | 929 ✅ |
+| `components/MigrationsTable.tsx` | 760 | 674 ✅ |
 
 ---
 
@@ -24,7 +24,6 @@
 - No logic/props/behavior changes during extraction
 - No component or hook renames that break external imports
 - One concern per output file
-- Every moved export re-exports from original path until Step 4 import cleanup
 - Preserve all TS types exactly as written
 - Node version: v18.20.7 — do NOT change. TypeScript check command:
   `/home/abhijeet/.nvm/versions/node/v18.20.7/bin/node /home/abhijeet/Projects/Platform9/vjailbreak/ui/node_modules/.bin/tsc --noEmit`
@@ -38,18 +37,16 @@
 **Phase 2 — Extract zero-risk items** ✅ Done
 Order: types → constants → pure utils
 
-**Phase 3 — Custom hook extraction** ⏳ In Progress (2 of 4 files done)
-- `RollingMigrationForm.tsx` ✅ all 6 hooks done
-- `NetworkAndStorageMappingStep.tsx` ✅ all 3 hooks done
-- `VmsSelectionStep.tsx` ⏳ 5 hooks pending
-- `MigrationForm.tsx` ⏳ 5 hooks pending
+**Phase 3 — Custom hook extraction** ✅ Done (all 4 files)
 
-**Phase 4 — Update imports + clean re-exports** ⏳ Pending
-Update all cross-file imports, remove temporary re-exports.
+**Phase 4 — Update imports + clean re-exports** ✅ Done
+- No temporary re-exports remain in component files
+- `MigrationOptions.tsx` imports types from `./types` (not `./MigrationForm`)
+- No hooks import from component files (no circular deps)
 
 ---
 
-## Step 2 — Completed Work
+## Phase 2 — Completed Work
 
 ### New files created
 
@@ -68,23 +65,33 @@ Update all cross-file imports, remove temporary re-exports.
 
 ---
 
-## Step 3 — Hook Extraction
+## Phase 3 — Hook Extraction
 
 ### Hooks directory: `src/features/migration/hooks/`
 
 ```
 hooks/
+├── useBulkIPEdit.ts              (VmsSelectionStep) ✅
 ├── useBulkIPHandlers.ts          (RollingMigrationForm) ✅
+├── useCredentialFetching.ts      (MigrationForm) ✅
 ├── useFilteredMappings.ts        (NetworkAndStorageMappingStep) ✅
+├── useFlavorAssignment.ts        (VmsSelectionStep) ✅
 ├── useFlavorHandlers.ts          (RollingMigrationForm) ✅
+├── useFormSync.ts                (MigrationForm) ✅
+├── useFormValidation.ts          (MigrationForm) ✅
 ├── useHostConfigHandlers.ts      (RollingMigrationForm) ✅
-├── useMigrationsQuery.ts         (pre-existing)
-├── useMigrationStatusMonitor.ts  (pre-existing)
+├── useMigrationFormSubmit.ts     (MigrationForm) ✅
+├── useMigrationsQuery.ts         (pre-existing re-export)
+├── useMigrationStatusMonitor.ts  (pre-existing re-export)
 ├── useNetworkIPsMap.ts           (NetworkAndStorageMappingStep) ✅
 ├── useNetworkSubnetCompatibility.ts (NetworkAndStorageMappingStep) ✅
+├── useOsAssignment.ts            (VmsSelectionStep) ✅
+├── useRdmConfiguration.ts        (VmsSelectionStep) ✅
 ├── useRollingFormData.ts         (RollingMigrationForm) ✅
 ├── useRollingFormSubmit.ts       (RollingMigrationForm) ✅
-└── useRollingFormValidation.ts   (RollingMigrationForm) ✅
+├── useRollingFormValidation.ts   (RollingMigrationForm) ✅
+├── useSectionTracking.ts         (MigrationForm) ✅
+└── useVmSelection.ts             (VmsSelectionStep) ✅
 ```
 
 ---
@@ -107,7 +114,7 @@ hooks/
 - All API imports brought in directly
 - `params` type is `RollingFormParams`
 
-**Key type added to `types.ts`:**
+**Key type in `types.ts`:**
 ```typescript
 export interface RollingFormParams extends Record<string, unknown> {
   dataCopyMethod?: string
@@ -136,7 +143,7 @@ const { vmIpValidationError, esxHostConfigValidationError, osValidationError,
         osValidation, isSubmitDisabled } = useRollingFormValidation({ ... })
 ```
 
-**Note:** `RollingMigrationForm` keeps local `SelectedMigrationOptionsType` (adds `osFamily: boolean`, extends `Record<string, unknown>`) — structurally compatible with `types.ts` version that has `[key: string]: unknown`. Passes to hooks fine.
+**Note:** `RollingMigrationForm` keeps local `SelectedMigrationOptionsType` (adds `osFamily: boolean`, extends `Record<string, unknown>`) — structurally compatible with `types.ts` version that has `[key: string]: unknown`.
 
 ---
 
@@ -163,45 +170,48 @@ export function useNetworkSubnetCompatibility({ networkMappings, openstackCreden
 
 ---
 
-### `VmsSelectionStep.tsx` — ⏳ 5 hooks pending
+### `VmsSelectionStep.tsx` — ✅ All 5 hooks done
 
-| Hook | Contents |
-|------|----------|
-| `hooks/useBulkIPEdit.ts` | 30+ bulk IP state vars + all bulk IP handlers |
-| `hooks/useFlavorAssignment.ts` | flavor dialog state + handlers |
-| `hooks/useRdmConfiguration.ts` | RDM dialog flow + handlers |
-| `hooks/useVmSelection.ts` | `handleVmSelection`, `isRowSelectable`, selection state |
-| `hooks/useOsAssignment.ts` | `handleOSAssignment` + OS state |
+**`hooks/useBulkIPEdit.ts`** — 30+ bulk IP state vars + all bulk IP handlers
+
+**`hooks/useFlavorAssignment.ts`** — flavor dialog state + handlers
+
+**`hooks/useRdmConfiguration.ts`** — RDM dialog flow + handlers
+
+**`hooks/useVmSelection.ts`** — `handleVmSelection`, `isRowSelectable`, selection state
+
+**`hooks/useOsAssignment.ts`** — `handleOSAssignment` + OS state
 
 ---
 
-### `MigrationForm.tsx` — ⏳ 5 hooks pending
+### `MigrationForm.tsx` — ✅ All 5 hooks done
 
-| Hook | Contents |
-|------|----------|
-| `hooks/useFormSync.ts` | URL param ↔ RHF sync effects (lines 259–385) |
-| `hooks/useCredentialFetching.ts` | credential + template fetching effects (lines 404–551) |
-| `hooks/useMigrationFormSubmit.ts` | `createNetworkMapping`, `createStorageMapping`, `createArrayCredsMapping`, `updateMigrationTemplate`, `createMigrationPlan`, `handleSubmit` |
-| `hooks/useFormValidation.ts` | step completion memos + `disableSubmit` |
-| `hooks/useSectionTracking.ts` | IntersectionObserver logic (lines 1470–1531) |
+**`hooks/useFormSync.ts`** — URL param ↔ RHF sync effects
+
+**`hooks/useCredentialFetching.ts`** — credential + template fetching effects
+
+**`hooks/useMigrationFormSubmit.ts`** — `createNetworkMapping`, `createStorageMapping`, `createArrayCredsMapping`, `updateMigrationTemplate`, `createMigrationPlan`, `handleSubmit`
+
+**`hooks/useFormValidation.ts`** — step completion memos + `disableSubmit`
+
+**`hooks/useSectionTracking.ts`** — IntersectionObserver logic
 
 ---
 
 ## Key Design Notes
 - `RollingMigrationForm` keeps own `FormValues` (simpler: no vmwareCreds/openstackCreds) and `SelectedMigrationOptionsType` (adds `osFamily: boolean`) — both differ from canonical `types.ts` versions
-- `BulkIpEdit` + `BulkIpClear` in `VmsSelectionStep` defined inside function body — need hoisting to module scope before extraction
 - `normalizeNetworkInterfaces` in `VmsSelectionStep` not shared — stays local
-- `MigrationOptions.tsx` (legacy, 390 lines) still imports `FieldErrors, FormValues, SelectedMigrationOptionsType` from `./MigrationForm` — resolves in Step 4 import cleanup
 - Spread operator on `params` requires typed interface (`RollingFormParams`), not `Record<string, unknown>`
-- Circular import pattern: hooks must import types from `'../types'`, never from `'../RollingMigrationForm'`
+- Circular import rule: hooks import types from `'../types'`, never from component files
+- `useRollingFormSubmit` and `useRollingFormData` import `SourceDataItem`/`PcdDataItem` from `'../useClusterData'` — OK, not a component file
 
 ---
 
-## Pitfalls Hit This Session
+## Pitfalls Hit
 
 **Spread type error:** `params: Record<string, unknown>` → `params.field` has type `unknown` → `TS2698: Spread types may only be created from object types`. Fix: add typed `RollingFormParams` interface to `types.ts`.
 
-**Circular import:** `useRollingFormValidation` initially imported `SelectedMigrationOptionsType` from `'../RollingMigrationForm'`. Fix: import from `'../types'` instead (structurally compatible).
+**Circular import:** `useRollingFormValidation` initially imported `SelectedMigrationOptionsType` from `'../RollingMigrationForm'`. Fix: import from `'../types'` instead.
 
 **Orphaned code after Edit:** Edit tool matched only partial old string, leaving dead code block. Fix: Python `content.replace(old_block, new_block, 1)` for exact single-occurrence replacement.
 
@@ -210,37 +220,6 @@ export function useNetworkSubnetCompatibility({ networkMappings, openstackCreden
 ---
 
 ## Current Status
-**tsc --noEmit: 0 errors**
+**All 4 phases complete. tsc --noEmit: 0 errors.**
 
----
-
-## Resume Prompt
-
-Paste into new conversation:
-
-> Step 2 (types, constants, utils) and partial Step 3 (hook extraction) are complete. `tsc --noEmit` passes with 0 errors. Node v18.20.7 — do not change.
->
-> Working directory: `/home/abhijeet/Projects/Platform9/vjailbreak/ui`
-> Branch: `private/main/sarika/add-more-to-logs`
->
-> Context: refactoring `src/features/migration/` — breaking large files into focused modules without changing runtime behavior. Constraints: no logic changes, no renames of externally imported symbols, re-export from original path until Step 4.
->
-> **Completed Step 2:**
-> - `types.ts` — all interfaces consolidated (includes `RollingFormParams`)
-> - `utils/ipValidation.ts` — shared IP helpers
-> - `utils/migrationTableUtils.ts` — table utils
-> - `constants.ts` — expanded with all constants
->
-> **Completed Step 3 hooks:**
-> - `RollingMigrationForm.tsx` (4264→2678 lines): all 6 hooks extracted — `useBulkIPHandlers`, `useFlavorHandlers`, `useHostConfigHandlers`, `useRollingFormData`, `useRollingFormValidation`, `useRollingFormSubmit`
-> - `NetworkAndStorageMappingStep.tsx` (556→304 lines): all 3 hooks extracted — `useNetworkIPsMap`, `useFilteredMappings`, `useNetworkSubnetCompatibility`
->
-> **Pending Step 3:**
-> - `VmsSelectionStep.tsx` (~2633 lines): extract `useBulkIPEdit`, `useFlavorAssignment`, `useRdmConfiguration`, `useVmSelection`, `useOsAssignment`
-> - `MigrationForm.tsx` (~1737 lines): extract `useFormSync`, `useCredentialFetching`, `useMigrationFormSubmit`, `useFormValidation`, `useSectionTracking`
->
-> TypeScript check: `/home/abhijeet/.nvm/versions/node/v18.20.7/bin/node /home/abhijeet/Projects/Platform9/vjailbreak/ui/node_modules/.bin/tsc --noEmit`
->
-> Proceed with `VmsSelectionStep.tsx` hook extraction. Extract `useBulkIPEdit` first (largest savings). For each hook: show new file, show updated original with extraction replaced by hook call, confirm TS still passes.
->
-> See `vjailbreak-refactor-handoff.md` in repo root for full context.
+Remaining: commit + PR.
