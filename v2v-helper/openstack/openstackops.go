@@ -11,6 +11,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/pkg/common/microversion"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -160,16 +161,19 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block storage client: %s", err)
 	}
+	blockStorageClient.Microversion = microversion.Floor(os.Getenv("OS_VOLUME_API_VERSION"), "")
 
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create compute client: %s", err)
 	}
+	computeClient.Microversion = microversion.Floor(os.Getenv("OS_COMPUTE_API_VERSION"), "")
 
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create networking client: %s", err)
 	}
+	networkingClient.Microversion = microversion.Floor(os.Getenv("OS_NETWORK_API_VERSION"), "")
 
 	return &utils.OpenStackClients{
 		BlockStorageClient: blockStorageClient,
