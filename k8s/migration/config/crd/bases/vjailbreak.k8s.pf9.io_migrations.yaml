@@ -91,6 +91,12 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
+              powerOffTargetVm:
+                description: |-
+                  PowerOffTargetVM specifies whether to leave the migrated VM powered off
+                  in the target cloud instead of starting it. Useful when post-migration
+                  tasks must run before the VM's first boot. Defaults to false.
+                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack

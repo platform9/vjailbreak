@@ -978,6 +978,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				// PodRef will be set in the migration controller
 				InitiateCutover:         migrationplan.Spec.MigrationStrategy.AdminInitiatedCutOver,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
+				PowerOffTargetVM:        migrationplan.Spec.MigrationStrategy.PowerOffTargetVM,
 				NetworkOverrides:        networkOverrides,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 			},
@@ -1528,6 +1529,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
 		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
+		"POWER_OFF_TARGET_VM":               strconv.FormatBool(migrationobj.Spec.PowerOffTargetVM),
 	}
 }
 

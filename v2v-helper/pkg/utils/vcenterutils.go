@@ -37,6 +37,7 @@ type MigrationParams struct {
 	TargetAvailabilityZone         string
 	VMwareMachineName              string
 	DisconnectSourceNetwork        bool
+	PowerOffTargetVM               bool
 	SecurityGroups                 string
 	ServerGroup                    string
 	RDMDisks                       string
@@ -101,6 +102,7 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		TargetAvailabilityZone:         string(configMap.Data["TARGET_AVAILABILITY_ZONE"]),
 		VMwareMachineName:              string(configMap.Data["VMWARE_MACHINE_OBJECT_NAME"]),
 		DisconnectSourceNetwork:        string(configMap.Data["DISCONNECT_SOURCE_NETWORK"]) == constants.TrueString,
+		PowerOffTargetVM:               string(configMap.Data["POWER_OFF_TARGET_VM"]) == constants.TrueString,
 		SecurityGroups:                 string(configMap.Data["SECURITY_GROUPS"]),
 		ServerGroup:                    string(configMap.Data["SERVER_GROUP"]),
 		RDMDisks:                       string(configMap.Data["RDM_DISK_NAMES"]),

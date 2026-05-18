@@ -54,6 +54,7 @@ type OpenstackOperations interface {
 	FindDevice(volumeID string) (string, error)
 	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
+	StopServer(ctx context.Context, serverID string, vjailbreakSettings k8sutils.VjailbreakSettings) error
 	GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error)
 	// GetCinderVolumeServices returns Cinder volume services (Host, Status, State)
 	// Returns a slice of structs with these fields - defined in implementation package to avoid import cycles

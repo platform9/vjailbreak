@@ -50,6 +50,7 @@ type Migrate struct {
 	Thumbprint              string
 	Convert                 bool
 	DisconnectSourceNetwork bool
+	PowerOffTargetVM        bool
 	Openstackclients        openstack.OpenstackOperations
 	Vcclient                vcenter.VCenterOperations
 	VMops                   vm.VMOperations
@@ -1636,6 +1637,15 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	}
 
 	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))
+
+	if migobj.PowerOffTargetVM {
+		migobj.logMessage("PowerOffTargetVM is set: powering off the target VM and skipping health checks")
+		if err := openstackops.StopServer(ctx, newVM.ID, *vjailbreakSettings); err != nil {
+			return errors.Wrap(err, "failed to power off target VM")
+		}
+		migobj.logMessage("Target VM powered off successfully")
+		return nil
+	}
 
 	if migobj.PerformHealthChecks {
 		err = migobj.HealthCheck(vminfo, ipaddresses)

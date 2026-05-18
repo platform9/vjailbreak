@@ -45,6 +45,10 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 	// +kubebuilder:default:=false
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
+	// PowerOffTargetVM, when true, leaves the migrated VM powered off in the
+	// target cloud instead of starting it after creation.
+	// +kubebuilder:default:=false
+	PowerOffTargetVM bool `json:"powerOffTargetVm,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process
