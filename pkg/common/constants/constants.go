@@ -704,3 +704,47 @@ var (
 	// RDMPhaseError is the phase for RDMDisk when there is an error
 	RDMPhaseError = "Error"
 )
+
+// Hot-Add copy method constants
+const (
+	HotAddCopyMethod = "HotAdd"
+
+	// Migration phase names for the Hot-Add data-copy phase
+	MigrationPhaseHotAddSnapshottingVM     = "SnapshottingSourceVM"
+	MigrationPhaseHotAddAttachingDisks     = "AttachingDisksToProxy"
+	MigrationPhaseHotAddIdentifyingDevices = "IdentifyingBlockDevices"
+	MigrationPhaseHotAddTransferring       = "HotAddTransferInProgress"
+	MigrationPhaseHotAddCleaningUp         = "HotAddCleanup"
+
+	// Event message constants for Hot-Add phases
+	EventMessageHotAddSnapshotCreate = "Creating source VM snapshot"
+	EventMessageHotAddAttachDisks    = "Attaching snapshot disks to Proxy VM"
+	EventMessageHotAddIdentify       = "Identifying block devices on Proxy VM"
+	EventMessageHotAddServing        = "Serving disk via NBD on Proxy VM"
+	EventMessageHotAddCopying        = "Copying data via nbdcopy"
+	EventMessageHotAddCleanup        = "Cleaning up snapshot and disk attachments"
+
+	// Port range for qemu-nbd on Proxy VM
+	HotAddPortRangeMin = 10809
+	HotAddPortRangeMax = 11808
+
+	// ProxyVM validation statuses
+	ProxyVMStatusPending            = "Pending"
+	ProxyVMStatusVerifying          = "Verifying"
+	ProxyVMStatusReady              = "Ready"
+	ProxyVMStatusVerificationFailed = "VerificationFailed"
+
+	// ProxyVMMaxAttachedDisks is the vSphere hardware limit for disks per VM
+	ProxyVMMaxAttachedDisks = 60
+
+	// ProxyVMControllerName is the name of the ProxyVM controller
+	ProxyVMControllerName = "proxyvm-controller"
+
+	// ProxyVMFinalizer is the finalizer for ProxyVM resources
+	ProxyVMFinalizer = "proxyvm.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+)
+
+var (
+	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
+	ProxyVMRequiredComponents = []string{"lsblk", "qemu-nbd", "nbdkit", "sshd"}
+)
