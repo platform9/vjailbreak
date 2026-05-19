@@ -646,6 +646,7 @@ export default function RollingMigrationFormDrawer({
               data-testid="rolling-migration-form-header"
               icon={<ClusterIcon />}
               title="Rolling Cluster Conversion"
+              subtitle="Configure source/destination, Bare Metal, ESXi Hosts, and map resources before starting"
             />
           }
           footer={
@@ -970,7 +971,9 @@ export default function RollingMigrationFormDrawer({
                           Bare metal config
                         </Typography>
                         <Typography variant="body2">
-                          {selectedMaasConfig ? selectedMaasConfig.metadata?.name ?? 'Selected' : '—'}
+                          {selectedMaasConfig
+                            ? (selectedMaasConfig.metadata?.name ?? 'Selected')
+                            : '—'}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
