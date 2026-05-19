@@ -339,6 +339,7 @@ export default function MigrationFormDrawer({
                 data-testid="migration-form-step2-card"
               >
                 <VmsSelectionStep
+                  mode="standard"
                   onChange={getParamsUpdater}
                   error={fieldErrors['vms']}
                   open={open}

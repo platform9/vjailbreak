@@ -1,3 +1,7 @@
+export { BulkIPEditDialog } from './BulkIPEditDialog'
+export type { BulkIPEditDialogProps } from './BulkIPEditDialog'
+export { FlavorAssignmentDialog } from './FlavorAssignmentDialog'
+export type { FlavorAssignmentDialogProps } from './FlavorAssignmentDialog'
 export { default as LogsDrawer } from './PodLogsDrawer'
 export { default as LogLine, extractLogLevel } from './LogLine'
 export { RdmDiskConfigurationPanel } from './RdmDiskConfigurationPanel'

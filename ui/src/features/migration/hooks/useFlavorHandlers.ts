@@ -191,6 +191,7 @@ export function useFlavorHandlers({
   return {
     flavorDialogOpen,
     selectedFlavor,
+    setSelectedFlavor,
     updating,
     handleOpenFlavorDialog,
     handleCloseFlavorDialog,

@@ -1,7 +1,10 @@
+import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
+import type { GridRowSelectionModel } from '@mui/x-data-grid'
+import type { ErrorContext } from 'src/services/errorReporting'
 
 // ---------------------------------------------------------------------------
 // MigrationForm types
@@ -175,6 +178,8 @@ export interface VmNetworkInterface {
   mac: string
   network: string
   ipAddress: string[]
+  preserveIP?: boolean
+  preserveMAC?: boolean
 }
 
 export interface ESXHost {
@@ -238,6 +243,7 @@ export interface RdmConfiguration {
 
 export interface VmDataWithFlavor extends VmData {
   isMigrated?: boolean
+  flavor?: string
   flavorName?: string
   flavorNotFound?: boolean
   ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
@@ -245,15 +251,54 @@ export interface VmDataWithFlavor extends VmData {
   powerState?: string
 }
 
+/**
+ * Unified VM shape used by the merged VmsSelectionStep.
+ * Bridges VmDataWithFlavor (standard migration) and VM (rolling migration).
+ * Canonical power state: 'powered-on' | 'powered-off'
+ * Canonical ip field: ip (not ipAddress)
+ * Canonical cpu field: cpu (not cpuCount)
+ */
+export interface CanonicalVM {
+  id: string
+  name: string
+  powerState: 'powered-on' | 'powered-off'
+  ip: string
+  cpu?: number
+  memory?: number
+  osFamily?: string
+  flavor?: string
+  targetFlavorId?: string
+  networkInterfaces?: VmNetworkInterface[]
+  esxHost?: string
+  networks?: string[]
+  datastores?: string[]
+  preserveIp?: Record<number, boolean>
+  preserveMac?: Record<number, boolean>
+  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
+  ipValidationMessage?: string
+  // Standard-migration-only (absent in rolling mode)
+  isMigrated?: boolean
+  flavorNotFound?: boolean
+  hasSharedRdm?: boolean
+  vmKey?: string
+  vmid?: string
+  labels?: Record<string, string>
+  disks?: string[]
+  vmWareMachineName?: string
+}
+
 export type BulkIpEdit = { vmName: string; interfaceIndex: number; ip: string }
 export type BulkIpClear = { vmName: string; interfaceIndex: number }
 
 export interface VmsSelectionStepProps {
-  onChange: (id: string) => (value: unknown) => void
-  error: string
+  mode?: 'standard' | 'rolling'
+
+  // Standard-mode props
+  onChange?: (id: string) => (value: unknown) => void
+  error?: string
   open?: boolean
-  vmwareCredsValidated: boolean
-  openstackCredsValidated: boolean
+  vmwareCredsValidated?: boolean
+  openstackCredsValidated?: boolean
   sessionId?: string
   openstackFlavors?: OpenStackFlavor[]
   vmwareCredName?: string
@@ -262,6 +307,20 @@ export interface VmsSelectionStepProps {
   vmwareCluster?: string
   useGPU?: boolean
   showHeader?: boolean
+
+  // Rolling-mode props
+  vmsWithAssignments?: VM[]
+  setVmsWithAssignments?: Dispatch<SetStateAction<VM[]>>
+  vmOSAssignments?: Record<string, string>
+  setVmOSAssignments?: Dispatch<SetStateAction<Record<string, string>>>
+  selectedVMs?: GridRowSelectionModel
+  onSelectionChange?: (ids: GridRowSelectionModel) => void
+  loadingVMs?: boolean
+  vmIpValidationError?: string
+  osValidationError?: string
+  fetchClusterVMs?: () => Promise<void>
+  openstackCredData?: OpenstackCreds | null
+  reportError?: (error: Error, additionalContext?: ErrorContext) => void
 }
 
 // ---------------------------------------------------------------------------

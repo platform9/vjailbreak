@@ -20,7 +20,7 @@ import MaasConfigDetailDialog from '../components/MaasConfigDetailDialog'
 import MaasConfigDetailsModal from '../components/MaasConfigDetailsModal'
 import HostConfigAssignmentDialog from '../components/HostConfigAssignmentDialog'
 import NetworkAndStorageMappingStep from '../steps/NetworkAndStorageMappingStep'
-import RollingVmsSelectionStep from '../steps/RollingVmsSelectionStep'
+import VmsSelectionStep from '../steps/VmsSelectionStep'
 import SecurityGroupAndServerGroupStep from '../steps/SecurityGroupAndServerGroup'
 import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
 import useParams from 'src/hooks/useParams'
@@ -838,7 +838,8 @@ export default function RollingMigrationFormDrawer({
                   subtitle="Choose the virtual machines to convert and assign required fields"
                   data-testid="rolling-migration-form-step4-card"
                 >
-                  <RollingVmsSelectionStep
+                  <VmsSelectionStep
+                    mode="rolling"
                     vmsWithAssignments={vmsWithAssignments}
                     setVmsWithAssignments={setVmsWithAssignments}
                     selectedVMs={selectedVMs}
