@@ -79,6 +79,9 @@ type Migrate struct {
 	ArrayInsecure     bool
 	VendorType        string
 	ArrayCredsMapping string
+	// Hot-Add copy method: Proxy VM coordinates
+	ProxyVMIP   string
+	ProxyVMName string
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.

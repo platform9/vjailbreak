@@ -1,93 +1,223 @@
 ---
-description: "UI task list for Hot-Add Proxy Migration feature"
+description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 ---
 
-# Tasks: Hot-Add Proxy Migration — UI
+# Tasks: Hot-Add Proxy Migration
 
 **Feature**: `1944-hot-add-proxy`  
-**Scope**: UI only — API client, ProxyVM management page, migration form changes, sidebar/routing  
-**Reference patterns**: ESXi SSH Keys (`ui/src/features/esxiSshKeys/`) · SAM copy method in `NetworkAndStorageMappingStep.tsx`
+**Branch**: `1944-hot-add-proxy`  
+**Reference patterns**: ESXi SSH Keys · SAM copy (`vaai_copy.go`) · StorageAcceleratedCopy validation block in `migrationplan_controller.go`
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (US1, US2, US4)
-- Exact file paths are in every description
+- **[Story]**: Which user story this belongs to
+- Exact file paths in every description
 
 ---
 
-## Phase 1: Setup — API Client (Shared Infrastructure)
+## Phase 1: Setup — API Client ✅
 
-**Purpose**: ProxyVM TypeScript interfaces and CRUD client that all UI components depend on.
-
-- [ ] T001 Create `ui/src/api/proxy-vm/model.ts` with `ProxyVM`, `ProxyVMList`, and `ProxyVMComponentCheck` TypeScript interfaces matching the CRD (spec: `vmName`, `vmwareCredsRef`; status: `validationStatus`, `validationMessage`, `ipAddress`, `attachedDiskCount`, `componentsVerified`, `lastValidationTime`)
-- [ ] T002 Create `ui/src/api/proxy-vm/proxyVm.ts` with `getProxyVMs`, `getProxyVM`, `createProxyVM`, and `deleteProxyVM` functions following the pattern in `ui/src/api/esxi-ssh-creds/esxiSshCreds.ts` — resource path is `proxyvms`, API version `vjailbreak.k8s.pf9.io/v1alpha1`, kind `ProxyVM`
-- [ ] T003 Create `ui/src/api/proxy-vm/index.ts` barrel file with `export * from './model'` and `export * from './proxyVm'`
+- [X] T001 Create `ui/src/api/proxy-vm/model.ts` with `ProxyVM`, `ProxyVMList`, `ProxyVMComponentCheck` TypeScript interfaces
+- [X] T002 Create `ui/src/api/proxy-vm/proxyVm.ts` with `getProxyVMs`, `getProxyVM`, `createProxyVM`, `deleteProxyVM`
+- [X] T003 Create `ui/src/api/proxy-vm/index.ts` barrel re-exports
 
 ---
 
-## Phase 2: Foundational — Routing & Navigation
+## Phase 2: Foundational — Routing & Navigation ✅
 
-**Purpose**: Register the route and sidebar entry so the page is reachable.  
-**⚠️ CRITICAL**: Must be done before any ProxyVM page work.
-
-- [ ] T004 Add `<Route path="proxy-vms" element={<ProxyVMPage />} />` to the `/dashboard` nested routes in `ui/src/App.tsx` (alongside the existing `esxi-ssh-keys` route at line 441) and add the import for `ProxyVMPage`
-- [ ] T005 Add a "Proxy VMs" child nav entry to the Credentials group in `ui/src/config/navigation.tsx` (after the `esxi-ssh-keys` entry at line 65) with `id: 'proxy-vms'`, `label: 'Proxy VMs'`, `path: '/dashboard/proxy-vms'`, and a `DnsIcon` or `ComputerIcon` from `@mui/icons-material`
-
-**Checkpoint**: Navigating to `/dashboard/proxy-vms` should render (even an empty shell) before proceeding.
+- [X] T004 Add `<Route path="proxy-vms" element={<ProxyVMPage />} />` to `/dashboard` nested routes in `ui/src/App.tsx`
+- [X] T005 Add "Proxy VMs" nav entry to `ui/src/config/navigation.tsx` after `esxi-ssh-keys`
 
 ---
 
-## Phase 3: User Story 1 — Register and Verify Proxy VM (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 — ProxyVM Management Page ✅
 
-**Goal**: Operator can register a Proxy VM, see SSH key prerequisite instructions, and watch status transition from Verifying → Ready or Verification Failed with per-component detail.
-
-**Independent Test**: Register a ProxyVM CR via the UI → confirm status chip updates (polling) → see Ready or VerificationFailed with component list. No migration needed.
-
-### Implementation for User Story 1
-
-- [ ] T006 [P] [US1] Create `ui/src/features/proxyVM/components/AddProxyVMDialog.tsx`: MUI Dialog with (1) an info Alert explaining the SSH key prerequisite — "Before registering, copy the vJailbreak appliance public key (`/root/.ssh/id_rsa.pub`) to the Proxy VM's `/root/.ssh/authorized_keys`"; (2) a "VM Name" TextField bound to `vmName` state; (3) a "VMware Credentials" Select populated by `useQuery` calling `getVMwareCreds()`, showing only validated creds; (4) Submit calls `createProxyVM({ vmName, vmwareCredsRef: { name: selectedCreds } })` and closes the dialog on success
-- [ ] T007 [US1] Create `ui/src/features/proxyVM/pages/ProxyVMPage.tsx`: MUI DataGrid listing ProxyVM resources with columns Name, VM Name, Status (Chip coloured by status: `success`=Ready, `warning`=Verifying/Pending, `error`=VerificationFailed), IP Address, Attached Disks, Age; toolbar has an "Add Proxy VM" button that opens `AddProxyVMDialog`; delete action per row calls `deleteProxyVM`; poll via `refetchInterval: 5000` when any item has `validationStatus` of `Pending` or `Verifying` (stop polling when all are `Ready` or `VerificationFailed`); use `useQuery` from `@tanstack/react-query` and follow the pattern in `ui/src/features/esxiSshKeys/pages/EsxiSshKeysPage.tsx`
-- [ ] T008 [US1] Add a `ComponentsVerifiedTooltip` sub-component inside `ProxyVMPage.tsx`: when hovering the Status chip of a VerificationFailed row, show a Tooltip listing each component from `status.componentsVerified` with a ✓ or ✗ per item and the per-component `message` for missing ones
-
-**Checkpoint**: ProxyVM page fully usable — add, poll, see Ready / VerificationFailed with component detail, delete.
+- [X] T006 [P] [US1] Create `ui/src/features/proxyVM/components/AddProxyVMDialog.tsx` with SSH key prerequisite Alert, VM Name TextField, VMware Credentials Select (validated creds only), and `createProxyVM` call on submit
+- [X] T007 [US1] Create `ui/src/features/proxyVM/pages/ProxyVMPage.tsx` with DataGrid (Name, VM Name, Status Chip, IP, Attached Disks, Age, Actions), "Add Proxy VM" toolbar button, `refetchInterval: 5000` polling while Pending/Verifying
+- [X] T008 [US1] Add `ComponentsVerifiedTooltip` sub-component in `ProxyVMPage.tsx` showing ✓/✗ per component on VerificationFailed rows
 
 ---
 
-## Phase 4: User Story 2 — Select Hot-Add in Migration Form (Priority: P1)
+## Phase 4: User Story 2 — Hot-Add in Migration Form ✅
 
-**Goal**: "Hot-Add via Proxy VM" appears in the copy method dropdown; when selected, the ProxyVM selector replaces the StorageMapping/ArrayCredsMapping sections; form validates that a Ready ProxyVM is chosen before submission.
-
-**Independent Test**: Open migration creation, select Hot-Add → confirm ProxyVM selector appears, StorageMapping section disappears → submit with no ProxyVM selected → validation error shown → select a Ready ProxyVM → form submits and MigrationTemplate CR contains `storageCopyMethod: HotAdd` and `proxyVMRef.name`.
-
-### Implementation for User Story 2
-
-- [ ] T009 [P] [US2] In `ui/src/features/migration/MigrationForm.tsx` (line 120): extend the `storageCopyMethod` union type to `'normal' | 'StorageAcceleratedCopy' | 'HotAdd'`; add `proxyVMRef?: string` field to `FormValues`; in the MigrationTemplate build function (around line 660), add an `else if (storageCopyMethod === 'HotAdd')` branch that sets `spec.storageCopyMethod = 'HotAdd'` and `spec.proxyVMRef = { name: params.proxyVMRef }` on the template spec; add form validation that when `storageCopyMethod === 'HotAdd'` the `proxyVMRef` field must be set
-- [ ] T010 [US2] In `ui/src/features/migration/NetworkAndStorageMappingStep.tsx`: (1) append `{ value: 'HotAdd', label: 'Hot-Add via Proxy VM' }` to the `storageCopyMethodOptions` array (around line 40); (2) add a `useQuery` that fetches `getProxyVMs()` with `enabled: storageCopyMethod === 'HotAdd'`; (3) when `storageCopyMethod === 'HotAdd'`, hide the StorageMapping section and the ArrayCredsMapping section, and instead render a "Proxy VM" MUI Select populated with Ready ProxyVMs (label: name + IP, value: name) calling `onChange('proxyVMRef')` on change; (4) when no Ready ProxyVM exists, show an inline warning: "No ready Proxy VM found. Register one in Proxy VMs before proceeding."
-
-**Checkpoint**: Migration form correctly shows/hides sections by copy method; HotAdd path submits correct CR fields.
+- [X] T009 [P] [US2] Extend `storageCopyMethod` union to include `'HotAdd'`, add `proxyVMRef?: string` to `FormValues`, add HotAdd branch in template build and form validation in `ui/src/features/migration/MigrationForm.tsx`
+- [X] T010 [US2] Append `{ value: 'HotAdd', label: 'Hot-Add via Proxy VM' }` to copy method options; add ProxyVM Select below StorageMapping table when HotAdd is selected in `ui/src/features/migration/NetworkAndStorageMappingStep.tsx`
 
 ---
 
-## Phase 5: User Story 4 — View and Manage Proxy VMs (Priority: P2)
+## Phase 5: User Story 4 — ProxyVM Lifecycle ✅
 
-**Goal**: Operator can see full Proxy VM list with all status detail and remove stale entries.
-
-**Independent Test**: Register two ProxyVMs, delete one → list reflects change immediately. No migration needed.
-
-### Implementation for User Story 4
-
-- [ ] T011 [US4] In `ui/src/features/proxyVM/pages/ProxyVMPage.tsx`: add a confirmation Dialog before delete ("Remove Proxy VM `{name}`? Any pending Hot-Add migration that depends on it will be blocked.") — only call `deleteProxyVM` after confirmation; show a success/error Snackbar after delete completes; add a "Last Validated" column displaying `status.lastValidationTime` formatted as a relative time (e.g., "2 minutes ago") using the existing date helpers in `ui/src/api/helpers.ts`
-
-**Checkpoint**: Full ProxyVM lifecycle (add → verify → view detail → delete with confirmation) works without any migration.
+- [X] T011 [US4] Add delete confirmation Dialog and success/error Snackbar; add "Last Validated" column with relative time in `ui/src/features/proxyVM/pages/ProxyVMPage.tsx`
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: UI Polish ✅
 
-- [ ] T012 [P] Export `ProxyVMPage` from `ui/src/features/proxyVM/index.ts` barrel file (create if it doesn't exist) so the App.tsx import is clean
-- [ ] T013 [P] Verify no TypeScript errors in modified files: `MigrationForm.tsx`, `NetworkAndStorageMappingStep.tsx`, `App.tsx`, `navigation.tsx` — run `cd ui && yarn tsc --noEmit` and fix any type errors
-- [ ] T014 Smoke-test the existing copy methods (normal, StorageAcceleratedCopy) still render their respective mapping sections correctly after the `NetworkAndStorageMappingStep.tsx` changes — manual check in dev server
+- [X] T012 [P] Create `ui/src/features/proxyVM/index.ts` barrel export for `ProxyVMPage`
+- [ ] T013 [P] Verify no TypeScript errors: run `cd ui && yarn tsc --noEmit` and fix any issues in modified files
+- [ ] T014 Smoke-test normal and StorageAcceleratedCopy paths still render correctly after `NetworkAndStorageMappingStep.tsx` changes
+
+---
+
+## Phase 7: Backend Data Structures
+
+**Purpose**: Thread HotAdd parameters from ConfigMap through MigrationParams into the Migrate struct so `hotadd_copy.go` can access Proxy VM coordinates.
+
+- [X] T015 In `v2v-helper/migrate/migrate.go` (line ~81, after `ArrayCredsMapping string`), add two fields to the `Migrate` struct:
+  ```go
+  ProxyVMIP   string
+  ProxyVMName string
+  ```
+
+- [X] T016 In `v2v-helper/pkg/utils/vcenterutils.go` (line ~15, `MigrationParams` struct, after `ArrayCredsMapping string`), add:
+  ```go
+  ProxyVMIP   string
+  ProxyVMName string
+  ```
+
+- [X] T017 In `GetMigrationParams()` in `v2v-helper/pkg/utils/vcenterutils.go` (after the `ArrayCredsMapping` read), read the two new keys:
+  ```go
+  params.ProxyVMIP   = configMap.Data["PROXY_VM_IP"]
+  params.ProxyVMName = configMap.Data["PROXY_VM_NAME"]
+  ```
+
+- [X] T018 In `v2v-helper/main.go` (lines ~168–178, Migrate struct literal), wire in the new fields:
+  ```go
+  ProxyVMIP:   migrationparams.ProxyVMIP,
+  ProxyVMName: migrationparams.ProxyVMName,
+  ```
+
+---
+
+## Phase 8: MigrationPlan Controller Changes
+
+**Purpose**: Validate HotAdd prerequisites at plan-time, populate the ConfigMap for the v2v-helper pod, and track per-ProxyVM disk counts.
+
+- [ ] T019 Add RBAC marker above the `MigrationPlanReconciler` struct in `k8s/migration/internal/controller/migrationplan_controller.go`:
+  ```go
+  // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms,verbs=get;list;watch;update;patch
+  ```
+  Then run `make generate` inside `k8s/migration/` to regenerate RBAC manifests.
+
+- [ ] T020 In `k8s/migration/internal/controller/migrationplan_controller.go`, after the `StorageAcceleratedCopy` validation block (~line 670), add a HotAdd validation block that:
+  1. Fetches the `ProxyVM` named by `migrationtemplate.Spec.ProxyVMRef.Name`
+  2. Returns an error/condition if `proxyVM.Status.ValidationStatus != "Ready"`
+  3. Returns an error/condition if `proxyVM.Status.AttachedDiskCount + len(sourceDisks) > 60`
+
+- [ ] T021 In `setOSFamilyAndStorageFields()` in `k8s/migration/internal/controller/migrationplan_controller.go` (~line 1604), add a HotAdd `else if` branch after the StorageAcceleratedCopy branch that sets:
+  ```go
+  configMapData["STORAGE_COPY_METHOD"] = string(constants.HotAddCopyMethod)
+  configMapData["PROXY_VM_IP"]   = proxyVM.Status.IPAddress
+  configMapData["PROXY_VM_NAME"] = proxyVM.Spec.VMName
+  ```
+  Fetch the ProxyVM resource using `migrationtemplate.Spec.ProxyVMRef.Name`.
+
+- [ ] T022 Add `incrementProxyVMDiskCount` and `decrementProxyVMDiskCount` helpers in `k8s/migration/internal/controller/migrationplan_controller.go` that patch `status.attachedDiskCount` on the ProxyVM resource; call increment when a HotAdd migration transitions to running, decrement on completion or failure.
+
+---
+
+## Phase 9: hotadd_copy.go — New File
+
+**Purpose**: All Hot-Add data copy logic. Modelled on `v2v-helper/migrate/vaai_copy.go`.  
+**File to create**: `v2v-helper/migrate/hotadd_copy.go`
+
+- [ ] T023 Create `v2v-helper/migrate/hotadd_copy.go` with package declaration, imports, and the `hotAddDiskTransfer` struct:
+  ```go
+  type hotAddDiskTransfer struct {
+      BlockDevice     string  // /dev/sdX on the Proxy VM
+      DestDevice      string  // /dev/sdX on the vJailbreak appliance
+      SnapshotVMDKPath string // frozen parent VMDK path
+      DiskKey         int32  // vCenter device key for detach
+      WWID            string // normalised UUID (no dashes, lowercase)
+      NBDPort         int
+      NBDPid          int
+  }
+  ```
+
+- [ ] T024 Implement `takeVMSnapshot(ctx context.Context, vcClient *govmomi.Client, sourceVMName, snapshotName string) error` in `hotadd_copy.go`:
+  - Use govmomi to call `snapshot.Create` with `memory=false`, `quiesce=false`
+  - If a snapshot with the same name already exists, remove it first with `snapshot.Remove`
+
+- [ ] T025 Implement `getFrozenVMDKs(ctx context.Context, vcClient *govmomi.Client, sourceVMName string) ([]hotAddDiskTransfer, error)` in `hotadd_copy.go`:
+  - Enumerate `VirtualDisk` devices from the VM config
+  - For each disk, if `backing.Parent != nil`, use `backing.Parent.FileName`; otherwise use `backing.FileName`
+  - Return one `hotAddDiskTransfer` per disk with `SnapshotVMDKPath` and `DiskKey` populated
+
+- [ ] T026 Implement `attachDiskToProxy(ctx context.Context, vcClient *govmomi.Client, proxyVMName, datastoreName, diskPath string) error` in `hotadd_copy.go`:
+  - Use govmomi `vm.AddDevice` to attach the frozen VMDK to the Proxy VM
+  - Set mode to `VirtualDiskMode_independent_nonpersistent`
+  - Return the updated device key
+
+- [ ] T027 Implement `identifyBlockDevices(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName string) error` in `hotadd_copy.go`:
+  - Via SSH: `for d in /sys/block/sd*; do w=$(cat $d/device/wwid 2>/dev/null); case "$w" in naa.*) echo "$(basename $d)|${w#naa.}";; esac; done`
+  - Via govmomi: `device.info -json 'disk-*'` on the Proxy VM, extract `backing.uuid`, strip dashes and lowercase
+  - Match each transfer's WWID to a block device; set `transfer.BlockDevice = "/dev/" + matched`
+  - Retry up to 3 times with 5-second sleep between attempts (disk may take a moment to appear in guest)
+
+- [ ] T028 Implement `findFreePort(sshClient *ssh.Client, rangeMin, rangeMax int) (int, error)` in `hotadd_copy.go`:
+  - Via SSH: `cat /proc/net/tcp /proc/net/tcp6`
+  - Parse each line's local_address field (column 2): hex `XXXXXXXX:PPPP` — extract port from last 4 hex digits
+  - Build a set of used ports; return first port in `[rangeMin, rangeMax]` not in the set
+
+- [ ] T029 Implement `serveViaNBD(sshClient *ssh.Client, blockDevice string, port int) (pid int, err error)` in `hotadd_copy.go`:
+  - Via SSH run: `qemu-nbd --format=raw --port=<port> --bind=0.0.0.0 --fork --persistent <blockDevice>`
+  - The `--fork` flag makes qemu-nbd print the child PID to stdout then exit; capture and parse the PID
+  - Return the PID so cleanup can kill it later
+
+- [ ] T030 Implement `runNBDCopy(ctx context.Context, proxyIP string, port int, destDevice string) error` in `hotadd_copy.go`:
+  - Execute locally: `nbdcopy nbd://<proxyIP>:<port> <destDevice>`
+  - Retry up to 3 times with 10-second backoff on non-zero exit; log stderr on each attempt
+  - Return nil on success, wrapped error after 3 failures
+
+- [ ] T031 Implement `cleanupHotAdd(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName, sourceVMName, snapshotName string)` in `hotadd_copy.go`:
+  - For each transfer with `NBDPid > 0`: SSH `kill <pid>` (ignore errors — process may already be gone)
+  - For each transfer with `DiskKey != 0`: govmomi `vm.RemoveDevice` on the Proxy VM using the device key
+  - Call govmomi `snapshot.Remove` on the source VM for `snapshotName`
+  - Log but do not fail on individual cleanup errors
+
+- [ ] T032 Implement `HotAddCopyDisks(ctx context.Context, migobj *Migrate, vminfo vm.VMInfo) error` in `hotadd_copy.go`:
+  - Orchestrates T024–T031 in order: takeVMSnapshot → getFrozenVMDKs → attachDiskToProxy (per disk) → identifyBlockDevices → per disk: findFreePort + serveViaNBD + runNBDCopy
+  - `defer cleanupHotAdd(...)` immediately after snapshot is created
+  - Log progress at each step with disk name and sizes
+
+---
+
+## Phase 10: migrate.go Integration
+
+**Purpose**: Wire the HotAdd code path into the existing migration execution loop.
+
+- [ ] T033 In `v2v-helper/migrate/migrate.go` at line ~1862 (the disk count check that skips for SAM), extend the condition to also skip for HotAdd:
+  ```go
+  // Before:
+  if migobj.StorageCopyMethod != constants.StorageCopyMethod {
+  // After:
+  if migobj.StorageCopyMethod != constants.StorageCopyMethod &&
+     migobj.StorageCopyMethod != constants.HotAddCopyMethod {
+  ```
+
+- [ ] T034 In `v2v-helper/migrate/migrate.go` at line ~1881 (the `if migobj.StorageCopyMethod == constants.StorageCopyMethod` branch for SAM), add an `else if` branch for HotAdd:
+  ```go
+  } else if migobj.StorageCopyMethod == constants.HotAddCopyMethod {
+      if err := CreateVolumes(ctx, migobj, vminfo); err != nil {
+          return err
+      }
+      if err := AttachVolumes(ctx, migobj, vminfo); err != nil {
+          return err
+      }
+      if err := HotAddCopyDisks(ctx, migobj, vminfo); err != nil {
+          return err
+      }
+  }
+  ```
+  (CreateVolumes and AttachVolumes create and attach the destination volumes on OpenStack, same as the normal path.)
+
+---
+
+## Phase 11: Constants & CRD
+
+- [ ] T035 Verify `constants.HotAddCopyMethod` is defined in `pkg/common/constants/constants.go` (add `HotAddCopyMethod StorageCopyMethodType = "HotAdd"` if missing)
+- [ ] T036 Verify `MigrationTemplate` CRD spec includes `proxyVMRef` field; if not present, add it to `k8s/migration/api/v1alpha1/migrationtemplate_types.go` and run `make generate` inside `k8s/migration/`
 
 ---
 
@@ -95,50 +225,46 @@ description: "UI task list for Hot-Add Proxy Migration feature"
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies — start immediately
-- **Phase 2 (Routing)**: Depends on Phase 1 (needs `ProxyVMPage` import) — BLOCKS Phase 3
-- **Phase 3 (US1)**: Depends on Phase 1 + Phase 2
-- **Phase 4 (US2)**: Depends on Phase 1 (needs `getProxyVMs`) — can run in parallel with Phase 3
-- **Phase 5 (US4)**: Depends on Phase 3 (extends the ProxyVM page)
-- **Phase 6 (Polish)**: Depends on Phases 3–5
+- **Phase 7**: Independent — start immediately
+- **Phase 8**: Depends on Phase 7 data structures being clear (can start in parallel)
+- **Phase 9**: Depends on Phase 7 (uses `Migrate` struct fields) — must have T015 done
+- **Phase 10**: Depends on Phase 9 (calls `HotAddCopyDisks`) — must have T032 done
+- **Phase 11**: Independent — can run in parallel with Phase 7
 
-### Within Each Phase
+### Critical Path
 
-- T006 and T009 are marked [P] — they touch different files and can be worked simultaneously
-- T007 depends on T006 (dialog is opened from the page)
-- T008 depends on T007 (tooltip is inside the page)
-- T010 depends on T009 (needs the `proxyVMRef` FormValues field to call `onChange`)
-- T011 depends on T007 (extends the existing page)
+```
+T015/T016/T017/T018  →  T032  →  T033/T034   (data flow: ConfigMap → Migrate → hotadd_copy → migrate.go)
+T019/T020/T021/T022             (controller changes, independent of v2v-helper)
+T023 → T024 → T025 → T026 → T027 → T028 → T029 → T030 → T031 → T032
+T035/T036                       (constants/CRD, unblock everything)
+```
+
+### Parallel Opportunities
+
+```
+[Thread A] T035 → T036 → T015 → T016 → T017 → T018 → T033 → T034
+[Thread B] T019 → T020 → T021 → T022
+[Thread C] T023 → T024 → T025 → T026 → T027 → T028 → T029 → T030 → T031 → T032
+```
+
+Threads A and C converge at T033/T034.
 
 ---
 
-## Parallel Execution Example
+## Implementation Notes
 
-```
-# Phase 1 — run all three in sequence (fast, shared infrastructure):
-T001 → T002 → T003
+### SSH client in hotadd_copy.go
+Use `golang.org/x/crypto/ssh` (already a transitive dep). Create the client with the same key-path pattern used by `proxyvm_controller.go` (`/home/ubuntu/.ssh/id_rsa`). Pass it into each function rather than re-opening.
 
-# Phase 3 + Phase 4 — run in parallel once Phase 1 is done:
-[Thread A] T006 → T007 → T008   (ProxyVM management page)
-[Thread B] T009 → T010          (Migration form Hot-Add support)
+### qemu-nbd PID capture
+`qemu-nbd --fork` prints the daemon PID to stdout on the background process line. Parse with `strconv.Atoi(strings.TrimSpace(out))`.
 
-# Phase 5 — after Thread A completes:
-T011
-```
+### Port range for NBD
+Use `10809–10909` (100 ports). Port 10809 is the IANA-registered NBD port; the range avoids conflicts with common services.
 
----
+### govmomi disk detach
+Use `object.VirtualMachine.RemoveDevice(ctx, false, device)` — `keepFiles=false` would delete the VMDK; since these are snapshot reference disks we must NOT delete the file, so pass `keepFiles=true`.
 
-## Implementation Strategy
-
-### MVP (US1 + US2 only)
-
-1. Complete Phase 1: API client (T001–T003)
-2. Complete Phase 2: Routing (T004–T005)
-3. Complete Phase 3: ProxyVM page (T006–T008) — operators can register + verify
-4. Complete Phase 4: Migration form (T009–T010) — operators can start Hot-Add migrations
-5. **STOP and validate**: register a ProxyVM → verify Ready → create Hot-Add migration → confirm CR has correct fields
-
-### Full Delivery (adds US4)
-
-6. Complete Phase 5: Delete confirmation + last-validated column (T011)
-7. Complete Phase 6: Polish (T012–T014)
+### Error propagation
+`cleanupHotAdd` is called via `defer` and must not panic. Use `log.Error` for each sub-step failure and continue cleanup.

@@ -172,6 +172,8 @@ func main() {
 		ArrayInsecure:          arrayInsecure,
 		VendorType:             migrationparams.VendorType,
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
+		ProxyVMIP:              migrationparams.ProxyVMIP,
+		ProxyVMName:            migrationparams.ProxyVMName,
 		NetAppSVM:              migrationparams.NetAppSVM,
 		NetAppFlexVol:          migrationparams.NetAppFlexVol,
 		NetworkOverrides:       networkOverrides,
