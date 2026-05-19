@@ -1390,6 +1390,22 @@ spec:
                 - windowsGuest
                 - linuxGuest
                 type: string
+              proxyVMRef:
+                description: |-
+                  ProxyVMRef references the ProxyVM to use for HotAdd data copy.
+                  Required when StorageCopyMethod is "HotAdd".
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               source:
                 description: Source is the source details for the virtual machine
                 properties:
@@ -1404,10 +1420,11 @@ spec:
                 default: normal
                 description: |-
                   StorageCopyMethod indicates the method to use for storage migration
-                  Valid values: "normal" (default), "StorageAcceleratedCopy"
+                  Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAdd"
                 enum:
                 - normal
                 - StorageAcceleratedCopy
+                - HotAdd
                 type: string
               storageMapping:
                 description: |-
@@ -3640,6 +3657,7 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
+  - proxyvms
   - rdmdisks
   - rollingmigrationplans
   - storagemappings
@@ -3670,6 +3688,7 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
+  - proxyvms/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
@@ -3692,6 +3711,7 @@ rules:
   - openstackcreds/status
   - pcdclusters/status
   - pcdhosts/status
+  - proxyvms/status
   - rdmdisks/status
   - rollingmigrationplans/status
   - storagemappings/status
