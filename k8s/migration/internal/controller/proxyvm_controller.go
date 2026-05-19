@@ -43,7 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const proxyVMSSHKeyPath = "/root/.ssh/id_rsa"
+const proxyVMSSHKeyPath = "/home/ubuntu/.ssh/id_rsa"
 
 // ProxyVMReconciler reconciles a ProxyVM object
 type ProxyVMReconciler struct {
