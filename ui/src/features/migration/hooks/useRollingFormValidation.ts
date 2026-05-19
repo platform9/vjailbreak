@@ -399,27 +399,26 @@ export function useRollingFormValidation({
         id: 'vms',
         title: 'Select VMs',
         description: 'Choose VMs and required fields',
-        status:
-          touchedSections.vms && selectedVMs.length > 0
+        status: step4HasErrors
+          ? 'attention'
+          : touchedSections.vms && selectedVMs.length > 0
             ? 'complete'
-            : step4HasErrors
-              ? 'attention'
-              : 'incomplete'
+            : 'incomplete'
       },
       {
         id: 'map-resources',
         title: 'Map Networks And Storage',
         description: 'Map VMware resources to PCD',
-        status:
-          touchedSections.mapResources &&
-          availableVmwareNetworks.every((n) => (params.networkMappings ?? []).some((m) => m.source === n)) &&
-          (params.storageCopyMethod === 'StorageAcceleratedCopy'
-            ? availableVmwareDatastores.every((d) => (params.arrayCredsMappings ?? []).some((m) => m.source === d))
-            : availableVmwareDatastores.every((d) => (params.storageMappings ?? []).some((m) => m.source === d)))
+        status: step5HasErrors
+          ? 'attention'
+          : touchedSections.mapResources &&
+            (availableVmwareNetworks.length > 0 || availableVmwareDatastores.length > 0) &&
+            availableVmwareNetworks.every((n) => (params.networkMappings ?? []).some((m) => m.source === n)) &&
+            (params.storageCopyMethod === 'StorageAcceleratedCopy'
+              ? availableVmwareDatastores.every((d) => (params.arrayCredsMappings ?? []).some((m) => m.source === d))
+              : availableVmwareDatastores.every((d) => (params.storageMappings ?? []).some((m) => m.source === d)))
             ? 'complete'
-            : step5HasErrors
-              ? 'attention'
-              : 'incomplete'
+            : 'incomplete'
       },
       {
         id: 'security',

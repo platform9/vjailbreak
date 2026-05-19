@@ -217,6 +217,12 @@ export default function RollingMigrationFormDrawer({
     }
   }, [params.vmwareCluster, params.pcdCluster])
 
+  useEffect(() => {
+    if ((params.securityGroups ?? []).length > 0 || params.serverGroup) {
+      markTouched('security')
+    }
+  }, [params.securityGroups, params.serverGroup])
+
   const availableVmwareNetworks = useMemo(() => {
     if (!vmsWithAssignments.length || !selectedVMs.length) return []
 
@@ -961,6 +967,26 @@ export default function RollingMigrationFormDrawer({
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                         <Typography variant="body2" color="text.secondary">
+                          Bare metal config
+                        </Typography>
+                        <Typography variant="body2">
+                          {selectedMaasConfig ? selectedMaasConfig.metadata?.name ?? 'Selected' : '—'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          ESXi hosts
+                        </Typography>
+                        <Typography variant="body2">
+                          {esxHostMappingStatus.total === 0
+                            ? '—'
+                            : esxHostMappingStatus.fullyMapped
+                              ? `All ${esxHostMappingStatus.total} mapped`
+                              : `${esxHostMappingStatus.mapped} of ${esxHostMappingStatus.total} mapped`}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
                           VMs selected
                         </Typography>
                         <Typography variant="body2">{selectedVMs.length}</Typography>
@@ -988,6 +1014,22 @@ export default function RollingMigrationFormDrawer({
                               ? 'All mapped'
                               : `${unmappedStorageCount} unmapped`}
                         </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Security groups
+                        </Typography>
+                        <Typography variant="body2">
+                          {(params.securityGroups ?? []).length === 0
+                            ? '—'
+                            : `${(params.securityGroups ?? []).length} selected`}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Server group
+                        </Typography>
+                        <Typography variant="body2">{params.serverGroup || '—'}</Typography>
                       </Box>
                     </Box>
                   </Box>
