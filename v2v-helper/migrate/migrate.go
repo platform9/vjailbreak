@@ -1884,7 +1884,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) &&
+		migobj.StorageCopyMethod != constants.StorageCopyMethod &&
+		migobj.StorageCopyMethod != constants.HotAddCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1936,6 +1938,23 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 				return errors.Wrapf(err, "failed to cleanup after image metadata failure: %s", cleanuperror)
 			}
 			return errors.Wrap(err, "failed to apply image metadata to XCOPY volumes")
+		}
+
+	} else if migobj.StorageCopyMethod == constants.HotAddCopyMethod {
+
+		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
+		}
+		for idx, vmdisk := range vminfo.VMDisks {
+			path, err := migobj.AttachVolume(ctx, vmdisk)
+			if err != nil {
+				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
+			}
+			vminfo.VMDisks[idx].Path = path
+		}
+		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform HotAdd disk copy")
 		}
 
 	} else {

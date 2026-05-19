@@ -55,8 +55,8 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 ## Phase 6: UI Polish ✅
 
 - [X] T012 [P] Create `ui/src/features/proxyVM/index.ts` barrel export for `ProxyVMPage`
-- [ ] T013 [P] Verify no TypeScript errors: run `cd ui && yarn tsc --noEmit` and fix any issues in modified files
-- [ ] T014 Smoke-test normal and StorageAcceleratedCopy paths still render correctly after `NetworkAndStorageMappingStep.tsx` changes
+- [X] T013 [P] Verify no TypeScript errors: run `cd ui && yarn tsc --noEmit` and fix any issues in modified files
+- [X] T014 Smoke-test normal and StorageAcceleratedCopy paths still render correctly after `NetworkAndStorageMappingStep.tsx` changes
 
 ---
 
@@ -94,18 +94,18 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 
 **Purpose**: Validate HotAdd prerequisites at plan-time, populate the ConfigMap for the v2v-helper pod, and track per-ProxyVM disk counts.
 
-- [ ] T019 Add RBAC marker above the `MigrationPlanReconciler` struct in `k8s/migration/internal/controller/migrationplan_controller.go`:
+- [X] T019 Add RBAC marker above the `MigrationPlanReconciler` struct in `k8s/migration/internal/controller/migrationplan_controller.go`:
   ```go
   // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms,verbs=get;list;watch;update;patch
   ```
   Then run `make generate` inside `k8s/migration/` to regenerate RBAC manifests.
 
-- [ ] T020 In `k8s/migration/internal/controller/migrationplan_controller.go`, after the `StorageAcceleratedCopy` validation block (~line 670), add a HotAdd validation block that:
+- [X] T020 In `k8s/migration/internal/controller/migrationplan_controller.go`, after the `StorageAcceleratedCopy` validation block (~line 670), add a HotAdd validation block that:
   1. Fetches the `ProxyVM` named by `migrationtemplate.Spec.ProxyVMRef.Name`
   2. Returns an error/condition if `proxyVM.Status.ValidationStatus != "Ready"`
   3. Returns an error/condition if `proxyVM.Status.AttachedDiskCount + len(sourceDisks) > 60`
 
-- [ ] T021 In `setOSFamilyAndStorageFields()` in `k8s/migration/internal/controller/migrationplan_controller.go` (~line 1604), add a HotAdd `else if` branch after the StorageAcceleratedCopy branch that sets:
+- [X] T021 In `setOSFamilyAndStorageFields()` in `k8s/migration/internal/controller/migrationplan_controller.go` (~line 1604), add a HotAdd `else if` branch after the StorageAcceleratedCopy branch that sets:
   ```go
   configMapData["STORAGE_COPY_METHOD"] = string(constants.HotAddCopyMethod)
   configMapData["PROXY_VM_IP"]   = proxyVM.Status.IPAddress
@@ -113,7 +113,7 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
   ```
   Fetch the ProxyVM resource using `migrationtemplate.Spec.ProxyVMRef.Name`.
 
-- [ ] T022 Add `incrementProxyVMDiskCount` and `decrementProxyVMDiskCount` helpers in `k8s/migration/internal/controller/migrationplan_controller.go` that patch `status.attachedDiskCount` on the ProxyVM resource; call increment when a HotAdd migration transitions to running, decrement on completion or failure.
+- [X] T022 Add `incrementProxyVMDiskCount` and `decrementProxyVMDiskCount` helpers in `k8s/migration/internal/controller/migrationplan_controller.go` that patch `status.attachedDiskCount` on the ProxyVM resource; call increment when a HotAdd migration transitions to running, decrement on completion or failure.
 
 ---
 
@@ -122,7 +122,7 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 **Purpose**: All Hot-Add data copy logic. Modelled on `v2v-helper/migrate/vaai_copy.go`.  
 **File to create**: `v2v-helper/migrate/hotadd_copy.go`
 
-- [ ] T023 Create `v2v-helper/migrate/hotadd_copy.go` with package declaration, imports, and the `hotAddDiskTransfer` struct:
+- [X] T023 Create `v2v-helper/migrate/hotadd_copy.go` with package declaration, imports, and the `hotAddDiskTransfer` struct:
   ```go
   type hotAddDiskTransfer struct {
       BlockDevice     string  // /dev/sdX on the Proxy VM
@@ -135,48 +135,48 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
   }
   ```
 
-- [ ] T024 Implement `takeVMSnapshot(ctx context.Context, vcClient *govmomi.Client, sourceVMName, snapshotName string) error` in `hotadd_copy.go`:
+- [X] T024 Implement `takeVMSnapshot(ctx context.Context, vcClient *govmomi.Client, sourceVMName, snapshotName string) error` in `hotadd_copy.go`:
   - Use govmomi to call `snapshot.Create` with `memory=false`, `quiesce=false`
   - If a snapshot with the same name already exists, remove it first with `snapshot.Remove`
 
-- [ ] T025 Implement `getFrozenVMDKs(ctx context.Context, vcClient *govmomi.Client, sourceVMName string) ([]hotAddDiskTransfer, error)` in `hotadd_copy.go`:
+- [X] T025 Implement `getFrozenVMDKs(ctx context.Context, vcClient *govmomi.Client, sourceVMName string) ([]hotAddDiskTransfer, error)` in `hotadd_copy.go`:
   - Enumerate `VirtualDisk` devices from the VM config
   - For each disk, if `backing.Parent != nil`, use `backing.Parent.FileName`; otherwise use `backing.FileName`
   - Return one `hotAddDiskTransfer` per disk with `SnapshotVMDKPath` and `DiskKey` populated
 
-- [ ] T026 Implement `attachDiskToProxy(ctx context.Context, vcClient *govmomi.Client, proxyVMName, datastoreName, diskPath string) error` in `hotadd_copy.go`:
+- [X] T026 Implement `attachDiskToProxy(ctx context.Context, vcClient *govmomi.Client, proxyVMName, datastoreName, diskPath string) error` in `hotadd_copy.go`:
   - Use govmomi `vm.AddDevice` to attach the frozen VMDK to the Proxy VM
   - Set mode to `VirtualDiskMode_independent_nonpersistent`
   - Return the updated device key
 
-- [ ] T027 Implement `identifyBlockDevices(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName string) error` in `hotadd_copy.go`:
+- [X] T027 Implement `identifyBlockDevices(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName string) error` in `hotadd_copy.go`:
   - Via SSH: `for d in /sys/block/sd*; do w=$(cat $d/device/wwid 2>/dev/null); case "$w" in naa.*) echo "$(basename $d)|${w#naa.}";; esac; done`
   - Via govmomi: `device.info -json 'disk-*'` on the Proxy VM, extract `backing.uuid`, strip dashes and lowercase
   - Match each transfer's WWID to a block device; set `transfer.BlockDevice = "/dev/" + matched`
   - Retry up to 3 times with 5-second sleep between attempts (disk may take a moment to appear in guest)
 
-- [ ] T028 Implement `findFreePort(sshClient *ssh.Client, rangeMin, rangeMax int) (int, error)` in `hotadd_copy.go`:
+- [X] T028 Implement `findFreePort(sshClient *ssh.Client, rangeMin, rangeMax int) (int, error)` in `hotadd_copy.go`:
   - Via SSH: `cat /proc/net/tcp /proc/net/tcp6`
   - Parse each line's local_address field (column 2): hex `XXXXXXXX:PPPP` — extract port from last 4 hex digits
   - Build a set of used ports; return first port in `[rangeMin, rangeMax]` not in the set
 
-- [ ] T029 Implement `serveViaNBD(sshClient *ssh.Client, blockDevice string, port int) (pid int, err error)` in `hotadd_copy.go`:
+- [X] T029 Implement `serveViaNBD(sshClient *ssh.Client, blockDevice string, port int) (pid int, err error)` in `hotadd_copy.go`:
   - Via SSH run: `qemu-nbd --format=raw --port=<port> --bind=0.0.0.0 --fork --persistent <blockDevice>`
   - The `--fork` flag makes qemu-nbd print the child PID to stdout then exit; capture and parse the PID
   - Return the PID so cleanup can kill it later
 
-- [ ] T030 Implement `runNBDCopy(ctx context.Context, proxyIP string, port int, destDevice string) error` in `hotadd_copy.go`:
+- [X] T030 Implement `runNBDCopy(ctx context.Context, proxyIP string, port int, destDevice string) error` in `hotadd_copy.go`:
   - Execute locally: `nbdcopy nbd://<proxyIP>:<port> <destDevice>`
   - Retry up to 3 times with 10-second backoff on non-zero exit; log stderr on each attempt
   - Return nil on success, wrapped error after 3 failures
 
-- [ ] T031 Implement `cleanupHotAdd(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName, sourceVMName, snapshotName string)` in `hotadd_copy.go`:
+- [X] T031 Implement `cleanupHotAdd(sshClient *ssh.Client, transfers []hotAddDiskTransfer, vcClient *govmomi.Client, proxyVMName, sourceVMName, snapshotName string)` in `hotadd_copy.go`:
   - For each transfer with `NBDPid > 0`: SSH `kill <pid>` (ignore errors — process may already be gone)
   - For each transfer with `DiskKey != 0`: govmomi `vm.RemoveDevice` on the Proxy VM using the device key
   - Call govmomi `snapshot.Remove` on the source VM for `snapshotName`
   - Log but do not fail on individual cleanup errors
 
-- [ ] T032 Implement `HotAddCopyDisks(ctx context.Context, migobj *Migrate, vminfo vm.VMInfo) error` in `hotadd_copy.go`:
+- [X] T032 Implement `HotAddCopyDisks(ctx context.Context, migobj *Migrate, vminfo vm.VMInfo) error` in `hotadd_copy.go`:
   - Orchestrates T024–T031 in order: takeVMSnapshot → getFrozenVMDKs → attachDiskToProxy (per disk) → identifyBlockDevices → per disk: findFreePort + serveViaNBD + runNBDCopy
   - `defer cleanupHotAdd(...)` immediately after snapshot is created
   - Log progress at each step with disk name and sizes
@@ -187,7 +187,7 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 
 **Purpose**: Wire the HotAdd code path into the existing migration execution loop.
 
-- [ ] T033 In `v2v-helper/migrate/migrate.go` at line ~1862 (the disk count check that skips for SAM), extend the condition to also skip for HotAdd:
+- [X] T033 In `v2v-helper/migrate/migrate.go` at line ~1862 (the disk count check that skips for SAM), extend the condition to also skip for HotAdd:
   ```go
   // Before:
   if migobj.StorageCopyMethod != constants.StorageCopyMethod {
@@ -196,7 +196,7 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
      migobj.StorageCopyMethod != constants.HotAddCopyMethod {
   ```
 
-- [ ] T034 In `v2v-helper/migrate/migrate.go` at line ~1881 (the `if migobj.StorageCopyMethod == constants.StorageCopyMethod` branch for SAM), add an `else if` branch for HotAdd:
+- [X] T034 In `v2v-helper/migrate/migrate.go` at line ~1881 (the `if migobj.StorageCopyMethod == constants.StorageCopyMethod` branch for SAM), add an `else if` branch for HotAdd:
   ```go
   } else if migobj.StorageCopyMethod == constants.HotAddCopyMethod {
       if err := CreateVolumes(ctx, migobj, vminfo); err != nil {
@@ -216,8 +216,8 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
 
 ## Phase 11: Constants & CRD
 
-- [ ] T035 Verify `constants.HotAddCopyMethod` is defined in `pkg/common/constants/constants.go` (add `HotAddCopyMethod StorageCopyMethodType = "HotAdd"` if missing)
-- [ ] T036 Verify `MigrationTemplate` CRD spec includes `proxyVMRef` field; if not present, add it to `k8s/migration/api/v1alpha1/migrationtemplate_types.go` and run `make generate` inside `k8s/migration/`
+- [X] T035 Verify `constants.HotAddCopyMethod` is defined in `pkg/common/constants/constants.go` (add `HotAddCopyMethod StorageCopyMethodType = "HotAdd"` if missing)
+- [X] T036 Verify `MigrationTemplate` CRD spec includes `proxyVMRef` field; if not present, add it to `k8s/migration/api/v1alpha1/migrationtemplate_types.go` and run `make generate` inside `k8s/migration/`
 
 ---
 

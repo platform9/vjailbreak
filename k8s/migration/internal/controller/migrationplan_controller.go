@@ -100,6 +100,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms,verbs=get;list;watch;update;patch
 
 // Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
 func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -666,6 +667,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
+	var proxyVM *vjailbreakv1alpha1.ProxyVM
 	// Check if StorageCopyMethod is StorageAcceleratedCopy
 	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
 		// Fetch ArrayCredsMapping CR first
@@ -686,6 +688,17 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			if arraycreds.Status.ArrayValidationStatus != string(corev1.PodSucceeded) {
 				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
 			}
+		}
+	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod {
+		if migrationtemplate.Spec.ProxyVMRef == nil {
+			return ctrl.Result{}, errors.New("StorageCopyMethod is HotAdd but ProxyVMRef is not set in MigrationTemplate")
+		}
+		proxyVM = &vjailbreakv1alpha1.ProxyVM{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ProxyVMRef.Name, Namespace: migrationtemplate.Namespace}, proxyVM); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get ProxyVM '%s'", migrationtemplate.Spec.ProxyVMRef.Name)
+		}
+		if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
+			return ctrl.Result{}, errors.Errorf("ProxyVM '%s' is not ready (status: %s)", proxyVM.Name, proxyVM.Status.ValidationStatus)
 		}
 	} else {
 		arraycreds = nil
@@ -718,7 +731,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr, proxyVM)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -1324,6 +1337,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) (*corev1.ConfigMap, error) {
 	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
@@ -1334,7 +1348,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
-		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds)
+		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds, proxyVM)
 		if err != nil {
 			return nil, err
 		}
@@ -1355,6 +1369,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 	vm, vmname, configMapName string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) (*corev1.ConfigMap, error) {
 	r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 
@@ -1391,7 +1406,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	if err := r.setOSFamilyAndStorageFields(configMapData, vmMachine, migrationtemplate, arraycreds); err != nil {
+	if err := r.setOSFamilyAndStorageFields(configMapData, vmMachine, migrationtemplate, arraycreds, proxyVM); err != nil {
 		return nil, err
 	}
 
@@ -1587,6 +1602,7 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	if vmMachine.Spec.VMInfo.OSFamily == "" {
 		return errors.Errorf(
@@ -1609,6 +1625,10 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
 			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
 		}
+	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod && proxyVM != nil {
+		configMapData["STORAGE_COPY_METHOD"] = constants.HotAddCopyMethod
+		configMapData["PROXY_VM_IP"] = proxyVM.Status.IPAddress
+		configMapData["PROXY_VM_NAME"] = proxyVM.Spec.VMName
 	}
 
 	return nil
@@ -1959,6 +1979,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []*vjailbreakv1alpha1.VMwareMachine,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var (
@@ -2046,7 +2067,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 			continue
 		}
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
@@ -2555,4 +2576,33 @@ func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migra
 		LastTransitionTime: metav1.Now(),
 	}
 	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
+}
+
+// incrementProxyVMDiskCount atomically increments the AttachedDiskCount on a ProxyVM by delta.
+// Call when disks are attached to the Proxy VM at the start of a Hot-Add migration.
+func (r *MigrationPlanReconciler) incrementProxyVMDiskCount(ctx context.Context, proxyVMName, namespace string, delta int) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		latest := &vjailbreakv1alpha1.ProxyVM{}
+		if err := r.Get(ctx, types.NamespacedName{Name: proxyVMName, Namespace: namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.AttachedDiskCount += delta
+		return r.Status().Update(ctx, latest)
+	})
+}
+
+// decrementProxyVMDiskCount atomically decrements the AttachedDiskCount on a ProxyVM by delta.
+// Call when disks are detached from the Proxy VM after a Hot-Add migration completes or fails.
+func (r *MigrationPlanReconciler) decrementProxyVMDiskCount(ctx context.Context, proxyVMName, namespace string, delta int) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		latest := &vjailbreakv1alpha1.ProxyVM{}
+		if err := r.Get(ctx, types.NamespacedName{Name: proxyVMName, Namespace: namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.AttachedDiskCount -= delta
+		if latest.Status.AttachedDiskCount < 0 {
+			latest.Status.AttachedDiskCount = 0
+		}
+		return r.Status().Update(ctx, latest)
+	})
 }
