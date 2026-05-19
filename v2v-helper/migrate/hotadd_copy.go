@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	hotAddSSHKeyPath        = "/home/ubuntu/.ssh/id_rsa"
+	hotAddSSHKeyPath        = "/home/fedora/.ssh/id_rsa"
 	hotAddSnapName          = "vjailbreak-hotadd-snap"
 	hotAddSSHUser           = "root"
 	hotAddIdentifyRetries   = 3
@@ -122,6 +122,18 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 		return 0, errors.Wrap(err, "failed to list proxy VM disks before attach")
 	}
 
+	// Get the proxy VM's current device list to find an available SCSI controller.
+	// ReconfigVM requires ControllerKey+UnitNumber to be set; without them vCenter
+	// defaults to key=0 (IDE controller) which either rejects the request or fills up.
+	deviceList, err := proxyVMObj.Device(ctx)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get proxy VM device list")
+	}
+	controller, err := deviceList.FindDiskController("")
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to find available disk controller on proxy VM")
+	}
+
 	disk := &govmomitypes.VirtualDisk{
 		VirtualDevice: govmomitypes.VirtualDevice{
 			Backing: &govmomitypes.VirtualDiskFlatVer2BackingInfo{
@@ -132,6 +144,7 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 			},
 		},
 	}
+	deviceList.AssignController(disk, controller)
 
 	if err := proxyVMObj.AddDevice(ctx, disk); err != nil {
 		return 0, errors.Wrapf(err, "failed to attach disk %s to proxy VM", vmdkPath)

@@ -1219,6 +1219,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "virtio-driver",
 										MountPath: "/home/fedora/virtio-win",
 									},
+									{
+										Name:      "ssh-key",
+										MountPath: "/home/fedora/.ssh",
+										ReadOnly:  true,
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -1277,6 +1282,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/home/ubuntu/virtio-win",
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
+									},
+								},
+							},
+							{
+								Name: "ssh-key",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/home/ubuntu/.ssh",
 										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},
