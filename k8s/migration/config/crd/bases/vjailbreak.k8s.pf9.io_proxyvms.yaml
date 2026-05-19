@@ -96,7 +96,7 @@ spec:
                       type: string
                     name:
                       description: Name is the component name (e.g. "lsblk", "qemu-nbd",
-                        "nbdkit", "sshd").
+                        "sshd").
                       type: string
                     present:
                       description: Present indicates whether the component was found

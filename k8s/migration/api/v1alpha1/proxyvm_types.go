@@ -32,7 +32,7 @@ type ProxyVMSpec struct {
 
 // ProxyVMComponentCheck records whether a required component was found on the Proxy VM.
 type ProxyVMComponentCheck struct {
-	// Name is the component name (e.g. "lsblk", "qemu-nbd", "nbdkit", "sshd").
+	// Name is the component name (e.g. "lsblk", "qemu-nbd", "sshd").
 	Name string `json:"name"`
 	// Present indicates whether the component was found in PATH.
 	Present bool `json:"present"`

@@ -746,5 +746,5 @@ const (
 
 var (
 	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
-	ProxyVMRequiredComponents = []string{"lsblk", "qemu-nbd", "nbdkit", "sshd"}
+	ProxyVMRequiredComponents = []string{"lsblk", "qemu-nbd", "sshd"}
 )
