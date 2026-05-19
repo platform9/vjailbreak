@@ -2,7 +2,7 @@
 
 **Feature Branch**: `1944-hot-add-proxy`  
 **Created**: 2026-05-19  
-**Status**: Draft  
+**Status**: Implemented  
 
 ## Overview
 
@@ -42,9 +42,13 @@ An operator needs to register a Proxy VM with vJailbreak before any Hot-Add migr
 
 3. **Given** a Proxy VM where `disk.EnableUUID` is not enabled, **When** vJailbreak detects this during verification, **Then** the system automatically enables the property, reboots the VM, and continues verification; the operator is notified that a reboot occurred.
 
-4. **Given** a registered Proxy VM that was previously "Ready," **When** the operator re-runs verification, **Then** the status is refreshed accurately.
+4. **Given** a registered Proxy VM in "Verification Failed" state, **When** the operator clicks the "Retry Verification" button in the UI, **Then** the system re-triggers the full verification flow (connectivity + component checks + disk.EnableUUID) and updates the status accordingly.
 
-5. **Given** an operator has not yet added their vJailbreak appliance's public key to the Proxy VM's authorized keys(root), **When** they attempt to register the Proxy VM, **Then** the UI displays a clear pre-requisite message explaining the SSH key setup step before registration is attempted.
+5. **Given** a registered Proxy VM that was previously "Ready," **When** the operator re-runs verification via the retry button, **Then** the status is refreshed accurately.
+
+6. **Given** an operator has not yet added their vJailbreak appliance's public key to the Proxy VM's authorized keys(root), **When** they attempt to register the Proxy VM, **Then** the UI displays a clear pre-requisite message explaining the SSH key setup step before registration is attempted.
+
+7. **Given** VMware credentials are selected in the Add Proxy VM form, **When** the operator opens the VM Name field, **Then** the system fetches and displays all available VMs from those credentials as a searchable dropdown; the operator can also type a name not in the list.
 
 ---
 
@@ -148,6 +152,10 @@ An operator can view the list of registered Proxy VMs, their current status, and
 
 - **FR-014**: Before attaching disks for a Hot-Add migration, the system MUST check the current number of disks attached to the Proxy VM across all active migrations and reject the new migration with a descriptive capacity error if adding its disks would exceed 60 total attached disks.
 
+- **FR-015**: The Proxy VM list page MUST display a "Retry Verification" button for any Proxy VM whose status is "Verification Failed." Clicking it MUST re-trigger the full verification flow without deleting and re-creating the Proxy VM resource. The retry mechanism patches the ProxyVM resource with a timestamp annotation (`vjailbreak.k8s.pf9.io/retry-at`) to trigger controller reconciliation.
+
+- **FR-016**: The Add Proxy VM dialog MUST fetch all available VMs from the selected VMware credentials and present them as a searchable dropdown in the VM Name field. Free-text input MUST also be accepted so operators can specify a VM not yet discovered by the credentials label selector.
+
 ### Key Entities
 
 - **Proxy VM**: A VM registered with vJailbreak to serve as an intermediary for Hot-Add data copy. Attributes: name, IP address, SSH accessibility status, component verification status, overall readiness status, registration timestamp, current attached-disk count (max 60).
@@ -173,6 +181,10 @@ An operator can view the list of registered Proxy VMs, their current status, and
 - **SC-005**: Verification failures surface at least one specific, actionable error message per failed check (missing component, connectivity failure, UUID property not set).
 
 - **SC-006**: Multi-disk VM migrations via Hot-Add successfully transfer all disks and clean up all corresponding snapshots and attachments.
+
+- **SC-007**: After clicking "Retry Verification" on a failed Proxy VM, the status transitions from "Verification Failed" back through "Verifying" and reaches "Ready" or "Verification Failed" (with updated messages) within 60 seconds for a reachable VM.
+
+- **SC-008**: The Add Proxy VM form populates the VM Name dropdown within 3 seconds of selecting VMware credentials for a vCenter with up to 500 VMs.
 
 ---
 

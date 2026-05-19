@@ -1,6 +1,7 @@
 # Implementation Plan: Hot-Add Proxy Migration
 
 **Branch**: `1944-hot-add-proxy` | **Date**: 2026-05-19 | **Spec**: [spec.md](spec.md)  
+**Status**: Fully implemented (all T001–T036 complete)  
 **Input**: Feature specification from `specs/003-hot-add-proxy/spec.md`
 
 ## Summary
@@ -114,7 +115,7 @@ See [research.md](research.md). All unknowns resolved:
 |---------|------------|
 | ProxyVM CRD structure | `ESXiSSHCreds` pattern (VMName + VMwareCredsRef + validation status) |
 | StorageCopyMethod extension | Extend existing enum to `normal|StorageAcceleratedCopy|HotAdd` |
-| SSH key strategy | Reuse vJailbreak appliance key at `/root/.ssh/id_rsa`; no new Secret |
+| SSH key strategy | Reuse vJailbreak appliance key at `/home/ubuntu/.ssh/id_rsa` (constant `hotAddSSHKeyPath`); no new Secret |
 | Port allocation | Dynamic scan of range 10809–11808 via `ss -tlnp` on ProxyVM |
 | Block device identification | wwid/naa UUID matching via `/sys/block/sd*/device/wwid` |
 | Concurrency (60-disk limit) | Track `AttachedDiskCount` in ProxyVM status; checked in migrationplan_controller |
@@ -131,8 +132,9 @@ See [data-model.md](data-model.md).
 
 **New CRDs**: `ProxyVM`  
 **Modified CRDs**: `MigrationTemplate` (extended `StorageCopyMethod` enum + `ProxyVMRef` field)  
-**New v2v-helper types**: `hotAddDiskTransfer` (in-memory), `ProxyVMIP`/`ProxyVMName` in `MigrationParams`  
-**New constants**: `HotAddCopyMethod`, `ProxyVMStatus*`, `HotAddPortRange*`, phase/event constants
+**New v2v-helper types**: `hotAddDiskTransfer` (in-memory struct in `hotadd_copy.go`), `ProxyVMIP`/`ProxyVMName` fields in `MigrationParams` and `Migrate` structs  
+**New constants** (already present in `pkg/common/constants/constants.go`): `HotAddCopyMethod = "HotAdd"`, `ProxyVMStatusReady`, `ProxyVMStatusVerifying`, `ProxyVMStatusVerificationFailed`, `ProxyVMStatusPending`, `HotAddPortRangeMin = 10809`, `HotAddPortRangeMax = 11808`  
+**migrate.go changes**: disk-count guard extended with `&& StorageCopyMethod != HotAddCopyMethod`; HotAdd `else if` branch: `CreateVolumes → AttachVolume per disk → HotAddCopyDisks`
 
 ### Contracts
 
@@ -141,7 +143,8 @@ See [contracts/crds.md](contracts/crds.md).
 **New CRD**: `ProxyVM` with full YAML examples (Ready + VerificationFailed states)  
 **Modified CRD**: `MigrationTemplate` with `storageCopyMethod: HotAdd` + `proxyVMRef` example  
 **ConfigMap keys**: `PROXY_VM_IP`, `PROXY_VM_NAME` (alongside existing `STORAGE_COPY_METHOD`)  
-**REST API**: Standard Kubernetes CRUD on `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/proxyvms`
+**REST API**: Standard Kubernetes CRUD on `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/proxyvms`  
+**Retry API**: `PATCH proxyvms/<name>` with `Content-Type: application/merge-patch+json` body `{"metadata":{"annotations":{"vjailbreak.k8s.pf9.io/retry-at":"<ISO-timestamp>"}}}` — triggers controller reconcile and re-runs full verification
 
 ### Implementation Details
 
@@ -213,10 +216,26 @@ func HotAddCopyDisks(ctx, params) error {
 
 #### UI: ProxyVM management page
 
-- List: name, status badge, IP, attached-disk count, last validation time, delete button
-- Add dialog: VMName text field + VMwareCreds dropdown + SSH key setup pre-requisite instruction
-- Status polling: re-fetch ProxyVM every 5s while status is Pending/Verifying (same pattern as credentials page)
-- Sidebar entry: "Proxy VMs" with a server/proxy icon
+- List: name, VM name, status badge (with per-component tooltip on VerificationFailed), IP, attached-disk count, age, last-validated time, delete button, **retry-verification button** (visible only for VerificationFailed rows)
+- **Retry mechanism**: `retryProxyVM()` in `ui/src/api/proxy-vm/proxyVm.ts` patches the ProxyVM resource with annotation `vjailbreak.k8s.pf9.io/retry-at: <ISO timestamp>` using `Content-Type: application/merge-patch+json`. This triggers a controller reconcile without deleting the resource.
+- Add dialog: **VM Name Autocomplete** (MUI `freeSolo`) — on credential select, fetches VMwareMachines filtered by `labelSelector: vjailbreak.k8s.pf9.io/vmwarecreds=<cred>` and populates a searchable dropdown; free-text still accepted for unlisted VMs. VMwareCreds dropdown (validated only) with SSH key prerequisite Alert above it.
+- Status polling: re-fetch ProxyVM list every 5s while any item is Pending/Verifying (same pattern as credentials page)
+- Sidebar entry: "Proxy VMs" with ComputerIcon
+
+#### UI: Source files changed
+
+| File | Change |
+|------|--------|
+| `ui/src/api/proxy-vm/model.ts` | New — ProxyVM, ProxyVMList, ProxyVMComponentCheck interfaces |
+| `ui/src/api/proxy-vm/proxyVm.ts` | New — getProxyVMs, getProxyVM, createProxyVM, deleteProxyVM, **retryProxyVM** |
+| `ui/src/api/proxy-vm/index.ts` | New — barrel re-exports |
+| `ui/src/features/proxyVM/components/AddProxyVMDialog.tsx` | New — VM Autocomplete + credentials select |
+| `ui/src/features/proxyVM/pages/ProxyVMPage.tsx` | New — DataGrid + retry/delete actions + polling |
+| `ui/src/features/proxyVM/index.ts` | New — barrel export |
+| `ui/src/features/migration/MigrationForm.tsx` | Modified — HotAdd in storageCopyMethod union + proxyVMRef field |
+| `ui/src/features/migration/NetworkAndStorageMappingStep.tsx` | Modified — HotAdd option + ProxyVM selector |
+| `ui/src/App.tsx` | Modified — proxy-vms route |
+| `ui/src/config/navigation.tsx` | Modified — Proxy VMs nav entry |
 
 ---
 
