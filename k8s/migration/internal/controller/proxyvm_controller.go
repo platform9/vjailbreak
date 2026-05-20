@@ -205,19 +205,30 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		}
 	}()
 
-	// Verify required components via `which <name>` — one command per component, exit code in Go
+	// Verify all required components in a single SSH session.
+	// Output format per line: "<name>:<path-or-MISSING>"
+	checkCmd := `for cmd in ` + strings.Join(constants.ProxyVMRequiredComponents, " ") + `; do printf '%s:%s\n' "$cmd" "$(which "$cmd" 2>/dev/null || echo MISSING)"; done`
+	checkOutput, execErr := sshClient.ExecuteCommand(checkCmd)
+	if execErr != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to run component check on Proxy VM: %v", execErr))
+	}
+
 	componentResults := make([]vjailbreakv1alpha1.ProxyVMComponentCheck, 0, len(constants.ProxyVMRequiredComponents))
 	allPresent := true
 	missingComponents := []string{}
 
-	for _, component := range constants.ProxyVMRequiredComponents {
-		check := vjailbreakv1alpha1.ProxyVMComponentCheck{Name: component}
-		_, execErr := sshClient.ExecuteCommand("which " + component)
-		if execErr != nil {
+	for _, line := range strings.Split(strings.TrimSpace(checkOutput), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name, path := parts[0], parts[1]
+		check := vjailbreakv1alpha1.ProxyVMComponentCheck{Name: name}
+		if path == "MISSING" || path == "" {
 			check.Present = false
-			check.Message = fmt.Sprintf("%s not found in PATH — install the required package", component)
+			check.Message = fmt.Sprintf("%s not found in PATH — install the required package", name)
 			allPresent = false
-			missingComponents = append(missingComponents, component)
+			missingComponents = append(missingComponents, name)
 		} else {
 			check.Present = true
 		}
