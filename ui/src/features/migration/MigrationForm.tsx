@@ -47,6 +47,7 @@ import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
 import { useNetworkMappingValidation } from 'src/hooks/useNetworkMappingValidation'
 import { useRdmDisksQuery } from 'src/hooks/api/useRdmDisksQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { getRegionNameForOpenstackRef } from 'src/utils/regionNameResolver'
@@ -394,6 +395,9 @@ export default function MigrationFormDrawer({
   const { data: rdmDisks = [] } = useRdmDisksQuery({
     enabled: vmwareCredsValidated && openstackCredsValidated
   })
+
+  const { data: vddkStatus } = useVddkStatusQuery({ refetchOnMount: true })
+  const vddkUploaded = vddkStatus?.uploaded === true
 
   // Polling Conditions - Poll when we have a migration template but it's not fully populated with networks/volumes
   const shouldPollMigrationTemplate =
@@ -1098,6 +1102,7 @@ export default function MigrationFormDrawer({
   const disableSubmit =
     !vmwareCredsValidated ||
     !openstackCredsValidated ||
+    !vddkUploaded ||
     isNilOrEmpty(params.vms) ||
     (networkMappingRequired && isNilOrEmpty(params.networkMappings)) ||
     isNilOrEmpty(params.vmwareCluster) ||

@@ -8,6 +8,7 @@ import MigrationFormDrawer from '../../migration/MigrationForm'
 import GuidesList from './GuidesList'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import Tooltip from '@mui/material/Tooltip'
 
 const OnboardingContainer = styled('div')({
@@ -73,6 +74,7 @@ export default function Onboarding() {
     staleTime: 0,
     refetchOnMount: true
   })
+  const { data: vddkStatus } = useVddkStatusQuery({ refetchOnMount: true })
 
   const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
   const hasPcdCredentials = useMemo(() => {
@@ -83,9 +85,10 @@ export default function Onboarding() {
       ).length > 0
     )
   }, [openstackCreds])
+  const vddkUploaded = vddkStatus?.uploaded === true
 
-  const isStartMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
-  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
+  const isStartMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials || !vddkUploaded
+  const startMigrationDisabledReason = 'Add VMware credentials, PCD credentials, and upload VDDK before starting a migration.'
 
   return (
     <OnboardingContainer>

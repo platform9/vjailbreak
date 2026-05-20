@@ -24,6 +24,7 @@ import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 
 const pulse = keyframes`
   0% {
@@ -223,6 +224,7 @@ export default function MigrationsTable({
     staleTime: 0,
     refetchOnMount: true
   })
+  const { data: vddkStatus } = useVddkStatusQuery({ refetchOnMount: true })
 
   const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
   const hasPcdCredentials = useMemo(() => {
@@ -233,9 +235,10 @@ export default function MigrationsTable({
       ).length > 0
     )
   }, [openstackCreds])
+  const vddkUploaded = vddkStatus?.uploaded === true
 
-  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
-  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
+  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials || !vddkUploaded
+  const startMigrationDisabledReason = 'Add VMware credentials, PCD credentials, and upload VDDK before starting a migration.'
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
