@@ -180,12 +180,15 @@ func getDiskKeys(ctx context.Context, vmObj *object.VirtualMachine) (map[int32]b
 
 // identifyBlockDevices SSH-queries the Proxy VM for NAA WWIDs and matches them
 // against the vCenter disk backing UUIDs to populate transfer[i].BlockDevice and
-// transfer[i].WWID. Retries up to hotAddIdentifyRetries times.
+// transfer[i].WWID. Each transfer is matched by its vCenter device key (DiskKey),
+// which was recorded at attach time, so the mapping is deterministic regardless of
+// map iteration order or leftover disks from prior runs.
+// Retries up to hotAddIdentifyRetries times.
 func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxissh.Client,
 	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
 ) error {
-	// Get disk UUIDs from vCenter (proxy VM side).
-	vcUUIDs, err := migobj.getProxyDiskUUIDs(ctx, proxyVMObj)
+	// Get per-device-key UUIDs from vCenter for this proxy VM.
+	keyToUUID, err := migobj.getProxyDiskUUIDs(ctx, proxyVMObj)
 	if err != nil {
 		return errors.Wrap(err, "failed to get proxy VM disk UUIDs from vCenter")
 	}
@@ -203,19 +206,19 @@ func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxi
 			if transfers[i].BlockDevice != "" {
 				continue // already identified
 			}
-			matched := false
-			for normUUID, vcUUID := range vcUUIDs {
-				if dev, ok := guestMap[normUUID]; ok {
-					transfers[i].BlockDevice = "/dev/" + dev
-					transfers[i].WWID = vcUUID
-					matched = true
-					delete(vcUUIDs, normUUID) // each UUID maps to one disk
-					break
-				}
-			}
-			if !matched {
+			normUUID, ok := keyToUUID[transfers[i].DiskKey]
+			if !ok {
+				migobj.logMessage(fmt.Sprintf("Warning: no UUID found for proxy disk key %d (transfer %d)", transfers[i].DiskKey, i))
 				allMatched = false
+				continue
 			}
+			dev, ok := guestMap[normUUID]
+			if !ok {
+				allMatched = false
+				continue
+			}
+			transfers[i].BlockDevice = "/dev/" + dev
+			transfers[i].WWID = normUUID
 		}
 
 		if allMatched {
@@ -227,14 +230,15 @@ func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxi
 	return errors.New("could not match all proxy VM disks to block devices after retries")
 }
 
-// getProxyDiskUUIDs returns a map of normalised UUID → raw UUID for all VirtualDisk
-// devices currently on the proxy VM.
-func (migobj *Migrate) getProxyDiskUUIDs(ctx context.Context, proxyVMObj *object.VirtualMachine) (map[string]string, error) {
+// getProxyDiskUUIDs returns a map of vCenter device key → normalised UUID for all
+// VirtualDisk devices on the proxy VM. Keying by device key (not UUID) lets
+// identifyBlockDevices do a precise per-disk lookup via transfers[i].DiskKey.
+func (migobj *Migrate) getProxyDiskUUIDs(ctx context.Context, proxyVMObj *object.VirtualMachine) (map[int32]string, error) {
 	var props mo.VirtualMachine
 	if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &props); err != nil {
 		return nil, err
 	}
-	result := make(map[string]string)
+	result := make(map[int32]string)
 	for _, dev := range props.Config.Hardware.Device {
 		vDisk, ok := dev.(*govmomitypes.VirtualDisk)
 		if !ok {
@@ -247,8 +251,9 @@ func (migobj *Migrate) getProxyDiskUUIDs(ctx context.Context, proxyVMObj *object
 		if backing.Uuid == "" {
 			continue
 		}
+		key := dev.GetVirtualDevice().Key
 		norm := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(backing.Uuid, "-", ""), " ", ""))
-		result[norm] = backing.Uuid
+		result[key] = norm
 	}
 	return result, nil
 }
