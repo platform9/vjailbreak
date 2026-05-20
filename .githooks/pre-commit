@@ -34,11 +34,7 @@ if changed:
     _rebuild_code(Path('.'), changed_paths=changed)
 " 2>&1 | sed 's/^/  [graphify] /'
       _after_graphify="$(git status --porcelain)"
-      if [[ "${_before_graphify}" != "${_after_graphify}" ]]; then
-        comm -13 <(echo "${_before_graphify}" | awk '{print $2}' | sort) \
-                 <(echo "${_after_graphify}"  | awk '{print $2}' | sort) \
-          | xargs -r git add
-      fi
+      git add graphify-out/ 2>/dev/null || true
     fi
   fi
 fi
