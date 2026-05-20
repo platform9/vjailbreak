@@ -4607,37 +4607,6 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: vjailbreak-api-ingress
-  namespace: default
-  annotations:
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-spec:
-  ingressClassName: nginx
-  rules:
-  - http:
-      paths:
-      - path: /(apis.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: kubernetes
-            port:
-              number: 443
-      - path: /(api.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: kubernetes
-            port:
-              number: 443
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
   name: grafana-api-ingress
   namespace: monitoring
   annotations:
@@ -4695,6 +4664,33 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
 - apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
