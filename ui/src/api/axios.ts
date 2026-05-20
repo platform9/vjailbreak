@@ -17,14 +17,11 @@ interface RequestParamsWithData extends BaseRequestParams {
 }
 
 const getHeaders = () => {
-  const authToken = import.meta.env.VITE_API_TOKEN
-  const headers = {
+  return {
     common: {
-      'Content-Type': 'application/json;charset=UTF-8',
-      ...(authToken && { Authorization: `Bearer ${authToken}` })
+      'Content-Type': 'application/json;charset=UTF-8'
     }
   }
-  return headers
 }
 
 const axiosInstance = axios.create({

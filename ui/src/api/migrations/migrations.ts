@@ -1,5 +1,5 @@
 import axios from '../axios'
-import { K8S_PROXY_BASE_PATH, VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
+import { KUBERNETES_API_BASE_PATH, VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 import { GetMigrationsList, Migration } from './model'
 
 export const getMigrations = async (
@@ -47,7 +47,7 @@ export const triggerAdminCutover = async (
     }
 
     // List all pods in the namespace
-    const podsEndpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/pods`
+    const podsEndpoint = `${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods`
     const podsResponse = await axios.get<{
       items: Array<{
         metadata: {
@@ -81,7 +81,7 @@ export const triggerAdminCutover = async (
       }
     }
 
-    const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/pods/${podName}`
+    const endpoint = `${KUBERNETES_API_BASE_PATH}/namespaces/${namespace}/pods/${podName}`
 
     await axios.patch({
       endpoint,
