@@ -1,3 +1,4 @@
+export * from './cells'
 export { BulkIPEditDialog } from './BulkIPEditDialog'
 export type { BulkIPEditDialogProps } from './BulkIPEditDialog'
 export { FlavorAssignmentDialog } from './FlavorAssignmentDialog'

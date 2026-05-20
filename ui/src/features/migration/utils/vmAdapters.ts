@@ -1,4 +1,5 @@
 import type { VmDataWithFlavor, CanonicalVM, VM } from '../types'
+import type { VmData } from '../api/migration-templates/model'
 
 /**
  * Convert standard-migration VmDataWithFlavor → CanonicalVM.
@@ -95,6 +96,20 @@ export function fromVM(vm: VM): CanonicalVM {
     ipValidationStatus: vm.ipValidationStatus,
     ipValidationMessage: vm.ipValidationMessage,
   }
+}
+
+export function normalizeNetworkInterfaces(
+  networkInterfaces?: VmData['networkInterfaces']
+): VmData['networkInterfaces'] {
+  if (!networkInterfaces || networkInterfaces.length === 0) return networkInterfaces
+  return networkInterfaces.map((nic) => ({
+    ...nic,
+    ipAddress: Array.isArray((nic as any).ipAddress)
+      ? (nic as any).ipAddress
+      : (nic as any).ipAddress
+        ? [(nic as any).ipAddress]
+        : [],
+  }))
 }
 
 /**
