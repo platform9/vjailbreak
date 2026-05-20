@@ -20,31 +20,31 @@
     "hash": "8c947a23d3f2f409d08311917cdc4930"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/openstackcreds_controller.go": {
-    "mtime": 1778664147.8670707,
+    "mtime": 1779182366.3052256,
     "hash": "750b8eef3b05fd22f4c0c4168db65093"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/migrationplan_controller.go": {
-    "mtime": 1778664147.8664114,
-    "hash": "bdcaa20c398d5dc50bfa966b9ee12cb5"
+    "mtime": 1779182366.304158,
+    "hash": "4b677586700d8719bbe7f78f6f3d9256"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/esximigration_controller_test.go": {
     "mtime": 1778664135.76972,
     "hash": "9bdc66183cbd1ed1336172b0a1d38738"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/rollingmigrationplan_controller.go": {
-    "mtime": 1778664147.868239,
+    "mtime": 1779182366.3087053,
     "hash": "3767ea8fc667a0e49760808efe4f1a1f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/migrationplan_controller_test.go": {
-    "mtime": 1778664147.8668227,
+    "mtime": 1779182366.3046744,
     "hash": "c258602eaa954af5184ada6288a679e5"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/openstackcreds_controller_test.go": {
-    "mtime": 1778664147.867695,
+    "mtime": 1779182366.3060014,
     "hash": "897ec4a0a108c416d3a5577a15b076ba"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/reprovision_test.go": {
-    "mtime": 1778755570.1819224,
+    "mtime": 1779182366.3076713,
     "hash": "adc0df3f1a9d851ba3d5ba3fb106be31"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/clustermigration_controller.go": {
@@ -52,7 +52,7 @@
     "hash": "7f57a2883d660950c02760e8c427e406"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/vmwarecreds_controller.go": {
-    "mtime": 1778664147.8684921,
+    "mtime": 1779182366.31068,
     "hash": "c51093867fcac15fed85956c5bd9fdc5"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/vjailbreaknode_controller_test.go": {
@@ -60,7 +60,7 @@
     "hash": "2b169014182b2abeaae04126e7c9b1e6"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/vmwarecreds_controller_test.go": {
-    "mtime": 1778664147.8686912,
+    "mtime": 1779182366.3111606,
     "hash": "00a6b3854ae0da78ea9795136ee98388"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/storagemapping_controller.go": {
@@ -76,16 +76,16 @@
     "hash": "38b971a01420930709cb51bd36092514"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/bmconfig_controller.go": {
-    "mtime": 1778664147.8658426,
+    "mtime": 1779182366.3015287,
     "hash": "9509aac1a3c715eadfb171a9f65593a6"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/arraycreds_controller.go": {
-    "mtime": 1778664147.865584,
+    "mtime": 1779182366.3006542,
     "hash": "76f44baa572ff33de6b741cdb8414d3c"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/vjailbreaknode_controller.go": {
-    "mtime": 1778755562.9084506,
-    "hash": "df12f6172ab86eb17cf2ff56920d9350"
+    "mtime": 1779182366.3102953,
+    "hash": "62919f59561c57d040462e1fb2f57d43"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/storagemapping_controller_test.go": {
     "mtime": 1750236926.442617,
@@ -100,7 +100,7 @@
     "hash": "45c90660e717238b3ea5c7979701b7c4"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/esximigration_controller.go": {
-    "mtime": 1778664147.8660715,
+    "mtime": 1779182366.3017812,
     "hash": "ade5f5ce9f695a92da4cc3e109da4cd7"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/clustermigration_controller_test.go": {
@@ -112,11 +112,11 @@
     "hash": "77e2ad8503a6fbec83727c5287ebee87"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/migration_controller.go": {
-    "mtime": 1778664135.7702286,
-    "hash": "3aefae35cb17174df7ddd01544f3b340"
+    "mtime": 1779182366.3030193,
+    "hash": "077ae52c251d52c6a3e48c7ddfc4a2ce"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/rdmdisk_controller.go": {
-    "mtime": 1778664147.8680253,
+    "mtime": 1779182366.3065934,
     "hash": "ff07b7ab02ce3475903074d99a02f1e0"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/internal/controller/suite_test.go": {
@@ -140,7 +140,7 @@
     "hash": "e7812ed7fc365d45231a5630624cab66"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/migration_types.go": {
-    "mtime": 1778664135.7441475,
+    "mtime": 1779182366.2968297,
     "hash": "2fdf3b6b6c8f0083ff4429574344c6a7"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/openstackcreds_types.go": {
@@ -148,7 +148,7 @@
     "hash": "898f327e15d14579edf93410a8b33a6d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/migrationtemplate_types.go": {
-    "mtime": 1778664147.864887,
+    "mtime": 1779182366.2977338,
     "hash": "503671cf11b17edc86f1c884dc12a17e"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/groupversion_info.go": {
@@ -184,7 +184,7 @@
     "hash": "b6825d9432806650d768c5436ebb86ff"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/migrationplan_types.go": {
-    "mtime": 1778664135.7451665,
+    "mtime": 1779182366.2973971,
     "hash": "6550022eb59a1c5fdcdc7866e3061822"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1/rdmdisk_types.go": {
@@ -228,11 +228,11 @@
     "hash": "330a9ad6fcbc296dc8932e11ac88a931"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/credutils.go": {
-    "mtime": 1778664147.8695326,
-    "hash": "5dde31592092e14d1f83eec139f08af6"
+    "mtime": 1779182366.3134432,
+    "hash": "8b0a1d089bb1641a016861582aac3892"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/bmprovisionerutils.go": {
-    "mtime": 1778664147.869175,
+    "mtime": 1779182366.3119886,
     "hash": "adb7463cf34ffc7c817c22839c40a8c4"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/rollingmigrationutils.go": {
@@ -240,19 +240,19 @@
     "hash": "006f691b19c4845af0f1238654b0e2be"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/credutils_test.go": {
-    "mtime": 1778664147.8700397,
-    "hash": "f97026cc521734001abebe1a71ea4c85"
+    "mtime": 1779182366.3140616,
+    "hash": "2c758c202ab48f2cd6175bd61bc40a06"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/openstackutils.go": {
     "mtime": 1778664135.7881186,
     "hash": "cdc79ccace93a3125e566fbf7e9c159b"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/vjailbreaknodeutils_test.go": {
-    "mtime": 1778674348.8896093,
+    "mtime": 1779182366.3157234,
     "hash": "a493159cfec20f6f16e89837eac7f00a"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/vjailbreaknodeutils.go": {
-    "mtime": 1778674525.3306243,
+    "mtime": 1779182366.3151407,
     "hash": "2f56c3686bcad47bfc50dd4a84be3879"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/types.go": {
@@ -272,7 +272,7 @@
     "hash": "5496dcdffe3f1be33a12090076c73feb"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/maintenance_mode.go": {
-    "mtime": 1778664147.8702612,
+    "mtime": 1779182366.3143156,
     "hash": "38e666b44927deb07b81f0022411496d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/utils/vmwareutils.go": {
@@ -368,7 +368,7 @@
     "hash": "b0b33eeb34748e75c24b7669a15e8ea9"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr/types.go": {
-    "mtime": 1778664147.868936,
+    "mtime": 1779182366.311578,
     "hash": "e1f91a5e5236747c432110a006d83f54"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/pkg/sdk/resmgr/resmgr.go": {
@@ -380,7 +380,7 @@
     "hash": "f2bdddf82a53b89768829399e91072a3"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/main.go": {
-    "mtime": 1778664135.9620821,
+    "mtime": 1779182366.374019,
     "hash": "987785ae4d91a83018fbf637bef36225"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/openstack/openstackops.go": {
@@ -428,7 +428,7 @@
     "hash": "f911a8db2817090952f20c02b28b265d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/vm/vmops.go": {
-    "mtime": 1778664136.1837668,
+    "mtime": 1779182366.3782566,
     "hash": "811a10a351f6879085aee5040fa9c936"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/vm/vmops_test.go": {
@@ -440,7 +440,7 @@
     "hash": "82971ee0cdb95bcb9823b80ff52f839e"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/migrate/migrate.go": {
-    "mtime": 1778664135.9624343,
+    "mtime": 1779182366.3755066,
     "hash": "7c2bceda0a123d1653f8bdbb26de0f4e"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/migrate/vaai_copy.go": {
@@ -456,11 +456,11 @@
     "hash": "d15a2f45cdd0868071ff44702c128584"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vcenterutils.go": {
-    "mtime": 1778664136.1811779,
+    "mtime": 1779182366.3774774,
     "hash": "fdda0157fce383cb46ab13d4d487e3a6"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/pkg/utils/openstackopsutils.go": {
-    "mtime": 1778664147.8757,
+    "mtime": 1779182366.3766253,
     "hash": "d8da171d844aba589fd7f9b262fa2b4d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/v2v-helper/pkg/utils/utils.go": {
@@ -556,16 +556,24 @@
     "hash": "3852c71fb79240e1ece90388b29701be"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/server.go": {
-    "mtime": 1778664135.8134153,
-    "hash": "b20292ae702fadb7cbd6ad022e0d969c"
+    "mtime": 1779182366.3256433,
+    "hash": "fc49f7746a6d9ca166cda7db2b2b13ae"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/vddk_upload.go": {
     "mtime": 1778664135.8141036,
     "hash": "96aa72cb77118e2a705dfcc1fcb38e56"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/vjailbreak_proxy.go": {
-    "mtime": 1778664147.8714075,
+    "mtime": 1779182366.3261561,
     "hash": "79899d6a3c81520236915b3a922cc5ad"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/k8s_proxy_handler_test.go": {
+    "mtime": 1779182366.32451,
+    "hash": "0f00006dd389fe588c3863c71a5adc56"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/k8s_proxy_handler.go": {
+    "mtime": 1779182366.3231955,
+    "hash": "35a5d24fc639bf5871b133e18d90e76b"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/vpwned/server/storage.go": {
     "mtime": 1778664135.8137672,
@@ -676,7 +684,7 @@
     "hash": "133b43cdb491032470d0e9722ce0cf7a"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/openstack/securitygroups.go": {
-    "mtime": 1778664135.797555,
+    "mtime": 1779182366.317204,
     "hash": "3f4ff12893dee951a62d10069f044fdc"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/openstack/network.go": {
@@ -684,11 +692,11 @@
     "hash": "3024903397108b4404e982ef228d1d3b"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/openstack/flavor_test.go": {
-    "mtime": 1778664147.8709714,
+    "mtime": 1779182366.3171046,
     "hash": "61cd46f9f4bac9743637ea8f7b3525c1"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/openstack/flavor.go": {
-    "mtime": 1778664147.8707576,
+    "mtime": 1779182366.316781,
     "hash": "09c3cfb9d9494a8c13329a55e2be0ab1"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/config/settings.go": {
@@ -700,15 +708,15 @@
     "hash": "dd1a8c94932e627036458a46b6175b5e"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/constants/constants.go": {
-    "mtime": 1778674197.1541421,
-    "hash": "ba799798dbebd4ddec1cc5c9a9012491"
+    "mtime": 1779182366.3164575,
+    "hash": "102a930a57c2376ff368df91bd567ae4"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/utils/hosts_test.go": {
-    "mtime": 1778674420.4538763,
+    "mtime": 1779182366.319168,
     "hash": "33f8a5fe6949de3e6c1df2782a62e7ed"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/utils/hosts.go": {
-    "mtime": 1778674384.7452092,
+    "mtime": 1779182366.3183744,
     "hash": "0a8ab8814684ec46f6bd320a5d76fd2a"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/utils/net.go": {
@@ -719,9 +727,13 @@
     "mtime": 1778664135.7985122,
     "hash": "9c3ddacdd927de0688164cb077c42123"
   },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/utils/k8scompat_test.go": {
+    "mtime": 1779182366.3223827,
+    "hash": "c4756e660747001dbaa1975b75026b8d"
+  },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/utils/k8scompat.go": {
-    "mtime": 1778664147.8711526,
-    "hash": "8a7037f1e483b9b8302d87bc1364914c"
+    "mtime": 1779182366.320318,
+    "hash": "baeb5fc7c15937b5c1b772c60ecb1623"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/pkg/common/validation/openstack/validate.go": {
     "mtime": 1778664135.7997231,
@@ -744,8 +756,8 @@
     "hash": "5cdf93e8975dabf562b0e62a946dffd9"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/CLAUDE.md": {
-    "mtime": 1778672853.3135366,
-    "hash": "fc8dac9e86720212e3723dc989b2a365"
+    "mtime": 1779190701.904699,
+    "hash": "60775d991ce5ae33c6b82c3fadafbab9"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/opensource.txt": {
     "mtime": 1778664135.7908235,
@@ -779,32 +791,60 @@
     "mtime": 1778664135.6782565,
     "hash": "45bf19771351c5485cc6764d02afd56a"
   },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/tasks.md": {
+    "mtime": 1779265388.958592,
+    "hash": "2dff2bc18a1cdc66f1d0674cf5277afc"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/research.md": {
+    "mtime": 1779190477.797951,
+    "hash": "ab244dce5295b30a08991bee1e743c2b"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/data-model.md": {
+    "mtime": 1779190497.066085,
+    "hash": "6edd7211698c6ab03111e9a21d2080c5"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/plan.md": {
+    "mtime": 1779265395.6063082,
+    "hash": "163efec6aa6261660b3570365dcff4b3"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/spec.md": {
+    "mtime": 1779256109.9987211,
+    "hash": "9c52c8baca244b33b2676453a70adf9c"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/test-cases.md": {
+    "mtime": 1779190602.0653107,
+    "hash": "eb85be97957e9ff0c69a3d4181d4639c"
+  },
+  "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/ui-token-rotation/checklists/requirements.md": {
+    "mtime": 1779186203.0882266,
+    "hash": "14c752b5ffd70a5c68220d8357c39890"
+  },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/tasks.md": {
-    "mtime": 1778673878.7995515,
+    "mtime": 1779182366.3311045,
     "hash": "da594e9db8a5dcd8751e732468e99365"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/research.md": {
-    "mtime": 1778673576.9276135,
+    "mtime": 1779182366.3300807,
     "hash": "6f53e43537956c71add33ce9f8449cda"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/data-model.md": {
-    "mtime": 1778672779.1958573,
+    "mtime": 1779182366.3285441,
     "hash": "18622349276c3a7b16c2d2954ba993f0"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/plan.md": {
-    "mtime": 1778673657.6076677,
+    "mtime": 1779182366.3290927,
     "hash": "c2607fa3dee34861badb9bbc0b11656f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/spec.md": {
-    "mtime": 1778672418.0499623,
+    "mtime": 1779182366.330613,
     "hash": "c7f1541f297247a83e63e163e0d2bac9"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/specs/002-agent-dns-config/checklists/requirements.md": {
-    "mtime": 1778672426.4217722,
+    "mtime": 1779182366.32744,
     "hash": "d4f690fbddaf22cd22c227bec5f86036"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/05controller-deployment.yaml": {
-    "mtime": 1778753852.9719715,
+    "mtime": 1778841909.087883,
     "hash": "499bb969c450a32a9f466dc9fbefd4d6"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/02storagemapping.yaml": {
@@ -816,8 +856,8 @@
     "hash": "594549cd130e238f00e5ef1f63db5872"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/installer.yaml": {
-    "mtime": 1778753852.555235,
-    "hash": "fc61f282441f34379793cca4ca1b2f53"
+    "mtime": 1779184986.8088439,
+    "hash": "65abf99fd8796b5112fa2b375b4972eb"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/04migrationplan.yaml": {
     "mtime": 1735580226.8343325,
@@ -828,7 +868,7 @@
     "hash": "5aaebb7010f4fabcd23678e20041ee2b"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/06vpwned-deployment.yaml": {
-    "mtime": 1778753853.0541303,
+    "mtime": 1778841909.1477375,
     "hash": "7982a03dc4db8b916ebefeeac4a16441"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/volumeimageprofile-defaults.yaml": {
@@ -836,8 +876,8 @@
     "hash": "07e4c1e6a8a6d5e470cf8edafc5b8f91"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/00crds.yaml": {
-    "mtime": 1778753852.875267,
-    "hash": "3c2fc2a205cf3de16c2c8101ba9f3b2b"
+    "mtime": 1779182365.6976163,
+    "hash": "00e7641deccf287d6ad8b5c4a53a9388"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/01openstackcreds.yaml": {
     "mtime": 1735580230.3329449,
@@ -852,7 +892,7 @@
     "hash": "aff9779cd97245381ac9332d7bd8e564"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/07ui-deployment.yaml": {
-    "mtime": 1778753853.1174922,
+    "mtime": 1779184986.8076537,
     "hash": "b448282c2b9686ef710b2b5657d13a67"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/cert-manager/00-selfsigned-issuer.yaml": {
@@ -1276,7 +1316,7 @@
     "hash": "ac7e06198c71c784ff1db35c24394e00"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/rbac/role.yaml": {
-    "mtime": 1778753848.3160322,
+    "mtime": 1778841905.385974,
     "hash": "80e481d9cbe6bdbc16e4ad41e5eddc23"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/rbac/vmwarecluster_editor_role.yaml": {
@@ -1420,7 +1460,7 @@
     "hash": "b2c04499b17518162bae03f56b30901f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/addons/kustomization.yaml": {
-    "mtime": 1778753851.9870398,
+    "mtime": 1778841908.5487466,
     "hash": "348e7aaa75a4a09fe2f441f0470cc511"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/kustomizeconfig.yaml": {
@@ -1432,91 +1472,91 @@
     "hash": "b38f570e73a8f79284e148b4bbb3957f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_rollingmigrationplans.yaml": {
-    "mtime": 1778753848.5554903,
+    "mtime": 1778841905.6109579,
     "hash": "3700b16634d9e18b8efe9e405a26e0aa"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrationplans.yaml": {
-    "mtime": 1778753848.5475147,
+    "mtime": 1779182366.2989252,
     "hash": "1ff61b359a5a6be2c77c4832e0d3ed29"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_clustermigrations.yaml": {
-    "mtime": 1778753848.5307312,
+    "mtime": 1778841905.6004736,
     "hash": "b703489ec168a2d51e0d0a7ffd27b8d3"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_networkmappings.yaml": {
-    "mtime": 1778753848.5492656,
+    "mtime": 1778841905.6055834,
     "hash": "2e017ff73b3071e819dc50f27bce7c13"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_esxisshcreds.yaml": {
-    "mtime": 1778753848.5385427,
+    "mtime": 1778841905.6019356,
     "hash": "cfc1c923810570621643034c59749aa5"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml": {
-    "mtime": 1778753848.5575924,
+    "mtime": 1778841905.6127226,
     "hash": "4bd2abf3f0e8eee320c9f7fb5b88c83f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrations.yaml": {
-    "mtime": 1778753848.5435865,
+    "mtime": 1779182366.299342,
     "hash": "10db79a3973b63b82e24b6bd3373c2d6"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrationtemplates.yaml": {
-    "mtime": 1778753848.5484931,
+    "mtime": 1779182366.2997353,
     "hash": "60b6950d540180e4b33e8d255cf40592"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_bmconfigs.yaml": {
-    "mtime": 1778753848.5295062,
+    "mtime": 1778841905.5996506,
     "hash": "6f58073453ee91a43273ae067bb41fce"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwareclusters.yaml": {
-    "mtime": 1778753848.5569189,
+    "mtime": 1778841905.6120458,
     "hash": "9bb05b646372c28a81558c7870f1fa3f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_rdmdisks.yaml": {
-    "mtime": 1778753848.553806,
+    "mtime": 1778841905.6094117,
     "hash": "752cbc3c4a05b56222c17aaa703bbc8c"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_esximigrations.yaml": {
-    "mtime": 1778753848.5345876,
+    "mtime": 1778841905.6011753,
     "hash": "8eb05afb799f0c6dc4fa67633cfd9d96"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_storagemappings.yaml": {
-    "mtime": 1778753848.5564113,
+    "mtime": 1778841905.611542,
     "hash": "4b79c3a90d612e848220ea74f28c30db"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_pcdhosts.yaml": {
-    "mtime": 1778753848.5529535,
+    "mtime": 1778841905.6085832,
     "hash": "d2bc8e4c7fa18a9af32f98a9fc3a9035"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_pcdclusters.yaml": {
-    "mtime": 1778753848.5523303,
+    "mtime": 1778841905.6080034,
     "hash": "46a6370fca8de4ecd53c672fdc763a2c"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml": {
-    "mtime": 1778753848.5516355,
+    "mtime": 1778841905.6074018,
     "hash": "9194656da423ed488262147bafcb55b3"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vjailbreaknodes.yaml": {
-    "mtime": 1778753848.560249,
+    "mtime": 1778841905.6153173,
     "hash": "08af26f0c6f88e6e110d4c3b7284f9de"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_volumeimageprofiles.yaml": {
-    "mtime": 1778753848.5607717,
+    "mtime": 1778841905.615815,
     "hash": "f67713091e6a26b256477f98fa8afcc5"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwaremachines.yaml": {
-    "mtime": 1778753848.5594013,
+    "mtime": 1778841905.6145127,
     "hash": "de5125abc2028642131bd90a856e522f"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwarehosts.yaml": {
-    "mtime": 1778753848.5581775,
+    "mtime": 1778841905.6133394,
     "hash": "53df19f968c2bf691cddc50a1070f3fe"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_arraycreds.yaml": {
-    "mtime": 1778753848.5269685,
+    "mtime": 1778841905.5968325,
     "hash": "db3a84900edc7604179c66dac9c2885a"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_arraycredsmappings.yaml": {
-    "mtime": 1778753848.5279243,
+    "mtime": 1778841905.5978715,
     "hash": "ac6a58529799e44faec64d1e5c58480d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/default/kustomization.yaml": {
@@ -1640,7 +1680,7 @@
     "hash": "1384c5c623393c29e91af65bedd51b5a"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/manager/kustomization.yaml": {
-    "mtime": 1778753851.8403213,
+    "mtime": 1778841908.4047136,
     "hash": "5fb4cbd4e8d6c225264dc1f1742b359d"
   },
   "/Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/k8s/migration/config/manager/manager.yaml": {

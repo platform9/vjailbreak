@@ -28,6 +28,64 @@ vJailbreak is a VMware to Platform9 Private Cloud Director (PCD) VM migration to
 
 ---
 
+## AI Development Behavior
+
+**These rules govern how AI agents must behave in this project:**
+
+### Clarifying Questions (NON-NEGOTIABLE)
+- For vague or ambiguous prompts, ask clarifying questions BEFORE taking any action — no silent assumptions on scope, intent, or requirements
+- When a description contains an implicit solution ("we want X to do Y"), ask what problem Y solves before committing to Y
+
+### Skills Invocation (NON-NEGOTIABLE)
+- Invoke `superpowers:using-superpowers` at session start
+- Invoke relevant skills (brainstorming, debugging, TDD, etc.) before any non-trivial task — even 1% chance a skill applies means invoke it
+
+### Security Features
+Always build a threat model before writing requirements. Ask:
+- "Where exactly can this credential/secret be obtained?" (enumerate all vectors)
+- "Can we eliminate the exposure entirely, or only mitigate it?"
+- "What is the blast radius if exploited?"
+
+**Eliminate > mitigate**: Propose elimination first. Only fall back to mitigation (rotation, shorter TTL, rate limiting) after confirming elimination is not feasible.
+
+### Test-First Development
+All new Go code: write tests first → get approval → confirm they fail → implement (Red-Green-Refactor). No live system contact in tests — mock external dependencies.
+
+### Code Simplicity
+Three similar lines is better than a premature abstraction. Logic-preserving refactors reducing complexity are permitted at point of need without dedicated tickets.
+
+### Commit Strategy (Speckit Workflows)
+Commit after each completed phase, not in one big commit at the end. Run `git add` + `git commit` scoped to that phase before starting the next.
+
+### Architecture Constraint
+All migration state must be represented as Kubernetes Custom Resources within k3s — no external state management.
+
+---
+
+## Core Design Principles
+
+Apply these to every change:
+
+| Principle | Rule |
+|-----------|------|
+| **Interface-First** | No new abstraction layers when configuration suffices. Prefer config/Lua over a new Go service; prefer a function over a new interface. |
+| **Modular Boundaries** | Changes scoped to their directory. No cross-module leakage without full module path imports. |
+| **Clean Code** | Minimal, single-responsibility blocks. Each function/component does one thing. |
+| **Observability** | All error paths must log. Failed external calls must be visible in logs. |
+| **Simplicity First** | Among solutions that satisfy requirements, choose the simplest. |
+| **No Premature Abstraction** | Three similar lines is better than a wrapper. Abstract only when the third real case arrives. |
+
+### Refactor-as-You-Go (NON-NEGOTIABLE)
+
+Every feature branch must include **1–2 targeted refactoring changes** to files touched by or adjacent to the feature work. Goal: incrementally improve code simplicity and modularity so pending unit tests can be written. Rules:
+
+- Refactors must be logic-preserving (no behavior change)
+- Scope to files already being read/modified — no drive-by rewrites of unrelated code
+- Each refactor commit is separate from feature commits (`refactor:` prefix in commit message)
+- Priority targets: functions >50 lines, untestable code with tight coupling, duplicate logic across files
+
+---
+
 ## Development Rules
 
 **Critical directives — follow these strictly:**
@@ -153,7 +211,7 @@ kubectl -n migration-system logs <migration-name>-v2v-helper
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/002-agent-dns-config/plan.md
+at specs/ui-token-rotation/plan.md
 <!-- SPECKIT END -->
 
 ## graphify
