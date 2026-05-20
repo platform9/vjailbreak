@@ -43,11 +43,9 @@
 
 > **Write these before implementing T008–T014. Confirm each test FAILS with current code.**
 
-- [ ] T005 [P] [US1] Write Vitest test in `ui/src/api/__tests__/axios.test.ts`: assert `getHeaders()` returns object with `Content-Type` but no `Authorization` key; assert axios GET/POST calls do not include `Authorization: Bearer` header
-- [ ] T006 [P] [US1] Write Vitest test in `ui/src/api/kubernetes/__tests__/pods.test.ts`: assert `fetchPods('migration-system')` calls endpoint `/api/v1/namespaces/migration-system/pods`; assert `streamPodLogs` calls `/api/v1/...` path and fetch options contain no `Authorization` header; assert default URL params `follow=true&tailLines=100&limitBytes=500000`
-- [ ] T007 [P] [US1] Write Vitest test in `ui/src/api/secrets/__tests__/secrets.test.ts`: assert `createSecret`/`getSecret`/`deleteSecret`/`listSecrets` endpoints resolve to `/api/v1/namespaces/migration-system/secrets[/name]` (no `/sdk/` or `/vpw/` substring in any endpoint)
-
-**Verify all three tests FAIL before continuing.**
+- [x] T005 [P] [US1] ~~Write Vitest test~~ — SKIPPED: No Vitest infrastructure in project; user chose to skip unit tests
+- [x] T006 [P] [US1] ~~Write Vitest test~~ — SKIPPED: No Vitest infrastructure in project; user chose to skip unit tests
+- [x] T007 [P] [US1] ~~Write Vitest test~~ — SKIPPED: No Vitest infrastructure in project; user chose to skip unit tests
 
 ### Implementation for US1
 
