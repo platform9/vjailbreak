@@ -1,0 +1,1 @@
+{"nodes": [{"id": "migrationplan_sample_cr", "label": "MigrationPlan Sample CR", "file_type": "document", "source_file": "k8s/migration/config/samples/vjailbreak_v1alpha1_migrationplan.yaml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

@@ -5,19 +5,53 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 cd "${REPO_ROOT}"
 
+if [ -f graphify-out/graph.json ]; then
+  echo "[pre-commit] updating knowledge graph (graphify)"
+  GRAPHIFY_PYTHON=""
+  GRAPHIFY_BIN=$(command -v graphify 2>/dev/null)
+  if [ -n "$GRAPHIFY_BIN" ]; then
+    _SHEBANG=$(head -1 "$GRAPHIFY_BIN" | sed 's/^#![[:space:]]*//')
+    case "$_SHEBANG" in
+      */env\ *) _PY="${_SHEBANG#*/env }" ;;
+      *)         _PY="$_SHEBANG" ;;
+    esac
+    case "$_PY" in *[!a-zA-Z0-9/_.@-]*) _PY="" ;; esac
+    [ -n "$_PY" ] && "$_PY" -c "import graphify" 2>/dev/null && GRAPHIFY_PYTHON="$_PY"
+  fi
+  if [ -z "$GRAPHIFY_PYTHON" ] && python3 -c "import graphify" 2>/dev/null; then
+    GRAPHIFY_PYTHON="python3"
+  fi
+  if [ -n "$GRAPHIFY_PYTHON" ]; then
+    STAGED=$(git diff --cached --name-only)
+    if [ -n "$STAGED" ]; then
+      _before_graphify="$(git status --porcelain)"
+      $GRAPHIFY_PYTHON -c "
+import os, sys
+from pathlib import Path
+from graphify.watch import _rebuild_code
+changed = [Path(f.strip()) for f in '''$STAGED'''.strip().splitlines() if f.strip()]
+if changed:
+    _rebuild_code(Path('.'), changed_paths=changed)
+" 2>&1 | sed 's/^/  [graphify] /'
+      _after_graphify="$(git status --porcelain)"
+      if [[ "${_before_graphify}" != "${_after_graphify}" ]]; then
+        comm -13 <(echo "${_before_graphify}" | awk '{print $2}' | sort) \
+                 <(echo "${_after_graphify}"  | awk '{print $2}' | sort) \
+          | xargs -r git add
+      fi
+    fi
+  fi
+fi
+
 echo "[pre-commit] running golangci-lint (k8s/migration)"
 make -C k8s/migration lint
 
 echo "[pre-commit] running make build-installer"
-before_status="$(git status --porcelain)"
+_before_installer="$(git status --porcelain)"
 TAG=main make build-installer
-
-after_status="$(git status --porcelain)"
-
-if [[ "${before_status}" != "${after_status}" ]]; then
-  echo "[pre-commit] WARN: 'make build-installer' modified your working tree." >&2
-  echo "[pre-commit] Please commit the generated changes (or revert them) and retry." >&2
-  echo "[pre-commit] Current git status:" >&2
-  git status --porcelain >&2
-  exit 1
+_after_installer="$(git status --porcelain)"
+if [[ "${_before_installer}" != "${_after_installer}" ]]; then
+  comm -13 <(echo "${_before_installer}" | awk '{print $2}' | sort) \
+           <(echo "${_after_installer}"  | awk '{print $2}' | sort) \
+    | xargs -r git add
 fi

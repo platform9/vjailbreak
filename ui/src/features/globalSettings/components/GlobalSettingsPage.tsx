@@ -29,6 +29,7 @@ import FormGrid from 'src/components/design-system/ui/FormGrid'
 import InlineHelp from 'src/components/design-system/ui/InlineHelp'
 import ToggleField from 'src/components/design-system/ui/ToggleField'
 import VDDKUploadTab from './VDDKUploadTab'
+import { HostEntriesTab } from './HostEntriesTab'
 import type { VddkUploadStatus } from './VDDKUploadTab'
 import { IntervalField as SharedIntervalField, RHFTextField } from 'src/shared/components/forms'
 import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
@@ -84,6 +85,7 @@ const DEFAULTS: SettingsForm = {
   AUTO_FSTAB_UPDATE: true,
   DEPLOYMENT_NAME: 'vJailbreak',
   HTTP_TIMEOUT_SECONDS: 30,
+  AGENT_HOST_ENTRIES: '',
   PROXY_ENABLED: false,
   PROXY_HTTP_SCHEME: 'http',
   PROXY_HTTP_HOST: '',
@@ -95,7 +97,7 @@ const DEFAULTS: SettingsForm = {
 }
 
 const helpers = getGlobalSettingsHelpers(DEFAULTS)
-type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'vddk'
+type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'hosts' | 'vddk'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: ['DEPLOYMENT_NAME', 'CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD', 'PERIODIC_SYNC_INTERVAL'],
@@ -128,10 +130,11 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VALIDATE_RDM_OWNER_VMS',
     'AUTO_FSTAB_UPDATE'
   ],
+  hosts: ['AGENT_HOST_ENTRIES'],
   vddk: []
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced', 'vddk']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced', 'hosts', 'vddk']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -154,6 +157,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     label: 'Advanced',
     helper: 'Tune integration defaults and automation flags for PCD and VMware flows.',
     icon: <TuneOutlinedIcon fontSize="small" />
+  },
+  hosts: {
+    label: 'Host Entries',
+    helper: 'Custom hostname-to-IP mappings injected into agent node VMs at provisioning time.',
+    icon: <LanOutlinedIcon fontSize="small" />
   },
   vddk: {
     label: 'VDDK Upload',
@@ -248,7 +256,9 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'FQDN or IP of the HTTPS proxy server (e.g. proxy.example.com). You may also paste a full URL like http://proxy.example.com:3128 to auto-fill.',
   PROXY_HTTPS_PORT: 'TCP port of the HTTPS proxy server (e.g. 3129).',
   NO_PROXY:
-    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).'
+    'Comma-separated hosts or CIDRs that should bypass the proxy (e.g. localhost,127.0.0.1).',
+  AGENT_HOST_ENTRIES:
+    'Custom /etc/hosts-style entries injected into agent node VMs at provisioning time. Use for ESXi, vCenter, PCD, and OpenStack FQDNs that require static resolution.'
 }
 
 type ToggleKey = Extract<
@@ -1401,6 +1411,14 @@ export default function GlobalSettingsPage() {
                 />
               ))}
             </FormGrid>
+          </TabPanel>
+
+          <TabPanel activeTab={activeTab} value="hosts">
+            <HostEntriesTab
+              value={form.AGENT_HOST_ENTRIES}
+              onChange={(v) => rhfForm.setValue('AGENT_HOST_ENTRIES', v, { shouldValidate: true })}
+              disabled={saving}
+            />
           </TabPanel>
 
           <TabPanel activeTab={activeTab} value="vddk">

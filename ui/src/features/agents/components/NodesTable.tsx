@@ -4,13 +4,14 @@ import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import WarningIcon from '@mui/icons-material/Warning'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
 import AgentsIcon from '@mui/icons-material/Computer'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { useState } from 'react'
 import ScaleUpDrawer from './ScaleUpDrawer'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { useNodesQuery } from 'src/hooks/api/useNodesQuery'
-import { deleteNode } from 'src/api/nodes/nodeMappings'
+import { deleteNode, reprovisionNode } from 'src/api/nodes/nodeMappings'
 import { useQueryClient } from '@tanstack/react-query'
 import { NODES_QUERY_KEY } from 'src/hooks/api/useNodesQuery'
 import { NodeItem } from 'src/api/nodes/model'
@@ -124,7 +125,7 @@ const columns: GridColDef[] = [
     field: 'actions',
     headerName: 'Actions',
     flex: 1,
-    width: 100,
+    minWidth: 120,
     sortable: false,
     renderCell: (params) => {
       const isErrorState = params.row.phase === 'Error'
@@ -141,23 +142,54 @@ const columns: GridColDef[] = [
         return 'Scale down node'
       }
 
+      const reprovisionDisabled = isMaster || isDeleting || hasMigrations
+
       return (
-        <Tooltip title={getTooltip()}>
-          <span>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation()
-                params.row.onDelete(params.row.metadata?.name)
-              }}
-              size="small"
-              color={isErrorState ? 'error' : 'warning'}
-              aria-label="scale down node"
-              disabled={isDisabled}
-            >
-              <RemoveCircleOutlineIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title={getTooltip()}>
+            <span>
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation()
+                  params.row.onDelete(params.row.metadata?.name)
+                }}
+                size="small"
+                color={isErrorState ? 'error' : 'warning'}
+                aria-label="scale down node"
+                disabled={isDisabled}
+              >
+                <RemoveCircleOutlineIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={
+              isMaster
+                ? 'Master node cannot be reprovisioned'
+                : isDeleting
+                  ? 'Node is being deleted'
+                  : hasMigrations
+                    ? 'Cannot reprovision node with active migrations'
+                    : 'Reprovision: tear down and re-create agent VM with latest settings'
+            }
+          >
+            <span>
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation()
+                  params.row.onReprovision?.(params.row.metadata?.name)
+                }}
+                size="small"
+                color="primary"
+                aria-label="reprovision node"
+                disabled={reprovisionDisabled}
+                data-testid={`reprovision-node-${params.row.name}`}
+              >
+                <AutorenewIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
       )
     }
   }
@@ -185,6 +217,7 @@ interface NodeSelector {
   metadata?: {
     name: string
   }
+  onReprovision?: (nodeName: string) => void
 }
 
 const NodesToolbar = ({
@@ -257,6 +290,7 @@ export default function NodesTable() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const [scaleDownError, setScaleDownError] = useState<string | null>(null)
+  const [reprovisionError, setReprovisionError] = useState<string | null>(null)
 
   const masterNode = nodes?.find((node) => node.spec.nodeRole === 'master') || null
 
@@ -294,6 +328,25 @@ export default function NodesTable() {
   const handleSingleNodeScaleDown = (node: NodeSelector) => {
     setSelectedNodes([node.name])
     setScaleDownDialogOpen(true)
+  }
+
+  const handleReprovisionNode = async (nodeName: string) => {
+    try {
+      setLoading(true)
+      setReprovisionError(null)
+      await reprovisionNode(nodeName)
+      setSuccessMessage(`Reprovision requested for node "${nodeName}". A new VM will be created with the latest settings.`)
+      queryClient.invalidateQueries({ queryKey: NODES_QUERY_KEY })
+    } catch (error) {
+      console.error('Error reprovisioning node:', error)
+      reportError(error as Error, {
+        context: 'nodes-reprovision',
+        metadata: { nodeName, action: 'reprovision-node' }
+      })
+      setReprovisionError(`Failed to request reprovision for node "${nodeName}". Please try again.`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const confirmScaleDown = async () => {
@@ -351,7 +404,8 @@ export default function NodesTable() {
 
   const nodesWithActions = transformedNodes.map((node) => ({
     ...node,
-    onDelete: () => handleSingleNodeScaleDown(node)
+    onDelete: () => handleSingleNodeScaleDown(node),
+    onReprovision: (nodeName: string) => handleReprovisionNode(nodeName)
   }))
 
   const isRowSelectable = (params: GridRowParams) => {
@@ -457,6 +511,16 @@ export default function NodesTable() {
       >
         <Alert onClose={() => setSuccessMessage(null)} severity="success">
           {successMessage}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!reprovisionError}
+        autoHideDuration={6000}
+        onClose={() => setReprovisionError(null)}
+      >
+        <Alert onClose={() => setReprovisionError(null)} severity="error">
+          {reprovisionError}
         </Alert>
       </Snackbar>
     </>

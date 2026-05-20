@@ -120,9 +120,14 @@ const (
 	// VMNameLabel is the label for vm name
 	VMNameLabel = "vjailbreak.k8s.pf9.io/vm-name"
 
-	// MigrationVMKeyLabel stores the name-<moid> VM key on Migration objects,
-	// used for internal K8s lookups while spec.VMName holds the plain display name.
+	// MigrationVMKeyLabel stores the sanitized name-<moid> VM key on Migration objects as a label.
+	// Label values forbid spaces; use OriginalVMNameAnnotation to retrieve the unsanitized key.
 	MigrationVMKeyLabel = "vjailbreak.k8s.pf9.io/vm-key"
+
+	// OriginalVMNameAnnotation stores the original (unsanitized) name-<moid> VM key on Migration
+	// objects. VM display names may contain spaces, which are invalid in label values; this
+	// annotation preserves the raw key needed for VMwareMachine lookups and retry detection.
+	OriginalVMNameAnnotation = "vjailbreak.k8s.pf9.io/original-vm-name"
 
 	// RollingMigrationPlanFinalizer is the finalizer for rolling migration plan
 	RollingMigrationPlanFinalizer = "rollingmigrationplan.k8s.pf9.io/finalizer"
@@ -327,6 +332,9 @@ const (
 	// ConfigMap settings keys
 	// ValidateRDMOwnerVMsKey is the key for enabling/disabling RDM owner VM validation
 	ValidateRDMOwnerVMsKey = "VALIDATE_RDM_OWNER_VMS"
+
+	// AgentHostEntriesKey is the ConfigMap key for custom host entries injected into agent node VMs
+	AgentHostEntriesKey = "AGENT_HOST_ENTRIES"
 
 	// AutoPXEBootOnConversionDefault is the default value for automatic PXE boot during cluster conversion
 	AutoPXEBootOnConversionDefault = false

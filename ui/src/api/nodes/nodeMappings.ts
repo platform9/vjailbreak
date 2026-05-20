@@ -43,6 +43,22 @@ export const deleteNode = async (nodeName: string, namespace = VJAILBREAK_DEFAUL
   return response
 }
 
+export const reprovisionNode = async (nodeName: string, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/vjailbreaknodes/${nodeName}`
+  const patch = {
+    metadata: {
+      annotations: {
+        'vjailbreak.io/reprovision': 'requested'
+      }
+    }
+  }
+  return axios.patch<Node>({
+    endpoint,
+    data: patch,
+    config: { headers: { 'Content-Type': 'application/merge-patch+json' } }
+  })
+}
+
 export const getOpenstackImages = async (creds) => {
   try {
     const { token } = await generateOpenstackToken(creds)

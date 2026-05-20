@@ -1,0 +1,19 @@
+# Vendor / dependency dirs
+vendor/
+node_modules/
+dist/
+bin/
+
+# Generated code
+**/zz_generated*.go
+**/*.pb.go
+**/*_pb_gw.go
+**/*_grpc.pb.go
+**/*_grpc_pb.go
+**/*_mock.go
+**/mock_*.go
+**/openstackops_mock.go
+
+# UI / swagger bundles
+ui/
+swagger-ui-template/
