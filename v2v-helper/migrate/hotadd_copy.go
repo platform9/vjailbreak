@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -19,6 +20,9 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	govmomitypes "github.com/vmware/govmomi/vim25/types"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -361,6 +365,41 @@ func (migobj *Migrate) runNBDCopy(ctx context.Context, proxyIP string, port int,
 	return fmt.Errorf("nbdcopy failed after %d attempts: %s → %s", hotAddNBDCopyRetries, nbdURL, destDevice)
 }
 
+// adjustProxyDiskCount atomically adds delta to the ProxyVM's AttachedDiskCount status.
+// Failures are non-fatal and are logged without aborting the caller.
+func (migobj *Migrate) adjustProxyDiskCount(ctx context.Context, delta int) {
+	if migobj.K8sClient == nil || migobj.ProxyVMName == "" || delta == 0 {
+		return
+	}
+	key := k8stypes.NamespacedName{
+		Name:      migobj.ProxyVMName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		proxyVM := &vjailbreakv1alpha1.ProxyVM{}
+		if err := migobj.K8sClient.Get(ctx, key, proxyVM); err != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: could not get ProxyVM %s to update disk count: %v", migobj.ProxyVMName, err))
+			return
+		}
+		patch := client.MergeFrom(proxyVM.DeepCopy())
+		newCount := proxyVM.Status.AttachedDiskCount + delta
+		if newCount < 0 {
+			newCount = 0
+		}
+		proxyVM.Status.AttachedDiskCount = newCount
+		if err := migobj.K8sClient.Status().Patch(ctx, proxyVM, patch); err != nil {
+			if apierrors.IsConflict(err) {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			migobj.logMessage(fmt.Sprintf("Warning: could not update ProxyVM %s disk count: %v", migobj.ProxyVMName, err))
+			return
+		}
+		return
+	}
+	migobj.logMessage(fmt.Sprintf("Warning: gave up updating ProxyVM %s disk count after conflicts", migobj.ProxyVMName))
+}
+
 // cleanupHotAdd releases all resources acquired during Hot-Add copy:
 // kills NBD daemon processes, detaches disks from proxy VM, removes the snapshot.
 // Individual failures are logged but do not abort the cleanup sequence.
@@ -403,6 +442,16 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 	if err := migobj.VMops.DeleteSnapshot(hotAddSnapName); err != nil {
 		migobj.logMessage(fmt.Sprintf("Warning: failed to remove snapshot '%s': %v", hotAddSnapName, err))
 	}
+
+	// Decrement the proxy VM's attached disk count for every disk we attached.
+	attached := 0
+	for _, t := range transfers {
+		if t.DiskKey != 0 {
+			attached++
+		}
+	}
+	// Use Background context: cleanup runs in a defer and the parent ctx may be cancelled.
+	migobj.adjustProxyDiskCount(context.Background(), -attached)
 }
 
 // HotAddCopyDisks is the top-level entry point for the Hot-Add copy method.
@@ -478,6 +527,8 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		transfers[i].DiskKey = key
 		migobj.logMessage(fmt.Sprintf("Disk attached with vCenter key %d", key))
 	}
+
+	migobj.adjustProxyDiskCount(ctx, len(transfers))
 
 	// 6. Identify block devices on the Proxy VM by matching NAA WWIDs.
 	migobj.logMessage(constants.EventMessageHotAddIdentify)
