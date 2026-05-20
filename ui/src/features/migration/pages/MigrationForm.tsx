@@ -32,7 +32,7 @@ import type {
   SelectedMigrationOptionsType,
   FieldErrors,
   MigrationDrawerRHFValues,
-  MigrationFormDrawerProps,
+  MigrationFormDrawerProps
 } from '../types'
 import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useFormSync } from '../hooks/useFormSync'
@@ -498,6 +498,24 @@ export default function MigrationFormDrawer({
                             ? 'All mapped'
                             : `${unmappedStorageCount} unmapped`}
                       </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Security groups
+                      </Typography>
+                      <Typography variant="body2">
+                        {(params.securityGroups ?? []).length === 0
+                          ? '—'
+                          : `${(params.securityGroups ?? []).length} selected`}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Server group
+                      </Typography>
+                      <Typography variant="body2">{params.serverGroup || '—'}</Typography>
                     </Box>
                   </Box>
                 </Box>
