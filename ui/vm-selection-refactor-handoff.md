@@ -1,11 +1,9 @@
-# VmsSelectionStep Merge Refactor — Handoff
+# VmsSelectionStep Refactor — Handoff
 
 ## Context
 
 **Repo:** `/home/abhijeet/Projects/Platform9/vjailbreak/ui`
 **Branch:** `587-ui-refactor-migration`
-**Goal:** Merge `VmsSelectionStep` and `RollingVmsSelectionStep` into one parameterized component. Zero behavior change.
-
 **TypeScript check:**
 ```
 /home/abhijeet/.nvm/versions/node/v18.20.7/bin/node node_modules/.bin/tsc --noEmit
@@ -14,334 +12,350 @@ Node: v18.20.7 — do NOT change.
 
 ---
 
-## Current Status: PHASE 3 COMPLETE ✅
+## Completed Work (Phases 1–5) ✅
 
-**tsc --noEmit: 0 errors**
+All uncommitted. tsc: 0 errors.
 
-Work is **uncommitted** — all changes in working tree.
+**What was done:**
+- Phase 1: Added `CanonicalVM` type to `types.ts` + `utils/vmAdapters.ts` (4 converters: `fromVmDataWithFlavor`, `toVmDataWithFlavor`, `fromVM`, `toVM`)
+- Phase 2: Extracted `BulkIPEditDialog` and `FlavorAssignmentDialog` into `components/`
+- Phase 3: `VmsSelectionStep.tsx` fully rewritten as unified component with `mode?: 'standard' | 'rolling'`; `VmsSelectionStepProps` unified in `types.ts`
+- Phase 4: Updated callers — `MigrationForm.tsx` (`mode="standard"`), `RollingMigrationForm.tsx` (replaced `<RollingVmsSelectionStep>` with `<VmsSelectionStep mode="rolling">`)
+- Phase 5: Deleted `RollingVmsSelectionStep.tsx` (no barrel exports referencing it)
 
----
-
-## Why Two Components Were Redundant
-
-`VmsSelectionStep` (`steps/VmsSelectionStep.tsx`) and `RollingVmsSelectionStep` (`steps/RollingVmsSelectionStep.tsx`) share duplicated logic:
-- Bulk IP Edit dialog (~200 lines identical)
-- Flavor Assignment dialog (~80 lines near-identical)
-- OS assignment dropdown renderCell (~60 lines near-identical)
-- `renderValidationAdornment` (identical — now deleted from both)
-- `MissingInterfaceIpWarningAlert` usage
-- DataGrid structure + pagination
-
-Key differences (features unique to each):
-
-| Concern | VmsSelectionStep | RollingVmsSelectionStep |
-|---------|-----------------|------------------------|
-| VM type | `VmDataWithFlavor` (`vmState`, `ipAddress`, `cpuCount`) | `VM` (`powerState`, `ip`, `cpu`) |
-| VM loading | Internal (`useVMwareMachinesQuery` + migrated VMs fetch) | External (parent passes `vmsWithAssignments`) |
-| RDM support | Full (dialog + validation + warning) | None |
-| Flavor column | Dialog only | Inline `Select` per row + dialog |
-| IP assignment | All selected VMs | Powered-off only |
-| OS dropdown trigger | Any selected VM | Selected + powered-off only |
-| `isMigrated` display | Yes (chip, disabled row) | No |
-| GPU warning | Yes | No |
-| Amplitude tracking | Yes | No |
-| Error display | Internal snackbar | Props (`vmIpValidationError`, `osValidationError`) |
-| `React.memo` | Yes (custom comparator) | No |
+**Files modified:**
+| File | Change |
+|------|--------|
+| `src/features/migration/types.ts` | `CanonicalVM` interface, `VmsSelectionStepProps` unified |
+| `src/features/migration/utils/vmAdapters.ts` | new file — 4 converters |
+| `src/features/migration/components/BulkIPEditDialog.tsx` | new file — extracted dialog |
+| `src/features/migration/components/FlavorAssignmentDialog.tsx` | new file — extracted dialog |
+| `src/features/migration/components/index.ts` | added exports for both dialogs |
+| `src/features/migration/hooks/useFlavorHandlers.ts` | added `setSelectedFlavor` to return |
+| `src/features/migration/steps/VmsSelectionStep.tsx` | full rewrite — unified component |
+| `src/features/migration/pages/MigrationForm.tsx` | added `mode="standard"` |
+| `src/features/migration/pages/RollingMigrationForm.tsx` | swapped import, added `mode="rolling"` |
+| `src/features/migration/steps/RollingVmsSelectionStep.tsx` | DELETED |
 
 ---
 
-## Refactor Plan (5 Phases)
+## Current State: `VmsSelectionStep.tsx`
 
-### Phase 1 ✅ — Normalize VM type
+**1646 lines.** Breakdown:
 
-**`src/features/migration/types.ts`** — 3 changes:
-1. `VmNetworkInterface` extended with `preserveIP?: boolean` and `preserveMAC?: boolean`
-2. `VmDataWithFlavor` extended with `flavor?: string`
-3. New `CanonicalVM` interface added (see below)
+| Section | Lines | Notes |
+|---------|-------|-------|
+| Imports | 1–61 | |
+| Styled components | 66–91 | |
+| `StandardToolbarWithActions` | 93–139 | `props: any` — untyped |
+| `RollingToolbarWithActions` | 141–168 | `props: any` — untyped |
+| Component function body (state/hooks/effects) | 176–559 | |
+| `standardColumns` array | 562–843 | 280 lines, defined inside render |
+| `rollingColumns` array | 846–1148 | 300 lines, defined inside render |
+| JSX return | 1156–1606 | |
+| `arePropsEqual` + `React.memo` | 1609–1646 | |
 
-**`src/features/migration/utils/vmAdapters.ts`** — new file, 4 converters:
-- `fromVmDataWithFlavor(vm: VmDataWithFlavor): CanonicalVM` — maps `vmState`→`powerState` ('running'→'powered-on'), `ipAddress`→`ip`, `cpuCount`→`cpu`, `flavor ?? flavorName`→`flavor`
-- `toVmDataWithFlavor(vm: CanonicalVM): VmDataWithFlavor` — reverse, for standard hooks
-- `fromVM(vm: VM): CanonicalVM` — type-lift (VM already close to canonical)
-- `toVM(vm: CanonicalVM): VM` — reverse, for rolling hooks
+**Column `renderCell` sizes:**
+| Column | Mode | Lines |
+|--------|------|-------|
+| `name` | standard | ~40 |
+| `ipAddress` | standard | ~65 |
+| `osFamily` | standard | ~95 |
+| `name` | rolling | ~15 |
+| `ip` | rolling | ~85 |
+| `osFamily` | rolling | ~95 |
+| `flavor` | rolling | ~50 |
 
-**`CanonicalVM` interface** (in `types.ts`):
+**Key duplication:** `osFamily` renderCell is ~95 lines in both standard and rolling — logic nearly identical, only trigger condition differs:
+- Standard: shows `Select` when `isSelected` (any power state)
+- Rolling: shows `Select` when `isSelected && powerState === 'powered-off'`
+
+---
+
+## Further Refactor Plan (Phases A–G)
+
+Zero behavior change. tsc must stay at 0 errors after each phase.
+
+---
+
+### Phase A — Type toolbar components
+
+**Files:** `steps/VmsSelectionStep.tsx` only (lines 93–168)
+
+Add typed interfaces to replace `props: any`:
+
 ```typescript
-export interface CanonicalVM {
-  id: string
-  name: string
-  powerState: 'powered-on' | 'powered-off'
-  ip: string
-  cpu?: number
-  memory?: number
-  osFamily?: string
-  flavor?: string
-  targetFlavorId?: string
-  networkInterfaces?: VmNetworkInterface[]
-  esxHost?: string
-  networks?: string[]
-  datastores?: string[]
-  preserveIp?: Record<number, boolean>
-  preserveMac?: Record<number, boolean>
-  ipValidationStatus?: 'pending' | 'valid' | 'invalid' | 'validating'
-  ipValidationMessage?: string
-  // Standard-migration-only (absent in rolling mode)
-  isMigrated?: boolean
-  flavorNotFound?: boolean
-  hasSharedRdm?: boolean
-  vmKey?: string
-  vmid?: string
-  labels?: Record<string, string>
-  disks?: string[]
-  vmWareMachineName?: string
+interface StandardToolbarWithActionsProps {
+  rowSelectionModel: string[]
+  onAssignFlavor: () => void
+  onAssignIP: () => void
+  hasRdmVMs: boolean
+  onAssignRdmConfiguration: () => void
+  selectedCount: number
+  rdmVMsCount: number
+  // CustomSearchToolbar passthrough
+  onRefresh?: () => void
+  disableRefresh?: boolean
+  placeholder?: string
+}
+
+interface RollingToolbarWithActionsProps {
+  rowSelectionModel: string[]
+  onAssignFlavor: () => void
+  onAssignIP: () => void
+  hasPoweredOffVMs: boolean
 }
 ```
 
----
+Replace `(props: any)` with `(props: StandardToolbarWithActionsProps)` / `(props: RollingToolbarWithActionsProps)`.
 
-### Phase 2 ✅ — Extract shared sub-components
-
-**New files created in `src/features/migration/components/`:**
-
-#### `BulkIPEditDialog.tsx`
-- Accepts `CanonicalVM[]` for VM list
-- Uses `vm.powerState !== 'powered-on'` for `isPoweredOff` (canonical)
-- Optional `bulkCurrentIPs?: Record<string, Record<number, string>>` — standard-mode only (used for `currentIp` fallback display)
-- Optional `duplicateNames?: Set<string>` — standard-mode only (shows `vmKey` when VM name is duplicate)
-- `helperText` logic: `status === 'invalid' ? message || 'Invalid IP' : preserveIp && !existingIp ? message : ''`
-- `renderValidationAdornment` now lives inside this component only
-- Props interface:
-  ```typescript
-  export interface BulkIPEditDialogProps {
-    open: boolean
-    selectedVMCount: number
-    vms: CanonicalVM[]
-    bulkEditIPs: Record<string, Record<number, string>>
-    bulkPreserveIp: Record<string, Record<number, boolean>>
-    bulkPreserveMac: Record<string, Record<number, boolean>>
-    bulkExistingIPs: Record<string, Record<number, string>>
-    bulkCurrentIPs?: Record<string, Record<number, string>>
-    bulkValidationStatus: Record<string, Record<number, string>>
-    bulkValidationMessages: Record<string, Record<number, string>>
-    assigningIPs: boolean
-    hasBulkIpsToApply: boolean
-    hasBulkIpValidationErrors: boolean
-    duplicateNames?: Set<string>
-    onClose: () => void
-    onApply: () => void
-    onClearAll: () => void
-    onPreserveIpChange: (vmId: string, ifIdx: number, val: boolean) => void
-    onPreserveMacChange: (vmId: string, ifIdx: number, val: boolean) => void
-    onIpChange: (vmId: string, ifIdx: number, val: string) => void
-  }
-  ```
-
-#### `FlavorAssignmentDialog.tsx`
-- Uses `Autocomplete` + `SharedTextField` (standard approach, better UX than rolling's `Select`)
-- Props interface:
-  ```typescript
-  export interface FlavorAssignmentDialogProps {
-    open: boolean
-    selectedVMCount: number
-    flavors: OpenStackFlavor[]
-    selectedFlavor: string
-    updating: boolean
-    onClose: () => void
-    onApply: () => void
-    onFlavorChange: (flavorId: string) => void
-  }
-  ```
-
-**Other changes in Phase 2:**
-
-`src/features/migration/hooks/useFlavorHandlers.ts`:
-- Added `setSelectedFlavor` to return object
-
-`src/features/migration/components/index.ts`:
-- Added exports for `BulkIPEditDialog`, `BulkIPEditDialogProps`, `FlavorAssignmentDialog`, `FlavorAssignmentDialogProps`
-
-`src/features/migration/steps/VmsSelectionStep.tsx`:
-- Replaced inline dialogs with `<BulkIPEditDialog>` and `<FlavorAssignmentDialog>` calls
-- Removed `renderValidationAdornment`, ~250 lines of dialog JSX
-
-`src/features/migration/steps/RollingVmsSelectionStep.tsx`:
-- Same dialog extraction; removed ~320 lines of dialog JSX + `renderValidationAdornment`
+**Impact:** ~5 lines added, high type-safety value. No behavior change.
 
 ---
 
-### Phase 3 ✅ — Merge into unified VmsSelectionStep
+### Phase B — Extract cell components
 
-**Completed in this session.** tsc: 0 errors.
+**New directory:** `src/features/migration/components/cells/`
 
-**What changed:**
+**New files:**
 
-`src/features/migration/types.ts`:
-- Added imports: `Dispatch`, `SetStateAction` from react; `GridRowSelectionModel` from `@mui/x-data-grid`; `ErrorContext` from `src/services/errorReporting`
-- `VmsSelectionStepProps` replaced with unified interface (see below)
+#### `OsFamilyCell.tsx`
+Unified — replaces ~190 lines of duplicated logic across both column sets.
 
-`src/features/migration/steps/VmsSelectionStep.tsx`:
-- Full rewrite — single component with `mode?: 'standard' | 'rolling'`
-- Both hook sets (`useBulkIPEdit`/`useBulkIPHandlers`, `useFlavorAssignment`/`useFlavorHandlers`) called unconditionally; `isRolling` gates which results are used
-- `handleRollingOSAssignment` inlined (patches VMwareMachine, updates `vmsWithAssignments`)
-- Rolling flavor sync `useEffect` added (syncs flavor names from `openstackFlavors` to `vmsWithAssignments`), gated by `isRolling`
-- `standardColumns` and `rollingColumns` defined separately; passed via `columns={isRolling ? rollingColumns : standardColumns}`
-- `StandardToolbarWithActions` and `RollingToolbarWithActions` defined as separate local components
-- Two `<DataGrid>` branches in JSX (standard vs rolling) — avoids mixing incompatible props
-- `React.memo` retained; `arePropsEqual` updated: rolling mode always returns `false` (parent owns state), standard mode uses original comparator
-- `canonicalVMs` = `isRolling ? vmsWithAssignments.map(fromVM) : vmsWithFlavor.map(fromVmDataWithFlavor)`
-- `vmOSAssignments` = `isRolling ? vmOSAssignmentsProp : standardVmOSAssignments`
-- `reportError` = `isRolling && reportErrorProp ? reportErrorProp : internalReportError`
-- RDM dialogs, GlobalStyles, flavor Snackbar all behind `{!isRolling && ...}`
-
-**Unified `VmsSelectionStepProps`:**
 ```typescript
-export interface VmsSelectionStepProps {
-  mode?: 'standard' | 'rolling'
-
-  // Standard-mode props
-  onChange?: (id: string) => (value: unknown) => void
-  error?: string
-  open?: boolean
-  vmwareCredsValidated?: boolean
-  openstackCredsValidated?: boolean
-  sessionId?: string
-  openstackFlavors?: OpenStackFlavor[]
-  vmwareCredName?: string
-  openstackCredName?: string
-  openstackCredentials?: OpenstackCreds
-  vmwareCluster?: string
-  useGPU?: boolean
-  showHeader?: boolean
-
-  // Rolling-mode props
-  vmsWithAssignments?: VM[]
-  setVmsWithAssignments?: Dispatch<SetStateAction<VM[]>>
-  vmOSAssignments?: Record<string, string>
-  setVmOSAssignments?: Dispatch<SetStateAction<Record<string, string>>>
-  selectedVMs?: GridRowSelectionModel
-  onSelectionChange?: (ids: GridRowSelectionModel) => void
-  loadingVMs?: boolean
-  vmIpValidationError?: string
-  osValidationError?: string
-  fetchClusterVMs?: () => Promise<void>
-  openstackCredData?: OpenstackCreds | null
-  reportError?: (error: Error, additionalContext?: ErrorContext) => void
+export interface OsFamilyCellProps {
+  vmId: string
+  powerState: string
+  detectedOsFamily?: string
+  assignedOsFamily?: string
+  // Standard: show select when selected regardless of power state
+  // Rolling: show select only when selected AND powered-off
+  showSelectWhenSelected: boolean
+  onOSAssignment: (vmId: string, osFamily: string) => void
 }
 ```
 
-**Hook bridging (call both sets, gate which results used):**
+Internal logic:
+- `currentOsFamily = assignedOsFamily ?? detectedOsFamily`
+- Select renders when `showSelectWhenSelected` is true
+- Display icons/text for Windows/Linux/Unknown/Other
 
-| Hook | Mode | Called with |
-|------|------|-------------|
-| `useBulkIPEdit` | both | standard state; empty in rolling mode (no-op) |
-| `useBulkIPHandlers` | both | rolling props; empty in standard mode (no-op) |
-| `useFlavorAssignment` | both | standard state; `onChange ?? (() => () => {})` fallback |
-| `useFlavorHandlers` | both | rolling props; `fetchClusterVMs ?? noOpAsync` fallback |
-| `useVmSelection` | both | standard `vmsWithFlavor` (empty in rolling) |
-| `useOsAssignment` | both | standard `vmsWithFlavor` (empty in rolling) |
-| `useRdmConfiguration` | both | standard state (empty `Set<string>()` in rolling) |
-| `useVMwareMachinesQuery` | both | `enabled: !isRolling && open` |
+**Callers:**
+- Standard `osFamily` renderCell: `<OsFamilyCell showSelectWhenSelected={isSelected} .../>`
+- Rolling `osFamily` renderCell: `<OsFamilyCell showSelectWhenSelected={isSelected && powerState === 'powered-off'} .../>`
 
----
+#### `StandardIpAddressCell.tsx`
+Extracts lines 616–679 (~65 lines) from standard `ipAddress` column.
 
-### Phase 4 — Update callers
-
-**`pages/MigrationForm.tsx`** — add `mode="standard"` (or omit — default is `'standard'`):
-```tsx
-<VmsSelectionStep
-  mode="standard"   // or omit — default
-  onChange={getParamsUpdater}
-  error={fieldErrors['vms']}
-  open={open}
-  vmwareCredsValidated={vmwareCredsValidated}
-  openstackCredsValidated={openstackCredsValidated}
-  sessionId={sessionId}
-  openstackFlavors={openstackCredentials?.spec?.flavors}
-  vmwareCredName={params.vmwareCreds?.existingCredName}
-  openstackCredName={params.openstackCreds?.existingCredName}
-  openstackCredentials={openstackCredentials}
-  vmwareCluster={params.vmwareCluster}
-  useGPU={params.useGPU}
-  showHeader={false}
-/>
+```typescript
+export interface StandardIpAddressCellProps {
+  vm: VmDataWithFlavor
+  isSelected: boolean
+  originalIPsPerVM: Record<string, Record<number, string>>
+}
 ```
 
-**`pages/RollingMigrationForm.tsx`** — replace `<RollingVmsSelectionStep ...>` with:
-```tsx
-import VmsSelectionStep from '../steps/VmsSelectionStep'
-// remove: import RollingVmsSelectionStep from '../steps/RollingVmsSelectionStep'
+#### `RollingIpAddressCell.tsx`
+Extracts lines 875–956 (~85 lines) from rolling `ip` column.
 
-<VmsSelectionStep
-  mode="rolling"
-  vmsWithAssignments={vmsWithAssignments}
-  setVmsWithAssignments={setVmsWithAssignments}
-  selectedVMs={selectedVMs}
-  onSelectionChange={(ids) => {
-    markTouched('vms')
-    setSelectedVMs(ids)
-  }}
-  vmOSAssignments={vmOSAssignments}
-  setVmOSAssignments={setVmOSAssignments}
-  openstackCredData={openstackCredData}
-  loadingVMs={loadingVMs}
-  reportError={reportError}
-  fetchClusterVMs={fetchClusterVMs}
-  vmIpValidationError={vmIpValidationError}
-  osValidationError={osValidationError}
-/>
+```typescript
+export interface RollingIpAddressCellProps {
+  vm: VM
+  isSelected: boolean
+}
 ```
 
----
+#### `RollingFlavorCell.tsx`
+Extracts lines 1091–1141 (~50 lines) from rolling `flavor` column.
 
-### Phase 5 — Delete RollingVmsSelectionStep.tsx
+```typescript
+export interface RollingFlavorCellProps {
+  vmId: string
+  currentFlavor: string
+  isSelected: boolean
+  openstackFlavors: OpenStackFlavor[]
+  onFlavorChange: (vmId: string, flavorId: string) => void
+}
+```
 
-Delete `src/features/migration/steps/RollingVmsSelectionStep.tsx`.
-Check `src/features/migration/steps/index.ts` (if it exists) for barrel exports referencing it.
+**Export all from `components/cells/index.ts`**, then re-export from `components/index.ts`.
 
----
-
-## Hook Types Reference
-
-| Hook | VM type | SelectedVMs type | Notes |
-|------|---------|-----------------|-------|
-| `useBulkIPEdit` | `VmDataWithFlavor[]` | `Set<string>` | Standard form |
-| `useBulkIPHandlers` | `VM[]` | `GridRowSelectionModel` | Rolling form |
-| `useFlavorAssignment` | `VmDataWithFlavor[]` | `Set<string>` | Standard form, needs `onChange('vms')` |
-| `useFlavorHandlers` | `VM[]` | `GridRowSelectionModel` | Rolling form, needs `fetchClusterVMs`; returns `setSelectedFlavor` |
-| `useOsAssignment` | — | — | Standard form only |
-| `useRdmConfiguration` | — | — | Standard form only |
-| `useVmSelection` | `VmDataWithFlavor[]` | `Set<string>` | Standard form |
+**Impact:** ~370 lines removed from main file. Cells become independently testable.
 
 ---
 
-## Key Pitfalls
+### Phase C — Extract column definition hooks
+
+**New files:**
+- `src/features/migration/hooks/useStandardColumns.ts`
+- `src/features/migration/hooks/useRollingColumns.ts`
+
+Each hook returns `GridColDef[]` via `useMemo` with explicit dependency arrays.
+
+**`useStandardColumns` signature:**
+```typescript
+export function useStandardColumns(params: {
+  selectedVMs: Set<string>
+  duplicateNames: Set<string>
+  vmOSAssignments: Record<string, string>
+  originalIPsPerVM: Record<string, Record<number, string>>
+  handleOSAssignment: (vmId: string, os: string) => void
+}): GridColDef[]
+```
+
+**`useRollingColumns` signature:**
+```typescript
+export function useRollingColumns(params: {
+  selectedVMs: GridRowSelectionModel
+  vmOSAssignments: Record<string, string>
+  openstackFlavors: OpenStackFlavor[]
+  handleOSAssignment: (vmId: string, os: string) => void
+  handleFlavorChange: (vmId: string, flavorId: string) => void
+}): GridColDef[]
+```
+
+**In main component:**
+```typescript
+const standardColumns = useStandardColumns({ selectedVMs: selectedVMsStandard, duplicateNames, vmOSAssignments, originalIPsPerVM: standardBulkIP.originalIPsPerVM, handleOSAssignment: standardHandleOSAssignment })
+const rollingColumns = useRollingColumns({ selectedVMs: rollingSelectedVMs, vmOSAssignments, openstackFlavors: rollingOpenstackFlavors, handleOSAssignment: handleRollingOSAssignment, handleFlavorChange: rollingFlavor.handleIndividualFlavorChange })
+```
+
+**Requires Phase B done first** (cell components used inside column definitions).
+
+**Impact:** ~580 lines removed from main file (after Phase B already removed ~370). Main file drops from ~1270 to ~690 lines.
+
+---
+
+### Phase D — Move `normalizeNetworkInterfaces` to utils
+
+**Current location:** `steps/VmsSelectionStep.tsx` lines 485–495 (inside component function).
+
+**Target:** `src/features/migration/utils/vmAdapters.ts` (already exists) or new `src/features/migration/utils/networkUtils.ts`.
+
+```typescript
+export function normalizeNetworkInterfaces(
+  networkInterfaces?: VmData['networkInterfaces']
+): VmData['networkInterfaces'] {
+  if (!networkInterfaces || networkInterfaces.length === 0) return networkInterfaces
+  return networkInterfaces.map((nic) => ({
+    ...nic,
+    ipAddress: Array.isArray((nic as any).ipAddress)
+      ? (nic as any).ipAddress
+      : (nic as any).ipAddress
+        ? [(nic as any).ipAddress]
+        : [],
+  }))
+}
+```
+
+Import in `VmsSelectionStep.tsx`, delete local definition.
+
+**Impact:** 12 lines removed from component, utility is now testable.
+
+---
+
+### Phase E — Extract dialog prop helpers
+
+**Problem:** `BulkIPEditDialog` and `FlavorAssignmentDialog` are each wired with ~25 ternary-per-prop lines in JSX — hard to read.
+
+**Option A: Helper functions (simpler)**
+
+```typescript
+function buildFlavorDialogProps(
+  isRolling: boolean,
+  rollingFlavor: ReturnType<typeof useFlavorHandlers>,
+  standardFlavor: ReturnType<typeof useFlavorAssignment>,
+  rollingSelectedVMs: GridRowSelectionModel,
+  standardSelectedVMs: Set<string>,
+  rollingFlavors: OpenStackFlavor[],
+  standardFlavors: OpenStackFlavor[],
+): FlavorAssignmentDialogProps { ... }
+```
+
+**Option B: Hook (if deps need memoization)**
+
+```typescript
+const flavorDialogProps = useFlavorDialogProps({ isRolling, rollingFlavor, standardFlavor, ... })
+```
+
+**Impact:** JSX shrinks ~50 lines; intent becomes clear.
+
+---
+
+### Phase F — Extract `useToast` hook
+
+**Current:** 5 state items + 2 handlers inline in component (lines 220–239).
+
+```typescript
+// src/features/migration/hooks/useToast.ts
+export function useToast() {
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastSeverity, setToastSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('success')
+  const showToast = useCallback((message: string, severity = 'success') => { ... }, [])
+  const handleClose = useCallback((_event?: React.SyntheticEvent | Event, reason?: string) => { ... }, [])
+  return { toastOpen, toastMessage, toastSeverity, showToast, handleClose }
+}
+```
+
+**Impact:** ~20 lines removed from component; reusable across other forms.
+
+---
+
+### Phase G — `useVmsSelectionState` mega-hook (optional)
+
+Extract ALL hook calls, state, and effects from the component function body into one custom hook.
+
+```typescript
+// src/features/migration/hooks/useVmsSelectionState.ts
+export function useVmsSelectionState(props: VmsSelectionStepProps) {
+  // All useState, useEffect, useMemo, useCallback, useXxx calls
+  // Returns everything needed for JSX
+  return { isRolling, canonicalVMs, standardBulkIP, rollingBulkIP, ... }
+}
+```
+
+Component becomes:
+```tsx
+function VmsSelectionStep(props: VmsSelectionStepProps) {
+  const state = useVmsSelectionState(props)
+  return <VmsSelectionStepContainer>...</VmsSelectionStepContainer>
+}
+```
+
+**Risk:** Large surface area. Only do after A–F are complete and tsc verified.
+
+**Impact:** Component file drops to ~250–350 lines of pure JSX.
+
+---
+
+## Phase Execution Order
+
+| Phase | Prerequisite | Effort | Impact |
+|-------|-------------|--------|--------|
+| A — Type toolbars | none | S | Type safety |
+| D — Move `normalizeNetworkInterfaces` | none | XS | Testability |
+| F — `useToast` hook | none | S | Reusability |
+| B — Extract cell components | none | M | -370 lines |
+| E — Dialog prop helpers | none | S | Readability |
+| C — Column hooks | B | M | -580 lines (cumulative) |
+| G — `useVmsSelectionState` | A–F | L | -300 lines |
+
+Phases A, D, F, B, E are independent — can parallelize or do in any order.
+Phase C requires Phase B.
+Phase G requires all others.
+
+---
+
+## Pitfalls
 
 | Problem | Fix |
 |---------|-----|
-| `flavor` field untyped on `VmDataWithFlavor` | Fixed in Phase 1 — added `flavor?: string` |
-| `VmNetworkInterface` defined twice (model vs types.ts) | Fixed in Phase 1 — types.ts version now has `preserveIP`/`preserveMAC` |
-| `[].every(condition)` vacuous truth → false 'complete' | Already fixed in `useRollingFormValidation.ts` (prior session) |
-| `VmData.vmState` = 'running'/'stopped'; `VM.powerState` = 'powered-on'/'powered-off' | `fromVmDataWithFlavor` adapter handles mapping |
-| `useBulkIPEdit` uses `Set<string>`, `useBulkIPHandlers` uses `GridRowSelectionModel` | Keep hooks native; convert at boundary |
-| `useFlavorAssignment` needs `onChange('vms')` callback; `useFlavorHandlers` needs `fetchClusterVMs` | Mode-gate which hook results to use; both called unconditionally with fallbacks |
-| Rolling `selectedVMs` is `GridRowSelectionModel` (array); standard is `Set<string>` | Use `.length` for rolling, `.size` for standard; BulkIPEditDialog takes `selectedVMCount: number` |
-| `VmsSelectionStep` uses `React.memo` with custom comparator | Rolling mode returns `false` from `arePropsEqual` (parent owns state); standard uses original comparator |
-| Calling hooks in inactive mode | All hooks safe with empty/no-op fallbacks — no side effects from inactive-mode hook calls |
-
----
-
-## Files Modified Summary (All Phases)
-
-| File | Change |
-|------|--------|
-| `src/features/migration/types.ts` | Phase 1: `VmNetworkInterface.preserveIP/preserveMAC`, `VmDataWithFlavor.flavor`, `CanonicalVM` interface. Phase 3: new imports + unified `VmsSelectionStepProps` |
-| `src/features/migration/utils/vmAdapters.ts` | Phase 1: new file — `fromVmDataWithFlavor`, `toVmDataWithFlavor`, `fromVM`, `toVM` |
-| `src/features/migration/components/BulkIPEditDialog.tsx` | Phase 2: new file — extracted + unified dialog |
-| `src/features/migration/components/FlavorAssignmentDialog.tsx` | Phase 2: new file — extracted + unified dialog (Autocomplete style) |
-| `src/features/migration/components/index.ts` | Phase 2: added exports for new dialog components |
-| `src/features/migration/hooks/useFlavorHandlers.ts` | Phase 2: added `setSelectedFlavor` to return |
-| `src/features/migration/steps/VmsSelectionStep.tsx` | Phase 2: dialog extraction. Phase 3: full rewrite — unified component with `mode` prop |
-| `src/features/migration/steps/RollingVmsSelectionStep.tsx` | Phase 2: dialog extraction. **Phase 5 target: delete this file** |
+| `osFamily` renderCell trigger condition differs between modes | `OsFamilyCell` gets `showSelectWhenSelected: boolean` prop — caller computes condition |
+| Column hooks need stable callback refs | Pass memoized callbacks; use `useCallback` at call site |
+| `standardBulkIP.originalIPsPerVM` not in current public hook API | Check `useBulkIPEdit` return type before referencing in `useStandardColumns` |
+| `normalizeNetworkInterfaces` uses `(nic as any)` casts | Keep casts in extracted util — don't change logic |
+| Rolling `arePropsEqual` returns `false` always | Preserve this in `React.memo` wrapper; do NOT change during column extraction |
 
 ---
 
@@ -350,19 +364,15 @@ Check `src/features/migration/steps/index.ts` (if it exists) for barrel exports 
 > Branch: `587-ui-refactor-migration`
 > Working dir: `/home/abhijeet/Projects/Platform9/vjailbreak/ui`
 >
-> **Goal:** Merge `VmsSelectionStep` and `RollingVmsSelectionStep` into one parameterized component.
+> **Goal:** Further refactor `VmsSelectionStep.tsx` (currently 1646 lines). All prior phases (1–5) complete — `VmsSelectionStep` is already a unified `mode?: 'standard' | 'rolling'` component. Callers updated. `RollingVmsSelectionStep.tsx` deleted. All changes UNCOMMITTED. tsc: 0 errors.
 >
-> **Phases 1, 2, 3 COMPLETE. tsc --noEmit: 0 errors. All changes UNCOMMITTED.**
+> **Next refactor phases (A–G):**
+> - Phase A: Type `StandardToolbarWithActions` / `RollingToolbarWithActions` (replace `props: any`)
+> - Phase B: Extract cell components (`OsFamilyCell`, `StandardIpAddressCell`, `RollingIpAddressCell`, `RollingFlavorCell`) into `components/cells/`
+> - Phase C: Extract column definitions into `useStandardColumns` / `useRollingColumns` hooks (requires Phase B)
+> - Phase D: Move `normalizeNetworkInterfaces` to `utils/`
+> - Phase E: Extract dialog prop helpers for `BulkIPEditDialog` / `FlavorAssignmentDialog`
+> - Phase F: Extract `useToast` hook from inline state
+> - Phase G: `useVmsSelectionState` mega-hook (optional, do last)
 >
-> Phase 1: Added `CanonicalVM` type to `types.ts` + `utils/vmAdapters.ts` (4 converters).
-> Phase 2: Extracted `BulkIPEditDialog` and `FlavorAssignmentDialog` into `components/`. Both step files now import shared components.
-> Phase 3: `VmsSelectionStep.tsx` fully rewritten as unified component with `mode?: 'standard' | 'rolling'`. Both hook sets (`useBulkIPEdit`/`useBulkIPHandlers`, `useFlavorAssignment`/`useFlavorHandlers`) called unconditionally; `isRolling` gates which results are used in render. `VmsSelectionStepProps` unified in `types.ts`.
->
-> **Next: Phase 4** — update callers.
-> - `pages/MigrationForm.tsx`: add `mode="standard"` (or omit — default)
-> - `pages/RollingMigrationForm.tsx`: replace `<RollingVmsSelectionStep ...>` with `<VmsSelectionStep mode="rolling" ...>`, swap import
->
-> **Then Phase 5** — delete `src/features/migration/steps/RollingVmsSelectionStep.tsx`.
-> Check `src/features/migration/steps/index.ts` for barrel exports.
->
-> See `vm-selection-refactor-handoff.md` for full Phase 4 JSX snippets and complete context.
+> See `vm-selection-refactor-handoff.md` for full interfaces, signatures, line numbers, and pitfalls.

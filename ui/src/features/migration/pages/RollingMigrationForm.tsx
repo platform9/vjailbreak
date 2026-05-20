@@ -17,7 +17,6 @@ import { useNavigate } from 'react-router-dom'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
 import { CustomSearchToolbar } from 'src/components/grid'
 import MaasConfigDetailDialog from '../components/MaasConfigDetailDialog'
-import MaasConfigDetailsModal from '../components/MaasConfigDetailsModal'
 import HostConfigAssignmentDialog from '../components/HostConfigAssignmentDialog'
 import NetworkAndStorageMappingStep from '../steps/NetworkAndStorageMappingStep'
 import VmsSelectionStep from '../steps/VmsSelectionStep'
@@ -131,7 +130,6 @@ export default function RollingMigrationFormDrawer({
   const { track } = useAmplitude({ component: 'RollingMigrationForm' })
   const [submitting, setSubmitting] = useState(false)
   const [selectedVMs, setSelectedVMs] = useState<GridRowSelectionModel>([])
-  const [maasConfigDialogOpen, setMaasConfigDialogOpen] = useState(false)
   const [maasDetailsModalOpen, setMaasDetailsModalOpen] = useState(false)
 
   // IP editing and validation state - updated for multiple interfaces
@@ -206,10 +204,6 @@ export default function RollingMigrationFormDrawer({
     getParamsUpdater,
     selectedMigrationOptions
   })
-
-  const handleCloseMaasConfig = () => {
-    setMaasConfigDialogOpen(false)
-  }
 
   useEffect(() => {
     if (params.vmwareCluster || params.pcdCluster) {
@@ -1045,19 +1039,11 @@ export default function RollingMigrationFormDrawer({
       </FormProvider>
 
       <MaasConfigDetailDialog
-        open={maasConfigDialogOpen}
-        onClose={handleCloseMaasConfig}
-        selectedMaasConfig={selectedMaasConfig}
+        open={maasDetailsModalOpen}
+        onClose={handleCloseMaasDetailsModal}
+        selectedMaasConfig={maasConfigs?.[0] ?? null}
         loadingMaasConfig={loadingMaasConfig}
       />
-
-      {maasConfigs && maasConfigs.length > 0 && (
-        <MaasConfigDetailsModal
-          open={maasDetailsModalOpen}
-          onClose={handleCloseMaasDetailsModal}
-          config={maasConfigs[0]}
-        />
-      )}
 
       <HostConfigAssignmentDialog
         open={pcdHostConfigDialogOpen}

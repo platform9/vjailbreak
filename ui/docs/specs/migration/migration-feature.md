@@ -2,7 +2,8 @@
 
 **Feature path**: `src/features/migration/`  
 **Generated**: 2026-05-20  
-**Coverage**: 76 files — api, components, context, hooks, pages, steps, utils
+**Updated**: 2026-05-20 (technical debt cleanup)  
+**Coverage**: 73 files — api, components, context, hooks, pages, steps, utils
 
 ---
 
@@ -75,8 +76,7 @@ src/features/migration/
 │   ├── FlavorAssignmentDialog.tsx — Bulk flavor assignment dialog
 │   ├── HostConfigAssignmentDialog.tsx — Bulk host config assignment dialog
 │   ├── LogLine.tsx             — Syntax-highlighted log line renderer
-│   ├── MaasConfigDetailDialog.tsx — MAAS config details (syntax highlighted)
-│   ├── MaasConfigDetailsModal.tsx — MAAS config details (legacy modal)
+│   ├── MaasConfigDetailDialog.tsx — MAAS config details (styled dialog, syntax highlighted)
 │   ├── MigrationProgress.tsx   — Status icon + text for migration phases
 │   ├── MigrationProgressWithPopover.tsx — Progress icon + stepper popover
 │   ├── MigrationsTable.tsx     — Main DataGrid for migration list
@@ -84,7 +84,6 @@ src/features/migration/
 │   ├── missingInterfaceIpWarnings.ts — Logic to detect missing IP warnings
 │   ├── PodLogsDrawer.tsx       — Pod logs with download bundle support
 │   ├── RdmDiskConfigurationPanel.tsx — RDM disk → Cinder backend config
-│   ├── ResourceMapping.tsx     — Manual source→target mapping UI (legacy)
 │   ├── ResourceMappingTable.tsx — Read-only mapping table with delete
 │   ├── ResourceMappingTableNew.tsx — RHF-integrated mapping table
 │   ├── TriggerAdminCutover/
@@ -129,7 +128,6 @@ src/features/migration/
 │   ├── MigrationOptionsAlt.tsx — Advanced options step (copy, cutover, scripts)
 │   ├── NetworkAndStorageMappingStep.tsx — Network + storage mapping step
 │   ├── SecurityGroupAndServerGroup.tsx — Security groups + server groups step
-│   ├── SourceAndDestinationEnvStep.tsx — Deprecated cred selection step
 │   ├── SourceDestinationClusterSelection.tsx — Cluster + cred selection step
 │   └── VmsSelectionStep.tsx    — Dual-mode VM selection DataGrid step
 ├── utils/
@@ -441,8 +439,6 @@ Migration monitoring
 ### ResourceMappingTableNew (`components/ResourceMappingTableNew.tsx`)
 
 **Purpose**: RHF-integrated mapping table with auto-add on selection and delete.
-
-**Note**: `ResourceMapping.tsx` is the legacy non-RHF version. New code should use `ResourceMappingTableNew`.
 
 ---
 
@@ -893,6 +889,4 @@ All step completion flags, error flags, and section nav items are computed via `
 
 ### Known Technical Debt
 
-- `SourceAndDestinationEnvStep.tsx` is deprecated — replaced by `SourceDestinationClusterSelection.tsx`
-- `ResourceMapping.tsx` (non-RHF) and `ResourceMappingTableNew.tsx` (RHF) are parallel implementations — `ResourceMapping.tsx` should be phased out
-- `MaasConfigDetailDialog.tsx` and `MaasConfigDetailsModal.tsx` appear to be duplicates with overlapping responsibility
+No outstanding technical debt.
