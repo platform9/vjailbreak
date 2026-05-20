@@ -353,6 +353,10 @@ const (
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
 
+	// Retry attempts for delete operations (port, volume) during cleanup.
+	// Kept small — cleanup should not block indefinitely, but must survive transient API errors.
+	DeleteOperationRetryCount = 5
+
 	InspectOSCommand      = "inspect-os"
 	LSBootCommand         = "ls /boot"
 	XMLFileName           = "libxml.xml"

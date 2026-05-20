@@ -10,6 +10,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	"github.com/golang/mock/gomock"
@@ -517,7 +518,7 @@ func TestCreateTargetInstance(t *testing.T) {
 	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -571,7 +572,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		ID:        "port-2-id",
 		NetworkID: "network-2",
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -619,7 +620,7 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		RAM:   2048,
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetSecurityGroupIDs(gomock.Any(), gomock.Any(), gomock.Any()).Return([]string{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	inputvminfo := vm.VMInfo{
 		Name:   "test-vm",
@@ -650,5 +651,82 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
 	// The test passes port IDs directly, so the validation in the port creation code path is not triggered
 	// This test now just verifies that CreateTargetInstance can handle mismatched Networkports config
+	assert.NoError(t, err)
+}
+
+func TestDetachAllVolumes_SkipsNilOpenstackVol(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	// Only disk1 has a volume — expect exactly one detach+wait, not two.
+	mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any(), "id1").Return(nil).Times(1)
+	mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any(), "id1").Return(nil).Times(1)
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", OpenstackVol: &volumes.Volume{ID: "id1"}},
+			{Name: "disk2", OpenstackVol: nil},
+		},
+	}
+	migobj := Migrate{Openstackclients: mockOpenStackOps, InPod: false}
+	err := migobj.DetachAllVolumes(ctx, vminfo)
+	assert.NoError(t, err)
+}
+
+func TestDeleteAllVolumes_SkipsNilOpenstackVol(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	// Only disk1 has a volume — expect exactly one delete call.
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "id1").Return(nil).Times(1)
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", OpenstackVol: &volumes.Volume{ID: "id1"}},
+			{Name: "disk2", OpenstackVol: nil},
+		},
+	}
+	migobj := Migrate{Openstackclients: mockOpenStackOps, InPod: false}
+	err := migobj.DeleteAllVolumes(ctx, vminfo)
+	assert.NoError(t, err)
+}
+
+// TestCleanup_PartialVolumes verifies that when CreateVolumes fails partway through,
+// cleanup correctly handles the mix of created (non-nil) and uncreated (nil) volumes,
+// deletes only the created volume, and deletes ports when the setting is enabled.
+func TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	// disk1 was created; disk2 was never created (nil OpenstackVol).
+	mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any(), "id1").Return(nil).Times(1)
+	mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any(), "id1").Return(nil).Times(1)
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "id1").Return(nil).Times(1)
+	mockOpenStackOps.EXPECT().DeletePort(gomock.Any(), "port-1").Return(nil).Times(1)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", OpenstackVol: &volumes.Volume{ID: "id1"}},
+			{Name: "disk2", OpenstackVol: nil},
+		},
+	}
+	settings := &k8sutils.VjailbreakSettings{
+		CleanupPortsAfterMigrationFailure: true,
+	}
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+	}
+	err := migobj.cleanup(ctx, vminfo, "test partial volume failure", []string{"port-1"}, settings)
 	assert.NoError(t, err)
 }

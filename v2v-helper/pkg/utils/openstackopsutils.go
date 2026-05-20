@@ -225,11 +225,16 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 
 func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting volume with ID %s, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
-	err := volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete volume: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error deleting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(5 * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to delete volume after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID string) error {
@@ -242,7 +247,9 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		volume, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
-			return fmt.Errorf("failed to get volume: %s", err)
+			PrintLog(fmt.Sprintf("Transient error polling volume %s (attempt %d/%d): %s", volumeID, i+1, vjailbreakSettings.VolumeAvailableWaitRetryLimit, err))
+			time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second)
+			continue
 		}
 		if volume.Status == "error" {
 			return fmt.Errorf("volume %s is in error state", volumeID)
@@ -255,7 +262,9 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 		// Check if the volume is available from nova side as well
 		server, err := servers.Get(ctx, osclient.ComputeClient, instanceID).Extract()
 		if err != nil {
-			return fmt.Errorf("failed to get server: %s", err)
+			PrintLog(fmt.Sprintf("Transient error polling server %s (attempt %d/%d): %s", instanceID, i+1, vjailbreakSettings.VolumeAvailableWaitRetryLimit, err))
+			time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second)
+			continue
 		}
 
 		// get the attachments from the server
@@ -523,12 +532,17 @@ func (osclient *OpenStackClients) GetPort(ctx context.Context, portID string) (*
 
 func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
-	err := ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete port %s: %s", portID, err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
+		if err == nil {
+			PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error deleting port %s (attempt %d/%d): %s", portID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(5 * time.Second)
 	}
-	PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
-	return nil
+	return fmt.Errorf("failed to delete port %s after %d attempts: %s", portID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []string, ip string) (*subnets.Subnet, error) {
