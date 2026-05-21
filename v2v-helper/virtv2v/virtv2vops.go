@@ -39,12 +39,25 @@ type VirtV2VOperations interface {
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
 	AddUdevRules(disks []vm.VMDisk, diskPath string, interfaces []string, macs []string) error
 	GetNetworkInterfaceNames(path string) ([]string, error)
-	IsRHELFamily(osRelease string) (bool, error)
+	IsRHELFamily(osRelease string) bool
+	IsSUSEFamily(osRelease string) bool
 	GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error)
 }
 type FirstBootWindows struct {
 	Script string
 	Async  bool
+}
+
+type FirstBootLinux struct {
+	Script string
+	Async  bool
+}
+
+func IsSUSEFamily(osRelease string) bool {
+	lower := strings.ToLower(osRelease)
+	return strings.Contains(lower, "suse") ||
+		strings.Contains(lower, "sles") ||
+		strings.Contains(lower, "opensuse")
 }
 
 func splitAndFilterUserScripts(content, ostype string) []string {
@@ -633,8 +646,11 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 }
 
 func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
-	// Create the firstboot script
-	firstbootscriptpath := fmt.Sprintf("/home/fedora/%s.sh", firstbootscriptname)
+	// Write generated script into linux-store so InjectLinuxFirstBootScriptsFromStore can find it
+	if err := os.MkdirAll("/home/fedora/linux-store", 0755); err != nil {
+		return fmt.Errorf("failed to ensure linux-store dir: %s", err)
+	}
+	firstbootscriptpath := fmt.Sprintf("/home/fedora/linux-store/%s.sh", firstbootscriptname)
 	err := os.WriteFile(firstbootscriptpath, []byte(firstbootscript), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create firstboot script: %s", err)
@@ -1180,6 +1196,64 @@ func InjectFirstBootScriptsFromStore(disks []vm.VMDisk, diskPath string, firstbo
 		return err
 	}
 	return nil
+}
+
+// InjectLinuxFirstBootScriptsFromStore copies the Linux firstboot scheduler and all platform
+// scripts into the guest disk offline, and writes scripts.json for the scheduler to consume.
+func InjectLinuxFirstBootScriptsFromStore(disks []vm.VMDisk, diskPath string, scripts []FirstBootLinux) error {
+	log.Println("Injecting Linux firstboot scripts into guest disk")
+
+	stageDir := "/home/fedora/linux-firstboot"
+	if err := os.MkdirAll(stageDir, 0755); err != nil {
+		return fmt.Errorf("failed to create staging dir %s: %v", stageDir, err)
+	}
+
+	// Copy scheduler into staging dir
+	schedulerSrc := "/home/fedora/linux-store/firstboot-scheduler.sh"
+	schedulerDst := filepath.Join(stageDir, "firstboot-scheduler.sh")
+	if err := copyFile(schedulerSrc, schedulerDst, 0755); err != nil {
+		return fmt.Errorf("failed to copy scheduler: %v", err)
+	}
+
+	// Copy each script into staging dir with index prefix
+	metadata := make([]FirstBootLinux, 0, len(scripts))
+	for idx, s := range scripts {
+		src := fmt.Sprintf("/home/fedora/linux-store/%s", s.Script)
+		indexedName := fmt.Sprintf("%d-%s", idx, s.Script)
+		dst := filepath.Join(stageDir, indexedName)
+		if err := copyFile(src, dst, 0755); err != nil {
+			return fmt.Errorf("failed to copy script %s: %v", s.Script, err)
+		}
+		metadata = append(metadata, FirstBootLinux{Script: indexedName, Async: s.Async})
+	}
+
+	// Write scripts.json
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal linux scripts metadata: %v", err)
+	}
+	metadataPath := filepath.Join(stageDir, "scripts.json")
+	if err := os.WriteFile(metadataPath, metadataJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write scripts.json: %v", err)
+	}
+	log.Printf("Linux firstboot scripts.json: %s", string(metadataJSON))
+
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	ans, err := RunCommandInGuestAllVolumes(disks, "copy-in", true, stageDir, "/")
+	if err != nil {
+		return fmt.Errorf("failed to inject linux-firstboot into guest: %v: %s", err, strings.TrimSpace(ans))
+	}
+	log.Println("Linux firstboot scripts injected successfully")
+	return nil
+}
+
+// copyFile copies src to dst with the given permission bits.
+func copyFile(src, dst string, mode os.FileMode) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", src, err)
+	}
+	return os.WriteFile(dst, data, mode)
 }
 
 // PushWindowsFirstBoot creates OS-filtered user script parts in the store directory for Windows
