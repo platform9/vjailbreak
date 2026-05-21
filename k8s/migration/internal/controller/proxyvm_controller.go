@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -43,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const proxyVMSSHKeyPath = "/home/ubuntu/.ssh/id_rsa"
 
 // ProxyVMReconciler reconciles a ProxyVM object
 type ProxyVMReconciler struct {
@@ -186,10 +184,20 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
 
-	// Load the vJailbreak appliance SSH private key
-	privateKey, err := os.ReadFile(proxyVMSSHKeyPath)
-	if err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to read SSH private key at %s: %v", proxyVMSSHKeyPath, err))
+	// Load the vJailbreak appliance SSH private key from the shared k8s secret.
+	// The same secret is used by the v2v-helper worker, so only one public key
+	// needs to be authorised on the Proxy VM.
+	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
+	sshSecret := &corev1.Secret{}
+	if err := r.Get(ctx, k8stypes.NamespacedName{
+		Name:      sshSecretName,
+		Namespace: proxyVM.Namespace,
+	}, sshSecret); err != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get SSH secret %q: %v", sshSecretName, err))
+	}
+	privateKey, ok := sshSecret.Data["ssh-privatekey"]
+	if !ok || len(privateKey) == 0 {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("secret %q is missing 'ssh-privatekey' key", sshSecretName))
 	}
 
 	// Connect via SSH
@@ -264,6 +272,22 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 }
 
 func (r *ProxyVMReconciler) reconcileDelete(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
+	sshSecret := &corev1.Secret{}
+	if err := r.Get(ctx, k8stypes.NamespacedName{
+		Name:      sshSecretName,
+		Namespace: proxyVM.Namespace,
+	}, sshSecret); err != nil {
+		if !apierrors.IsNotFound(err) {
+			ctxlog.V(1).Info("Failed to get SSH secret for deletion", "secret", sshSecretName, "error", err)
+		}
+	} else {
+		if err := r.Delete(ctx, sshSecret); err != nil && !apierrors.IsNotFound(err) {
+			ctxlog.V(1).Info("Failed to delete SSH secret", "secret", sshSecretName, "error", err)
+		}
+	}
+
 	if controllerutil.RemoveFinalizer(proxyVM, constants.ProxyVMFinalizer) {
 		if err := r.Update(ctx, proxyVM); err != nil {
 			if apierrors.IsNotFound(err) {

@@ -402,6 +402,11 @@ const (
 	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
 	ESXiSSHSecretName = "esxi-ssh-key"
 
+	// HotAddSSHSecretSuffix is appended to the ProxyVM k8s resource name to form the
+	// per-VM SSH secret name: "{proxyVMName}-hot-add-ssh-key".
+	// Each Proxy VM has its own secret so different VMs can use different SSH keys.
+	HotAddSSHSecretSuffix = "hot-add-ssh-key"
+
 	// AutoFstabUpdate is the default value for automatic fstab update
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update

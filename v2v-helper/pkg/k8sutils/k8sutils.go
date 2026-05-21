@@ -271,6 +271,30 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 	return arrayCreds, nil
 }
 
+// GetHotAddPrivateKey retrieves the SSH private key used to connect to the given Proxy VM.
+// The secret is named "{proxyVMName}-hot-add-ssh-key" and is created during Proxy VM onboarding.
+func GetHotAddPrivateKey(ctx context.Context, k8sClient client.Client, proxyVMName string) ([]byte, error) {
+	secretName := proxyVMName + "-" + constants.HotAddSSHSecretSuffix
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      secretName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret); err != nil {
+		return nil, errors.Wrapf(err, "failed to get Hot-Add SSH secret %s", secretName)
+	}
+
+	privateKey, ok := secret.Data["ssh-privatekey"]
+	if !ok {
+		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
+	}
+
+	if len(privateKey) == 0 {
+		return nil, fmt.Errorf("Hot-Add SSH private key in secret %s is empty", secretName)
+	}
+
+	return privateKey, nil
+}
+
 // GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret
 func GetESXiSSHPrivateKey(ctx context.Context, k8sClient client.Client, secretName string) ([]byte, error) {
 	secret := &corev1.Secret{}

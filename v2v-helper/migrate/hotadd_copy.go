@@ -5,7 +5,6 @@ package migrate
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
+	k8sutils "github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -27,7 +27,6 @@ import (
 )
 
 const (
-	hotAddSSHKeyPath        = "/home/fedora/.ssh/id_rsa"
 	hotAddSnapName          = "vjailbreak-hotadd-snap"
 	hotAddSSHUser           = "root"
 	hotAddIdentifyRetries   = 3
@@ -479,10 +478,11 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		return errors.New("ProxyVMIP and ProxyVMName must be set for HotAdd copy method")
 	}
 
-	// Read the vJailbreak appliance SSH key used to connect to the Proxy VM.
-	sshKeyBytes, err := os.ReadFile(hotAddSSHKeyPath)
+	// Load the per-proxy-VM SSH private key from the k8s secret named
+	// "{proxyVMName}-hot-add-ssh-key", created during Proxy VM onboarding.
+	sshKeyBytes, err := k8sutils.GetHotAddPrivateKey(ctx, migobj.K8sClient, migobj.ProxyVMK8sName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read SSH key at %s", hotAddSSHKeyPath)
+		return errors.Wrap(err, "failed to get Hot-Add SSH private key")
 	}
 
 	// 1. Snapshot the source VM.
