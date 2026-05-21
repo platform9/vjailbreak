@@ -83,14 +83,18 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Mark Verifying
-	proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerifying
-	proxyVM.Status.ValidationMessage = "Verifying Proxy VM components..."
-	if err := r.Status().Update(ctx, proxyVM); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+	// Only broadcast Verifying when transitioning from a non-ready state.
+	// Periodic re-checks of an already-Ready VM run silently so the UI
+	// does not flip back to Verifying every 15 minutes.
+	if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
+		proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerifying
+		proxyVM.Status.ValidationMessage = "Verifying Proxy VM components..."
+		if err := r.Status().Update(ctx, proxyVM); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
 	}
 
 	// Fetch VMwareCreds secret
