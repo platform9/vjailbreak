@@ -1643,6 +1643,7 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 		configMapData["STORAGE_COPY_METHOD"] = constants.HotAddCopyMethod
 		configMapData["PROXY_VM_IP"] = proxyVM.Status.IPAddress
 		configMapData["PROXY_VM_NAME"] = proxyVM.Spec.VMName
+		configMapData["PROXY_VM_K8S_NAME"] = proxyVM.Name
 	}
 
 	return nil

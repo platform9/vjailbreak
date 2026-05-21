@@ -174,6 +174,7 @@ func main() {
 		ArrayCredsMapping:      migrationparams.ArrayCredsMapping,
 		ProxyVMIP:              migrationparams.ProxyVMIP,
 		ProxyVMName:            migrationparams.ProxyVMName,
+		ProxyVMK8sName:         migrationparams.ProxyVMK8sName,
 		NetAppSVM:              migrationparams.NetAppSVM,
 		NetAppFlexVol:          migrationparams.NetAppFlexVol,
 		NetworkOverrides:       networkOverrides,

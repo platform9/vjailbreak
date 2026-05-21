@@ -381,11 +381,11 @@ func (migobj *Migrate) runNBDCopy(ctx context.Context, proxyIP string, port int,
 // adjustProxyDiskCount atomically adds delta to the ProxyVM's AttachedDiskCount status.
 // Failures are non-fatal and are logged without aborting the caller.
 func (migobj *Migrate) adjustProxyDiskCount(ctx context.Context, delta int) {
-	if migobj.K8sClient == nil || migobj.ProxyVMName == "" || delta == 0 {
+	if migobj.K8sClient == nil || migobj.ProxyVMK8sName == "" || delta == 0 {
 		return
 	}
 	key := k8stypes.NamespacedName{
-		Name:      migobj.ProxyVMName,
+		Name:      migobj.ProxyVMK8sName,
 		Namespace: constants.NamespaceMigrationSystem,
 	}
 	for attempt := 0; attempt < 3; attempt++ {
