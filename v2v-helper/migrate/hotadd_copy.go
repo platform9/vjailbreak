@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -284,12 +285,12 @@ func readGuestWWIDs(sshClient *esxissh.Client) (map[string]string, error) {
 	return result, nil
 }
 
-// findFreePort reads /proc/net/tcp and /proc/net/tcp6 on the Proxy VM and returns
-// the first port in [rangeMin, rangeMax] not currently in use.
-func (migobj *Migrate) findFreePort(sshClient *esxissh.Client, rangeMin, rangeMax int) (int, error) {
+// findFreePorts reads /proc/net/tcp once and returns count free ports in [rangeMin, rangeMax].
+// Reading once prevents concurrent goroutines from racing to pick the same port.
+func (migobj *Migrate) findFreePorts(sshClient *esxissh.Client, rangeMin, rangeMax, count int) ([]int, error) {
 	out, err := sshClient.ExecuteCommand("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null")
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to read /proc/net/tcp on proxy VM")
+		return nil, errors.Wrap(err, "failed to read /proc/net/tcp on proxy VM")
 	}
 
 	usedPorts := make(map[int]bool)
@@ -299,7 +300,6 @@ func (migobj *Migrate) findFreePort(sshClient *esxissh.Client, rangeMin, rangeMa
 			continue
 		}
 		localAddr := fields[1]
-		// localAddr format: XXXXXXXX:PPPP (hex IP:hex port)
 		colonIdx := strings.LastIndex(localAddr, ":")
 		if colonIdx < 0 {
 			continue
@@ -312,34 +312,47 @@ func (migobj *Migrate) findFreePort(sshClient *esxissh.Client, rangeMin, rangeMa
 		usedPorts[int(port)] = true
 	}
 
-	for port := rangeMin; port <= rangeMax; port++ {
+	var ports []int
+	for port := rangeMin; port <= rangeMax && len(ports) < count; port++ {
 		if !usedPorts[port] {
-			return port, nil
+			ports = append(ports, port)
 		}
 	}
-	return 0, fmt.Errorf("no free port found in range %d-%d on proxy VM", rangeMin, rangeMax)
+	if len(ports) < count {
+		return nil, fmt.Errorf("not enough free ports in range %d-%d (need %d, found %d)",
+			rangeMin, rangeMax, count, len(ports))
+	}
+	return ports, nil
 }
 
-// serveViaNBD starts qemu-nbd on the Proxy VM in fork+persistent mode and returns
-// the PID of the background daemon.
+// serveViaNBD starts qemu-nbd on the Proxy VM and returns its PID.
+// We use nohup+& instead of --fork so the PID is captured reliably via $!
+// (--fork's child PID output is absent on several qemu-nbd versions).
+// A /proc/net/tcp poll ensures the port is bound before we return.
 func (migobj *Migrate) serveViaNBD(sshClient *esxissh.Client, blockDevice string, port int) (int, error) {
-	cmd := fmt.Sprintf("qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --fork --persistent %s", port, blockDevice)
+	portHex := strings.ToUpper(fmt.Sprintf("%04x", port))
+	// Start qemu-nbd in the background with nohup so it outlives the SSH session.
+	// Poll /proc/net/tcp (no external tools required) until the port is bound or
+	// the 5-second timeout expires, then print the PID.
+	cmd := fmt.Sprintf(
+		`nohup qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --persistent %s </dev/null >/dev/null 2>&1 & `+
+			`pid=$!; i=0; `+
+			`while [ $i -lt 20 ] && ! grep -q ":%s " /proc/net/tcp /proc/net/tcp6 2>/dev/null; `+
+			`do i=$((i+1)); sleep 0.25; done; `+
+			`echo $pid`,
+		port, blockDevice, portHex,
+	)
 	out, err := sshClient.ExecuteCommand(cmd)
 	if err != nil {
 		return 0, errors.Wrapf(err, "qemu-nbd failed to start on port %d", port)
 	}
-	// qemu-nbd --fork prints the child PID to stdout.
 	pidStr := strings.TrimSpace(out)
 	if pidStr == "" {
-		// Some versions don't print anything; return 0 so cleanup skips the kill.
-		return 0, nil
+		return 0, fmt.Errorf("qemu-nbd started on port %d but PID was not captured", port)
 	}
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
-		// Non-fatal: we may not be able to kill it explicitly, but the process
-		// will be cleaned up when the disk is detached.
-		migobj.logMessage(fmt.Sprintf("Warning: could not parse qemu-nbd PID from output %q: %v", pidStr, err))
-		return 0, nil
+		return 0, fmt.Errorf("could not parse qemu-nbd PID from output %q: %w", pidStr, err)
 	}
 	return pid, nil
 }
@@ -406,7 +419,8 @@ func (migobj *Migrate) adjustProxyDiskCount(ctx context.Context, delta int) {
 func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Client,
 	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
 ) {
-	// Kill NBD daemon processes.
+	// Kill NBD daemon processes by PID. serveViaNBD now always returns a valid PID
+	// via nohup+& so we no longer need fuser or any other port-lookup tool.
 	for _, t := range transfers {
 		if t.NBDPid <= 0 {
 			continue
@@ -536,31 +550,63 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		return errors.Wrap(err, "failed to identify block devices on Proxy VM")
 	}
 
-	// 7. For each disk: find free port, start NBD server, run nbdcopy.
-	for i := range transfers {
-		migobj.logMessage(fmt.Sprintf("Copying disk %d/%d: %s → %s",
-			i+1, len(transfers), transfers[i].BlockDevice, transfers[i].DestDevice))
-
-		port, err := migobj.findFreePort(sshClient, constants.HotAddPortRangeMin, constants.HotAddPortRangeMax)
-		if err != nil {
-			return errors.Wrapf(err, "no free NBD port available for disk %d", i+1)
-		}
-		transfers[i].NBDPort = port
-
-		migobj.logMessage(fmt.Sprintf("%s port %d for %s", constants.EventMessageHotAddServing, port, transfers[i].BlockDevice))
-		pid, err := migobj.serveViaNBD(sshClient, transfers[i].BlockDevice, port)
-		if err != nil {
-			return errors.Wrapf(err, "failed to start qemu-nbd for disk %d on port %d", i+1, port)
-		}
-		transfers[i].NBDPid = pid
-
-		migobj.logMessage(fmt.Sprintf("%s nbd://%s:%d → %s", constants.EventMessageHotAddCopying,
-			migobj.ProxyVMIP, port, transfers[i].DestDevice))
-		if err := migobj.runNBDCopy(ctx, migobj.ProxyVMIP, port, transfers[i].DestDevice); err != nil {
-			return errors.Wrapf(err, "nbdcopy failed for disk %d", i+1)
-		}
-		migobj.logMessage(fmt.Sprintf("Disk %d/%d copied successfully", i+1, len(transfers)))
+	// 7. Pre-allocate one NBD port per disk before launching goroutines so concurrent
+	//    workers don't race and pick the same port from /proc/net/tcp.
+	ports, err := migobj.findFreePorts(sshClient, constants.HotAddPortRangeMin, constants.HotAddPortRangeMax, len(transfers))
+	if err != nil {
+		return errors.Wrap(err, "failed to allocate NBD ports")
 	}
+	for i := range transfers {
+		transfers[i].NBDPort = ports[i]
+	}
+
+	// 8. Copy all disks concurrently — each disk gets its own NBD server and nbdcopy.
+	overallStart := time.Now()
+	errCh := make(chan error, len(transfers))
+	var wg sync.WaitGroup
+
+	for i := range transfers {
+		wg.Add(1)
+		t := &transfers[i]
+		idx := i
+		go func() {
+			defer wg.Done()
+			diskStart := time.Now()
+
+			migobj.logMessage(fmt.Sprintf("%s port %d for %s (disk %d/%d)",
+				constants.EventMessageHotAddServing, t.NBDPort, t.BlockDevice, idx+1, len(transfers)))
+			pid, err := migobj.serveViaNBD(sshClient, t.BlockDevice, t.NBDPort)
+			if err != nil {
+				errCh <- errors.Wrapf(err, "disk %d: failed to start NBD server on port %d", idx+1, t.NBDPort)
+				return
+			}
+			t.NBDPid = pid
+
+			migobj.logMessage(fmt.Sprintf("%s nbd://%s:%d → %s (disk %d/%d)",
+				constants.EventMessageHotAddCopying, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
+			if err := migobj.runNBDCopy(ctx, migobj.ProxyVMIP, t.NBDPort, t.DestDevice); err != nil {
+				errCh <- errors.Wrapf(err, "disk %d: nbdcopy failed", idx+1)
+				return
+			}
+
+			migobj.logMessage(fmt.Sprintf("Disk %d/%d copied in %s: %s → %s",
+				idx+1, len(transfers), time.Since(diskStart).Round(time.Second),
+				t.BlockDevice, t.DestDevice))
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	overallDuration := time.Since(overallStart)
+	var copyErrors []string
+	for err := range errCh {
+		copyErrors = append(copyErrors, err.Error())
+	}
+	if len(copyErrors) > 0 {
+		return fmt.Errorf("one or more disks failed to copy:\n  %s", strings.Join(copyErrors, "\n  "))
+	}
+	migobj.logMessage(fmt.Sprintf("All %d disk(s) copied in %s", len(transfers), overallDuration.Round(time.Second)))
 
 	migobj.logMessage("Hot-Add disk copy completed successfully")
 	return nil
