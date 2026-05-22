@@ -669,7 +669,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
 	var proxyVM *vjailbreakv1alpha1.ProxyVM
 	// Check if StorageCopyMethod is StorageAcceleratedCopy
-	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
+	switch migrationtemplate.Spec.StorageCopyMethod {
+	case StorageCopyMethod:
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
@@ -689,7 +690,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
 			}
 		}
-	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod {
+	case constants.HotAddCopyMethod:
 		if migrationtemplate.Spec.ProxyVMRef == nil {
 			return ctrl.Result{}, errors.New("StorageCopyMethod is HotAdd but ProxyVMRef is not set in MigrationTemplate")
 		}
@@ -700,7 +701,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
 			return ctrl.Result{}, errors.Errorf("ProxyVM '%s' is not ready (status: %s)", proxyVM.Name, proxyVM.Status.ValidationStatus)
 		}
-	} else {
+	default:
 		arraycreds = nil
 	}
 
@@ -2593,31 +2594,3 @@ func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migra
 	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
 }
 
-// incrementProxyVMDiskCount atomically increments the AttachedDiskCount on a ProxyVM by delta.
-// Call when disks are attached to the Proxy VM at the start of a Hot-Add migration.
-func (r *MigrationPlanReconciler) incrementProxyVMDiskCount(ctx context.Context, proxyVMName, namespace string, delta int) error {
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		latest := &vjailbreakv1alpha1.ProxyVM{}
-		if err := r.Get(ctx, types.NamespacedName{Name: proxyVMName, Namespace: namespace}, latest); err != nil {
-			return err
-		}
-		latest.Status.AttachedDiskCount += delta
-		return r.Status().Update(ctx, latest)
-	})
-}
-
-// decrementProxyVMDiskCount atomically decrements the AttachedDiskCount on a ProxyVM by delta.
-// Call when disks are detached from the Proxy VM after a Hot-Add migration completes or fails.
-func (r *MigrationPlanReconciler) decrementProxyVMDiskCount(ctx context.Context, proxyVMName, namespace string, delta int) error {
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		latest := &vjailbreakv1alpha1.ProxyVM{}
-		if err := r.Get(ctx, types.NamespacedName{Name: proxyVMName, Namespace: namespace}, latest); err != nil {
-			return err
-		}
-		latest.Status.AttachedDiskCount -= delta
-		if latest.Status.AttachedDiskCount < 0 {
-			latest.Status.AttachedDiskCount = 0
-		}
-		return r.Status().Update(ctx, latest)
-	})
-}
