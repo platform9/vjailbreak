@@ -49,12 +49,12 @@
 
 ## Decision 4: SSH Access Strategy for ProxyVM
 
-**Decision**: The v2v-helper pod uses the vJailbreak appliance's own SSH private key (at `/root/.ssh/id_rsa` inside the pod, same path used for ESXi operations) to SSH into the ProxyVM. No Kubernetes Secret is needed for ProxyVM SSH credentials.
+**Decision**: During ProxyVM onboarding, the controller generates an SSH keypair and stores the private key in a Kubernetes Secret named `"{proxyVMK8sName}-hot-add-ssh-key"` (constant suffix `HotAddSSHSecretSuffix`). The corresponding public key is stored in the same secret. The v2v-helper reads the private key via `k8sutils.GetHotAddPrivateKey(ctx, k8sClient, proxyVMK8sName)` at migration time.
 
-**Rationale**: The spec explicitly states the operator pre-authorizes the vJailbreak public key on the ProxyVM. The private key is already present in the vJailbreak appliance's filesystem and mounted into pods. The `esxi-ssh/client.go` package already implements this pattern for ESXi host SSH. Reuse it.
+**Rationale**: Per-ProxyVM secrets allow key rotation and scoping without touching the appliance's own identity key. The secret is created during ProxyVM verification (controller side) and consumed by the v2v-helper at migration time. The operator copies the public key to the ProxyVM's `authorized_keys` during initial setup.
 
 **Alternatives considered**:
-- Store ProxyVM SSH key in a Kubernetes Secret (like `ESXiSSHCreds`): rejected — the key is the appliance's own key, not a user-supplied credential; adding a SecretRef would be redundant.
+- Use the appliance's own key at `/root/.ssh/id_rsa`: initially considered but rejected — using a dedicated per-ProxyVM keypair is more secure and doesn't tie ProxyVM access to the appliance's primary identity key.
 
 ---
 
@@ -120,17 +120,19 @@ Compare normalized UUID map against normalized wwid map; resolve `label → /dev
 
 ## Decision 8: Concurrency and the 60-Disk Limit
 
-**Decision**: The `migrationplan_controller` checks `ProxyVM.Status.AttachedDiskCount + pendingDisks <= 60` before scheduling a Hot-Add migration. The count is incremented in the ProxyVM status before creating migration pods and decremented after cleanup. Uses Kubernetes optimistic locking (status update retry on conflict).
+**Decision**: Disk count tracking is split across two layers:
+1. **Pre-flight check** (`migrationplan_controller`): checks `ProxyVM.Status.AttachedDiskCount + pendingDisks <= 60` before scheduling.
+2. **Runtime tracking** (v2v-helper `hotadd_copy.go`): `adjustProxyDiskCount(ctx, delta)` increments count after disks are attached, decrements in `cleanupHotAdd`. Uses optimistic locking with 3 retries on k8s conflict.
 
-**Rationale**: The vSphere hardware limit is the binding constraint. Tracking count in ProxyVM status keeps the check Kubernetes-native. The migrationplan_controller already serializes per-plan reconciliation, reducing race window.
+**Rationale**: The controller-side check is best-effort (race window exists between check and attach). The v2v-helper is the authoritative incrementer since it knows exactly when disks are attached. Decrement on cleanup ensures the count returns to 0 even on migration failure.
 
 ---
 
 ## Decision 9: Snapshot Naming
 
-**Decision**: Snapshot name = `"vjailbreak-hotadd-<migration-name>"`. If a snapshot with this name already exists on the source VM, delete it first (per spec clarification Q2).
+**Decision**: Snapshot name = fixed constant `"vjailbreak-hotadd-snap"`. If a snapshot with this name already exists on the source VM, delete it first (per spec clarification Q2).
 
-**Rationale**: Deterministic snapshot name makes cleanup idempotent — a crashed migration can be retried and will clean up the stale snapshot. Including `migration-name` scopes it to the specific migration, avoiding cross-migration collisions.
+**Rationale**: HotAdd is cold-only (VM is powered off), so only one Hot-Add migration can run against a given source VM at a time — no cross-migration collision risk. A fixed name simplifies cleanup: the controller can always delete by the same constant name without needing migration-name context.
 
 ---
 
@@ -162,3 +164,23 @@ Compare normalized UUID map against normalized wwid map; resolve `label → /dev
 |-----------|-------------|
 | Port exhaustion (>60 disks, all ports taken) | Bounded by 60-disk limit; port range covers all possible concurrent disks |
 | Source VM with no disks | Existing pre-migration guard in controller validates VM has disks before scheduling |
+
+---
+
+## Decision 11: Cold-Only Constraint for HotAdd
+
+**Decision**: HotAdd migration type is restricted to `cold` only. Controller blocks `hot` and `mock` migration types. UI enforces this via `useEffect`.
+
+**Rationale**: HotAdd requires the source VM to be powered off before snapshotting to guarantee disk consistency. Hot migration (live with CBT) is incompatible with the freeze-snapshot-attach workflow. Enforcing this at both the controller and UI layers prevents invalid migrations from starting.
+
+**Power-off sequence**: `VMPowerOff()` → `DoRetryWithExponentialBackoff(checkPowerState, 3 retries, 5-min cap)` → `takeVMSnapshot(ctx, name)` (quiesce=true). Snapshot does not include memory (`memory=false`).
+
+---
+
+## Decision 12: Migration Phase Tracking
+
+**Decision**: `SetupMigrationPhase()` in `migration_controller.go` maps HotAdd event message constants to `VMMigrationPhase` typed constants. HotAdd phases share numeric slots in `VMMigrationStatesEnum` with equivalent SAC phases since the two paths are mutually exclusive.
+
+**Rationale**: Without this fix, HotAdd migrations showed "Validating" for the entire data copy duration. The controller defaults to `VMMigrationPhaseValidating` when a pod is running but no recognized event message has been emitted. Adding the 6 HotAdd event message → phase mappings makes the UI accurately reflect: `SnapshottingSourceVM → AttachingDisksToProxy → IdentifyingBlockDevices → HotAddTransferInProgress → HotAddCleanup`.
+
+**Implementation**: New typed `VMMigrationPhase` constants added to `migration_types.go`; `+kubebuilder:validation:Enum` tag updated; phases added to `VMMigrationStatesEnum`. Requires `make generate` to regenerate CRD YAML with new enum values.

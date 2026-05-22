@@ -113,7 +113,8 @@ The migrationplan_controller populates a ConfigMap consumed by the v2v-helper po
 |-----|------|---------|-------|
 | `STORAGE_COPY_METHOD` | string | `HotAdd` | Triggers Hot-Add code path |
 | `PROXY_VM_IP` | string | `10.96.2.75` | IP discovered from ProxyVM.Status |
-| `PROXY_VM_NAME` | string | `dnd-ha-proxy-vm` | For logging / snapshot naming |
+| `PROXY_VM_NAME` | string | `dnd-ha-proxy-vm` | vCenter display name — used to locate VM via govmomi |
+| `PROXY_VM_K8S_NAME` | string | `ha-proxy-vm` | Kubernetes resource name (`metadata.name`) — used by v2v-helper to patch `status.attachedDiskCount` |
 
 Existing keys are unchanged. The `STORAGE_COPY_METHOD` = `"HotAdd"` value is exclusive with `"StorageAcceleratedCopy"` — no overlap.
 
@@ -131,3 +132,13 @@ The UI communicates with the Kubernetes API server via the existing vjailbreak R
 | Delete ProxyVM | `DELETE /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/proxyvms/{name}` | — |
 
 No custom verbs needed. The controller reacts to Create events to start verification.
+
+### Retry Verification API
+
+Trigger re-verification for a ProxyVM in `VerificationFailed` state without deleting the resource:
+
+| Operation | Path | Content-Type | Body |
+|-----------|------|--------------|------|
+| Retry verification | `PATCH /apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/proxyvms/{name}` | `application/merge-patch+json` | `{"metadata":{"annotations":{"vjailbreak.k8s.pf9.io/retry-at":"<ISO-8601-timestamp>"}}}` |
+
+The controller watches for annotation changes and re-runs the full verification flow when this annotation is set or updated.

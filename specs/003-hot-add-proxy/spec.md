@@ -110,7 +110,7 @@ An operator can view the list of registered Proxy VMs, their current status, and
 
 ### Edge Cases
 
-- What happens if the Proxy VM runs out of available ports for serving block devices?
+- What happens if the Proxy VM runs out of available ports for serving block devices? Port exhaustion is bounded by the 60-disk attachment limit: the qemu-nbd port range covers all 60 possible concurrent disks; exhaustion cannot occur if the disk limit is enforced correctly.
 - **Proxy VM crash during transfer (resolved)**: If the Proxy VM becomes unreachable during data transfer, the system retries the transfer automatically up to 3 attempts. If all retries are exhausted, the migration is marked failed, cleanup is attempted (best effort), and the operator sees a clear failure reason indicating the Proxy VM was unreachable.
 - What if the source VM has no disks (or only OS disks with no additional data disks)?
 - **Snapshot name collision (resolved)**: If a snapshot with the migration's designated name already exists on the source VM, the system deletes it and creates a fresh snapshot before proceeding; no error is raised.
@@ -156,6 +156,14 @@ An operator can view the list of registered Proxy VMs, their current status, and
 
 - **FR-016**: The Add Proxy VM dialog MUST fetch all available VMs from the selected VMware credentials and present them as a searchable dropdown in the VM Name field. Free-text input MUST also be accepted so operators can specify a VM not yet discovered by the credentials label selector.
 
+- **FR-017**: When `StorageCopyMethod` is HotAdd, the migration type MUST be `cold`. The controller MUST reject migrations with type `hot` or `mock` when HotAdd is selected, with a descriptive error. The UI MUST disable the `hot` and `mock` migration type options when HotAdd is the selected copy method and automatically reset to `cold`.
+
+- **FR-018**: Before taking the snapshot for Hot-Add data copy, the system MUST power off the source VM and verify it has reached the powered-off state (with up to 3 retries using exponential backoff up to 5 minutes cap) before proceeding. If power-off verification fails, the migration MUST fail with a descriptive error.
+
+- **FR-019**: The snapshot taken during Hot-Add data copy MUST use `quiesce=true, memory=false` to ensure filesystem consistency.
+
+- **FR-020**: The migration status MUST accurately reflect Hot-Add-specific phases during the data copy operation: `SnapshottingSourceVM`, `AttachingDisksToProxy`, `IdentifyingBlockDevices`, `HotAddTransferInProgress`, `HotAddCleanup`. Migrations MUST NOT remain stuck at `Validating` while data copy is in progress.
+
 ### Key Entities
 
 - **Proxy VM**: A VM registered with vJailbreak to serve as an intermediary for Hot-Add data copy. Attributes: name, IP address, SSH accessibility status, component verification status, overall readiness status, registration timestamp, current attached-disk count (max 60).
@@ -200,3 +208,4 @@ An operator can view the list of registered Proxy VMs, their current status, and
 - The existing SAM (Storage Accelerated Copy) feature serves as the UI and backend reference pattern for introducing this new data copy method.
 - Cleanup is best-effort on failure: the system will attempt to remove snapshots and detach disks, but in severe failure cases (e.g., vCenter unreachable), manual cleanup may be required.
 - The feature does not require changes to the OpenStack side of the migration workflow — disk attachment and identification on the destination side reuse the existing mechanism.
+- Hot-Add requires cold migration type — the source VM is powered off before snapshotting to ensure disk consistency.

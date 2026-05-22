@@ -113,7 +113,7 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
   ```
   Fetch the ProxyVM resource using `migrationtemplate.Spec.ProxyVMRef.Name`.
 
-- [X] T022 Add `incrementProxyVMDiskCount` and `decrementProxyVMDiskCount` helpers in `k8s/migration/internal/controller/migrationplan_controller.go` that patch `status.attachedDiskCount` on the ProxyVM resource; call increment when a HotAdd migration transitions to running, decrement on completion or failure.
+- [X] T022 *(controller-side helpers removed)* — disk count increment/decrement is handled by `adjustProxyDiskCount(ctx, delta)` in `v2v-helper/migrate/hotadd_copy.go`: increments after all disks are attached to the Proxy VM, decrements in `cleanupHotAdd`. Uses optimistic locking with 3 retries on k8s conflict.
 
 ---
 
@@ -155,10 +155,11 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
   - Match each transfer's WWID to a block device; set `transfer.BlockDevice = "/dev/" + matched`
   - Retry up to 3 times with 5-second sleep between attempts (disk may take a moment to appear in guest)
 
-- [X] T028 Implement `findFreePort(sshClient *ssh.Client, rangeMin, rangeMax int) (int, error)` in `hotadd_copy.go`:
+- [X] T028 Implement `findFreePorts(sshClient *ssh.Client, rangeMin, rangeMax, count int) ([]int, error)` in `hotadd_copy.go`:
+  - Allocates `count` ports in a single call (avoids goroutines racing on the same port)
   - Via SSH: `cat /proc/net/tcp /proc/net/tcp6`
   - Parse each line's local_address field (column 2): hex `XXXXXXXX:PPPP` — extract port from last 4 hex digits
-  - Build a set of used ports; return first port in `[rangeMin, rangeMax]` not in the set
+  - Build a set of used ports; return first `count` consecutive free ports in `[rangeMin, rangeMax]`
 
 - [X] T029 Implement `serveViaNBD(sshClient *ssh.Client, blockDevice string, port int) (pid int, err error)` in `hotadd_copy.go`:
   - Via SSH run: `qemu-nbd --format=raw --port=<port> --bind=0.0.0.0 --fork --persistent <blockDevice>`
@@ -176,10 +177,13 @@ description: "Full task list for Hot-Add Proxy Migration feature (UI + Backend)"
   - Call govmomi `snapshot.Remove` on the source VM for `snapshotName`
   - Log but do not fail on individual cleanup errors
 
-- [X] T032 Implement `HotAddCopyDisks(ctx context.Context, migobj *Migrate, vminfo vm.VMInfo) error` in `hotadd_copy.go`:
-  - Orchestrates T024–T031 in order: takeVMSnapshot → getFrozenVMDKs → attachDiskToProxy (per disk) → identifyBlockDevices → per disk: findFreePort + serveViaNBD + runNBDCopy
-  - `defer cleanupHotAdd(...)` immediately after snapshot is created
-  - Log progress at each step with disk name and sizes
+- [X] T032 Implement `HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) error` in `hotadd_copy.go`:
+  - Step 1: power off source VM + verify via `DoRetryWithExponentialBackoff` (3 retries, 5-min cap)
+  - Step 2: `takeVMSnapshot` (fixed name `"vjailbreak-hotadd-snap"`, quiesce=true, memory=false)
+  - Step 3: `getFrozenVMDKs`; Step 4: SSH connect; Step 5: locate Proxy VM; `defer cleanupHotAdd`
+  - Step 6: attach all disks → `adjustProxyDiskCount(ctx, +len)`
+  - Step 7: `identifyBlockDevices` (retry ×3); Step 8: `findFreePorts` (all ports pre-allocated at once)
+  - Step 9: copy all disks **concurrently** — one goroutine per disk (`serveViaNBD` + `runNBDCopy`); collect all errors before returning
 
 ---
 
@@ -252,10 +256,21 @@ Threads A and C converge at T033/T034.
 
 ---
 
+## Phase 12: Migration Phase Tracking & Cold-Only Enforcement ✅
+
+- [X] T037 Add `VMMigrationPhaseSnapshottingSourceVM`, `VMMigrationPhaseAttachingDisksToProxy`, `VMMigrationPhaseIdentifyingBlockDevices`, `VMMigrationPhaseHotAddTransferring`, `VMMigrationPhaseHotAddCleanup` typed constants to `k8s/migration/api/v1alpha1/migration_types.go`; update `+kubebuilder:validation:Enum` tag; add phases to `VMMigrationStatesEnum` in `pkg/common/constants/constants.go`
+- [X] T038 Add HotAdd event message → phase case blocks to `SetupMigrationPhase()` in `k8s/migration/internal/controller/migration_controller.go` — maps `EventMessageHotAddSnapshotCreate/AttachDisks/Identify/Serving/Copying/Cleanup` to the corresponding `VMMigrationPhase` values so migrations advance past "Validating" during Hot-Add data copy
+- [X] T039 Enforce cold-only constraint: add controller validation in `migrationplan_controller.go` rejecting `MigrationType == hot|mock` when `StorageCopyMethod == HotAdd`; add `useEffect` in `ui/src/features/migration/MigrationOptionsAlt.tsx` to force `dataCopyMethod` back to `cold` and disable hot/mock options when HotAdd is selected
+- [X] T040 Add power-off before snapshot in `v2v-helper/migrate/hotadd_copy.go` `HotAddCopyDisks()`: call `VMPowerOff()` then verify power state via `utils.DoRetryWithExponentialBackoff` (3 retries, 5-min cap) before calling `takeVMSnapshot`; set `quiesce=true` in snapshot creation
+- [X] T041 Fix ProxyVM delete ghost entry: add optimistic cache removal in `doDelete` `onMutate` (with restore on `onError`); filter rows by `!vm.metadata.deletionTimestamp`; add `deletionTimestamp?: string` to `ProxyVM.metadata` in `ui/src/api/proxy-vm/model.ts`
+- [X] T042 ProxyVM controller lint fixes: extract `isDiskEnableUUIDSet`, `setDiskEnableUUIDAndReboot`, `parseComponentCheckOutput` helpers in `k8s/migration/internal/controller/proxyvm_controller.go` to reduce cyclomatic complexity below gocyclo limit of 30; fix errcheck on status update in reboot helper
+
+---
+
 ## Implementation Notes
 
 ### SSH client in hotadd_copy.go
-Use `golang.org/x/crypto/ssh` (already a transitive dep). Create the client with the same key-path pattern used by `proxyvm_controller.go` (`/home/ubuntu/.ssh/id_rsa`). Pass it into each function rather than re-opening.
+Use `golang.org/x/crypto/ssh` (already a transitive dep). Load the private key via `k8sutils.GetHotAddPrivateKey(ctx, k8sClient, proxyVMK8sName)` — reads from the k8s Secret `"{proxyVMK8sName}-hot-add-ssh-key"` created during ProxyVM onboarding. Pass the client into each function rather than re-opening.
 
 ### qemu-nbd PID capture
 `qemu-nbd --fork` prints the daemon PID to stdout on the background process line. Parse with `strconv.Atoi(strings.TrimSpace(out))`.

@@ -58,17 +58,21 @@ In `migrationplan_controller.go`:
 
 ### Step 4 — v2v-helper Hot-Add copy (`v2v-helper/`)
 
-1. Add `ProxyVMIP`, `ProxyVMName` fields to `MigrationParams` in `v2v-helper/pkg/utils/vcenterutils.go`
-2. Extend `GetMigrationParams()` to read `PROXY_VM_IP`, `PROXY_VM_NAME` from ConfigMap
+1. Add `ProxyVMIP`, `ProxyVMName`, `ProxyVMK8sName` fields to `MigrationParams` in `v2v-helper/pkg/utils/vcenterutils.go`
+2. Extend `GetMigrationParams()` to read `PROXY_VM_IP`, `PROXY_VM_NAME`, `PROXY_VM_K8S_NAME` from ConfigMap
 3. Add corresponding fields to the `Migrate` struct in `v2v-helper/migrate/migrate.go`
 4. Create `v2v-helper/migrate/hotadd_copy.go`:
-   - `HotAddCopyDisks()` entry point
-   - `takeSnapshot()`, `attachSnapshotDisks()`, `detachDisks()`, `deleteSnapshot()` — all govmomi, no SSH
-   - `identifyBlockDevices()` — SSH `find /sys/block -maxdepth 4 -name wwid` + SSH `cat <paths...>`; all wwid→device matching in Go; retry ×3
-   - `findFreePort()` — SSH `cat /proc/net/tcp /proc/net/tcp6`; parse hex ports in Go (`bufio.Scanner` + `strconv.ParseInt`); iterate 10809-11808 in Go
-   - `serveViaNBD()` — SSH `qemu-nbd --format=raw --port=<port> --bind=0.0.0.0 --fork --persistent <dev>`; Go captures PID from stdout
-   - `copyDisk()` — local `nbdcopy` exec via `os/exec`, retry ×3
-   - `cleanup()` — defer: SSH `kill <pid>` per running qemu-nbd; govmomi detach disks; govmomi delete snapshot
+   - `HotAddCopyDisks(ctx, vminfo)` entry point — powers off VM, verifies power state, takes quiesced snapshot (`"vjailbreak-hotadd-snap"`), attaches disks, copies all disks **concurrently** (one goroutine per disk)
+   - `takeVMSnapshot(ctx, name)` — govmomi `CreateSnapshot` with `quiesce=true, memory=false`
+   - `getFrozenVMDKs(ctx, vminfo)` — enumerate frozen parent VMDKs via govmomi
+   - `attachDiskToProxy(ctx, proxyVMObj, vmdkPath)` — govmomi attach in `independent_nonpersistent` mode
+   - `identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj)` — wwid/NAA UUID matching; retry ×3
+   - `findFreePorts(sshClient, min, max, count)` — allocates all N ports at once via `cat /proc/net/tcp /proc/net/tcp6`; parse hex ports in Go
+   - `serveViaNBD(sshClient, blockDevice, port)` — SSH `qemu-nbd --fork`; Go captures PID from stdout
+   - `runNBDCopy(ctx, proxyIP, port, destDevice)` — local `nbdcopy` exec via `os/exec`, retry ×3
+   - `adjustProxyDiskCount(ctx, delta)` — patches ProxyVM status (increment after attach, decrement in cleanup)
+   - `cleanupHotAdd(ctx, sshClient, transfers, proxyVMObj)` — defer: SSH `kill <pid>`; govmomi detach; govmomi delete snapshot
+   - SSH key loaded from k8s Secret `"{proxyVMK8sName}-hot-add-ssh-key"` via `GetHotAddPrivateKey()`
    - **Rule**: no shell loops/pipes/conditionals in SSH command strings; all logic in Go
 5. In `MigrateVM()` in `migrate.go`, add `else if migobj.StorageCopyMethod == constants.HotAddCopyMethod` branch calling `HotAddCopyDisks()`
 
@@ -108,13 +112,17 @@ In `migrationplan_controller.go`:
 
 | File | Change |
 |------|--------|
-| `pkg/common/constants/constants.go` | New Hot-Add constants |
-| `k8s/migration/api/v1alpha1/migrationtemplate_types.go` | Extend enum + add ProxyVMRef |
+| `pkg/common/constants/constants.go` | New Hot-Add constants + HotAdd VMMigrationPhase ordering in VMMigrationStatesEnum |
+| `k8s/migration/api/v1alpha1/migration_types.go` | New VMMigrationPhase typed constants for HotAdd phases; updated Enum tag |
+| `k8s/migration/api/v1alpha1/migrationtemplate_types.go` | Extend StorageCopyMethod enum + add ProxyVMRef |
 | `k8s/migration/api/v1alpha1/groupversion_info.go` | Register ProxyVM |
 | `k8s/migration/cmd/main.go` | Register ProxyVM controller |
-| `k8s/migration/internal/controller/migrationplan_controller.go` | HotAdd validation + ConfigMap |
-| `v2v-helper/pkg/utils/vcenterutils.go` | New MigrationParams fields |
+| `k8s/migration/internal/controller/migration_controller.go` | HotAdd event message → phase mappings in SetupMigrationPhase |
+| `k8s/migration/internal/controller/migrationplan_controller.go` | HotAdd validation (cold-only + ProxyVM ready + capacity) + ConfigMap (`PROXY_VM_IP/NAME/K8S_NAME`) |
+| `v2v-helper/pkg/utils/vcenterutils.go` | New MigrationParams fields: ProxyVMIP, ProxyVMName, ProxyVMK8sName |
 | `v2v-helper/migrate/migrate.go` | HotAdd branch in MigrateVM |
+| `ui/src/api/proxy-vm/model.ts` | Added `deletionTimestamp` to metadata |
+| `ui/src/features/migration/MigrationOptionsAlt.tsx` | Force cold + disable hot/mock when HotAdd selected |
 | `ui/src/features/migration/NetworkAndStorageMappingStep.tsx` | HotAdd option + ProxyVM selector |
 | `ui/src/features/migration/MigrationForm.tsx` | HotAdd form logic |
 | `ui/src/components/layout/Sidebar.tsx` | Add Proxy VMs entry |
