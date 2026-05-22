@@ -91,6 +91,7 @@ export default function MigrationOptionsAlt({
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
 
   const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
+  const isHotAdd = params?.storageCopyMethod === 'HotAdd'
 
   const hasWindowsVMSelected = useMemo(() => {
     if (!params?.vms || params.vms.length === 0) return false
@@ -190,6 +191,15 @@ export default function MigrationOptionsAlt({
     selectedMigrationOptions.periodicSyncEnabled,
     updateSelectedMigrationOptions
   ])
+
+  // Hot-Add only supports cold migration — reset to cold if an incompatible method was selected.
+  useEffect(() => {
+    if (!isHotAdd) return
+    if (params?.dataCopyMethod === 'hot' || params?.dataCopyMethod === 'mock') {
+      onChange('dataCopyMethod')('cold')
+      onChange('acknowledgeNetworkConflictRisk')(false)
+    }
+  }, [isHotAdd, params?.dataCopyMethod, onChange])
 
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
 
@@ -291,7 +301,11 @@ export default function MigrationOptionsAlt({
                     fullWidth
                   >
                     {DATA_COPY_OPTIONS.map((item) => (
-                      <MenuItem key={item.value} value={item.value}>
+                      <MenuItem
+                        key={item.value}
+                        value={item.value}
+                        disabled={isHotAdd && item.value !== 'cold'}
+                      >
                         {item.label}
                       </MenuItem>
                     ))}

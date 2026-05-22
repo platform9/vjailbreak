@@ -694,6 +694,12 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if migrationtemplate.Spec.ProxyVMRef == nil {
 			return ctrl.Result{}, errors.New("StorageCopyMethod is HotAdd but ProxyVMRef is not set in MigrationTemplate")
 		}
+		if migrationplan.Spec.MigrationStrategy.Type == "hot" || migrationplan.Spec.MigrationStrategy.Type == "mock" {
+			return ctrl.Result{}, errors.Errorf(
+				"StorageCopyMethod HotAdd requires migration type 'cold', got %q — HotAdd powers off the VM before snapshotting",
+				migrationplan.Spec.MigrationStrategy.Type,
+			)
+		}
 		proxyVM = &vjailbreakv1alpha1.ProxyVM{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ProxyVMRef.Name, Namespace: migrationtemplate.Namespace}, proxyVM); err != nil {
 			return ctrl.Result{}, errors.Wrapf(err, "failed to get ProxyVM '%s'", migrationtemplate.Spec.ProxyVMRef.Name)
