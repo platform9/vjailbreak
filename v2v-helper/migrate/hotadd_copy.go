@@ -62,9 +62,8 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	return getter.GetVCenterClient(), nil
 }
 
-// takeVMSnapshot removes any pre-existing snapshot with the same name, then creates a
-// quiesced, memory-less snapshot. The caller is responsible for ensuring the VM is
-// already powered off before calling this function.
+// takeVMSnapshot removes any pre-existing snapshot with the same name, then creates
+// a quiesced, memory-less snapshot of an already-powered-off VM.
 func (migobj *Migrate) takeVMSnapshot(ctx context.Context, name string) error {
 	snapshots, err := migobj.VMops.ListSnapshots()
 	if err == nil {
@@ -135,9 +134,8 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 		return 0, errors.Wrap(err, "failed to list proxy VM disks before attach")
 	}
 
-	// Get the proxy VM's current device list to find an available SCSI controller.
-	// ReconfigVM requires ControllerKey+UnitNumber to be set; without them vCenter
-	// defaults to key=0 (IDE controller) which either rejects the request or fills up.
+	// ReconfigVM requires ControllerKey+UnitNumber; without them vCenter defaults to
+	// key=0 (IDE) which rejects the request or fills up.
 	deviceList, err := proxyVMObj.Device(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get proxy VM device list")
@@ -191,12 +189,8 @@ func getDiskKeys(ctx context.Context, vmObj *object.VirtualMachine) (map[int32]b
 	return keys, nil
 }
 
-// identifyBlockDevices SSH-queries the Proxy VM for NAA WWIDs and matches them
-// against the vCenter disk backing UUIDs to populate transfer[i].BlockDevice and
-// transfer[i].WWID. Each transfer is matched by its vCenter device key (DiskKey),
-// which was recorded at attach time, so the mapping is deterministic regardless of
-// map iteration order or leftover disks from prior runs.
-// Retries up to hotAddIdentifyRetries times.
+// identifyBlockDevices matches proxy VM NAA WWIDs to vCenter disk UUIDs by device key,
+// populating transfer[i].BlockDevice and WWID. Retries up to hotAddIdentifyRetries times.
 func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxissh.Client,
 	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
 ) error {
@@ -244,8 +238,7 @@ func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxi
 }
 
 // getProxyDiskUUIDs returns a map of vCenter device key → normalised UUID for all
-// VirtualDisk devices on the proxy VM. Keying by device key (not UUID) lets
-// identifyBlockDevices do a precise per-disk lookup via transfers[i].DiskKey.
+// VirtualDisk devices on the proxy VM.
 func (migobj *Migrate) getProxyDiskUUIDs(ctx context.Context, proxyVMObj *object.VirtualMachine) (map[int32]string, error) {
 	var props mo.VirtualMachine
 	if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &props); err != nil {
@@ -333,15 +326,10 @@ func (migobj *Migrate) findFreePorts(sshClient *esxissh.Client, rangeMin, rangeM
 	return ports, nil
 }
 
-// serveViaNBD starts qemu-nbd on the Proxy VM and returns its PID.
-// We use nohup+& instead of --fork so the PID is captured reliably via $!
-// (--fork's child PID output is absent on several qemu-nbd versions).
-// A /proc/net/tcp poll ensures the port is bound before we return.
+// serveViaNBD starts qemu-nbd on the Proxy VM via nohup and returns its PID.
+// Polls /proc/net/tcp until the port is bound before returning.
 func (migobj *Migrate) serveViaNBD(sshClient *esxissh.Client, blockDevice string, port int) (int, error) {
 	portHex := strings.ToUpper(fmt.Sprintf("%04x", port))
-	// Start qemu-nbd in the background with nohup so it outlives the SSH session.
-	// Poll /proc/net/tcp (no external tools required) until the port is bound or
-	// the 5-second timeout expires, then print the PID.
 	cmd := fmt.Sprintf(
 		`nohup qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --persistent %s </dev/null >/dev/null 2>&1 & `+
 			`pid=$!; i=0; `+
@@ -365,8 +353,7 @@ func (migobj *Migrate) serveViaNBD(sshClient *esxissh.Client, blockDevice string
 	return pid, nil
 }
 
-// runNBDCopy executes nbdcopy locally to transfer data from the NBD source on the
-// proxy VM to the destination block device on the vJailbreak appliance.
+// runNBDCopy transfers data from an NBD source on the proxy VM to a local block device.
 // Retries up to hotAddNBDCopyRetries times.
 func (migobj *Migrate) runNBDCopy(ctx context.Context, proxyIP string, port int, destDevice string) error {
 	nbdURL := fmt.Sprintf("nbd://%s:%d", proxyIP, port)
@@ -421,14 +408,11 @@ func (migobj *Migrate) adjustProxyDiskCount(ctx context.Context, delta int) {
 	migobj.logMessage(fmt.Sprintf("Warning: gave up updating ProxyVM %s disk count after conflicts", migobj.ProxyVMName))
 }
 
-// cleanupHotAdd releases all resources acquired during Hot-Add copy:
-// kills NBD daemon processes, detaches disks from proxy VM, removes the snapshot.
-// Individual failures are logged but do not abort the cleanup sequence.
+// cleanupHotAdd kills NBD daemons, detaches proxy VM disks, and removes the snapshot.
+// Individual failures are logged without aborting the cleanup sequence.
 func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Client,
 	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
 ) {
-	// Kill NBD daemon processes by PID. serveViaNBD now always returns a valid PID
-	// via nohup+& so we no longer need fuser or any other port-lookup tool.
 	for _, t := range transfers {
 		if t.NBDPid <= 0 {
 			continue
@@ -476,10 +460,8 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 	migobj.adjustProxyDiskCount(context.Background(), -attached)
 }
 
-// HotAddCopyDisks is the top-level entry point for the Hot-Add copy method.
-// It snapshots the source VM, attaches frozen disks to the Proxy VM,
-// identifies block devices, serves them via qemu-nbd, and transfers data
-// using nbdcopy. Cleanup runs on return (success or failure).
+// HotAddCopyDisks powers off the source VM, snapshots it, attaches frozen disks to
+// the Proxy VM, and transfers data via qemu-nbd+nbdcopy. Cleanup runs on return.
 func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Starting Hot-Add disk copy")
 
@@ -551,11 +533,8 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		return errors.Wrapf(err, "failed to locate Proxy VM '%s' in vCenter", migobj.ProxyVMName)
 	}
 
-	// Cleanup deferred after proxy VM is found so all resources are released.
-	// Cleanup deferred after proxy VM is found so all resources are released.
-	// Use context.Background() because the parent ctx may be cancelled by the
-	// time this deferred function runs (e.g. SIGTERM), and we still need
-	// govmomi calls (RemoveDevice, DeleteSnapshot) to succeed.
+	// Cleanup is deferred here so all resources are released on any return path.
+	// context.Background() ensures govmomi calls succeed even if parent ctx is cancelled.
 	defer func() {
 		migobj.logMessage(constants.EventMessageHotAddCleanup)
 		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)

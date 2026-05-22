@@ -85,9 +85,7 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Only broadcast Verifying when transitioning from a non-ready state.
-	// Periodic re-checks of an already-Ready VM run silently so the UI
-	// does not flip back to Verifying every 15 minutes.
+	// Skip Verifying broadcast for already-Ready VMs to avoid spurious UI flips.
 	if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
 		proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerifying
 		proxyVM.Status.ValidationMessage = "Verifying Proxy VM components..."
@@ -153,9 +151,7 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, vmObj)
 	}
 
-	// Load the vJailbreak appliance SSH private key from the shared k8s secret.
-	// The same secret is used by the v2v-helper worker, so only one public key
-	// needs to be authorised on the Proxy VM.
+	// Load the SSH private key from the per-ProxyVM k8s secret created during onboarding.
 	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
 	sshSecret := &corev1.Secret{}
 	if err := r.Get(ctx, k8stypes.NamespacedName{
