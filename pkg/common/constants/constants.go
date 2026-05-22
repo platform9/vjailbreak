@@ -655,8 +655,14 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder:      8,
 		vjailbreakv1alpha1.VMMigrationPhaseMappingVolume:          9,
 		vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage:      10,
+		// HotAdd specific phases (share the same ordering slots as SAC since they are mutually exclusive code paths)
+		vjailbreakv1alpha1.VMMigrationPhaseSnapshottingSourceVM:    5,
+		vjailbreakv1alpha1.VMMigrationPhaseAttachingDisksToProxy:   6,
+		vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices: 7,
 		// Common phases to both the copy methods.
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  11,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:             11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring:  11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup:       12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover
