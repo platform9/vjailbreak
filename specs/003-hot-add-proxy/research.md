@@ -153,8 +153,8 @@ Compare normalized UUID map against normalized wwid map; resolve `label → /dev
 **Applies to**: port scan (Decision 5), block device identification (Decision 6), qemu-nbd start/stop (Decision 7), component verification in ProxyVM controller.
 
 **ProxyVM controller component checks** (updated to match this principle):
-- Check each component individually: SSH `command -v lsblk`, `command -v qemu-nbd`, `command -v nbdkit`, `command -v sshd || systemctl is-active sshd`
-  → Actually: run `which lsblk` etc. — `which` is POSIX and present everywhere; parse exit code in Go (0 = found, non-0 = missing). One SSH command per component.
+- Check each component individually: `which qemu-nbd`, `which sshd` — `which` is POSIX and present everywhere; parse exit code in Go (0 = found, non-0 = missing). One SSH command per component.
+- `lsblk` and `nbdkit` are not required: block device identification uses `/sys/block/*/device/wwid` directly; NBD serving uses `qemu-nbd` only.
 
 ---
 

@@ -31,11 +31,7 @@ status:
   attachedDiskCount: 0
   lastValidationTime: "2026-05-19T12:00:00Z"
   componentsVerified:
-    - name: lsblk
-      present: true
     - name: qemu-nbd
-      present: true
-    - name: nbdkit
       present: true
     - name: sshd
       present: true
@@ -47,13 +43,9 @@ status:
   validationStatus: VerificationFailed
   validationMessage: "Missing required component: qemu-nbd. Install with: apt-get install qemu-utils"
   componentsVerified:
-    - name: lsblk
-      present: true
     - name: qemu-nbd
       present: false
       message: "qemu-nbd not found in PATH. Install with: apt-get install qemu-utils"
-    - name: nbdkit
-      present: true
     - name: sshd
       present: true
 ```

@@ -55,7 +55,7 @@ type ProxyVMStatus struct {
 }
 
 type ProxyVMComponentCheck struct {
-    // Name is the component name (e.g., "lsblk", "qemu-nbd", "nbdkit", "sshd").
+    // Name is the component name (e.g., "qemu-nbd", "sshd").
     Name string `json:"name"`
     // Present indicates whether the component was found.
     Present bool `json:"present"`
@@ -78,7 +78,7 @@ type ProxyVMComponentCheck struct {
 
 1. Look up VM by `VMName` in vCenter using referenced `VMwareCreds` → discover IP from guest info
 2. SSH connectivity test (root@`IPAddress`, using private key from k8s Secret `"{proxyVMK8sName}-hot-add-ssh-key"`)
-3. Component presence: `lsblk`, `qemu-nbd`, `nbdkit`, `sshd`
+3. Component presence: `qemu-nbd`, `sshd`
 4. `disk.EnableUUID` check via vCenter API → if missing, set it and reboot VM, then re-verify
 
 ---
@@ -181,7 +181,7 @@ ProxyVMStatusVerificationFailed  = "VerificationFailed"
 ProxyVMMaxAttachedDisks = 60
 
 // Required components on Proxy VM
-ProxyVMRequiredComponents = []string{"lsblk", "qemu-nbd", "nbdkit", "sshd"}
+ProxyVMRequiredComponents = []string{"qemu-nbd", "sshd"}
 ```
 
 ### VMMigrationPhase Typed Constants (migration_types.go)
