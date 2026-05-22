@@ -27,6 +27,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
 	govmomitypes "github.com/vmware/govmomi/vim25/types"
 
@@ -53,6 +54,7 @@ type ProxyVMReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms/finalizers,verbs=update
 
+// Reconcile reconciles a ProxyVM object.
 func (r *ProxyVMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctxlog := log.FromContext(ctx).WithName(constants.ProxyVMControllerName)
 
@@ -147,45 +149,8 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 	proxyVM.Status.IPAddress = ipAddress
 	ctxlog.Info("Discovered Proxy VM IP", "ip", ipAddress)
 
-	// Check disk.EnableUUID
-	enableUUID := false
-	if vmProps.Config != nil {
-		for _, opt := range vmProps.Config.ExtraConfig {
-			if ov, ok := opt.(*govmomitypes.OptionValue); ok {
-				if strings.EqualFold(ov.Key, "disk.enableUUID") {
-					if v, ok := ov.Value.(string); ok && strings.EqualFold(v, "TRUE") {
-						enableUUID = true
-					}
-				}
-			}
-		}
-	}
-	if !enableUUID {
-		ctxlog.Info("disk.EnableUUID not set on Proxy VM — setting it and rebooting", "vm", proxyVM.Spec.VMName)
-		spec := govmomitypes.VirtualMachineConfigSpec{
-			ExtraConfig: []govmomitypes.BaseOptionValue{
-				&govmomitypes.OptionValue{Key: "disk.enableUUID", Value: "TRUE"},
-			},
-		}
-		reconfTask, err := vmObj.Reconfigure(ctx, spec)
-		if err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to set disk.EnableUUID: %v", err))
-		}
-		if err := reconfTask.Wait(ctx); err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed waiting for disk.EnableUUID reconfigure: %v", err))
-		}
-		// Reboot the VM so the change takes effect
-		rebootTask, err := vmObj.Reset(ctx)
-		if err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to reboot Proxy VM after setting disk.EnableUUID: %v", err))
-		}
-		if err := rebootTask.Wait(ctx); err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed waiting for VM reboot: %v", err))
-		}
-		// Re-queue after reboot to allow VMware Tools to come back up
-		proxyVM.Status.ValidationMessage = "disk.EnableUUID set and VM rebooted — re-verifying shortly"
-		_ = r.Status().Update(ctx, proxyVM)
-		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+	if vmProps.Config == nil || !isDiskEnableUUIDSet(vmProps.Config.ExtraConfig) {
+		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, vmObj)
 	}
 
 	// Load the vJailbreak appliance SSH private key from the shared k8s secret.
@@ -225,28 +190,7 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to run component check on Proxy VM: %v", execErr))
 	}
 
-	componentResults := make([]vjailbreakv1alpha1.ProxyVMComponentCheck, 0, len(constants.ProxyVMRequiredComponents))
-	allPresent := true
-	missingComponents := []string{}
-
-	for _, line := range strings.Split(strings.TrimSpace(checkOutput), "\n") {
-		parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		name, path := parts[0], parts[1]
-		check := vjailbreakv1alpha1.ProxyVMComponentCheck{Name: name}
-		if path == "MISSING" || path == "" {
-			check.Present = false
-			check.Message = fmt.Sprintf("%s not found in PATH — install the required package", name)
-			allPresent = false
-			missingComponents = append(missingComponents, name)
-		} else {
-			check.Present = true
-		}
-		componentResults = append(componentResults, check)
-	}
-
+	componentResults, missingComponents, allPresent := parseComponentCheckOutput(checkOutput)
 	now := metav1.Now()
 	proxyVM.Status.ComponentsVerified = componentResults
 	proxyVM.Status.LastValidationTime = &now
@@ -315,6 +259,77 @@ func (r *ProxyVMReconciler) failVerification(ctx context.Context, proxyVM *vjail
 		return ctrl.Result{}, errors.Wrap(err, "failed to update ProxyVM status")
 	}
 	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+}
+
+// isDiskEnableUUIDSet reports whether disk.enableUUID is set to TRUE in the VM's ExtraConfig.
+func isDiskEnableUUIDSet(extraConfig []govmomitypes.BaseOptionValue) bool {
+	for _, opt := range extraConfig {
+		if ov, ok := opt.(*govmomitypes.OptionValue); ok {
+			if strings.EqualFold(ov.Key, "disk.enableUUID") {
+				if v, ok := ov.Value.(string); ok && strings.EqualFold(v, "TRUE") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// setDiskEnableUUIDAndReboot sets disk.enableUUID=TRUE on the VM, reboots it,
+// and requeues for re-verification after VMware Tools comes back up.
+func (r *ProxyVMReconciler) setDiskEnableUUIDAndReboot(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM, vmObj *object.VirtualMachine) (ctrl.Result, error) {
+	ctxlog := log.FromContext(ctx)
+	ctxlog.Info("disk.EnableUUID not set on Proxy VM — setting it and rebooting", "vm", proxyVM.Spec.VMName)
+	spec := govmomitypes.VirtualMachineConfigSpec{
+		ExtraConfig: []govmomitypes.BaseOptionValue{
+			&govmomitypes.OptionValue{Key: "disk.enableUUID", Value: "TRUE"},
+		},
+	}
+	reconfTask, err := vmObj.Reconfigure(ctx, spec)
+	if err != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to set disk.EnableUUID: %v", err))
+	}
+	if err := reconfTask.Wait(ctx); err != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed waiting for disk.EnableUUID reconfigure: %v", err))
+	}
+	rebootTask, err := vmObj.Reset(ctx)
+	if err != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to reboot Proxy VM after setting disk.EnableUUID: %v", err))
+	}
+	if err := rebootTask.Wait(ctx); err != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed waiting for VM reboot: %v", err))
+	}
+	proxyVM.Status.ValidationMessage = "disk.EnableUUID set and VM rebooted — re-verifying shortly"
+	if err := r.Status().Update(ctx, proxyVM); err != nil && !apierrors.IsNotFound(err) {
+		ctxlog.V(1).Info("Failed to update status after reboot", "error", err)
+	}
+	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+}
+
+// parseComponentCheckOutput parses the output of the SSH component-check command.
+// Returns component results, missing component names, and whether all components are present.
+func parseComponentCheckOutput(output string) ([]vjailbreakv1alpha1.ProxyVMComponentCheck, []string, bool) {
+	results := make([]vjailbreakv1alpha1.ProxyVMComponentCheck, 0)
+	missing := []string{}
+	allPresent := true
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name, path := parts[0], parts[1]
+		check := vjailbreakv1alpha1.ProxyVMComponentCheck{Name: name}
+		if path == "MISSING" || path == "" {
+			check.Present = false
+			check.Message = fmt.Sprintf("%s not found in PATH — install the required package", name)
+			allPresent = false
+			missing = append(missing, name)
+		} else {
+			check.Present = true
+		}
+		results = append(results, check)
+	}
+	return results, missing, allPresent
 }
 
 // SetupWithManager sets up the controller with the Manager.
