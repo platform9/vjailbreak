@@ -151,7 +151,7 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 				constants.ESXiNameLabel:             esxiK8sName,
 				constants.VMwareCredsLabel:          scope.ClusterMigration.Spec.VMwareCredsRef.Name,
 				constants.RollingMigrationPlanLabel: scope.RollingMigrationPlan.Name,
-				constants.ClusterMigrationLabel:     scope.ClusterMigration.Name,
+				constants.ClusterMigrationLabel:     commonutils.SanitizeLabelValue(scope.ClusterMigration.Name),
 			},
 		},
 		Spec: vjailbreakv1alpha1.ESXIMigrationSpec{
