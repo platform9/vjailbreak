@@ -552,9 +552,13 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	}
 
 	// Cleanup deferred after proxy VM is found so all resources are released.
+	// Cleanup deferred after proxy VM is found so all resources are released.
+	// Use context.Background() because the parent ctx may be cancelled by the
+	// time this deferred function runs (e.g. SIGTERM), and we still need
+	// govmomi calls (RemoveDevice, DeleteSnapshot) to succeed.
 	defer func() {
 		migobj.logMessage(constants.EventMessageHotAddCleanup)
-		migobj.cleanupHotAdd(ctx, sshClient, transfers, proxyVMObj)
+		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
 	}()
 
 	// 6. Attach each frozen disk to the Proxy VM.
