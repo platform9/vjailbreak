@@ -1,4 +1,5 @@
 import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Tooltip } from '@mui/material'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -24,7 +25,6 @@ import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredenti
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
-import { hasAnyLayer2Network } from 'src/shared/utils/network'
 
 interface ScaleUpDrawerProps {
   open: boolean
@@ -77,8 +77,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
 
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
-
-  const isL2Network = hasAnyLayer2Network(openstackCredentials?.status?.openstack?.networks)
 
   const [volumeTypes, setVolumeTypes] = useState<Array<string>>([])
   const [selectedVolumeType, setSelectedVolumeType] = useState('')
@@ -426,67 +424,54 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 disabled={
                   !openstackCredsValidated ||
                   !openstackCredentials ||
-                  securityGroups.length === 0 ||
-                  isL2Network
+                  securityGroups.length === 0
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                  <FieldLabel label="Security Groups" align="flex-start" />
-                  <Tooltip
-                    title={
-                      isL2Network ? 'Security Groups are not available on L2 network setups.' : ''
-                    }
-                    placement="top"
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <FieldLabel label="Security Groups" align="flex-start" />
+                    <Tooltip
+                      title="If the VJB VM is on an L2 network, the selected security group won't be applied."
+                      placement="top"
+                    >
+                      <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', opacity: 0.6 }} />
+                    </Tooltip>
+                  </Box>
+                  <Select
+                    multiple
+                    value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
+                    label=""
+                    onChange={(e) => {
+                      const value = e.target.value as string[]
+                      if (value.includes('USE_MASTER')) {
+                        setUseMasterSecurityGroups(true)
+                        setSelectedSecurityGroups([])
+                      } else {
+                        setUseMasterSecurityGroups(false)
+                        setSelectedSecurityGroups(value)
+                      }
+                    }}
+                    size="small"
+                    renderValue={(selected) => {
+                      if (useMasterSecurityGroups) {
+                        return 'Use security groups of primary VJB instance'
+                      }
+                      return (selected as string[])
+                        .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
+                        .join(', ')
+                    }}
                   >
-                    <span>
-                      <Select
-                        multiple
-                        value={
-                          isL2Network
-                            ? []
-                            : useMasterSecurityGroups
-                              ? ['USE_MASTER']
-                              : selectedSecurityGroups
-                        }
-                        label=""
-                        disabled={isL2Network}
-                        onChange={(e) => {
-                          const value = e.target.value as string[]
-                          if (value.includes('USE_MASTER')) {
-                            setUseMasterSecurityGroups(true)
-                            setSelectedSecurityGroups([])
-                          } else {
-                            setUseMasterSecurityGroups(false)
-                            setSelectedSecurityGroups(value)
-                          }
-                        }}
-                        size="small"
-                        fullWidth
-                        renderValue={(selected) => {
-                          if (isL2Network) {
-                            return ''
-                          }
-                          if (useMasterSecurityGroups) {
-                            return 'Use security groups of primary VJB instance'
-                          }
-                          return (selected as string[])
-                            .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
-                            .join(', ')
-                        }}
-                      >
-                        <MenuItem value="USE_MASTER">
-                          <Checkbox checked={useMasterSecurityGroups} />
-                          <ListItemText primary="Use security groups of primary VJB instance" />
-                        </MenuItem>
-                        {securityGroups.map((sg) => (
-                          <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
-                            <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
-                            <ListItemText primary={sg.name} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </span>
-                  </Tooltip>
+                    <MenuItem value="USE_MASTER">
+                      <Checkbox checked={useMasterSecurityGroups} />
+                      <ListItemText primary="Use security groups of primary VJB instance" />
+                    </MenuItem>
+                    {securityGroups.map((sg) => (
+                      <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
+                        <Checkbox checked={selectedSecurityGroups.includes(sg.id)} />
+                        <ListItemText primary={sg.name} />
+                      </MenuItem>
+                    ))}
+                  </Select>
                 </Box>
               </FormControl>
             </FormGrid>
