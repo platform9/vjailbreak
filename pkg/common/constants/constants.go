@@ -353,7 +353,8 @@ const (
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
 
-	// Retry attempts and interval for delete/create operations to survive transient API errors.
+	// Retry attempts for delete operations (port, volume) during cleanup.
+	// Kept small — cleanup should not block indefinitely, but must survive transient API errors.
 	DeleteOperationRetryCount           = 5
 	DeleteOperationRetryIntervalSeconds = 5
 

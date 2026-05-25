@@ -186,9 +186,18 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 	// Add 1GB to the size to account for the extra space
 	opts.Size += 1
 
-	volume, err := volumes.Create(ctx, blockStorageClient, opts, nil).Extract()
+	var volume *volumes.Volume
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		volume, err = volumes.Create(ctx, blockStorageClient, opts, nil).Extract()
+		if err == nil {
+			break
+		}
+		PrintLog(fmt.Sprintf("Transient error creating volume %s (attempt %d/%d): %s", name, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create volume: %s", err)
+		return nil, fmt.Errorf("failed to create volume after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 	}
 
 	err = osclient.WaitForVolume(ctx, volume.ID)
@@ -400,11 +409,16 @@ func (osclient *OpenStackClients) EnableQGA(ctx context.Context, volume *volumes
 			"hw_pointer_model":    "usbtablet",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to detach volume from VM: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting QGA metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set QGA metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
@@ -414,11 +428,16 @@ func (osclient *OpenStackClients) SetVolumeUEFI(ctx context.Context, volume *vol
 			"hw_firmware_type": "uefi",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume image metadata hw_firmware_type to uefi: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting UEFI metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set UEFI metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error {
@@ -431,11 +450,16 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	if setRDMLabel {
 		options.Metadata["hw_scsi_model"] = "virtio-scsi"
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume image metadata for windows: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting image metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set image metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 // ApplyBootVolumeImageMetadata merges profile-supplied properties onto the boot volume's existing
@@ -446,10 +470,16 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
-	if err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr(); err != nil {
-		return fmt.Errorf("failed to apply profile image metadata to boot volume: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error applying profile metadata to boot volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to apply profile metadata to boot volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
@@ -457,11 +487,16 @@ func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume 
 	options := volumes.BootableOpts{
 		Bootable: true,
 	}
-	err := volumes.SetBootable(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume as bootable: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetBootable(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting volume %s as bootable (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set volume %s as bootable after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
@@ -787,16 +822,27 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 }
 
 func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
-	// When no security groups are selected, disable port security
-	if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
-		disabled := false
-		extOpts := portsecurity.PortCreateOptsExt{
-			CreateOptsBuilder:   createOpts,
-			PortSecurityEnabled: &disabled,
+	var port *ports.Port
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		// When no security groups are selected, disable port security
+		if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
+			disabled := false
+			extOpts := portsecurity.PortCreateOptsExt{
+				CreateOptsBuilder:   createOpts,
+				PortSecurityEnabled: &disabled,
+			}
+			port, err = ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
+		} else {
+			port, err = ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 		}
-		return ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
+		if err == nil {
+			return port, nil
+		}
+		PrintLog(fmt.Sprintf("Transient error creating port (attempt %d/%d): %s", i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
+	return nil, fmt.Errorf("failed to create port after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {

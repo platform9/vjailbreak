@@ -1934,7 +1934,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
-			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
+			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
 			return errors.Wrap(err, "CBT Failure")
 		}
 
@@ -1946,7 +1946,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Live Replicate Disks
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 		if err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
 				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
