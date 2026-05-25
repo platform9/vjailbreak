@@ -1271,6 +1271,16 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
+	// Inject VMware Tools cleanup script for Linux guests when requested
+	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
+		firstbootscriptname := "vmware_tools_cleanup"
+		firstbootscripts = append(firstbootscripts, firstbootscriptname)
+		if err := virtv2v.AddFirstBootScript(constants.LinuxVMwareToolsCleanupScript, firstbootscriptname); err != nil {
+			return errors.Wrap(err, "failed to add VMware tools cleanup first boot script")
+		}
+		utils.PrintLog("VMware Tools cleanup script added for Linux firstboot")
+	}
+
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
