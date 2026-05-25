@@ -18,15 +18,79 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"testing"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	openstackvalidation "github.com/platform9/vjailbreak/pkg/common/validation/openstack"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	constants "github.com/platform9/vjailbreak/pkg/common/constants"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+// TestApplyValidationResult_ValidationFailure tests that applyValidationResult
+// marks validation failures with the single terminal Failed status.
+func TestApplyValidationResult_ValidationFailure(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "default"
+	const name = "test-oscreds"
+
+	tests := []struct {
+		name                 string
+		result               openstackvalidation.ValidationResult
+		wantValidationStatus string
+	}{
+		{
+			name:                 "auth failure marks failed",
+			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("auth failed"), Message: "auth failed"},
+			wantValidationStatus: constants.ValidationStatusFailed,
+		},
+		{
+			name:                 "connection failure marks failed",
+			result:               openstackvalidation.ValidationResult{Valid: false, Error: fmt.Errorf("connection refused"), Message: "connection refused"},
+			wantValidationStatus: constants.ValidationStatusFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oscreds := &vjailbreakv1alpha1.OpenstackCreds{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(oscreds).
+				WithStatusSubresource(&vjailbreakv1alpha1.OpenstackCreds{}).
+				Build()
+
+			credScope, _ := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
+				Client:         fakeClient,
+				OpenstackCreds: oscreds,
+			})
+			r := &OpenstackCredsReconciler{Client: fakeClient, Scheme: scheme}
+
+			_ = r.applyValidationResult(context.Background(), credScope, tt.result)
+
+			updated := &vjailbreakv1alpha1.OpenstackCreds{}
+			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, updated); err != nil {
+				t.Fatalf("failed to get updated OpenstackCreds: %v", err)
+			}
+			if updated.Status.OpenStackValidationStatus != tt.wantValidationStatus {
+				t.Errorf("OpenStackValidationStatus = %q, want %q", updated.Status.OpenStackValidationStatus, tt.wantValidationStatus)
+			}
+		})
+	}
+}
 
 var _ = ginkgo.Describe("OpenstackCreds Controller", func() {
 	ginkgo.Context("When reconciling a resource", func() {

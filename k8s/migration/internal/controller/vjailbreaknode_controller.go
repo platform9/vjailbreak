@@ -81,8 +81,10 @@ func (r *VjailbreakNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.reconcileDelete(ctx, vjailbreakNodeScope)
 	}
 
-	// Quick path for just updating ActiveMigrations if node is ready
-	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady {
+	// Quick path for just updating ActiveMigrations if node is ready.
+	// Skip fast path when reprovision is requested so reconcileNormal can handle it.
+	if vjailbreakNode.Status.Phase == constants.VjailbreakNodePhaseNodeReady &&
+		vjailbreakNode.Annotations[reprovisionAnnotation] != reprovisionRequested {
 		return r.updateActiveMigrations(ctx, vjailbreakNodeScope)
 	}
 
@@ -119,6 +121,15 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	if vjNode.Status.Phase == constants.VjailbreakNodePhaseError {
 		log.Info("Node is in error state, skipping reconciliation. Delete the node to clean up.", "name", vjNode.Name)
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+
+	// Handle reprovision annotation before normal UUID lookup
+	if reprovisioned, repErr := r.reconcileReprovision(ctx, vjNode); repErr != nil {
+		log.Error(repErr, "Failed to handle reprovision annotation")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, repErr
+	} else if reprovisioned {
+		log.Info("Reprovision triggered, requeueing to create new VM", "name", vjNode.Name)
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
@@ -258,6 +269,81 @@ func (r *VjailbreakNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&vjailbreakv1alpha1.VjailbreakNode{}).
 		Complete(r)
+}
+
+const (
+	reprovisionAnnotation = "vjailbreak.io/reprovision"
+	reprovisionRequested  = "requested"
+	reprovisionBlocked    = "blocked"
+)
+
+// reprovisionAllowed returns true when no active migrations block node reprovisioning.
+func reprovisionAllowed(activeMigrations []string) bool {
+	return len(activeMigrations) == 0
+}
+
+// reconcileReprovision handles the reprovision annotation lifecycle.
+// Returns (true, nil) when reprovisioning was triggered (UUID cleared, annotation removed).
+// Returns (false, nil) when no action was needed or reprovision was blocked by active migrations.
+func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
+	vjNode *vjailbreakv1alpha1.VjailbreakNode) (bool, error) {
+	if vjNode.Annotations[reprovisionAnnotation] != reprovisionRequested {
+		return false, nil
+	}
+
+	if !reprovisionAllowed(vjNode.Status.ActiveMigrations) {
+		// Block reprovision — node is busy
+		patch := client.MergeFrom(vjNode.DeepCopy())
+		if vjNode.Annotations == nil {
+			vjNode.Annotations = map[string]string{}
+		}
+		vjNode.Annotations[reprovisionAnnotation] = reprovisionBlocked
+		return false, r.Patch(ctx, vjNode, patch)
+	}
+
+	log := log.FromContext(ctx).WithName(constants.VjailbreakNodeControllerName)
+
+	// Resolve UUID: prefer stored value, fall back to name lookup
+	uuid := vjNode.Status.OpenstackUUID
+	if uuid == "" {
+		var lookupErr error
+		uuid, lookupErr = utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
+		if lookupErr != nil {
+			log.Error(lookupErr, "reprovision: failed to look up VM by name, continuing without VM deletion")
+		}
+	}
+
+	// Delete the existing OpenStack VM so a fresh one can be created
+	if uuid != "" {
+		if delErr := utils.DeleteOpenstackVM(ctx, uuid, r.Client, vjNode); delErr != nil {
+			log.Error(delErr, "reprovision: failed to delete OpenStack VM, continuing", "uuid", uuid)
+		} else {
+			log.Info("reprovision: deleted OpenStack VM", "uuid", uuid)
+		}
+	}
+
+	// Remove the Kubernetes node entry so k3s re-joins cleanly
+	if vjNode.Name != "" {
+		if delErr := utils.DeleteNodeByName(ctx, r.Client, vjNode.Name); delErr != nil && !apierrors.IsNotFound(delErr) {
+			log.Error(delErr, "reprovision: failed to delete K8s node, continuing", "nodeName", vjNode.Name)
+		}
+	}
+
+	// Remove annotation and reset status so reconcileNormal creates a new VM
+	metaPatch := client.MergeFrom(vjNode.DeepCopy())
+	delete(vjNode.Annotations, reprovisionAnnotation)
+	if err := r.Patch(ctx, vjNode, metaPatch); err != nil {
+		return false, errors.Wrap(err, "failed to remove reprovision annotation")
+	}
+
+	statusPatch := client.MergeFrom(vjNode.DeepCopy())
+	vjNode.Status.OpenstackUUID = ""
+	vjNode.Status.Phase = ""
+	if err := r.Client.Status().Patch(ctx, vjNode, statusPatch); err != nil {
+		return false, errors.Wrap(err, "failed to clear OpenstackUUID for reprovision")
+	}
+
+	return true, nil
 }
 
 // updateActiveMigrations efficiently updates just the ActiveMigrations field

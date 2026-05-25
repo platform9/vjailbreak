@@ -35,6 +35,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -285,6 +286,7 @@ func (r *OpenstackCredsReconciler) applyValidationResult(ctx context.Context, sc
 		return err
 	}
 	ctxlog.Info("Successfully updated status to success")
+
 	err := handleValidatedCreds(ctx, r, scope)
 	if err != nil {
 		return err
@@ -666,33 +668,43 @@ func handlePCDSync(ctx context.Context, r *OpenstackCredsReconciler, scope *scop
 func runPCDSyncAsync(r *OpenstackCredsReconciler, scope *scope.OpenstackCredsScope) {
 	ctxlog := scope.Logger
 	syncCtx := context.Background()
+	name := scope.OpenstackCreds.Name
+	namespace := scope.OpenstackCreds.Namespace
 
-	err := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
+	syncErr := utils.SyncPCDInfo(syncCtx, r.Client, *scope.OpenstackCreds)
 
-	latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if getErr := r.Get(syncCtx, client.ObjectKey{
-		Name:      scope.OpenstackCreds.Name,
-		Namespace: scope.OpenstackCreds.Namespace,
-	}, latestCreds); getErr != nil {
-		ctxlog.Error(getErr, "Failed to get OpenstackCreds for annotation update")
-		return
-	}
-
-	if latestCreds.Annotations == nil {
-		latestCreds.Annotations = make(map[string]string)
-	}
-
-	delete(latestCreds.Annotations, "pcd-sync-in-progress")
-
-	if err != nil {
-		ctxlog.Error(err, "PCD sync failed")
-		latestCreds.Annotations["pcd-sync-last-error"] = err.Error()
+	if syncErr != nil {
+		ctxlog.Error(syncErr, "PCD sync failed")
 	} else {
-		ctxlog.Info("PCD sync completed successfully", "openstackcreds", scope.OpenstackCreds.Name)
-		delete(latestCreds.Annotations, "pcd-sync-last-error")
+		ctxlog.Info("PCD sync completed successfully", "openstackcreds", name)
 	}
 
-	if updateErr := r.Update(syncCtx, latestCreds); updateErr != nil {
-		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync")
+	// Annotation update: re-Get inside retry so each attempt operates on the
+	// freshest ResourceVersion.
+	if updateErr := retry.OnError(retry.DefaultBackoff, isRetryableUpdateError, func() error {
+		latestCreds := &vjailbreakv1alpha1.OpenstackCreds{}
+		if err := r.Get(syncCtx, client.ObjectKey{Name: name, Namespace: namespace}, latestCreds); err != nil {
+			return err
+		}
+		if latestCreds.Annotations == nil {
+			latestCreds.Annotations = make(map[string]string)
+		}
+		delete(latestCreds.Annotations, "pcd-sync-in-progress")
+		if syncErr != nil {
+			latestCreds.Annotations["pcd-sync-last-error"] = syncErr.Error()
+		} else {
+			delete(latestCreds.Annotations, "pcd-sync-last-error")
+		}
+		return r.Update(syncCtx, latestCreds)
+	}); updateErr != nil {
+		ctxlog.Error(updateErr, "Failed to update OpenstackCreds annotations after sync; pcd-sync-in-progress may be stuck",
+			"openstackcreds", name)
 	}
+}
+
+func isRetryableUpdateError(err error) bool {
+	return apierrors.IsConflict(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err)
 }

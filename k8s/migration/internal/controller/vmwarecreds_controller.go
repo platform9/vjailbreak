@@ -89,11 +89,30 @@ func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return r.reconcileDelete(ctx, scope)
 }
 
+// ensureFinalizer persists the finalizer via r.Update before any Status().Update
+// runs. Status().Update refreshes the in-memory object from the server response.
+func (r *VMwareCredsReconciler) ensureFinalizer(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, bool, error) {
+	ctxlog := log.FromContext(ctx)
+	if controllerutil.ContainsFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer) {
+		return ctrl.Result{}, false, nil
+	}
+	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	if err := r.Update(ctx, scope.VMwareCreds); err != nil {
+		ctxlog.Error(err, "failed to add VMwareCreds finalizer", "name", scope.Name())
+		return ctrl.Result{}, true, err
+	}
+	return ctrl.Result{Requeue: true}, true, nil
+}
+
 func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scope.VMwareCredsScope) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info(fmt.Sprintf("Reconciling VMwareCreds '%s' object", scope.Name()))
 
 	var err error
+
+	if res, done, err := r.ensureFinalizer(ctx, scope); done {
+		return res, err
+	}
 
 	// Validate credentials (whether first time or periodic check)
 	ctxlog.Info("Validating VMware credentials", "name", scope.Name())
@@ -119,7 +138,7 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 	}
 	// Validation succeeded - update status
 	ctxlog.Info(fmt.Sprintf("Successfully authenticated to VMware '%s'", scope.Name()))
-	scope.VMwareCreds.Status.VMwareValidationStatus = "Succeeded"
+	scope.VMwareCreds.Status.VMwareValidationStatus = string(corev1.PodSucceeded)
 	scope.VMwareCreds.Status.VMwareValidationMessage = result.Message
 	if err := r.Status().Update(ctx, scope.VMwareCreds); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -128,8 +147,8 @@ func (r *VMwareCredsReconciler) reconcileNormal(ctx context.Context, scope *scop
 		}
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error updating status of VMwareCreds '%s'", scope.Name()))
 	}
-	ctxlog.Info("Successfully validated VMwareCreds, adding finalizer", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
-	controllerutil.AddFinalizer(scope.VMwareCreds, constants.VMwareCredsFinalizer)
+	ctxlog.Info("Successfully validated VMwareCreds", "name", scope.Name(), "finalizers", scope.VMwareCreds.Finalizers)
+
 	err = utils.CreateVMwareClustersAndHosts(ctx, scope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, fmt.Sprintf("Error creating VMs for VMwareCreds '%s'", scope.Name()))

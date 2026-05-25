@@ -14,6 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// labelInvalidCharsRe matches characters not allowed in Kubernetes label values.
+var labelInvalidCharsRe = regexp.MustCompile(`[^A-Za-z0-9\-_.]`)
+
 // ConvertToK8sName converts a name to be Kubernetes-compatible
 func ConvertToK8sName(name string) (string, error) {
 	// Convert to lowercase
@@ -97,4 +100,22 @@ func GetVMUniqueKey(vmName, vmid string) string {
 func GetVMK8sCompatibleName(vmName, vmid, credName string) (string, error) {
 	vmNameForK8s := GetVMUniqueKey(vmName, vmid)
 	return GetK8sCompatibleVMWareObjectName(vmNameForK8s, credName)
+}
+
+// SanitizeLabelValue returns a Kubernetes-valid label value from an arbitrary string.
+// Rules: max 63 chars, only [A-Za-z0-9-_.], must start and end with alphanumeric (or be empty).
+// Spaces are replaced with hyphens; remaining invalid characters are removed.
+func SanitizeLabelValue(s string) string {
+	// Replace spaces with hyphens (primary offender for VM names with spaces)
+	s = strings.ReplaceAll(s, " ", "-")
+	// Remove any character not in [A-Za-z0-9-_.]
+	s = labelInvalidCharsRe.ReplaceAllString(s, "")
+	// Trim leading and trailing non-alphanumeric chars (hyphens, underscores, dots)
+	s = strings.Trim(s, "-_.")
+	// Enforce 63-char limit, then re-trim trailing non-alphanumeric introduced by truncation
+	if len(s) > constants.K8sNameMaxLength {
+		s = s[:constants.K8sNameMaxLength]
+		s = strings.TrimRight(s, "-_.")
+	}
+	return s
 }

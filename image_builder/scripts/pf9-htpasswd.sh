@@ -257,9 +257,6 @@ _pf9_ht_main() {
           ;;
         list)
           list_users
-          if [[ $no_restart -eq 0 ]]; then
-            sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui
-          fi
           ;;
         refresh|reload)
           sudo kubectl -n migration-system rollout restart deployment vjailbreak-ui

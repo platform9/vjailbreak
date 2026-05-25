@@ -1229,10 +1229,18 @@ func migrationMatchesVMwareMachine(migration *vjailbreakv1alpha1.Migration, vmwv
 	if migration == nil {
 		return false
 	}
-	if vmKey != "" && migration.Labels[constants.MigrationVMKeyLabel] == vmKey {
+	// Resolve the stored raw key: annotation falls back to label.
+	storedKey := ""
+	if migration.Annotations != nil {
+		storedKey = migration.Annotations[constants.OriginalVMNameAnnotation]
+	}
+	if storedKey == "" {
+		storedKey = migration.Labels[constants.MigrationVMKeyLabel]
+	}
+	if vmKey != "" && storedKey == vmKey {
 		return true
 	}
-	return migration.Labels[constants.MigrationVMKeyLabel] == "" &&
+	return storedKey == "" &&
 		migration.Spec.VMName != "" &&
 		migration.Spec.VMName == vmwvm.Spec.VMInfo.Name
 }
