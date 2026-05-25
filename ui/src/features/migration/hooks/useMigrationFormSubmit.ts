@@ -162,9 +162,12 @@ export function useMigrationFormSubmit({
 
     const updatedMigrationTemplateFields: any = {
       spec: {
-        networkMapping: networkMappings.metadata.name,
         storageCopyMethod
       }
+    }
+
+    if (networkMappings?.metadata?.name) {
+      updatedMigrationTemplateFields.spec.networkMapping = networkMappings.metadata.name
     }
 
     if (storageCopyMethod === 'StorageAcceleratedCopy' && arrayCredsMapping) {
