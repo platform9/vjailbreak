@@ -276,7 +276,7 @@ export default function MigrationOptionsAlt({
                   />
                   <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
                 </OptionLeft>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }} data-testid="data-copy-method-container">
                   <Select
                     size="small"
                     disabled={!selectedMigrationOptions.dataCopyMethod}
@@ -413,7 +413,7 @@ export default function MigrationOptionsAlt({
                     Choose immediate, windowed, or admin-initiated cutover.
                   </OptionHelp>
                 </OptionLeft>
-                <Box sx={{ display: 'grid', gap: 1 }}>
+                <Box sx={{ display: 'grid', gap: 1 }} data-testid="cutover-type-container">
                   <Select
                     size="small"
                     disabled={isPowerOffThenCopy || !selectedMigrationOptions?.cutoverOption}

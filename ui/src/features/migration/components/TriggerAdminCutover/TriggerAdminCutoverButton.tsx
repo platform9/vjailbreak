@@ -93,6 +93,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
             Cancel
           </Button>
           <Button
+            data-testid="cutover-confirm-button"
             onClick={handleTriggerCutover}
             variant="contained"
             color="primary"

@@ -389,10 +389,10 @@ export function useRollingFormValidation({
         title: 'ESXi Hosts',
         description: 'Assign host configs',
         status:
-          touchedSections.hosts && orderedESXHosts.length > 0
-            ? 'complete'
-            : step3HasErrors
-              ? 'attention'
+          step3HasErrors
+            ? 'attention'
+            : touchedSections.hosts && orderedESXHosts.length > 0
+              ? 'complete'
               : 'incomplete'
       },
       {

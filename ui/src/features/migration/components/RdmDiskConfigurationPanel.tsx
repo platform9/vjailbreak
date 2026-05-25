@@ -91,7 +91,7 @@ export const RdmDiskConfigurationPanel: React.FC<RdmDiskConfigurationPanelProps>
   }
 
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box data-testid="rdm-config-panel" sx={{ mt: 3 }}>
       <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
         🔗 RDM Disk Configuration
       </Typography>

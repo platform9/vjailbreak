@@ -59,6 +59,7 @@ const CustomToolbar = ({
       {numSelected > 0 ? (
         <>
           <Button
+            data-testid="delete-selected-button"
             variant="outlined"
             color="error"
             startIcon={<DeleteIcon />}
@@ -102,6 +103,7 @@ const CustomToolbar = ({
           onClick={onStartMigration}
           disabled={startMigrationDisabled}
           sx={{ height: 40 }}
+          data-testid="start-migration-button"
         >
           Start Migration
         </Button>
@@ -580,6 +582,7 @@ export default function MigrationsTable({
   return (
     <>
       <CommonDataGrid
+        data-testid="migrations-table"
         rows={migrationsWithActions}
         columns={
           onDeleteSelected === undefined && onDeleteMigration === undefined

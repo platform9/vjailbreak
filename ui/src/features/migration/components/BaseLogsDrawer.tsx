@@ -51,6 +51,7 @@ export interface BaseLogsDrawerProps {
   onReconnect: () => void
   /** Custom download handler. Receives filteredLogs. If omitted, downloads filteredLogs as plain text. */
   onDownload?: (filteredLogs: string[]) => Promise<void>
+  'data-testid'?: string
 }
 
 export default function BaseLogsDrawer({
@@ -64,7 +65,8 @@ export default function BaseLogsDrawer({
   isPaused,
   onPausedChange,
   onReconnect,
-  onDownload
+  onDownload,
+  'data-testid': dataTestId
 }: BaseLogsDrawerProps) {
   const theme = useTheme()
   const isDarkMode = theme.palette.mode === 'dark'
@@ -178,6 +180,7 @@ export default function BaseLogsDrawer({
       open={open}
       onClose={handleClose}
       requireCloseConfirmation={false}
+      data-testid={dataTestId}
       header={
         <DrawerHeader
           title={title}
@@ -284,6 +287,7 @@ export default function BaseLogsDrawer({
 
                 <Tooltip title={downloadSuccess ? 'Downloaded!' : isDownloading ? 'Downloading...' : 'Download logs'}>
                   <IconButton
+                    data-testid="logs-download-button"
                     onClick={handleDownloadLogs}
                     size="small"
                     color={downloadSuccess ? 'success' : 'default'}
@@ -302,6 +306,7 @@ export default function BaseLogsDrawer({
             </Box>
 
             <TextField
+              data-testid="logs-search-input"
               fullWidth
               size="small"
               placeholder="Search logs..."

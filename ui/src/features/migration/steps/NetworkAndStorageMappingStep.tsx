@@ -175,6 +175,7 @@ export default function NetworkAndStorageMappingStep({
                     onChange={(value) => onChange('networkMappings')(value)}
                     oneToManyMapping
                     fieldPrefix="networkMapping"
+                    data-testid="network-mapping-table"
                   />
                   {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
                     <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
@@ -272,6 +273,7 @@ export default function NetworkAndStorageMappingStep({
                     onChange={(value) => onChange('storageMappings')(value)}
                     oneToManyMapping
                     fieldPrefix="storageMapping"
+                    data-testid="storage-mapping-table"
                   />
                 </>
               ) : (

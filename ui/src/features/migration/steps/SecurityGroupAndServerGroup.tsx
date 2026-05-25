@@ -192,6 +192,7 @@ export default function SecurityGroupAndServerGroup({
             size="small"
             loading={loadingProfiles}
             options={applicableProfiles}
+            data-testid="volume-image-profiles-autocomplete"
             getOptionLabel={(o: VolumeImageProfile) => o.metadata?.name || ''}
             isOptionEqualToValue={(o, v) => o.metadata?.name === v.metadata?.name}
             value={applicableProfiles.filter((p) =>
