@@ -232,7 +232,7 @@ func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID str
 			return nil
 		}
 		PrintLog(fmt.Sprintf("Transient error deleting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
-		time.Sleep(5 * time.Second)
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
 	return fmt.Errorf("failed to delete volume after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
@@ -540,7 +540,7 @@ func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string)
 			return nil
 		}
 		PrintLog(fmt.Sprintf("Transient error deleting port %s (attempt %d/%d): %s", portID, i+1, constants.DeleteOperationRetryCount, err))
-		time.Sleep(5 * time.Second)
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
 	return fmt.Errorf("failed to delete port %s after %d attempts: %s", portID, constants.DeleteOperationRetryCount, err)
 }
@@ -954,9 +954,18 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		}
 	}
 
-	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+	var server *servers.Server
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		server, err = servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+		if err == nil {
+			break
+		}
+		PrintLog(fmt.Sprintf("Transient error creating server %s (attempt %d/%d): %s", vminfo.Name, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server: %s", err)
+		return nil, fmt.Errorf("failed to create server after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 	}
 
 	// Wait for server to become active
