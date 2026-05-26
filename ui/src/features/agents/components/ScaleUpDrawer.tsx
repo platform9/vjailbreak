@@ -422,19 +422,21 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 fullWidth
                 size="small"
                 disabled={
-                  !openstackCredsValidated ||
-                  !openstackCredentials ||
-                  securityGroups.length === 0
+                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <FieldLabel label="Security Groups" align="flex-start" />
                     <Tooltip
-                      title="If the VJB VM is on an L2 network, the selected security group won't be applied."
+                      title="For L2 network, the VJB VM uses its native security groups."
                       placement="top"
                     >
-                      <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', opacity: 0.6 }} />
+                      <InfoOutlinedIcon
+                        color="primary"
+                        fontSize="small"
+                        sx={{ cursor: 'help', opacity: 0.6 }}
+                      />
                     </Tooltip>
                   </Box>
                   <Select
