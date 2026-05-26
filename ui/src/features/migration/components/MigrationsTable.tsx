@@ -22,6 +22,7 @@ import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import type { CustomToolbarProps, MigrationsTableProps } from '../types'
 import { TooltipContent, ClickableTableCell } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
@@ -132,6 +133,8 @@ export default function MigrationsTable({
     refetchOnMount: true
   })
 
+  const { data: vddkStatus } = useVddkStatusQuery({ staleTime: 0, refetchOnMount: true })
+
   const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
   const hasPcdCredentials = useMemo(() => {
     const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
@@ -141,9 +144,12 @@ export default function MigrationsTable({
       ).length > 0
     )
   }, [openstackCreds])
+  const vddkUploaded = vddkStatus?.uploaded === true
 
-  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
-  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
+  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials || !vddkUploaded
+  const startMigrationDisabledReason = !vddkUploaded
+    ? 'Upload VDDK library in Settings before starting a migration.'
+    : 'Add VMware and PCD credentials before starting a migration.'
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
