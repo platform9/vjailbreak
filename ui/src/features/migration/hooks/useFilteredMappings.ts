@@ -1,0 +1,156 @@
+import { useMemo, useEffect, useCallback, useRef } from 'react'
+import { ArrayCreds } from 'src/api/array-creds/model'
+import type { ResourceMap, StorageCopyMethod } from '../types'
+
+interface MappingsParams {
+  networkMappings?: ResourceMap[]
+  storageMappings?: ResourceMap[]
+  arrayCredsMappings?: ResourceMap[]
+}
+
+interface UseFilteredMappingsParams {
+  params: MappingsParams
+  vmwareNetworks: string[]
+  openstackNetworkNames: string[]
+  vmWareStorage: string[]
+  openstackStorage: string[]
+  arrayCredsNames: string[]
+  storageCopyMethod: StorageCopyMethod
+  validatedArrayCreds: ArrayCreds[]
+  onChange: (key: string) => (value: unknown) => void
+}
+
+export function useFilteredMappings({
+  params,
+  vmwareNetworks,
+  openstackNetworkNames,
+  vmWareStorage,
+  openstackStorage,
+  arrayCredsNames,
+  storageCopyMethod,
+  validatedArrayCreds,
+  onChange
+}: UseFilteredMappingsParams) {
+  const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
+
+  const filteredNetworkMappings = useMemo(
+    () =>
+      (params.networkMappings || []).filter(
+        (mapping) =>
+          vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
+      ),
+    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
+  )
+
+  const filteredStorageMappings = useMemo(
+    () =>
+      (params.storageMappings || []).filter(
+        (mapping) =>
+          vmWareStorage.includes(mapping.source) && openstackStorage.includes(mapping.target)
+      ),
+    [params.storageMappings, vmWareStorage, openstackStorage]
+  )
+
+  const filteredArrayCredsMappings = useMemo(
+    () =>
+      (params.arrayCredsMappings || []).filter(
+        (mapping) =>
+          vmWareStorage.includes(mapping.source) && arrayCredsNames.includes(mapping.target)
+      ),
+    [params.arrayCredsMappings, vmWareStorage, arrayCredsNames]
+  )
+
+  useEffect(() => {
+    if (filteredNetworkMappings.length !== params.networkMappings?.length) {
+      onChange('networkMappings')(filteredNetworkMappings)
+    }
+  }, [filteredNetworkMappings, onChange, params.networkMappings])
+
+  useEffect(() => {
+    if (
+      storageCopyMethod === 'normal' &&
+      filteredStorageMappings.length !== params.storageMappings?.length
+    ) {
+      onChange('storageMappings')(filteredStorageMappings)
+    }
+  }, [filteredStorageMappings, onChange, params.storageMappings, storageCopyMethod])
+
+  useEffect(() => {
+    if (
+      storageCopyMethod === 'StorageAcceleratedCopy' &&
+      filteredArrayCredsMappings.length !== params.arrayCredsMappings?.length
+    ) {
+      onChange('arrayCredsMappings')(filteredArrayCredsMappings)
+    }
+  }, [filteredArrayCredsMappings, onChange, params.arrayCredsMappings, storageCopyMethod])
+
+  // Auto-map datastores to ArrayCreds based on dataStore information in ArrayCreds status
+  useEffect(() => {
+    if (
+      storageCopyMethod !== 'StorageAcceleratedCopy' ||
+      !validatedArrayCreds.length ||
+      !vmWareStorage.length
+    ) {
+      return
+    }
+
+    const datastoreToArrayCredsMap = new Map<string, string>()
+    validatedArrayCreds.forEach((cred) => {
+      const datastores = cred.status?.dataStore || []
+      datastores.forEach((ds) => {
+        datastoreToArrayCredsMap.set(ds.name, cred.metadata.name)
+      })
+    })
+
+    const currentMappings = params.arrayCredsMappings || []
+    const currentMappedSources = new Set(currentMappings.map((m) => m.source))
+
+    const autoMappings: ResourceMap[] = []
+    vmWareStorage.forEach((datastore) => {
+      if (removedAutoArrayCredsSourcesRef.current.has(datastore)) {
+        return
+      }
+      if (!currentMappedSources.has(datastore) && datastoreToArrayCredsMap.has(datastore)) {
+        autoMappings.push({
+          source: datastore,
+          target: datastoreToArrayCredsMap.get(datastore)!
+        })
+      }
+    })
+
+    if (autoMappings.length > 0) {
+      onChange('arrayCredsMappings')([...currentMappings, ...autoMappings])
+    }
+  }, [storageCopyMethod, validatedArrayCreds, vmWareStorage, params.arrayCredsMappings, onChange])
+
+  const handleArrayCredsMappingsChange = useCallback(
+    (nextMappings: ResourceMap[]) => {
+      const prevMappings = params.arrayCredsMappings || []
+
+      const prevSources = new Set(prevMappings.map((m) => m.source))
+      const nextSources = new Set(nextMappings.map((m) => m.source))
+
+      for (const source of prevSources) {
+        if (!nextSources.has(source)) {
+          removedAutoArrayCredsSourcesRef.current.add(source)
+        }
+      }
+
+      for (const source of nextSources) {
+        if (removedAutoArrayCredsSourcesRef.current.has(source)) {
+          removedAutoArrayCredsSourcesRef.current.delete(source)
+        }
+      }
+
+      onChange('arrayCredsMappings')(nextMappings)
+    },
+    [onChange, params.arrayCredsMappings]
+  )
+
+  return {
+    filteredNetworkMappings,
+    filteredStorageMappings,
+    filteredArrayCredsMappings,
+    handleArrayCredsMappingsChange
+  }
+}
