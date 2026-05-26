@@ -263,8 +263,9 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		}
 
 		// Wait for machine to be released (becomes "Ready")
+		// MaaS runs commissioning scripts after release which can take 20+ minutes on baremetal.
 		logrus.Infof("%s Waiting for machine %s to be released", ctx, systemID)
-		err = m.waitForMachineState(ctx, systemID, "Ready", 5*time.Minute)
+		err = m.waitForMachineState(ctx, systemID, "Ready", 30*time.Minute)
 		if err != nil {
 			logrus.Errorf("%s Failed waiting for release: %v", ctx, err)
 			return errors.Wrap(err, "failed waiting for machine to be released")
@@ -319,6 +320,15 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	if err != nil {
 		logrus.Errorf("Failed to deploy machine: %v", err)
 		return err
+	}
+
+	// Wait for machine to reach Deployed state — this is when cloud-init (prep node script) completes.
+	// OS install + cloud-init on baremetal can take 45+ minutes.
+	logrus.Infof("%s Waiting for machine %s to reach Deployed state (prep script completion)", ctx, systemID)
+	err = m.waitForMachineState(ctx, systemID, "Deployed", 60*time.Minute)
+	if err != nil {
+		logrus.Errorf("%s Failed waiting for machine to be deployed: %v", ctx, err)
+		return errors.Wrap(err, "failed waiting for machine to be deployed")
 	}
 
 	return nil
