@@ -1275,7 +1275,11 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		firstbootscriptname := "vmware_tools_cleanup"
 		firstbootscripts = append(firstbootscripts, firstbootscriptname)
-		if err := virtv2v.AddFirstBootScript(constants.LinuxVMwareToolsCleanupScript, firstbootscriptname); err != nil {
+		scriptContent, err := os.ReadFile("/home/fedora/vmware-tools-cleanup.sh")
+		if err != nil {
+			return errors.Wrap(err, "failed to read VMware tools cleanup script")
+		}
+		if err := virtv2v.AddFirstBootScript(string(scriptContent), firstbootscriptname); err != nil {
 			return errors.Wrap(err, "failed to add VMware tools cleanup first boot script")
 		}
 		utils.PrintLog("VMware Tools cleanup script added for Linux firstboot")
