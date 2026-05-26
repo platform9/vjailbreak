@@ -386,7 +386,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
             </FormGrid>
             {!useMasterSecurityGroups && (
               <Alert severity="warning" sx={{ mt: 1 }}>
-                Security groups apply only when the VJB VM is on a non-L2 network.
+                Security groups apply only when the vJailbreak VM is on a non-Layer 2 network.
               </Alert>
             )}
             <FormGrid minWidth={260} gap={2}>
@@ -409,7 +409,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                       size="small"
                     >
                       <MenuItem value="USE_MASTER">
-                        Use volume type of primary VJB instance
+                        Use volume type of primary vJailbreak instance
                       </MenuItem>
                       {volumeTypes.map((volumeType) => (
                         <MenuItem key={volumeType} value={volumeType}>
@@ -447,7 +447,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     size="small"
                     renderValue={(selected) => {
                       if (useMasterSecurityGroups) {
-                        return 'Use security groups of primary VJB instance'
+                        return 'Use security groups of primary vJailbreak instance'
                       }
                       return (selected as string[])
                         .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
@@ -456,7 +456,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   >
                     <MenuItem value="USE_MASTER">
                       <Checkbox checked={useMasterSecurityGroups} />
-                      <ListItemText primary="Use security groups of primary VJB instance" />
+                      <ListItemText primary="Use security groups of primary vJailbreak instance" />
                     </MenuItem>
                     {securityGroups.map((sg) => (
                       <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>
