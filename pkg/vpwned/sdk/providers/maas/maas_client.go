@@ -265,7 +265,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 		// Wait for machine to be released (becomes "Ready")
 		// MaaS runs commissioning scripts after release which can take 20+ minutes on baremetal.
 		logrus.Infof("%s Waiting for machine %s to be released", ctx, systemID)
-		err = m.waitForMachineState(ctx, systemID, "Ready", 30*time.Minute)
+		err = m.waitForMachineState(ctx, systemID, "New", 5*time.Minute)
 		if err != nil {
 			logrus.Errorf("%s Failed waiting for release: %v", ctx, err)
 			return errors.Wrap(err, "failed waiting for machine to be released")
@@ -280,7 +280,7 @@ func (m *MaasClient) Reclaim(ctx context.Context, req api.ReclaimBMRequest) erro
 	}
 
 	// Allocate the machine before deployment (only if not already Allocated)
-	if !strings.EqualFold(machine.StatusName, "Allocated") {
+	if !strings.EqualFold(machine.StatusName, "Allocated") && !strings.EqualFold(machine.StatusName, "Deployed") {
 		logrus.Infof("%s Allocating machine %s", ctx, systemID)
 		_, err = m.Client.Machines.Allocate(&entity.MachineAllocateParams{
 			SystemID: systemID,

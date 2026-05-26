@@ -283,7 +283,7 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	}
 	if len(scope.RollingMigrationPlan.Spec.ClusterMapping) > 0 {
 		for _, mapping := range scope.RollingMigrationPlan.Spec.ClusterMapping {
-			if mapping.VMwareClusterName == vmwareHost.Spec.ClusterName {
+			if mapping.VMwareClusterName == vmwareHost.Spec.ClusterName || mapping.VMwareClusterName == vmwareHost.Labels[constants.VMwareClusterLabel] {
 				pcdClusterName = mapping.PCDClusterName
 				break
 			}
@@ -300,7 +300,7 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 			log.Info("No PCD clusters found, pausing ESXi migration. please create PCD cluster to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 			return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 		}
-		pcdClusterName = pcdClusterList.Items[0].Name
+		pcdClusterName = pcdClusterList.Items[0].Spec.ClusterName
 	}
 
 	if err := utils.AssignHostConfigToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID, vmwareHost.Spec.HostConfigID); err != nil {

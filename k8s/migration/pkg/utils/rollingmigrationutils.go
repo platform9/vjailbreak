@@ -501,7 +501,7 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 			vmName := cluster.VMSequence[j].VMName
 			vm, ok := vmByDisplayName[vmName]
 			if !ok {
-				return fmt.Errorf("Error getting VMInfo for VM '%s': VMwareMachine not found", vmName)
+				return fmt.Errorf("error getting VMInfo for VM '%s': VMwareMachine not found", vmName)
 			}
 			scope.RollingMigrationPlan.Spec.ClusterSequence[i].VMSequence[j].ESXiName = vm.Spec.VMInfo.ESXiName
 		}
