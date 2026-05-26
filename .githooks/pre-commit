@@ -8,7 +8,7 @@ cd "${REPO_ROOT}"
 if [ -f graphify-out/graph.json ]; then
   echo "[pre-commit] updating knowledge graph (graphify)"
   GRAPHIFY_PYTHON=""
-  GRAPHIFY_BIN=$(command -v graphify 2>/dev/null)
+  GRAPHIFY_BIN=$(command -v graphify 2>/dev/null) || true
   if [ -n "$GRAPHIFY_BIN" ]; then
     _SHEBANG=$(head -1 "$GRAPHIFY_BIN" | sed 's/^#![[:space:]]*//')
     case "$_SHEBANG" in
