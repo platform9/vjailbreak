@@ -15,8 +15,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.openstackValidationStatus
-      name: Status
+    - jsonPath: .status.conditions[?(@.type=="CredentialsValidated")].status
+      name: Validated
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="CredentialsValidated")].reason
+      name: Reason
       type: string
     - jsonPath: .spec.secretRef.name
       name: Secret Name
@@ -53,6 +56,14 @@ spec:
           spec:
             description: OpenstackCredsSpec defines the desired state of OpenstackCreds
             properties:
+              cloudName:
+                description: |-
+                  CloudName selects which cloud entry to use when SecretRef points to a Secret
+                  containing a clouds.yaml key. Ignored when the Secret contains only legacy
+                  OS_* keys. When omitted with a single-entry clouds.yaml, that entry is used.
+                  When omitted with a multi-entry clouds.yaml, the resource reports
+                  CredentialsParsed=False with Reason=AmbiguousCloudName.
+                type: string
               flavors:
                 description: Flavors is the list of available flavors in openstack
                 items:
@@ -214,6 +225,69 @@ spec:
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
             properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of an OpenstackCreds's state.
+                  Standard Condition Types include CredentialsParsed, CredentialsValidated,
+                  RolesSufficient, Expiring, and Expired.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               openstack:
                 description: Openstack is the OpenStack configuration for the openstackcreds
                 properties:
@@ -283,12 +357,21 @@ spec:
                     type: array
                 type: object
               openstackValidationMessage:
-                description: OpenStackValidationMessage is the message associated
-                  with the OpenStack validation
+                description: |-
+                  OpenStackValidationMessage is the legacy summary message string,
+                  superseded by Conditions[*].Message. Populated as a derived view for
+                  back-compat alongside OpenStackValidationStatus.
                 type: string
               openstackValidationStatus:
-                description: OpenStackValidationStatus is the status of the OpenStack
-                  validation
+                description: |-
+                  OpenStackValidationStatus is the legacy summary status string. It is
+                  superseded by Conditions (the "CredentialsValidated" Type). The
+                  controller continues to populate this field as a derived view of
+                  Conditions so existing UI and API consumers (UI components reading
+                  openstackValidationStatus, pkg/vpwned proxy, etc.) keep working through
+                  the Conditions migration window. New consumers should read Conditions;
+                  this field will be removed in a future release once downstream
+                  consumers migrate.
                 type: string
             type: object
         type: object
