@@ -1,5 +1,4 @@
-import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Tooltip } from '@mui/material'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Alert } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -385,7 +384,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 error={!!flavorsError}
               />
             </FormGrid>
-
+            {!useMasterSecurityGroups && (
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                Security groups apply only when the VJB VM is on a non-L2 network.
+              </Alert>
+            )}
             <FormGrid minWidth={260} gap={2}>
               <FormControl
                 fullWidth
@@ -426,19 +429,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <FieldLabel label="Security Groups" align="flex-start" />
-                    <Tooltip
-                      title="For L2 network, the VJB VM uses its native security groups."
-                      placement="top"
-                    >
-                      <InfoOutlinedIcon
-                        color="primary"
-                        fontSize="small"
-                        sx={{ cursor: 'help', opacity: 0.6 }}
-                      />
-                    </Tooltip>
-                  </Box>
+                  <FieldLabel label="Security Groups" align="flex-start" />
                   <Select
                     multiple
                     value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
