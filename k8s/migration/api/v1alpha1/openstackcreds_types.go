@@ -112,6 +112,14 @@ type OpenstackCredsSpec struct {
 	// +optional
 	OsInterface string `json:"osInterface,omitempty"`
 
+	// CloudName selects which cloud entry to use when SecretRef points to a Secret
+	// containing a clouds.yaml key. Ignored when the Secret contains only legacy
+	// OS_* keys. When omitted with a single-entry clouds.yaml, that entry is used.
+	// When omitted with a multi-entry clouds.yaml, the resource reports
+	// CredentialsParsed=False with Reason=AmbiguousCloudName.
+	// +optional
+	CloudName string `json:"cloudName,omitempty"`
+
 	// Flavors is the list of available flavors in openstack
 	Flavors []flavors.Flavor `json:"flavors,omitempty"`
 
@@ -124,17 +132,38 @@ type OpenstackCredsSpec struct {
 
 // OpenstackCredsStatus defines the observed state of OpenstackCreds
 type OpenstackCredsStatus struct {
+	// Conditions represent the latest available observations of an OpenstackCreds's state.
+	// Standard Condition Types include CredentialsParsed, CredentialsValidated,
+	// RolesSufficient, Expiring, and Expired.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
 	// Openstack is the OpenStack configuration for the openstackcreds
 	Openstack OpenstackInfo `json:"openstack,omitempty"`
-	// OpenStackValidationStatus is the status of the OpenStack validation
+
+	// OpenStackValidationStatus is the legacy summary status string. It is
+	// superseded by Conditions (the "CredentialsValidated" Type). The
+	// controller continues to populate this field as a derived view of
+	// Conditions so existing UI and API consumers (UI components reading
+	// openstackValidationStatus, pkg/vpwned proxy, etc.) keep working through
+	// the Conditions migration window. New consumers should read Conditions;
+	// this field will be removed in a future release once downstream
+	// consumers migrate.
+	// +optional
 	OpenStackValidationStatus string `json:"openstackValidationStatus,omitempty"`
-	// OpenStackValidationMessage is the message associated with the OpenStack validation
+	// OpenStackValidationMessage is the legacy summary message string,
+	// superseded by Conditions[*].Message. Populated as a derived view for
+	// back-compat alongside OpenStackValidationStatus.
+	// +optional
 	OpenStackValidationMessage string `json:"openstackValidationMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=`.status.openstackValidationStatus`,name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.conditions[?(@.type=="CredentialsValidated")].status`,name=Validated,type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.conditions[?(@.type=="CredentialsValidated")].reason`,name=Reason,type=string
 // +kubebuilder:printcolumn:name="Secret Name",type="string",JSONPath=".spec.secretRef.name"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 

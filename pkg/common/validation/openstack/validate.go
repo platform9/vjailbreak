@@ -31,6 +31,12 @@ type ValidationResult struct {
 	Valid   bool
 	Message string
 	Error   error
+	// AppCred carries Application Credential metadata fetched after successful
+	// authentication when auth_type is v3applicationcredential and the
+	// credential's metadata could be retrieved. Nil for non-AppCred auth or
+	// when the metadata fetch was unavailable. Drives the Expiring / Expired
+	// Conditions on OpenstackCreds.status.
+	AppCred *utils.AppCredentialDetails
 }
 
 func authErrorMessage(err error, isTokenAuth bool) string {
@@ -65,6 +71,25 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 		Message: "Successfully authenticated to Openstack",
 		Error:   nil,
 	}
+
+	// Branch on Secret content: clouds.yaml takes precedence over the legacy
+	// OS_* keys. See FR-001 / FR-003 in
+	// specs/003-clouds-yaml-credentials/spec.md.
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      openstackcreds.Spec.SecretRef.Name,
+		Namespace: namespaceMigrationSystem,
+	}, secret); err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("Failed to get credentials secret: %s", err.Error()),
+			Error:   err,
+		}
+	}
+	if utils.SecretContainsCloudsYAML(secret.Data) {
+		return validateFromCloudsYAML(ctx, k8sClient, openstackcreds, secret.Data["clouds.yaml"])
+	}
+
 	// Get credentials from secret
 	openstackCredential, err := getCredentialsFromSecret(ctx, k8sClient, openstackcreds.Spec.SecretRef.Name)
 	if err != nil {
@@ -164,6 +189,98 @@ func Validate(ctx context.Context, k8sClient client.Client, openstackcreds *vjai
 	}
 
 	return successfulValidationObject
+}
+
+// validateFromCloudsYAML performs credential validation when the Secret carries
+// a clouds.yaml-formatted credential. Parses the YAML via utils.ParseCloudsYAML,
+// builds a provider client, authenticates, and verifies the credential matches
+// the current OpenStack environment. The function is invoked from Validate when
+// SecretContainsCloudsYAML returns true; the legacy OS_* flow is unchanged.
+func validateFromCloudsYAML(ctx context.Context, k8sClient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds, cloudsYAML []byte) ValidationResult {
+	cfg, err := utils.ParseCloudsYAML(cloudsYAML, openstackcreds.Spec.CloudName)
+	if err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("Failed to parse clouds.yaml: %s", err.Error()),
+			Error:   err,
+		}
+	}
+
+	providerClient, err := openstack.NewClient(cfg.AuthOptions.IdentityEndpoint)
+	if err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: fmt.Sprintf("Failed to create OpenStack client: %s", err.Error()),
+			Error:   err,
+		}
+	}
+	vjbNet := netutils.NewVjbNet()
+	if cfg.Verify != nil && !*cfg.Verify {
+		vjbNet.Insecure = true
+	}
+	vjbNet.SetTimeout(60 * time.Second)
+	if err := vjbNet.CreateSecureHTTPClient(); err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: "failed to create secure HTTP client",
+			Error:   fmt.Errorf("failed to create secure HTTP client %v", err),
+		}
+	}
+	providerClient.HTTPClient = *vjbNet.GetClient()
+
+	if err := openstack.Authenticate(ctx, providerClient, cfg.AuthOptions); err != nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: authErrorMessage(err, false),
+			Error:   err,
+		}
+	}
+	if providerClient.EndpointLocator == nil {
+		return ValidationResult{
+			Valid:   false,
+			Message: "Authentication failed: client endpoint catalog was not initialized. Please verify your OpenStack credentials and try again",
+			Error:   fmt.Errorf("authentication returned no error but ProviderClient.EndpointLocator is nil"),
+		}
+	}
+
+	if cfg.RegionName != "" {
+		if _, err := verifyCredentialsMatchCurrentEnvironment(providerClient, cfg.RegionName); err != nil {
+			if strings.Contains(err.Error(), "Creds are valid but for a different OpenStack environment") {
+				return ValidationResult{
+					Valid:   false,
+					Message: "Creds are valid but for a different OpenStack environment",
+					Error:   err,
+				}
+			}
+			return ValidationResult{
+				Valid:   false,
+				Message: fmt.Sprintf("Failed to verify credentials against current environment: %s", err.Error()),
+				Error:   err,
+			}
+		}
+	}
+
+	result := ValidationResult{
+		Valid:   true,
+		Message: "Successfully authenticated to Openstack",
+		Error:   nil,
+	}
+
+	// For v3applicationcredential auth, try to fetch the credential's metadata
+	// so the controller can populate the Expiring / Expired Conditions. A
+	// failure here is non-fatal: the credential itself authenticated, and
+	// the controller treats nil AppCred as "details unavailable".
+	if cfg.AuthType == "v3applicationcredential" && cfg.AuthOptions.ApplicationCredentialID != "" {
+		details, err := utils.FetchAppCredentialDetails(ctx, providerClient, cfg.AuthOptions.ApplicationCredentialID)
+		if err != nil {
+			ctrllog.FromContext(ctx).Info("could not fetch Application Credential details for status reporting",
+				"credentialID", cfg.AuthOptions.ApplicationCredentialID, "err", err.Error())
+		} else {
+			result.AppCred = details
+		}
+	}
+
+	return result
 }
 
 // getCredentialsFromSecret retrieves OpenStack credentials from a Kubernetes secret
