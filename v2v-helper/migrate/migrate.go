@@ -1271,6 +1271,15 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
+	// in place when virt-v2v chroots into the guest.
+	if virtv2v.IsSUSEFamily(osRelease) {
+		if err := virtv2v.FixLegacyMkinitrd(vminfo.VMDisks); err != nil {
+			// Non-fatal: log and continue.  The conversion may still succeed
+			// on modern SUSE guests that use dracut, or if the root is not LVM.
+			utils.PrintLog(fmt.Sprintf("Warning: FixLegacyMkinitrd failed: %v", err))
+		}
+	}
+
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
