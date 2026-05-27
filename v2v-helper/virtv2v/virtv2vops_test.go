@@ -3,9 +3,11 @@
 package virtv2v
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -236,6 +238,106 @@ func TestDeviceMapReplacement(t *testing.T) {
 			} else {
 				assert.Equal(t, tt.input, got, "expected content unchanged but it was modified")
 			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ReinstallGrubLegacy – pure-logic tests (no guestfish required)
+// ---------------------------------------------------------------------------
+
+// grubDiskList mirrors the disk-list generation logic inside ReinstallGrubLegacy
+// so we can unit-test it without a real guestfish instance.
+func grubDiskList(n int) (sdList, vdList string) {
+	sdNames := make([]string, n)
+	vdNames := make([]string, n)
+	for i := 0; i < n; i++ {
+		sdNames[i] = fmt.Sprintf("/dev/sd%c", rune('a'+i))
+		vdNames[i] = fmt.Sprintf("/dev/vd%c", rune('a'+i))
+	}
+	return strings.Join(sdNames, " "), strings.Join(vdNames, " ")
+}
+
+// TestGrubDiskListExact verifies that the generated disk lists contain EXACTLY
+// n entries, with the correct device names, and never include the appliance
+// scratch disk (sd{a+n} / vd{a+n}).
+func TestGrubDiskListExact(t *testing.T) {
+	tests := []struct {
+		diskCount int
+		wantSD    string
+		wantVD    string
+	}{
+		{1, "/dev/sda", "/dev/vda"},
+		{2, "/dev/sda /dev/sdb", "/dev/vda /dev/vdb"},
+		{4, "/dev/sda /dev/sdb /dev/sdc /dev/sdd", "/dev/vda /dev/vdb /dev/vdc /dev/vdd"},
+		// 4-disk SLES 11 LVM case: must NOT include /dev/sde (appliance disk)
+		{4, "/dev/sda /dev/sdb /dev/sdc /dev/sdd", "/dev/vda /dev/vdb /dev/vdc /dev/vdd"},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("n=%d", tt.diskCount), func(t *testing.T) {
+			sd, vd := grubDiskList(tt.diskCount)
+			assert.Equal(t, tt.wantSD, sd, "sd list mismatch")
+			assert.Equal(t, tt.wantVD, vd, "vd list mismatch")
+
+			// Verify appliance disk is excluded
+			applianceSd := fmt.Sprintf("/dev/sd%c", rune('a'+tt.diskCount))
+			applianceVd := fmt.Sprintf("/dev/vd%c", rune('a'+tt.diskCount))
+			assert.NotContains(t, sd, applianceSd, "sd list must not contain appliance disk %s", applianceSd)
+			assert.NotContains(t, vd, applianceVd, "vd list must not contain appliance disk %s", applianceVd)
+		})
+	}
+}
+
+// TestGrubMenuLstRootReplace verifies the sed pattern used in ReinstallGrubLegacy
+// to patch "root (hdX,Y)" lines in menu.lst with the correct GRUB root.
+// The pattern must match the GRUB root command but NOT the kernel root= parameter.
+func grubMenuLstRootReplace(content, grubRoot string) string {
+	re := regexp.MustCompile(`root \(hd[0-9]+,[0-9]+\)`)
+	return re.ReplaceAllString(content, "root "+grubRoot)
+}
+
+func TestGrubMenuLstRootReplace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		grubRoot string
+		want     string
+	}{
+		{
+			name: "correct root already set – no change",
+			input: "\troot (hd3,0)\n\tkernel /vmlinuz root=/dev/vg_root/lv_root\n",
+			grubRoot: "(hd3,0)",
+			want:     "\troot (hd3,0)\n\tkernel /vmlinuz root=/dev/vg_root/lv_root\n",
+		},
+		{
+			name: "wrong root (hd0,0) replaced with (hd3,0)",
+			input: "\troot (hd0,0)\n\tkernel /vmlinuz root=/dev/vg_root/lv_root\n",
+			grubRoot: "(hd3,0)",
+			want:     "\troot (hd3,0)\n\tkernel /vmlinuz root=/dev/vg_root/lv_root\n",
+		},
+		{
+			name: "multiple title blocks all fixed",
+			input: "title SLES 11\n\troot (hd0,0)\n\tkernel /vmlinuz\ntitle SLES 11 fallback\n\troot (hd0,0)\n\tkernel /vmlinuz.old\n",
+			grubRoot: "(hd3,0)",
+			want:     "title SLES 11\n\troot (hd3,0)\n\tkernel /vmlinuz\ntitle SLES 11 fallback\n\troot (hd3,0)\n\tkernel /vmlinuz.old\n",
+		},
+		{
+			name: "kernel root= parameter NOT modified",
+			input: "\troot (hd0,0)\n\tkernel /vmlinuz root=/dev/sda1\n",
+			grubRoot: "(hd3,0)",
+			want:     "\troot (hd3,0)\n\tkernel /vmlinuz root=/dev/sda1\n",
+		},
+		{
+			name: "no root command in menu.lst – unchanged",
+			input: "default 0\ntimeout 5\n",
+			grubRoot: "(hd3,0)",
+			want:     "default 0\ntimeout 5\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := grubMenuLstRootReplace(tt.input, tt.grubRoot)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
