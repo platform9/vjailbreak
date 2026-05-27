@@ -689,6 +689,89 @@ export const MOCK_VMWARE_MACHINES_LIST = {
   items: [MOCK_VMWARE_MACHINE_1, MOCK_VMWARE_MACHINE_POWERED_OFF, MOCK_VMWARE_MACHINE_MULTI_NETWORK],
 }
 
+export const MOCK_VMWARE_MACHINE_RDM = {
+  apiVersion: API_VERSION,
+  kind: 'VMwareMachine',
+  metadata: { name: 'vcenter-cred-1-test-vm-rdm', namespace: NS, creationTimestamp: '2026-05-20T10:00:00Z', labels: baseMachineLabels() },
+  spec: {
+    vms: {
+      name: 'test-vm-rdm', vmid: 'vm-004', cpu: 2, memory: 4096,
+      vmState: 'poweredOn', ipAddress: '192.168.1.104', osFamily: 'Linux',
+      networks: ['VM Network'], datastores: ['datastore1'],
+      rdmDisks: ['naa.600000000000001'],
+      disks: [],
+      networkInterfaces: [{ mac: '00:50:56:aa:01:04', network: 'VM Network', ipAddress: ['192.168.1.104'] }],
+    },
+  },
+  status: { migrated: false, powerState: 'running' },
+}
+
+export const MOCK_VMWARE_MACHINES_LIST_WITH_RDM = {
+  apiVersion: API_VERSION,
+  kind: 'VMwareMachineList',
+  metadata: listMeta(),
+  items: [...MOCK_VMWARE_MACHINES_LIST.items, MOCK_VMWARE_MACHINE_RDM],
+}
+
+export const MOCK_VMWARE_MACHINES_LIST_LARGE = {
+  apiVersion: API_VERSION,
+  kind: 'VMwareMachineList',
+  metadata: listMeta(),
+  items: Array.from({ length: 55 }, (_, i) => ({
+    apiVersion: API_VERSION,
+    kind: 'VMwareMachine',
+    metadata: {
+      name: `vcenter-cred-1-stress-test-vm-${String(i + 1).padStart(3, '0')}`,
+      namespace: NS,
+      creationTimestamp: '2026-05-20T10:00:00Z',
+      labels: {
+        'vjailbreak.k8s.pf9.io/vmwarecreds': 'vcenter-cred-1',
+        'vjailbreak.k8s.pf9.io/vmware-cluster': 'vcenter-cred-1-dc1-cluster',
+      },
+    },
+    spec: {
+      vms: {
+        name: `stress-test-vm-${String(i + 1).padStart(3, '0')}`,
+        vmid: `vm-large-${String(i + 1).padStart(3, '0')}`,
+        cpu: 2,
+        memory: 4096,
+        vmState: i % 5 === 0 ? 'poweredOff' : 'poweredOn',
+        ipAddress: i % 5 === 0 ? '' : `10.0.${Math.floor(i / 255)}.${(i % 255) + 1}`,
+        networks: ['VM Network'],
+        datastores: ['datastore1'],
+        disks: [],
+        networkInterfaces: [{
+          mac: `00:50:56:bb:${String(Math.floor(i / 256)).padStart(2, '0')}:${String(i % 256).padStart(2, '0')}`,
+          network: 'VM Network',
+          ipAddress: i % 5 === 0 ? [] : [`10.0.${Math.floor(i / 255)}.${(i % 255) + 1}`],
+        }],
+      },
+    },
+    status: { migrated: false, powerState: i % 5 === 0 ? 'stopped' : 'running' },
+  })),
+}
+
+export const MOCK_RDM_DISK_1 = {
+  apiVersion: API_VERSION,
+  kind: 'RdmDisk',
+  metadata: { ...baseMeta('rdm-disk-naa-600000000000001') },
+  spec: {
+    diskName: 'naa.600000000000001',
+    displayName: 'RDM Disk 1',
+    uuid: 'uuid-rdm-001',
+    diskSize: 10737418240,
+    ownerVMs: ['test-vm-rdm'],
+    openstackVolumeRef: {},
+  },
+}
+
+export const MOCK_RDM_DISKS_LIST = {
+  apiVersion: API_VERSION,
+  kind: 'RdmDiskList',
+  metadata: listMeta(),
+  items: [MOCK_RDM_DISK_1],
+}
+
 // ─── Volume Image Profiles (for MIG-018 conflict detection) ──────────────────
 
 export const MOCK_VOLUME_IMAGE_PROFILE_A = {
