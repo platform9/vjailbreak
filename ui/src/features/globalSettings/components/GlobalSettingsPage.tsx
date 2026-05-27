@@ -786,10 +786,9 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
           console.error('Failed to inject proxy env variables:', envErr)
         }
 
-        let timeApplyResult: { message: string; hasWarnings: boolean } | null = null
         if (timeSettingsChanged) {
           stage = 'apply'
-          timeApplyResult = await applyTimeSettings()
+          await applyTimeSettings()
         }
 
         let nextState = form
@@ -811,11 +810,6 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         if (envInjectionFailed) {
           show(
             'Settings saved, but applying proxy environment variables failed. Please verify connectivity and try again.',
-            'warning'
-          )
-        } else if (timeApplyResult?.hasWarnings) {
-          show(
-            `Time settings applied with warnings: ${timeApplyResult.message}. Some Kubernetes follow-ups (workload restart, ConfigMap patch) failed; check the controller logs.`,
             'warning'
           )
         } else {

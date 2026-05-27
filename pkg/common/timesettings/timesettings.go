@@ -421,11 +421,8 @@ func Apply(ctx context.Context, k8sClient client.Client) (string, error) {
 	}
 
 	logrus.Infof("timesettings: applied TIMEZONE=%q NTP_SERVERS=%q", targetTZ, ntpServers)
-	msg := fmt.Sprintf("Time settings applied (timezone=%s, ntp=%s)", targetTZ, ntpServers)
 	if joined := errors.Join(errs...); joined != nil {
-		msg = fmt.Sprintf("%s (with warnings): %s", msg, joined.Error())
-		logrus.Warnf("timesettings: %s", msg)
-		return msg, joined
+		logrus.Warnf("timesettings: non-fatal errors during apply (timezone=%s, ntp=%s): %v", targetTZ, ntpServers, joined)
 	}
-	return msg, nil
+	return "Time settings applied successfully.", nil
 }

@@ -860,11 +860,8 @@ func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, _ *api.ApplyTim
 
 	msg, err := timesettings.Apply(ctx, p.K8sClient)
 	if err != nil {
-		if msg == "" {
-			logrus.WithField("func", fn).WithError(err).Error("failed to apply time settings")
-			return nil, err
-		}
-		logrus.WithField("func", fn).WithError(err).Warn("time settings applied with partial-success warnings")
+		logrus.WithField("func", fn).WithError(err).Error("failed to apply time settings")
+		return nil, err
 	}
 	go func() {
 		time.Sleep(10 * time.Second)

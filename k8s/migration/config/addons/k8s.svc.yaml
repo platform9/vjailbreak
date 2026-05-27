@@ -18,6 +18,8 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
