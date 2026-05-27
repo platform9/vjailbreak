@@ -1296,6 +1296,18 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
 			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed: %v", err))
 		}
+
+		// Reinstall GRUB Legacy stage1 on the boot disk.
+		//
+		// virt-v2v embeds the boot disk's BIOS number as it appears in the
+		// virt-v2v appliance (e.g. hd3 = 0x83 when it was the 4th disk).
+		// OpenStack Nova places the boot volume first (boot_index=0), making
+		// it /dev/vda = BIOS 0x80 (hd0).  The mismatch causes GRUB Error 21.
+		// Opening only the boot disk with guestfish makes it appear as
+		// /dev/sda = hd0 so grub-install embeds the correct 0x80 in stage1.
+		if err := virtv2v.ReinstallGrubLegacy(vminfo.VMDisks[bootVolumeIndex]); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: ReinstallGrubLegacy failed: %v", err))
+		}
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {

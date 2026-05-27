@@ -976,6 +976,107 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 	return nil
 }
 
+// ReinstallGrubLegacy reinstalls GRUB Legacy stage1 on the boot disk so that
+// the embedded BIOS disk number matches the OpenStack disk ordering.
+//
+// Root cause: virt-v2v processes the boot disk as the Nth disk in its
+// appliance (e.g. /dev/sdd = hd3 = BIOS 0x83) and reinstalls GRUB with that
+// disk number embedded in stage1.  When OpenStack creates the guest, Nova
+// places the boot volume first in the block-device mapping (because it has
+// boot_index=0), so the guest sees it as /dev/vda = BIOS 0x80 = hd0.  GRUB
+// stage1 then tries to load stage1.5 from BIOS disk 0x83 which is now an LVM
+// data disk → Error 21.
+//
+// Fix: open ONLY the boot disk so guestfish presents it as /dev/sda = hd0,
+// then use the GRUB shell to reinstall stage1 with BIOS 0x80 embedded.  Also
+// rewrite device.map so stage2 looks for (hd0) /dev/vda (the guest device
+// name when the boot volume is first).
+//
+// This runs after ConvertDisk (post virt-v2v) so the guest filesystem is
+// fully converted and the boot partition is accessible.
+func ReinstallGrubLegacy(bootDisk vm.VMDisk) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Build a single-disk guestfish command (no -i; we will manually mount).
+	// With only the boot disk passed, guestfish sees it as /dev/sda (hd0).
+	// We detect the first (and likely only) partition, mount it, and reinstall.
+	const grubBatch = `device (hd0) /dev/sda
+find /grub/stage1
+root (hd0,0)
+setup (hd0)
+quit`
+
+	// Write the grub batch script locally, then upload and run it.
+	grubScriptLocal := "/tmp/vjailbreak-grub-setup.sh"
+	grubScriptGuest := "/tmp/vjailbreak-grub-setup.sh"
+
+	scriptContent := "#!/bin/sh\n" +
+		"printf '%s\\n' " +
+		"'device (hd0) /dev/sda' " +
+		"'find /grub/stage1' " +
+		"'root (hd0,0)' " +
+		"'setup (hd0)' " +
+		"'quit' | grub --no-curses --batch\n"
+
+	if err := os.WriteFile(grubScriptLocal, []byte(scriptContent), 0755); err != nil {
+		return fmt.Errorf("ReinstallGrubLegacy: failed to write setup script: %w", err)
+	}
+
+	// Build a guestfish command that opens ONLY the boot disk (no -i).
+	// We manually run, list partitions, mount the first ext* partition, and
+	// run the grub reinstall script.
+	//
+	// guestfish batch script (via stdin):
+	//   run
+	//   list-filesystems  (to find the boot partition)
+	//   mount /dev/sda1 /
+	//   upload <local> <guest>
+	//   chmod 0755 <guest>
+	//   sh <guest>
+	//   umount /
+	batchScript := fmt.Sprintf(`run
+mount /dev/sda1 /
+upload %s %s
+chmod 0755 %s
+sh %s
+umount /
+`, grubScriptLocal, grubScriptGuest, grubScriptGuest, grubScriptGuest)
+
+	cmd := exec.Command("guestfish", "--rw", "-a", bootDisk.Path)
+	cmd.Stdin = strings.NewReader(batchScript)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("ReinstallGrubLegacy: grub setup output: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("ReinstallGrubLegacy: grub reinstall failed: %w", err)
+	}
+	log.Printf("ReinstallGrubLegacy: grub setup output: %s", strings.TrimSpace(string(out)))
+
+	// Now fix device.map: the boot disk will be /dev/vda (hd0) in the
+	// OpenStack guest because Nova attaches the boot volume first.
+	const deviceMapContent = "(hd0) /dev/vda\n"
+	deviceMapLocal := "/tmp/vjailbreak-device-map-new"
+	if err := os.WriteFile(deviceMapLocal, []byte(deviceMapContent), 0644); err != nil {
+		return fmt.Errorf("ReinstallGrubLegacy: failed to write device.map: %w", err)
+	}
+
+	dmScript := fmt.Sprintf(`run
+mount /dev/sda1 /
+upload %s /boot/grub/device.map
+umount /
+`, deviceMapLocal)
+
+	cmd2 := exec.Command("guestfish", "--rw", "-a", bootDisk.Path)
+	cmd2.Stdin = strings.NewReader(dmScript)
+	if out2, err := cmd2.CombinedOutput(); err != nil {
+		log.Printf("ReinstallGrubLegacy: device.map update output: %s", strings.TrimSpace(string(out2)))
+		return fmt.Errorf("ReinstallGrubLegacy: failed to update device.map: %w", err)
+	}
+
+	log.Printf("ReinstallGrubLegacy: GRUB reinstalled successfully as (hd0), device.map updated")
+	_ = grubBatch // referenced in comments above
+	return nil
+}
+
 // FixGrubDeviceMap fixes GRUB Legacy's device.map after virt-v2v conversion.
 //
 // virt-v2v warns about unknown 'sdX' device names in device.map but does not
