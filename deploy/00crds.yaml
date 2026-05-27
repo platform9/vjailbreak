@@ -1292,6 +1292,11 @@ spec:
                 - MappingVolume
                 - RescanningStorage
                 - XCOPYInProgress
+                - SnapshottingSourceVM
+                - AttachingDisksToProxy
+                - IdentifyingBlockDevices
+                - HotAddTransferInProgress
+                - HotAddCleanup
                 type: string
               retryable:
                 description: |-
@@ -2028,6 +2033,138 @@ spec:
               responding:
                 type: boolean
               roleStatus:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: proxyvms.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ProxyVM
+    listKind: ProxyVMList
+    plural: proxyvms
+    singular: proxyvm
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.vmName
+      name: VM-Name
+      type: string
+    - jsonPath: .status.validationStatus
+      name: Status
+      type: string
+    - jsonPath: .status.ipAddress
+      name: IP
+      type: string
+    - jsonPath: .status.attachedDiskCount
+      name: Attached-Disks
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ProxyVM is the Schema for a registered Proxy VM used in Hot-Add data copy migrations.
+          The controller validates SSH connectivity and required components on the referenced VM.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ProxyVMSpec defines the desired state of ProxyVM
+            properties:
+              vmName:
+                description: VMName is the display name of the Proxy VM in vCenter.
+                type: string
+              vmwareCredsRef:
+                description: VMwareCredsRef references the VMwareCreds used to locate
+                  and connect to the Proxy VM.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - vmName
+            - vmwareCredsRef
+            type: object
+          status:
+            description: ProxyVMStatus defines the observed state of ProxyVM
+            properties:
+              attachedDiskCount:
+                description: |-
+                  AttachedDiskCount is the number of source-snapshot disks currently attached
+                  to this Proxy VM across all active Hot-Add migrations. Max 60.
+                type: integer
+              componentsVerified:
+                description: ComponentsVerified lists each required component and
+                  whether it was found.
+                items:
+                  description: ProxyVMComponentCheck records whether a required component
+                    was found on the Proxy VM.
+                  properties:
+                    message:
+                      description: Message provides detail for missing components.
+                      type: string
+                    name:
+                      description: Name is the component name (e.g. "lsblk", "qemu-nbd",
+                        "sshd").
+                      type: string
+                    present:
+                      description: Present indicates whether the component was found
+                        in PATH.
+                      type: boolean
+                  required:
+                  - name
+                  - present
+                  type: object
+                type: array
+              ipAddress:
+                description: IPAddress is the IP address discovered from vCenter guest
+                  info.
+                type: string
+              lastValidationTime:
+                description: LastValidationTime records when the last verification
+                  completed.
+                format: date-time
+                type: string
+              validationMessage:
+                description: ValidationMessage contains a human-readable summary of
+                  the last validation result.
+                type: string
+              validationStatus:
+                description: 'ValidationStatus is one of: Pending, Verifying, Ready,
+                  VerificationFailed.'
                 type: string
             type: object
         type: object
@@ -4716,6 +4853,17 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds
@@ -4731,6 +4879,7 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
+  - proxyvms
   - rdmdisks
   - rollingmigrationplans
   - storagemappings
@@ -4763,6 +4912,7 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
+  - proxyvms/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
@@ -4786,6 +4936,7 @@ rules:
   - openstackcreds/status
   - pcdclusters/status
   - pcdhosts/status
+  - proxyvms/status
   - rdmdisks/status
   - rollingmigrationplans/status
   - storagemappings/status
