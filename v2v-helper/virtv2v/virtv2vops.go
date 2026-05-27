@@ -976,6 +976,60 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 	return nil
 }
 
+// FixGrubDeviceMap fixes GRUB Legacy's device.map after virt-v2v conversion.
+//
+// virt-v2v warns about unknown 'sdX' device names in device.map but does not
+// rewrite them.  After conversion the guest still has e.g. "(hd3) /dev/sdd"
+// when the KVM guest sees the disk as "/dev/vdd", which causes GRUB Error 21
+// ("Selected disk does not exist") at boot.
+//
+// This function runs AFTER ConvertDisk so that fstab has already been rewritten
+// to UUID= by virt-v2v; that lets guestfish -i mount /boot correctly and reach
+// /boot/grub/device.map.  Before virt-v2v, fstab still contains raw device
+// paths (e.g. /dev/sdd1) that guestfish cannot resolve, so the pre-conversion
+// generate-mount-persistence.sh pass silently skips the file.
+func FixGrubDeviceMap(disks []vm.VMDisk) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	const guestPath = "/boot/grub/device.map"
+	localPath := "/tmp/vjailbreak-device-map"
+
+	// Download device.map from the guest; if it doesn't exist this is not a
+	// GRUB Legacy system (or /boot is inaccessible), so just skip.
+	if out, err := RunCommandInGuestAllVolumes(disks, "download", true, guestPath, localPath); err != nil {
+		log.Printf("FixGrubDeviceMap: skipping (%v: %s)", err, strings.TrimSpace(out))
+		return nil
+	}
+
+	content, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("FixGrubDeviceMap: failed to read downloaded device.map: %w", err)
+	}
+
+	// Replace every /dev/sdX occurrence with /dev/vdX (handles sda-sdz).
+	re := regexp.MustCompile(`/dev/sd([a-z])`)
+	fixed := re.ReplaceAllString(string(content), "/dev/vd$1")
+
+	if fixed == string(content) {
+		log.Printf("FixGrubDeviceMap: device.map already correct, no changes needed")
+		return nil
+	}
+
+	log.Printf("FixGrubDeviceMap: fixing device.map\n  before: %s\n  after:  %s",
+		strings.TrimSpace(string(content)), strings.TrimSpace(fixed))
+
+	if err := os.WriteFile(localPath, []byte(fixed), 0644); err != nil {
+		return fmt.Errorf("FixGrubDeviceMap: failed to write fixed device.map: %w", err)
+	}
+
+	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, localPath, guestPath); err != nil {
+		return fmt.Errorf("FixGrubDeviceMap: failed to upload fixed device.map: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	log.Printf("FixGrubDeviceMap: device.map fixed successfully")
+	return nil
+}
+
 // mkinitrdLVMWrapper is installed as /sbin/mkinitrd on old SLES 11 guests that use
 // LVM for their root volume.  virt-v2v passes the root device to mkinitrd via the
 // -d flag using the symlink-style path /dev/<vg>/<lv>, but the SLES 11 mkinitrd

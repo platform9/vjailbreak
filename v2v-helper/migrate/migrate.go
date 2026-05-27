@@ -1285,6 +1285,19 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 
+	// Fix GRUB Legacy device.map after virt-v2v.
+	//
+	// generate-mount-persistence.sh runs before virt-v2v but cannot reach
+	// /boot/grub/device.map at that point: fstab still contains raw /dev/sddN
+	// paths that guestfish cannot resolve before virt-v2v rewrites them to
+	// UUID= form.  Now that virt-v2v has run, guestfish -i can mount /boot
+	// and we can safely rewrite any remaining /dev/sdX → /dev/vdX entries.
+	if virtv2v.IsSUSEFamily(osRelease) {
+		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed: %v", err))
+		}
+	}
+
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if removeVMwareTools {
 			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {

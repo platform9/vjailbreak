@@ -5,6 +5,7 @@ package virtv2v
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,4 +132,97 @@ func TestFixLegacyMkinitrdOnlyForSUSE(t *testing.T) {
 		assert.False(t, IsSUSEFamily(r),
 			"expected IsSUSEFamily=false for %q so FixLegacyMkinitrd would be skipped", r)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// FixGrubDeviceMap – regex replacement logic
+//
+// The guestfish I/O calls require real block devices; we test the pure
+// substitution regex in isolation so it can run on any platform.
+// ---------------------------------------------------------------------------
+
+// deviceMapReplace mirrors the regex replacement inside FixGrubDeviceMap.
+func deviceMapReplace(content string) string {
+	re := regexp.MustCompile(`/dev/sd([a-z])`)
+	return re.ReplaceAllString(content, "/dev/vd$1")
+}
+
+func TestDeviceMapReplacement(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		want   string
+		change bool // whether we expect a replacement to occur
+	}{
+		{
+			name:   "4-disk SLES 11 (hd3 on sdd)",
+			input:  "(hd0) /dev/sda\n(hd1) /dev/sdb\n(hd2) /dev/sdc\n(hd3) /dev/sdd\n",
+			want:   "(hd0) /dev/vda\n(hd1) /dev/vdb\n(hd2) /dev/vdc\n(hd3) /dev/vdd\n",
+			change: true,
+		},
+		{
+			name:   "single disk",
+			input:  "(hd0) /dev/sda\n",
+			want:   "(hd0) /dev/vda\n",
+			change: true,
+		},
+		{
+			name:   "already vd paths – no change needed",
+			input:  "(hd0) /dev/vda\n(hd1) /dev/vdb\n(hd2) /dev/vdc\n(hd3) /dev/vdd\n",
+			want:   "(hd0) /dev/vda\n(hd1) /dev/vdb\n(hd2) /dev/vdc\n(hd3) /dev/vdd\n",
+			change: false,
+		},
+		{
+			name:   "mixed – only sd entries replaced",
+			input:  "(hd0) /dev/vda\n(hd1) /dev/sdb\n",
+			want:   "(hd0) /dev/vda\n(hd1) /dev/vdb\n",
+			change: true,
+		},
+		{
+			name:   "sda through sdz are all handled",
+			input:  "/dev/sdz",
+			want:   "/dev/vdz",
+			change: true,
+		},
+		{
+			name:   "non-sd device (xvd) left untouched",
+			input:  "(hd0) /dev/xvda\n",
+			want:   "(hd0) /dev/xvda\n",
+			change: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deviceMapReplace(tt.input)
+			assert.Equal(t, tt.want, got)
+			if tt.change {
+				assert.NotEqual(t, tt.input, got, "expected content to change but it did not")
+			} else {
+				assert.Equal(t, tt.input, got, "expected content unchanged but it was modified")
+			}
+		})
+	}
+}
+
+// TestDeviceMapRoundTrip verifies that writing and reading back the fixed
+// content produces the expected device.map file on disk.
+func TestDeviceMapRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "device.map")
+
+	input := "(hd0) /dev/sda\n(hd1) /dev/sdb\n(hd2) /dev/sdc\n(hd3) /dev/sdd\n"
+	expected := "(hd0) /dev/vda\n(hd1) /dev/vdb\n(hd2) /dev/vdc\n(hd3) /dev/vdd\n"
+
+	require.NoError(t, os.WriteFile(path, []byte(input), 0644))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	fixed := deviceMapReplace(string(content))
+	require.NoError(t, os.WriteFile(path, []byte(fixed), 0644))
+
+	result, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, expected, string(result))
 }
