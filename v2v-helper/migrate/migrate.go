@@ -1291,39 +1291,6 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 	utils.PrintLog("virt-v2v conversion completed successfully")
 
-	// Post-conversion SUSE GRUB fixes.
-	//
-	// FixGrubDeviceMap rewrites any remaining /dev/sdX → /dev/vdX entries in
-	// /boot/grub/device.map.  This runs AFTER ConvertDisk so fstab has already
-	// been rewritten to UUID= form by virt-v2v, letting guestfish -i reach
-	// /boot/grub/device.map.
-	//
-	// ReinstallGrubLegacy reinstalls GRUB stage1 on /dev/sda (hd0) via the
-	// grub shell running inside the fully-mounted guest.  This corrects the
-	// embedded BIOS disk number so it matches the OpenStack disk ordering
-	// (Nova attaches the boot volume with boot_index=0 → vda = BIOS hd0 = 0x80).
-	if virtv2v.IsSUSEFamily(osRelease) {
-		utils.PrintLog("SUSE guest: running post-conversion GRUB fixes")
-
-		// ReinstallGrubLegacy runs first: it calls grub --batch inside the
-		// guestfish chroot where disks are /dev/vdX.  Grub's setup command
-		// may rewrite device.map with /dev/vdX paths, so FixGrubDeviceMap
-		// must run AFTER to ensure device.map ends up correct for OpenStack.
-		utils.PrintLog(fmt.Sprintf("Running ReinstallGrubLegacy on %d disk(s) to fix GRUB stage1 BIOS disk number", len(vminfo.VMDisks)))
-		if err := virtv2v.ReinstallGrubLegacy(vminfo.VMDisks); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: ReinstallGrubLegacy failed (continuing): %v", err))
-		} else {
-			utils.PrintLog("ReinstallGrubLegacy completed successfully")
-		}
-
-		utils.PrintLog("Running FixGrubDeviceMap to update /boot/grub/device.map")
-		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed (continuing): %v", err))
-		} else {
-			utils.PrintLog("FixGrubDeviceMap completed")
-		}
-	}
-
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if removeVMwareTools {
 			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
