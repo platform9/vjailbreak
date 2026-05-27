@@ -1122,10 +1122,13 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", -1, err
 	}
 
-	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
+	// Run generate-mount-persistence.sh script based on AUTO_FSTAB_UPDATE setting.
+	// The flag passed to the script varies by OS: SUSE GRUB Legacy guests use
+	// --replace-fstab to avoid rewriting device.map before virt-v2v runs (see
+	// RunMountPersistenceScript for the full rationale).
 	if autoFstabUpdate {
-		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
-		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+		migobj.logMessage("Running generate-mount-persistence.sh script")
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path, osRelease); err != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
 			// Don't fail the migration, just log the warning
 		} else {

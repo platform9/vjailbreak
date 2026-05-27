@@ -168,3 +168,53 @@ func TestFixLegacyMkinitrdOnlyForSUSE(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// RunMountPersistenceScript – flag selection logic
+//
+// The actual guestfish execution cannot run in unit tests, but we can verify
+// that the OS-family check that determines the script flag is correct.
+// ---------------------------------------------------------------------------
+
+// mountPersistenceScriptFlag returns the flag that RunMountPersistenceScript
+// would choose for a given osRelease, without actually running guestfish.
+// This mirrors the flag-selection logic inside RunMountPersistenceScript.
+func mountPersistenceScriptFlag(osRelease string) string {
+	if IsSUSEFamily(osRelease) {
+		return "--replace-fstab"
+	}
+	return "--force-uuid"
+}
+
+// TestMountPersistenceScriptFlagSelection verifies that SUSE guests get
+// --replace-fstab (which skips fix_grub_config / device.map rewrite) and
+// all other guests get --force-uuid.
+func TestMountPersistenceScriptFlagSelection(t *testing.T) {
+	tests := []struct {
+		name      string
+		osRelease string
+		wantFlag  string
+	}{
+		// SUSE family → must NOT rewrite device.map before virt-v2v
+		{name: "SLES 11", osRelease: "suse linux enterprise server 11 (x86_64)", wantFlag: "--replace-fstab"},
+		{name: "SLES 12", osRelease: `NAME="SLES" VERSION="12-SP5"`, wantFlag: "--replace-fstab"},
+		{name: "SLES 15", osRelease: `NAME="SLES" VERSION="15-SP4"`, wantFlag: "--replace-fstab"},
+		{name: "openSUSE Leap", osRelease: `NAME="openSUSE Leap" VERSION_ID="15.5"`, wantFlag: "--replace-fstab"},
+		{name: "openSUSE Tumbleweed", osRelease: `NAME="openSUSE Tumbleweed"`, wantFlag: "--replace-fstab"},
+
+		// Non-SUSE → full UUID conversion including GRUB config
+		{name: "RHEL 8", osRelease: "red hat enterprise linux 8", wantFlag: "--force-uuid"},
+		{name: "CentOS 7", osRelease: "centos linux 7", wantFlag: "--force-uuid"},
+		{name: "Ubuntu 22.04", osRelease: `NAME="Ubuntu" VERSION_ID="22.04"`, wantFlag: "--force-uuid"},
+		{name: "Rocky Linux 9", osRelease: "rocky linux 9", wantFlag: "--force-uuid"},
+		{name: "empty string", osRelease: "", wantFlag: "--force-uuid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mountPersistenceScriptFlag(tt.osRelease)
+			assert.Equal(t, tt.wantFlag, got,
+				"wrong script flag for osRelease=%q", tt.osRelease)
+		})
+	}
+}
+

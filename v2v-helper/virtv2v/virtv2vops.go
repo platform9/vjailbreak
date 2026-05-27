@@ -952,9 +952,19 @@ func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
 	return strings.ToLower(productName), nil
 }
 
-// RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
-// during guest inspection phase for Linux migrations
-func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
+// RunMountPersistenceScript runs the generate-mount-persistence.sh script
+// during guest inspection phase for Linux migrations.
+//
+// For SUSE/SLES GRUB Legacy guests, --replace-fstab is used instead of
+// --force-uuid. The --force-uuid flag calls fix_grub_config which rewrites
+// device.map from /dev/sdX → /dev/vdX BEFORE virt-v2v runs. When virt-v2v
+// subsequently runs inside the guestfish appliance (where disks are /dev/sdX),
+// it reads a device.map referencing /dev/vdX paths that do not exist in the
+// appliance, causing it to reinstall GRUB stage1 with incorrect embedded drive
+// references — manifesting as GRUB Error 21 at boot. Using --replace-fstab
+// fixes fstab and udev rules without touching device.map or grub config files,
+// allowing virt-v2v to handle GRUB correctly.
+func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease string) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Script should be available in the container at /home/fedora/
@@ -965,7 +975,17 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
 	}
 
-	log.Printf("Running generate-mount-persistence.sh with --force-uuid option")
+	// Choose the script flag based on OS family.
+	// SUSE GRUB Legacy guests must not have device.map rewritten before virt-v2v
+	// runs, so we use --replace-fstab (which skips fix_grub_config) instead of
+	// --force-uuid.
+	scriptFlag := "--force-uuid"
+	if IsSUSEFamily(osRelease) {
+		scriptFlag = "--replace-fstab"
+		log.Printf("SUSE guest detected: using --replace-fstab (skipping fix_grub_config) to avoid corrupting device.map before virt-v2v")
+	}
+
+	log.Printf("Running generate-mount-persistence.sh with %s option", scriptFlag)
 
 	// Upload the script to the guest VM
 	var uploadErr error
@@ -993,12 +1013,12 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 
 	log.Printf("Made generate-mount-persistence.sh executable")
 
-	// Run the script with --force-uuid
+	// Run the script with the chosen flag
 	var runErr error
 	var runOutput string
 
 	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptFlag)
 
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
@@ -1006,7 +1026,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 		return nil
 	}
 
-	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
+	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptFlag)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
 	return nil
