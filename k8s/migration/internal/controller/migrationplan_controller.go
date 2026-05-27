@@ -1082,6 +1082,17 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "USE_FLAVORLESS",
 			Value: strconv.FormatBool(migrationtemplate.Spec.UseFlavorless),
 		},
+		{
+			// LIBGUESTFS_MEMSIZE caps the QEMU appliance VM memory (in MB).
+			// Without this, libguestfs auto-sizes from the cgroup limit (e.g. 2.6GB
+			// with a 5Gi pod limit), which may be enough for xfs_repair to survive
+			// even on large XFS filesystems. Setting this explicitly to a lower value
+			// reproduces the original OOM: xfs_repair is killed inside the appliance
+			// while the pod itself remains alive.
+			// TODO: remove or make this configurable via VjailbreakSettings.
+			Name:  "LIBGUESTFS_MEMSIZE",
+			Value: "1500",
+		},
 	}
 
 	if migrationtemplate.Spec.UseFlavorless {
