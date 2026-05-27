@@ -186,9 +186,18 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 	// Add 1GB to the size to account for the extra space
 	opts.Size += 1
 
-	volume, err := volumes.Create(ctx, blockStorageClient, opts, nil).Extract()
+	var volume *volumes.Volume
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		volume, err = volumes.Create(ctx, blockStorageClient, opts, nil).Extract()
+		if err == nil {
+			break
+		}
+		PrintLog(fmt.Sprintf("Transient error creating volume %s (attempt %d/%d): %s", name, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create volume: %s", err)
+		return nil, fmt.Errorf("failed to create volume after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 	}
 
 	err = osclient.WaitForVolume(ctx, volume.ID)
@@ -225,11 +234,16 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 
 func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting volume with ID %s, authurl %s, tenant %s", volumeID, osclient.AuthURL, osclient.Tenant))
-	err := volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete volume: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.Delete(ctx, osclient.BlockStorageClient, volumeID, volumes.DeleteOpts{}).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error deleting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to delete volume after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID string) error {
@@ -242,7 +256,9 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 	for i := 0; i < vjailbreakSettings.VolumeAvailableWaitRetryLimit; i++ {
 		volume, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
 		if err != nil {
-			return fmt.Errorf("failed to get volume: %s", err)
+			PrintLog(fmt.Sprintf("Transient error polling volume %s (attempt %d/%d): %s", volumeID, i+1, vjailbreakSettings.VolumeAvailableWaitRetryLimit, err))
+			time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second)
+			continue
 		}
 		if volume.Status == "error" {
 			return fmt.Errorf("volume %s is in error state", volumeID)
@@ -255,7 +271,9 @@ func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID st
 		// Check if the volume is available from nova side as well
 		server, err := servers.Get(ctx, osclient.ComputeClient, instanceID).Extract()
 		if err != nil {
-			return fmt.Errorf("failed to get server: %s", err)
+			PrintLog(fmt.Sprintf("Transient error polling server %s (attempt %d/%d): %s", instanceID, i+1, vjailbreakSettings.VolumeAvailableWaitRetryLimit, err))
+			time.Sleep(time.Duration(vjailbreakSettings.VolumeAvailableWaitIntervalSeconds) * time.Second)
+			continue
 		}
 
 		// get the attachments from the server
@@ -391,11 +409,16 @@ func (osclient *OpenStackClients) EnableQGA(ctx context.Context, volume *volumes
 			"hw_pointer_model":    "usbtablet",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to detach volume from VM: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting QGA metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set QGA metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeUEFI(ctx context.Context, volume *volumes.Volume) error {
@@ -405,11 +428,16 @@ func (osclient *OpenStackClients) SetVolumeUEFI(ctx context.Context, volume *vol
 			"hw_firmware_type": "uefi",
 		},
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume image metadata hw_firmware_type to uefi: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting UEFI metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set UEFI metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, setRDMLabel bool) error {
@@ -422,11 +450,16 @@ func (osclient *OpenStackClients) SetVolumeImageMetadata(ctx context.Context, vo
 	if setRDMLabel {
 		options.Metadata["hw_scsi_model"] = "virtio-scsi"
 	}
-	err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume image metadata for windows: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting image metadata for volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set image metadata for volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 // ApplyBootVolumeImageMetadata merges profile-supplied properties onto the boot volume's existing
@@ -437,10 +470,16 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
-	if err := volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr(); err != nil {
-		return fmt.Errorf("failed to apply profile image metadata to boot volume: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error applying profile metadata to boot volume %s (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to apply profile metadata to boot volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
@@ -448,11 +487,16 @@ func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume 
 	options := volumes.BootableOpts{
 		Bootable: true,
 	}
-	err := volumes.SetBootable(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to set volume as bootable: %s", err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = volumes.SetBootable(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
+		if err == nil {
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error setting volume %s as bootable (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return nil
+	return fmt.Errorf("failed to set volume %s as bootable after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
@@ -523,12 +567,17 @@ func (osclient *OpenStackClients) GetPort(ctx context.Context, portID string) (*
 
 func (osclient *OpenStackClients) DeletePort(ctx context.Context, portID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting port %s, authurl %s, tenant %s", portID, osclient.AuthURL, osclient.Tenant))
-	err := ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
-	if err != nil {
-		return fmt.Errorf("failed to delete port %s: %s", portID, err)
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		err = ports.Delete(ctx, osclient.NetworkingClient, portID).ExtractErr()
+		if err == nil {
+			PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
+			return nil
+		}
+		PrintLog(fmt.Sprintf("Transient error deleting port %s (attempt %d/%d): %s", portID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	PrintLog(fmt.Sprintf("Successfully deleted port %s", portID))
-	return nil
+	return fmt.Errorf("failed to delete port %s after %d attempts: %s", portID, constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) GetSubnet(ctx context.Context, subnetList []string, ip string) (*subnets.Subnet, error) {
@@ -773,16 +822,27 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 }
 
 func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
-	// When no security groups are selected, disable port security
-	if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
-		disabled := false
-		extOpts := portsecurity.PortCreateOptsExt{
-			CreateOptsBuilder:   createOpts,
-			PortSecurityEnabled: &disabled,
+	var port *ports.Port
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		// When no security groups are selected, disable port security
+		if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
+			disabled := false
+			extOpts := portsecurity.PortCreateOptsExt{
+				CreateOptsBuilder:   createOpts,
+				PortSecurityEnabled: &disabled,
+			}
+			port, err = ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
+		} else {
+			port, err = ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
 		}
-		return ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
+		if err == nil {
+			return port, nil
+		}
+		PrintLog(fmt.Sprintf("Transient error creating port (attempt %d/%d): %s", i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
-	return ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
+	return nil, fmt.Errorf("failed to create port after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
@@ -940,9 +1000,18 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		}
 	}
 
-	server, err := servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+	var server *servers.Server
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		server, err = servers.Create(ctx, osclient.ComputeClient, serverCreateOpts, schedulerHints).Extract()
+		if err == nil {
+			break
+		}
+		PrintLog(fmt.Sprintf("Transient error creating server %s (attempt %d/%d): %s", vminfo.Name, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server: %s", err)
+		return nil, fmt.Errorf("failed to create server after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 	}
 
 	// Wait for server to become active

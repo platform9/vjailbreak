@@ -269,6 +269,10 @@ func (migobj *Migrate) DetachVolume(ctx context.Context, disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping detach for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
 		migobj.logMessage(fmt.Sprintf("Detaching volume %s from VM", vmdisk.Name))
 		if err := openstackops.DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
@@ -287,6 +291,10 @@ func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping delete for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
 		err := openstackops.DeleteVolume(ctx, vmdisk.OpenstackVol.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete volume")
@@ -1881,6 +1889,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if migobj.StorageCopyMethod == constants.StorageCopyMethod {
 		// Initialize storage provider if using StorageAcceleratedCopy migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to initialize storage provider: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after storage provider init failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to initialize storage provider")
 		}
 		defer func() {
@@ -1889,15 +1900,24 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 		}()
 		if err := migobj.ValidateStorageAcceleratedCopyPrerequisites(ctx); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("StorageAcceleratedCopy prerequisites validation failed: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after prerequisites validation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "StorageAcceleratedCopy prerequisites validation failed")
 		}
 
 		// Perform the copy here.
 		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform StorageAcceleratedCopy copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after StorageAcceleratedCopy failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to perform StorageAcceleratedCopy copy")
 		}
 		// Apply image tags to the volumes we cinder managed.
 		if err := migobj.applyImageMetadataForXCOPYVolumes(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to apply image metadata to XCOPY volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after image metadata failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to apply image metadata to XCOPY volumes")
 		}
 
@@ -1906,12 +1926,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Create and Add Volumes to Host
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after volume creation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to add volumes to host")
 		}
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
-			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
+			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
 			return errors.Wrap(err, "CBT Failure")
 		}
 
@@ -1923,7 +1946,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Live Replicate Disks
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 		if err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
 				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
