@@ -262,6 +262,15 @@ func IsRHELFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "alma")
 }
 
+// IsSUSEFamily returns true when osRelease identifies a SUSE / openSUSE guest.
+func IsSUSEFamily(osRelease string) bool {
+	lowerRelease := strings.ToLower(osRelease)
+	return strings.Contains(lowerRelease, "suse") ||
+		strings.Contains(lowerRelease, "sles") ||
+		strings.Contains(lowerRelease, "sled") ||
+		strings.Contains(lowerRelease, "opensuse")
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -964,6 +973,106 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
+	return nil
+}
+
+// mkinitrdLVMWrapper is installed as /sbin/mkinitrd on old SLES 11 guests that use
+// LVM for their root volume.  virt-v2v passes the root device to mkinitrd via the
+// -d flag using the symlink-style path /dev/<vg>/<lv>, but the SLES 11 mkinitrd
+// cannot probe the filesystem type through that path – it only resolves
+// /dev/mapper/<vg>-<lv>.  The wrapper translates the -d argument at call time and
+// forwards every other argument unchanged to the original binary.
+//
+// Argument boundaries are preserved by writing each argument as a NUL-terminated
+// string to a temp file and replaying them with xargs -0, so -m "virtio virtio_ring …"
+// (a single argument with embedded spaces) survives the round-trip correctly.
+const mkinitrdLVMWrapper = `#!/bin/sh
+# vjailbreak: LVM /dev/<vg>/<lv> -> /dev/mapper/<vg>-<lv> translation wrapper
+# Installed to fix SLES 11 mkinitrd when root is on an LVM logical volume.
+_tmp=$(mktemp /tmp/vjailbreak-mkinitrd-args.XXXXXX)
+trap 'rm -f "$_tmp"' EXIT
+_skip=0
+for _arg in "$@"; do
+  if [ "$_skip" = "1" ]; then
+    _skip=0
+    case "$_arg" in
+      /dev/*/*)
+        _vg=$(printf '%s' "$_arg" | sed 's|^/dev/\([^/]*\)/.*|\1|')
+        _lv=$(printf '%s' "$_arg" | sed 's|^/dev/[^/]*/||')
+        _mapper="/dev/mapper/${_vg}-${_lv}"
+        if [ -e "$_mapper" ]; then
+          _arg="$_mapper"
+        fi
+        ;;
+    esac
+  fi
+  case "$_arg" in -d) _skip=1 ;; esac
+  printf '%s\0' "$_arg" >> "$_tmp"
+done
+xargs -0 /sbin/mkinitrd.orig < "$_tmp"
+`
+
+// FixLegacyMkinitrd detects old SUSE guests (SLES 11 and earlier) that use
+// mkinitrd without dracut and whose root filesystem sits on an LVM logical
+// volume.  In that configuration virt-v2v-in-place passes the root device to
+// mkinitrd as /dev/<vg>/<lv>, but the aged mkinitrd binary cannot resolve the
+// filesystem type through that path and aborts the conversion.
+//
+// The fix installs a thin shell wrapper at /sbin/mkinitrd (backing up the
+// original to /sbin/mkinitrd.orig) that translates the -d argument from the
+// symlink-style LVM path to the /dev/mapper/<vg>-<lv> form before calling the
+// original binary.  The wrapper is a no-op when the mapper device does not
+// exist, so it is safe on non-LVM or already-fixed guests.
+//
+// This must be called BEFORE ConvertDisk / virt-v2v-in-place so that the
+// patched binary is in place when virt-v2v chroots into the guest.
+func FixLegacyMkinitrd(disks []vm.VMDisk) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// 1. Does /sbin/mkinitrd exist on the guest?
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd"); err != nil {
+		log.Printf("FixLegacyMkinitrd: /sbin/mkinitrd not found on guest, skipping")
+		return nil
+	}
+
+	// 2. Is dracut absent? (dracut == modern SUSE, no patch needed)
+	for _, draculPath := range []string{"/usr/bin/dracut", "/sbin/dracut"} {
+		if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, draculPath); err == nil {
+			log.Printf("FixLegacyMkinitrd: dracut found at %s, modern system – skipping", draculPath)
+			return nil
+		}
+	}
+
+	// 3. Already patched by a previous run?
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd.orig"); err == nil {
+		log.Printf("FixLegacyMkinitrd: wrapper already installed (/sbin/mkinitrd.orig present), skipping")
+		return nil
+	}
+
+	log.Printf("FixLegacyMkinitrd: old mkinitrd detected (no dracut), installing LVM path translation wrapper")
+
+	// Write wrapper to host filesystem so we can upload it.
+	wrapperLocalPath := "/home/fedora/mkinitrd-lvm-wrapper.sh"
+	if err := os.WriteFile(wrapperLocalPath, []byte(mkinitrdLVMWrapper), 0755); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to write wrapper locally: %w", err)
+	}
+
+	// 4. Back up original mkinitrd inside the guest.
+	if out, err := RunCommandInGuestAllVolumes(disks, "cp", true, "/sbin/mkinitrd", "/sbin/mkinitrd.orig"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to backup /sbin/mkinitrd: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	// 5. Upload the wrapper as the new /sbin/mkinitrd.
+	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, wrapperLocalPath, "/sbin/mkinitrd"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to upload wrapper: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	// 6. Ensure the wrapper is executable.
+	if out, err := RunCommandInGuestAllVolumes(disks, "chmod", true, "0755", "/sbin/mkinitrd"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to chmod wrapper: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	log.Printf("FixLegacyMkinitrd: wrapper installed successfully at /sbin/mkinitrd (original at /sbin/mkinitrd.orig)")
 	return nil
 }
 
