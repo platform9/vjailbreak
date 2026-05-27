@@ -854,7 +854,7 @@ func (vmops *VMOps) VMPowerOff() error {
 	// If guest shutdown failed, log the error and fall back to power off
 	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
 
-	// Use RefreshVM to re-login and get a fresh VM reference before the force power-off.
+	// Use RefreshVM to re-login and get a fresh VM reference before force power-off.
 	if err := vmops.RefreshVM(); err != nil {
 		return fmt.Errorf("failed to refresh VM reference: %s", err)
 	}
