@@ -13,6 +13,41 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// isBareDisk
+// ---------------------------------------------------------------------------
+
+func TestIsBareDisk(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		// True cases – bare disk device, no partition suffix
+		{name: "sda", path: "/dev/sda", want: true},
+		{name: "sdb", path: "/dev/sdb", want: true},
+		{name: "vda", path: "/dev/vda", want: true},
+		{name: "sdz", path: "/dev/sdz", want: true},
+
+		// False cases – partition or LVM/device-mapper paths
+		{name: "sda1", path: "/dev/sda1", want: false},
+		{name: "sda2", path: "/dev/sda2", want: false},
+		{name: "vda1", path: "/dev/vda1", want: false},
+		{name: "lv path", path: "/dev/vg0/lv_root", want: false},
+		{name: "mapper path", path: "/dev/mapper/vg-lv", want: false},
+		{name: "empty", path: "", want: false},
+		{name: "no /dev prefix", path: "sda", want: false},
+		{name: "first (virt-v2v sentinel)", path: "first", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isBareDisk(tt.path)
+			assert.Equal(t, tt.want, got, "isBareDisk(%q)", tt.path)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // IsSUSEFamily
 // ---------------------------------------------------------------------------
 

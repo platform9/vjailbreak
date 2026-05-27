@@ -375,6 +375,32 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
+// isBareDisk returns true when path is a bare block device with no trailing
+// partition digit (e.g. "/dev/sda", "/dev/vda") as opposed to a partition
+// ("/dev/sda1") or LVM/device-mapper path ("/dev/vg0/lv_root").
+// A bare disk is typically an LVM PV, not a directly-mountable root filesystem,
+// so virt-v2v's --root flag should use "first" rather than this path.
+func isBareDisk(path string) bool {
+	if path == "" {
+		return false
+	}
+	// Must start with /dev/
+	if !strings.HasPrefix(path, "/dev/") {
+		return false
+	}
+	// If it contains a slash after /dev/ it is a device-mapper or LVM path → not a bare disk
+	rest := path[len("/dev/"):]
+	if strings.Contains(rest, "/") {
+		return false
+	}
+	// If the last character is a digit it is a partition (e.g. sda1, vda2)
+	if len(rest) == 0 {
+		return false
+	}
+	lastChar := rest[len(rest)-1]
+	return lastChar < '0' || lastChar > '9'
+}
+
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
@@ -425,7 +451,17 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// Always use libvirtxml mode to convert all disks
 	args = append(args, "-i", "libvirtxml", xmlFile)
 	if strings.ToLower(ostype) != constants.OSFamilyWindows {
-		args = append(args, "--root", path)
+		// --root expects a root *filesystem* device, not a raw disk or LVM PV.
+		// get-bootable-partition.sh may return a bare disk name (e.g. /dev/sda) when
+		// GRUB's MBR signature is on an LVM PV disk that has no mountable partition.
+		// In that case "first" is safer: virt-v2v will auto-detect the root LV via
+		// libguestfs inspection (which traverses LVM, RAID, etc. automatically).
+		rootArg := path
+		if isBareDisk(path) {
+			log.Printf("ConvertDisk: --root path %q looks like a bare disk (LVM PV); using 'first' for auto-detection", path)
+			rootArg = "first"
+		}
+		args = append(args, "--root", rootArg)
 	}
 
 	start := time.Now()
@@ -976,7 +1012,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 	return nil
 }
 
-// ReinstallGrubLegacy reinstalls GRUB Legacy stage1 on the boot disk so that
+// ReinstallGrubLegacy reinstalls GRUB Legacy stage1 on the first disk so that
 // the embedded BIOS disk number matches the OpenStack disk ordering.
 //
 // Root cause: virt-v2v processes the boot disk as the Nth disk in its
@@ -987,93 +1023,134 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 // stage1 then tries to load stage1.5 from BIOS disk 0x83 which is now an LVM
 // data disk → Error 21.
 //
-// Fix: open ONLY the boot disk so guestfish presents it as /dev/sda = hd0,
-// then use the GRUB shell to reinstall stage1 with BIOS 0x80 embedded.  Also
-// rewrite device.map so stage2 looks for (hd0) /dev/vda (the guest device
-// name when the boot volume is first).
+// Fix: open ALL disks with guestfish -i (so the LVM root and the separate
+// /boot partition, e.g. sdd1, are both mounted correctly via fstab inspection).
+// Inside the fully-mounted guest /dev/sda is the first disk = hd0 = BIOS 0x80.
+// We run the GRUB shell from inside the guest to reinstall stage1 on hd0 with
+// the correct BIOS disk number.
+//
+// The function dynamically detects where /boot/grub lives, which disk it is on,
+// and installs stage1 on /dev/sda (hd0 in guestfish = vda in OpenStack).
 //
 // This runs after ConvertDisk (post virt-v2v) so the guest filesystem is
-// fully converted and the boot partition is accessible.
-func ReinstallGrubLegacy(bootDisk vm.VMDisk) error {
+// fully converted and the boot partition is accessible via guestfish -i.
+func ReinstallGrubLegacy(disks []vm.VMDisk) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	// Build a single-disk guestfish command (no -i; we will manually mount).
-	// With only the boot disk passed, guestfish sees it as /dev/sda (hd0).
-	// We detect the first (and likely only) partition, mount it, and reinstall.
-	const grubBatch = `device (hd0) /dev/sda
-find /grub/stage1
-root (hd0,0)
-setup (hd0)
-quit`
-
-	// Write the grub batch script locally, then upload and run it.
-	grubScriptLocal := "/tmp/vjailbreak-grub-setup.sh"
-	grubScriptGuest := "/tmp/vjailbreak-grub-setup.sh"
-
-	scriptContent := "#!/bin/sh\n" +
-		"printf '%s\\n' " +
-		"'device (hd0) /dev/sda' " +
-		"'find /grub/stage1' " +
-		"'root (hd0,0)' " +
-		"'setup (hd0)' " +
-		"'quit' | grub --no-curses --batch\n"
-
-	if err := os.WriteFile(grubScriptLocal, []byte(scriptContent), 0755); err != nil {
-		return fmt.Errorf("ReinstallGrubLegacy: failed to write setup script: %w", err)
+	log.Printf("ReinstallGrubLegacy: starting GRUB stage1 reinstall on %d disk(s)", len(disks))
+	for i, d := range disks {
+		log.Printf("ReinstallGrubLegacy: disk[%d] = %s (path: %s)", i, d.Name, d.Path)
 	}
 
-	// Build a guestfish command that opens ONLY the boot disk (no -i).
-	// We manually run, list partitions, mount the first ext* partition, and
-	// run the grub reinstall script.
-	//
-	// guestfish batch script (via stdin):
-	//   run
-	//   list-filesystems  (to find the boot partition)
-	//   mount /dev/sda1 /
-	//   upload <local> <guest>
-	//   chmod 0755 <guest>
-	//   sh <guest>
-	//   umount /
-	batchScript := fmt.Sprintf(`run
-mount /dev/sda1 /
-upload %s %s
-chmod 0755 %s
-sh %s
-umount /
-`, grubScriptLocal, grubScriptGuest, grubScriptGuest, grubScriptGuest)
+	// Shell script that runs INSIDE the guest (via guestfish -i sh).
+	// /dev/sda in the guestfish context == VMDisks[0] == the disk that Nova
+	// will attach with boot_index=0 (vda, BIOS hd0 = 0x80).
+	// We detect where /boot/grub/stage1 lives so the grub shell can find it
+	// regardless of whether /boot is a separate partition or on a different disk.
+	const grubReinstallScript = `#!/bin/sh
+set -e
 
-	cmd := exec.Command("guestfish", "--rw", "-a", bootDisk.Path)
-	cmd.Stdin = strings.NewReader(batchScript)
-	out, err := cmd.CombinedOutput()
+echo "vjailbreak ReinstallGrubLegacy: starting"
+
+# Locate the GRUB Legacy stage1 binary.
+if [ -f /boot/grub/stage1 ]; then
+    GRUB_DIR=/boot/grub
+    echo "vjailbreak: found GRUB dir at /boot/grub"
+elif [ -f /grub/stage1 ]; then
+    GRUB_DIR=/grub
+    echo "vjailbreak: found GRUB dir at /grub"
+else
+    echo "vjailbreak: no GRUB Legacy stage1 found at /boot/grub or /grub – skipping reinstall"
+    exit 0
+fi
+
+# Check that the grub binary is present in the guest.
+GRUB_BIN=$(command -v grub 2>/dev/null || command -v grub-legacy 2>/dev/null || true)
+if [ -z "$GRUB_BIN" ]; then
+    echo "vjailbreak: grub binary not found in guest PATH – skipping reinstall"
+    exit 0
+fi
+echo "vjailbreak: grub binary found at $GRUB_BIN"
+
+# Show current device.map for diagnostics.
+if [ -f "$GRUB_DIR/device.map" ]; then
+    echo "vjailbreak: current device.map:"
+    cat "$GRUB_DIR/device.map"
+fi
+
+# Determine which block device holds $GRUB_DIR.
+# df gives us the device name (e.g. /dev/sdd1) of the mounted filesystem.
+BOOT_DEV=$(df "$GRUB_DIR" 2>/dev/null | awk 'NR==2{print $1}')
+if [ -z "$BOOT_DEV" ]; then
+    echo "vjailbreak: ERROR – cannot determine device for $GRUB_DIR (df failed)"
+    exit 1
+fi
+echo "vjailbreak: GRUB dir=$GRUB_DIR is on device=$BOOT_DEV"
+
+# Strip the trailing partition digit(s) to get the parent disk.
+BOOT_DISK=$(echo "$BOOT_DEV" | sed 's/[0-9]*$//')
+echo "vjailbreak: parent disk of GRUB partition = $BOOT_DISK"
+
+# Convert /dev/sdX -> hd index (a=0, b=1, c=2, d=3 …).
+DISK_LETTER=$(echo "$BOOT_DISK" | sed 's|/dev/sd||')
+# POSIX sh arithmetic: subtract ASCII value of 'a' (97) from the letter.
+BOOT_HD_NUM=$(printf '%d' "'$DISK_LETTER")
+BOOT_HD_NUM=$(( BOOT_HD_NUM - 97 ))
+
+# Convert partition suffix to 0-based GRUB partition index (sdd1 → part 0).
+PART_NUM=$(echo "$BOOT_DEV" | grep -o '[0-9]*$')
+GRUB_PART=$(( ${PART_NUM:-1} - 1 ))
+
+GRUB_ROOT="(hd${BOOT_HD_NUM},${GRUB_PART})"
+echo "vjailbreak: calculated GRUB root = ${GRUB_ROOT}"
+echo "vjailbreak: reinstalling stage1 on (hd0) /dev/sda with root=${GRUB_ROOT}"
+
+# Build and log the exact grub batch commands being run.
+GRUB_CMDS=$(printf '%s\n' \
+    "device (hd0) /dev/sda" \
+    "root ${GRUB_ROOT}" \
+    "setup (hd0)" \
+    "quit")
+echo "vjailbreak: grub batch input:"
+echo "$GRUB_CMDS"
+
+# Reinstall stage1 on /dev/sda (hd0).  In guestfish context /dev/sda is
+# VMDisks[0], which Nova attaches with boot_index=0 (vda = BIOS 0x80).
+echo "$GRUB_CMDS" | "$GRUB_BIN" --no-curses --batch
+GRUB_RC=$?
+echo "vjailbreak: grub --batch exit code = $GRUB_RC"
+exit $GRUB_RC
+`
+
+	scriptLocalPath := "/tmp/vjailbreak-grub-reinstall.sh"
+	log.Printf("ReinstallGrubLegacy: writing reinstall script to %s", scriptLocalPath)
+	if err := os.WriteFile(scriptLocalPath, []byte(grubReinstallScript), 0755); err != nil {
+		return fmt.Errorf("ReinstallGrubLegacy: failed to write reinstall script: %w", err)
+	}
+
+	// Upload the script into the guest.
+	// RunCommandInGuestAllVolumes uses guestfish -i which mounts all filesystems
+	// (LVM root and the separate /boot partition via fstab) before each command.
+	log.Printf("ReinstallGrubLegacy: uploading reinstall script into guest")
+	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, scriptLocalPath, "/tmp/vjailbreak-grub-reinstall.sh"); err != nil {
+		return fmt.Errorf("ReinstallGrubLegacy: failed to upload script: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	log.Printf("ReinstallGrubLegacy: setting script executable inside guest")
+	if out, err := RunCommandInGuestAllVolumes(disks, "chmod", true, "0755", "/tmp/vjailbreak-grub-reinstall.sh"); err != nil {
+		return fmt.Errorf("ReinstallGrubLegacy: failed to chmod script: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	// Execute the grub reinstall script inside the guest.
+	log.Printf("ReinstallGrubLegacy: executing grub reinstall script inside guest (guestfish -i with all disks)")
+	out, err := RunCommandInGuestAllVolumes(disks, "sh", true, "/tmp/vjailbreak-grub-reinstall.sh")
+	// Always log the full script output so failures are diagnosable.
+	log.Printf("ReinstallGrubLegacy: script output:\n%s", strings.TrimSpace(out))
 	if err != nil {
-		log.Printf("ReinstallGrubLegacy: grub setup output: %s", strings.TrimSpace(string(out)))
-		return fmt.Errorf("ReinstallGrubLegacy: grub reinstall failed: %w", err)
-	}
-	log.Printf("ReinstallGrubLegacy: grub setup output: %s", strings.TrimSpace(string(out)))
-
-	// Now fix device.map: the boot disk will be /dev/vda (hd0) in the
-	// OpenStack guest because Nova attaches the boot volume first.
-	const deviceMapContent = "(hd0) /dev/vda\n"
-	deviceMapLocal := "/tmp/vjailbreak-device-map-new"
-	if err := os.WriteFile(deviceMapLocal, []byte(deviceMapContent), 0644); err != nil {
-		return fmt.Errorf("ReinstallGrubLegacy: failed to write device.map: %w", err)
+		return fmt.Errorf("ReinstallGrubLegacy: grub reinstall script failed: %w", err)
 	}
 
-	dmScript := fmt.Sprintf(`run
-mount /dev/sda1 /
-upload %s /boot/grub/device.map
-umount /
-`, deviceMapLocal)
-
-	cmd2 := exec.Command("guestfish", "--rw", "-a", bootDisk.Path)
-	cmd2.Stdin = strings.NewReader(dmScript)
-	if out2, err := cmd2.CombinedOutput(); err != nil {
-		log.Printf("ReinstallGrubLegacy: device.map update output: %s", strings.TrimSpace(string(out2)))
-		return fmt.Errorf("ReinstallGrubLegacy: failed to update device.map: %w", err)
-	}
-
-	log.Printf("ReinstallGrubLegacy: GRUB reinstalled successfully as (hd0), device.map updated")
-	_ = grubBatch // referenced in comments above
+	log.Printf("ReinstallGrubLegacy: GRUB stage1 successfully reinstalled on hd0 (will be vda in OpenStack)")
 	return nil
 }
 

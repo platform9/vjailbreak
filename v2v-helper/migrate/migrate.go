@@ -1271,42 +1271,52 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
-	// in place when virt-v2v chroots into the guest.
+	// Pre-conversion SUSE fixes: install the LVM mkinitrd wrapper so that
+	// virt-v2v's chroot call to mkinitrd can resolve /dev/<vg>/<lv> paths.
 	if virtv2v.IsSUSEFamily(osRelease) {
+		utils.PrintLog("SUSE guest detected: running pre-conversion FixLegacyMkinitrd")
 		if err := virtv2v.FixLegacyMkinitrd(vminfo.VMDisks); err != nil {
 			// Non-fatal: log and continue.  The conversion may still succeed
 			// on modern SUSE guests that use dracut, or if the root is not LVM.
-			utils.PrintLog(fmt.Sprintf("Warning: FixLegacyMkinitrd failed: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: FixLegacyMkinitrd failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixLegacyMkinitrd completed successfully")
 		}
 	}
 
 	// Run virt-v2v conversion
+	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s)", vminfo.Name, osPath, vminfo.OSType))
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
+	utils.PrintLog("virt-v2v conversion completed successfully")
 
-	// Fix GRUB Legacy device.map after virt-v2v.
+	// Post-conversion SUSE GRUB fixes.
 	//
-	// generate-mount-persistence.sh runs before virt-v2v but cannot reach
-	// /boot/grub/device.map at that point: fstab still contains raw /dev/sddN
-	// paths that guestfish cannot resolve before virt-v2v rewrites them to
-	// UUID= form.  Now that virt-v2v has run, guestfish -i can mount /boot
-	// and we can safely rewrite any remaining /dev/sdX → /dev/vdX entries.
+	// FixGrubDeviceMap rewrites any remaining /dev/sdX → /dev/vdX entries in
+	// /boot/grub/device.map.  This runs AFTER ConvertDisk so fstab has already
+	// been rewritten to UUID= form by virt-v2v, letting guestfish -i reach
+	// /boot/grub/device.map.
+	//
+	// ReinstallGrubLegacy reinstalls GRUB stage1 on /dev/sda (hd0) via the
+	// grub shell running inside the fully-mounted guest.  This corrects the
+	// embedded BIOS disk number so it matches the OpenStack disk ordering
+	// (Nova attaches the boot volume with boot_index=0 → vda = BIOS hd0 = 0x80).
 	if virtv2v.IsSUSEFamily(osRelease) {
+		utils.PrintLog("SUSE guest: running post-conversion GRUB fixes")
+
+		utils.PrintLog("Running FixGrubDeviceMap to update /boot/grub/device.map")
 		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixGrubDeviceMap completed")
 		}
 
-		// Reinstall GRUB Legacy stage1 on the boot disk.
-		//
-		// virt-v2v embeds the boot disk's BIOS number as it appears in the
-		// virt-v2v appliance (e.g. hd3 = 0x83 when it was the 4th disk).
-		// OpenStack Nova places the boot volume first (boot_index=0), making
-		// it /dev/vda = BIOS 0x80 (hd0).  The mismatch causes GRUB Error 21.
-		// Opening only the boot disk with guestfish makes it appear as
-		// /dev/sda = hd0 so grub-install embeds the correct 0x80 in stage1.
-		if err := virtv2v.ReinstallGrubLegacy(vminfo.VMDisks[bootVolumeIndex]); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: ReinstallGrubLegacy failed: %v", err))
+		utils.PrintLog(fmt.Sprintf("Running ReinstallGrubLegacy on %d disk(s) to fix GRUB stage1 BIOS disk number", len(vminfo.VMDisks)))
+		if err := virtv2v.ReinstallGrubLegacy(vminfo.VMDisks); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: ReinstallGrubLegacy failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("ReinstallGrubLegacy completed successfully")
 		}
 	}
 
