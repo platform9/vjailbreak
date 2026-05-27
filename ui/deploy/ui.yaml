@@ -171,17 +171,6 @@ rules:
   - list
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-- apiGroups:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds
@@ -197,7 +186,6 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
-  - proxyvms
   - rdmdisks
   - rollingmigrationplans
   - storagemappings
@@ -230,7 +218,6 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
-  - proxyvms/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
@@ -254,7 +241,6 @@ rules:
   - openstackcreds/status
   - pcdclusters/status
   - pcdhosts/status
-  - proxyvms/status
   - rdmdisks/status
   - rollingmigrationplans/status
   - storagemappings/status
