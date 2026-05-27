@@ -1305,18 +1305,22 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	if virtv2v.IsSUSEFamily(osRelease) {
 		utils.PrintLog("SUSE guest: running post-conversion GRUB fixes")
 
-		utils.PrintLog("Running FixGrubDeviceMap to update /boot/grub/device.map")
-		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed (continuing): %v", err))
-		} else {
-			utils.PrintLog("FixGrubDeviceMap completed")
-		}
-
+		// ReinstallGrubLegacy runs first: it calls grub --batch inside the
+		// guestfish chroot where disks are /dev/vdX.  Grub's setup command
+		// may rewrite device.map with /dev/vdX paths, so FixGrubDeviceMap
+		// must run AFTER to ensure device.map ends up correct for OpenStack.
 		utils.PrintLog(fmt.Sprintf("Running ReinstallGrubLegacy on %d disk(s) to fix GRUB stage1 BIOS disk number", len(vminfo.VMDisks)))
 		if err := virtv2v.ReinstallGrubLegacy(vminfo.VMDisks); err != nil {
 			utils.PrintLog(fmt.Sprintf("Warning: ReinstallGrubLegacy failed (continuing): %v", err))
 		} else {
 			utils.PrintLog("ReinstallGrubLegacy completed successfully")
+		}
+
+		utils.PrintLog("Running FixGrubDeviceMap to update /boot/grub/device.map")
+		if err := virtv2v.FixGrubDeviceMap(vminfo.VMDisks); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: FixGrubDeviceMap failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixGrubDeviceMap completed")
 		}
 	}
 

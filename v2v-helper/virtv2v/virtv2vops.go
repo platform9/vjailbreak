@@ -1048,11 +1048,27 @@ func ReinstallGrubLegacy(disks []vm.VMDisk) error {
 	// We detect where /boot/grub/stage1 lives so the grub shell can find it
 	// regardless of whether /boot is a separate partition or on a different disk.
 	const grubReinstallScript = `#!/bin/sh
-set -e
+# Runs inside guestfish -i chroot. Reinstalls GRUB Legacy stage1/stage1.5 on
+# the first disk (hd0) so the migrated VM boots correctly in OpenStack.
+#
+# KEY DESIGN NOTES
+# ----------------
+# 1. df / /proc/mounts are unreliable inside the guestfish chroot: /proc/mounts
+#    shows the APPLIANCE mount namespace (/sysroot/boot etc.), not the chroot
+#    view, so df returns "-" for device names.  Do NOT use df.
+#
+# 2. Inside the guestfish appliance (QEMU/KVM direct backend) disks appear as
+#    /dev/sda, /dev/sdb ... (virtio-scsi), NOT /dev/vda.  The device.map in
+#    the guest has /dev/vdX paths (correct for OpenStack) so grub cannot probe
+#    any drive via device.map alone.  We override with explicit
+#    "device (hdN) /dev/sdX" commands so grub can reach the actual block devices.
+#
+# 3. We use grub's "find /boot/grub/stage2" to determine the (hdN,P) that holds
+#    /boot/grub.  This avoids all df / arithmetic and lets grub be authoritative.
 
 echo "vjailbreak ReinstallGrubLegacy: starting"
 
-# Locate the GRUB Legacy stage1 binary.
+# ── Locate GRUB Legacy stage directory ──────────────────────────────────────
 if [ -f /boot/grub/stage1 ]; then
     GRUB_DIR=/boot/grub
     echo "vjailbreak: found GRUB dir at /boot/grub"
@@ -1060,64 +1076,81 @@ elif [ -f /grub/stage1 ]; then
     GRUB_DIR=/grub
     echo "vjailbreak: found GRUB dir at /grub"
 else
-    echo "vjailbreak: no GRUB Legacy stage1 found at /boot/grub or /grub – skipping reinstall"
+    echo "vjailbreak: no GRUB Legacy stage1 found at /boot/grub or /grub - skipping"
     exit 0
 fi
 
-# Check that the grub binary is present in the guest.
+# ── Locate grub binary ───────────────────────────────────────────────────────
 GRUB_BIN=$(command -v grub 2>/dev/null || command -v grub-legacy 2>/dev/null || true)
 if [ -z "$GRUB_BIN" ]; then
-    echo "vjailbreak: grub binary not found in guest PATH – skipping reinstall"
+    echo "vjailbreak: grub binary not found in PATH - skipping"
     exit 0
 fi
-echo "vjailbreak: grub binary found at $GRUB_BIN"
+echo "vjailbreak: grub binary at $GRUB_BIN"
 
-# Show current device.map for diagnostics.
-if [ -f "$GRUB_DIR/device.map" ]; then
-    echo "vjailbreak: current device.map:"
-    cat "$GRUB_DIR/device.map"
+# ── Show current device.map ──────────────────────────────────────────────────
+echo "vjailbreak: current device.map:"
+cat "$GRUB_DIR/device.map" 2>/dev/null || echo "(not found)"
+
+# ── Enumerate block devices present in the guestfish appliance ──────────────
+# Inside guestfish (QEMU direct backend) disks are /dev/sda, /dev/sdb ...
+# The first disk (/dev/sda) = VMDisks[0] = the -a arg passed first to guestfish
+# = Nova boot_index=0 volume = vda = BIOS 0x80 = hd0 in OpenStack.
+DISKS=$(ls /dev/sda /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh           2>/dev/null | sort) || true
+if [ -z "$DISKS" ]; then
+    # Fallback: some backends name disks /dev/vdX inside the appliance.
+    DISKS=$(ls /dev/vda /dev/vdb /dev/vdc /dev/vdd /dev/vde /dev/vdf               2>/dev/null | sort) || true
 fi
-
-# Determine which block device holds $GRUB_DIR.
-# df gives us the device name (e.g. /dev/sdd1) of the mounted filesystem.
-BOOT_DEV=$(df "$GRUB_DIR" 2>/dev/null | awk 'NR==2{print $1}')
-if [ -z "$BOOT_DEV" ]; then
-    echo "vjailbreak: ERROR – cannot determine device for $GRUB_DIR (df failed)"
+if [ -z "$DISKS" ]; then
+    echo "vjailbreak: ERROR - no block devices found in /dev"
     exit 1
 fi
-echo "vjailbreak: GRUB dir=$GRUB_DIR is on device=$BOOT_DEV"
+echo "vjailbreak: disks found in guestfish appliance: $DISKS"
 
-# Strip the trailing partition digit(s) to get the parent disk.
-BOOT_DISK=$(echo "$BOOT_DEV" | sed 's/[0-9]*$//')
-echo "vjailbreak: parent disk of GRUB partition = $BOOT_DISK"
+# ── Build grub device-override commands ─────────────────────────────────────
+# Map (hd0)->first disk, (hd1)->second, ... matching the VMDisks order so that
+# the hd numbers here correspond to the same BIOS drive numbers in OpenStack.
+DEVICE_CMDS=""
+HDN=0
+for DISK in $DISKS; do
+    DEVICE_CMDS="${DEVICE_CMDS}device (hd${HDN}) ${DISK}
+"
+    HDN=$((HDN + 1))
+done
+echo "vjailbreak: grub device overrides for this session:"
+printf '%s' "$DEVICE_CMDS"
 
-# Convert /dev/sdX -> hd index (a=0, b=1, c=2, d=3 …).
-DISK_LETTER=$(echo "$BOOT_DISK" | sed 's|/dev/sd||')
-# POSIX sh arithmetic: subtract ASCII value of 'a' (97) from the letter.
-BOOT_HD_NUM=$(printf '%d' "'$DISK_LETTER")
-BOOT_HD_NUM=$(( BOOT_HD_NUM - 97 ))
+# ── Use grub find to locate stage2 ──────────────────────────────────────────
+# "find /boot/grub/stage2" scans all accessible (hdN,P) and returns the
+# partition containing the file.  This is the authoritative, arithmetic-free
+# way to determine the GRUB root.
+FIND_CMDS="${DEVICE_CMDS}find /boot/grub/stage2
+quit"
+echo "vjailbreak: running grub find /boot/grub/stage2..."
+FIND_OUT=$(printf '%s' "$FIND_CMDS" | "$GRUB_BIN" --no-curses --batch 2>&1) || true
+echo "vjailbreak: grub find output:"
+echo "$FIND_OUT"
+GRUB_ROOT=$(printf '%s' "$FIND_OUT" | grep -o '(hd[0-9]*,[0-9]*)' | head -1) || true
 
-# Convert partition suffix to 0-based GRUB partition index (sdd1 → part 0).
-PART_NUM=$(echo "$BOOT_DEV" | grep -o '[0-9]*$')
-GRUB_PART=$(( ${PART_NUM:-1} - 1 ))
+if [ -z "$GRUB_ROOT" ]; then
+    echo "vjailbreak: ERROR - grub could not locate /boot/grub/stage2 on any disk"
+    exit 1
+fi
+echo "vjailbreak: stage2 located at $GRUB_ROOT"
 
-GRUB_ROOT="(hd${BOOT_HD_NUM},${GRUB_PART})"
-echo "vjailbreak: calculated GRUB root = ${GRUB_ROOT}"
-echo "vjailbreak: reinstalling stage1 on (hd0) /dev/sda with root=${GRUB_ROOT}"
+# ── Reinstall GRUB stage1/stage1.5 on the first disk (hd0) ──────────────────
+# "setup (hd0)" writes stage1 to hd0 MBR and stage1.5 to post-MBR sectors,
+# embedding the BIOS drive number for GRUB_ROOT inside stage1.5.
+# In OpenStack: hd0=vda=BIOS 0x80 (boot disk), GRUB_ROOT=(hdN,P)=vd{N+1}1.
+echo "vjailbreak: reinstalling GRUB on (hd0) with root=$GRUB_ROOT"
+SETUP_CMDS="${DEVICE_CMDS}root ${GRUB_ROOT}
+setup (hd0)
+quit"
+echo "vjailbreak: grub setup batch commands:"
+printf '%s' "$SETUP_CMDS"
 
-# Build and log the exact grub batch commands being run.
-GRUB_CMDS=$(printf '%s\n' \
-    "device (hd0) /dev/sda" \
-    "root ${GRUB_ROOT}" \
-    "setup (hd0)" \
-    "quit")
-echo "vjailbreak: grub batch input:"
-echo "$GRUB_CMDS"
-
-# Reinstall stage1 on /dev/sda (hd0).  In guestfish context /dev/sda is
-# VMDisks[0], which Nova attaches with boot_index=0 (vda = BIOS 0x80).
-echo "$GRUB_CMDS" | "$GRUB_BIN" --no-curses --batch
-GRUB_RC=$?
+GRUB_RC=0
+printf '%s' "$SETUP_CMDS" | "$GRUB_BIN" --no-curses --batch || GRUB_RC=$?
 echo "vjailbreak: grub --batch exit code = $GRUB_RC"
 exit $GRUB_RC
 `
