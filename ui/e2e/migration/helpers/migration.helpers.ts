@@ -24,9 +24,10 @@ export const API = {
   vmwareHosts: `**${V1A1}/vmwarehosts**`,
   pcdClusters: `**${V1A1}/pcdclusters**`,
   bmConfigs: `**${V1A1}/bmconfigs`,
+  bmConfigByName: (name: string) => `**${V1A1}/bmconfigs/${name}`,
   rdmDisks: `**${V1A1}/rdmdisks`,
   volumeImageProfiles: `**${V1A1}/volumeimageprofiles**`,
-  validateIPs: `**/validateOpenstackIPs`,
+  validateIPs: `**/validate_openstack_ip`,
   podLogs: (namespace: string, podName: string) =>
     `**/namespaces/${namespace}/pods/${podName}/log*`,
   rollingMigrationPlans: `**${V1A1}/rollingmigrationplans`,

@@ -124,6 +124,8 @@ async function mockStandardFormApis(page: Page) {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(MOCK_MIGRATION_TEMPLATE_PENDING) })
     } else if (method === 'GET') {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MIGRATION_TEMPLATE_READY) })
+    } else if (method === 'PATCH') {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MIGRATION_TEMPLATE_READY) })
     } else {
       route.continue()
     }

@@ -58,6 +58,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
     <>
       <Tooltip title="Trigger Admin Cutover">
         <IconButton
+          data-testid="cutover-trigger-button"
           onClick={(e) => {
             e.stopPropagation()
             setError(null) // Clear any previous errors

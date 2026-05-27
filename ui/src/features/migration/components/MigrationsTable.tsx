@@ -222,7 +222,11 @@ export default function MigrationsTable({
       const name = m.spec?.vmName || ''
       if (name) counts.set(name, (counts.get(name) || 0) + 1)
     }
-    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, c]) => c > 1)
+        .map(([n]) => n)
+    )
   }, [migrations])
 
   const columns: GridColDef[] = useMemo(() => {
@@ -273,7 +277,9 @@ export default function MigrationsTable({
 
           const isDuplicate = duplicateVmNames.has(vmName)
           const vmKey =
-            (params.row?.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] as string) ||
+            (params.row?.metadata?.annotations?.[
+              'vjailbreak.k8s.pf9.io/original-vm-name'
+            ] as string) ||
             (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
             ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
@@ -606,24 +612,29 @@ export default function MigrationsTable({
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
         slots={{
+          // Pass CustomToolbar directly (stable module-level reference) to prevent DataGrid
+          // from unmounting/remounting the toolbar on every MigrationsTable re-render.
+          // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
+          toolbar: hasSelectionActions ? CustomToolbar : undefined
+        }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        slotProps={{
           toolbar: hasSelectionActions
-            ? () => (
-                <CustomToolbar
-                  numSelected={selectedRows.length}
-                  onDeleteSelected={handleDeleteSelected}
-                  onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
-                  numEligibleForCutover={eligibleForCutover.length}
-                  refetchMigrations={refetchMigrations}
-                  onStatusFilterChange={setStatusFilter}
-                  currentStatusFilter={statusFilter}
-                  onDateFilterChange={setDateFilter}
-                  currentDateFilter={dateFilter}
-                  onStartMigration={() => openMigrationForm('standard')}
-                  startMigrationDisabled={startMigrationDisabled}
-                  startMigrationDisabledReason={startMigrationDisabledReason}
-                />
-              )
-            : undefined
+            ? ({
+                numSelected: selectedRows.length,
+                onDeleteSelected: handleDeleteSelected,
+                onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
+                numEligibleForCutover: eligibleForCutover.length,
+                refetchMigrations,
+                onStatusFilterChange: setStatusFilter,
+                currentStatusFilter: statusFilter,
+                onDateFilterChange: setDateFilter,
+                currentDateFilter: dateFilter,
+                onStartMigration: () => openMigrationForm('standard'),
+                startMigrationDisabled,
+                startMigrationDisabledReason
+              } as any)
+            : {}
         }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}

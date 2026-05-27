@@ -118,7 +118,7 @@ export const MOCK_MIGRATION_AWAITING_CUTOVER = {
     migrationPlan: 'test-plan-4',
     podRef: 'v2v-helper-test-5',
     vmName: 'test-vm-5',
-    initiateCutover: false,
+    initiateCutover: true,
   },
   status: {
     phase: 'AwaitingAdminCutOver',
@@ -170,6 +170,45 @@ export const MOCK_MIGRATION_PLAN_1 = {
     migrationStatus: 'Running',
     migrationMessage: '',
   },
+}
+
+export const MOCK_MIGRATION_PLAN_2 = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: baseMeta('test-plan-2'),
+  spec: {
+    migrationStrategy: { type: 'cold' },
+    migrationTemplate: 'test-template-abc123',
+    retry: false,
+    virtualMachines: [['test-vm-3']],
+  },
+  status: { migrationStatus: 'Succeeded', migrationMessage: '' },
+}
+
+export const MOCK_MIGRATION_PLAN_3 = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: baseMeta('test-plan-3'),
+  spec: {
+    migrationStrategy: { type: 'cold' },
+    migrationTemplate: 'test-template-abc123',
+    retry: false,
+    virtualMachines: [['test-vm-4']],
+  },
+  status: { migrationStatus: 'Failed', migrationMessage: '' },
+}
+
+export const MOCK_MIGRATION_PLAN_5 = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: baseMeta('test-plan-5'),
+  spec: {
+    migrationStrategy: { type: 'cold' },
+    migrationTemplate: 'test-template-abc123',
+    retry: false,
+    virtualMachines: [['test-vm-6']],
+  },
+  status: { migrationStatus: 'Pending', migrationMessage: '' },
 }
 
 export const MOCK_MIGRATION_PLANS_LIST = {

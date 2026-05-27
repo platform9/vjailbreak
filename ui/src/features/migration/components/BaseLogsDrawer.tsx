@@ -237,6 +237,7 @@ export default function BaseLogsDrawer({
                       name="follow"
                       size="small"
                       disabled={isPaused}
+                      data-testid="logs-follow-toggle"
                     />
                   }
                   label="Follow"
