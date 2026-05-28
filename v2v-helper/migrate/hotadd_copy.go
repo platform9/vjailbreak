@@ -62,31 +62,6 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	return getter.GetVCenterClient(), nil
 }
 
-// takeVMSnapshot removes any pre-existing snapshot with the same name, then creates
-// a memory-less snapshot of the source VM. quiesce=true requires VMware Tools and
-// a powered-off (or quiescence-capable) VM; pass quiesce=false for mock migrations
-// where the source VM remains powered on.
-func (migobj *Migrate) takeVMSnapshot(ctx context.Context, name string, quiesce bool) error {
-	snapshots, err := migobj.VMops.ListSnapshots()
-	if err == nil {
-		for _, snap := range snapshots {
-			if snap.Name == name {
-				migobj.logMessage(fmt.Sprintf("Removing pre-existing snapshot '%s'", name))
-				if delErr := migobj.VMops.DeleteSnapshot(name); delErr != nil {
-					return errors.Wrapf(delErr, "failed to remove pre-existing snapshot '%s'", name)
-				}
-				break
-			}
-		}
-	}
-
-	vmObj := migobj.VMops.GetVMObj()
-	task, err := vmObj.CreateSnapshot(ctx, name, "", false, quiesce)
-	if err != nil {
-		return errors.Wrap(err, "failed to create snapshot")
-	}
-	return task.Wait(ctx)
-}
 
 // getFrozenVMDKs returns one hotAddDiskTransfer per data disk on the source VM,
 // populated with the frozen parent VMDK path and device key after the snapshot.
@@ -499,12 +474,22 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		}
 	}
 
-	// 2. Snapshot the source VM. Use quiesced=true for cold migrations (VM is
-	// powered off); use quiesced=false for mock so the powered-on VM is
-	// snapshotted crash-consistently without requiring VMware Tools quiescence.
-	quiesce := migobj.MigrationType != "mock"
+	// 2. Remove any pre-existing snapshot with the same name, then take a fresh one.
+	// VMops.TakeSnapshot uses quiesce=false which works for both cold (VM already
+	// powered off, quiescing is a no-op) and mock (VM on, crash-consistent is correct).
 	migobj.logMessage(constants.EventMessageHotAddSnapshotCreate)
-	if err := migobj.takeVMSnapshot(ctx, hotAddSnapName, quiesce); err != nil {
+	if snapshots, err := migobj.VMops.ListSnapshots(); err == nil {
+		for _, snap := range snapshots {
+			if snap.Name == hotAddSnapName {
+				migobj.logMessage(fmt.Sprintf("Removing pre-existing snapshot '%s'", hotAddSnapName))
+				if delErr := migobj.VMops.DeleteSnapshot(hotAddSnapName); delErr != nil {
+					return errors.Wrapf(delErr, "failed to remove pre-existing snapshot '%s'", hotAddSnapName)
+				}
+				break
+			}
+		}
+	}
+	if err := migobj.VMops.TakeSnapshot(hotAddSnapName); err != nil {
 		return errors.Wrap(err, "failed to create source VM snapshot")
 	}
 

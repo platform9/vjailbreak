@@ -595,7 +595,7 @@ func (vmops *VMOps) TakeSnapshot(name string) error {
 			return fmt.Errorf("failed to refresh VM reference: %s", err)
 		}
 		vm = vmops.VMObj
-		task, err = vm.CreateSnapshot(vmops.ctx, name, "", false, false)
+		task, err = vm.CreateSnapshot(vmops.ctx, name, "", false, true)
 		if err != nil {
 			return fmt.Errorf("failed to take snapshot: %s", err)
 		}
