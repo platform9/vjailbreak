@@ -12,6 +12,7 @@ import (
 	commonconfig "github.com/platform9/vjailbreak/pkg/common/config"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -274,7 +275,7 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 // GetHotAddPrivateKey retrieves the SSH private key used to connect to the given Proxy VM.
 // The secret is named "{proxyVMName}-hot-add-ssh-key" and is created during Proxy VM onboarding.
 func GetHotAddPrivateKey(ctx context.Context, k8sClient client.Client, proxyVMName string) ([]byte, error) {
-	secretName := proxyVMName + "-" + constants.HotAddSSHSecretSuffix
+	secretName := commonutils.HotAddSSHSecretName(proxyVMName)
 	secret := &corev1.Secret{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
 		Name:      secretName,

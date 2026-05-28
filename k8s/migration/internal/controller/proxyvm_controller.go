@@ -25,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	vmwarepkg "github.com/platform9/vjailbreak/pkg/common/vmware"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/vmware/govmomi/object"
@@ -97,30 +99,14 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		}
 	}
 
-	// Fetch VMwareCreds secret
-	vmwCreds := &vjailbreakv1alpha1.VMwareCreds{}
-	if err := r.Get(ctx, k8stypes.NamespacedName{
-		Name:      proxyVM.Spec.VMwareCredsRef.Name,
-		Namespace: proxyVM.Namespace,
-	}, vmwCreds); err != nil {
+	// Fetch vCenter credentials using the shared helper (VMwareCreds CR → secret → parsed fields).
+	vcCreds, err := vmwarepkg.GetVMwareCredsInfo(ctx, r.Client, proxyVM.Spec.VMwareCredsRef.Name)
+	if err != nil {
 		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get VMwareCreds %q: %v", proxyVM.Spec.VMwareCredsRef.Name, err))
 	}
 
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, k8stypes.NamespacedName{
-		Name:      vmwCreds.Spec.SecretRef.Name,
-		Namespace: proxyVM.Namespace,
-	}, secret); err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get vCenter secret: %v", err))
-	}
-
-	username, password, host, err := extractVCenterCredentials(secret)
-	if err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("invalid vCenter credentials: %v", err))
-	}
-
 	// Connect to vCenter
-	vcClient, err := vcenter.VCenterClientBuilder(ctx, username, password, host, true)
+	vcClient, err := vcenter.VCenterClientBuilder(ctx, vcCreds.Username, vcCreds.Password, vcCreds.Host, vcCreds.Insecure)
 	if err != nil {
 		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to connect to vCenter: %v", err))
 	}
@@ -152,7 +138,7 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 	}
 
 	// Load the SSH private key from the per-ProxyVM k8s secret created during onboarding.
-	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
+	sshSecretName := commonutils.HotAddSSHSecretName(proxyVM.Name)
 	sshSecret := &corev1.Secret{}
 	if err := r.Get(ctx, k8stypes.NamespacedName{
 		Name:      sshSecretName,
