@@ -1,6 +1,9 @@
 import {
   FormControl,
   FormHelperText,
+  InputLabel,
+  MenuItem,
+  Select,
   styled,
   Typography,
   Box,
@@ -18,6 +21,7 @@ import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
+import { useProxyVMsQuery } from 'src/hooks/api/useProxyVMsQuery'
 import type { NetworkAndStorageMappingStepProps } from '../types'
 import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 
@@ -56,6 +60,15 @@ export default function NetworkAndStorageMappingStep({
     {
       enabled: storageCopyMethod === 'StorageAcceleratedCopy'
     }
+  )
+
+  // Fetch ready proxy VMs for HotAdd
+  const { data: allProxyVMs = [] } = useProxyVMsQuery(undefined, {
+    enabled: storageCopyMethod === 'HotAdd'
+  })
+  const readyProxyVMs = useMemo(
+    () => allProxyVMs.filter((vm) => vm.status?.validationStatus === 'Ready'),
+    [allProxyVMs]
   )
 
   // Filter to only validated array credentials
@@ -107,6 +120,7 @@ export default function NetworkAndStorageMappingStep({
   )
 
   const unmappedStorage = useMemo(() => {
+    if (storageCopyMethod === 'HotAdd') return []
     if (storageCopyMethod === 'StorageAcceleratedCopy') {
       return vmWareStorage.filter(
         (storage) => !params.arrayCredsMappings?.some((mapping) => mapping.source === storage)
@@ -274,7 +288,7 @@ export default function NetworkAndStorageMappingStep({
                     fieldPrefix="storageMapping"
                   />
                 </>
-              ) : (
+              ) : storageCopyMethod === 'StorageAcceleratedCopy' ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Map datastores to storage array credentials for storage array data copy.
@@ -310,9 +324,42 @@ export default function NetworkAndStorageMappingStep({
                     </>
                   )}
                 </>
-              )}
+              ) : storageCopyMethod === 'HotAdd' ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Select a verified Proxy VM to use for Hot-Add disk access during migration.
+                  </Typography>
+                  {readyProxyVMs.length === 0 ? (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      No Ready Proxy VM found. Add and verify a Proxy VM on the Proxy VMs page
+                      before starting a Hot-Add migration.
+                    </Alert>
+                  ) : null}
+                  <FormControl fullWidth error={!!storageMappingError}>
+                    <InputLabel>Proxy VM</InputLabel>
+                    <Select
+                      value={params.proxyVMRef || ''}
+                      label="Proxy VM"
+                      onChange={(e) => onChange('proxyVMRef')(e.target.value)}
+                      disabled={readyProxyVMs.length === 0}
+                    >
+                      {readyProxyVMs.map((vm) => (
+                        <MenuItem key={vm.metadata.name} value={vm.metadata.name}>
+                          {vm.metadata.name}
+                          {vm.status?.ipAddress ? ` (${vm.status.ipAddress})` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {storageMappingError && (
+                      <FormHelperText error>{storageMappingError}</FormHelperText>
+                    )}
+                  </FormControl>
+                </>
+              ) : null}
 
-              {storageMappingError && <FormHelperText error>{storageMappingError}</FormHelperText>}
+              {storageCopyMethod !== 'HotAdd' && storageMappingError && (
+                <FormHelperText error>{storageMappingError}</FormHelperText>
+              )}
             </FormControl>
           </>
         )}

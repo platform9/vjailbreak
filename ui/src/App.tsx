@@ -22,6 +22,7 @@ import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery
 import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
+import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -440,6 +441,7 @@ function App() {
               <Route path="storage-management" element={<StorageManagementPage />} />
               <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
               <Route path="profiles" element={<ImageProfilesPage />} />
+              <Route path="proxy-vms" element={<ProxyVMsPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>

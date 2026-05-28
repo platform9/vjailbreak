@@ -67,6 +67,11 @@ export const navigationItems: NavigationItem[] = [
         label: 'ESXi SSH',
         path: '/dashboard/esxi-ssh-keys',
         icon: <VpnKeyIcon />
+      },
+      {
+        id: 'proxy-vms',
+        label: 'Proxy VMs',
+        path: '/dashboard/proxy-vms'
       }
     ]
   },

@@ -128,9 +128,11 @@ export function useRollingFormValidation({
       !params.vmwareCluster || !params.pcdCluster || !selectedMaasConfig || !selectedVMs.length || submitting
 
     const storageMappingComplete =
-      params.storageCopyMethod === 'StorageAcceleratedCopy'
-        ? availableVmwareDatastores.every((d) => arrayCredsMappings.some((m) => m.source === d))
-        : availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
+      params.storageCopyMethod === 'HotAdd'
+        ? Boolean(params.proxyVMRef)
+        : params.storageCopyMethod === 'StorageAcceleratedCopy'
+          ? availableVmwareDatastores.every((d) => arrayCredsMappings.some((m) => m.source === d))
+          : availableVmwareDatastores.every((d) => storageMappings.some((m) => m.source === d))
 
     const mappingsValid = !(
       availableVmwareNetworks.some(
@@ -414,9 +416,11 @@ export function useRollingFormValidation({
           : touchedSections.mapResources &&
             (availableVmwareNetworks.length > 0 || availableVmwareDatastores.length > 0) &&
             availableVmwareNetworks.every((n) => (params.networkMappings ?? []).some((m) => m.source === n)) &&
-            (params.storageCopyMethod === 'StorageAcceleratedCopy'
-              ? availableVmwareDatastores.every((d) => (params.arrayCredsMappings ?? []).some((m) => m.source === d))
-              : availableVmwareDatastores.every((d) => (params.storageMappings ?? []).some((m) => m.source === d)))
+            (params.storageCopyMethod === 'HotAdd'
+              ? Boolean(params.proxyVMRef)
+              : params.storageCopyMethod === 'StorageAcceleratedCopy'
+                ? availableVmwareDatastores.every((d) => (params.arrayCredsMappings ?? []).some((m) => m.source === d))
+                : availableVmwareDatastores.every((d) => (params.storageMappings ?? []).some((m) => m.source === d)))
             ? 'complete'
             : 'incomplete'
       },

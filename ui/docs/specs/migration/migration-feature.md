@@ -2,8 +2,62 @@
 
 **Feature path**: `src/features/migration/`  
 **Generated**: 2026-05-20  
-**Updated**: 2026-05-20 (technical debt cleanup)  
+**Updated**: 2026-05-27 (HotAdd proxy VM integration)  
 **Coverage**: 73 files — api, components, context, hooks, pages, steps, utils
+
+---
+
+## Quick-Start Context (read this first in a new session)
+
+> **Purpose**: This spec gives an LLM or new developer full context on the migration feature. Read §1–2 for architecture orientation, §3 for specific component APIs, §4 for API contracts, §5 for validation rules.
+
+### What this feature does
+Orchestrates VMware → PCD (OpenStack) VM migrations. Two modes: **standard** (one-time, per-VM) and **rolling** (cluster-wide with ESXi host lifecycle). Both modes go through a multi-step drawer form that creates `MigrationPlan` + `MigrationTemplate` Kubernetes CRDs.
+
+### Key files to know
+
+| What | File |
+|------|------|
+| Standard form (6 steps) | `src/features/migration/pages/MigrationForm.tsx` |
+| Rolling form (8 steps) | `src/features/migration/pages/RollingMigrationForm.tsx` |
+| Migrations list page | `src/features/migration/pages/MigrationsPage.tsx` |
+| All form types/interfaces | `src/features/migration/types.ts` |
+| Constants (enums, options) | `src/features/migration/constants.ts` |
+| Step 3: Network+Storage | `src/features/migration/steps/NetworkAndStorageMappingStep.tsx` |
+| Step 5: Advanced options | `src/features/migration/steps/MigrationOptionsAlt.tsx` |
+| Standard validation | `src/features/migration/hooks/useFormValidation.ts` |
+| Rolling validation | `src/features/migration/hooks/useRollingFormValidation.ts` |
+| Standard submit | `src/features/migration/hooks/useMigrationFormSubmit.ts` |
+| Rolling submit | `src/features/migration/hooks/useRollingFormSubmit.ts` |
+| MigrationTemplate model | `src/api/migration-templates/model.ts` |
+| MigrationPlan model | `src/api/migration-plans/model.ts` |
+
+### Storage copy methods (Step 3)
+
+| Value | Storage UI | Submit behavior |
+|-------|-----------|-----------------|
+| `normal` | Datastore → Volume Type mapping | POST `/storage-mappings`, patch template `storageMapping` |
+| `StorageAcceleratedCopy` | Datastore → Array Creds mapping | POST `/arraycreds-mapping`, patch template `arrayCredsMapping` |
+| `HotAdd` | ProxyVM selector dropdown | No storage mapping POST; patch template `proxyVMRef: { name }` |
+
+`HotAdd` added in May 2026. Related spec: `docs/specs/proxyvms/proxyvms-feature.md`.
+
+### Form state architecture (critical to understand)
+
+- Primary state: `params` (plain `useState` object) — holds all field values
+- Secondary state: `react-hook-form` manages a subset of fields (`securityGroups`, `serverGroup`, time fields)
+- Sync: `useFormSync` / `useRollingFormSync` keep both in sync bidirectionally
+- **Do not add new fields to RHF unless they need RHF validation.** Add to `FormValues` in `types.ts` and access via `params`.
+
+### Common pitfalls for new developers
+
+1. **Two VM types**: `VmDataWithFlavor` (standard) vs `VM` (rolling) — bridged by `vmAdapters.ts → CanonicalVM`. Always update both types when changing VM shape.
+2. **Session-scoped K8s resources**: VMwareCreds, OpenstackCreds, MigrationTemplate are created per form session and must be deleted on close (`handleClose`). Orphans persist if browser crashes.
+3. **StorageCopyMethod type**: Lives in `types.ts`. When adding new copy methods, update: `StorageCopyMethod` type, `STORAGE_COPY_METHOD_OPTIONS` constant, `useFormValidation`, `useRollingFormValidation`, `useMigrationFormSubmit`, `useRollingFormSubmit`, `NetworkAndStorageMappingStep`, `MigrationOptionsAlt`.
+4. **Namespace**: `VJAILBREAK_DEFAULT_NAMESPACE = 'migration-system'` in `src/api/constants.ts`.
+5. **Template polling**: `MigrationTemplate` is polled every 3s after creation. VMs/networks/storage only available after controller populates `status`. Form cannot proceed until then.
+
+---
 
 ---
 
@@ -394,11 +448,19 @@ Migration monitoring
 
 ### NetworkAndStorageMappingStep (`steps/NetworkAndStorageMappingStep.tsx`)
 
-**Purpose**: Map VMware networks → PCD networks; VMware datastores → PCD volume types or array credentials.
+**Purpose**: Map VMware networks → PCD networks; VMware datastores → PCD volume types, array credentials, or select a Proxy VM.
 
 **Storage Copy Method**:
 - `normal` → storage mappings (datastore → volume type)
 - `StorageAcceleratedCopy` → array creds mappings (datastore → array cred)
+- `HotAdd` → ProxyVM selector dropdown (no datastore mapping; select Ready ProxyVM CRD)
+
+**HotAdd behavior**:
+- Fetches `useProxyVMsQuery()` filtered to `status.validationStatus === 'Ready'`
+- Each option label: `metadata.name (status.ipAddress)`
+- Selection stored as `params.proxyVMRef`
+- If no Ready VMs exist: warning Alert shown
+- `unmappedStorageCount` returns 0 (storage mapping not applicable)
 
 **Subnet Warnings**: Shown per source network when VM IPs don't match target subnet CIDR.
 
@@ -418,7 +480,8 @@ Migration monitoring
 
 **Key Constraints**:
 - `StorageAcceleratedCopy` hides data copy + cutover (not applicable)
-- `PowerOffThenCopy` disables cutover options (cutover automatic)
+- `HotAdd` forces `dataCopyMethod = 'cold'`, disables `hot` and `mock` options, shows helper note
+- `PowerOffThenCopy` (cold) disables cutover options (cutover automatic)
 - Mixed OS VMs require OS tags in post-migration script
 - `hasL2Network` disables fallback to DHCP
 
@@ -525,11 +588,22 @@ Used by: `useOsAssignment`, `useFlavorAssignment`, `useFlavorHandlers`, `useBulk
 
 ### Network/Storage Mappings
 
-| Resource | Endpoint | Method |
-|----------|----------|--------|
-| Network Mapping | `/network-mappings` | POST |
-| Storage Mapping | `/storage-mappings` | POST |
-| Array Creds Mapping | `/arraycreds-mapping` | POST |
+| Resource | Endpoint | Method | When used |
+|----------|----------|--------|-----------|
+| Network Mapping | `/network-mappings` | POST | Always (if networks exist) |
+| Storage Mapping | `/storage-mappings` | POST | `storageCopyMethod === 'normal'` |
+| Array Creds Mapping | `/arraycreds-mapping` | POST | `storageCopyMethod === 'StorageAcceleratedCopy'` |
+| ProxyVM (patch template) | template PATCH only | — | `storageCopyMethod === 'HotAdd'` — no mapping POST; `proxyVMRef: { name }` set directly on template |
+
+**HotAdd template patch** (`useMigrationFormSubmit.ts` + `useRollingFormSubmit.ts`):
+```typescript
+// When storageCopyMethod === 'HotAdd'
+spec: {
+  storageCopyMethod: 'HotAdd',
+  proxyVMRef: { name: params.proxyVMRef },
+  networkMapping: networkMappings.metadata.name
+}
+```
 
 ---
 
@@ -592,8 +666,9 @@ Trigger: On selection change + on submit.
 | Rule | Condition | Error |
 |------|-----------|-------|
 | All networks mapped | `unmappedNetworksCount > 0` | Network mapping required (count shown) |
-| All storage mapped | `unmappedStorageCount > 0` | Storage mapping required |
+| All storage mapped | `unmappedStorageCount > 0` (not applicable for HotAdd) | Storage mapping required |
 | Array creds present | `StorageAcceleratedCopy` + no validated creds | Warning shown |
+| Proxy VM selected | `HotAdd` + `!proxyVMRef` | "Please select a Proxy VM to use for Hot-Add data copy" |
 
 Trigger: On mapping change + on submit.
 
@@ -682,6 +757,7 @@ All step completion flags, error flags, and section nav items are computed via `
 | `['vmwareMachines', credName, clusterName]` | VM list per cluster |
 | `['rdmDisks', ...]` | RDM disks |
 | `['availableTags']` | Available upgrade versions |
+| `['proxyvms', namespace?]` | ProxyVM list — polled 5s while Pending/Verifying |
 
 ---
 
@@ -862,7 +938,8 @@ All step completion flags, error flags, and section nav items are computed via `
 ### Feature Flags and Conditional Behavior
 
 - `isPCD` flag (derived from OpenstackCreds) enables GPU and flavorless options in MigrationOptionsAlt
-- `storageCopyMethod === 'StorageAcceleratedCopy'` disables data copy + cutover scheduling
+- `storageCopyMethod === 'StorageAcceleratedCopy'` hides data copy + cutover scheduling
+- `storageCopyMethod === 'HotAdd'` forces cold copy, disables hot/mock, shows ProxyVM selector (Step 3)
 - `hasL2Network` disables security groups and fallback to DHCP
 - `useGPU` disables flavor selection (GPU instance auto-selected)
 
@@ -890,3 +967,9 @@ All step completion flags, error flags, and section nav items are computed via `
 ### Known Technical Debt
 
 No outstanding technical debt.
+
+---
+
+## Related Specs
+
+- **ProxyVM feature**: `docs/specs/proxyvms/proxyvms-feature.md` — full spec for the Proxy VMs management page and HotAdd CRD lifecycle

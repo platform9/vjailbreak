@@ -88,6 +88,7 @@ export function useRollingFormSubmit({
     const storageCopyMethod = (params.storageCopyMethod || 'normal') as
       | 'normal'
       | 'StorageAcceleratedCopy'
+      | 'HotAdd'
 
     if (selectedVMs.length > 0) {
       if (
@@ -246,7 +247,9 @@ export function useRollingFormSubmit({
       let storageMappingResponse: any = null
       let arrayCredsMappingResponse: any = null
 
-      if (storageCopyMethod === 'StorageAcceleratedCopy') {
+      if (storageCopyMethod === 'HotAdd') {
+        // No storage mapping needed — proxyVMRef is set directly on the template
+      } else if (storageCopyMethod === 'StorageAcceleratedCopy') {
         const arrayCredsMappingJson = createArrayCredsMappingJson({
           mappings: arrayCredsMappings.map((mapping) => ({
             source: mapping.source,
@@ -282,11 +285,16 @@ export function useRollingFormSubmit({
           spec: {
             networkMapping: networkMappingResponse.metadata.name,
             storageCopyMethod,
+            ...(storageCopyMethod === 'HotAdd' &&
+              params.proxyVMRef && {
+                proxyVMRef: { name: params.proxyVMRef }
+              }),
             ...(storageCopyMethod === 'StorageAcceleratedCopy' &&
               arrayCredsMappingResponse?.metadata?.name && {
                 arrayCredsMapping: arrayCredsMappingResponse.metadata.name
               }),
             ...(storageCopyMethod !== 'StorageAcceleratedCopy' &&
+              storageCopyMethod !== 'HotAdd' &&
               storageMappingResponse?.metadata?.name && {
                 storageMapping: storageMappingResponse.metadata.name
               })
