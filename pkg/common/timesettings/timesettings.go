@@ -54,6 +54,7 @@ type WorkloadRef struct {
 
 var workloadsToRestart = []WorkloadRef{
 	{WorkloadDeployment, "migration-controller-manager", constants.NamespaceMigrationSystem},
+	{WorkloadDeployment, "migration-vpwned-sdk", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "vjailbreak-ui", constants.NamespaceMigrationSystem},
 	{WorkloadDeployment, "grafana", "monitoring"},
 	{WorkloadStatefulSet, "prometheus-k8s", "monitoring"},
@@ -301,27 +302,6 @@ func restartTZWorkloads(ctx context.Context, k8sClient client.Client) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func RestartDeployment(ctx context.Context, k8sClient client.Client, name, namespace string) error {
-	now := time.Now().Format(time.RFC3339)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		obj := &appsv1.Deployment{}
-		if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
-			Name:      name,
-			Namespace: namespace,
-		}, obj); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-		if obj.Spec.Template.Annotations == nil {
-			obj.Spec.Template.Annotations = make(map[string]string)
-		}
-		obj.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = now
-		return k8sClient.Update(ctx, obj)
-	})
 }
 
 // patchVersionCheckerTZ sets spec.timeZone on the version-checker CronJob so
