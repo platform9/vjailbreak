@@ -63,8 +63,10 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 }
 
 // takeVMSnapshot removes any pre-existing snapshot with the same name, then creates
-// a quiesced, memory-less snapshot of an already-powered-off VM.
-func (migobj *Migrate) takeVMSnapshot(ctx context.Context, name string) error {
+// a memory-less snapshot of the source VM. quiesce=true requires VMware Tools and
+// a powered-off (or quiescence-capable) VM; pass quiesce=false for mock migrations
+// where the source VM remains powered on.
+func (migobj *Migrate) takeVMSnapshot(ctx context.Context, name string, quiesce bool) error {
 	snapshots, err := migobj.VMops.ListSnapshots()
 	if err == nil {
 		for _, snap := range snapshots {
@@ -78,11 +80,10 @@ func (migobj *Migrate) takeVMSnapshot(ctx context.Context, name string) error {
 		}
 	}
 
-	// quiesced=true, memory=false
 	vmObj := migobj.VMops.GetVMObj()
-	task, err := vmObj.CreateSnapshot(ctx, name, "", false, true)
+	task, err := vmObj.CreateSnapshot(ctx, name, "", false, quiesce)
 	if err != nil {
-		return errors.Wrap(err, "failed to create quiesced snapshot")
+		return errors.Wrap(err, "failed to create snapshot")
 	}
 	return task.Wait(ctx)
 }
@@ -476,27 +477,34 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		return errors.Wrap(err, "failed to get Hot-Add SSH private key")
 	}
 
-	// 1. Power off the source VM — Hot-Add only supports cold migration.
-	migobj.logMessage("Powering off source VM before Hot-Add snapshot")
-	if err := migobj.VMops.VMPowerOff(); err != nil {
-		return errors.Wrap(err, "failed to power off source VM")
-	}
-	if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-		currState, stateErr := migobj.VMops.GetVMObj().PowerState(ctx)
-		if stateErr != nil {
-			return stateErr
+	// 1. Power off the source VM — skipped for mock migrations.
+	if migobj.MigrationType == "mock" {
+		migobj.logMessage("Mock migration detected, skipping VM power off")
+	} else {
+		migobj.logMessage("Powering off source VM before Hot-Add snapshot")
+		if err := migobj.VMops.VMPowerOff(); err != nil {
+			return errors.Wrap(err, "failed to power off source VM")
 		}
-		if currState != govmomitypes.VirtualMachinePowerStatePoweredOff {
-			return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+		if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+			currState, stateErr := migobj.VMops.GetVMObj().PowerState(ctx)
+			if stateErr != nil {
+				return stateErr
+			}
+			if currState != govmomitypes.VirtualMachinePowerStatePoweredOff {
+				return fmt.Errorf("VM power-off command completed but VM is still in state: %s", currState)
+			}
+			return nil
+		}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+			return errors.Wrap(err, "failed to verify VM power state after power off")
 		}
-		return nil
-	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
-		return errors.Wrap(err, "failed to verify VM power state after power off")
 	}
 
-	// 2. Snapshot the source VM (quiesced, memory-less).
+	// 2. Snapshot the source VM. Use quiesced=true for cold migrations (VM is
+	// powered off); use quiesced=false for mock so the powered-on VM is
+	// snapshotted crash-consistently without requiring VMware Tools quiescence.
+	quiesce := migobj.MigrationType != "mock"
 	migobj.logMessage(constants.EventMessageHotAddSnapshotCreate)
-	if err := migobj.takeVMSnapshot(ctx, hotAddSnapName); err != nil {
+	if err := migobj.takeVMSnapshot(ctx, hotAddSnapName, quiesce); err != nil {
 		return errors.Wrap(err, "failed to create source VM snapshot")
 	}
 
