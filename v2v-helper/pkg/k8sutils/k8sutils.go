@@ -12,6 +12,7 @@ import (
 	commonconfig "github.com/platform9/vjailbreak/pkg/common/config"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	k8scommon "github.com/platform9/vjailbreak/pkg/common/k8s"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -269,6 +270,30 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds configmap")
 	}
 	return arrayCreds, nil
+}
+
+// GetHotAddPrivateKey retrieves the SSH private key used to connect to the given Proxy VM.
+// The secret is named "{proxyVMName}-hot-add-ssh-key" and is created during Proxy VM onboarding.
+func GetHotAddPrivateKey(ctx context.Context, k8sClient client.Client, proxyVMName string) ([]byte, error) {
+	secretName := commonutils.HotAddSSHSecretName(proxyVMName)
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      secretName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, secret); err != nil {
+		return nil, errors.Wrapf(err, "failed to get Hot-Add SSH secret %s", secretName)
+	}
+
+	privateKey, ok := secret.Data["ssh-privatekey"]
+	if !ok {
+		return nil, fmt.Errorf("secret %s does not contain 'ssh-privatekey' key", secretName)
+	}
+
+	if len(privateKey) == 0 {
+		return nil, fmt.Errorf("Hot-Add SSH private key in secret %s is empty", secretName)
+	}
+
+	return privateKey, nil
 }
 
 // GetESXiSSHPrivateKey retrieves the ESXi SSH private key from a Kubernetes secret

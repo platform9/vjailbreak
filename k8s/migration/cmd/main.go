@@ -273,6 +273,13 @@ func SetupControllers(mgr ctrl.Manager, local bool, maxConcurrentReconciles int)
 		setupLog.Error(err, "unable to create controller", "controller", "ESXiSSHCreds")
 		return err
 	}
+	if err := (&controller.ProxyVMReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ProxyVM")
+		return err
+	}
 	if err := (&controller.StorageMappingReconciler{
 		BaseReconciler: controller.BaseReconciler{
 			Client: mgr.GetClient(),

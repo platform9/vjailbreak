@@ -160,6 +160,22 @@ func GetThumbprint(host string) (string, error) {
 	return thumbprint, nil
 }
 
+// IsTransientVCenterError returns true for errors that may resolve after refreshing
+// the vCenter session — covers auth expiry, HTTP timeouts, and dropped connections.
+func IsTransientVCenterError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "NotAuthenticated") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "no such host")
+}
+
 // Get all datacenters with retry and explicit authentication
 func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Datacenter, error) {
 	// Create a new finder with the current client each time to ensure we're using the most up-to-date client
@@ -168,8 +184,8 @@ func (vcclient *VCenterClient) getDatacenters(ctx context.Context) ([]*object.Da
 	// Try to get datacenters
 	datacenters, err := vcclient.VCFinder.DatacenterList(ctx, "*")
 	if err != nil {
-		// If we encounter an authentication error, force an explicit re-login and retry once
-		if strings.Contains(err.Error(), "NotAuthenticated") && vcclient.Session != nil {
+		// Retry on auth expiry and transient network/timeout errors
+		if IsTransientVCenterError(err) && vcclient.Session != nil {
 			// Explicitly force re-login
 			login := vcclient.Session.Login
 			if err := login(ctx, vcclient.VCClient, nil); err != nil {
@@ -218,6 +234,11 @@ func (vcclient *VCenterClient) GetVMWithDatacenter(ctx context.Context, name str
 		vm, err := vcclient.VCFinder.VirtualMachine(ctx, name)
 		if err == nil {
 			return vm, datacenter, nil
+		}
+		// Only continue to the next datacenter for genuine "not found" results.
+		// Surface real errors (timeouts, network failures) immediately.
+		if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return nil, nil, fmt.Errorf("failed to search for VM '%s': %v", name, err)
 		}
 	}
 	return nil, nil, fmt.Errorf("VM not found")

@@ -190,6 +190,7 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
+  - proxyvms
   - rdmdisks
   - rollingmigrationplans
   - storagemappings
@@ -222,6 +223,7 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
+  - proxyvms/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
