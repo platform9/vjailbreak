@@ -1289,6 +1289,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		} else {
 			utils.PrintLog("FixLegacyMkinitrd completed successfully")
 		}
+	}
 	// Inject VMware Tools cleanup script for Linux guests when requested
 	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		firstbootscriptname := "vmware_tools_cleanup"
