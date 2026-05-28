@@ -479,13 +479,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	}
 	log.Printf("virt-v2v-in-place conversion took: %s", duration)
 
-	// For SUSE/SLES GRUB Legacy guests, log the post-conversion GRUB state so
-	// we can confirm whether virt-v2v correctly updated device.map and menu.lst.
-	// This is the key diagnostic for GRUB Error 21 investigations.
-	if IsSUSEFamily(osRelease) {
-		logGRUBStatePostConversion(diskPath)
-	}
-
 	return nil
 }
 
@@ -1037,56 +1030,6 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptFlag)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
-	return nil
-}
-
-// logGRUBStatePostConversion reads and logs the GRUB Legacy configuration files
-// from the guest disk after virt-v2v-in-place completes.  This is diagnostic
-// output only — it does not modify the guest.
-//
-// The two files that matter for GRUB Error 21 on SLES 11 SP4 are:
-//
-//   - /boot/grub/device.map  — must reference the KVM disk (e.g. /dev/vda), not
-//     the original VMware disk (/dev/sda).  If it still contains /dev/sda the
-//     guest will fail with Error 21 because GRUB stage1.5 cannot find stage2.
-//
-//   - /boot/grub/menu.lst    — the root= kernel parameter and the GRUB "root"
-//     stanza must agree with the device.map entry above.
-//
-// Both files are read via guestfish in read-only mode so this call is safe to
-// run after conversion.
-func logGRUBStatePostConversion(diskPath string) {
-	log.Printf("=== GRUB state check (post virt-v2v) for disk %s ===", diskPath)
-
-	singleDisk := []vm.VMDisk{{Path: diskPath}}
-
-	// --- device.map ---
-	deviceMap, err := RunCommandInGuestAllVolumes(singleDisk, "cat", false, "/boot/grub/device.map")
-	if err != nil {
-		log.Printf("GRUB device.map: could not read: %v", err)
-	} else {
-		log.Printf("GRUB device.map contents:\n%s", strings.TrimSpace(deviceMap))
-	}
-
-	// --- menu.lst: log only the lines that identify boot targets ---
-	// Logging the full file is noisy; root/kernel/title lines are sufficient.
-	menuLst, err := RunCommandInGuestAllVolumes(singleDisk, "grep", false,
-		"-E", `^(title|kernel|root)[[:space:]]`, "/boot/grub/menu.lst")
-	if err != nil {
-		// grep exits non-zero when there are no matches; treat that as empty, not fatal.
-		log.Printf("GRUB menu.lst: could not read or no matching lines: %v", err)
-	} else {
-		log.Printf("GRUB menu.lst (title/kernel/root lines):\n%s", strings.TrimSpace(menuLst))
-	}
-
-	log.Printf("=== end GRUB state check ===")
-}
-
-// ReinstallGrubLegacy is a no-op stub — the guestfish-based GRUB stage1
-// reinstall approach did not reliably fix GRUB Error 21 for multi-disk
-// SLES 11 LVM VMs and has been removed.
-func ReinstallGrubLegacy(disks []vm.VMDisk) error {
-	log.Printf("ReinstallGrubLegacy: skipped (removed)")
 	return nil
 }
 
