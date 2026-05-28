@@ -5084,6 +5084,7 @@ rules:
   - openstackcreds
   - pcdclusters
   - pcdhosts
+  - proxyvms
   - rdmdisks
   - rollingmigrationplans
   - storagemappings
@@ -5116,6 +5117,7 @@ rules:
   - openstackcreds/finalizers
   - pcdclusters/finalizers
   - pcdhosts/finalizers
+  - proxyvms/finalizers
   - rdmdisks/finalizers
   - rollingmigrationplans/finalizers
   - storagemappings/finalizers
@@ -5149,6 +5151,13 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
