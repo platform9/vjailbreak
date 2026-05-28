@@ -1426,7 +1426,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	if err := r.setOSFamilyAndStorageFields(configMapData, vmMachine, migrationtemplate, arraycreds, proxyVM); err != nil {
+	if err := r.setMigrationEnv(configMapData, vmMachine, migrationtemplate, arraycreds, proxyVM); err != nil {
 		return nil, err
 	}
 
@@ -1617,7 +1617,7 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 	return nil
 }
 
-func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
+func (r *MigrationPlanReconciler) setMigrationEnv(
 	configMapData map[string]string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
@@ -2598,4 +2598,3 @@ func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migra
 	}
 	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
 }
-
