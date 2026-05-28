@@ -402,6 +402,11 @@ const (
 	// ESXiSSHSecretName is the name of the Kubernetes secret containing ESXi SSH private key
 	ESXiSSHSecretName = "esxi-ssh-key"
 
+	// HotAddSSHSecretSuffix is appended to the ProxyVM k8s resource name to form the
+	// per-VM SSH secret name: "{proxyVMName}-hot-add-ssh-key".
+	// Each Proxy VM has its own secret so different VMs can use different SSH keys.
+	HotAddSSHSecretSuffix = "hot-add-ssh-key"
+
 	// AutoFstabUpdate is the default value for automatic fstab update
 	AutoFstabUpdate = false
 	// AutoFstabUpdateKey is the key for enabling/disabling automatic fstab update
@@ -650,8 +655,14 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseImportingToCinder:      8,
 		vjailbreakv1alpha1.VMMigrationPhaseMappingVolume:          9,
 		vjailbreakv1alpha1.VMMigrationPhaseRescanningStorage:      10,
+		// HotAdd specific phases (share the same ordering slots as SAC since they are mutually exclusive code paths)
+		vjailbreakv1alpha1.VMMigrationPhaseSnapshottingSourceVM:    5,
+		vjailbreakv1alpha1.VMMigrationPhaseAttachingDisksToProxy:   6,
+		vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices: 7,
 		// Common phases to both the copy methods.
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  11,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:             11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring:  11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup:       12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover
@@ -703,4 +714,48 @@ var (
 	RDMPhaseManaged = "Managed"
 	// RDMPhaseError is the phase for RDMDisk when there is an error
 	RDMPhaseError = "Error"
+)
+
+// Hot-Add copy method constants
+const (
+	HotAddCopyMethod = "HotAdd"
+
+	// Migration phase names for the Hot-Add data-copy phase
+	MigrationPhaseHotAddSnapshottingVM     = "SnapshottingSourceVM"
+	MigrationPhaseHotAddAttachingDisks     = "AttachingDisksToProxy"
+	MigrationPhaseHotAddIdentifyingDevices = "IdentifyingBlockDevices"
+	MigrationPhaseHotAddTransferring       = "HotAddTransferInProgress"
+	MigrationPhaseHotAddCleaningUp         = "HotAddCleanup"
+
+	// Event message constants for Hot-Add phases
+	EventMessageHotAddSnapshotCreate = "Creating source VM snapshot"
+	EventMessageHotAddAttachDisks    = "Attaching snapshot disks to Proxy VM"
+	EventMessageHotAddIdentify       = "Identifying block devices on Proxy VM"
+	EventMessageHotAddServing        = "Serving disk via NBD on Proxy VM"
+	EventMessageHotAddCopying        = "Copying data via nbdcopy"
+	EventMessageHotAddCleanup        = "Cleaning up snapshot and disk attachments"
+
+	// Port range for qemu-nbd on Proxy VM
+	HotAddPortRangeMin = 10809
+	HotAddPortRangeMax = 11808
+
+	// ProxyVM validation statuses
+	ProxyVMStatusPending            = "Pending"
+	ProxyVMStatusVerifying          = "Verifying"
+	ProxyVMStatusReady              = "Ready"
+	ProxyVMStatusVerificationFailed = "VerificationFailed"
+
+	// ProxyVMMaxAttachedDisks is the vSphere hardware limit for disks per VM
+	ProxyVMMaxAttachedDisks = 60
+
+	// ProxyVMControllerName is the name of the ProxyVM controller
+	ProxyVMControllerName = "proxyvm-controller"
+
+	// ProxyVMFinalizer is the finalizer for ProxyVM resources
+	ProxyVMFinalizer = "proxyvm.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+)
+
+var (
+	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
+	ProxyVMRequiredComponents = []string{"qemu-nbd", "sshd"}
 )

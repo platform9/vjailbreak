@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,11 +53,15 @@ type MigrationTemplateSpec struct {
 	// +optional
 	ArrayCredsMapping string `json:"arrayCredsMapping,omitempty"`
 	// StorageCopyMethod indicates the method to use for storage migration
-	// Valid values: "normal" (default), "StorageAcceleratedCopy"
-	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy
+	// Valid values: "normal" (default), "StorageAcceleratedCopy", "HotAdd"
+	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy;HotAdd
 	// +kubebuilder:default:=normal
 	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
+	// ProxyVMRef references the ProxyVM to use for HotAdd data copy.
+	// Required when StorageCopyMethod is "HotAdd".
+	// +optional
+	ProxyVMRef *corev1.LocalObjectReference `json:"proxyVMRef,omitempty"`
 	// Source is the source details for the virtual machine
 	Source MigrationTemplateSource `json:"source"`
 	// Destination is the destination details for the virtual machine

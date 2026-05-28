@@ -75,5 +75,6 @@ COPY scripts/generate-udev-mapping.sh /home/fedora/generate-udev-mapping.sh
 COPY scripts/firstboot/windows/NIC-Recovery /home/fedora/NIC-Recovery
 COPY scripts/firstboot/store /home/fedora/store
 COPY scripts/offline-vmware-cleanup.sh /home/fedora/offline-vmware-cleanup.sh
+COPY scripts/firstboot/linux/vmware-tools-cleanup.sh /home/fedora/vmware-tools-cleanup.sh
 COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
 COPY scripts/99-l2-Netplan.yaml /home/fedora/99-l2-Netplan.yaml
