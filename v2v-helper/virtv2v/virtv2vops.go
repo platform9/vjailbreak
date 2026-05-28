@@ -1056,7 +1056,7 @@ for _arg in "$@"; do
       /dev/*/*)
         _vg=$(printf '%s' "$_arg" | sed 's|^/dev/\([^/]*\)/.*|\1|')
         _lv=$(printf '%s' "$_arg" | sed 's|^/dev/[^/]*/||')
-        _mapper="/dev/mapper/${_vg}-${_lv}"
+        _mapper="/dev/mapper/$(printf '%s' "${_vg}" | sed 's/-/--/g')-$(printf '%s' "${_lv}" | sed 's/-/--/g')"
         if [ -e "$_mapper" ]; then
           _arg="$_mapper"
         fi
