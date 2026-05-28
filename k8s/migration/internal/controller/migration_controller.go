@@ -458,6 +458,31 @@ loop:
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingDataCopyStart
 			break loop
+		// HotAdd-specific phases — ordered from most advanced to least advanced so the latest event wins.
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddCleanup) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddCopying) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddServing) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddIdentify) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddAttachDisks) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAttachingDisksToProxy]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAttachingDisksToProxy
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageHotAddSnapshotCreate) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseSnapshottingSourceVM]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSnapshottingSourceVM
+			break loop
 		case strings.Contains(strings.TrimSpace(events.Items[i].Message), constants.EventMessageMigrationFailed) ||
 			strings.Contains(strings.TrimSpace(events.Items[i].Message), constants.EventMessageFailed):
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
