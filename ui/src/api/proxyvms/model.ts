@@ -25,9 +25,10 @@ export interface ProxyVM {
   metadata: {
     name: string
     namespace: string
-    creationTimestamp: string
-    uid: string
+    creationTimestamp?: string
+    uid?: string
     resourceVersion?: string
+    deletionTimestamp?: string
   }
   spec: ProxyVMSpec
   status?: ProxyVMStatus

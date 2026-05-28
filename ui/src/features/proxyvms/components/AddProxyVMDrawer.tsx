@@ -136,9 +136,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         kind: 'ProxyVM',
         metadata: {
           name: proxyVmName,
-          namespace: VJAILBREAK_DEFAULT_NAMESPACE,
-          creationTimestamp: '',
-          uid: ''
+          namespace: VJAILBREAK_DEFAULT_NAMESPACE
         },
         spec: {
           vmName: data.vmName,

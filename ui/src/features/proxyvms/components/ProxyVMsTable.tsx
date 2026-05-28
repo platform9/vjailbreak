@@ -161,6 +161,7 @@ export default function ProxyVMsTable() {
         })
       )
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+      refetch()
       setRowSelectionModel([])
       setBulkDeleteDialogOpen(false)
     } catch (err: any) {
@@ -187,24 +188,27 @@ export default function ProxyVMsTable() {
     }
     deleteSecret(deleteTarget.metadata.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
     queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+    refetch()
     setDeleteTarget(null)
     setDeleting(false)
   }
 
   const rows = useMemo(
     () =>
-      proxyVMs.map((vm) => ({
-        id: vm.metadata.name,
-        name: vm.metadata.name,
-        vmName: vm.spec.vmName,
-        status: vm.status?.validationStatus,
-        message: vm.status?.validationMessage,
-        ipAddress: vm.status?.ipAddress,
-        attachedDiskCount: vm.status?.attachedDiskCount,
-        age: formatAge(vm.metadata.creationTimestamp),
-        lastValidated: vm.status?.lastValidationTime,
-        rawObject: vm
-      })),
+      proxyVMs
+        .filter((vm) => !vm.metadata.deletionTimestamp)
+        .map((vm) => ({
+          id: vm.metadata.name,
+          name: vm.metadata.name,
+          vmName: vm.spec.vmName,
+          status: vm.status?.validationStatus,
+          message: vm.status?.validationMessage,
+          ipAddress: vm.status?.ipAddress,
+          attachedDiskCount: vm.status?.attachedDiskCount,
+          age: formatAge(vm.metadata?.creationTimestamp || ''),
+          lastValidated: vm.status?.lastValidationTime,
+          rawObject: vm
+        })),
     [proxyVMs]
   )
 
@@ -315,9 +319,7 @@ export default function ProxyVMsTable() {
         />
       )}
 
-      {addDrawerOpen && (
-        <AddProxyVMDrawer open onClose={() => setAddDrawerOpen(false)} />
-      )}
+      {addDrawerOpen && <AddProxyVMDrawer open onClose={() => setAddDrawerOpen(false)} />}
     </div>
   )
 }
