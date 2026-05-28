@@ -1,7 +1,6 @@
 import {
   FormControl,
   FormHelperText,
-  InputLabel,
   MenuItem,
   Select,
   styled,
@@ -155,11 +154,7 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <FieldLabel
-                  label="Map Networks"
-                  required={hasSourceNetworks}
-                  align="flex-start"
-                />
+                <FieldLabel label="Map Networks" required={hasSourceNetworks} align="flex-start" />
                 {!hasSourceNetworks ? (
                   <Typography variant="body2" color="text.secondary">
                     Not required
@@ -177,8 +172,8 @@ export default function NetworkAndStorageMappingStep({
               {hasSourceNetworks ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select source and target networks to automatically create mappings. All
-                    networks must be mapped to proceed.
+                    Select source and target networks to automatically create mappings. All networks
+                    must be mapped to proceed.
                   </Typography>
                   <ResourceMappingTable
                     sourceItems={vmwareNetworks}
@@ -198,8 +193,8 @@ export default function NetworkAndStorageMappingStep({
                 </>
               ) : (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  None of the selected VMs have network interfaces. Network mapping is not
-                  required for this plan — you can proceed to the next step.
+                  None of the selected VMs have network interfaces. Network mapping is not required
+                  for this plan — you can proceed to the next step.
                 </Alert>
               )}
               {networkMappingError && <FormHelperText error>{networkMappingError}</FormHelperText>}
@@ -241,8 +236,7 @@ export default function NetworkAndStorageMappingStep({
                       value={option.value}
                       control={<Radio />}
                       label={
-                        option.value === 'StorageAcceleratedCopy' ||
-                        option.value === 'HotAdd' ? (
+                        option.value === 'StorageAcceleratedCopy' || option.value === 'HotAdd' ? (
                           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                             <Box component="span">{option.label}</Box>
                             <Chip
@@ -336,25 +330,38 @@ export default function NetworkAndStorageMappingStep({
                       before starting a Hot-Add migration.
                     </Alert>
                   ) : null}
-                  <FormControl fullWidth error={!!storageMappingError}>
-                    <InputLabel>Proxy VM</InputLabel>
-                    <Select
-                      value={params.proxyVMRef || ''}
-                      label="Proxy VM"
-                      onChange={(e) => onChange('proxyVMRef')(e.target.value)}
-                      disabled={readyProxyVMs.length === 0}
+                  <Box>
+                    <FormControl
+                      fullWidth
+                      variant="outlined"
+                      size="small"
+                      error={!!storageMappingError}
                     >
-                      {readyProxyVMs.map((vm) => (
-                        <MenuItem key={vm.metadata.name} value={vm.metadata.name}>
-                          {vm.metadata.name}
-                          {vm.status?.ipAddress ? ` (${vm.status.ipAddress})` : ''}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {storageMappingError && (
-                      <FormHelperText error>{storageMappingError}</FormHelperText>
-                    )}
-                  </FormControl>
+                      <Select
+                        value={params.proxyVMRef || ''}
+                        displayEmpty
+                        onChange={(e) => onChange('proxyVMRef')(e.target.value)}
+                        disabled={readyProxyVMs.length === 0}
+                        renderValue={(selected) => {
+                          if (!selected) return <em>Select Proxy VM</em>
+                          const vm = readyProxyVMs.find((v) => v.metadata.name === selected)
+                          return vm?.status?.ipAddress
+                            ? `${vm.metadata.name} (${vm.status.ipAddress})`
+                            : (selected as string)
+                        }}
+                      >
+                        {readyProxyVMs.map((vm) => (
+                          <MenuItem key={vm.metadata.name} value={vm.metadata.name}>
+                            {vm.metadata.name}
+                            {vm.status?.ipAddress ? ` (${vm.status.ipAddress})` : ''}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {storageMappingError && (
+                        <FormHelperText error>{storageMappingError}</FormHelperText>
+                      )}
+                    </FormControl>
+                  </Box>
                 </>
               ) : null}
 
