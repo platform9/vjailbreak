@@ -5,6 +5,9 @@ export interface ProxyVMSpec {
   vmwareCredsRef: {
     name: string
   }
+  sshKeySecretRef?: {
+    name: string
+  }
 }
 
 export interface ProxyVMStatus {

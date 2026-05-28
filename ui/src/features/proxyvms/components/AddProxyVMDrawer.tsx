@@ -1,15 +1,7 @@
-import { useState } from 'react'
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Alert,
-  Box,
-  Typography
-} from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, Box, Typography } from '@mui/material'
 import { useForm } from 'react-hook-form'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 
 import {
@@ -17,21 +9,23 @@ import {
   DrawerFooter,
   DrawerHeader,
   DrawerShell,
-  FormGrid,
   Section,
   SectionHeader,
   SurfaceCard
 } from 'src/components'
-import { DesignSystemForm, RHFSelect, RHFTextField, TextField } from 'src/shared/components/forms'
+import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
 
 import { postProxyVM } from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
+import { createSecret, deleteSecret } from 'src/api/secrets/secrets'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 
 interface FormData {
-  vmName: string
   vmwareCredsRef: string
+  vmName: string
+  sshPrivateKey: string
 }
 
 interface AddProxyVMDrawerProps {
@@ -48,14 +42,16 @@ function toK8sName(input: string): string {
     .slice(0, 63)
 }
 
-const PREREQUISITES = [
-  'lsblk — block device lister must be installed',
-  'nbdkit — network block device kit must be installed',
-  'qemu-nbd — QEMU NBD server must be installed',
-  'sshd — SSH daemon must be running and accessible',
-  'disk.EnableUUID — VMware disk UUID must be enabled on the VM',
-  'SSH key authorization — vJailbreak public key must be added to authorized_keys'
-]
+const validateSshPrivateKey = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return 'SSH private key is required'
+  const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
+  const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
+  if (!hasBegin || !hasEnd) {
+    return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
+  }
+  return null
+}
 
 const FORM_ID = 'add-proxy-vm-form'
 
@@ -70,42 +66,95 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
 
   const form = useForm<FormData>({
-    defaultValues: { vmName: '', vmwareCredsRef: '' }
+    defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '' },
+    mode: 'onChange',
+    reValidateMode: 'onChange'
   })
 
-  const { watch, reset } = form
-  const vmName = watch('vmName')
-  const derivedName = vmName ? toK8sName(vmName) : ''
+  const {
+    watch,
+    reset,
+    setValue,
+    formState: { isValid }
+  } = form
 
-  const handleClose = () => {
+  const vmwareCredsRef = watch('vmwareCredsRef')
+
+  const { data: vmOptions = [], isLoading: vmsLoading } = useQuery({
+    queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef],
+    queryFn: async () => {
+      const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, vmwareCredsRef)
+      return result.items.map((m) => ({ label: m.spec.vms.name, value: m.spec.vms.name }))
+    },
+    enabled: Boolean(vmwareCredsRef),
+    staleTime: 30_000
+  })
+
+  useEffect(() => {
+    setValue('vmName', '')
+  }, [vmwareCredsRef, setValue])
+
+  const handleClose = useCallback(() => {
     reset()
     setSubmitError(null)
     onClose()
-  }
+  }, [reset, onClose])
+
+  const handleKeyFileUpload = useCallback(
+    async (file: File | null) => {
+      if (!file) return
+      if (file.size > 1024 * 1024) {
+        setSubmitError('File too large. SSH private key must be under 1 MB.')
+        return
+      }
+      try {
+        const text = await file.text()
+        setValue('sshPrivateKey', text, { shouldDirty: true, shouldValidate: true })
+        setSubmitError(null)
+      } catch {
+        setSubmitError('Failed to read key file.')
+      }
+    },
+    [setValue]
+  )
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
+    const proxyVmName = toK8sName(data.vmName)
+    let secretCreated = false
     try {
+      await createSecret(
+        proxyVmName,
+        { 'ssh-privatekey': data.sshPrivateKey.trim() },
+        VJAILBREAK_DEFAULT_NAMESPACE
+      )
+      secretCreated = true
+
       await postProxyVM({
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'ProxyVM',
         metadata: {
-          name: derivedName,
+          name: proxyVmName,
           namespace: VJAILBREAK_DEFAULT_NAMESPACE,
           creationTimestamp: '',
           uid: ''
         },
         spec: {
           vmName: data.vmName,
-          vmwareCredsRef: { name: data.vmwareCredsRef }
+          vmwareCredsRef: { name: data.vmwareCredsRef },
+          sshKeySecretRef: { name: proxyVmName }
         }
       })
+
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
       handleClose()
     } catch (err) {
+      if (secretCreated) {
+        deleteSecret(proxyVmName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+      }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        setSubmitError(`A Proxy VM with the name "${derivedName}" already exists.`)
+        setSubmitError(`A Proxy VM with the name "${proxyVmName}" already exists.`)
       } else if (axios.isAxiosError(err)) {
         setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
       } else {
@@ -116,6 +165,16 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     }
   }
 
+  const isSubmitDisabled = isSubmitting || !isValid
+
+  const vmSelectPlaceholder = !vmwareCredsRef
+    ? 'Select VMware credentials first'
+    : vmsLoading
+      ? 'Loading VMs...'
+      : vmOptions.length === 0
+        ? 'No VMs found for selected credentials'
+        : 'Search and select a VM'
+
   return (
     <DrawerShell
       open={open}
@@ -123,7 +182,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       header={
         <DrawerHeader
           title="Add Proxy VM"
-          subtitle="Register a vCenter VM to act as a Hot-Add proxy during migration"
+          subtitle="Register a Proxy VM for Hot-Add data copy migrations"
           onClose={handleClose}
         />
       }
@@ -137,7 +196,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             type="submit"
             form={FORM_ID}
             loading={isSubmitting}
-            disabled={isSubmitting}
+            disabled={isSubmitDisabled}
           >
             Add Proxy VM
           </ActionButton>
@@ -148,7 +207,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         id={FORM_ID}
         form={form}
         onSubmit={onSubmit}
-        keyboardSubmitProps={{ open, onClose: handleClose, isSubmitDisabled: isSubmitting }}
+        keyboardSubmitProps={{ open, onClose: handleClose, isSubmitDisabled }}
       >
         <SurfaceCard>
           <Box sx={{ display: 'grid', gap: 2 }}>
@@ -160,30 +219,10 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
 
             <Section>
               <SectionHeader
-                title="VM Details"
-                subtitle="Specify the vCenter VM name and the VMware credentials used to access it."
+                title="Proxy VM"
+                subtitle="Select the VMware environment and the vCenter VM to register as a proxy."
               />
-              <FormGrid gap={2} minWidth={300}>
-                <RHFTextField
-                  name="vmName"
-                  label="VM Name"
-                  placeholder="proxy-vm-01"
-                  required
-                  fullWidth
-                  size="small"
-                  rules={{ required: 'VM name is required' }}
-                />
-
-                {derivedName && (
-                  <TextField
-                    label="Kubernetes Resource Name"
-                    value={derivedName}
-                    InputProps={{ readOnly: true }}
-                    helperText="Auto-derived from VM name"
-                    fullWidth
-                  />
-                )}
-
+              <Box sx={{ display: 'grid', gap: 2 }}>
                 <RHFSelect
                   name="vmwareCredsRef"
                   label="VMware Credentials"
@@ -195,32 +234,62 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                       : 'Select credentials'
                   }
                 />
-              </FormGrid>
+
+                <RHFSelect
+                  name="vmName"
+                  label="VM Name"
+                  options={vmOptions}
+                  searchable
+                  searchPlaceholder="Search VMs..."
+                  rules={{ required: 'VM is required' }}
+                  placeholder={vmSelectPlaceholder}
+                  disabled={!vmwareCredsRef || vmsLoading}
+                />
+              </Box>
             </Section>
 
-            <Accordion
-              disableGutters
-              elevation={0}
-              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-            >
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="body2" fontWeight={500}>
-                  Setup Prerequisites
+            <Section>
+              <SectionHeader
+                title="SSH Access"
+                subtitle="Provide the private key used to SSH into the proxy VM for disk access."
+              />
+
+              <Alert severity="info">
+                Add the public key corresponding to your private key below to the Proxy VM's{' '}
+                <strong>/root/.ssh/authorized_keys</strong> before registering.
+              </Alert>
+
+              <Box sx={{ display: 'flex', gap: 2, alignItems: { xs: 'flex-start', md: 'center' } }}>
+                <ActionButton tone="secondary" component="label" disabled={isSubmitting}>
+                  Upload key file
+                  <input
+                    type="file"
+                    hidden
+                    onChange={(e) => handleKeyFileUpload(e.target.files?.[0] ?? null)}
+                  />
+                </ActionButton>
+                <Typography variant="body2" color="text.secondary">
+                  Paste only the OpenSSH private key content (no field name prefix).
                 </Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Ensure the following are configured on the proxy VM before adding:
-                </Typography>
-                <Box component="ul" sx={{ m: 0, pl: 2 }}>
-                  {PREREQUISITES.map((item) => (
-                    <Box component="li" key={item} sx={{ mb: 0.5 }}>
-                      <Typography variant="body2">{item}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </AccordionDetails>
-            </Accordion>
+              </Box>
+
+              <RHFTextField
+                name="sshPrivateKey"
+                label="SSH Private Key"
+                required
+                multiline
+                minRows={10}
+                disabled={isSubmitting}
+                placeholder={
+                  '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'
+                }
+                rules={{
+                  required: 'SSH private key is required',
+                  validate: (val: string) => validateSshPrivateKey(val) || true
+                }}
+                onValueChange={() => setSubmitError(null)}
+              />
+            </Section>
           </Box>
         </SurfaceCard>
       </DesignSystemForm>

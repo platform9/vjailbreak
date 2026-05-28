@@ -1,18 +1,19 @@
-import { useMemo, useState } from 'react'
-import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
-import DeleteIcon from '@mui/icons-material/Delete'
+import { useCallback, useMemo, useState } from 'react'
+import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import WarningIcon from '@mui/icons-material/Warning'
+import DnsIcon from '@mui/icons-material/Dns'
 import { GridColDef } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
-import { CommonDataGrid } from 'src/components/grid'
-import ConfirmationDialog from 'src/components/dialogs/ConfirmationDialog'
+import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
+import { ConfirmationDialog } from 'src/components/dialogs'
 import { deleteProxyVM } from 'src/api/proxyvms/proxyVMs'
+import { deleteSecret } from 'src/api/secrets/secrets'
 import { ProxyVM, ProxyVMValidationStatus } from 'src/api/proxyvms/model'
-import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
-interface Props {
-  proxyVMs: ProxyVM[]
-  loading?: boolean
-  toolbar: React.ReactNode
-}
+import { useProxyVMsQuery, PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
+import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import AddProxyVMDrawer from './AddProxyVMDrawer'
 
 function statusColor(
   status: ProxyVMValidationStatus | undefined
@@ -43,85 +44,138 @@ function formatAge(creationTimestamp: string): string {
   }
 }
 
-export default function ProxyVMsTable({ proxyVMs, loading, toolbar }: Props) {
+const getColumns = (onDeleteClick: (vm: ProxyVM) => void): GridColDef[] => [
+  { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 140 },
+  { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 140 },
+  {
+    field: 'status',
+    headerName: 'Status',
+    flex: 0.9,
+    minWidth: 150,
+    renderCell: (params) => (
+      <Chip
+        label={params.value ?? 'Pending'}
+        size="small"
+        color={statusColor(params.value)}
+        variant="outlined"
+        sx={{ borderRadius: '4px' }}
+      />
+    )
+  },
+  {
+    field: 'message',
+    headerName: 'Message',
+    flex: 1.5,
+    minWidth: 180,
+    renderCell: (params) => {
+      const msg: string = params.value || ''
+      const status: string = params.row.status
+      if (!msg) return '-'
+      return (
+        <Tooltip title={msg}>
+          <Typography
+            variant="body2"
+            color={status === 'VerificationFailed' ? 'error' : 'text.secondary'}
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%'
+            }}
+          >
+            {msg}
+          </Typography>
+        </Tooltip>
+      )
+    }
+  },
+  {
+    field: 'ipAddress',
+    headerName: 'IP Address',
+    flex: 0.9,
+    minWidth: 130,
+    renderCell: (params) => params.value || '-'
+  },
+  {
+    field: 'attachedDiskCount',
+    headerName: 'Attached Disks',
+    flex: 0.7,
+    minWidth: 120,
+    renderCell: (params) => (params.value != null ? params.value : '-')
+  },
+  {
+    field: 'age',
+    headerName: 'Age',
+    flex: 0.6,
+    minWidth: 80
+  },
+  {
+    field: 'lastValidated',
+    headerName: 'Last Validated',
+    flex: 1.1,
+    minWidth: 160,
+    renderCell: (params) => {
+      if (!params.value) return '-'
+      try {
+        return new Date(params.value).toLocaleString()
+      } catch {
+        return params.value
+      }
+    }
+  },
+  {
+    field: 'actions',
+    headerName: 'Actions',
+    width: 80,
+    sortable: false,
+    disableColumnMenu: true,
+    renderCell: (params) => (
+      <Tooltip title="Delete">
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDeleteClick(params.row.rawObject)
+          }}
+          aria-label="delete proxy vm"
+        >
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )
+  }
+]
+
+const STATUS_FILTER_OPTIONS = ['All', 'Pending', 'Verifying', 'Ready', 'VerificationFailed']
+
+export default function ProxyVMsTable() {
   const queryClient = useQueryClient()
+  const { data: proxyVMs = [], isLoading, refetch } = useProxyVMsQuery()
+  const [addDrawerOpen, setAddDrawerOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProxyVM | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('All')
 
-  const columns: GridColDef[] = useMemo(
-    () => [
-      { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 140 },
-      { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 140 },
-      {
-        field: 'status',
-        headerName: 'Status',
-        flex: 1,
-        minWidth: 150,
-        renderCell: (params) => (
-          <Chip
-            label={params.value ?? 'Pending'}
-            size="small"
-            color={statusColor(params.value)}
-            variant="outlined"
-            sx={{ borderRadius: '4px' }}
-          />
-        )
-      },
-      {
-        field: 'ipAddress',
-        headerName: 'IP Address',
-        flex: 1,
-        minWidth: 130,
-        renderCell: (params) => params.value || '-'
-      },
-      {
-        field: 'attachedDiskCount',
-        headerName: 'Attached Disks',
-        flex: 0.8,
-        minWidth: 120,
-        renderCell: (params) => (params.value != null ? params.value : '-')
-      },
-      {
-        field: 'age',
-        headerName: 'Age',
-        flex: 0.7,
-        minWidth: 80
-      },
-      {
-        field: 'lastValidated',
-        headerName: 'Last Validated',
-        flex: 1.2,
-        minWidth: 160,
-        renderCell: (params) => {
-          if (!params.value) return '-'
-          try {
-            return new Date(params.value).toLocaleString()
-          } catch {
-            return params.value
-          }
-        }
-      },
-      {
-        field: 'actions',
-        headerName: '',
-        width: 60,
-        sortable: false,
-        disableColumnMenu: true,
-        renderCell: (params) => (
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => setDeleteTarget(params.row.rawObject)}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )
-      }
-    ],
-    []
-  )
+  const handleRefresh = useCallback(() => {
+    refetch()
+  }, [refetch])
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteProxyVM(deleteTarget.metadata.name)
+      deleteSecret(deleteTarget.metadata.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+      queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+      setDeleteTarget(null)
+    } catch (err: any) {
+      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VM.')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const rows = useMemo(
     () =>
@@ -130,6 +184,7 @@ export default function ProxyVMsTable({ proxyVMs, loading, toolbar }: Props) {
         name: vm.metadata.name,
         vmName: vm.spec.vmName,
         status: vm.status?.validationStatus,
+        message: vm.status?.validationMessage,
         ipAddress: vm.status?.ipAddress,
         attachedDiskCount: vm.status?.attachedDiskCount,
         age: formatAge(vm.metadata.creationTimestamp),
@@ -139,41 +194,67 @@ export default function ProxyVMsTable({ proxyVMs, loading, toolbar }: Props) {
     [proxyVMs]
   )
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return
-    setDeleteError(null)
-    await deleteProxyVM(deleteTarget.metadata.name)
-    queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
-    setDeleteTarget(null)
-  }
+  const filteredRows = useMemo(() => {
+    if (statusFilter === 'All') return rows
+    return rows.filter((r) => r.status === statusFilter)
+  }, [rows, statusFilter])
+
+  const columns = useMemo(() => getColumns(setDeleteTarget), [])
+
+  const search = (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      <CustomSearchToolbar
+        placeholder="Search by name or VM name"
+        onRefresh={handleRefresh}
+        disableRefresh={isLoading}
+        onStatusFilterChange={setStatusFilter}
+        currentStatusFilter={statusFilter}
+        statusFilterOptions={STATUS_FILTER_OPTIONS}
+      />
+    </Box>
+  )
+
+  const actions = (
+    <Button
+      variant="contained"
+      startIcon={<AddIcon />}
+      onClick={() => setAddDrawerOpen(true)}
+      sx={{ height: 40 }}
+    >
+      Add Proxy VM
+    </Button>
+  )
+
+  const toolbar = (
+    <ListingToolbar title="Proxy VMs" icon={<DnsIcon />} search={search} actions={actions} />
+  )
 
   return (
-    <Box sx={{ height: '100%', width: '100%' }}>
+    <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
       <CommonDataGrid
-        rows={rows}
+        rows={filteredRows}
         columns={columns}
-        loading={loading}
+        loading={isLoading || deleting}
         disableRowSelectionOnClick
-        slots={{ toolbar: () => toolbar }}
         initialState={{
+          sorting: { sortModel: [{ field: 'name', sort: 'asc' }] },
           pagination: { paginationModel: { pageSize: 25 } }
         }}
+        slots={{ toolbar: () => toolbar }}
         pageSizeOptions={[10, 25, 50, 100]}
         emptyMessage="No Proxy VMs configured"
+        sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
       />
 
       {deleteTarget && (
         <ConfirmationDialog
           open
           title="Delete Proxy VM"
-          message={
-            <Typography>
-              Delete Proxy VM <strong>{deleteTarget.metadata.name}</strong>? This action cannot be
-              undone.
-            </Typography>
-          }
+          icon={<WarningIcon color="warning" />}
+          message={`Are you sure you want to delete Proxy VM "${deleteTarget.metadata.name}"?`}
           actionLabel="Delete"
           actionColor="error"
+          actionVariant="outlined"
           onConfirm={handleDelete}
           onClose={() => {
             setDeleteTarget(null)
@@ -183,6 +264,10 @@ export default function ProxyVMsTable({ proxyVMs, loading, toolbar }: Props) {
           onErrorChange={setDeleteError}
         />
       )}
-    </Box>
+
+      {addDrawerOpen && (
+        <AddProxyVMDrawer open onClose={() => setAddDrawerOpen(false)} />
+      )}
+    </div>
   )
 }
