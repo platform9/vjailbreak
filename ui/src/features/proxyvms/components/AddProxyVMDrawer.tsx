@@ -158,39 +158,45 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               </Alert>
             )}
 
-            <FormGrid gap={2} minWidth={300}>
-              <RHFTextField
-                name="vmName"
-                label="VM Name"
-                placeholder="proxy-vm-01"
-                required
-                fullWidth
-                size="small"
-                rules={{ required: 'VM name is required' }}
+            <Section>
+              <SectionHeader
+                title="VM Details"
+                subtitle="Specify the vCenter VM name and the VMware credentials used to access it."
               />
-
-              {derivedName && (
-                <TextField
-                  label="Kubernetes Resource Name"
-                  value={derivedName}
-                  InputProps={{ readOnly: true }}
-                  helperText="Auto-derived from VM name"
+              <FormGrid gap={2} minWidth={300}>
+                <RHFTextField
+                  name="vmName"
+                  label="VM Name"
+                  placeholder="proxy-vm-01"
+                  required
                   fullWidth
+                  size="small"
+                  rules={{ required: 'VM name is required' }}
                 />
-              )}
 
-              <RHFSelect
-                name="vmwareCredsRef"
-                label="VMware Credentials"
-                options={credOptions}
-                rules={{ required: 'VMware credentials are required' }}
-                placeholder={
-                  credOptions.length === 0
-                    ? 'No validated VMware credentials found'
-                    : 'Select credentials'
-                }
-              />
-            </FormGrid>
+                {derivedName && (
+                  <TextField
+                    label="Kubernetes Resource Name"
+                    value={derivedName}
+                    InputProps={{ readOnly: true }}
+                    helperText="Auto-derived from VM name"
+                    fullWidth
+                  />
+                )}
+
+                <RHFSelect
+                  name="vmwareCredsRef"
+                  label="VMware Credentials"
+                  options={credOptions}
+                  rules={{ required: 'VMware credentials are required' }}
+                  placeholder={
+                    credOptions.length === 0
+                      ? 'No validated VMware credentials found'
+                      : 'Select credentials'
+                  }
+                />
+              </FormGrid>
+            </Section>
 
             <Accordion
               disableGutters

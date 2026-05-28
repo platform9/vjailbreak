@@ -71,7 +71,12 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'proxy-vms',
         label: 'Proxy VMs',
-        path: '/dashboard/proxy-vms'
+        path: '/dashboard/proxy-vms',
+        badge: {
+          label: 'Beta',
+          color: 'warning',
+          variant: 'outlined'
+        }
       }
     ]
   },

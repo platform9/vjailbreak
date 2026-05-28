@@ -241,7 +241,8 @@ export default function NetworkAndStorageMappingStep({
                       value={option.value}
                       control={<Radio />}
                       label={
-                        option.value === 'StorageAcceleratedCopy' ? (
+                        option.value === 'StorageAcceleratedCopy' ||
+                        option.value === 'HotAdd' ? (
                           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                             <Box component="span">{option.label}</Box>
                             <Chip
