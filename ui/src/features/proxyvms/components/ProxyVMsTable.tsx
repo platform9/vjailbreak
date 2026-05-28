@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Tooltip } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
 import DnsIcon from '@mui/icons-material/Dns'
-import { GridColDef } from '@mui/x-data-grid'
+import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -45,13 +45,13 @@ function formatAge(creationTimestamp: string): string {
 }
 
 const getColumns = (onDeleteClick: (vm: ProxyVM) => void): GridColDef[] => [
-  { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 140 },
-  { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 140 },
+  { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 120 },
+  { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 120 },
   {
     field: 'status',
     headerName: 'Status',
-    flex: 0.9,
-    minWidth: 150,
+    flex: 0.8,
+    minWidth: 100,
     renderCell: (params) => (
       <Chip
         label={params.value ?? 'Pending'}
@@ -63,57 +63,30 @@ const getColumns = (onDeleteClick: (vm: ProxyVM) => void): GridColDef[] => [
     )
   },
   {
-    field: 'message',
-    headerName: 'Message',
-    flex: 1.5,
-    minWidth: 180,
-    renderCell: (params) => {
-      const msg: string = params.value || ''
-      const status: string = params.row.status
-      if (!msg) return '-'
-      return (
-        <Tooltip title={msg}>
-          <Typography
-            variant="body2"
-            color={status === 'VerificationFailed' ? 'error' : 'text.secondary'}
-            sx={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: '100%'
-            }}
-          >
-            {msg}
-          </Typography>
-        </Tooltip>
-      )
-    }
-  },
-  {
     field: 'ipAddress',
     headerName: 'IP Address',
     flex: 0.9,
-    minWidth: 130,
+    minWidth: 110,
     renderCell: (params) => params.value || '-'
   },
   {
     field: 'attachedDiskCount',
     headerName: 'Attached Disks',
     flex: 0.7,
-    minWidth: 120,
+    minWidth: 100,
     renderCell: (params) => (params.value != null ? params.value : '-')
   },
   {
     field: 'age',
     headerName: 'Age',
-    flex: 0.6,
-    minWidth: 80
+    flex: 0.5,
+    minWidth: 60
   },
   {
     field: 'lastValidated',
     headerName: 'Last Validated',
     flex: 1.1,
-    minWidth: 160,
+    minWidth: 150,
     renderCell: (params) => {
       if (!params.value) return '-'
       try {
@@ -126,7 +99,7 @@ const getColumns = (onDeleteClick: (vm: ProxyVM) => void): GridColDef[] => [
   {
     field: 'actions',
     headerName: 'Actions',
-    width: 80,
+    width: 70,
     sortable: false,
     disableColumnMenu: true,
     renderCell: (params) => (
@@ -156,10 +129,46 @@ export default function ProxyVMsTable() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   const handleRefresh = useCallback(() => {
     refetch()
   }, [refetch])
+
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteDialogOpen(true)
+  }
+
+  const handleBulkDeleteClose = () => {
+    setBulkDeleteDialogOpen(false)
+    setDeleteError(null)
+  }
+
+  const handleConfirmBulkDelete = async () => {
+    const snapshot = [...rowSelectionModel] as string[]
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await Promise.all(
+        snapshot.map(async (name) => {
+          try {
+            await deleteProxyVM(name)
+          } catch (err: any) {
+            if (err?.response?.status !== 404) throw err
+          }
+          deleteSecret(name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+        })
+      )
+      queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+      setRowSelectionModel([])
+      setBulkDeleteDialogOpen(false)
+    } catch (err: any) {
+      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VMs.')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -167,14 +176,19 @@ export default function ProxyVMsTable() {
     setDeleteError(null)
     try {
       await deleteProxyVM(deleteTarget.metadata.name)
-      deleteSecret(deleteTarget.metadata.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
-      queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
-      setDeleteTarget(null)
     } catch (err: any) {
-      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VM.')
-    } finally {
-      setDeleting(false)
+      const status = err?.response?.status
+      if (status !== 404) {
+        setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VM.')
+        setDeleting(false)
+        return
+      }
+      // 404 = already gone, proceed with cleanup
     }
+    deleteSecret(deleteTarget.metadata.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+    queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+    setDeleteTarget(null)
+    setDeleting(false)
   }
 
   const rows = useMemo(
@@ -199,10 +213,26 @@ export default function ProxyVMsTable() {
     return rows.filter((r) => r.status === statusFilter)
   }, [rows, statusFilter])
 
+  const selectedItems = useMemo(
+    () => proxyVMs.filter((vm) => rowSelectionModel.includes(vm.metadata.name)),
+    [proxyVMs, rowSelectionModel]
+  )
+
   const columns = useMemo(() => getColumns(setDeleteTarget), [])
 
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {rowSelectionModel.length > 0 && (
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={handleBulkDeleteClick}
+          sx={{ height: 40 }}
+        >
+          Delete Selected ({rowSelectionModel.length})
+        </Button>
+      )}
       <CustomSearchToolbar
         placeholder="Search by name or VM name"
         onRefresh={handleRefresh}
@@ -235,7 +265,10 @@ export default function ProxyVMsTable() {
         rows={filteredRows}
         columns={columns}
         loading={isLoading || deleting}
+        checkboxSelection
         disableRowSelectionOnClick
+        rowSelectionModel={rowSelectionModel}
+        onRowSelectionModelChange={setRowSelectionModel}
         initialState={{
           sorting: { sortModel: [{ field: 'name', sort: 'asc' }] },
           pagination: { paginationModel: { pageSize: 25 } }
@@ -260,6 +293,23 @@ export default function ProxyVMsTable() {
             setDeleteTarget(null)
             setDeleteError(null)
           }}
+          errorMessage={deleteError}
+          onErrorChange={setDeleteError}
+        />
+      )}
+
+      {bulkDeleteDialogOpen && (
+        <ConfirmationDialog
+          open
+          title="Delete Proxy VMs"
+          icon={<WarningIcon color="warning" />}
+          message={`Are you sure you want to delete ${rowSelectionModel.length} Proxy VM${rowSelectionModel.length > 1 ? 's' : ''}?`}
+          items={selectedItems.map((vm) => ({ id: vm.metadata.name, name: vm.metadata.name }))}
+          actionLabel="Delete"
+          actionColor="error"
+          actionVariant="outlined"
+          onConfirm={handleConfirmBulkDelete}
+          onClose={handleBulkDeleteClose}
           errorMessage={deleteError}
           onErrorChange={setDeleteError}
         />
