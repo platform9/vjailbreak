@@ -121,7 +121,8 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
-    const proxyVmName = toK8sName(data.vmName)
+    const vmNameSafe = toK8sName(data.vmName)
+    const proxyVmName = vmNameSafe + '-hot-add-ssh-key'
     let secretCreated = false
     try {
       await createSecret(
@@ -135,7 +136,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'ProxyVM',
         metadata: {
-          name: proxyVmName,
+          name: vmNameSafe,
           namespace: VJAILBREAK_DEFAULT_NAMESPACE
         },
         spec: {
