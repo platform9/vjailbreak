@@ -752,7 +752,6 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.removeVMwareTools || false}
-                    disabled={!hasWindowsVMSelected}
                     onChange={(e) => {
                       onChange('removeVMwareTools')(e.target.checked)
                     }}
@@ -760,7 +759,7 @@ export default function MigrationOptionsAlt({
                 }
               />
               <OptionHelp variant="caption">
-                Remove VMware Tools from the Windows VM post-migration
+                Remove VMware Tools from the VM post-migration
               </OptionHelp>
             </OptionLeft>
             <Box />

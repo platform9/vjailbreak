@@ -102,6 +102,22 @@ func GetVMK8sCompatibleName(vmName, vmid, credName string) (string, error) {
 	return GetK8sCompatibleVMWareObjectName(vmNameForK8s, credName)
 }
 
+// HotAddSSHSecretName returns the k8s Secret name that holds the SSH private key
+// for the given ProxyVM. k8s names are limited to 253 characters; the suffix
+// "-hot-add-ssh-key" is 16 characters, so the ProxyVM name is truncated to 237
+// characters if necessary and any trailing hyphen is stripped before appending.
+func HotAddSSHSecretName(proxyVMName string) string {
+	const maxNameLen = 253
+	suffix := "-" + constants.HotAddSSHSecretSuffix
+	maxBase := maxNameLen - len(suffix)
+	base := proxyVMName
+	if len(base) > maxBase {
+		base = base[:maxBase]
+		base = strings.TrimRight(base, "-")
+	}
+	return base + suffix
+}
+
 // SanitizeLabelValue returns a Kubernetes-valid label value from an arbitrary string.
 // Rules: max 63 chars, only [A-Za-z0-9-_.], must start and end with alphanumeric (or be empty).
 // Spaces are replaced with hyphens; remaining invalid characters are removed.

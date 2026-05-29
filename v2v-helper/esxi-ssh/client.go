@@ -117,6 +117,9 @@ func (c *Client) Connect(ctx context.Context, hostname, username string, private
 		_ = netConn.Close()
 		return fmt.Errorf("failed to establish SSH client connection: %w", err)
 	}
+	// Clear the deadline that was set for the handshake so the connection
+	// stays open indefinitely for subsequent commands (e.g. long nbdcopy runs).
+	_ = netConn.SetDeadline(time.Time{})
 	c.sshClient = ssh.NewClient(cc, chans, reqs)
 	return nil
 }

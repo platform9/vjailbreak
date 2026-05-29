@@ -79,6 +79,10 @@ type Migrate struct {
 	ArrayInsecure     bool
 	VendorType        string
 	ArrayCredsMapping string
+	// Hot-Add copy method: Proxy VM coordinates
+	ProxyVMIP      string
+	ProxyVMName    string // vCenter display name — used to locate VM in vCenter
+	ProxyVMK8sName string // Kubernetes resource name — used to patch ProxyVM status
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.
@@ -269,6 +273,10 @@ func (migobj *Migrate) DetachVolume(ctx context.Context, disk vm.VMDisk) error {
 func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping detach for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
 		migobj.logMessage(fmt.Sprintf("Detaching volume %s from VM", vmdisk.Name))
 		if err := openstackops.DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
 			return errors.Wrap(err, "failed to detach volume from VM")
@@ -287,6 +295,10 @@ func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping delete for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
 		err := openstackops.DeleteVolume(ctx, vmdisk.OpenstackVol.ID)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete volume")
@@ -1114,10 +1126,13 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", -1, err
 	}
 
-	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
+	// Run generate-mount-persistence.sh script based on AUTO_FSTAB_UPDATE setting.
+	// The flag passed to the script varies by OS: SUSE GRUB Legacy guests use
+	// --replace-fstab to avoid rewriting device.map before virt-v2v runs (see
+	// RunMountPersistenceScript for the full rationale).
 	if autoFstabUpdate {
-		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
-		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+		migobj.logMessage("Running generate-mount-persistence.sh script")
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path, osRelease); err != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
 			// Don't fail the migration, just log the warning
 		} else {
@@ -1263,10 +1278,38 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
+	// Pre-conversion SUSE fixes: install the LVM mkinitrd wrapper so that
+	// virt-v2v's chroot call to mkinitrd can resolve /dev/<vg>/<lv> paths.
+	if virtv2v.IsSUSEFamily(osRelease) {
+		utils.PrintLog("SUSE guest detected: running pre-conversion FixLegacyMkinitrd")
+		if err := virtv2v.FixLegacyMkinitrd(vminfo.VMDisks); err != nil {
+			// Non-fatal: log and continue.  The conversion may still succeed
+			// on modern SUSE guests that use dracut, or if the root is not LVM.
+			utils.PrintLog(fmt.Sprintf("Warning: FixLegacyMkinitrd failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixLegacyMkinitrd completed successfully")
+		}
+	}
+	// Inject VMware Tools cleanup script for Linux guests when requested
+	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
+		firstbootscriptname := "vmware_tools_cleanup"
+		firstbootscripts = append(firstbootscripts, firstbootscriptname)
+		scriptContent, err := os.ReadFile("/home/fedora/vmware-tools-cleanup.sh")
+		if err != nil {
+			return errors.Wrap(err, "failed to read VMware tools cleanup script")
+		}
+		if err := virtv2v.AddFirstBootScript(string(scriptContent), firstbootscriptname); err != nil {
+			return errors.Wrap(err, "failed to add VMware tools cleanup first boot script")
+		}
+		utils.PrintLog("VMware Tools cleanup script added for Linux firstboot")
+	}
+
 	// Run virt-v2v conversion
+	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s)", vminfo.Name, osPath, vminfo.OSType))
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
+	utils.PrintLog("virt-v2v conversion completed successfully")
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if removeVMwareTools {
@@ -1859,7 +1902,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) &&
+		migobj.StorageCopyMethod != constants.StorageCopyMethod &&
+		migobj.StorageCopyMethod != constants.HotAddCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1881,6 +1926,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	if migobj.StorageCopyMethod == constants.StorageCopyMethod {
 		// Initialize storage provider if using StorageAcceleratedCopy migration
 		if err := migobj.InitializeStorageProvider(ctx); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to initialize storage provider: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after storage provider init failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to initialize storage provider")
 		}
 		defer func() {
@@ -1889,16 +1937,42 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 		}()
 		if err := migobj.ValidateStorageAcceleratedCopyPrerequisites(ctx); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("StorageAcceleratedCopy prerequisites validation failed: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after prerequisites validation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "StorageAcceleratedCopy prerequisites validation failed")
 		}
 
 		// Perform the copy here.
 		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform StorageAcceleratedCopy copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after StorageAcceleratedCopy failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to perform StorageAcceleratedCopy copy")
 		}
 		// Apply image tags to the volumes we cinder managed.
 		if err := migobj.applyImageMetadataForXCOPYVolumes(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to apply image metadata to XCOPY volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after image metadata failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to apply image metadata to XCOPY volumes")
+		}
+
+	} else if migobj.StorageCopyMethod == constants.HotAddCopyMethod {
+
+		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
+		}
+		for idx, vmdisk := range vminfo.VMDisks {
+			path, err := migobj.AttachVolume(ctx, vmdisk)
+			if err != nil {
+				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
+			}
+			vminfo.VMDisks[idx].Path = path
+		}
+		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform HotAdd disk copy")
 		}
 
 	} else {
@@ -1906,12 +1980,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Create and Add Volumes to Host
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after volume creation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to add volumes to host")
 		}
 		// Enable CBT
 		err = migobj.EnableCBTWrapper()
 		if err != nil {
-			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, nil)
+			migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
 			return errors.Wrap(err, "CBT Failure")
 		}
 
@@ -1923,7 +2000,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		// Live Replicate Disks
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
 		if err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, nil); cleanuperror != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
 				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 			}
