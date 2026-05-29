@@ -2,7 +2,7 @@
 
 **Feature path**: `src/features/migration/`  
 **Generated**: 2026-05-20  
-**Updated**: 2026-05-27 (HotAdd proxy VM integration)  
+**Updated**: 2026-05-29 (HotAdd storage mapping, powered-on VM filter, validation fixes)  
 **Coverage**: 73 files — api, components, context, hooks, pages, steps, utils
 
 ---
@@ -38,7 +38,7 @@ Orchestrates VMware → PCD (OpenStack) VM migrations. Two modes: **standard** (
 |-------|-----------|-----------------|
 | `normal` | Datastore → Volume Type mapping | POST `/storage-mappings`, patch template `storageMapping` |
 | `StorageAcceleratedCopy` | Datastore → Array Creds mapping | POST `/arraycreds-mapping`, patch template `arrayCredsMapping` |
-| `HotAdd` | ProxyVM selector dropdown | No storage mapping POST; patch template `proxyVMRef: { name }` |
+| `HotAdd` | ProxyVM selector + Datastore → Volume Type mapping table | POST `/storagemappings`; patch template `proxyVMRef: { name }` AND `storageMapping` |
 
 `HotAdd` added in May 2026. Related spec: `docs/specs/proxyvms/proxyvms-feature.md`.
 
@@ -453,14 +453,17 @@ Migration monitoring
 **Storage Copy Method**:
 - `normal` → storage mappings (datastore → volume type)
 - `StorageAcceleratedCopy` → array creds mappings (datastore → array cred)
-- `HotAdd` → ProxyVM selector dropdown (no datastore mapping; select Ready ProxyVM CRD)
+- `HotAdd` → ProxyVM selector **plus** Datastore → Volume Type mapping table
 
 **HotAdd behavior**:
-- Fetches `useProxyVMsQuery()` filtered to `status.validationStatus === 'Ready'`
-- Each option label: `metadata.name (status.ipAddress)`
-- Selection stored as `params.proxyVMRef`
-- If no Ready VMs exist: warning Alert shown
-- `unmappedStorageCount` returns 0 (storage mapping not applicable)
+- ProxyVM selector (with `FieldLabel`):
+  - Source: `useProxyVMsQuery()` filtered to `status.validationStatus === 'Ready'`
+  - Option label: `metadata.name (status.ipAddress)`
+  - Selection stored as `params.proxyVMRef`
+  - If no Ready VMs: warning Alert shown
+- Storage mapping table (same as `normal` mode) shown below selector
+- Switching to a different copy method clears `proxyVMRef`
+- `unmappedStorage` calculated same as `normal` — all datastores must be mapped
 
 **Subnet Warnings**: Shown per source network when VM IPs don't match target subnet CIDR.
 
@@ -591,9 +594,8 @@ Used by: `useOsAssignment`, `useFlavorAssignment`, `useFlavorHandlers`, `useBulk
 | Resource | Endpoint | Method | When used |
 |----------|----------|--------|-----------|
 | Network Mapping | `/network-mappings` | POST | Always (if networks exist) |
-| Storage Mapping | `/storage-mappings` | POST | `storageCopyMethod === 'normal'` |
+| Storage Mapping | `/storage-mappings` | POST | `storageCopyMethod === 'normal'` OR `'HotAdd'` |
 | Array Creds Mapping | `/arraycreds-mapping` | POST | `storageCopyMethod === 'StorageAcceleratedCopy'` |
-| ProxyVM (patch template) | template PATCH only | — | `storageCopyMethod === 'HotAdd'` — no mapping POST; `proxyVMRef: { name }` set directly on template |
 
 **HotAdd template patch** (`useMigrationFormSubmit.ts` + `useRollingFormSubmit.ts`):
 ```typescript
@@ -601,6 +603,7 @@ Used by: `useOsAssignment`, `useFlavorAssignment`, `useFlavorHandlers`, `useBulk
 spec: {
   storageCopyMethod: 'HotAdd',
   proxyVMRef: { name: params.proxyVMRef },
+  storageMapping: storageMappings.metadata.name,   // same as normal mode
   networkMapping: networkMappings.metadata.name
 }
 ```
@@ -666,9 +669,10 @@ Trigger: On selection change + on submit.
 | Rule | Condition | Error |
 |------|-----------|-------|
 | All networks mapped | `unmappedNetworksCount > 0` | Network mapping required (count shown) |
-| All storage mapped | `unmappedStorageCount > 0` (not applicable for HotAdd) | Storage mapping required |
+| All storage mapped | `unmappedStorageCount > 0` | Storage mapping required (applies to `normal` and `HotAdd`) |
 | Array creds present | `StorageAcceleratedCopy` + no validated creds | Warning shown |
 | Proxy VM selected | `HotAdd` + `!proxyVMRef` | "Please select a Proxy VM to use for Hot-Add data copy" |
+| Storage mapped (HotAdd) | `HotAdd` + storage not fully mapped | Same error as `normal` mode — all datastores must map to volume types |
 
 Trigger: On mapping change + on submit.
 
@@ -939,7 +943,7 @@ All step completion flags, error flags, and section nav items are computed via `
 
 - `isPCD` flag (derived from OpenstackCreds) enables GPU and flavorless options in MigrationOptionsAlt
 - `storageCopyMethod === 'StorageAcceleratedCopy'` hides data copy + cutover scheduling
-- `storageCopyMethod === 'HotAdd'` forces cold copy, disables hot/mock, shows ProxyVM selector (Step 3)
+- `storageCopyMethod === 'HotAdd'` forces cold copy, disables hot/mock, shows ProxyVM selector + storage mapping table in Step 3; submit POSTs `/storagemappings` and sets both `proxyVMRef` and `storageMapping` on template
 - `hasL2Network` disables security groups and fallback to DHCP
 - `useGPU` disables flavor selection (GPU instance auto-selected)
 
