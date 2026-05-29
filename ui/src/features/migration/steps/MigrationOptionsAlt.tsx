@@ -195,7 +195,9 @@ export default function MigrationOptionsAlt({
 
   useEffect(() => {
     if (!isHotAdd) return
-    onChange('dataCopyMethod')('cold')
+    if (params?.dataCopyMethod !== 'cold' && params?.dataCopyMethod !== 'mock') {
+      onChange('dataCopyMethod')('cold')
+    }
   }, [isHotAdd, onChange])
 
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
@@ -264,7 +266,7 @@ export default function MigrationOptionsAlt({
 
               {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  Hot-Add migration requires Cold copy. Other data copy methods are not available.
+                  Hot-Add migration requires Cold or Mock copy. Other data copy methods are not available.
                 </Alert>
               )}
               <OptionRow>
@@ -306,7 +308,7 @@ export default function MigrationOptionsAlt({
                       <MenuItem
                         key={item.value}
                         value={item.value}
-                        disabled={isHotAdd && item.value !== 'cold'}
+                        disabled={isHotAdd && item.value !== 'cold' && item.value !== 'mock'}
                       >
                         {item.label}
                       </MenuItem>
