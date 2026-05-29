@@ -168,7 +168,11 @@ export function useFormValidation({
 
   const storageValidation =
     storageCopyMethod === 'HotAdd'
-      ? Boolean(params.proxyVMRef)
+      ? Boolean(params.proxyVMRef) &&
+        !isNilOrEmpty(params.storageMappings) &&
+        !availableVmwareDatastores.some(
+          (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
+        )
       : storageCopyMethod === 'StorageAcceleratedCopy'
         ? !isNilOrEmpty(params.arrayCredsMappings) &&
           !availableVmwareDatastores.some(
@@ -225,7 +229,10 @@ export function useFormValidation({
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
     const storageMapped =
       currentStorageCopyMethod === 'HotAdd'
-        ? Boolean(params.proxyVMRef)
+        ? Boolean(params.proxyVMRef) &&
+          availableVmwareDatastores.every((datastore) =>
+            (params.storageMappings || []).some((m) => m.source === datastore)
+          )
         : currentStorageCopyMethod === 'StorageAcceleratedCopy'
           ? availableVmwareDatastores.every((datastore) =>
               (params.arrayCredsMappings || []).some((m) => m.source === datastore)

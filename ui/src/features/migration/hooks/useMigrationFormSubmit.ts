@@ -170,8 +170,13 @@ export function useMigrationFormSubmit({
       updatedMigrationTemplateFields.spec.networkMapping = networkMappings.metadata.name
     }
 
-    if (storageCopyMethod === 'HotAdd' && params.proxyVMRef) {
-      updatedMigrationTemplateFields.spec.proxyVMRef = { name: params.proxyVMRef }
+    if (storageCopyMethod === 'HotAdd') {
+      if (params.proxyVMRef) {
+        updatedMigrationTemplateFields.spec.proxyVMRef = { name: params.proxyVMRef }
+      }
+      if (storageMappings) {
+        updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
+      }
     } else if (storageCopyMethod === 'StorageAcceleratedCopy' && arrayCredsMapping) {
       updatedMigrationTemplateFields.spec.arrayCredsMapping = arrayCredsMapping.metadata.name
     } else if (storageMappings) {
@@ -439,7 +444,11 @@ export function useMigrationFormSubmit({
     let arrayCredsMapping: any = null
 
     if (storageCopyMethod === 'HotAdd') {
-      // No storage mapping needed — proxyVMRef is set directly on the template
+      storageMappings = await createStorageMapping(params.storageMappings)
+      if (!storageMappings) {
+        setSubmitting(false)
+        return
+      }
     } else if (storageCopyMethod === 'StorageAcceleratedCopy') {
       arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings || [])
       if (!arrayCredsMapping) {
