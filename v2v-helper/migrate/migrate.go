@@ -79,6 +79,10 @@ type Migrate struct {
 	ArrayInsecure     bool
 	VendorType        string
 	ArrayCredsMapping string
+	// Hot-Add copy method: Proxy VM coordinates
+	ProxyVMIP      string
+	ProxyVMName    string // vCenter display name — used to locate VM in vCenter
+	ProxyVMK8sName string // Kubernetes resource name — used to patch ProxyVM status
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.
@@ -1271,6 +1275,20 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
+	// Inject VMware Tools cleanup script for Linux guests when requested
+	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
+		firstbootscriptname := "vmware_tools_cleanup"
+		firstbootscripts = append(firstbootscripts, firstbootscriptname)
+		scriptContent, err := os.ReadFile("/home/fedora/vmware-tools-cleanup.sh")
+		if err != nil {
+			return errors.Wrap(err, "failed to read VMware tools cleanup script")
+		}
+		if err := virtv2v.AddFirstBootScript(string(scriptContent), firstbootscriptname); err != nil {
+			return errors.Wrap(err, "failed to add VMware tools cleanup first boot script")
+		}
+		utils.PrintLog("VMware Tools cleanup script added for Linux firstboot")
+	}
+
 	// Run virt-v2v conversion
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
@@ -1867,7 +1885,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
-	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) && migobj.StorageCopyMethod != constants.StorageCopyMethod {
+	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) &&
+		migobj.StorageCopyMethod != constants.StorageCopyMethod &&
+		migobj.StorageCopyMethod != constants.HotAddCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
 	if len(vminfo.Mac) != len(migobj.Networknames) {
@@ -1919,6 +1939,23 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 				return errors.Wrapf(err, "failed to cleanup after image metadata failure: %s", cleanuperror)
 			}
 			return errors.Wrap(err, "failed to apply image metadata to XCOPY volumes")
+		}
+
+	} else if migobj.StorageCopyMethod == constants.HotAddCopyMethod {
+
+		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
+		}
+		for idx, vmdisk := range vminfo.VMDisks {
+			path, err := migobj.AttachVolume(ctx, vmdisk)
+			if err != nil {
+				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
+			}
+			vminfo.VMDisks[idx].Path = path
+		}
+		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			return errors.Wrap(err, "failed to perform HotAdd disk copy")
 		}
 
 	} else {

@@ -51,6 +51,10 @@ type MigrationParams struct {
 	StorageCopyMethod string
 	VendorType        string
 	ArrayCredsMapping string
+	// Hot-Add copy method: Proxy VM coordinates
+	ProxyVMIP      string
+	ProxyVMName    string // vCenter display name — used to locate the VM in vCenter
+	ProxyVMK8sName string // Kubernetes resource name — used to update ProxyVM CRD status
 	// NetApp-specific targeting. Empty for non-NetApp arrays or when the
 	// provider should fall back to auto-detection.
 	NetAppSVM     string
@@ -112,6 +116,9 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		StorageCopyMethod:              string(configMap.Data["STORAGE_COPY_METHOD"]),
 		VendorType:                     string(configMap.Data["VENDOR_TYPE"]),
 		ArrayCredsMapping:              string(configMap.Data["ARRAY_CREDS_MAPPING"]),
+		ProxyVMIP:                      string(configMap.Data["PROXY_VM_IP"]),
+		ProxyVMName:                    string(configMap.Data["PROXY_VM_NAME"]),
+		ProxyVMK8sName:                 string(configMap.Data["PROXY_VM_K8S_NAME"]),
 		NetAppSVM:                      string(configMap.Data["NETAPP_SVM"]),
 		NetAppFlexVol:                  string(configMap.Data["NETAPP_FLEXVOL"]),
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,

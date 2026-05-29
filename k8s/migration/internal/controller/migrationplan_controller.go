@@ -100,6 +100,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms,verbs=get;list;watch;update;patch
 
 // Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
 func (r *MigrationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
@@ -666,8 +667,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
+	var proxyVM *vjailbreakv1alpha1.ProxyVM
 	// Check if StorageCopyMethod is StorageAcceleratedCopy
-	if migrationtemplate.Spec.StorageCopyMethod == StorageCopyMethod {
+	switch migrationtemplate.Spec.StorageCopyMethod {
+	case StorageCopyMethod:
 		// Fetch ArrayCredsMapping CR first
 		arrayCredsMapping := &vjailbreakv1alpha1.ArrayCredsMapping{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ArrayCredsMapping, Namespace: migrationtemplate.Namespace}, arrayCredsMapping); err != nil {
@@ -687,7 +690,23 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				return ctrl.Result{}, errors.Errorf("ArrayCreds '%s' is not validated (status: %s)", mapping.Target, arraycreds.Status.ArrayValidationStatus)
 			}
 		}
-	} else {
+	case constants.HotAddCopyMethod:
+		if migrationtemplate.Spec.ProxyVMRef == nil {
+			return ctrl.Result{}, errors.New("StorageCopyMethod is HotAdd but ProxyVMRef is not set in MigrationTemplate")
+		}
+		if migrationplan.Spec.MigrationStrategy.Type == "hot" {
+			return ctrl.Result{}, errors.Errorf(
+				"StorageCopyMethod HotAdd does not support migration type 'hot' — use 'cold' or 'mock'",
+			)
+		}
+		proxyVM = &vjailbreakv1alpha1.ProxyVM{}
+		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ProxyVMRef.Name, Namespace: migrationtemplate.Namespace}, proxyVM); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get ProxyVM '%s'", migrationtemplate.Spec.ProxyVMRef.Name)
+		}
+		if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
+			return ctrl.Result{}, errors.Errorf("ProxyVM '%s' is not ready (status: %s)", proxyVM.Name, proxyVM.Status.ValidationStatus)
+		}
+	default:
 		arraycreds = nil
 	}
 
@@ -718,7 +737,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr, proxyVM)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -1206,6 +1225,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 										Name:      "virtio-driver",
 										MountPath: "/home/fedora/virtio-win",
 									},
+									{
+										Name:      "ssh-key",
+										MountPath: "/home/fedora/.ssh",
+										ReadOnly:  true,
+									},
 								},
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -1268,6 +1292,15 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
+							{
+								Name: "ssh-key",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/home/ubuntu/.ssh",
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
+									},
+								},
+							},
 						},
 					},
 				},
@@ -1324,6 +1357,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) (*corev1.ConfigMap, error) {
 	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
@@ -1334,7 +1368,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
-		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds)
+		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds, proxyVM)
 		if err != nil {
 			return nil, err
 		}
@@ -1355,6 +1389,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 	vm, vmname, configMapName string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) (*corev1.ConfigMap, error) {
 	r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 
@@ -1391,7 +1426,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	if err := r.setOSFamilyAndStorageFields(configMapData, vmMachine, migrationtemplate, arraycreds); err != nil {
+	if err := r.setMigrationEnv(configMapData, vmMachine, migrationtemplate, arraycreds, proxyVM); err != nil {
 		return nil, err
 	}
 
@@ -1582,11 +1617,12 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 	return nil
 }
 
-func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
+func (r *MigrationPlanReconciler) setMigrationEnv(
 	configMapData map[string]string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	if vmMachine.Spec.VMInfo.OSFamily == "" {
 		return errors.Errorf(
@@ -1609,6 +1645,11 @@ func (r *MigrationPlanReconciler) setOSFamilyAndStorageFields(
 			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
 			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
 		}
+	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod && proxyVM != nil {
+		configMapData["STORAGE_COPY_METHOD"] = constants.HotAddCopyMethod
+		configMapData["PROXY_VM_IP"] = proxyVM.Status.IPAddress
+		configMapData["PROXY_VM_NAME"] = proxyVM.Spec.VMName
+		configMapData["PROXY_VM_K8S_NAME"] = proxyVM.Name
 	}
 
 	return nil
@@ -1959,6 +2000,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []*vjailbreakv1alpha1.VMwareMachine,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var (
@@ -2046,7 +2088,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			}
 			continue
 		}
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
