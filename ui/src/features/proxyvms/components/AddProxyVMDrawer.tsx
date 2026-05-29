@@ -84,7 +84,9 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef],
     queryFn: async () => {
       const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, vmwareCredsRef)
-      return result.items.map((m) => ({ label: m.spec.vms.name, value: m.spec.vms.name }))
+      return result.items
+        .filter((m) => m.status?.powerState === 'running')
+        .map((m) => ({ label: m.spec.vms.name, value: m.spec.vms.name }))
     },
     enabled: Boolean(vmwareCredsRef),
     staleTime: 30_000
@@ -234,6 +236,12 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                   }
                 />
 
+                {vmwareCredsRef && !vmsLoading && (
+                  <Alert severity="info">
+                    Only powered on VMs can be added as a Proxy VM. If the VM is powered on but not
+                    listed, please revalidate the credentials.
+                  </Alert>
+                )}
                 <RHFSelect
                   name="vmName"
                   label="VM Name"

@@ -119,7 +119,6 @@ export default function NetworkAndStorageMappingStep({
   )
 
   const unmappedStorage = useMemo(() => {
-    if (storageCopyMethod === 'HotAdd') return []
     if (storageCopyMethod === 'StorageAcceleratedCopy') {
       return vmWareStorage.filter(
         (storage) => !params.arrayCredsMappings?.some((mapping) => mapping.source === storage)
@@ -227,7 +226,12 @@ export default function NetworkAndStorageMappingStep({
                 </Typography>
                 <RadioGroup
                   value={storageCopyMethod}
-                  onChange={(e) => onChange('storageCopyMethod')(e.target.value)}
+                  onChange={(e) => {
+                    onChange('storageCopyMethod')(e.target.value)
+                    if (e.target.value !== 'HotAdd') {
+                      onChange('proxyVMRef')('')
+                    }
+                  }}
                   row
                 >
                   {STORAGE_COPY_METHOD_OPTIONS.map((option) => (
@@ -322,6 +326,19 @@ export default function NetworkAndStorageMappingStep({
               ) : storageCopyMethod === 'HotAdd' ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Map VMware datastores to PCD volume types for the migrated VM disks.
+                  </Typography>
+                  <ResourceMappingTable
+                    sourceItems={vmWareStorage}
+                    targetItems={openstackStorage}
+                    sourceLabel="VMware Datastore"
+                    targetLabel="PCD Volume Type"
+                    values={params.storageMappings || []}
+                    onChange={(value) => onChange('storageMappings')(value)}
+                    oneToManyMapping
+                    fieldPrefix="storageMapping"
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Select a verified Proxy VM to use for Hot-Add disk access during migration.
                   </Typography>
                   {readyProxyVMs.length === 0 ? (
@@ -330,7 +347,11 @@ export default function NetworkAndStorageMappingStep({
                       before starting a Hot-Add migration.
                     </Alert>
                   ) : null}
-                  <Box>
+
+                  <Box sx={{ mb: 2 }}>
+                    <Box sx={{ mb: 1 }}>
+                      <FieldLabel label="Proxy VM" required align="flex-start" />
+                    </Box>
                     <FormControl
                       fullWidth
                       variant="outlined"
