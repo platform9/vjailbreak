@@ -122,6 +122,12 @@ export function useRollingFormSubmit({
           return
         }
       }
+
+      if (storageCopyMethod === 'HotAdd' && !params.proxyVMRef) {
+        setStorageMappingError('Please select a Proxy VM to use for Hot-Add data copy')
+        setSubmitting(false)
+        return
+      }
     } else if (sourceCluster && destinationPCD) {
       alert('Please select at least one VM to migrate')
       setSubmitting(false)
@@ -248,7 +254,13 @@ export function useRollingFormSubmit({
       let arrayCredsMappingResponse: any = null
 
       if (storageCopyMethod === 'HotAdd') {
-        // No storage mapping needed — proxyVMRef is set directly on the template
+        const storageMappingJson = createStorageMappingJson({
+          storageMappings: storageMappings.map((mapping) => ({
+            source: mapping.source,
+            target: mapping.target
+          }))
+        })
+        storageMappingResponse = await postStorageMapping(storageMappingJson)
       } else if (storageCopyMethod === 'StorageAcceleratedCopy') {
         const arrayCredsMappingJson = createArrayCredsMappingJson({
           mappings: arrayCredsMappings.map((mapping) => ({
@@ -285,10 +297,12 @@ export function useRollingFormSubmit({
           spec: {
             networkMapping: networkMappingResponse.metadata.name,
             storageCopyMethod,
-            ...(storageCopyMethod === 'HotAdd' &&
-              params.proxyVMRef && {
-                proxyVMRef: { name: params.proxyVMRef }
-              }),
+            ...(storageCopyMethod === 'HotAdd' && {
+              ...(params.proxyVMRef && { proxyVMRef: { name: params.proxyVMRef } }),
+              ...(storageMappingResponse?.metadata?.name && {
+                storageMapping: storageMappingResponse.metadata.name
+              })
+            }),
             ...(storageCopyMethod === 'StorageAcceleratedCopy' &&
               arrayCredsMappingResponse?.metadata?.name && {
                 arrayCredsMapping: arrayCredsMappingResponse.metadata.name

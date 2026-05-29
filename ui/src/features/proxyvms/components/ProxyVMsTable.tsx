@@ -146,18 +146,21 @@ export default function ProxyVMsTable() {
   }
 
   const handleConfirmBulkDelete = async () => {
-    const snapshot = [...rowSelectionModel] as string[]
+    const snapshot = [...selectedItems]
     setDeleting(true)
     setDeleteError(null)
     try {
       await Promise.all(
-        snapshot.map(async (name) => {
+        snapshot.map(async (vm) => {
           try {
-            await deleteProxyVM(name)
+            await deleteProxyVM(vm.metadata.name)
           } catch (err: any) {
             if (err?.response?.status !== 404) throw err
           }
-          deleteSecret(name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+          deleteSecret(
+            vm.spec.sshKeySecretRef?.name || vm.metadata.name,
+            VJAILBREAK_DEFAULT_NAMESPACE
+          ).catch(() => {})
         })
       )
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
@@ -186,7 +189,10 @@ export default function ProxyVMsTable() {
       }
       // 404 = already gone, proceed with cleanup
     }
-    deleteSecret(deleteTarget.metadata.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+    deleteSecret(
+      deleteTarget.spec.sshKeySecretRef?.name || deleteTarget.metadata.name,
+      VJAILBREAK_DEFAULT_NAMESPACE
+    ).catch(() => {})
     queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
     refetch()
     setDeleteTarget(null)
