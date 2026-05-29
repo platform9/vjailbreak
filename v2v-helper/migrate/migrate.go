@@ -1126,10 +1126,13 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", -1, err
 	}
 
-	// Run generate-mount-persistence.sh script with --force-uuid option based on AUTO_FSTAB_UPDATE setting
+	// Run generate-mount-persistence.sh script based on AUTO_FSTAB_UPDATE setting.
+	// The flag passed to the script varies by OS: SUSE GRUB Legacy guests use
+	// --replace-fstab to avoid rewriting device.map before virt-v2v runs (see
+	// RunMountPersistenceScript for the full rationale).
 	if autoFstabUpdate {
-		migobj.logMessage("Running generate-mount-persistence.sh script with --force-uuid option")
-		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path); err != nil {
+		migobj.logMessage("Running generate-mount-persistence.sh script")
+		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path, osRelease); err != nil {
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
 			// Don't fail the migration, just log the warning
 		} else {
@@ -1275,6 +1278,18 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
+	// Pre-conversion SUSE fixes: install the LVM mkinitrd wrapper so that
+	// virt-v2v's chroot call to mkinitrd can resolve /dev/<vg>/<lv> paths.
+	if virtv2v.IsSUSEFamily(osRelease) {
+		utils.PrintLog("SUSE guest detected: running pre-conversion FixLegacyMkinitrd")
+		if err := virtv2v.FixLegacyMkinitrd(vminfo.VMDisks); err != nil {
+			// Non-fatal: log and continue.  The conversion may still succeed
+			// on modern SUSE guests that use dracut, or if the root is not LVM.
+			utils.PrintLog(fmt.Sprintf("Warning: FixLegacyMkinitrd failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixLegacyMkinitrd completed successfully")
+		}
+	}
 	// Inject VMware Tools cleanup script for Linux guests when requested
 	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		firstbootscriptname := "vmware_tools_cleanup"
@@ -1290,9 +1305,11 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
+	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s)", vminfo.Name, osPath, vminfo.OSType))
 	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
+	utils.PrintLog("virt-v2v conversion completed successfully")
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if removeVMwareTools {
