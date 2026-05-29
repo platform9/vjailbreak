@@ -262,6 +262,15 @@ func IsRHELFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "alma")
 }
 
+// IsSUSEFamily returns true when osRelease identifies a SUSE / openSUSE guest.
+func IsSUSEFamily(osRelease string) bool {
+	lowerRelease := strings.ToLower(osRelease)
+	return strings.Contains(lowerRelease, "suse") ||
+		strings.Contains(lowerRelease, "sles") ||
+		strings.Contains(lowerRelease, "sled") ||
+		strings.Contains(lowerRelease, "opensuse")
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -366,6 +375,32 @@ func CheckForVirtioDrivers() (bool, error) {
 	return false, nil
 }
 
+// isBareDisk returns true when path is a bare block device with no trailing
+// partition digit (e.g. "/dev/sda", "/dev/vda") as opposed to a partition
+// ("/dev/sda1") or LVM/device-mapper path ("/dev/vg0/lv_root").
+// A bare disk is typically an LVM PV, not a directly-mountable root filesystem,
+// so virt-v2v's --root flag should use "first" rather than this path.
+func isBareDisk(path string) bool {
+	if path == "" {
+		return false
+	}
+	// Must start with /dev/
+	if !strings.HasPrefix(path, "/dev/") {
+		return false
+	}
+	// If it contains a slash after /dev/ it is a device-mapper or LVM path → not a bare disk
+	rest := path[len("/dev/"):]
+	if strings.Contains(rest, "/") {
+		return false
+	}
+	// If the last character is a digit it is a partition (e.g. sda1, vda2)
+	if len(rest) == 0 {
+		return false
+	}
+	lastChar := rest[len(rest)-1]
+	return lastChar < '0' || lastChar > '9'
+}
+
 func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
@@ -416,7 +451,17 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// Always use libvirtxml mode to convert all disks
 	args = append(args, "-i", "libvirtxml", xmlFile)
 	if strings.ToLower(ostype) != constants.OSFamilyWindows {
-		args = append(args, "--root", path)
+		// --root expects a root *filesystem* device, not a raw disk or LVM PV.
+		// get-bootable-partition.sh may return a bare disk name (e.g. /dev/sda) when
+		// GRUB's MBR signature is on an LVM PV disk that has no mountable partition.
+		// In that case "first" is safer: virt-v2v will auto-detect the root LV via
+		// libguestfs inspection (which traverses LVM, RAID, etc. automatically).
+		rootArg := path
+		if isBareDisk(path) {
+			log.Printf("ConvertDisk: --root path %q looks like a bare disk (LVM PV); using 'first' for auto-detection", path)
+			rootArg = "first"
+		}
+		args = append(args, "--root", rootArg)
 	}
 
 	start := time.Now()
@@ -433,6 +478,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
 	log.Printf("virt-v2v-in-place conversion took: %s", duration)
+
 	return nil
 }
 
@@ -907,9 +953,19 @@ func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
 	return strings.ToLower(productName), nil
 }
 
-// RunMountPersistenceScript runs the generate-mount-persistence.sh script with --force-uuid option
-// during guest inspection phase for Linux migrations
-func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
+// RunMountPersistenceScript runs the generate-mount-persistence.sh script
+// during guest inspection phase for Linux migrations.
+//
+// For SUSE/SLES GRUB Legacy guests, --replace-fstab is used instead of
+// --force-uuid. The --force-uuid flag calls fix_grub_config which rewrites
+// device.map from /dev/sdX → /dev/vdX BEFORE virt-v2v runs. When virt-v2v
+// subsequently runs inside the guestfish appliance (where disks are /dev/sdX),
+// it reads a device.map referencing /dev/vdX paths that do not exist in the
+// appliance, causing it to reinstall GRUB stage1 with incorrect embedded drive
+// references — manifesting as GRUB Error 21 at boot. Using --replace-fstab
+// fixes fstab and udev rules without touching device.map or grub config files,
+// allowing virt-v2v to handle GRUB correctly.
+func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease string) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Script should be available in the container at /home/fedora/
@@ -920,7 +976,17 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
 	}
 
-	log.Printf("Running generate-mount-persistence.sh with --force-uuid option")
+	// Choose the script flag based on OS family.
+	// SUSE GRUB Legacy guests must not have device.map rewritten before virt-v2v
+	// runs, so we use --replace-fstab (which skips fix_grub_config) instead of
+	// --force-uuid.
+	scriptFlag := "--force-uuid"
+	if IsSUSEFamily(osRelease) {
+		scriptFlag = "--replace-fstab"
+		log.Printf("SUSE guest detected: using --replace-fstab (skipping fix_grub_config) to avoid corrupting device.map before virt-v2v")
+	}
+
+	log.Printf("Running generate-mount-persistence.sh with %s option", scriptFlag)
 
 	// Upload the script to the guest VM
 	var uploadErr error
@@ -948,12 +1014,12 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 
 	log.Printf("Made generate-mount-persistence.sh executable")
 
-	// Run the script with --force-uuid
+	// Run the script with the chosen flag
 	var runErr error
 	var runOutput string
 
 	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh --force-uuid")
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptFlag)
 
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
@@ -961,9 +1027,60 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string) error {
 		return nil
 	}
 
-	log.Printf("Successfully executed generate-mount-persistence.sh with --force-uuid")
+	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptFlag)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
+	return nil
+}
+
+// mkinitrdLVMWrapperPath is the path where the mkinitrd LVM wrapper script
+// is pre-installed in the v2v-helper Docker image (copied from
+// scripts/mkinitrd-lvm-wrapper.sh at build time).
+const mkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
+
+// This must be called BEFORE ConvertDisk / virt-v2v-in-place so that the
+// patched binary is in place when virt-v2v chroots into the guest.
+func FixLegacyMkinitrd(disks []vm.VMDisk) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// 1. Does /sbin/mkinitrd exist on the guest?
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd"); err != nil {
+		log.Printf("FixLegacyMkinitrd: /sbin/mkinitrd not found on guest, skipping")
+		return nil
+	}
+
+	// 2. Is dracut absent? (dracut == modern SUSE, no patch needed)
+	for _, draculPath := range []string{"/usr/bin/dracut", "/sbin/dracut"} {
+		if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, draculPath); err == nil {
+			log.Printf("FixLegacyMkinitrd: dracut found at %s, modern system – skipping", draculPath)
+			return nil
+		}
+	}
+
+	// 3. Already patched by a previous run?
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd.orig"); err == nil {
+		log.Printf("FixLegacyMkinitrd: wrapper already installed (/sbin/mkinitrd.orig present), skipping")
+		return nil
+	}
+
+	log.Printf("FixLegacyMkinitrd: old mkinitrd detected (no dracut), installing LVM path translation wrapper")
+
+	// 4. Back up original mkinitrd inside the guest.
+	if out, err := RunCommandInGuestAllVolumes(disks, "cp", true, "/sbin/mkinitrd", "/sbin/mkinitrd.orig"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to backup /sbin/mkinitrd: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	// 5. Upload the wrapper as the new /sbin/mkinitrd.
+	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, mkinitrdLVMWrapperPath, "/sbin/mkinitrd"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to upload wrapper: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	// 6. Ensure the wrapper is executable.
+	if out, err := RunCommandInGuestAllVolumes(disks, "chmod", true, "0755", "/sbin/mkinitrd"); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to chmod wrapper: %v: %s", err, strings.TrimSpace(out))
+	}
+
+	log.Printf("FixLegacyMkinitrd: wrapper installed successfully at /sbin/mkinitrd (original at /sbin/mkinitrd.orig)")
 	return nil
 }
 
