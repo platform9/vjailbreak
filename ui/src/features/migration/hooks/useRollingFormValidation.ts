@@ -391,7 +391,7 @@ export function useRollingFormValidation({
         status:
           step3HasErrors
             ? 'attention'
-            : touchedSections.hosts && orderedESXHosts.length > 0
+            : touchedSections.hosts && orderedESXHosts.length > 0 && esxHostMappingStatus.fullyMapped
               ? 'complete'
               : 'incomplete'
       },

@@ -162,7 +162,7 @@ export function useMigrationFormSubmit({
 
     const updatedMigrationTemplateFields: any = {
       spec: {
-        networkMapping: networkMappings.metadata.name,
+        ...(networkMappings?.metadata?.name && { networkMapping: networkMappings.metadata.name }),
         storageCopyMethod
       }
     }
