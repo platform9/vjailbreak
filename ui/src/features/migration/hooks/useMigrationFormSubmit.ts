@@ -167,7 +167,14 @@ export function useMigrationFormSubmit({
       }
     }
 
-    if (storageCopyMethod === 'StorageAcceleratedCopy' && arrayCredsMapping) {
+    if (storageCopyMethod === 'HotAdd') {
+      if (params.proxyVMRef) {
+        updatedMigrationTemplateFields.spec.proxyVMRef = { name: params.proxyVMRef }
+      }
+      if (storageMappings) {
+        updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
+      }
+    } else if (storageCopyMethod === 'StorageAcceleratedCopy' && arrayCredsMapping) {
       updatedMigrationTemplateFields.spec.arrayCredsMapping = arrayCredsMapping.metadata.name
     } else if (storageMappings) {
       updatedMigrationTemplateFields.spec.storageMapping = storageMappings.metadata.name
@@ -433,7 +440,13 @@ export function useMigrationFormSubmit({
     let storageMappings: any = null
     let arrayCredsMapping: any = null
 
-    if (storageCopyMethod === 'StorageAcceleratedCopy') {
+    if (storageCopyMethod === 'HotAdd') {
+      storageMappings = await createStorageMapping(params.storageMappings)
+      if (!storageMappings) {
+        setSubmitting(false)
+        return
+      }
+    } else if (storageCopyMethod === 'StorageAcceleratedCopy') {
       arrayCredsMapping = await createArrayCredsMapping(params.arrayCredsMappings || [])
       if (!arrayCredsMapping) {
         setSubmitting(false)

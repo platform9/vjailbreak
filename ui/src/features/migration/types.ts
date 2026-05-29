@@ -41,7 +41,8 @@ export interface FormValues extends Record<string, unknown> {
   networkMappings?: { source: string; target: string }[]
   storageMappings?: { source: string; target: string }[]
   arrayCredsMappings?: { source: string; target: string }[]
-  storageCopyMethod?: 'normal' | 'StorageAcceleratedCopy'
+  storageCopyMethod?: StorageCopyMethod
+  proxyVMRef?: string
   // Cluster selection fields
   vmwareCluster?: string // Format: "credName:datacenter:clusterName"
   pcdCluster?: string // PCD cluster ID
@@ -118,7 +119,7 @@ export interface ResourceMap {
   target: string
 }
 
-export type StorageCopyMethod = 'normal' | 'StorageAcceleratedCopy'
+export type StorageCopyMethod = 'normal' | 'StorageAcceleratedCopy' | 'HotAdd'
 
 export interface RollingFormParams extends Record<string, unknown> {
   vmwareCluster?: string
@@ -136,6 +137,7 @@ export interface RollingFormParams extends Record<string, unknown> {
   postMigrationScript?: string
   osFamily?: string
   storageCopyMethod?: StorageCopyMethod
+  proxyVMRef?: string
   postMigrationAction?: {
     suffix?: string
     folderName?: string
@@ -159,6 +161,7 @@ export interface NetworkAndStorageMappingStepProps {
     storageMappings?: ResourceMap[]
     arrayCredsMappings?: ResourceMap[]
     storageCopyMethod?: StorageCopyMethod
+    proxyVMRef?: string
   }
   onChange: (key: string) => (value: any) => void
   networkMappingError?: string

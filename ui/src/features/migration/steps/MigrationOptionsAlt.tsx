@@ -91,6 +91,7 @@ export default function MigrationOptionsAlt({
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
 
   const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
+  const isHotAdd = params?.storageCopyMethod === 'HotAdd'
 
   const hasWindowsVMSelected = useMemo(() => {
     if (!params?.vms || params.vms.length === 0) return false
@@ -112,9 +113,10 @@ export default function MigrationOptionsAlt({
 
   const postMigrationScriptValue = String(params?.postMigrationScript || '')
   const hasBashShebang = /(^|\n)\s*#!\/bin\/(ba)?sh/i.test(postMigrationScriptValue)
-  const hasPowerShellSyntax = /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
-    postMigrationScriptValue
-  )
+  const hasPowerShellSyntax =
+    /(\bWrite-Host\b|\bThrow\b|\bSet-ExecutionPolicy\b|\$[A-Za-z_][A-Za-z0-9_]*)/.test(
+      postMigrationScriptValue
+    )
   const hasLinuxTag = /(^|\n)\s*(\/\/|#)\s*LINUX-SCRIPT:/i.test(postMigrationScriptValue)
   const hasWindowsTag = /(^|\n)\s*(\/\/|#)\s*WINDOWS-SCRIPT:/i.test(postMigrationScriptValue)
 
@@ -191,6 +193,13 @@ export default function MigrationOptionsAlt({
     updateSelectedMigrationOptions
   ])
 
+  useEffect(() => {
+    if (!isHotAdd) return
+    if (params?.dataCopyMethod !== 'cold' && params?.dataCopyMethod !== 'mock') {
+      onChange('dataCopyMethod')('cold')
+    }
+  }, [isHotAdd, onChange])
+
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
 
   useEffect(() => {
@@ -255,6 +264,11 @@ export default function MigrationOptionsAlt({
               </SectionHeaderRow>
               <Divider />
 
+              {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Hot-Add migration requires Cold or Mock copy. Other data copy methods are not available.
+                </Alert>
+              )}
               <OptionRow>
                 <OptionLeft>
                   <FormControlLabel
@@ -279,7 +293,7 @@ export default function MigrationOptionsAlt({
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }} data-testid="data-copy-method-container">
                   <Select
                     size="small"
-                    disabled={!selectedMigrationOptions.dataCopyMethod}
+                    disabled={!selectedMigrationOptions.dataCopyMethod && !isHotAdd}
                     labelId="source-item-label"
                     value={params?.dataCopyMethod || 'cold'}
                     onChange={(e) => {
@@ -291,7 +305,11 @@ export default function MigrationOptionsAlt({
                     fullWidth
                   >
                     {DATA_COPY_OPTIONS.map((item) => (
-                      <MenuItem key={item.value} value={item.value}>
+                      <MenuItem
+                        key={item.value}
+                        value={item.value}
+                        disabled={isHotAdd && item.value !== 'cold' && item.value !== 'mock'}
+                      >
                         {item.label}
                       </MenuItem>
                     ))}
@@ -782,7 +800,10 @@ export default function MigrationOptionsAlt({
                   />
                 }
               />
-              <OptionHelp variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <OptionHelp
+                variant="caption"
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+              >
                 <span>Supports PowerShell for Windows and Bash for Linux.</span>
                 <Tooltip
                   arrow
@@ -814,35 +835,57 @@ export default function MigrationOptionsAlt({
                       <Typography variant="subtitle2" gutterBottom>
                         Post-Migration Script Guide
                       </Typography>
-                      
-                      <Box sx={{ 
-                        bgcolor: 'action.hover', 
-                        p: 1, 
-                        borderRadius: 1, 
-                        fontFamily: 'monospace',
-                        mb: 1.5,
-                        border: '1px solid',
-                        borderColor: 'divider'
-                      }}>
+
+                      <Box
+                        sx={{
+                          bgcolor: 'action.hover',
+                          p: 1,
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          mb: 1.5,
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }}
+                      >
                         <Typography variant="caption" component="div">
-                          <Box component="span" sx={{ color: 'primary.main' }}>// WINDOWS-SCRIPT:</Box><br />
-                          Write-Host "Hello Windows"<br />
-                          <Box component="span" sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}>{NEXT_SCRIPT_DELIMITER}</Box>
-                          <Box component="span" sx={{ color: 'success.main' }}>// LINUX-SCRIPT:</Box><br />
+                          <Box component="span" sx={{ color: 'primary.main' }}>
+                            // WINDOWS-SCRIPT:
+                          </Box>
+                          <br />
+                          Write-Host "Hello Windows"
+                          <br />
+                          <Box
+                            component="span"
+                            sx={{ color: 'secondary.main', my: 0.2, display: 'block' }}
+                          >
+                            {NEXT_SCRIPT_DELIMITER}
+                          </Box>
+                          <Box component="span" sx={{ color: 'success.main' }}>
+                            // LINUX-SCRIPT:
+                          </Box>
+                          <br />
                           echo "Hello Linux"
                         </Typography>
                       </Box>
 
-                      <Typography variant="subtitle2" gutterBottom>Instructions</Typography>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Instructions
+                      </Typography>
                       <Typography variant="caption" component="div">
-                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.<br />
-                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:" for respective OS execution.<br />
-                        • Untagged blocks will execute on all selected VMs irrespective of OS.
+                        • Paste scripts separated by "{NEXT_SCRIPT_DELIMITER}" in a new line.
+                        <br />
+                        • Tag line 1 of each script with "// WINDOWS-SCRIPT:" or "// LINUX-SCRIPT:"
+                        for respective OS execution.
+                        <br />• Untagged blocks will execute on all selected VMs irrespective of OS.
                       </Typography>
                     </Box>
                   }
                 >
-                  <InfoOutlinedIcon color="primary" fontSize="small" sx={{ cursor: 'help', ml: 0.5 }} />
+                  <InfoOutlinedIcon
+                    color="primary"
+                    fontSize="small"
+                    sx={{ cursor: 'help', ml: 0.5 }}
+                  />
                 </Tooltip>
               </OptionHelp>
             </OptionLeft>
