@@ -55,7 +55,7 @@ type VMwareCredsReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *VMwareCredsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
-	ctxlog := log.FromContext(ctx)
+	ctxlog := log.FromContext(ctx).WithName(constants.VMwareCredsControllerName)
 
 	// Get the VMwareCreds object
 	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{}

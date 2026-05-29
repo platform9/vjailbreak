@@ -21,6 +21,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -608,6 +609,43 @@ func GetVMwDatastore(ctx context.Context, k3sclient client.Client, vmwcreds *vja
 	return datastores, nil
 }
 
+// collectVMsFromDatacenters fetches all VMs across the given datacenters using
+// the provided vCenter client. Uses a ContainerView for recursive enumeration
+// so VMs inside cluster and resource-pool sub-folders are discovered.
+// An empty datacenter produces an empty list, not an error.
+func collectVMsFromDatacenters(ctx context.Context, c *vim25.Client, targetDatacenters []string, log logr.Logger) ([]*object.VirtualMachine, map[string]string) {
+	allVMs := make([]*object.VirtualMachine, 0)
+	vmToDatacenter := make(map[string]string)
+	for _, dcName := range targetDatacenters {
+		finder := find.NewFinder(c, false)
+		dc, err := finder.Datacenter(ctx, dcName)
+		if err != nil {
+			log.Error(err, "failed to find datacenter, skipping", "datacenter", dcName)
+			continue
+		}
+		m := view.NewManager(c)
+		v, err := m.CreateContainerView(ctx, dc.Reference(), []string{"VirtualMachine"}, true)
+		if err != nil {
+			log.Error(err, "failed to create container view, skipping", "datacenter", dcName)
+			continue
+		}
+		var moVMs []mo.VirtualMachine
+		if err := v.Retrieve(ctx, []string{"VirtualMachine"}, []string{"self"}, &moVMs); err != nil {
+			_ = v.Destroy(ctx) //nolint:errcheck,gosec
+			log.Error(err, "failed to retrieve VMs, skipping", "datacenter", dcName)
+			continue
+		}
+		_ = v.Destroy(ctx) //nolint:errcheck,gosec
+		for i := range moVMs {
+			vm := object.NewVirtualMachine(c, moVMs[i].Self)
+			vmToDatacenter[moVMs[i].Self.Value] = dcName
+			allVMs = append(allVMs, vm)
+		}
+		log.Info("Discovered VMs in datacenter", "datacenter", dcName, "count", len(moVMs))
+	}
+	return allVMs, vmToDatacenter
+}
+
 // GetAndCreateAllVMs gets all the VMs in a datacenter.
 func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, datacenter string) ([]vjailbreakv1alpha1.VMInfo, *sync.Map, error) {
 	log := scope.Logger
@@ -649,34 +687,12 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 	semaphore := make(chan struct{}, vjailbreakSettings.VCenterScanConcurrencyLimit)
 	rdmDiskMap := &sync.Map{}
 
-	// Collect all VMs from all target datacenters
-	allVMs := make([]*object.VirtualMachine, 0)
-	vmToDatacenter := make(map[string]string)
-
 	c, err := ValidateVMwareCreds(ctx, scope.Client, scope.VMwareCreds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get client: %w", err)
 	}
 
-	for _, dcName := range targetDatacenters {
-		finder := find.NewFinder(c, false)
-		dc, err := finder.Datacenter(ctx, dcName)
-		if err != nil {
-			log.Error(err, "failed to find datacenter, skipping", "datacenter", dcName)
-			continue
-		}
-		finder.SetDatacenter(dc)
-
-		vms, err := finder.VirtualMachineList(ctx, "*")
-		if err != nil {
-			log.Error(err, "failed to get vms from datacenter, skipping", "datacenter", dcName)
-			continue
-		}
-		for _, vm := range vms {
-			vmToDatacenter[vm.Reference().Value] = dcName
-		}
-		allVMs = append(allVMs, vms...)
-	}
+	allVMs, vmToDatacenter := collectVMsFromDatacenters(ctx, c, targetDatacenters, log)
 
 	// Pre-allocate vminfo slice
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(allVMs))
