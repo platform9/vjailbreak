@@ -3,7 +3,7 @@ import { VmData } from './api/migration-templates/model'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
-import type { GridRowSelectionModel } from '@mui/x-data-grid'
+import type { GridRowSelectionModel, GridToolbarProps } from '@mui/x-data-grid'
 import type { ErrorContext } from 'src/services/errorReporting'
 
 // ---------------------------------------------------------------------------
@@ -348,7 +348,24 @@ export interface MigrationOptionsPropsInterface {
 // MigrationsTable types
 // ---------------------------------------------------------------------------
 
-export interface CustomToolbarProps {
+declare module '@mui/x-data-grid' {
+  interface ToolbarPropsOverrides {
+    numSelected: number
+    onDeleteSelected: () => void
+    onBulkAdminCutover: () => void
+    numEligibleForCutover: number
+    refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
+    onStatusFilterChange: (filter: string) => void
+    currentStatusFilter: string
+    onDateFilterChange: (filter: string) => void
+    currentDateFilter: string
+    onStartMigration: () => void
+    startMigrationDisabled: boolean
+    startMigrationDisabledReason: string
+  }
+}
+
+export interface CustomToolbarProps extends GridToolbarProps {
   numSelected: number
   onDeleteSelected: () => void
   onBulkAdminCutover: () => void
