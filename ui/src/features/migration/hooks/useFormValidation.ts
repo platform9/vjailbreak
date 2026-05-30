@@ -167,15 +167,22 @@ export function useFormValidation({
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
   const storageValidation =
-    storageCopyMethod === 'StorageAcceleratedCopy'
-      ? !isNilOrEmpty(params.arrayCredsMappings) &&
-        !availableVmwareDatastores.some(
-          (datastore) => !params.arrayCredsMappings?.some((mapping) => mapping.source === datastore)
-        )
-      : !isNilOrEmpty(params.storageMappings) &&
+    storageCopyMethod === 'HotAdd'
+      ? Boolean(params.proxyVMRef) &&
+        !isNilOrEmpty(params.storageMappings) &&
         !availableVmwareDatastores.some(
           (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
         )
+      : storageCopyMethod === 'StorageAcceleratedCopy'
+        ? !isNilOrEmpty(params.arrayCredsMappings) &&
+          !availableVmwareDatastores.some(
+            (datastore) =>
+              !params.arrayCredsMappings?.some((mapping) => mapping.source === datastore)
+          )
+        : !isNilOrEmpty(params.storageMappings) &&
+          !availableVmwareDatastores.some(
+            (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
+          )
 
   const disableSubmit =
     !vmwareCredsValidated ||
@@ -221,13 +228,18 @@ export function useFormValidation({
 
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
     const storageMapped =
-      currentStorageCopyMethod === 'StorageAcceleratedCopy'
-        ? availableVmwareDatastores.every((datastore) =>
-            (params.arrayCredsMappings || []).some((m) => m.source === datastore)
-          )
-        : availableVmwareDatastores.every((datastore) =>
+      currentStorageCopyMethod === 'HotAdd'
+        ? Boolean(params.proxyVMRef) &&
+          availableVmwareDatastores.every((datastore) =>
             (params.storageMappings || []).some((m) => m.source === datastore)
           )
+        : currentStorageCopyMethod === 'StorageAcceleratedCopy'
+          ? availableVmwareDatastores.every((datastore) =>
+              (params.arrayCredsMappings || []).some((m) => m.source === datastore)
+            )
+          : availableVmwareDatastores.every((datastore) =>
+              (params.storageMappings || []).some((m) => m.source === datastore)
+            )
 
     return networkMapped && storageMapped
   }, [
@@ -236,6 +248,7 @@ export function useFormValidation({
     params.storageMappings,
     params.arrayCredsMappings,
     params.storageCopyMethod,
+    params.proxyVMRef,
     availableVmwareNetworks,
     availableVmwareDatastores,
     fieldErrors
@@ -249,6 +262,7 @@ export function useFormValidation({
 
   const unmappedStorageCount = useMemo(() => {
     const currentStorageCopyMethod = params.storageCopyMethod || 'normal'
+    if (currentStorageCopyMethod === 'HotAdd') return 0
     if (currentStorageCopyMethod === 'StorageAcceleratedCopy') {
       return availableVmwareDatastores.filter(
         (ds) => !(params.arrayCredsMappings || []).some((m) => m.source === ds)

@@ -112,7 +112,7 @@ fix_grub_config() {
       # Update device.map if it exists
       if [ -f "${ROOT_PREFIX}/boot/grub/device.map" ]; then
         cp "${ROOT_PREFIX}/boot/grub/device.map" "${ROOT_PREFIX}/boot/grub/device.map.bak.$(date +%s)"
-        sed -i 's|/dev/sda|/dev/vda|g; s|/dev/sdb|/dev/vdb|g; s|/dev/sdc|/dev/vdc|g' "${ROOT_PREFIX}/boot/grub/device.map"
+        sed -i 's|/dev/sd\([a-z]\)|/dev/vd\1|g' "${ROOT_PREFIX}/boot/grub/device.map"
       fi
     fi
   done
