@@ -15,6 +15,7 @@ import {
   Snackbar,
   Tab,
   Tabs,
+  TextField,
   Typography,
   styled,
   useTheme
@@ -48,10 +49,12 @@ import {
 } from 'src/api/settings/settings'
 import { getPf9EnvConfig, injectEnvVariables } from 'src/api/helpers'
 import { CloudUploadOutlined } from '@mui/icons-material'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import { uploadVddkFile } from 'src/api/vddk'
 import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
 import { Phase } from 'src/api/migrations/model'
+import { getAIKeyStatus, saveAIKey } from 'src/api/ai/aiAnalysis'
 import axios from 'axios'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
@@ -109,7 +112,7 @@ const DEFAULTS: SettingsForm = {
 }
 
 const helpers = getGlobalSettingsHelpers(DEFAULTS)
-type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'hosts' | 'vddk'
+type TabKey = 'general' | 'retry' | 'network' | 'advanced' | 'hosts' | 'vddk' | 'ai'
 
 const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
   general: [
@@ -150,10 +153,11 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'DEFAULT_NETWORK_PERSISTENCE'
   ],
   hosts: ['AGENT_HOST_ENTRIES'],
-  vddk: []
+  vddk: [],
+  ai: []
 }
 
-const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced', 'hosts', 'vddk']
+const TAB_ORDER: TabKey[] = ['general', 'retry', 'network', 'advanced', 'hosts', 'vddk', 'ai']
 
 const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.ReactNode }> = {
   general: {
@@ -187,6 +191,11 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
     label: 'VDDK Upload',
     helper: 'Upload and manage VDDK (Virtual Disk Development Kit) files for VMware integration.',
     icon: <CloudUploadOutlined fontSize="small" />
+  },
+  ai: {
+    label: 'AI',
+    helper: 'Configure Anthropic API key for AI-powered log analysis on failed migrations.',
+    icon: <AutoFixHighIcon fontSize="small" />
   }
 }
 
@@ -956,6 +965,36 @@ export default function GlobalSettingsPage() {
 
   const [proxyHelpDismissed, setProxyHelpDismissed] = useState(false)
 
+  // AI key state
+  const [aiKeyValue, setAIKeyValue] = useState('')
+  const [adminKeyValue, setAdminKeyValue] = useState('')
+  const [aiKeyConfigured, setAIKeyConfigured] = useState(false)
+  const [aiKeySaving, setAIKeySaving] = useState(false)
+  const [aiKeyError, setAIKeyError] = useState<string | null>(null)
+  const [aiKeySuccess, setAIKeySuccess] = useState(false)
+
+  useEffect(() => {
+    getAIKeyStatus().then((s) => setAIKeyConfigured(s.configured)).catch(() => {})
+  }, [])
+
+  const handleSaveAIKey = useCallback(async () => {
+    if (!aiKeyValue.trim()) return
+    setAIKeySaving(true)
+    setAIKeyError(null)
+    try {
+      await saveAIKey(aiKeyValue.trim(), adminKeyValue.trim())
+      setAIKeyConfigured(true)
+      setAIKeyValue('')
+      setAdminKeyValue('')
+      setAIKeySuccess(true)
+      setTimeout(() => setAIKeySuccess(false), 3000)
+    } catch {
+      setAIKeyError('Failed to save API keys. Check vpwned logs.')
+    } finally {
+      setAIKeySaving(false)
+    }
+  }, [aiKeyValue, adminKeyValue])
+
   const [vddkFile, setVddkFile] = useState<File | null>(null)
   const [vddkStatus, setVddkStatus] = useState<VddkUploadStatus>('idle')
   const vddkStatusRef = useRef(vddkStatus)
@@ -1617,6 +1656,55 @@ export default function GlobalSettingsPage() {
             />
           </TabPanel>
 
+          <TabPanel activeTab={activeTab} value="ai">
+            <Box sx={{ mt: 3, maxWidth: 480 }}>
+              <Typography variant="h6" gutterBottom>AI Configuration</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Required for &quot;Analyse with AI&quot; on failed migrations. Key is stored securely
+                in the cluster and never sent to external services except the Anthropic API.
+              </Typography>
+
+              {aiKeyConfigured && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  Anthropic API key is configured.
+                </Alert>
+              )}
+
+              {aiKeyError && <Alert severity="error" sx={{ mb: 2 }}>{aiKeyError}</Alert>}
+              {aiKeySuccess && <Alert severity="success" sx={{ mb: 2 }}>API key saved.</Alert>}
+
+              <TextField
+                label="Anthropic API Key"
+                type="password"
+                fullWidth
+                value={aiKeyValue}
+                onChange={(e) => setAIKeyValue(e.target.value)}
+                placeholder={aiKeyConfigured ? '••••••••••••••••••••' : 'sk-ant-...'}
+                helperText={aiKeyConfigured ? 'Leave blank to keep existing key' : 'Enter your Anthropic API key'}
+                sx={{ mb: 2 }}
+              />
+
+              <TextField
+                label="Admin API Key"
+                type="password"
+                fullWidth
+                value={adminKeyValue}
+                onChange={(e) => setAdminKeyValue(e.target.value)}
+                placeholder={aiKeyConfigured ? '••••••••••••••••••••' : 'Enter admin key for /crawl endpoint'}
+                helperText="Used to authenticate vjailbreak-ai admin endpoints (/crawl, /context)"
+                sx={{ mb: 2 }}
+              />
+
+              <Button
+                variant="contained"
+                onClick={handleSaveAIKey}
+                disabled={aiKeySaving || !aiKeyValue.trim()}
+              >
+                {aiKeySaving ? 'Saving...' : 'Save API Key'}
+              </Button>
+            </Box>
+          </TabPanel>
+
           <Box sx={{ flexGrow: 1 }} />
 
           <Footer sx={{ marginTop: 'auto', marginBottom: theme.spacing(3) }}>
@@ -1626,7 +1714,7 @@ export default function GlobalSettingsPage() {
               onClick={onResetDefaults}
               startIcon={<RefreshIcon />}
               data-testid="global-settings-reset-defaults"
-              disabled={activeTab === 'vddk'}
+              disabled={activeTab === 'vddk' || activeTab === 'ai'}
             >
               Reset to Defaults
             </Button>
@@ -1637,6 +1725,7 @@ export default function GlobalSettingsPage() {
               disabled={
                 saving ||
                 vddkStatus === 'uploading' ||
+                activeTab === 'ai' ||
                 (activeTab === 'vddk' && !vddkFile && !existingVddkPath)
               }
               data-tour="global-settings-save"
