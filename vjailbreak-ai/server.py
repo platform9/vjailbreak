@@ -9,6 +9,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from collections import defaultdict
 from urllib.parse import urlparse
+from typing import Optional, Any
 
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,11 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, field_validator, HttpUrl
 import chromadb
 import anthropic
+
+from analyzer import analyze_migration as _analyze_migration
+
+# Module-level alias so tests can patch "server.analyze_migration"
+analyze_migration = _analyze_migration
 
 # ---------------------------------------------------------------------------
 # Config — all from environment, no hardcoded secrets
@@ -302,3 +308,34 @@ async def query(req: QueryRequest, request: Request):
         yield json.dumps({"done": True}) + "\n"
 
     return StreamingResponse(stream_response(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
+# Migration analysis models and endpoint
+# ---------------------------------------------------------------------------
+class MigrationContext(BaseModel):
+    migration_cr: dict[str, Any] = {}
+    migration_plan: dict[str, Any] = {}
+    migration_template: dict[str, Any] = {}
+    network_mapping: dict[str, Any] = {}
+    storage_mapping: dict[str, Any] = {}
+    v2v_logs: str = ""
+    controller_logs: str = ""
+    debug_logs: dict[str, str] = {}
+    additional_context: str = ""
+    fetch_warnings: list[str] = []
+
+
+class AnalyzeMigrationRequest(BaseModel):
+    migration_name: str
+    namespace: str
+    context: MigrationContext
+    conversation_history: list[dict[str, str]] = []
+    question: Optional[str] = None
+
+
+@app.post("/analyze-migration")
+async def analyze_migration_endpoint(req: AnalyzeMigrationRequest):
+    import server as _server_module
+    result = _server_module.analyze_migration(req.model_dump(), chroma_client)
+    return result
