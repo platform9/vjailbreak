@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -405,6 +406,15 @@ func CreateInClusterClient() (client.Client, error) {
 	}
 	logrus.WithField("func", fn).Info("Successfully created in-cluster k8s client")
 	return clientset, nil
+}
+
+// CreateRawK8sClient returns a kubernetes.Interface for pod log streaming.
+func CreateRawK8sClient() (kubernetes.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
 }
 
 func isRetryableStatusUpdateError(err error) bool {
