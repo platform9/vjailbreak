@@ -216,6 +216,12 @@ update_pf9_env_timezone() {
     fi
   fi
 
+  # Validate tz contains only IANA-safe characters before embedding in JSON
+  if [[ ! "$tz" =~ ^[A-Za-z0-9/_+\-]+$ ]]; then
+    log "Skipping k8s patches — timezone contains unexpected characters: ${tz}"
+    return 0
+  fi
+
   if kubectl -n migration-system get configmap pf9-env >/dev/null 2>&1; then
     local env_patch
     env_patch="$(printf '{"data":{"TZ":"%s"}}' "$tz")"
@@ -260,6 +266,11 @@ timezone="$(get_cm_val TIMEZONE)"
 ntp_servers_raw="$(get_cm_val NTP_SERVERS)"
 
 timezone="$(echo "${timezone:-}" | xargs || true)"
+# Reject path traversal and non-IANA characters before any path or JSON use
+if [[ "$timezone" == *..* ]] || [[ "$timezone" == /* ]] || [[ ! "$timezone" =~ ^[A-Za-z0-9/_+\-]*$ ]]; then
+  log "Rejected timezone (invalid characters or path traversal): ${timezone}"
+  timezone=""
+fi
 ntp_servers="$(filter_valid_ntp_servers "$(normalize_servers "${ntp_servers_raw:-}")")"
 
 desired_fingerprint="$(printf '%s\n%s\n' "${timezone}" "${ntp_servers}" | sha256sum | awk '{print $1}')"
