@@ -133,3 +133,18 @@ def test_parse_claude_response_low_confidence_includes_github_issue():
     raw = '{"root_cause": "unclear", "fix_steps": [], "summary": "unclear", "confidence": "low", "doc_references": []}'
     result = parse_claude_response(raw, "migration-test", [{"type": "Failed"}], "errors")
     assert result["github_issue"]["should_open"] is True
+
+
+def test_build_github_issue_url_encoding():
+    import urllib.parse
+    result = build_github_issue(
+        migration_name="migration-test-vm",
+        conditions=[],
+        error_snippet="some error",
+    )
+    assert result["prefill_url"].startswith("https://github.com/platform9/vjailbreak/issues/new")
+    parsed = urllib.parse.urlparse(result["prefill_url"])
+    params = urllib.parse.parse_qs(parsed.query)
+    assert "title" in params
+    assert "body" in params
+    assert len(result["collect_first"]) >= 5
