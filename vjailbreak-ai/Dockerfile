@@ -1,40 +1,22 @@
-FROM python:3.11-slim AS builder
-
-WORKDIR /build
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
-
-
-FROM python:3.11-slim
-
-# Security: run as non-root user
-RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
-
+FROM python:3.11-slim AS base
 WORKDIR /app
 
-# Copy installed packages from builder stage
-COPY --from=builder /install /usr/local
+RUN addgroup --gid 1001 appgroup && adduser --uid 1001 --gid 1001 --no-create-home appuser
 
-# Copy application code
-COPY backend/ .
+FROM base AS deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Data directory owned by app user
-RUN mkdir -p /data/chroma && chown -R appuser:appuser /data
+FROM base AS final
+COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
 
-# Drop to non-root
+COPY server.py analyzer.py crawler.py error_catalog.md ./
+
+RUN mkdir -p /data && chown appuser:appgroup /data
 USER appuser
 
-ENV CHROMA_PATH=/data/chroma
-ENV CONTEXT_PATH=/data/context.md
-ENV PYTHONDONTWRITEBYTECODE=1
+EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
-
-# Use exec form — no shell, so signals propagate correctly
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
