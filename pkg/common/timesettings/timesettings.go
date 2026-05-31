@@ -260,7 +260,7 @@ func patchPf9EnvConfigMap(ctx context.Context, k8sClient client.Client, tz strin
 // StatefulSet that consumes the TZ env var. Errors are aggregated so one
 // missing workload doesn't prevent the others from being restarted.
 func restartTZWorkloads(ctx context.Context, k8sClient client.Client) error {
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now().Format(time.RFC3339Nano)
 	var errs []error
 	for _, w := range workloadsToRestart {
 		w := w
