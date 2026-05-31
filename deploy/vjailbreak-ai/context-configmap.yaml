@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vjailbreak-ai-context
+  namespace: migration-system
+data:
+  # Operator-provided context injected into every AI analysis prompt.
+  # Edit the value below to add site-specific information.
+  # Examples:
+  #   - Custom VDDK install path
+  #   - Known ESXi certificate issues in this environment
+  #   - Network restrictions that affect migrations
+  #   - OpenStack volume type mappings in use
+  additional_context: |
+    # Add operator-specific notes here.
+    # Example:
+    # VDDK is installed at /opt/vmware/vddk (non-standard path).
+    # All ESXi hosts use self-signed TLS certificates -- SSL errors are expected.
+    # OpenStack Cinder volume type "ssd" maps to VMware datastore "fast-ssd".
