@@ -4,6 +4,7 @@ import { fetchPodDebugLogs } from 'src/api/kubernetes/pods'
 import { fetchMigrationResourceBundle } from 'src/api/kubernetes/migrationResourceBundle'
 import { Phase } from '../api/migrations'
 import BaseLogsDrawer from './BaseLogsDrawer'
+import AIAnalysisTab from './AIAnalysisTab'
 
 const STREAM_END_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed]
 
@@ -131,6 +132,11 @@ export default function PodLogsDrawer({
     [vmDisplayName, podName, namespace, migrationName]
   )
 
+  const aiTabContent =
+    migrationPhase === Phase.Failed && migrationName && namespace ? (
+      <AIAnalysisTab migrationName={migrationName} namespace={namespace} />
+    ) : undefined
+
   return (
     <BaseLogsDrawer
       data-testid="pod-logs-drawer"
@@ -145,6 +151,7 @@ export default function PodLogsDrawer({
       onPausedChange={setIsPaused}
       onReconnect={handleReconnect}
       onDownload={handleDownload}
+      aiTabContent={aiTabContent}
     />
   )
 }
