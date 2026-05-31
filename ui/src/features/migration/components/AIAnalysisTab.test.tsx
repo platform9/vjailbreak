@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import AIAnalysisTab from './AIAnalysisTab'
 import * as aiAnalysis from 'src/api/ai/aiAnalysis'
