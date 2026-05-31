@@ -1,3 +1,10 @@
+# Prerequisites:
+#   Create the API key Secret via Settings → AI in the vJailbreak UI, or manually:
+#   kubectl -n migration-system create secret generic vjailbreak-ai-secret \
+#     --from-literal=api-key=<anthropic-api-key> \
+#     --from-literal=admin-key=<admin-key>
+#   The Deployment uses optional: true so it starts without the Secret,
+#   but AI analysis calls will fail until the key is configured.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
