@@ -1,4 +1,4 @@
-import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText } from '@mui/material'
+import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Alert } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -76,8 +76,6 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
 
   const openstackCredsValidated =
     openstackCredentials?.status?.openstackValidationStatus === 'Succeeded'
-
-  const isL2Credential = Boolean(openstackCredentials?.spec?.vjbinstanceid?.trim())
 
   const [volumeTypes, setVolumeTypes] = useState<Array<string>>([])
   const [selectedVolumeType, setSelectedVolumeType] = useState('')
@@ -386,7 +384,11 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 error={!!flavorsError}
               />
             </FormGrid>
-
+            {!useMasterSecurityGroups && (
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                Security groups apply only when the vJailbreak VM is on a non-Layer 2 network.
+              </Alert>
+            )}
             <FormGrid minWidth={260} gap={2}>
               <FormControl
                 fullWidth
@@ -407,7 +409,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                       size="small"
                     >
                       <MenuItem value="USE_MASTER">
-                        Use volume type of primary VJB instance
+                        Use volume type of primary vJailbreak instance
                       </MenuItem>
                       {volumeTypes.map((volumeType) => (
                         <MenuItem key={volumeType} value={volumeType}>
@@ -423,20 +425,15 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 fullWidth
                 size="small"
                 disabled={
-                  !openstackCredsValidated ||
-                  !openstackCredentials ||
-                  securityGroups.length === 0 ||
-                  isL2Credential
+                  !openstackCredsValidated || !openstackCredentials || securityGroups.length === 0
                 }
               >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <FieldLabel label="Security Groups" align="flex-start" />
-
                   <Select
                     multiple
                     value={useMasterSecurityGroups ? ['USE_MASTER'] : selectedSecurityGroups}
                     label=""
-                    disabled={isL2Credential}
                     onChange={(e) => {
                       const value = e.target.value as string[]
                       if (value.includes('USE_MASTER')) {
@@ -450,7 +447,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                     size="small"
                     renderValue={(selected) => {
                       if (useMasterSecurityGroups) {
-                        return 'Use security groups of primary VJB instance'
+                        return 'Use security groups of primary vJailbreak instance'
                       }
                       return (selected as string[])
                         .map((id) => securityGroups.find((sg) => sg.id === id)?.name || id)
@@ -459,7 +456,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   >
                     <MenuItem value="USE_MASTER">
                       <Checkbox checked={useMasterSecurityGroups} />
-                      <ListItemText primary="Use security groups of primary VJB instance" />
+                      <ListItemText primary="Use security groups of primary vJailbreak instance" />
                     </MenuItem>
                     {securityGroups.map((sg) => (
                       <MenuItem key={sg.id} value={sg.id} disabled={useMasterSecurityGroups}>

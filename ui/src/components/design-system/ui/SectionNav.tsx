@@ -150,6 +150,7 @@ export default function SectionNav({
                   selected={selected}
                   onClick={() => onSelect(item.id)}
                   aria-label={`Step ${stepNumber}`}
+                  data-testid={`section-nav-item-${item.id}`}
                   sx={{
                     display: 'flex',
                     justifyContent: 'center',
@@ -166,6 +167,7 @@ export default function SectionNav({
                   }}
                 >
                   <Box
+                    data-testid={item.status === 'attention' ? 'section-nav-error-badge' : undefined}
                     sx={(theme) => ({
                       width: chipSize,
                       height: chipSize,

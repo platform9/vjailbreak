@@ -133,6 +133,7 @@ export default function PodLogsDrawer({
 
   return (
     <BaseLogsDrawer
+      data-testid="pod-logs-drawer"
       open={open}
       onClose={handleClose}
       title="Migration Pod Logs"

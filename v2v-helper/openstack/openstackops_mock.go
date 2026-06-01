@@ -43,6 +43,20 @@ func (m *MockOpenstackOperations) EXPECT() *MockOpenstackOperationsMockRecorder 
 	return m.recorder
 }
 
+// ApplyBootVolumeImageMetadata mocks base method.
+func (m *MockOpenstackOperations) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyBootVolumeImageMetadata", ctx, volume, metadata)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyBootVolumeImageMetadata indicates an expected call of ApplyBootVolumeImageMetadata.
+func (mr *MockOpenstackOperationsMockRecorder) ApplyBootVolumeImageMetadata(ctx, volume, metadata interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBootVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).ApplyBootVolumeImageMetadata), ctx, volume, metadata)
+}
+
 // AttachVolumeToVM mocks base method.
 func (m *MockOpenstackOperations) AttachVolumeToVM(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()
@@ -73,18 +87,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(ctx, networkid, mac, i
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless)
+	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex)
 }
 
 // CreateVolume mocks base method.
@@ -349,20 +363,6 @@ func (m *MockOpenstackOperations) SetVolumeImageMetadata(ctx context.Context, vo
 func (mr *MockOpenstackOperationsMockRecorder) SetVolumeImageMetadata(ctx, volume, setRDMLabel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).SetVolumeImageMetadata), ctx, volume, setRDMLabel)
-}
-
-// ApplyBootVolumeImageMetadata mocks base method.
-func (m *MockOpenstackOperations) ApplyBootVolumeImageMetadata(ctx context.Context, volume *volumes.Volume, metadata map[string]string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyBootVolumeImageMetadata", ctx, volume, metadata)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ApplyBootVolumeImageMetadata indicates an expected call of ApplyBootVolumeImageMetadata.
-func (mr *MockOpenstackOperationsMockRecorder) ApplyBootVolumeImageMetadata(ctx, volume, metadata interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBootVolumeImageMetadata", reflect.TypeOf((*MockOpenstackOperations)(nil).ApplyBootVolumeImageMetadata), ctx, volume, metadata)
 }
 
 // SetVolumeUEFI mocks base method.

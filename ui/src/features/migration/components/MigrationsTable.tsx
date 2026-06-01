@@ -9,11 +9,9 @@ import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { LogsDrawer } from '.'
-import { Condition, Migration, Phase } from '../api/migrations'
+import { Migration, Phase } from '../api/migrations'
 import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
 import MigrationProgress from '../components/MigrationProgress'
-import { QueryObserverResult } from '@tanstack/react-query'
-import { RefetchOptions } from '@tanstack/react-query'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
@@ -24,6 +22,11 @@ import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
+import type { CustomToolbarProps, MigrationsTableProps } from '../types'
+import { TooltipContent, ClickableTableCell } from 'src/components'
+import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
+import { STATUS_ORDER } from '../constants'
+import { getProgressText, IN_PROGRESS_PHASES } from '../utils/migrationTableUtils'
 
 const pulse = keyframes`
   0% {
@@ -36,93 +39,6 @@ const pulse = keyframes`
     opacity: 1;
   }
 `
-import { TooltipContent, ClickableTableCell } from 'src/components'
-import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
-
-const STATUS_ORDER = {
-  Running: 0,
-  Failed: 1,
-  Succeeded: 2,
-  Pending: 3
-}
-const PHASE_STEPS = {
-  [Phase.Pending]: 1,
-  [Phase.Validating]: 2,
-  [Phase.AwaitingDataCopyStart]: 3,
-  [Phase.CopyingBlocks]: 4,
-  [Phase.CopyingChangedBlocks]: 5,
-  [Phase.ConvertingDisk]: 6,
-  [Phase.AwaitingCutOverStartTime]: 7,
-  [Phase.AwaitingAdminCutOver]: 8,
-  [Phase.Succeeded]: 9,
-  [Phase.Failed]: 10,
-  [Phase.ValidationFailed]: 11
-}
-
-const IN_PROGRESS_PHASES = [
-  Phase.Pending,
-  Phase.Validating,
-  Phase.AwaitingDataCopyStart,
-  Phase.CopyingBlocks,
-  Phase.CopyingChangedBlocks,
-  Phase.ConvertingDisk,
-  Phase.AwaitingCutOverStartTime,
-  Phase.AwaitingAdminCutOver
-]
-
-const getProgressText = (
-  phase: Phase | undefined,
-  conditions: Condition[] | undefined,
-  currentDisk?: string,
-  totalDisks?: number
-) => {
-  if (!phase || phase === Phase.Unknown) {
-    return 'Unknown Status'
-  }
-
-  const stepNumber = PHASE_STEPS[phase] || 0
-  const totalSteps = 9
-
-  const latestCondition = conditions?.sort(
-    (a, b) => new Date(b.lastTransitionTime).getTime() - new Date(a.lastTransitionTime).getTime()
-  )[0]
-
-  const message = latestCondition?.message || phase
-
-  if (phase === Phase.Failed || phase === Phase.ValidationFailed || phase === Phase.Succeeded) {
-    return `${phase} - ${message}`
-  }
-
-  let diskInfo = ''
-  if (
-    currentDisk &&
-    totalDisks &&
-    (phase === Phase.CopyingBlocks || phase === Phase.CopyingChangedBlocks)
-  ) {
-    const parsedDisk = parseInt(currentDisk, 10)
-    const currentDiskNum = Number.isNaN(parsedDisk) ? 1 : parsedDisk + 1
-    diskInfo = ` (disk ${currentDiskNum}/${totalDisks})`
-  }
-
-  let progressText = `STEP ${stepNumber}/${totalSteps}: ${phase}${diskInfo} - ${message}`
-
-  return progressText
-}
-
-interface CustomToolbarProps {
-  numSelected: number
-  onDeleteSelected: () => void
-  onBulkAdminCutover: () => void
-  numEligibleForCutover: number
-  refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
-  onStatusFilterChange: (filter: string) => void
-  currentStatusFilter: string
-  onDateFilterChange: (filter: string) => void
-  currentDateFilter: string
-  onStartMigration: () => void
-  startMigrationDisabled: boolean
-  startMigrationDisabledReason: string
-}
 
 const CustomToolbar = ({
   numSelected,
@@ -143,6 +59,7 @@ const CustomToolbar = ({
       {numSelected > 0 ? (
         <>
           <Button
+            data-testid="delete-selected-button"
             variant="outlined"
             color="error"
             startIcon={<DeleteIcon />}
@@ -186,6 +103,7 @@ const CustomToolbar = ({
           onClick={onStartMigration}
           disabled={startMigrationDisabled}
           sx={{ height: 40 }}
+          data-testid="start-migration-button"
         >
           Start Migration
         </Button>
@@ -196,14 +114,6 @@ const CustomToolbar = ({
   return (
     <ListingToolbar title="Migrations" icon={<MigrationIcon />} search={search} actions={actions} />
   )
-}
-
-interface MigrationsTableProps {
-  migrations: Migration[]
-  onDeleteMigration?: (name: string) => void
-  onDeleteSelected?: (migrations: Migration[]) => void
-  refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
-  loading?: boolean
 }
 
 export default function MigrationsTable({
@@ -312,7 +222,11 @@ export default function MigrationsTable({
       const name = m.spec?.vmName || ''
       if (name) counts.set(name, (counts.get(name) || 0) + 1)
     }
-    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, c]) => c > 1)
+        .map(([n]) => n)
+    )
   }, [migrations])
 
   const columns: GridColDef[] = useMemo(() => {
@@ -363,7 +277,9 @@ export default function MigrationsTable({
 
           const isDuplicate = duplicateVmNames.has(vmName)
           const vmKey =
-            (params.row?.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] as string) ||
+            (params.row?.metadata?.annotations?.[
+              'vjailbreak.k8s.pf9.io/original-vm-name'
+            ] as string) ||
             (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
             ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
@@ -672,6 +588,7 @@ export default function MigrationsTable({
   return (
     <>
       <CommonDataGrid
+        data-testid="migrations-table"
         rows={migrationsWithActions}
         columns={
           onDeleteSelected === undefined && onDeleteMigration === undefined
@@ -695,24 +612,29 @@ export default function MigrationsTable({
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
         slots={{
+          // Pass CustomToolbar directly (stable module-level reference) to prevent DataGrid
+          // from unmounting/remounting the toolbar on every MigrationsTable re-render.
+          // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
+          toolbar: hasSelectionActions ? CustomToolbar : undefined
+        }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        slotProps={{
           toolbar: hasSelectionActions
-            ? () => (
-                <CustomToolbar
-                  numSelected={selectedRows.length}
-                  onDeleteSelected={handleDeleteSelected}
-                  onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
-                  numEligibleForCutover={eligibleForCutover.length}
-                  refetchMigrations={refetchMigrations}
-                  onStatusFilterChange={setStatusFilter}
-                  currentStatusFilter={statusFilter}
-                  onDateFilterChange={setDateFilter}
-                  currentDateFilter={dateFilter}
-                  onStartMigration={() => openMigrationForm('standard')}
-                  startMigrationDisabled={startMigrationDisabled}
-                  startMigrationDisabledReason={startMigrationDisabledReason}
-                />
-              )
-            : undefined
+            ? ({
+                numSelected: selectedRows.length,
+                onDeleteSelected: handleDeleteSelected,
+                onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
+                numEligibleForCutover: eligibleForCutover.length,
+                refetchMigrations,
+                onStatusFilterChange: setStatusFilter,
+                currentStatusFilter: statusFilter,
+                onDateFilterChange: setDateFilter,
+                currentDateFilter: dateFilter,
+                onStartMigration: () => openMigrationForm('standard'),
+                startMigrationDisabled,
+                startMigrationDisabledReason
+              } as any)
+            : {}
         }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}

@@ -181,6 +181,11 @@ spec:
                 - MappingVolume
                 - RescanningStorage
                 - XCOPYInProgress
+                - SnapshottingSourceVM
+                - AttachingDisksToProxy
+                - IdentifyingBlockDevices
+                - HotAddTransferInProgress
+                - HotAddCleanup
                 type: string
               retryable:
                 description: |-

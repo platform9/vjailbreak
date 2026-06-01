@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -73,6 +73,17 @@ const (
 	VMMigrationPhaseRescanningStorage VMMigrationPhase = "RescanningStorage"
 	// VMMigrationPhaseStorageAcceleratedCopyInProgress indicates StorageAcceleratedCopy operation is in progress
 	VMMigrationPhaseStorageAcceleratedCopyInProgress VMMigrationPhase = "StorageAcceleratedCopyInProgress"
+
+	// VMMigrationPhaseSnapshottingSourceVM indicates the source VM is being snapshotted (HotAdd specific phase)
+	VMMigrationPhaseSnapshottingSourceVM VMMigrationPhase = "SnapshottingSourceVM"
+	// VMMigrationPhaseAttachingDisksToProxy indicates snapshot disks are being attached to the Proxy VM (HotAdd specific phase)
+	VMMigrationPhaseAttachingDisksToProxy VMMigrationPhase = "AttachingDisksToProxy"
+	// VMMigrationPhaseIdentifyingBlockDevices indicates block devices are being identified on the Proxy VM (HotAdd specific phase)
+	VMMigrationPhaseIdentifyingBlockDevices VMMigrationPhase = "IdentifyingBlockDevices"
+	// VMMigrationPhaseHotAddTransferring indicates data is being transferred via nbdcopy (HotAdd specific phase)
+	VMMigrationPhaseHotAddTransferring VMMigrationPhase = "HotAddTransferInProgress"
+	// VMMigrationPhaseHotAddCleanup indicates snapshot and disk attachments are being cleaned up (HotAdd specific phase)
+	VMMigrationPhaseHotAddCleanup VMMigrationPhase = "HotAddCleanup"
 )
 
 // MigrationSpec defines the desired state of Migration
