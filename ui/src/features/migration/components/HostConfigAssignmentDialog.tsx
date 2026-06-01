@@ -37,7 +37,7 @@ export default function HostConfigAssignmentDialog({
       onClose={onClose}
       fullWidth
       maxWidth="sm"
-      data-testid="rolling-migration-form-host-config-dialog"
+      data-testid="host-config-assignment-dialog"
     >
       <DialogTitle>Assign Host Config To All ESXi Hosts</DialogTitle>
       <DialogContent>

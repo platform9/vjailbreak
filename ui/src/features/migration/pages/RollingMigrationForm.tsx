@@ -113,7 +113,7 @@ const CustomESXToolbarWithActions = (props) => {
         gap: 1
       }}
     >
-      <ActionButton variant="text" color="primary" onClick={onAssignHostConfig} size="small">
+      <ActionButton data-testid="assign-host-config-button" variant="text" color="primary" onClick={onAssignHostConfig} size="small">
         Assign Host Config
       </ActionButton>
       <CustomSearchToolbar {...toolbarProps} />
@@ -789,7 +789,8 @@ export default function RollingMigrationFormDrawer({
                   </Box>
                   <Paper
                     sx={{ width: '100%', height: 389 }}
-                    data-testid="rolling-migration-form-hosts-grid"
+                    data-testid="hosts-datagrid"
+                    onClickCapture={() => markTouched('hosts')}
                   >
                     <DataGrid
                       rows={orderedESXHosts}
@@ -802,13 +803,9 @@ export default function RollingMigrationFormDrawer({
                       }}
                       pageSizeOptions={[5, 10, 25]}
                       rowHeight={45}
-                      slots={{
-                        toolbar: (props) => (
-                          <CustomESXToolbarWithActions
-                            {...props}
-                            onAssignHostConfig={handleOpenPcdHostConfigDialog}
-                          />
-                        )
+                      slots={{ toolbar: CustomESXToolbarWithActions }}
+                      slotProps={{
+                        toolbar: { onAssignHostConfig: handleOpenPcdHostConfigDialog } as any
                       }}
                       disableColumnMenu
                       disableColumnFilter

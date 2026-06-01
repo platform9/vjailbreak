@@ -88,7 +88,7 @@ export default function MaasConfigDetailDialog({
       open={open}
       onClose={onClose}
       aria-labelledby="baremetal-config-dialog-title"
-      data-testid="rolling-migration-form-baremetal-dialog"
+      data-testid="maas-config-detail-dialog"
     >
       <DialogTitle id="baremetal-config-dialog-title">
         <Typography variant="h6">ESXi - Bare Metal Configuration</Typography>

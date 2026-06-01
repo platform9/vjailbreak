@@ -30,7 +30,9 @@ export function useVmSelection({
   const syncSelectedVmSelection = useCallback(
     (selectedVmData: VmDataWithFlavor[]) => {
       const payload = JSON.stringify(selectedVmData)
-      if (payload === lastSelectedVmsPayloadRef.current) return
+      if (payload === lastSelectedVmsPayloadRef.current) {
+        return
+      }
       lastSelectedVmsPayloadRef.current = payload
       setFormVms(selectedVmData)
     },

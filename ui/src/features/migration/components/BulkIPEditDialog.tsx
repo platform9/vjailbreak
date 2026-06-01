@@ -103,7 +103,7 @@ export function BulkIPEditDialog({
   onIpChange
 }: BulkIPEditDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog data-testid="bulk-ip-dialog" open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         Edit IP Addresses for {selectedVMCount} {selectedVMCount === 1 ? 'VM' : 'VMs'}
       </DialogTitle>

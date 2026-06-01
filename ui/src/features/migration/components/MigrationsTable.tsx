@@ -22,7 +22,6 @@ import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
-import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import type { CustomToolbarProps, MigrationsTableProps } from '../types'
 import { TooltipContent, ClickableTableCell } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
@@ -60,6 +59,7 @@ const CustomToolbar = ({
       {numSelected > 0 ? (
         <>
           <Button
+            data-testid="delete-selected-button"
             variant="outlined"
             color="error"
             startIcon={<DeleteIcon />}
@@ -103,6 +103,7 @@ const CustomToolbar = ({
           onClick={onStartMigration}
           disabled={startMigrationDisabled}
           sx={{ height: 40 }}
+          data-testid="start-migration-button"
         >
           Start Migration
         </Button>
@@ -133,8 +134,6 @@ export default function MigrationsTable({
     refetchOnMount: true
   })
 
-  const { data: vddkStatus } = useVddkStatusQuery({ staleTime: 0, refetchOnMount: true })
-
   const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
   const hasPcdCredentials = useMemo(() => {
     const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
@@ -144,12 +143,9 @@ export default function MigrationsTable({
       ).length > 0
     )
   }, [openstackCreds])
-  const vddkUploaded = vddkStatus?.uploaded === true
 
-  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials || !vddkUploaded
-  const startMigrationDisabledReason = !vddkUploaded
-    ? 'Upload VDDK library in Settings before starting a migration.'
-    : 'Add VMware and PCD credentials before starting a migration.'
+  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
+  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
@@ -226,7 +222,11 @@ export default function MigrationsTable({
       const name = m.spec?.vmName || ''
       if (name) counts.set(name, (counts.get(name) || 0) + 1)
     }
-    return new Set(Array.from(counts.entries()).filter(([, c]) => c > 1).map(([n]) => n))
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, c]) => c > 1)
+        .map(([n]) => n)
+    )
   }, [migrations])
 
   const columns: GridColDef[] = useMemo(() => {
@@ -277,7 +277,9 @@ export default function MigrationsTable({
 
           const isDuplicate = duplicateVmNames.has(vmName)
           const vmKey =
-            (params.row?.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] as string) ||
+            (params.row?.metadata?.annotations?.[
+              'vjailbreak.k8s.pf9.io/original-vm-name'
+            ] as string) ||
             (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
             ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
@@ -586,6 +588,7 @@ export default function MigrationsTable({
   return (
     <>
       <CommonDataGrid
+        data-testid="migrations-table"
         rows={migrationsWithActions}
         columns={
           onDeleteSelected === undefined && onDeleteMigration === undefined
@@ -609,24 +612,29 @@ export default function MigrationsTable({
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
         slots={{
+          // Pass CustomToolbar directly (stable module-level reference) to prevent DataGrid
+          // from unmounting/remounting the toolbar on every MigrationsTable re-render.
+          // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
+          toolbar: hasSelectionActions ? CustomToolbar : undefined
+        }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        slotProps={{
           toolbar: hasSelectionActions
-            ? () => (
-                <CustomToolbar
-                  numSelected={selectedRows.length}
-                  onDeleteSelected={handleDeleteSelected}
-                  onBulkAdminCutover={() => setBulkCutoverDialogOpen(true)}
-                  numEligibleForCutover={eligibleForCutover.length}
-                  refetchMigrations={refetchMigrations}
-                  onStatusFilterChange={setStatusFilter}
-                  currentStatusFilter={statusFilter}
-                  onDateFilterChange={setDateFilter}
-                  currentDateFilter={dateFilter}
-                  onStartMigration={() => openMigrationForm('standard')}
-                  startMigrationDisabled={startMigrationDisabled}
-                  startMigrationDisabledReason={startMigrationDisabledReason}
-                />
-              )
-            : undefined
+            ? ({
+                numSelected: selectedRows.length,
+                onDeleteSelected: handleDeleteSelected,
+                onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
+                numEligibleForCutover: eligibleForCutover.length,
+                refetchMigrations,
+                onStatusFilterChange: setStatusFilter,
+                currentStatusFilter: statusFilter,
+                onDateFilterChange: setDateFilter,
+                currentDateFilter: dateFilter,
+                onStartMigration: () => openMigrationForm('standard'),
+                startMigrationDisabled,
+                startMigrationDisabledReason
+              } as any)
+            : {}
         }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}

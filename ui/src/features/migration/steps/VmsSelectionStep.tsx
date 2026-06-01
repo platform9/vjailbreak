@@ -105,7 +105,7 @@ const StandardToolbarWithActions = (props: StandardToolbarWithActionsProps) => {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {rowSelectionModel && rowSelectionModel.length > 0 && (
           <>
-            <Button variant="text" color="primary" onClick={onAssignFlavor} size="small">
+            <Button data-testid="assign-flavor-button" variant="text" color="primary" onClick={onAssignFlavor} size="small">
               Assign Flavor ({rowSelectionModel.length})
             </Button>
             {hasRdmVMs && rdmVMsCount > 0 && (
@@ -119,7 +119,7 @@ const StandardToolbarWithActions = (props: StandardToolbarWithActionsProps) => {
               </Button>
             )}
             {selectedCount > 0 && (
-              <Button variant="text" color="primary" onClick={onAssignIP} size="small">
+              <Button data-testid="bulk-ip-edit-button" variant="text" color="primary" onClick={onAssignIP} size="small">
                 Assign IP ({selectedCount})
               </Button>
             )}
@@ -254,7 +254,7 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
         <Box>
           <Paper
             sx={{ width: '100%', height: 389 }}
-            data-testid={isRolling ? 'rolling-migration-form-vms-grid' : undefined}
+            data-testid="vms-datagrid"
           >
             {isRolling ? (
               <DataGrid

@@ -170,6 +170,7 @@ export default function SourceDestinationClusterSelection({
           </Box>
           <FormControl fullWidth variant="outlined" size="small">
             <Select
+              data-testid="vmware-cluster-dropdown"
               value={currentVmwareCluster}
               onChange={handleVMwareClusterChangeWrapper}
               onOpen={() => setVmwareDropdownOpen(true)}
@@ -376,6 +377,7 @@ export default function SourceDestinationClusterSelection({
           </Box>
           <FormControl fullWidth variant="outlined" size="small">
             <Select
+              data-testid="pcd-cluster-dropdown"
               value={currentPcdCluster}
               onChange={handlePcdClusterChangeWrapper}
               onOpen={() => setPcdDropdownOpen(true)}

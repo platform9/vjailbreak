@@ -182,6 +182,7 @@ export default function MigrationsPage() {
         open={deleteDialogOpen}
         onClose={handleDeleteClose}
         title="Confirm Delete Migration"
+        confirmButtonTestId="confirm-delete-button"
         icon={<WarningIcon color="warning" />}
         message={
           selectedMigrations.length > 1

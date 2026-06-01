@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx playwright *)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/npx playwright *)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node ~/.nvm/versions/node/v20.19.6/bin/npx --yes playwright --version)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node -e \"const x = null ?? 'default'; console.log\\(x\\)\")",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ node --version)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright --version)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/smoke.spec.ts --reporter=line)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/happy-path.spec.ts --reporter=line)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/happy-path.spec.ts --project=chromium -g MIG-009 --reporter=line)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/happy-path.spec.ts --project=chromium -g MIG-010 --reporter=line)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/happy-path.spec.ts --project=chromium -g 'MIG-009|MIG-010' --reporter=line)",
+      "Bash(PATH=__TRACKED_VAR__/.nvm/versions/node/v20.19.6/bin:__TRACKED_VAR__ npx playwright test e2e/migration/happy-path.spec.ts --project=chromium -g MIG-004 --reporter=line)"
+    ]
+  }
+}

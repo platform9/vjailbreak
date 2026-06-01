@@ -53,7 +53,7 @@ export default function MigrationProgress({ progressText, phase, syncWarningMess
 
   return (
     <>
-      <ProgressContainer>
+      <ProgressContainer data-testid="migration-progress-cell">
         {statusIcon}
         <Tooltip title={progressText} arrow>
           <Typography
