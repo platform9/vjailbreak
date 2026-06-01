@@ -151,7 +151,7 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 				constants.ESXiNameLabel:             esxiK8sName,
 				constants.VMwareCredsLabel:          scope.ClusterMigration.Spec.VMwareCredsRef.Name,
 				constants.RollingMigrationPlanLabel: scope.RollingMigrationPlan.Name,
-				constants.ClusterMigrationLabel:     scope.ClusterMigration.Name,
+				constants.ClusterMigrationLabel:     commonutils.SanitizeLabelValue(scope.ClusterMigration.Name),
 			},
 		},
 		Spec: vjailbreakv1alpha1.ESXIMigrationSpec{
@@ -481,20 +481,27 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
+	// List all VMwareMachines for this credential set once. VMwareMachine k8s names are
+	// derived from name+MOID (GetVMK8sCompatibleName), so they cannot be reconstructed
+	// from the display name alone — we must list and match by Spec.VMInfo.Name instead.
+	vmList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := scope.Client.List(ctx, vmList,
+		client.InNamespace(scope.Namespace()),
+		client.MatchingLabels{constants.VMwareCredsLabel: vmwarecreds.Name},
+	); err != nil {
+		return errors.Wrap(err, "failed to list VMwareMachines")
+	}
+	vmByDisplayName := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(vmList.Items))
+	for i := range vmList.Items {
+		vmByDisplayName[vmList.Items[i].Spec.VMInfo.Name] = &vmList.Items[i]
+	}
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for j := range cluster.VMSequence {
-			k8sVMName, err := commonutils.GetK8sCompatibleVMWareObjectName(cluster.VMSequence[j].VMName, vmwarecreds.Name)
-			if err != nil {
-				return errors.Wrap(err, "failed to get vm name")
-			}
-			vm := &vjailbreakv1alpha1.VMwareMachine{}
-			err = scope.Client.Get(ctx, client.ObjectKey{
-				Name:      k8sVMName,
-				Namespace: scope.Namespace(),
-			}, vm)
-			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("Error getting VMInfo for VM '%s'", cluster.VMSequence[j].VMName))
+			vmName := cluster.VMSequence[j].VMName
+			vm, ok := vmByDisplayName[vmName]
+			if !ok {
+				return fmt.Errorf("error getting VMInfo for VM '%s': VMwareMachine not found", vmName)
 			}
 			scope.RollingMigrationPlan.Spec.ClusterSequence[i].VMSequence[j].ESXiName = vm.Spec.VMInfo.ESXiName
 		}

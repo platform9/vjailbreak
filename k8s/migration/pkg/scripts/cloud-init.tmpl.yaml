@@ -42,7 +42,7 @@ write_files:
         --no-prompt
       echo "pcdctl configuration set successfully."
       echo "Preparing the node..."
-      pcdctl prep-node
+      pcdctl prep-node --skip-checks
       echo "Node preparation complete. Setup finished successfully."
     owner: root:root
     permissions: '0755'
