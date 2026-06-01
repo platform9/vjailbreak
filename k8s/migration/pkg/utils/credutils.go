@@ -630,7 +630,7 @@ func collectVMsFromDatacenters(ctx context.Context, c *vim25.Client, targetDatac
 			continue
 		}
 		var moVMs []mo.VirtualMachine
-		if err := v.Retrieve(ctx, []string{"VirtualMachine"}, []string{"self"}, &moVMs); err != nil {
+		if err := v.Retrieve(ctx, []string{"VirtualMachine"}, nil, &moVMs); err != nil {
 			_ = v.Destroy(ctx) //nolint:errcheck,gosec
 			log.Error(err, "failed to retrieve VMs, skipping", "datacenter", dcName)
 			continue
