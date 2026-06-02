@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
@@ -32,6 +32,7 @@ interface UseCredentialFetchingResult {
   vmwareCredsValidated: boolean
   openstackCredsValidated: boolean
   targetPCDClusterName: string | undefined
+  revalidateCreds: () => Promise<void>
 }
 
 export function useCredentialFetching({
@@ -205,6 +206,25 @@ export function useCredentialFetching({
     setMigrationTemplate(undefined)
   }, [vmwareCredsValidated, openstackCredsValidated])
 
+  const revalidateCreds = useCallback(async () => {
+    const fetches: Promise<void>[] = []
+    if (params.vmwareCreds?.existingCredName) {
+      fetches.push(
+        getVmwareCredentials(params.vmwareCreds.existingCredName)
+          .then(setVmwareCredentials)
+          .catch((err) => console.error('Error revalidating VMware credentials:', err))
+      )
+    }
+    if (params.openstackCreds?.existingCredName) {
+      fetches.push(
+        getOpenstackCredentials(params.openstackCreds.existingCredName)
+          .then(setOpenstackCredentials)
+          .catch((err) => console.error('Error revalidating OpenStack credentials:', err))
+      )
+    }
+    await Promise.all(fetches)
+  }, [params.vmwareCreds?.existingCredName, params.openstackCreds?.existingCredName])
+
   return {
     vmwareCredentials,
     openstackCredentials,
@@ -214,6 +234,7 @@ export function useCredentialFetching({
     setOpenstackCredentials,
     vmwareCredsValidated,
     openstackCredsValidated,
-    targetPCDClusterName
+    targetPCDClusterName,
+    revalidateCreds,
   }
 }
