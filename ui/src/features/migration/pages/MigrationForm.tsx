@@ -107,7 +107,8 @@ export default function MigrationFormDrawer({
     setOpenstackCredentials,
     vmwareCredsValidated,
     openstackCredsValidated,
-    targetPCDClusterName
+    targetPCDClusterName,
+    revalidateCreds,
   } = useCredentialFetching({ params, pcdData, getFieldErrorsUpdater })
 
   // Query RDM disks
@@ -354,6 +355,7 @@ export default function MigrationFormDrawer({
                   vmwareCluster={params.vmwareCluster}
                   useGPU={params.useGPU}
                   showHeader={false}
+                  onRevalidateCreds={revalidateCreds}
                 />
                 {vmValidation.hasError && (
                   <Alert severity="warning">{vmValidation.errorMessage}</Alert>

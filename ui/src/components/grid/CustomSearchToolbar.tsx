@@ -84,7 +84,7 @@ const CustomSearchToolbar = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {onRefresh && (
-            <Tooltip title="Refresh">
+            <Tooltip title="Refresh list and revalidate credentials">
               <span>
                 <IconButton onClick={onRefresh} disabled={disableRefresh} size="small">
                   <RefreshRounded />

@@ -167,6 +167,7 @@ const FLAVOR_NOT_FOUND_MESSAGE =
   'Appropriate flavor not found. Please assign a flavor before selecting this VM for migration or create a flavor.'
 
 function VmsSelectionStep(props: VmsSelectionStepProps) {
+  const { onRevalidateCreds } = props
   const {
     isRolling,
     showHeader,
@@ -336,7 +337,7 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
                   toolbar: (props) => (
                     <StandardToolbarWithActions
                       {...props}
-                      onRefresh={() => refreshVMList()}
+                      onRefresh={() => { refreshVMList(); onRevalidateCreds?.() }}
                       disableRefresh={
                         loadingVms ||
                         loadingMigratedVms ||
