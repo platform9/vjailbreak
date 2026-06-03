@@ -108,7 +108,7 @@ export default function MigrationFormDrawer({
     vmwareCredsValidated,
     openstackCredsValidated,
     targetPCDClusterName,
-    revalidateCreds,
+    revalidateCreds
   } = useCredentialFetching({ params, pcdData, getFieldErrorsUpdater })
 
   // Query RDM disks
