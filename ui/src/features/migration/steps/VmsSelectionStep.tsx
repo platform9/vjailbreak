@@ -344,6 +344,7 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
                         !vmwareCredsValidated ||
                         !openstackCredsValidated
                       }
+                      refreshTooltip="Refresh list and revalidate credentials"
                       placeholder="Search by Name, Network Interface, CPU, or Memory"
                       rowSelectionModel={rowSelectionModelArray}
                       onAssignFlavor={standardFlavor.handleOpenFlavorDialog}
