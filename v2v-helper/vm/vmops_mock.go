@@ -178,6 +178,22 @@ func (mr *MockVMOperationsMockRecorder) GetVMObj() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMObj", reflect.TypeOf((*MockVMOperations)(nil).GetVMObj))
 }
 
+// GetVmPowerState mocks base method.
+func (m *MockVMOperations) GetVmPowerState() (types.VirtualMachinePowerState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVmPowerState")
+	ret0, _ := ret[0].(types.VirtualMachinePowerState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVmPowerState indicates an expected call of GetVmPowerState.
+func (mr *MockVMOperationsMockRecorder) GetVmPowerState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVmPowerState", reflect.TypeOf((*MockVMOperations)(nil).GetVmPowerState))
+}
+
+
 // IsCBTEnabled mocks base method.
 func (m *MockVMOperations) IsCBTEnabled() (bool, error) {
 	m.ctrl.T.Helper()
