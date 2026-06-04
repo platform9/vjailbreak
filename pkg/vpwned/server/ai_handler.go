@@ -23,7 +23,7 @@ import (
 
 const (
 	defaultAIURL       = "http://vjailbreak-ai.migration-system.svc.cluster.local:8080"
-	debugLogsBaseURL   = "http://localhost/debug-logs"
+	debugLogsBaseURL   = "http://vjailbreak-ui-service.migration-system.svc.cluster.local/debug-logs"
 	podLogContextLines = 10
 	podLogTailLines    = 200
 	controllerNS       = "migration-system"
