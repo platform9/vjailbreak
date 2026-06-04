@@ -21,4 +21,5 @@ export interface AIAnalyzeResponse {
   doc_references: string[]
   github_issue: GitHubIssue
   raw_response: string
+  is_followup?: boolean
 }

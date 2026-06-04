@@ -21,6 +21,15 @@ Always respond with a JSON object and nothing else. The JSON must have these exa
 Set confidence "none" only when you truly cannot identify any likely cause.
 """
 
+FOLLOWUP_SYSTEM_PROMPT = """\
+You are an expert vJailbreak migration failure analyst.
+vJailbreak migrates VMs from VMware to OpenStack using virt-v2v, libguestfs, and VDDK.
+
+Answer the user's follow-up question based on the previous analysis in the conversation history.
+Be concise and specific. Do not re-analyze the entire migration unless explicitly asked.
+Respond in plain text — no JSON.
+"""
+
 GITHUB_COLLECT_FIRST = [
     "Run `journalctl -u libvirtd -n 200` on the vJailbreak VM and save the output",
     "Download full debug logs using the Download button in the migration logs drawer",
@@ -188,9 +197,13 @@ def analyze_migration(request_data: dict, chroma_client) -> dict:
     error_keywords = extract_error_keywords(all_logs)
     rag_context = query_rag(chroma_client, error_keywords)
 
-    if question:
+    is_followup = bool(question and conversation_history)
+
+    if is_followup:
+        system_prompt = FOLLOWUP_SYSTEM_PROMPT
         user_content = question
     else:
+        system_prompt = SYSTEM_PROMPT
         user_content = build_user_message(context, rag_context)
 
     messages = list(conversation_history) + [{"role": "user", "content": user_content}]
@@ -199,10 +212,22 @@ def analyze_migration(request_data: dict, chroma_client) -> dict:
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         messages=messages,
     )
     raw = response.content[0].text
+
+    if is_followup:
+        return {
+            "raw_response": raw,
+            "is_followup": True,
+            "root_cause": None,
+            "fix_steps": [],
+            "summary": "",
+            "confidence": "high",
+            "doc_references": [],
+            "github_issue": {"should_open": False},
+        }
 
     conditions = (
         context.get("migration_cr", {}).get("status", {}).get("conditions", [])
