@@ -19,27 +19,69 @@ export interface EditBucketDrawerProps {
   onSave: (updated: MigrationBucket) => void
 }
 
-/** Build the form seed from a bucket: prefer an exact round-trip, else structured defaults. */
+/** True for a meaningful (non-empty) value worth overlaying from formValues. */
+const isMeaningful = (v: unknown): boolean => {
+  if (v === undefined || v === null) return false
+  if (Array.isArray(v) && v.length === 0) return false
+  if (typeof v === 'string' && v.trim() === '') return false
+  return true
+}
+
+/**
+ * Build the form seed from a bucket.
+ *
+ * The typed config fields (sourceCluster/pcdCluster/networkMappings/storageMappings/…) are
+ * ALWAYS persisted by the CRD, whereas `config.formValues` is an opaque blob that some deployed
+ * CRD schemas may prune. So we build a deterministic base from the typed fields and overlay only
+ * the non-empty fields from `formValues` on top — never letting an empty/pruned blob wipe good
+ * data. Source networks/datastores are reconstructed from the saved mappings so the mapping step
+ * renders its rows immediately, before the VM grid finishes loading.
+ */
 function buildSeed(bucket?: MigrationBucket, openstackCredName?: string): Partial<FormValues> {
   if (!bucket) return {}
-  const config = bucket.spec.config
-  if (config?.formValues) return config.formValues
+  const config = bucket.spec.config ?? {}
+  const fv = (config.formValues ?? {}) as Partial<FormValues>
 
-  return {
-    vmwareCreds: {
-      existingCredName: bucket.spec.vmwareCredsRef.name
-    } as FormValues['vmwareCreds'],
+  const networkMappings = config.networkMappings ?? []
+  const storageMappings = config.storageMappings ?? []
+  const sourceNetworks = networkMappings.map((m) => m.source).filter(Boolean)
+  const sourceDatastores = storageMappings.map((m) => m.source).filter(Boolean)
+
+  // Stub VMs keyed by name; carry the reconstructed source networks/datastores on the first one
+  // so useFormValidation's availableVmwareNetworks/Datastores are populated from the typed config
+  // even before the live VM grid resolves (the grid later replaces these with full objects).
+  const vms: VmData[] = bucket.spec.vms.map(
+    (name, i) =>
+      ({
+        id: name,
+        name,
+        vmKey: name,
+        networks: i === 0 ? sourceNetworks : [],
+        datastores: i === 0 ? sourceDatastores : []
+      }) as VmData
+  )
+
+  const base: Partial<FormValues> = {
+    vmwareCreds: { existingCredName: bucket.spec.vmwareCredsRef.name } as FormValues['vmwareCreds'],
     ...(openstackCredName
       ? { openstackCreds: { existingCredName: openstackCredName } as FormValues['openstackCreds'] }
       : {}),
-    vmwareCluster: config?.sourceCluster,
-    pcdCluster: config?.pcdCluster,
-    networkMappings: config?.networkMappings,
-    storageMappings: config?.storageMappings,
-    securityGroups: config?.securityGroups,
-    serverGroup: config?.serverGroup,
-    vms: bucket.spec.vms.map((name) => ({ id: name, name, vmKey: name }) as VmData)
+    vmwareCluster: config.sourceCluster,
+    pcdCluster: config.pcdCluster,
+    networkMappings,
+    storageMappings,
+    securityGroups: config.securityGroups,
+    serverGroup: config.serverGroup,
+    dataCopyMethod: config.dataCopyMethod,
+    vms
   }
+
+  // Overlay only the meaningful fields from the round-trip blob (it may be empty/pruned).
+  const merged: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(fv)) {
+    if (isMeaningful(value)) merged[key] = value
+  }
+  return merged as Partial<FormValues>
 }
 
 /**

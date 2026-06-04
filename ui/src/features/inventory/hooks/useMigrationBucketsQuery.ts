@@ -5,6 +5,7 @@ import {
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query'
+import { TEN_SECONDS } from 'src/constants'
 import { MIGRATION_BUCKETS_QUERY_KEY } from '../constants'
 import { MigrationBucket } from '../api/migration-buckets/model'
 import {
@@ -26,6 +27,9 @@ export const useMigrationBucketsQuery = (
     queryKey: MIGRATION_BUCKETS_KEY,
     queryFn: () => listMigrationBuckets(),
     staleTime: 0,
+    // Poll so newly created buckets (default bucket, duplicates, external changes) appear
+    // without a manual refresh.
+    refetchInterval: TEN_SECONDS,
     refetchOnWindowFocus: false,
     placeholderData: [],
     ...options
