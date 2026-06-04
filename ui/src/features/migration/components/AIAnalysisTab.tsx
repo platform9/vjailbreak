@@ -34,6 +34,7 @@ const confidenceColor = {
 
 export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTabProps) {
   const [loading, setLoading] = useState(false)
+  const [followUpLoading, setFollowUpLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AIAnalyzeResponse | null>(null)
   const [history, setHistory] = useState<ConversationTurn[]>([])
@@ -47,7 +48,12 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
   }, [])
 
   const runAnalysis = useCallback(async (question?: string) => {
-    setLoading(true)
+    const isFollowUp = !!question
+    if (isFollowUp) {
+      setFollowUpLoading(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     try {
       const resp = await analyzeMigration({
@@ -56,14 +62,17 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
         question: question || undefined,
         conversation_history: history,
       })
-      if (question) {
+      if (isFollowUp) {
         setHistory((prev) => [
           ...prev,
           { role: 'user', content: question },
           { role: 'assistant', content: resp.raw_response },
         ])
       } else {
-        setHistory([{ role: 'assistant', content: resp.raw_response }])
+        setHistory([
+          { role: 'user', content: 'Analyse this failed migration' },
+          { role: 'assistant', content: resp.raw_response },
+        ])
       }
       setResult(resp)
       setFollowUp('')
@@ -71,6 +80,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
       setError('AI service unavailable. Check vjailbreak-ai deployment or API key configuration.')
     } finally {
       setLoading(false)
+      setFollowUpLoading(false)
     }
   }, [migrationName, namespace, history])
 
@@ -88,7 +98,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
     [followUp, runAnalysis]
   )
 
-  if (!result && !loading && !error) {
+  if (!result && !loading && !followUpLoading && !error) {
     if (keyConfigured === false) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
@@ -241,10 +251,10 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           placeholder="Ask a follow-up question..."
           value={followUp}
           onChange={(e) => setFollowUp(e.target.value)}
-          disabled={loading}
+          disabled={followUpLoading}
         />
-        <Button type="submit" variant="contained" size="small" disabled={loading || !followUp.trim()}>
-          Send
+        <Button type="submit" variant="contained" size="small" disabled={followUpLoading || !followUp.trim()}>
+          {followUpLoading ? <CircularProgress size={16} color="inherit" /> : 'Send'}
         </Button>
       </Box>
     </Box>
