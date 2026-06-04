@@ -82,6 +82,40 @@ func TestExtractRelevantLines_WarnLinesIncluded(t *testing.T) {
 	}
 }
 
+func TestTruncateTailChars(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		maxChars int
+		wantTrunc bool
+	}{
+		{"under limit", "hello world", 100, false},
+		{"exact limit", "hello", 5, false},
+		{"over limit", strings.Repeat("x", 200), 50, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TruncateTailChars(tc.input, tc.maxChars)
+			if tc.wantTrunc {
+				if !strings.Contains(got, "[truncated]") {
+					t.Error("expected truncation marker")
+				}
+				if len(got) > tc.maxChars+30 {
+					t.Errorf("result too long: %d chars", len(got))
+				}
+				tail := tc.input[len(tc.input)-tc.maxChars:]
+				if !strings.HasSuffix(got, tail) {
+					t.Error("expected tail of original string preserved")
+				}
+			} else {
+				if got != tc.input {
+					t.Errorf("expected unchanged input, got %q", got)
+				}
+			}
+		})
+	}
+}
+
 func TestSplitLines(t *testing.T) {
 	cases := []struct {
 		name  string

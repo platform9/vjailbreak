@@ -24,11 +24,21 @@ import (
 const (
 	defaultAIURL       = "http://vjailbreak-ai.migration-system.svc.cluster.local:8080"
 	debugLogsBaseURL   = "http://vjailbreak-ui-service.migration-system.svc.cluster.local/debug-logs"
-	podLogContextLines = 10
-	podLogTailLines    = 200
 	controllerNS       = "migration-system"
 	controllerLabel    = "control-plane=controller-manager"
-	maxDebugLogFiles   = 10
+	maxDebugLogFiles   = 5
+
+	// v2v pod logs: failures always at end — raw tail, no extraction
+	v2vLogTailChars = 100000
+
+	// controller logs: errors can appear anywhere + relevant tail
+	controllerLogContextLines = 5
+	controllerLogTailLines    = 200
+	controllerLogMaxChars     = 50000
+
+	// debug logs: errors can appear anywhere in file — keep error lines + small context, no tail
+	debugLogContextLines = 3
+	debugLogMaxChars     = 50000
 )
 
 type aiAnalyzeRequest struct {
@@ -177,8 +187,8 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 			logrus.Warnf("ai_handler: failed to fetch v2v pod logs for %s: %v", podName, err)
 			fetchWarnings = append(fetchWarnings, fmt.Sprintf("v2v-helper pod logs unavailable: %v", err))
 		} else {
-			extracted := ExtractRelevantLines(lines, podLogContextLines, podLogTailLines)
-			v2vLogs = strings.Join(extracted, "\n")
+			// v2v failures always at end — raw tail is sufficient
+			v2vLogs = TruncateTailChars(strings.Join(lines, "\n"), v2vLogTailChars)
 		}
 	}
 
@@ -190,8 +200,8 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 				logrus.Warnf("ai_handler: failed to fetch controller logs: %v", err)
 				fetchWarnings = append(fetchWarnings, fmt.Sprintf("controller pod logs unavailable: %v", err))
 			} else {
-				extracted := ExtractRelevantLines(lines, podLogContextLines, 0)
-				controllerLogs = strings.Join(extracted, "\n")
+				extracted := ExtractRelevantLines(lines, controllerLogContextLines, controllerLogTailLines)
+				controllerLogs = TruncateTailChars(strings.Join(extracted, "\n"), controllerLogMaxChars)
 			}
 		}
 	}
@@ -295,16 +305,17 @@ func (h *aiAnalyzeHandler) fetchDebugLogs(migrationName string) (map[string]stri
 				}
 				content, err := h.fetchFileContent(debugLogsBaseURL + "/" + entry.Name + "/" + sub.Name)
 				if err == nil {
-					extracted := ExtractRelevantLines(SplitLines(content), podLogContextLines, podLogTailLines)
-					result[entry.Name+"/"+sub.Name] = strings.Join(extracted, "\n")
+					// debug logs: errors anywhere — extract error lines with small context, no tail
+					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, 0)
+					result[entry.Name+"/"+sub.Name] = TruncateTailChars(strings.Join(extracted, "\n"), debugLogMaxChars)
 				}
 			}
 		} else if strings.HasSuffix(entry.Name, ".log") {
 			if len(result) < maxDebugLogFiles {
 				content, err := h.fetchFileContent(debugLogsBaseURL + "/" + entry.Name)
 				if err == nil {
-					extracted := ExtractRelevantLines(SplitLines(content), podLogContextLines, podLogTailLines)
-					result[entry.Name] = strings.Join(extracted, "\n")
+					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, 0)
+					result[entry.Name] = TruncateTailChars(strings.Join(extracted, "\n"), debugLogMaxChars)
 				}
 			}
 		}

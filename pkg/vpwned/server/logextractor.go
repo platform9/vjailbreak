@@ -19,6 +19,14 @@ func SplitLines(s string) []string {
 	return result
 }
 
+// TruncateTailChars keeps the last maxChars bytes of s, prepending a marker if truncated.
+func TruncateTailChars(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+	return "... [truncated] ...\n" + s[len(s)-maxChars:]
+}
+
 // ExtractRelevantLines returns ERROR/WARN/FAILED lines with +/-contextWindow
 // surrounding lines, plus the last tailLines lines. Deduplicates.
 func ExtractRelevantLines(lines []string, contextWindow, tailLines int) []string {
