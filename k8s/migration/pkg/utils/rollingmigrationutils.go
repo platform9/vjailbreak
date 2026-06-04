@@ -913,6 +913,17 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 	}
 	vmwareHosts := filterHostsForMigrationPlan(allVMwareHosts, vmMachineList.Items, scope.RollingMigrationPlan.Spec.ClusterSequence)
 
+	// Build the set of VM display names that are in this migration plan.
+	// These VMs will be powered off for cold migration and must not be treated as
+	// "blocked" during the maintenance mode check — they won't be vMotioned.
+	migrationVMNames := make(map[string]struct{})
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		for _, vmEntry := range cluster.VMSequence {
+			migrationVMNames[vmEntry.VMName] = struct{}{}
+		}
+	}
+	config.MigrationVMNames = migrationVMNames
+
 	for _, vmwareHost := range vmwareHosts {
 		// This checks if the ESXi host can enter maintenance mode
 		// with all VMs automatically migrating off to other hosts.
