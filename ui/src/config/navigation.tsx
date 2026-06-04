@@ -1,5 +1,6 @@
 import { NavigationItem } from '../types/navigation'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
+import InventoryIcon from '@mui/icons-material/Inventory2'
 import CredentialsIcon from '@mui/icons-material/VpnKey'
 import ConfigIcon from '@mui/icons-material/Settings'
 import MonitoringIcon from '@mui/icons-material/Insights'
@@ -35,6 +36,12 @@ export const navigationItems: NavigationItem[] = [
         path: '/dashboard/profiles'
       }
     ]
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    path: '/dashboard/inventory',
+    icon: <InventoryIcon />
   },
   {
     id: 'credentials-group',

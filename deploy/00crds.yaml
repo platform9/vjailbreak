@@ -3787,6 +3787,7 @@ rules:
   - clustermigrations
   - esximigrations
   - esxisshcreds
+  - migrationbuckets
   - migrationplans
   - migrations
   - migrationtemplates
@@ -3819,6 +3820,7 @@ rules:
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - esxisshcreds/finalizers
+  - migrationbuckets/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -3841,6 +3843,7 @@ rules:
   - clustermigrations/status
   - esximigrations/status
   - esxisshcreds/status
+  - migrationbuckets/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status

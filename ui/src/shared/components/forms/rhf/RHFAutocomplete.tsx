@@ -22,6 +22,8 @@ export type RHFAutocompleteProps<TOption> = {
   rules?: ControllerRules
   getOptionLabel: (option: TOption) => string
   getOptionValue: (option: TOption) => string
+  /** Optionally disable specific options (e.g. already assigned elsewhere). */
+  getOptionDisabled?: (option: TOption) => boolean
   renderOptionLabel?: (option: TOption) => string
   showCheckboxes?: boolean
   onValueChange?: (value: string[] | string) => void
@@ -42,6 +44,7 @@ export default function RHFAutocomplete<TOption>({
   rules,
   getOptionLabel,
   getOptionValue,
+  getOptionDisabled,
   renderOptionLabel,
   showCheckboxes = false,
   onValueChange,
@@ -87,6 +90,7 @@ export default function RHFAutocomplete<TOption>({
               multiple={multiple}
               options={options}
               disabled={disabled}
+              getOptionDisabled={getOptionDisabled}
               value={selectedOptions as any}
               onChange={(_e, value) => {
                 if (multiple) {

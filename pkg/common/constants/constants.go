@@ -751,6 +751,9 @@ const (
 	// ProxyVMControllerName is the name of the ProxyVM controller
 	ProxyVMControllerName = "proxyvm-controller"
 
+	// MigrationBucketControllerName is the name of the MigrationBucket controller
+	MigrationBucketControllerName = "migrationbucket-controller"
+
 	// ProxyVMFinalizer is the finalizer for ProxyVM resources
 	ProxyVMFinalizer = "proxyvm.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
 )

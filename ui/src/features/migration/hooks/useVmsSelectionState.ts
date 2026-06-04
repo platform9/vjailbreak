@@ -51,6 +51,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     fetchClusterVMs,
     openstackCredData,
     reportError: reportErrorProp,
+    initialSelectedVmNames,
   } = props
 
   const isRolling = mode === 'rolling'
@@ -102,6 +103,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     rdmConfigurations,
     setFormVms,
     setFormRdmConfigurations,
+    initialSelectedVmNames,
   })
 
   // --- Standard: OS assignment ---

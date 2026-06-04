@@ -310,6 +310,8 @@ export interface VmsSelectionStepProps {
   vmwareCluster?: string
   useGPU?: boolean
   showHeader?: boolean
+  /** VM names to pre-select once the list loads (used by the bucket editor). */
+  initialSelectedVmNames?: string[]
 
   // Rolling-mode props
   vmsWithAssignments?: VM[]

@@ -15,6 +15,11 @@ interface UseVmSelectionParams {
   rdmConfigurations: RdmConfiguration[]
   setFormVms: (vms: VmDataWithFlavor[]) => void
   setFormRdmConfigurations: (configs: RdmConfiguration[]) => void
+  /**
+   * VM names to pre-select once the VM list loads (e.g. a bucket's members). Optional and
+   * unused by the standard "Start Migration" flow, so its behavior is unchanged.
+   */
+  initialSelectedVmNames?: string[]
 }
 
 export function useVmSelection({
@@ -22,10 +27,30 @@ export function useVmSelection({
   rdmConfigurations,
   setFormVms,
   setFormRdmConfigurations,
+  initialSelectedVmNames,
 }: UseVmSelectionParams) {
   const [selectedVMs, setSelectedVMs] = useState<Set<string>>(new Set())
   const lastSelectedVmsPayloadRef = useRef<string>('__initial__')
   const lastRdmConfigPayloadRef = useRef<string>('__initial__')
+  const seededRef = useRef(false)
+
+  // One-time pre-selection from initial VM names (matches grid rows by name or vmKey → id).
+  useEffect(() => {
+    if (seededRef.current) return
+    if (!initialSelectedVmNames || initialSelectedVmNames.length === 0) return
+    if (vmsWithFlavor.length === 0) return
+
+    const wanted = new Set(initialSelectedVmNames)
+    const ids = vmsWithFlavor
+      .filter((vm) => wanted.has(vm.name) || (vm.vmKey ? wanted.has(vm.vmKey) : false))
+      .map((vm) => vm.id)
+    if (ids.length === 0) return // VMs for this cluster not loaded yet; retry on next list change
+
+    seededRef.current = true
+    const next = new Set(ids)
+    setSelectedVMs(next)
+    setFormVms(vmsWithFlavor.filter((vm) => next.has(vm.id)))
+  }, [initialSelectedVmNames, vmsWithFlavor, setFormVms])
 
   const syncSelectedVmSelection = useCallback(
     (selectedVmData: VmDataWithFlavor[]) => {
