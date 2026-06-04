@@ -69,9 +69,20 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           { role: 'assistant', content: resp.raw_response },
         ])
       } else {
+        // Store human-readable analysis in history so Claude doesn't
+        // pattern-match and return JSON for follow-up questions
+        const analysisText = [
+          resp.root_cause ? `Root cause: ${resp.root_cause}` : null,
+          resp.fix_steps.length > 0
+            ? `Fix steps:\n${resp.fix_steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+            : null,
+          resp.summary ? `Summary: ${resp.summary}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n') || resp.raw_response
         setHistory([
           { role: 'user', content: 'Analyse this failed migration' },
-          { role: 'assistant', content: resp.raw_response },
+          { role: 'assistant', content: analysisText },
         ])
         setResult(resp)
       }
