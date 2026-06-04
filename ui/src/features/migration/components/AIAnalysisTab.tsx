@@ -73,8 +73,8 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           { role: 'user', content: 'Analyse this failed migration' },
           { role: 'assistant', content: resp.raw_response },
         ])
+        setResult(resp)
       }
-      setResult(resp)
       setFollowUp('')
     } catch {
       setError('AI service unavailable. Check vjailbreak-ai deployment or API key configuration.')
@@ -243,6 +243,34 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
       )}
 
       <Divider />
+
+      {history.length > 2 && (
+        <>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {history.slice(2).map((turn, i) => (
+              <Box
+                key={i}
+                sx={{
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: 1,
+                  bgcolor: turn.role === 'user' ? 'action.hover' : 'background.paper',
+                  border: turn.role === 'assistant' ? '1px solid' : 'none',
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {turn.role === 'user' ? 'You' : 'AI'}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                  {turn.content}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Divider />
+        </>
+      )}
 
       <Box component="form" onSubmit={handleFollowUp} sx={{ display: 'flex', gap: 1 }}>
         <TextField
