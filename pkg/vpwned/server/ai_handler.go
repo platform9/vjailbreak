@@ -208,10 +208,10 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 
 	return map[string]any{
 		"migration_cr":       migrationCR,
-		"migration_plan":     migrationPlan,
-		"migration_template": migrationTemplate,
-		"network_mapping":    networkMapping,
-		"storage_mapping":    storageMapping,
+		"migration_plan":     nilToEmptyMap(migrationPlan),
+		"migration_template": nilToEmptyMap(migrationTemplate),
+		"network_mapping":    nilToEmptyMap(networkMapping),
+		"storage_mapping":    nilToEmptyMap(storageMapping),
 		"v2v_logs":           v2vLogs,
 		"controller_logs":    controllerLogs,
 		"debug_logs":         debugLogs,
@@ -315,6 +315,13 @@ func (h *aiAnalyzeHandler) fetchFileContent(url string) (string, error) {
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	return string(data), err
+}
+
+func nilToEmptyMap(v any) any {
+	if v == nil {
+		return map[string]any{}
+	}
+	return v
 }
 
 func getEnvOrDefault(key, fallback string) string {
