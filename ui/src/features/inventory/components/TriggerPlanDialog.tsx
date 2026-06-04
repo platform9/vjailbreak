@@ -77,10 +77,6 @@ export default function TriggerPlanDialog({
             />
           </Box>
 
-          <InlineHelp tone="default" icon="info">
-            {recommendation.derivation}
-          </InlineHelp>
-
           {recommendation.exceedsCapacity ? (
             <Banner
               variant="warning"

@@ -14,7 +14,7 @@ import { deriveBucketStatus } from '../utils/bucketStatus'
 import type { BucketStatus } from '../types'
 import { buildBucketConfigDefaults, findNoClusterSourceClusterId } from '../utils/bucketDefaults'
 import { selectDefaultBucketVms } from '../utils/defaultBucketSelection'
-import { DEFAULT_BUCKET_NAME, DEFAULT_AGENT_PARAMS } from '../constants'
+import { DEFAULT_BUCKET_NAME, DEFAULT_AGENT_PARAMS, BUCKET_TRIGGERED_LABEL } from '../constants'
 import { recommendAgents } from '../utils/agentRecommendation'
 import { orderBucketsBySuccess } from '../utils/bucketOrdering'
 import TriggerDrawer from '../components/TriggerDrawer'
@@ -102,9 +102,16 @@ export default function InventoryPage() {
     const map: Record<string, string> = {}
     const list = Array.isArray(migrationsQuery.data) ? migrationsQuery.data : []
     for (const m of list) {
-      const vm = m.spec?.vmName as unknown as string
       const phase = m.status?.phase as unknown as string
-      if (vm && phase) map[vm] = phase
+      if (!phase) continue
+      // Key by every identifier a bucket might store (display name, vm-key label, original-name
+      // annotation) so status matches regardless of how the membership name was captured.
+      const keys = [
+        m.spec?.vmName as unknown as string,
+        m.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'],
+        m.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name']
+      ].filter((k): k is string => Boolean(k))
+      for (const key of keys) map[key] = phase
     }
     return map
   }, [migrationsQuery.data])
@@ -267,6 +274,15 @@ export default function InventoryPage() {
     try {
       for (const bucket of orderedBuckets) {
         await launchBucketMigration(bucket, { scheduleNow, pcdData })
+        // Mark the bucket as triggered so its status reflects "in progress" immediately, before
+        // the per-VM Migration objects are observable.
+        await updateBucket.mutateAsync({
+          ...bucket,
+          metadata: {
+            ...bucket.metadata,
+            labels: { ...(bucket.metadata.labels ?? {}), [BUCKET_TRIGGERED_LABEL]: 'true' }
+          }
+        })
       }
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
       setConfirming(false)

@@ -30,6 +30,7 @@ import {
   SurfaceCard
 } from 'src/components'
 import type { FormValues } from 'src/features/migration/types'
+import { CUTOVER_TYPES } from 'src/features/migration/constants'
 import { DEFAULT_BUCKET_LABEL } from '../constants'
 import { bucketStatusLabel, bucketStatusTone, getBucketStatus } from '../utils/bucketStatus'
 import type { BucketStatus, MigrationBucket } from '../types'
@@ -106,7 +107,7 @@ export default function BucketDetailsDrawer({
   onSchedule
 }: BucketDetailsDrawerProps) {
   const config = bucket?.spec.config ?? {}
-  const fv = (config.formValues ?? {}) as Partial<FormValues>
+  const fv = useMemo(() => (config.formValues ?? {}) as Partial<FormValues>, [config.formValues])
 
   const networkMappings = config.networkMappings ?? []
   const storageMappings = config.storageMappings ?? []
@@ -130,6 +131,47 @@ export default function BucketDetailsDrawer({
     ],
     [config.sourceCluster, config.pcdCluster, config.dataCopyMethod, fv.dataCopyMethod, fv.storageCopyMethod, bucket?.spec.vms.length, bucket?.spec.schedule]
   )
+
+  const advancedItems = useMemo(() => {
+    const items: Array<{ label: string; value: string }> = []
+    const push = (label: string, value?: string | false) => {
+      if (value) items.push({ label, value })
+    }
+    const fmt = (t?: string) => (t ? dayjs(t).format('MMM D, YYYY HH:mm') : '')
+
+    push('Scheduled data-copy start', fv.dataCopyStartTime && fmt(fv.dataCopyStartTime))
+    if (fv.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED) {
+      push('Cutover', 'Admin initiated')
+    } else if (
+      fv.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+      (fv.cutoverStartTime || fv.cutoverEndTime)
+    ) {
+      push('Cutover window', `${fmt(fv.cutoverStartTime) || 'N/A'} – ${fmt(fv.cutoverEndTime) || 'N/A'}`)
+    }
+    push(
+      'Security groups',
+      Array.isArray(fv.securityGroups) && fv.securityGroups.length
+        ? fv.securityGroups.join(', ')
+        : false
+    )
+    push('Server group', fv.serverGroup)
+    push('Disconnect source network', fv.disconnectSourceNetwork && 'Enabled')
+    push('Fallback to DHCP', fv.fallbackToDHCP && 'Enabled')
+    push('Network persistence', fv.networkPersistence && 'Enabled')
+    push('Remove VMware tools', fv.removeVMwareTools && 'Enabled')
+    push('GPU flavor', fv.useGPU && 'Enabled')
+    push(
+      'Image profiles',
+      Array.isArray(fv.imageProfiles) && fv.imageProfiles.length
+        ? fv.imageProfiles.join(', ')
+        : false
+    )
+    push(
+      'Post-migration script',
+      Boolean(fv.postMigrationScript && fv.postMigrationScript.trim()) && 'Configured'
+    )
+    return items
+  }, [fv])
 
   const vms = bucket?.spec.vms ?? []
 
@@ -227,6 +269,18 @@ export default function BucketDetailsDrawer({
                   />
                 </Box>
               </Box>
+            </SurfaceCard>
+
+            <SurfaceCard
+              variant="card"
+              title="Advanced Options"
+              subtitle="Configured migration options"
+            >
+              {advancedItems.length ? (
+                <KeyValueGrid items={advancedItems} />
+              ) : (
+                <Typography variant="body2">No advanced options configured.</Typography>
+              )}
             </SurfaceCard>
           </Box>
         </Section>
