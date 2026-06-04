@@ -166,7 +166,7 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 	var fetchWarnings []string
 
 	v2vLogs := ""
-	if podName := migration.Status.AgentName; podName != "" && h.rawK8s != nil {
+	if podName := migration.Spec.PodRef; podName != "" && h.rawK8s != nil {
 		lines, err := h.fetchPodLogs(ctx, namespace, podName)
 		if err != nil {
 			logrus.Warnf("ai_handler: failed to fetch v2v pod logs for %s: %v", podName, err)
