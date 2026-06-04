@@ -91,6 +91,7 @@ func (h *aiAnalyzeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payloadBytes, _ := json.Marshal(payload)
+	logrus.Debugf("ai_handler: sending payload to vjailbreak-ai: %s", string(payloadBytes))
 	aiResp, err := h.httpClient.Post(
 		h.aiURL+"/analyze-migration",
 		"application/json",
@@ -103,9 +104,13 @@ func (h *aiAnalyzeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer aiResp.Body.Close()
 
+	respBody, _ := io.ReadAll(aiResp.Body)
+	if aiResp.StatusCode != http.StatusOK {
+		logrus.Errorf("ai_handler: vjailbreak-ai returned %d: %s", aiResp.StatusCode, string(respBody))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(aiResp.StatusCode)
-	io.Copy(w, aiResp.Body) //nolint:errcheck
+	w.Write(respBody) //nolint:errcheck
 }
 
 func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace string) (map[string]any, error) {

@@ -11,10 +11,15 @@ from collections import defaultdict
 from urllib.parse import urlparse
 from typing import Optional, Any
 
+import logging
+
 from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, field_validator, HttpUrl
+
+logger = logging.getLogger("vjailbreak-ai")
 import chromadb
 import anthropic
 
@@ -78,6 +83,16 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error("422 validation error on %s %s\nbody: %s\nerrors: %s",
+                 request.method, request.url.path,
+                 body.decode("utf-8", errors="replace")[:2000],
+                 exc.errors())
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
 
 app.add_middleware(
     CORSMiddleware,
