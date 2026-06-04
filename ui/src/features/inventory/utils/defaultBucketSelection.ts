@@ -31,9 +31,16 @@ const minNicCount = (vms: InventoryVm[]): number =>
  *
  * Pure function.
  */
+/** A VM whose guest OS was detected (mirrors the migration form's OS-required check). */
+const hasKnownOs = (vm: InventoryVm): boolean =>
+  Boolean(vm.osFamily) && vm.osFamily !== 'Unknown' && (vm.osFamily ?? '').trim() !== ''
+
 export function selectDefaultBucketVms(vms: InventoryVm[]): DefaultBucketSelection {
-  const poweredOff = vms.filter((vm) => vm.powerState === 'powered-off')
-  const poweredOn = vms.filter((vm) => vm.powerState === 'powered-on')
+  // Exclude VMs with an undetected OS — they can't migrate (form blocks them), so they
+  // shouldn't seed the default bucket.
+  const eligible = vms.filter(hasKnownOs)
+  const poweredOff = eligible.filter((vm) => vm.powerState === 'powered-off')
+  const poweredOn = eligible.filter((vm) => vm.powerState === 'powered-on')
 
   let tier: DefaultBucketTier
   let picked: InventoryVm[]
