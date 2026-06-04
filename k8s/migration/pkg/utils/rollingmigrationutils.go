@@ -547,16 +547,18 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Cluster
 
 	// Create a MigrationPlan for each batch
 	for i, batch := range batches {
-		err := convertBatchToMigrationPlan(ctx, scope, batch, i)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				continue
-			}
+		if err := convertBatchToMigrationPlan(ctx, scope, batch, i); err != nil {
 			return errors.Wrap(err, "failed to convert batch to migration plan")
 		}
 	}
 
-	// Log summary of batches created
+	// Persist the updated VMMigrationPlans list so the rolling migration plan
+	// controller can aggregate statuses. Without this update the list stays empty
+	// in the API server and aggregation never finds any plans.
+	if err := scope.Client.Update(ctx, scope.RollingMigrationPlan); err != nil {
+		return errors.Wrap(err, "failed to update RollingMigrationPlan with VM migration plan list")
+	}
+
 	klog.Infof("Created %d batches with a maximum of %d VMs per batch", len(batches), batchSize)
 
 	return nil
@@ -601,12 +603,11 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrat
 		},
 	}
 
-	// Create the migration plan
-	err := scope.Client.Create(ctx, &migrationPlan)
-	if err != nil {
+	// Create the migration plan; AlreadyExists is fine — it was created on a prior reconcile.
+	if err := scope.Client.Create(ctx, &migrationPlan); err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create migration plan")
 	}
-	// Add the migration plan to the rolling migration plan
+	// Always track the name regardless of whether we just created it or it already existed.
 	rollingMigrationPlan.Spec.VMMigrationPlans = append(rollingMigrationPlan.Spec.VMMigrationPlans, migrationPlan.Name)
 	return nil
 }

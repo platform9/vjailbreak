@@ -10,6 +10,7 @@ import (
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -251,6 +252,21 @@ func TestConvertVMSequenceToMigrationPlans_UsesVMIDKeyedNames(t *testing.T) {
 		if displayNames[vmKey] {
 			t.Errorf("MigrationPlan VirtualMachines contains display name %q instead of vmid-keyed name", vmKey)
 		}
+	}
+
+	// Verify VMMigrationPlans is persisted in the API server, not just in-memory.
+	// This is the regression test for the bug where the list was appended in-memory
+	// but never persisted, causing the rolling migration plan controller to see an
+	// empty list and log "No MigrationPlans found".
+	persistedPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+	if err := fakeClient.Get(context.Background(), k8stypes.NamespacedName{Name: plan.Name, Namespace: ns}, persistedPlan); err != nil {
+		t.Fatalf("failed to get persisted RollingMigrationPlan: %v", err)
+	}
+	if len(persistedPlan.Spec.VMMigrationPlans) == 0 {
+		t.Error("VMMigrationPlans not persisted: spec.vMMigrationPlans is empty in API server")
+	}
+	if persistedPlan.Spec.VMMigrationPlans[0] != mp.Name {
+		t.Errorf("VMMigrationPlans[0] = %q, want %q", persistedPlan.Spec.VMMigrationPlans[0], mp.Name)
 	}
 }
 
