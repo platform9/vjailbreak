@@ -249,21 +249,24 @@ export default function MigrationConfigForm({
   useEffect(() => {
     if (!autoDefaults) return
 
-    // Source cluster ← first selected VM's cluster (first VM's datacenter + cluster).
-    if (!clusterDefaultedRef.current && (params.vms?.length ?? 0) > 0 && sourceData.length > 0) {
+    // Source cluster ← the datacenter's "NO CLUSTER" pseudo-cluster, which surfaces every VM so
+    // a cross-cluster bucket can select all its VMs. Only set when missing/unresolved.
+    if (!clusterDefaultedRef.current && sourceData.length > 0) {
       const validIds = new Set(sourceData.flatMap((s) => s.clusters.map((c) => c.id)))
       if (!params.vmwareCluster || !validIds.has(params.vmwareCluster)) {
-        const firstVm = params.vms![0]
-        const clusterLabel = firstVm.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster']
-        let resolvedId: string | undefined
+        let noClusterId: string | undefined
         for (const s of sourceData) {
-          const match = s.clusters.find((c) => c.name === clusterLabel)
-          if (match) {
-            resolvedId = match.id
+          const noC = s.clusters.find(
+            (c) =>
+              c.name.toLowerCase().startsWith('no-cluster-') ||
+              c.displayName?.toUpperCase() === 'NO CLUSTER'
+          )
+          if (noC) {
+            noClusterId = noC.id
             break
           }
         }
-        resolvedId = resolvedId ?? sourceData[0]?.clusters[0]?.id
+        const resolvedId = noClusterId ?? sourceData[0]?.clusters[0]?.id
         if (resolvedId) {
           clusterDefaultedRef.current = true
           getParamsUpdater('vmwareCluster')(resolvedId)

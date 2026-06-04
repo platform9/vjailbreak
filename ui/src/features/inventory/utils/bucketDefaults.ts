@@ -1,6 +1,26 @@
 import type { OpenstackCreds } from 'src/api/openstack-creds/model'
+import type { SourceDataItem } from 'src/features/migration/hooks/useClusterData'
 import type { BucketMapping, MigrationBucketConfig } from '../api/migration-buckets/model'
 import type { InventoryVm } from '../types'
+
+/**
+ * Find the "NO CLUSTER" source-cluster dropdown id (a VMwareCluster whose name starts with
+ * `no-cluster-`). Selecting it surfaces every VM in the datacenter, so a cross-cluster bucket
+ * can have all its VMs shown/selected at once. Returns the first one found (single-DC case).
+ */
+export const findNoClusterSourceClusterId = (
+  sourceData: SourceDataItem[]
+): string | undefined => {
+  for (const dc of sourceData) {
+    const noCluster = dc.clusters.find(
+      (c) =>
+        c.name.toLowerCase().startsWith('no-cluster-') ||
+        c.displayName?.toUpperCase() === 'NO CLUSTER'
+    )
+    if (noCluster) return noCluster.id
+  }
+  return undefined
+}
 
 const distinct = (values: (string | undefined)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v))))

@@ -5,10 +5,11 @@ import { ActionButton, Banner, Section, SectionHeader } from 'src/components'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
+import { useClusterData } from 'src/features/migration/hooks/useClusterData'
 import { useInventoryVms } from '../hooks/useInventoryVms'
 import { deriveBucketStatus } from '../utils/bucketStatus'
 import type { BucketStatus } from '../types'
-import { buildBucketConfigDefaults } from '../utils/bucketDefaults'
+import { buildBucketConfigDefaults, findNoClusterSourceClusterId } from '../utils/bucketDefaults'
 import { selectDefaultBucketVms } from '../utils/defaultBucketSelection'
 import { DEFAULT_BUCKET_NAME } from '../constants'
 import { recommendAgents } from '../utils/agentRecommendation'
@@ -53,6 +54,10 @@ export default function InventoryPage() {
     const creds = Array.isArray(openstackCredsQuery.data) ? openstackCredsQuery.data : []
     return creds.find((c) => c?.status?.openstackValidationStatus === 'Succeeded') ?? creds[0]
   }, [openstackCredsQuery.data])
+
+  // Cluster lists (VMware source + PCD destination) — used to compute a complete, correct
+  // default-bucket config at creation so the editor is deterministic (no edit-time resolving).
+  const { sourceData, pcdData } = useClusterData()
 
   const createBucket = useCreateBucket()
   const updateBucket = useUpdateBucket()
@@ -107,8 +112,9 @@ export default function InventoryPage() {
     if (planSelection) setAgentCount(recommendation.value)
   }, [planSelection, recommendation.value])
 
-  // Auto-create the default bucket once, from the real discovered VMs (FR-005/006).
-  // In production the backend reconciler owns this; in mock mode the page seeds it.
+  // Auto-create the default bucket once, with a COMPLETE, correct config (FR-005/006).
+  // Gated until cluster lists + OpenStack status are loaded so the stored config is right the
+  // first time — editing then just loads stored values (deterministic, no edit-time resolving).
   const defaultInitRef = useRef(false)
   useEffect(() => {
     if (defaultInitRef.current) return
@@ -117,28 +123,68 @@ export default function InventoryPage() {
       defaultInitRef.current = true
       return
     }
-    if (data.vms.length === 0) return // still loading VMs — retry when they arrive
+    if (data.vms.length === 0) return // still loading VMs
+
+    const osNetworks = openstackCreds?.status?.openstack?.networks
+    const osVolumeTypes = openstackCreds?.status?.openstack?.volumeTypes
+    // Wait until everything needed for a complete config has loaded.
+    if (
+      sourceData.length === 0 ||
+      pcdData.length === 0 ||
+      !osNetworks?.length ||
+      !osVolumeTypes?.length
+    ) {
+      return
+    }
 
     const selection = selectDefaultBucketVms(data.vms)
     defaultInitRef.current = true
     if (selection.tier === 'none' || selection.vmNames.length === 0) return // defer (FR-006)
 
     const selectedVms = data.vms.filter((vm) => selection.vmNames.includes(vm.name))
+
+    // Source cluster = the datacenter's "NO CLUSTER" pseudo-cluster, which surfaces every VM
+    // (the bucket may span clusters; NO CLUSTER lets them all be selected/migrated together).
+    // Fall back to the first real cluster if no NO-CLUSTER source exists.
+    const sourceClusterId =
+      findNoClusterSourceClusterId(sourceData) ?? sourceData[0]?.clusters?.[0]?.id
+
+    const firstNetwork = osNetworks[0]?.name
+    const firstVolumeType = osVolumeTypes[0]
+    const sourceNetworks = Array.from(
+      new Set(selectedVms.flatMap((vm) => vm.networks).filter(Boolean))
+    )
+    const sourceDatastores = Array.from(
+      new Set(selectedVms.flatMap((vm) => vm.datastores).filter(Boolean))
+    )
+
     createBucket.mutate(
       buildMigrationBucket(DEFAULT_BUCKET_NAME, {
         vmwareCredsRef: { name: data.credName },
         vms: selection.vmNames,
         isDefault: true,
-        config: buildBucketConfigDefaults(selectedVms, openstackCreds)
+        config: {
+          sourceCluster: sourceClusterId,
+          pcdCluster: pcdData[0].id,
+          networkMappings: firstNetwork
+            ? sourceNetworks.map((source) => ({ source, target: firstNetwork }))
+            : [],
+          storageMappings: firstVolumeType
+            ? sourceDatastores.map((source) => ({ source, target: firstVolumeType }))
+            : [],
+          securityGroups: [],
+          advancedOptions: {}
+        }
       })
     )
   }, [
     data.isLoading,
     data.credName,
-    data.vmwareDatacenter,
     data.buckets.length,
     data.vms,
     openstackCreds,
+    sourceData,
+    pcdData,
     createBucket
   ])
 
