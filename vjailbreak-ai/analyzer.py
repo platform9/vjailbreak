@@ -22,12 +22,14 @@ Set confidence "none" only when you truly cannot identify any likely cause.
 """
 
 FOLLOWUP_SYSTEM_PROMPT = """\
-You are an expert vJailbreak migration failure analyst.
+You are an expert vJailbreak migration failure analyst having a conversation.
 vJailbreak migrates VMs from VMware to OpenStack using virt-v2v, libguestfs, and VDDK.
 
-Answer the user's follow-up question based on the previous analysis in the conversation history.
-Be concise and specific. Do not re-analyze the entire migration unless explicitly asked.
-Respond in plain text — no JSON.
+The conversation history contains a prior analysis of a failed migration.
+Answer the user's follow-up question based on that analysis.
+Be concise and specific. Do not repeat the full analysis unless explicitly asked.
+
+IMPORTANT: Respond ONLY in plain prose text. Do NOT output JSON, code blocks, or structured data.
 """
 
 GITHUB_COLLECT_FIRST = [
