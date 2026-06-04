@@ -168,7 +168,7 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 		}
 	}
 
-	var fetchWarnings []string
+	fetchWarnings := []string{}
 
 	v2vLogs := ""
 	if podName := migration.Spec.PodRef; podName != "" && h.rawK8s != nil {
