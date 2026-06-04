@@ -881,6 +881,177 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+  name: migrationbuckets.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: MigrationBucket
+    listKind: MigrationBucketList
+    plural: migrationbuckets
+    singular: migrationbucket
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.isDefault
+      name: Default
+      type: boolean
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          MigrationBucket is the Schema for the migrationbuckets API. It represents a persistent,
+          named group of VMs (for one VMware credential) plus a migration configuration, used by the
+          Inventory / Migration Planner to organize and trigger migrations.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              MigrationBucketSpec defines the desired state of a MigrationBucket: a named, persistent
+              group of VMs for one VMware credential, carrying a migration configuration and an optional
+              schedule. At trigger time, buckets compile into the existing MigrationPlan/RollingMigrationPlan.
+            properties:
+              config:
+                description: Config is the embedded migration configuration.
+                properties:
+                  dataCopyMethod:
+                    description: DataCopyMethod is the migration data-copy method
+                      (e.g. cold/hot).
+                    type: string
+                  formValues:
+                    description: |-
+                      FormValues holds the full Migration Form inputs so the bucket editor can round-trip
+                      the exact configuration. Opaque to the controller.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  networkMappings:
+                    description: NetworkMappings maps source networks to destination
+                      networks.
+                    items:
+                      description: MigrationBucketMapping is a single source -> target
+                        mapping (network or storage).
+                      properties:
+                        source:
+                          type: string
+                        target:
+                          type: string
+                      required:
+                      - source
+                      - target
+                      type: object
+                    type: array
+                  pcdCluster:
+                    description: PCDCluster is the destination PCD cluster.
+                    type: string
+                  securityGroups:
+                    description: SecurityGroups is the list of OpenStack security
+                      groups to apply.
+                    items:
+                      type: string
+                    type: array
+                  selectedOptions:
+                    description: SelectedOptions records which optional migration-options
+                      checkboxes were enabled.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  serverGroup:
+                    description: ServerGroup is the OpenStack server group to place
+                      VMs in.
+                    type: string
+                  sourceCluster:
+                    description: SourceCluster is the VMware source cluster (derived
+                      from the bucket's VMs).
+                    type: string
+                  storageMappings:
+                    description: StorageMappings maps source datastores to destination
+                      volume types.
+                    items:
+                      description: MigrationBucketMapping is a single source -> target
+                        mapping (network or storage).
+                      properties:
+                        source:
+                          type: string
+                        target:
+                          type: string
+                      required:
+                      - source
+                      - target
+                      type: object
+                    type: array
+                type: object
+              isDefault:
+                description: IsDefault marks the auto-created default bucket (which
+                  cannot be deleted).
+                type: boolean
+              schedule:
+                description: Schedule is an optional future time at which the bucket's
+                  migration should start.
+                format: date-time
+                type: string
+              vms:
+                description: VMs is the list of member VM names. Must be non-empty.
+                items:
+                  type: string
+                type: array
+              vmwareCredsRef:
+                description: VMwareCredsRef references the source VMware credential
+                  this bucket belongs to.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - vms
+            - vmwareCredsRef
+            type: object
+          status:
+            description: MigrationBucketStatus defines the observed state of a MigrationBucket.
+            properties:
+              message:
+                description: Message provides human-readable detail (e.g. an invariant
+                  violation).
+                type: string
+              phase:
+                description: Phase is the derived lifecycle status of the bucket.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationplans.vjailbreak.k8s.pf9.io
 spec:
   group: vjailbreak.k8s.pf9.io
@@ -4863,6 +5034,7 @@ rules:
   - esxisshcreds
   - clustermigrations
   - esximigrations
+  - migrationbuckets
   - migrationplans
   - migrations
   - migrationtemplates
@@ -4897,6 +5069,7 @@ rules:
   - esxisshcreds/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
+  - migrationbuckets/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -4920,6 +5093,7 @@ rules:
   - esxisshcreds/status
   - clustermigrations/status
   - esximigrations/status
+  - migrationbuckets/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status

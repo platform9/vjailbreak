@@ -183,6 +183,7 @@ rules:
   - esxisshcreds
   - clustermigrations
   - esximigrations
+  - migrationbuckets
   - migrationplans
   - migrations
   - migrationtemplates
@@ -217,6 +218,7 @@ rules:
   - esxisshcreds/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
+  - migrationbuckets/finalizers
   - migrationplans/finalizers
   - migrationtemplates/finalizers
   - networkmappings/finalizers
@@ -240,6 +242,7 @@ rules:
   - esxisshcreds/status
   - clustermigrations/status
   - esximigrations/status
+  - migrationbuckets/status
   - migrationplans/status
   - migrations/status
   - migrationtemplates/status
