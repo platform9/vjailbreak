@@ -9,6 +9,12 @@ export const MIGRATION_BUCKETS_QUERY_KEY = 'migration-buckets'
 /** Display name for the auto-created default bucket. */
 export const DEFAULT_BUCKET_LABEL = 'Default Bucket'
 
+/**
+ * Label set on a bucket when its migrations are triggered from the planner. Lets the status
+ * derivation show progress immediately (InProgress) before the per-VM Migration objects appear.
+ */
+export const BUCKET_TRIGGERED_LABEL = 'vjailbreak.k8s.pf9.io/triggered'
+
 /** Resource name (metadata.name) of the auto-created default bucket. */
 export const DEFAULT_BUCKET_NAME = 'default-bucket'
 

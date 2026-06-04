@@ -110,14 +110,17 @@ export default function EditBucketDrawer({
   const handleSave = () => {
     if (!bucket || !cfg) return
     const params = cfg.params
-    const vmNames = (params.vms ?? []).map((vm) => vm.vmKey || vm.name)
+    // Membership key is the VM display name (consistent with the inventory's byName index and
+    // bucketIdByVm), so uniqueness/greying across buckets matches reliably.
+    const vmNames = (params.vms ?? []).map((vm) => vm.name)
 
     const updated: MigrationBucket = {
       ...bucket,
       spec: {
         ...bucket.spec,
         vms: vmNames.length > 0 ? vmNames : bucket.spec.vms,
-        schedule: params.dataCopyStartTime || undefined,
+        // Schedule is owned by the Schedule dialog (UI-only); preserve it across config edits.
+        schedule: bucket.spec.schedule,
         config: {
           sourceCluster: params.vmwareCluster,
           pcdCluster: cfg.targetPCDClusterName ?? params.pcdCluster,

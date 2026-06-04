@@ -1,5 +1,10 @@
 import type { StatusChipTone } from 'src/components'
+import { BUCKET_TRIGGERED_LABEL } from '../constants'
 import type { BucketStatus, MigrationBucket } from '../types'
+
+/** Was this bucket's migration triggered from the planner? (marker label set at trigger time). */
+const isTriggered = (bucket: MigrationBucket): boolean =>
+  bucket.metadata.labels?.[BUCKET_TRIGGERED_LABEL] === 'true'
 
 /**
  * Resolve a bucket's lifecycle status.
@@ -54,13 +59,19 @@ export const deriveBucketStatus = (
     .filter((p): p is string => Boolean(p))
     .map(classify)
 
-  if (phases.length === 0) return getBucketStatus(bucket)
+  if (phases.length === 0) {
+    // Triggered but no per-VM Migration objects matched yet → it's underway.
+    if (isTriggered(bucket)) return 'InProgress'
+    return getBucketStatus(bucket)
+  }
   if (phases.some((c) => c === 'running')) return 'InProgress'
   if (phases.length === bucket.spec.vms.length && phases.every((c) => c === 'done')) {
     return 'Migrated'
   }
   if (phases.some((c) => c === 'done')) return 'InProgress' // partially migrated
-  if (phases.some((c) => c === 'scheduled')) return 'Scheduled'
+  if (phases.some((c) => c === 'scheduled')) return 'InProgress'
+  // Triggered with some matches that aren't terminal yet → still in progress.
+  if (isTriggered(bucket)) return 'InProgress'
   return getBucketStatus(bucket)
 }
 
