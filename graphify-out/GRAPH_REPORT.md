@@ -1,16 +1,16 @@
 # Graph Report - vjailbreak  (2026-06-04)
 
 ## Corpus Check
-- 738 files · ~1,741,316 words
+- 738 files · ~1,741,330 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5352 nodes · 8419 edges · 787 communities (295 shown, 492 thin omitted)
+- 5351 nodes · 8419 edges · 785 communities (295 shown, 490 thin omitted)
 - Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 914 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f834cba0`
+- Built from commit: `019e09ac`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -744,9 +744,7 @@
 - [[_COMMUNITY_Community 770|Community 770]]
 - [[_COMMUNITY_Community 771|Community 771]]
 - [[_COMMUNITY_Community 772|Community 772]]
-- [[_COMMUNITY_Community 773|Community 773]]
 - [[_COMMUNITY_Community 774|Community 774]]
-- [[_COMMUNITY_Community 775|Community 775]]
 - [[_COMMUNITY_Community 776|Community 776]]
 - [[_COMMUNITY_Community 777|Community 777]]
 - [[_COMMUNITY_Community 778|Community 778]]
@@ -794,7 +792,7 @@
 - **RBAC Roles Governing Migration Resources** — vmwarecreds_viewer_role, storagemapping_viewer_role, migrationplan_editor_role, migrationtemplate_editor_role, vmwaremachine_editor_role, vmwarehost_editor_role, rdmdisk_viewer_role [EXTRACTED 1.00]
 - **ESXi SSH Authentication via Credentials and Secret** — esxisshcreds_sample, esxi_ssh_key_secret, vmwarecreds_pnapbmc1 [INFERRED 0.85]
 
-## Communities (787 total, 492 thin omitted)
+## Communities (785 total, 490 thin omitted)
 
 ### Community 0 - "vpwned Upgrade & Version"
 Cohesion: 0.06
@@ -1020,6 +1018,10 @@ Nodes (14): Code of Conduct, Code Review Process, code:bash (git clone https://g
 Cohesion: 0.23
 Nodes (11): Disk, GPUInfo, GuestNetwork, NIC, OpenStackVolumeRefInfo, VMInfo, VMwareMachine, init() (+3 more)
 
+### Community 58 - "Component 58"
+Cohesion: 0.15
+Nodes (5): VMwareCredsReconciler, VMwareCredsScope, NewVMwareCredsScope(), VMwareCredsScopeParams, CleanupCachedVMwareClient()
+
 ### Community 59 - "Utilities"
 Cohesion: 0.22
 Nodes (4): NewCloneTracker(), CloneStatus, CloneTracker, ProgressLogger
@@ -1061,8 +1063,8 @@ Cohesion: 0.05
 Nodes (37): Accessibility, API Calls, API Integration, Backend Communication, Best Practices, Browser DevTools, Build and Deployment, Code Style (+29 more)
 
 ### Community 69 - "CRD API Types"
-Cohesion: 0.07
-Nodes (30): methods, description, httpMethod, id, parameterOrder, path, response, scopes (+22 more)
+Cohesion: 0.06
+Nodes (37): methods, description, httpMethod, id, parameterOrder, path, response, scopes (+29 more)
 
 ### Community 70 - "CRD API Types"
 Cohesion: 0.28
@@ -1257,8 +1259,8 @@ Cohesion: 0.32
 Nodes (3): ESXIMigrationScope, NewESXIMigrationScope(), ESXIMigrationScopeParams
 
 ### Community 119 - "Test Utilities"
-Cohesion: 0.21
-Nodes (10): VMwareCredsScope, NewVMwareCredsScope(), VMwareCredsScopeParams, PostValidationResources, ensureLogger(), FetchResourcesPostValidation(), getCredentialsFromSecret(), getRetryLimitFromSettings() (+2 more)
+Cohesion: 0.50
+Nodes (7): PostValidationResources, ensureLogger(), FetchResourcesPostValidation(), getCredentialsFromSecret(), getRetryLimitFromSettings(), Validate(), ValidationResult
 
 ### Community 120 - "Test Utilities"
 Cohesion: 0.29
@@ -1368,6 +1370,10 @@ Nodes (3): KubeStateMetrics ClusterRole, KubeStateMetrics Exporter Service, Kube
 Cohesion: 0.67
 Nodes (3): vJailbreak Functional/Software Requirements Specification Template, Migration Sample CR, MigrationPlan Sample CR
 
+### Community 197 - "Protobuf Service"
+Cohesion: 0.40
+Nodes (5): status, description, enum, enumDescriptions, type
+
 ### Community 202 - "Protobuf Service"
 Cohesion: 0.08
 Nodes (25): Before Adding Support for New OS, Build Process, Building v2v-helper, CGO and Platform Requirements, Common Issues, Debugging, Disk Conversion Process, Disk Streaming (+17 more)
@@ -1433,8 +1439,8 @@ Cohesion: 0.26
 Nodes (13): display_msg(), execute_main_workflow(), fetch_uuid_time_marker(), has_netplan_get_feature(), invoke_netplan_get(), locate_netplan_if_by_ip(), parse_address_pair(), process_dhclient_history() (+5 more)
 
 ### Community 218 - "Component 218"
-Cohesion: 0.14
-Nodes (15): description, httpMethod, id, parameters, path, get, description, id (+7 more)
+Cohesion: 0.12
+Nodes (17): description, httpMethod, id, parameters, path, get, description, id (+9 more)
 
 ### Community 219 - "Protobuf Service"
 Cohesion: 0.12
@@ -1750,7 +1756,7 @@ Nodes (3): Details, Introduction, Setup
 
 ### Community 302 - "Community 302"
 Cohesion: 0.22
-Nodes (9): description, location, type, parameters, key, userIp, description, location (+1 more)
+Nodes (9): description, location, type, parameters, key, quotaUser, description, location (+1 more)
 
 ### Community 303 - "Community 303"
 Cohesion: 0.50
@@ -1769,8 +1775,8 @@ Cohesion: 0.47
 Nodes (9): GetNonEmptyLines(), GetProjectDir(), InstallCertManager(), InstallPrometheusOperator(), LoadImageToKindClusterWithName(), Run(), UninstallCertManager(), UninstallPrometheusOperator() (+1 more)
 
 ### Community 768 - "Community 768"
-Cohesion: 0.22
-Nodes (9): description, httpMethod, id, parameterOrder, path, request, scopes, insert (+1 more)
+Cohesion: 0.50
+Nodes (4): userIp, description, location, type
 
 ### Community 769 - "Community 769"
 Cohesion: 0.43
@@ -1788,22 +1794,14 @@ Nodes (6): VMwareHost, FilterVMwareHostsForCreds(), FindVMwareHostsNotInVcenter(
 Cohesion: 0.50
 Nodes (3): Extensions, Host, Host
 
-### Community 773 - "Community 773"
-Cohesion: 0.40
-Nodes (5): description, enum, enumDescriptions, type, networkTier
-
 ### Community 774 - "Community 774"
 Cohesion: 0.50
 Nodes (3): Server, VjailbreakSettings, VMInfo
 
-### Community 775 - "Community 775"
-Cohesion: 0.50
-Nodes (4): quotaUser, description, location, type
-
 ## Knowledge Gaps
-- **1786 isolated node(s):** `feature_directory`, `RawExtension`, `LocalObjectReference`, `Time`, `ObjectMeta` (+1781 more)
+- **1785 isolated node(s):** `feature_directory`, `RawExtension`, `LocalObjectReference`, `Time`, `ObjectMeta` (+1780 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **492 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **490 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -1819,6 +1817,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 65 inferred relationships involving `PrintLog()` (e.g. with `.addUdevRulesForUbuntu()` and `.CheckCutoverOptions()`) actually correct?**
   _`PrintLog()` has 65 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `feature_directory`, `RawExtension`, `LocalObjectReference` to the rest of the system?**
-  _1790 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1789 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `vpwned Upgrade & Version` be split into smaller, more focused modules?**
   _Cohesion score 0.05773726040205704 - nodes in this community are weakly interconnected._

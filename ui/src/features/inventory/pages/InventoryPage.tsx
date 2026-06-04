@@ -129,10 +129,7 @@ export default function InventoryPage() {
         vmwareCredsRef: { name: data.credName },
         vms: selection.vmNames,
         isDefault: true,
-        config: buildBucketConfigDefaults(selectedVms, openstackCreds, {
-          vmwareCredName: data.credName,
-          datacenter: data.vmwareDatacenter
-        })
+        config: buildBucketConfigDefaults(selectedVms, openstackCreds)
       })
     )
   }, [
@@ -153,10 +150,7 @@ export default function InventoryPage() {
     const config =
       inherited && inherited.networkMappings?.length
         ? inherited
-        : buildBucketConfigDefaults(selectedVms, openstackCreds, {
-            vmwareCredName: data.credName,
-            datacenter: data.vmwareDatacenter
-          })
+        : buildBucketConfigDefaults(selectedVms, openstackCreds)
     const bucket = buildMigrationBucket(name, {
       vmwareCredsRef: { name: credName },
       vms: vmNames,

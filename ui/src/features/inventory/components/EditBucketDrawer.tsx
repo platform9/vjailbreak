@@ -102,6 +102,7 @@ export default function EditBucketDrawer({
       seed={seed}
       seedOptions={seedOptions}
       initialSelectedVmNames={bucket?.spec.vms}
+      autoDefaults
       onStateChange={setCfg}
       onSubmit={handleSave}
       onClose={onClose}

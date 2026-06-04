@@ -71,6 +71,12 @@ export interface MigrationConfigFormProps {
   seedOptions?: SelectedMigrationOptionsType
   /** VM names to pre-select once the VM list loads (bucket editor). */
   initialSelectedVmNames?: string[]
+  /**
+   * Bucket-editor only: auto-fill source cluster (from the first selected VM), destination
+   * cluster (first PCD), and network/storage mappings (first source → first target) from live
+   * data, when those values are missing/unresolved. The "Start Migration" flow leaves this off.
+   */
+  autoDefaults?: boolean
   /** Enter-key / form submit handler. */
   onSubmit?: () => void | Promise<void>
   /** Close handler (used by keyboard submit). */
@@ -95,6 +101,7 @@ export default function MigrationConfigForm({
   seed,
   seedOptions,
   initialSelectedVmNames,
+  autoDefaults = false,
   onSubmit,
   onClose,
   submitDisabled = false,
@@ -102,7 +109,7 @@ export default function MigrationConfigForm({
   children
 }: MigrationConfigFormProps) {
   const { params, getParamsUpdater, setParams } = useParams<FormValues>((seed ?? {}) as FormValues)
-  const { pcdData } = useClusterData()
+  const { pcdData, sourceData } = useClusterData()
   const { params: fieldErrors, getParamsUpdater: getFieldErrorsUpdater } = useParams<FieldErrors>({})
   const {
     params: selectedMigrationOptions,
@@ -230,6 +237,101 @@ export default function MigrationConfigForm({
 
   const theme = useTheme()
   const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
+
+  // Bucket-editor auto-defaults: resolve source cluster (from the first selected VM),
+  // destination cluster (first PCD), and network/storage mappings (each source → first target)
+  // from live data, only filling values that are missing or unresolved. Each runs once.
+  const clusterDefaultedRef = useRef(false)
+  const pcdDefaultedRef = useRef(false)
+  const netDefaultedRef = useRef(false)
+  const storageDefaultedRef = useRef(false)
+
+  useEffect(() => {
+    if (!autoDefaults) return
+
+    // Source cluster ← first selected VM's cluster (first VM's datacenter + cluster).
+    if (!clusterDefaultedRef.current && (params.vms?.length ?? 0) > 0 && sourceData.length > 0) {
+      const validIds = new Set(sourceData.flatMap((s) => s.clusters.map((c) => c.id)))
+      if (!params.vmwareCluster || !validIds.has(params.vmwareCluster)) {
+        const firstVm = params.vms![0]
+        const clusterLabel = firstVm.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster']
+        let resolvedId: string | undefined
+        for (const s of sourceData) {
+          const match = s.clusters.find((c) => c.name === clusterLabel)
+          if (match) {
+            resolvedId = match.id
+            break
+          }
+        }
+        resolvedId = resolvedId ?? sourceData[0]?.clusters[0]?.id
+        if (resolvedId) {
+          clusterDefaultedRef.current = true
+          getParamsUpdater('vmwareCluster')(resolvedId)
+        }
+      } else {
+        clusterDefaultedRef.current = true
+      }
+    }
+
+    // Destination ← first PCD cluster.
+    if (!pcdDefaultedRef.current && pcdData.length > 0) {
+      const validPcd = new Set(pcdData.map((p) => p.id))
+      if (!params.pcdCluster || !validPcd.has(params.pcdCluster)) {
+        pcdDefaultedRef.current = true
+        getParamsUpdater('pcdCluster')(pcdData[0].id)
+      } else {
+        pcdDefaultedRef.current = true
+      }
+    }
+
+    // Network mappings ← each source network → first PCD network.
+    if (
+      !netDefaultedRef.current &&
+      availableVmwareNetworks.length > 0 &&
+      sortedOpenstackNetworks.length > 0
+    ) {
+      if (!params.networkMappings || params.networkMappings.length === 0) {
+        const target = sortedOpenstackNetworks[0].name
+        netDefaultedRef.current = true
+        getParamsUpdater('networkMappings')(
+          availableVmwareNetworks.map((source) => ({ source, target }))
+        )
+      } else {
+        netDefaultedRef.current = true
+      }
+    }
+
+    // Storage mappings ← each source datastore → first PCD volume type.
+    if (
+      !storageDefaultedRef.current &&
+      availableVmwareDatastores.length > 0 &&
+      sortedOpenstackVolumeTypes.length > 0
+    ) {
+      if (!params.storageMappings || params.storageMappings.length === 0) {
+        const target = sortedOpenstackVolumeTypes[0]
+        storageDefaultedRef.current = true
+        getParamsUpdater('storageMappings')(
+          availableVmwareDatastores.map((source) => ({ source, target }))
+        )
+      } else {
+        storageDefaultedRef.current = true
+      }
+    }
+  }, [
+    autoDefaults,
+    params.vms,
+    params.vmwareCluster,
+    params.pcdCluster,
+    params.networkMappings,
+    params.storageMappings,
+    sourceData,
+    pcdData,
+    availableVmwareNetworks,
+    availableVmwareDatastores,
+    sortedOpenstackNetworks,
+    sortedOpenstackVolumeTypes,
+    getParamsUpdater
+  ])
 
   // Emit state upward for the parent's footer + submit.
   useEffect(() => {

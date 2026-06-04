@@ -25,6 +25,7 @@ resources:
 - bases/vjailbreak.k8s.pf9.io_esxisshcreds.yaml
 - bases/vjailbreak.k8s.pf9.io_volumeimageprofiles.yaml
 - bases/vjailbreak.k8s.pf9.io_proxyvms.yaml
+- bases/vjailbreak.k8s.pf9.io_migrationbuckets.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
