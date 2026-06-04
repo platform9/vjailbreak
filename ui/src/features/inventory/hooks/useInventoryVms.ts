@@ -24,7 +24,8 @@ const toInventoryVm = (vm: VmData): InventoryVm => ({
   clusterName: vm.labels?.[VMWARE_CLUSTER_LABEL],
   diskCount: vm.disks?.length ?? 0,
   networks: vm.networks ?? [],
-  datastores: vm.datastores ?? []
+  datastores: vm.datastores ?? [],
+  osFamily: vm.osFamily
 })
 
 /**

@@ -33,6 +33,8 @@ export interface InventoryVm {
   networks: string[]
   /** Source datastore names (for default storage mapping). */
   datastores: string[]
+  /** Guest OS family (e.g. linuxGuest/windowsGuest); empty/Unknown = not detected. */
+  osFamily?: string
 }
 
 /** Map of VM name → owning bucket name (for the uniqueness/greying rules). */

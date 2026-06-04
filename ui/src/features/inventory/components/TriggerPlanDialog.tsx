@@ -30,6 +30,8 @@ export interface TriggerPlanDialogProps {
   scheduleMode: TriggerScheduleMode
   onScheduleModeChange: (mode: TriggerScheduleMode) => void
   confirming?: boolean
+  /** Launch error to surface in the dialog (null/undefined = none). */
+  error?: string | null
   onConfirm: () => void
 }
 
@@ -50,6 +52,7 @@ export default function TriggerPlanDialog({
   scheduleMode,
   onScheduleModeChange,
   confirming = false,
+  error,
   onConfirm
 }: TriggerPlanDialogProps) {
   return (
@@ -122,6 +125,8 @@ export default function TriggerPlanDialog({
               </InlineHelp>
             ) : null}
           </Box>
+
+          {error ? <Banner variant="error" message={error} /> : null}
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

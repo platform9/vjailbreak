@@ -1,16 +1,16 @@
 # Graph Report - vjailbreak  (2026-06-04)
 
 ## Corpus Check
-- 738 files · ~1,741,330 words
+- 738 files · ~1,742,460 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5351 nodes · 8419 edges · 785 communities (295 shown, 490 thin omitted)
+- 5368 nodes · 8452 edges · 793 communities (301 shown, 492 thin omitted)
 - Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 914 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `019e09ac`
+- Built from commit: `9b818ad8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -744,7 +744,9 @@
 - [[_COMMUNITY_Community 770|Community 770]]
 - [[_COMMUNITY_Community 771|Community 771]]
 - [[_COMMUNITY_Community 772|Community 772]]
+- [[_COMMUNITY_Community 773|Community 773]]
 - [[_COMMUNITY_Community 774|Community 774]]
+- [[_COMMUNITY_Community 775|Community 775]]
 - [[_COMMUNITY_Community 776|Community 776]]
 - [[_COMMUNITY_Community 777|Community 777]]
 - [[_COMMUNITY_Community 778|Community 778]]
@@ -756,6 +758,12 @@
 - [[_COMMUNITY_Community 784|Community 784]]
 - [[_COMMUNITY_Community 785|Community 785]]
 - [[_COMMUNITY_Community 786|Community 786]]
+- [[_COMMUNITY_Community 787|Community 787]]
+- [[_COMMUNITY_Community 788|Community 788]]
+- [[_COMMUNITY_Community 789|Community 789]]
+- [[_COMMUNITY_Community 790|Community 790]]
+- [[_COMMUNITY_Community 791|Community 791]]
+- [[_COMMUNITY_Community 792|Community 792]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Contains()` - 115 edges
@@ -792,7 +800,7 @@
 - **RBAC Roles Governing Migration Resources** — vmwarecreds_viewer_role, storagemapping_viewer_role, migrationplan_editor_role, migrationtemplate_editor_role, vmwaremachine_editor_role, vmwarehost_editor_role, rdmdisk_viewer_role [EXTRACTED 1.00]
 - **ESXi SSH Authentication via Credentials and Secret** — esxisshcreds_sample, esxi_ssh_key_secret, vmwarecreds_pnapbmc1 [INFERRED 0.85]
 
-## Communities (785 total, 490 thin omitted)
+## Communities (793 total, 492 thin omitted)
 
 ### Community 0 - "vpwned Upgrade & Version"
 Cohesion: 0.06
@@ -800,11 +808,11 @@ Nodes (56): init(), runUpgradeJob(), DeploymentConfig, checkAndDeleteAllCustomRe
 
 ### Community 1 - "ESXi Migration Reconciler"
 Cohesion: 0.06
-Nodes (54): computeSourceVMKey(), createVCenterClientAndDC(), extractVCenterCredentials(), getDatastoresForVolumeMapping(), GetVMwareMachineForVM(), MergeLabels(), resolveVirtioDriverURL(), TestGetDatastoresForVolumeMapping_FallsBackToLegacyDatastores() (+46 more)
+Nodes (55): computeSourceVMKey(), createVCenterClientAndDC(), extractVCenterCredentials(), getDatastoresForVolumeMapping(), GetVMwareMachineForVM(), MergeLabels(), resolveVirtioDriverURL(), TestGetDatastoresForVolumeMapping_FallsBackToLegacyDatastores() (+47 more)
 
 ### Community 2 - "MigrationPlan API Types"
-Cohesion: 0.09
-Nodes (43): Cmd, Context, GuestNetwork, IpEntry, VMDisk, DetectESPDiskIndex(), FirstBootWindows, VirtV2VOperations (+35 more)
+Cohesion: 0.10
+Nodes (41): Cmd, Context, GuestNetwork, IpEntry, VMDisk, DetectESPDiskIndex(), FirstBootWindows, VirtV2VOperations (+33 more)
 
 ### Community 3 - "K8s Utilities (Creds, Keys)"
 Cohesion: 0.23
@@ -819,8 +827,8 @@ Cohesion: 0.05
 Nodes (39): 1.1 Document Purpose, 1.2 Product Scope, 1.3 Definitions, Acronyms and Abbreviations, 1.4 References, 1.5 Document Overview, 1. Introduction, 2.1 Product Perspective, 2.2 Product Functions (+31 more)
 
 ### Community 6 - "Migration Credential Utils"
-Cohesion: 0.11
-Nodes (17): CancelFunc, extractFileName(), MigrationTimes, NBDOperations, NICOverride, OpenstackOperations, Reporter, StorageProvider (+9 more)
+Cohesion: 0.13
+Nodes (18): CancelFunc, Migrate, extractFileName(), MigrationTimes, NBDOperations, NICOverride, OpenstackOperations, Reporter (+10 more)
 
 ### Community 7 - "Migration Reconciler"
 Cohesion: 0.06
@@ -847,16 +855,16 @@ Cohesion: 0.07
 Nodes (43): createDummyPCDCluster(), fetchAndUpdateFlavors(), generateArrayCredsName(), handlePCDSync(), handleValidatedCreds(), isRetryableUpdateError(), populateVMwareMachineFlavors(), runPCDSyncAsync() (+35 more)
 
 ### Community 13 - "OpenStack Cinder Operations"
-Cohesion: 0.15
-Nodes (18): CreateOpts, ServerGroupInfo, Subnet, CinderVolumeService, OpenStackClients, GetCurrentInstanceUUID(), getInstanceUUIDFromNode(), PrintLog() (+10 more)
+Cohesion: 0.14
+Nodes (21): CreateOpts, ServerGroupInfo, Subnet, CinderVolumeService, OpenStackClients, GetCurrentInstanceUUID(), getInstanceUUIDFromNode(), PrintLog() (+13 more)
 
 ### Community 14 - "vpwned Protobuf API"
 Cohesion: 0.09
 Nodes (35): BM Config Editor Role, Cluster Migration Viewer Role, Controller Manager Service Account, BMConfigs CRD, ClusterMigrations CRD, ESXiMigrations CRD, Migrations CRD, NetworkMappings CRD (+27 more)
 
 ### Community 15 - "vpwned vCenter gRPC Target"
-Cohesion: 0.11
-Nodes (34): AuthInfo, AuthRequest, AuthRequestAuth, AuthRequestAuthIdentity, AuthRequestAuthIdentityPassword, AuthRequestAuthIdentityPasswordUser, AuthRequestAuthScope, AuthRequestAuthScopeProject (+26 more)
+Cohesion: 0.05
+Nodes (52): AuthInfo, AuthRequest, AuthRequestAuth, AuthRequestAuthIdentity, AuthRequestAuthIdentityPassword, AuthRequestAuthIdentityPasswordUser, AuthRequestAuthScope, AuthRequestAuthScopeProject (+44 more)
 
 ### Community 16 - "BM Mock Provider"
 Cohesion: 0.11
@@ -883,8 +891,8 @@ Cohesion: 0.08
 Nodes (27): Alertmanager (alertmanager-main), Alertmanager NetworkPolicy (alertmanager-main), Alertmanager ServiceAccount (alertmanager-main), Grafana Config Secret, Grafana Dashboard Definitions, Grafana Dashboard Sources ConfigMap, Grafana Dashboard Datasources Secret, Grafana Deployment (+19 more)
 
 ### Community 23 - "Monitoring Stack (Alertmanager)"
-Cohesion: 0.16
-Nodes (38): Flavor, Client, Context, Migration, Node, NodeList, OpenstackCreds, RollingMigrationPlan (+30 more)
+Cohesion: 0.19
+Nodes (33): Flavor, Client, Context, Flavor, OpenstackCreds, Node, NodeList, OpenstackCreds (+25 more)
 
 ### Community 24 - "VMwareMachine API Types"
 Cohesion: 0.15
@@ -907,12 +915,12 @@ Cohesion: 0.19
 Nodes (9): DatastoreInfo, Contains(), DiskChangeInfo, ManagedObjectReference, VCenterClient, VirtualMachine, IsTransientVCenterError(), VirtualMachineSnapshotTree (+1 more)
 
 ### Community 29 - "vpwned gRPC Gateway"
-Cohesion: 0.17
-Nodes (20): DiskChangeExtent, File, Libnbd, BlockStatusData, handlePool, NBDOperations, coalesceExtents(), copyBlockParallel() (+12 more)
+Cohesion: 0.11
+Nodes (29): DiskChangeExtent, File, Libnbd, BlockStatusData, handlePool, NBDOperations, coalesceExtents(), copyBlockParallel() (+21 more)
 
 ### Community 30 - "virt-v2v Mock Operations"
-Cohesion: 0.07
-Nodes (33): OpenstackOperations, authOptionsFromEnv(), NewOpenStackClients(), validateOpenStack(), checkNetworkSubnetCompatibilityRequest, checkNetworkSubnetCompatibilityResponse, OpenStackClients, OpenstackCredsinfo (+25 more)
+Cohesion: 0.18
+Nodes (16): checkNetworkSubnetCompatibilityRequest, checkNetworkSubnetCompatibilityResponse, OpenStackClients, OpenstackCredsinfo, subnetCompatibilityResult, countValid(), CreateInClusterClient(), GetOpenStackClients() (+8 more)
 
 ### Community 31 - "Monitoring Stack (Grafana)"
 Cohesion: 0.07
@@ -923,8 +931,8 @@ Cohesion: 0.27
 Nodes (17): Finder, VMwareCreds, VMwareCredsInfo, GetFinderForVMwareCreds(), GetVMwareCredentialsFromSecret(), GetVMwDatastore(), LogoutVMwareClient(), ValidateVMwareCreds() (+9 more)
 
 ### Community 33 - "vpwned gRPC Server (Storage)"
-Cohesion: 0.12
-Nodes (20): Collector, Datastore, Folder, Session, Client, Context, Datacenter, Finder (+12 more)
+Cohesion: 0.07
+Nodes (35): BaseOptionValue, Collector, isDiskEnableUUIDSet(), parseComponentCheckOutput(), ProxyVMReconciler, Datastore, Folder, Client (+27 more)
 
 ### Community 34 - "Rolling Migration Plan Utils"
 Cohesion: 0.10
@@ -939,16 +947,16 @@ Cohesion: 0.11
 Nodes (44): ClusterMigration, ESXIMigration, Client, ClusterMigrationInfo, ClusterMigrationScope, ConfigMap, Context, ESXIMigrationScope (+36 more)
 
 ### Community 37 - "RollingMigrationPlan API Types"
-Cohesion: 0.09
-Nodes (33): ArrayCredsMapping, BaseOptionValue, isDiskEnableUUIDSet(), parseComponentCheckOutput(), ProxyVMReconciler, Client, Context, Manager (+25 more)
+Cohesion: 0.13
+Nodes (15): description, items, type, id, properties, type, description, id (+7 more)
 
 ### Community 38 - "NBD Disk Copy Protocol"
 Cohesion: 0.11
 Nodes (18): code:bash (# One-time setup), code:bash (# Controller logs), Common Pitfalls, CRD Changes, Debugging, Development Rules, External Documentation, Generated Files (+10 more)
 
 ### Community 39 - "vpwned SDK Targets"
-Cohesion: 0.24
-Nodes (14): MigrationParams, atoi(), DoRetryWithExponentialBackoff(), GetFirstbootConfigMapName(), GetInclusterClient(), GetMigrationConfigMapName(), GetMigrationObjectName(), GetRemoveVMwareTools() (+6 more)
+Cohesion: 0.17
+Nodes (19): MigrationParams, MigrationParams, atoi(), DoRetryWithExponentialBackoff(), GetFirstbootConfigMapName(), GetInclusterClient(), GetMigrationConfigMapName(), GetMigrationObjectName() (+11 more)
 
 ### Community 40 - "Component 40"
 Cohesion: 0.10
@@ -1000,7 +1008,7 @@ Nodes (42): API Server Tests (`pkg/vpwned/`), Arrange-Act-Assert Pattern, Avoid,
 
 ### Community 53 - "CRD API Types"
 Cohesion: 0.05
-Nodes (43): description, type, description, type, description, type, description, format (+35 more)
+Nodes (39): description, type, description, type, description, type, description, format (+31 more)
 
 ### Community 54 - "CRD API Types"
 Cohesion: 0.36
@@ -1018,10 +1026,6 @@ Nodes (14): Code of Conduct, Code Review Process, code:bash (git clone https://g
 Cohesion: 0.23
 Nodes (11): Disk, GPUInfo, GuestNetwork, NIC, OpenStackVolumeRefInfo, VMInfo, VMwareMachine, init() (+3 more)
 
-### Community 58 - "Component 58"
-Cohesion: 0.15
-Nodes (5): VMwareCredsReconciler, VMwareCredsScope, NewVMwareCredsScope(), VMwareCredsScopeParams, CleanupCachedVMwareClient()
-
 ### Community 59 - "Utilities"
 Cohesion: 0.22
 Nodes (4): NewCloneTracker(), CloneStatus, CloneTracker, ProgressLogger
@@ -1035,8 +1039,8 @@ Cohesion: 0.05
 Nodes (41): API Authentication, API Client Usage, API Design Principles, API Documentation, API Handler Pattern, API Server Development Rules, API Testing, Authentication & Authorization (+33 more)
 
 ### Community 62 - "CRD API Types"
-Cohesion: 0.21
-Nodes (3): HTTPClient, credentialsToKeystoneAuthRequest(), PrettyPrint()
+Cohesion: 0.14
+Nodes (7): Extensions, Host, HTTPClient, Host, PrettyPrint(), GetOsRelease(), RunOfflineVMwareCleanup()
 
 ### Community 63 - "CRD API Types"
 Cohesion: 0.13
@@ -1063,16 +1067,16 @@ Cohesion: 0.05
 Nodes (37): Accessibility, API Calls, API Integration, Backend Communication, Best Practices, Browser DevTools, Build and Deployment, Code Style (+29 more)
 
 ### Community 69 - "CRD API Types"
-Cohesion: 0.06
-Nodes (37): methods, description, httpMethod, id, parameterOrder, path, response, scopes (+29 more)
+Cohesion: 0.17
+Nodes (12): description, httpMethod, id, parameterOrder, path, response, scopes, response (+4 more)
 
 ### Community 70 - "CRD API Types"
 Cohesion: 0.28
 Nodes (11): ArrayCreds, init(), ArrayCredsInfo, ArrayCredsList, ArrayCredsSpec, ArrayCredsStatus, BackendTarget, BackendTargetGroup (+3 more)
 
 ### Community 72 - "Component 72"
-Cohesion: 0.21
-Nodes (16): TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(), TestCreateTargetInstance(), TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(), TestCreateTargetInstance_AdvancedMapping_Ports(), TestCreateVolumes(), TestDeleteAllVolumes(), TestDeleteAllVolumes_SkipsNilOpenstackVol(), TestDetachAllVolumes() (+8 more)
+Cohesion: 0.25
+Nodes (14): TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(), TestCreateTargetInstance(), TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(), TestCreateTargetInstance_AdvancedMapping_Ports(), TestCreateVolumes(), TestDeleteAllVolumes(), TestDeleteAllVolumes_SkipsNilOpenstackVol(), TestDetachAllVolumes() (+6 more)
 
 ### Community 73 - "Component 73"
 Cohesion: 0.19
@@ -1115,8 +1119,8 @@ Cohesion: 0.42
 Nodes (3): VjailbreakNodeReconciler, DeleteNodeByName(), GetOpenstackVMByName()
 
 ### Community 83 - "Protobuf Service"
-Cohesion: 0.36
-Nodes (6): GetManager(), main(), SetupControllers(), Config, Manager, Server
+Cohesion: 0.27
+Nodes (8): GetManager(), main(), SetupControllers(), Config, Config, Manager, Server, Server
 
 ### Community 84 - "Protobuf Service"
 Cohesion: 0.18
@@ -1135,24 +1139,20 @@ Cohesion: 0.32
 Nodes (7): NewTestClient(), TestGetEndpointForRegion(), TestGetServiceID(), RoundTripFunc, Assert(), Equals(), Ok()
 
 ### Community 88 - "Controller Component"
-Cohesion: 0.06
-Nodes (37): description, id, properties, type, description, enum, enumDescriptions, type (+29 more)
+Cohesion: 0.09
+Nodes (26): description, id, location, pattern, properties, required, type, description (+18 more)
 
 ### Community 89 - "Component 89"
 Cohesion: 0.46
 Nodes (11): Client, Context, cleanupSimulator(), simulateVCenter(), TestDeleteSnapshot(), TestEnableCBT(), TestGetSnapshot(), TestGetVMInfo() (+3 more)
 
 ### Community 90 - "Component 90"
-Cohesion: 0.23
-Nodes (10): getDiskKeys(), readGuestWWIDs(), hotAddDiskTransfer, vcenterClientGetter, Client, Context, Migrate, VCenterClient (+2 more)
+Cohesion: 0.10
+Nodes (29): ArrayCredsMapping, atoi(), GetArrayCreds(), GetArrayCredsMapping(), GetESXiSSHPrivateKey(), GetHotAddPrivateKey(), GetInclusterClient(), GetRDMDisk() (+21 more)
 
 ### Community 91 - "Utilities"
 Cohesion: 0.15
 Nodes (16): GuestNetwork, NIC, RDMDisk, VirtualDisk, VMDisk, Volume, VirtualMachinePowerState, ChangeID (+8 more)
-
-### Community 92 - "Protobuf Service"
-Cohesion: 0.31
-Nodes (3): Migrate, sanitizeVolumeName(), Migrate
 
 ### Community 93 - "Protobuf Service"
 Cohesion: 0.47
@@ -1195,8 +1195,8 @@ Cohesion: 0.25
 Nodes (8): RegisterVersionHandler(), RegisterVersionHandlerClient(), RegisterVersionHandlerFromEndpoint(), request_Version_Cleanup_0(), request_Version_GetAvailableTags_0(), request_Version_GetUpgradeProgress_0(), request_Version_InitiateUpgrade_0(), request_Version_Version_0()
 
 ### Community 103 - "Protobuf Service"
-Cohesion: 0.06
-Nodes (42): description, $ref, id, properties, type, description, items, type (+34 more)
+Cohesion: 0.09
+Nodes (27): description, $ref, id, properties, type, properties, description, format (+19 more)
 
 ### Community 104 - "Config & Samples"
 Cohesion: 0.32
@@ -1259,8 +1259,8 @@ Cohesion: 0.32
 Nodes (3): ESXIMigrationScope, NewESXIMigrationScope(), ESXIMigrationScopeParams
 
 ### Community 119 - "Test Utilities"
-Cohesion: 0.50
-Nodes (7): PostValidationResources, ensureLogger(), FetchResourcesPostValidation(), getCredentialsFromSecret(), getRetryLimitFromSettings(), Validate(), ValidationResult
+Cohesion: 0.21
+Nodes (10): VMwareCredsScope, NewVMwareCredsScope(), VMwareCredsScopeParams, PostValidationResources, ensureLogger(), FetchResourcesPostValidation(), getCredentialsFromSecret(), getRetryLimitFromSettings() (+2 more)
 
 ### Community 120 - "Test Utilities"
 Cohesion: 0.29
@@ -1383,8 +1383,8 @@ Cohesion: 0.08
 Nodes (25): 1. Initialize Analysis Context, 2. Load Artifacts (Progressive Disclosure), 3. Build Semantic Models, 4. Detection Passes (Token-Efficient Analysis), 5. Severity Assignment, 6. Produce Compact Analysis Report, 7. Provide Next Actions, 8. Offer Remediation (+17 more)
 
 ### Community 204 - "Protobuf Service"
-Cohesion: 0.09
-Nodes (26): parameters, description, location, type, description, location, type, parameters (+18 more)
+Cohesion: 0.12
+Nodes (19): parameters, description, location, type, description, location, type, parameters (+11 more)
 
 ### Community 205 - "Server Component"
 Cohesion: 0.08
@@ -1399,8 +1399,8 @@ Cohesion: 0.09
 Nodes (22): After Editing CRD Types, Build Targets, Checking Logs, Client Usage, Common Patterns, Controller Development Rules, Controller Reconciliation, Controller-Specific Make Targets (+14 more)
 
 ### Community 208 - "Utilities"
-Cohesion: 0.09
-Nodes (23): description, enum, enumDescriptions, type, description, items, type, properties (+15 more)
+Cohesion: 0.12
+Nodes (18): description, enum, enumDescriptions, type, description, items, type, properties (+10 more)
 
 ### Community 209 - "Component 209"
 Cohesion: 0.11
@@ -1411,8 +1411,8 @@ Cohesion: 0.11
 Nodes (18): basePath, baseUrl, batchPath, description, discoveryVersion, documentationLink, etag, id (+10 more)
 
 ### Community 211 - "RBAC Manifests"
-Cohesion: 0.10
-Nodes (23): location, pattern, required, parameters, parameters, address, project, region (+15 more)
+Cohesion: 0.18
+Nodes (13): parameters, parameters, region, requestId, region, description, location, pattern (+5 more)
 
 ### Community 212 - "Test Utilities"
 Cohesion: 0.11
@@ -1431,16 +1431,16 @@ Cohesion: 0.12
 Nodes (16): Assumptions, Clarifications, Edge Cases, Feature Specification: Hot-Add Proxy Migration, Functional Requirements, Key Entities, Measurable Outcomes, Overview (+8 more)
 
 ### Community 216 - "Keystone Auth"
-Cohesion: 0.19
-Nodes (10): DetectAndHandleNetwork(), isNetplanSupported(), parseVersionID(), MigrationTimes, NICOverride, Time, extractKeyValue(), GetInterfaceNames() (+2 more)
+Cohesion: 0.17
+Nodes (12): DetectAndHandleNetwork(), isNetplanSupported(), parseVersionID(), MigrationTimes, NICOverride, PeriodicSyncContext, PeriodicSyncStates, Time (+4 more)
 
 ### Community 217 - "Config & Samples"
 Cohesion: 0.26
 Nodes (13): display_msg(), execute_main_workflow(), fetch_uuid_time_marker(), has_netplan_get_feature(), invoke_netplan_get(), locate_netplan_if_by_ip(), parse_address_pair(), process_dhclient_history() (+5 more)
 
 ### Community 218 - "Component 218"
-Cohesion: 0.12
-Nodes (17): description, httpMethod, id, parameters, path, get, description, id (+9 more)
+Cohesion: 0.25
+Nodes (9): parameters, description, id, location, pattern, required, type, operation (+1 more)
 
 ### Community 219 - "Protobuf Service"
 Cohesion: 0.12
@@ -1467,8 +1467,8 @@ Cohesion: 0.13
 Nodes (14): files, .specify/scripts/bash/check-prerequisites.sh, .specify/scripts/bash/common.sh, .specify/scripts/bash/create-new-feature.sh, .specify/scripts/bash/setup-plan.sh, .specify/scripts/bash/setup-tasks.sh, .specify/templates/checklist-template.md, .specify/templates/constitution-template.md (+6 more)
 
 ### Community 225 - "VMware Component"
-Cohesion: 0.20
-Nodes (13): ListMeta, LocalObjectReference, ObjectMeta, RawExtension, Time, TypeMeta, MigrationBucket, MigrationBucketConfig (+5 more)
+Cohesion: 0.14
+Nodes (18): ListMeta, LocalObjectReference, ObjectMeta, Time, TypeMeta, ListMeta, LocalObjectReference, ObjectMeta (+10 more)
 
 ### Community 226 - "Config & Samples"
 Cohesion: 0.13
@@ -1483,8 +1483,8 @@ Cohesion: 0.14
 Nodes (13): dependencies, dayjs, @emotion/react, @emotion/styled, @mui/icons-material, @mui/material, @mui/x-date-pickers, react (+5 more)
 
 ### Community 229 - "Component 229"
-Cohesion: 0.22
-Nodes (7): Network, IsSimpleNetwork(), OpenStackClients, Port, boolPtr(), createPortForL2Network(), GetInstanceNetworkInfoByID()
+Cohesion: 0.17
+Nodes (14): Network, OpenStackClients, Port, Network, IsSimpleNetwork(), OpenStackClients, Port, boolPtr() (+6 more)
 
 ### Community 230 - "Component 230"
 Cohesion: 0.15
@@ -1492,7 +1492,7 @@ Nodes (12): Assumptions, Edge Cases, Feature Specification: [FEATURE NAME], Func
 
 ### Community 231 - "VMware Component"
 Cohesion: 0.33
-Nodes (11): bucket(), newBucketReconciler(), reconcileBucket(), TestMigrationBucket_DefaultsPhase(), TestMigrationBucket_EmptyBucketReportsViolation(), TestMigrationBucket_NotFoundIsNoError(), Client, Scheme (+3 more)
+Nodes (12): bucket(), newBucketReconciler(), reconcileBucket(), TestMigrationBucket_DefaultsPhase(), TestMigrationBucket_EmptyBucketReportsViolation(), TestMigrationBucket_NotFoundIsNoError(), Client, Scheme (+4 more)
 
 ### Community 232 - "Utilities"
 Cohesion: 0.24
@@ -1731,8 +1731,8 @@ Cohesion: 0.27
 Nodes (4): buildProviderOptionsFromSpec(), getDatastoreInfo(), validateNetAppTargetSelection(), ArrayCredsReconciler
 
 ### Community 294 - "Community 294"
-Cohesion: 0.35
-Nodes (9): migrationLogInfo, AddDebugOutputToFile(), AddDebugOutputToFileWithCommand(), CleanupMigrationLogs(), CloseLogFile(), ParseFraction(), RunCommandWithLogFile(), RunCommandWithLogFileRedacted() (+1 more)
+Cohesion: 0.22
+Nodes (9): methods, description, httpMethod, id, parameterOrder, path, scopes, delete (+1 more)
 
 ### Community 295 - "Community 295"
 Cohesion: 0.50
@@ -1756,11 +1756,11 @@ Nodes (3): Details, Introduction, Setup
 
 ### Community 302 - "Community 302"
 Cohesion: 0.22
-Nodes (9): description, location, type, parameters, key, quotaUser, description, location (+1 more)
+Nodes (9): description, location, type, parameters, oauth_token, quotaUser, description, location (+1 more)
 
 ### Community 303 - "Community 303"
-Cohesion: 0.50
-Nodes (4): description, location, type, oauth_token
+Cohesion: 0.22
+Nodes (9): description, httpMethod, id, parameterOrder, path, request, scopes, insert (+1 more)
 
 ### Community 304 - "Community 304"
 Cohesion: 0.33
@@ -1783,40 +1783,72 @@ Cohesion: 0.43
 Nodes (3): ArrayCredsScope, NewArrayCredsScope(), ArrayCredsScopeParams
 
 ### Community 770 - "Community 770"
-Cohesion: 0.33
-Nodes (5): MigrationParams, GetNetworkPersistance(), GetMigrationParams(), Client, Context
+Cohesion: 0.25
+Nodes (8): description, httpMethod, id, path, get, methods, resources, regionOperations
 
 ### Community 771 - "Community 771"
 Cohesion: 0.40
 Nodes (6): VMwareHost, FilterVMwareHostsForCreds(), FindVMwareHostsNotInVcenter(), HostExistsInVcenter(), VMwareClusterInfo, VMwareHostList
 
 ### Community 772 - "Community 772"
-Cohesion: 0.50
-Nodes (3): Extensions, Host, Host
+Cohesion: 0.29
+Nodes (7): description, httpMethod, id, parameterOrder, path, scopes, list
+
+### Community 773 - "Community 773"
+Cohesion: 0.29
+Nodes (7): default, description, format, location, minimum, type, maxResults
 
 ### Community 774 - "Community 774"
+Cohesion: 0.33
+Nodes (6): project, description, location, pattern, required, type
+
+### Community 775 - "Community 775"
+Cohesion: 0.40
+Nodes (5): Migration, RollingMigrationPlan, Migration, RollingMigrationPlan, GetVMMigration()
+
+### Community 787 - "Community 787"
+Cohesion: 0.40
+Nodes (5): description, enum, enumDescriptions, type, addressType
+
+### Community 788 - "Community 788"
+Cohesion: 0.40
+Nodes (5): type, users, description, items, type
+
+### Community 789 - "Community 789"
+Cohesion: 0.40
+Nodes (5): description, enum, enumDescriptions, type, networkTier
+
+### Community 790 - "Community 790"
+Cohesion: 0.40
+Nodes (5): purpose, description, enum, enumDescriptions, type
+
+### Community 791 - "Community 791"
 Cohesion: 0.50
-Nodes (3): Server, VjailbreakSettings, VMInfo
+Nodes (4): description, location, type, key
+
+### Community 792 - "Community 792"
+Cohesion: 0.50
+Nodes (4): targetId, description, format, type
 
 ## Knowledge Gaps
-- **1785 isolated node(s):** `feature_directory`, `RawExtension`, `LocalObjectReference`, `Time`, `ObjectMeta` (+1780 more)
+- **1796 isolated node(s):** `@emotion/react`, `@emotion/styled`, `@mui/icons-material`, `@mui/material`, `@mui/x-date-pickers` (+1791 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **490 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **492 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Contains()` connect `OpenStack Mock Recorder` to `vpwned Upgrade & Version`, `ESXi Migration Reconciler`, `MigrationPlan API Types`, `Keystone Auth (PCD)`, `Controller Component`, `Migration Credential Utils`, `Community 774`, `OpenStack Client`, `PCD Auth & Keystone SDK`, `OpenStack Cinder Operations`, `RBAC Roles & CRD Docs`, `Monitoring Stack (Alertmanager)`, `VMwareMachine API Types`, `OpenstackCreds API Types`, `OpenStack Component`, `virt-v2v Mock Operations`, `vpwned Update Response Protobuf`, `vpwned gRPC Server (Storage)`, `Community 293`, `Community 294`, `CRD API Types`, `Mock / Test Double`, `CRD API Types`, `Mock / Test Double`, `Utilities`, `CRD API Types`, `OpenStack Component`, `VMware Component`, `Component 80`, `Keystone Auth`, `Protobuf Service`, `Controller Component`, `Controller Component`, `Test Utilities`, `Test Utilities`, `Utilities`, `PCD Integration`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
+- **Why does `Contains()` connect `OpenStack Mock Recorder` to `vpwned Upgrade & Version`, `ESXi Migration Reconciler`, `MigrationPlan API Types`, `Keystone Auth (PCD)`, `Controller Component`, `Migration Credential Utils`, `OpenStack Client`, `PCD Auth & Keystone SDK`, `OpenStack Cinder Operations`, `vpwned vCenter gRPC Target`, `RBAC Roles & CRD Docs`, `Monitoring Stack (Alertmanager)`, `VMwareMachine API Types`, `OpenstackCreds API Types`, `vpwned gRPC Gateway`, `OpenStack Component`, `vpwned Update Response Protobuf`, `vpwned gRPC Server (Storage)`, `Community 293`, `CRD API Types`, `Mock / Test Double`, `CRD API Types`, `Mock / Test Double`, `Utilities`, `CRD API Types`, `CRD API Types`, `OpenStack Component`, `VMware Component`, `Component 80`, `Keystone Auth`, `Protobuf Service`, `Controller Component`, `Controller Component`, `Test Utilities`, `Test Utilities`, `Utilities`, `PCD Integration`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
 - **Why does `Info` connect `Controller Component` to `ESXi Migration Reconciler`, `Controller Component`, `Component 74`, `Component 42`, `BM Mock Provider`, `VMware Component`, `RBAC Roles & CRD Docs`, `Protobuf Service`, `ESXi SSH Client`, `virt-v2v Mock Operations`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
-- **Why does `PrintLog()` connect `OpenStack Cinder Operations` to `MigrationPlan API Types`, `Community 770`, `Controller Component`, `Community 294`, `Migration Credential Utils`, `vpwned SDK Targets`, `Community 774`, `Keystone Auth`, `vpwned gRPC Gateway`?**
-  _High betweenness centrality (0.018) - this node is a cross-community bridge._
+  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `getHTTPServer()` connect `Component 74` to `Keystone Auth`, `Protobuf Service`, `Protobuf Service`, `VMware Component`, `Component 247`, `Test Utilities`, `Utilities`, `virt-v2v Mock Operations`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **Are the 105 inferred relationships involving `Contains()` (e.g. with `.discoverDatastores()` and `.moveVMToFolder()`) actually correct?**
   _`Contains()` has 105 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 65 inferred relationships involving `PrintLog()` (e.g. with `.addUdevRulesForUbuntu()` and `.CheckCutoverOptions()`) actually correct?**
   _`PrintLog()` has 65 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `feature_directory`, `RawExtension`, `LocalObjectReference` to the rest of the system?**
-  _1789 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `@emotion/react`, `@emotion/styled`, `@mui/icons-material` to the rest of the system?**
+  _1800 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `vpwned Upgrade & Version` be split into smaller, more focused modules?**
   _Cohesion score 0.05773726040205704 - nodes in this community are weakly interconnected._

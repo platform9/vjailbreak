@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { ActionButton, Banner, Section, SectionHeader } from 'src/components'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
-import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
+import { useMigrationsQuery, MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
+import { launchBucketMigration, scaleAgentsForTrigger } from '../utils/launchBucket'
 import { useClusterData } from 'src/features/migration/hooks/useClusterData'
 import { useInventoryVms } from '../hooks/useInventoryVms'
 import { deriveBucketStatus } from '../utils/bucketStatus'
@@ -70,6 +72,9 @@ export default function InventoryPage() {
   const [planSelection, setPlanSelection] = useState<string[] | null>(null)
   const [agentCount, setAgentCount] = useState(0)
   const [scheduleMode, setScheduleMode] = useState<TriggerScheduleMode>('now')
+  const [confirming, setConfirming] = useState(false)
+  const [triggerError, setTriggerError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const showNoCredential = !data.isLoading && !data.credName
   const bucketNames = useMemo(() => data.buckets.map((b) => b.metadata.name), [data.buckets])
@@ -222,12 +227,32 @@ export default function InventoryPage() {
     setPlanSelection(names)
   }
 
-  const handlePlanConfirm = () => {
-    // Phase 9/10: scale VjailbreakNode workers toward `agentCount`, then compile the selected
-    // buckets — in `orderedBuckets` order — into MigrationPlan(s) + a RollingMigrationPlan
-    // (existing CRDs, unchanged workflow). `scheduleMode === 'now'` overrides per-bucket
-    // schedules (FR-022); 'scheduled' honors each bucket's `spec.schedule`.
-    setPlanSelection(null)
+  const handlePlanConfirm = async () => {
+    // Scale agents toward `agentCount`, then turn each selected bucket — in `orderedBuckets`
+    // (success-first) order — into the SAME objects the Migration Form creates (NetworkMapping,
+    // StorageMapping, MigrationTemplate, MigrationPlan). `scheduleMode === 'now'` overrides each
+    // bucket's stored schedule (FR-022); 'scheduled' honors the per-bucket dataCopyStart.
+    setConfirming(true)
+    setTriggerError(null)
+    const scheduleNow = scheduleMode === 'now'
+    try {
+      await scaleAgentsForTrigger(agentCount) // helper accounts for the master's own agent.
+    } catch (err) {
+      // Non-fatal: agents can be scaled later; surface but continue to launch migrations.
+      console.error('Agent scale-up failed', err)
+    }
+    try {
+      for (const bucket of orderedBuckets) {
+        await launchBucketMigration(bucket, { scheduleNow, pcdData })
+      }
+      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
+      setConfirming(false)
+      setPlanSelection(null)
+      navigate('/dashboard/migrations')
+    } catch (err) {
+      setConfirming(false)
+      setTriggerError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const triggerAction =
@@ -304,7 +329,11 @@ export default function InventoryPage() {
 
       <TriggerPlanDialog
         open={Boolean(planSelection)}
-        onClose={() => setPlanSelection(null)}
+        onClose={() => {
+          if (confirming) return
+          setTriggerError(null)
+          setPlanSelection(null)
+        }}
         selectedCount={selectedBuckets.length}
         totalVms={totalSelectedVms}
         recommendation={recommendation}
@@ -313,6 +342,8 @@ export default function InventoryPage() {
         orderedBuckets={orderedBuckets}
         scheduleMode={scheduleMode}
         onScheduleModeChange={setScheduleMode}
+        confirming={confirming}
+        error={triggerError}
         onConfirm={handlePlanConfirm}
       />
     </Box>

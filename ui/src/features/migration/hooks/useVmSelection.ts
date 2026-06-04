@@ -97,13 +97,29 @@ export function useVmSelection({
 
   // Sync selection to form on any change
   useEffect(() => {
+    // Grid not loaded yet — there is nothing to sync, and pushing an empty selection would
+    // wipe a form that was seeded with VMs (e.g. the bucket editor), momentarily emptying the
+    // derived VMware networks/datastores and making the mapping step render blank.
+    if (vmsWithFlavor.length === 0) return
+    // Bucket editor: a pre-selection is still pending (names not yet matched to grid rows).
+    // Don't clobber the seeded VMs — and their networks/datastores — with an empty selection,
+    // or the saved network/storage mappings appear to "vanish" on reopen until the grid catches up.
+    if (initialSelectedVmNames && initialSelectedVmNames.length > 0 && !seededRef.current) return
+
     const selectedVmData = vmsWithFlavor.filter((vm) => selectedVMs.has(vm.id))
     syncSelectedVmSelection(selectedVmData)
 
     if (selectedVmData.length > 0 && rdmConfigurations.length > 0) {
       syncRdmConfigurations(rdmConfigurations)
     }
-  }, [vmsWithFlavor, selectedVMs, rdmConfigurations, syncSelectedVmSelection, syncRdmConfigurations])
+  }, [
+    vmsWithFlavor,
+    selectedVMs,
+    rdmConfigurations,
+    syncSelectedVmSelection,
+    syncRdmConfigurations,
+    initialSelectedVmNames
+  ])
 
   const handleVmSelection = (selectedRowIds: GridRowSelectionModel) => {
     const newSelection = new Set<string>(selectedRowIds as string[])
