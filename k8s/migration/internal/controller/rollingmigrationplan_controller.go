@@ -383,47 +383,21 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 		message = "Preparing for migration"
 	}
 
-	// Update the status if it has changed
-	// Build new migrated and failed VMs lists
-	newMigratedVMs := []string{}
-	newFailedVMs := []string{}
-
-	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
-		for _, vmName := range cluster.VMSequence {
-			vmMigration, err := utils.GetVMMigration(ctx, r.Client, vmName.VMName, scope.RollingMigrationPlan)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					log.Info("VMMigration not found, skipping", "vm", vmName.VMName, "error", err)
-					continue
-				}
-				return false, errors.Wrap(err, "failed to get VMMigration")
-			}
-			if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodSucceeded {
-				newMigratedVMs = append(newMigratedVMs, vmName.VMName)
-			} else if corev1.PodPhase(vmMigration.Status.Phase) == corev1.PodFailed {
-				newFailedVMs = append(newFailedVMs, vmName.VMName)
-			}
-		}
-	}
-
-	// Check if any status fields have changed
-	migratedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.MigratedVMs, newMigratedVMs)
-	failedVMsChanged := !utils.StringSlicesEqual(scope.RollingMigrationPlan.Status.FailedVMs, newFailedVMs)
+	// Only update VMMigrationsPhase and Message — MigratedVMs/FailedVMs are owned by
+	// UpdateRollingMigrationPlanStatus which looks up Migrations via MigrationPlan.Spec.VirtualMachines
+	// (vmid-keyed names). Recomputing them here from ClusterSequence display names would produce
+	// wrong Migration object names and always yield empty lists.
 	phaseChanged := scope.RollingMigrationPlan.Status.VMMigrationsPhase != string(currentPhase)
 	messageChanged := scope.RollingMigrationPlan.Status.Message != message
 
-	if phaseChanged || messageChanged || migratedVMsChanged || failedVMsChanged {
-		// Update status fields only if there are changes
+	if phaseChanged || messageChanged {
 		scope.RollingMigrationPlan.Status.VMMigrationsPhase = string(currentPhase)
 		scope.RollingMigrationPlan.Status.Message = message
-		scope.RollingMigrationPlan.Status.MigratedVMs = newMigratedVMs
-		scope.RollingMigrationPlan.Status.FailedVMs = newFailedVMs
 
 		if err := r.Status().Update(ctx, scope.RollingMigrationPlan); err != nil {
 			return false, errors.Wrap(err, "failed to update RollingMigrationPlan status")
 		}
-		log.Info("Updated RollingMigrationPlan status", "phase", currentPhase, "message", message,
-			"migratedVMsChanged", migratedVMsChanged, "failedVMsChanged", failedVMsChanged)
+		log.Info("Updated RollingMigrationPlan status", "vmMigrationsPhase", currentPhase, "message", message)
 		return true, nil
 	}
 
@@ -522,6 +496,14 @@ func (r *RollingMigrationPlanReconciler) ExecuteRollingMigrationPlan(ctx context
 			return false, errors.Wrap(err, "failed to update rolling migration plan status")
 		}
 		return false, nil
+	}
+
+	// All clusters succeeded — transition phase to Succeeded if not already set.
+	if scope.RollingMigrationPlan.Status.Phase != vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded {
+		if err := r.UpdateRollingMigrationPlanStatus(ctx, scope, vjailbreakv1alpha1.RollingMigrationPlanPhaseSucceeded,
+			"All cluster migrations completed successfully", "", ""); err != nil {
+			return false, errors.Wrap(err, "failed to update rolling migration plan status to succeeded")
+		}
 	}
 	return false, nil
 }
