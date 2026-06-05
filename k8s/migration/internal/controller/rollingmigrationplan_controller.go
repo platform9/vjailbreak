@@ -308,16 +308,32 @@ func (r *RollingMigrationPlanReconciler) aggregateAndUpdateMigrationPlanStatuses
 	var totalPlans, succeededPlans, failedPlans, runningPlans, waitingPlans int
 	var statusMessages []string
 
-	// Get all MigrationPlans associated with this RollingMigrationPlan
-	for _, planName := range scope.RollingMigrationPlan.Spec.VMMigrationPlans {
-		migrationPlan, err := utils.GetMigrationPlan(ctx, r.Client, planName)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// force update requeue, by sending true
-				return true, nil
-			}
-			return false, errors.Wrap(err, "failed to get migration plan")
+	// List MigrationPlans by label — more robust than spec.vMMigrationPlans which may
+	// be empty if the controller crashed before persisting the update.
+	mpList := &vjailbreakv1alpha1.MigrationPlanList{}
+	if err := r.List(ctx, mpList,
+		client.InNamespace(scope.RollingMigrationPlan.Namespace),
+		client.MatchingLabels{constants.RollingMigrationPlanLabel: scope.RollingMigrationPlan.Name},
+	); err != nil {
+		return false, errors.Wrap(err, "failed to list migration plans by label")
+	}
+
+	// Backfill spec.vMMigrationPlans from the label-based lookup so the early-return
+	// guard in ConvertVMSequenceToMigrationPlans works correctly going forward.
+	if len(mpList.Items) > 0 && len(scope.RollingMigrationPlan.Spec.VMMigrationPlans) == 0 {
+		names := make([]string, 0, len(mpList.Items))
+		for i := range mpList.Items {
+			names = append(names, mpList.Items[i].Name)
 		}
+		scope.RollingMigrationPlan.Spec.VMMigrationPlans = names
+		if err := r.Update(ctx, scope.RollingMigrationPlan); err != nil {
+			return false, errors.Wrap(err, "failed to backfill spec.vMMigrationPlans")
+		}
+	}
+
+	for i := range mpList.Items {
+		migrationPlan := &mpList.Items[i]
+		planName := migrationPlan.Name
 		totalPlans++
 
 		// Count statuses based on PodPhase
