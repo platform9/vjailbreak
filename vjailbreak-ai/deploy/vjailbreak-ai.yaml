@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vjailbreak-ai-sa
+  namespace: migration-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vjailbreak-ai-data
+  namespace: migration-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ai
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ai
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+      serviceAccountName: vjailbreak-ai-sa
+      containers:
+        - name: vjailbreak-ai
+          image: ${AI_IMG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: anthropic_api_key
+                  optional: true
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: admin_api_key
+                  optional: true
+            - name: CHROMA_PATH
+              value: /data/chroma
+            - name: CONTEXT_PATH
+              value: /data/context.md
+            - name: ALLOWED_ORIGINS
+              value: "http://vjailbreak-ui-service.migration-system.svc.cluster.local"
+          volumeMounts:
+            - name: ai-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: ai-data
+          persistentVolumeClaim:
+            claimName: vjailbreak-ai-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ai
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
