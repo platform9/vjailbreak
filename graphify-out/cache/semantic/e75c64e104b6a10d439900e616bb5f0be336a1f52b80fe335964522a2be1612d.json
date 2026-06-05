@@ -1,1 +1,0 @@
-{"nodes": [{"id": "prometheusagent_crd", "label": "PrometheusAgent CRD (monitoring.coreos.com)", "file_type": "document", "source_file": "k8s/kube-prometheus/manifests/setup/0prometheusagentCustomResourceDefinition.yaml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

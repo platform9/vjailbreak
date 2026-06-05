@@ -160,6 +160,12 @@ func CanEnterMaintenanceMode(ctx context.Context, scope *scope.RollingMigrationP
 		}
 
 		for _, vm := range vms {
+			// Skip VMs that are part of the migration plan — they are expected to
+			// be powered off (cold migration) and will be migrated via disk copy,
+			// not vMotioned off the host.
+			if _, isMigrationVM := config.MigrationVMNames[vm.Name]; isMigrationVM {
+				continue
+			}
 			if reason := CheckVMForMaintenanceMode(vm); reason != "" {
 				blockedVMs = append(blockedVMs, reason)
 			}
