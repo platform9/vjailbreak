@@ -50,13 +50,13 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: vjailbreak-ai-secret
-                  key: anthropic_api_key
+                  key: api-key
                   optional: true
             - name: ADMIN_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: vjailbreak-ai-secret
-                  key: admin_api_key
+                  key: admin-key
                   optional: true
             - name: CHROMA_PATH
               value: /data/chroma

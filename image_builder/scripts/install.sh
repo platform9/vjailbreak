@@ -217,6 +217,16 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 
+  # Auto-generate vjailbreak-ai admin key and store in secret.
+  # ANTHROPIC_API_KEY is left empty — user sets it via Settings UI.
+  VJAILBREAK_AI_ADMIN_KEY=$(openssl rand -hex 32)
+  kubectl create secret generic vjailbreak-ai-secret \
+    -n migration-system \
+    --from-literal=admin-key="${VJAILBREAK_AI_ADMIN_KEY}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  check_command "Creating vjailbreak-ai-secret"
+  log "vjailbreak-ai admin key generated and stored in secret"
+
   log "K3s master setup completed"
 
   # Start the rsync daemon
