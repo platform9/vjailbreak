@@ -144,12 +144,9 @@ def parse_claude_response(
             result = json.loads(json_match.group())
             result["raw_response"] = raw
             confidence = result.get("confidence", "none")
-            if confidence in ("none", "low"):
-                result["github_issue"] = build_github_issue(
-                    migration_name, conditions, error_snippet
-                )
-            else:
-                result["github_issue"] = {"should_open": False}
+            github_issue = build_github_issue(migration_name, conditions, error_snippet)
+            github_issue["should_open"] = confidence in ("none", "low")
+            result["github_issue"] = github_issue
             return result
         except json.JSONDecodeError:
             pass
