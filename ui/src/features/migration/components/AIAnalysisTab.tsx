@@ -194,16 +194,19 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
               </List>
             </>
           )}
-          {result.github_issue?.should_open && result.github_issue.prefill_url && (
+          {result.github_issue?.prefill_url && (
             <Box sx={{ mt: 1 }}>
-              <Link
+              <Button
+                size="small"
+                variant="outlined"
+                endIcon={<OpenInNewIcon />}
+                component="a"
                 href={result.github_issue.prefill_url}
                 target="_blank"
                 rel="noopener"
-                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
               >
-                Open GitHub Issue <OpenInNewIcon fontSize="inherit" />
-              </Link>
+                Open GitHub Issue
+              </Button>
             </Box>
           )}
         </Alert>
@@ -251,17 +254,20 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
             )}
 
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Link
+              <Button
+                size="small"
+                variant="outlined"
+                endIcon={<OpenInNewIcon />}
+                component="a"
                 href={
                   result.github_issue?.prefill_url ||
                   `https://github.com/platform9/vjailbreak/issues/new?title=${encodeURIComponent(`Migration failure: ${migrationName}`)}`
                 }
                 target="_blank"
                 rel="noopener"
-                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}
               >
-                Still having issues? Open a GitHub Issue <OpenInNewIcon sx={{ fontSize: '0.875rem' }} />
-              </Link>
+                Open GitHub Issue
+              </Button>
             </Box>
           </>
         )
