@@ -152,6 +152,20 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		logrus.Errorf("cannot start handler for StorageArray")
 	}
 
+	// AI analysis endpoints
+	aiK8sClient, err := CreateInClusterClient()
+	if err != nil {
+		logrus.Warnf("ai handler: failed to create k8s client (non-cluster env): %v", err)
+	} else {
+		rawK8s, rawErr := CreateRawK8sClient()
+		if rawErr != nil {
+			logrus.Warnf("ai handler: failed to create raw k8s client: %v", rawErr)
+		}
+		aiHandler := NewAIAnalyzeHandler(aiK8sClient, rawK8s)
+		mux.Handle("/vpw/v1/ai/analyze", aiHandler)
+		mux.Handle("/vpw/v1/ai/key", &aiKeyHandler{k8sClient: aiK8sClient})
+	}
+
 	// Wrap gatewayMuxer to handle all other routes
 	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
 		// Skip VDDK endpoints - they're already registered
@@ -171,6 +185,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// Skip k8s proxy - registered with its own prefix handler above
 		if strings.HasPrefix(r.URL.Path, "/vpw/v1/k8s/") {
 			HandleK8sProxy(w, r)
+			return
+		}
+		// Skip AI endpoints - registered with their own handlers above
+		if strings.HasPrefix(r.URL.Path, "/vpw/v1/ai/") {
+			http.NotFound(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)

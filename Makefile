@@ -25,6 +25,7 @@ export UI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ui:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/v2v-helper:${TAG}
 export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
+export AI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ai:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
 export KUBECONFIG ?= ~/.kube/config
 export CONTAINER_TOOL ?= docker
@@ -71,6 +72,10 @@ generate-manifests: setup-hooks vjail-controller ui
 .PHONY: build-vpwned
 build-vpwned: setup-hooks
 	make -C pkg/vpwned docker-build
+
+.PHONY: vjailbreak-ai
+vjailbreak-ai: setup-hooks
+	docker build --platform linux/amd64 -t $(AI_IMG) vjailbreak-ai/
 
 build-installer: setup-hooks
 	make -C k8s/migration/ build-installer 
