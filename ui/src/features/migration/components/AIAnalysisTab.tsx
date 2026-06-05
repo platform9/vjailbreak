@@ -249,6 +249,19 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
                 ))}
               </Box>
             )}
+
+            {result.github_issue?.prefill_url && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Link
+                  href={result.github_issue.prefill_url}
+                  target="_blank"
+                  rel="noopener"
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}
+                >
+                  Still having issues? Open a GitHub Issue <OpenInNewIcon sx={{ fontSize: '0.875rem' }} />
+                </Link>
+              </Box>
+            )}
           </>
         )
       )}
