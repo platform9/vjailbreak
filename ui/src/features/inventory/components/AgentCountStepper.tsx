@@ -49,7 +49,7 @@ export default function AgentCountStepper({
       </IconButton>
 
       <Typography variant="body2" color="text.secondary">
-        agent{value === 1 ? '' : 's'} to scale up (max {max})
+        agent{value === 1 ? '' : 's'} to scale up
       </Typography>
     </Box>
   )

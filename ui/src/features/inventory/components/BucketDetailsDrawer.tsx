@@ -31,6 +31,7 @@ import {
 } from 'src/components'
 import type { FormValues } from 'src/features/migration/types'
 import { CUTOVER_TYPES } from 'src/features/migration/constants'
+import type { SourceDataItem, PcdDataItem } from 'src/features/migration/hooks/useClusterData'
 import { DEFAULT_BUCKET_LABEL } from '../constants'
 import { bucketStatusLabel, bucketStatusTone, getBucketStatus } from '../utils/bucketStatus'
 import type { BucketStatus, MigrationBucket } from '../types'
@@ -39,6 +40,10 @@ export interface BucketDetailsDrawerProps {
   open: boolean
   bucket?: MigrationBucket
   statusOverride?: BucketStatus
+  /** VMware source clusters, to resolve a stored source-cluster id → its display name. */
+  sourceData?: SourceDataItem[]
+  /** PCD destination clusters, to resolve a stored pcdCluster id → its name. */
+  pcdData?: PcdDataItem[]
   onClose: () => void
   onEdit: (bucket: MigrationBucket) => void
   onDuplicate: (bucket: MigrationBucket) => void
@@ -101,6 +106,8 @@ export default function BucketDetailsDrawer({
   open,
   bucket,
   statusOverride,
+  sourceData = [],
+  pcdData = [],
   onClose,
   onEdit,
   onDuplicate,
@@ -115,10 +122,48 @@ export default function BucketDetailsDrawer({
   const title = isDefault ? DEFAULT_BUCKET_LABEL : bucket?.metadata.name ?? 'Bucket'
   const status = bucket ? statusOverride ?? getBucketStatus(bucket) : 'NotMigrated'
 
+  // The planner migrates every bucket with the "NO CLUSTER" source (cross-cluster, all VMs) and the
+  // "NO CLUSTER" destination — the same as the default bucket. So always show NO CLUSTER, ignoring
+  // any (often stale) real cluster baked into a bucket by an external tool. Only fall back to
+  // resolving the stored id when no NO CLUSTER entry exists in the loaded cluster data.
+  const sourceClusterLabel = useMemo(() => {
+    for (const dc of sourceData) {
+      const noC = dc.clusters.find(
+        (c) =>
+          c.name.toLowerCase().startsWith('no-cluster-') ||
+          c.displayName?.toUpperCase() === 'NO CLUSTER'
+      )
+      if (noC) return noC.displayName || noC.name
+    }
+    // Fallback: resolve the stored id to a readable name (cred:dc:cluster, possibly with a missing
+    // datacenter segment) — never show the full mapping id.
+    const raw = config.sourceCluster || (fv.vmwareCluster as string | undefined)
+    if (!raw) return 'N/A'
+    const seg = raw.split(':').pop() || raw
+    for (const dc of sourceData) {
+      const c = dc.clusters.find((cl) => cl.id === raw || cl.name === seg || cl.displayName === seg)
+      if (c) return c.displayName || c.name
+    }
+    return seg
+  }, [config.sourceCluster, fv.vmwareCluster, sourceData])
+
+  const pcdClusterLabel = useMemo(() => {
+    const noC = pcdData.find(
+      (p) =>
+        p.id.toLowerCase().startsWith('no-cluster-') ||
+        p.name?.toLowerCase().startsWith('no-cluster-') ||
+        p.name?.toUpperCase() === 'NO CLUSTER'
+    )
+    if (noC) return noC.name
+    const raw = config.pcdCluster || (fv.pcdCluster as string | undefined)
+    if (!raw) return 'N/A'
+    return pcdData.find((p) => p.id === raw || p.name === raw)?.name || raw
+  }, [config.pcdCluster, fv.pcdCluster, pcdData])
+
   const overviewItems = useMemo(
     () => [
-      { label: 'Source cluster', value: config.sourceCluster || 'N/A' },
-      { label: 'Destination (PCD) cluster', value: config.pcdCluster || 'N/A' },
+      { label: 'Source cluster', value: sourceClusterLabel },
+      { label: 'Destination (PCD) cluster', value: pcdClusterLabel },
       { label: 'VMs', value: String(bucket?.spec.vms.length ?? 0) },
       { label: 'Migration type', value: (config.dataCopyMethod || fv.dataCopyMethod || 'N/A') as string },
       { label: 'Storage copy method', value: (fv.storageCopyMethod as string) || 'normal' },
@@ -129,7 +174,7 @@ export default function BucketDetailsDrawer({
           : 'Not scheduled'
       }
     ],
-    [config.sourceCluster, config.pcdCluster, config.dataCopyMethod, fv.dataCopyMethod, fv.storageCopyMethod, bucket?.spec.vms.length, bucket?.spec.schedule]
+    [sourceClusterLabel, pcdClusterLabel, config.dataCopyMethod, fv.dataCopyMethod, fv.storageCopyMethod, bucket?.spec.vms.length, bucket?.spec.schedule]
   )
 
   const advancedItems = useMemo(() => {

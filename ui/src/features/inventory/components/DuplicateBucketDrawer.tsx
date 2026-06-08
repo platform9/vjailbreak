@@ -117,9 +117,6 @@ export default function DuplicateBucketDrawer({
             getOptionValue={(vm) => vm.name}
             getOptionLabel={(vm) => vm.name}
             getOptionDisabled={(vm) => isVmBlocked(vm.name, bucketIdByVm)}
-            renderOptionLabel={(vm) =>
-              isVmBlocked(vm.name, bucketIdByVm) ? `${vm.name} (already in a bucket)` : vm.name
-            }
           />
 
           {validationError ? (

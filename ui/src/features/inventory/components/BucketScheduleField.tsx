@@ -16,7 +16,7 @@ export interface BucketScheduleFieldProps {
  */
 export default function BucketScheduleField({
   name = 'schedule',
-  label = 'Schedule (optional)',
+  label = 'Schedule',
   disabled
 }: BucketScheduleFieldProps) {
   return (
@@ -26,7 +26,8 @@ export default function BucketScheduleField({
         label={label}
         disabled={disabled}
         disablePast
-        labelHelperText="Migration starts no earlier than this time. Past times are disabled."
+        // Portal the calendar to the body so it isn't clipped/misaligned inside the narrow dialog.
+        popperDisablePortal={false}
         placeholder="Select a future date & time"
       />
     </LocalizationProvider>

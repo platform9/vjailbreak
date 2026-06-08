@@ -147,12 +147,27 @@ export default function MigrationConfigForm({
     enabled: vmwareCredsValidated && openstackCredsValidated
   })
 
+  // Bucket-editor auto-defaults guards (declared here so the reseed effect below can reset them).
+  // Each resolves a value once per OPEN, not once per mount: the drawer (EditBucketDrawer) is
+  // rendered unconditionally and stays mounted across close/reopen and across editing different
+  // buckets, so these MUST be reset on every (re)open or only the first bucket would be defaulted.
+  const clusterDefaultedRef = useRef(false)
+  const pcdDefaultedRef = useRef(false)
+  const netDefaultedRef = useRef(false)
+  const storageDefaultedRef = useRef(false)
+
   // Re-seed when the form (re)opens, so editing a bucket shows its saved config.
   const wasOpen = useRef(false)
   useEffect(() => {
     if (open && !wasOpen.current) {
       setParams((seed ?? {}) as FormValues)
       setSelectedOptions(seedOptions ?? defaultMigrationOptions)
+      // Re-arm the auto-default guards for this open so every bucket (not just the first opened
+      // in a still-mounted drawer) gets its source/destination/mappings resolved.
+      clusterDefaultedRef.current = false
+      pcdDefaultedRef.current = false
+      netDefaultedRef.current = false
+      storageDefaultedRef.current = false
       form.reset({
         securityGroups: seed?.securityGroups ?? [],
         serverGroup: seed?.serverGroup ?? '',
@@ -238,53 +253,60 @@ export default function MigrationConfigForm({
   const theme = useTheme()
   const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
 
-  // Bucket-editor auto-defaults: resolve source cluster (from the first selected VM),
-  // destination cluster (first PCD), and network/storage mappings (each source → first target)
-  // from live data, only filling values that are missing or unresolved. Each runs once.
-  const clusterDefaultedRef = useRef(false)
-  const pcdDefaultedRef = useRef(false)
-  const netDefaultedRef = useRef(false)
-  const storageDefaultedRef = useRef(false)
-
+  // Bucket-editor auto-defaults: resolve source cluster, destination cluster, and network/storage
+  // mappings from live data. Source/destination are forced to NO CLUSTER (planner model); mappings
+  // are only filled when missing. Guarded by the refs above (re-armed on each open).
   useEffect(() => {
     if (!autoDefaults) return
 
-    // Source cluster ← the datacenter's "NO CLUSTER" pseudo-cluster, which surfaces every VM so
-    // a cross-cluster bucket can select all its VMs. Only set when missing/unresolved.
+    // Source cluster ← the datacenter's "NO CLUSTER" pseudo-cluster, which surfaces every VM so a
+    // cross-cluster bucket can select all its members. The planner always uses NO CLUSTER (cluster
+    // is not a meaningful per-bucket choice here, and a real source cluster would hide a bucket's
+    // cross-cluster VMs from the grid), so prefer it over any stored real cluster. Runs once per
+    // open; falls back to the stored-but-valid value, then the first cluster, only if NO CLUSTER
+    // can't be found.
     if (!clusterDefaultedRef.current && sourceData.length > 0) {
+      let noClusterId: string | undefined
+      for (const s of sourceData) {
+        const noC = s.clusters.find(
+          (c) =>
+            c.name.toLowerCase().startsWith('no-cluster-') ||
+            c.displayName?.toUpperCase() === 'NO CLUSTER'
+        )
+        if (noC) {
+          noClusterId = noC.id
+          break
+        }
+      }
       const validIds = new Set(sourceData.flatMap((s) => s.clusters.map((c) => c.id)))
-      if (!params.vmwareCluster || !validIds.has(params.vmwareCluster)) {
-        let noClusterId: string | undefined
-        for (const s of sourceData) {
-          const noC = s.clusters.find(
-            (c) =>
-              c.name.toLowerCase().startsWith('no-cluster-') ||
-              c.displayName?.toUpperCase() === 'NO CLUSTER'
-          )
-          if (noC) {
-            noClusterId = noC.id
-            break
-          }
-        }
-        const resolvedId = noClusterId ?? sourceData[0]?.clusters[0]?.id
-        if (resolvedId) {
-          clusterDefaultedRef.current = true
-          getParamsUpdater('vmwareCluster')(resolvedId)
-        }
-      } else {
+      const resolvedId =
+        noClusterId ??
+        (params.vmwareCluster && validIds.has(params.vmwareCluster)
+          ? params.vmwareCluster
+          : sourceData[0]?.clusters[0]?.id)
+      if (resolvedId) {
         clusterDefaultedRef.current = true
+        if (resolvedId !== params.vmwareCluster) getParamsUpdater('vmwareCluster')(resolvedId)
       }
     }
 
-    // Destination ← first PCD cluster.
+    // Destination ← the "NO CLUSTER" PCD cluster (same model as the default bucket, whose
+    // destination is the no-cluster PCD). Prefer it over a stored real cluster so every bucket
+    // lands on NO CLUSTER on both sides. Runs once per open; falls back to the stored-but-valid
+    // value, then the first PCD, only if no NO CLUSTER entry exists.
     if (!pcdDefaultedRef.current && pcdData.length > 0) {
+      const noClusterPcd = pcdData.find(
+        (p) =>
+          p.id.toLowerCase().startsWith('no-cluster-') ||
+          p.name?.toLowerCase().startsWith('no-cluster-') ||
+          p.name?.toUpperCase() === 'NO CLUSTER'
+      )
       const validPcd = new Set(pcdData.map((p) => p.id))
-      if (!params.pcdCluster || !validPcd.has(params.pcdCluster)) {
-        pcdDefaultedRef.current = true
-        getParamsUpdater('pcdCluster')(pcdData[0].id)
-      } else {
-        pcdDefaultedRef.current = true
-      }
+      const resolvedPcd =
+        noClusterPcd?.id ??
+        (params.pcdCluster && validPcd.has(params.pcdCluster) ? params.pcdCluster : pcdData[0].id)
+      pcdDefaultedRef.current = true
+      if (resolvedPcd !== params.pcdCluster) getParamsUpdater('pcdCluster')(resolvedPcd)
     }
 
     // Network mappings ← each source network → first PCD network.

@@ -56,11 +56,10 @@ export default function ScheduleBucketDialog({
       <DialogTitle>Schedule “{title}”</DialogTitle>
       <DialogContent>
         <DialogContentText variant="body2" sx={{ mb: 2 }}>
-          Set when this bucket should migrate. This is recorded on the bucket for planning; a
-          manual trigger always takes priority. Leave empty to clear the schedule.
+          The migrations for the VMs in this bucket will be scheduled at your chosen time.
         </DialogContentText>
         <FormProvider {...form}>
-          <BucketScheduleField name="schedule" label="Schedule (optional)" disabled={submitting} />
+          <BucketScheduleField name="schedule" label="Schedule" disabled={submitting} />
         </FormProvider>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -68,7 +67,7 @@ export default function ScheduleBucketDialog({
           Cancel
         </ActionButton>
         <ActionButton tone="primary" onClick={handleSave} loading={submitting}>
-          Save schedule
+          Save
         </ActionButton>
       </DialogActions>
     </Dialog>

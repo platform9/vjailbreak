@@ -61,28 +61,59 @@ export function useFilteredMappings({
   )
 
   useEffect(() => {
+    // Don't prune while the reference lists are still loading. An empty source or target list
+    // can't prove any mapping invalid, and writing the empty filtered result back would wipe
+    // mappings that were seeded before the lists arrived (the bucket editor preloads saved
+    // mappings, then `availableVmwareNetworks`/PCD networks resolve async). Prune only once both
+    // lists are present.
+    if (vmwareNetworks.length === 0 || openstackNetworkNames.length === 0) return
     if (filteredNetworkMappings.length !== params.networkMappings?.length) {
       onChange('networkMappings')(filteredNetworkMappings)
     }
-  }, [filteredNetworkMappings, onChange, params.networkMappings])
+  }, [
+    filteredNetworkMappings,
+    onChange,
+    params.networkMappings,
+    vmwareNetworks.length,
+    openstackNetworkNames.length
+  ])
 
   useEffect(() => {
+    // See the networks effect above: skip pruning until both reference lists have loaded so
+    // seeded storage mappings aren't cleared during load.
+    if (vmWareStorage.length === 0 || openstackStorage.length === 0) return
     if (
       storageCopyMethod === 'normal' &&
       filteredStorageMappings.length !== params.storageMappings?.length
     ) {
       onChange('storageMappings')(filteredStorageMappings)
     }
-  }, [filteredStorageMappings, onChange, params.storageMappings, storageCopyMethod])
+  }, [
+    filteredStorageMappings,
+    onChange,
+    params.storageMappings,
+    storageCopyMethod,
+    vmWareStorage.length,
+    openstackStorage.length
+  ])
 
   useEffect(() => {
+    // See the networks effect above: skip pruning until both reference lists have loaded.
+    if (vmWareStorage.length === 0 || arrayCredsNames.length === 0) return
     if (
       storageCopyMethod === 'StorageAcceleratedCopy' &&
       filteredArrayCredsMappings.length !== params.arrayCredsMappings?.length
     ) {
       onChange('arrayCredsMappings')(filteredArrayCredsMappings)
     }
-  }, [filteredArrayCredsMappings, onChange, params.arrayCredsMappings, storageCopyMethod])
+  }, [
+    filteredArrayCredsMappings,
+    onChange,
+    params.arrayCredsMappings,
+    storageCopyMethod,
+    vmWareStorage.length,
+    arrayCredsNames.length
+  ])
 
   // Auto-map datastores to ArrayCreds based on dataStore information in ArrayCreds status
   useEffect(() => {
