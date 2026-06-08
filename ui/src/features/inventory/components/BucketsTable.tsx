@@ -208,7 +208,7 @@ export default function BucketsTable({
       columns={columns}
       getRowId={(row) => row.metadata.name}
       loading={loading}
-      autoHeight
+      sx={{ height: '100%' }}
       emptyMessage="No buckets yet. A default bucket is created automatically once eligible VMs are discovered."
       initialState={{
         pagination: { paginationModel: { page: 0, pageSize: 25 } }

@@ -148,20 +148,20 @@ export async function launchBucketMigration(
 }
 
 /**
- * Scale the migration-agent worker pool UP TO `targetAgents` total agents, reusing the master
- * node's image, flavor, and OpenStack credential (the same inputs the Scale-Up drawer uses).
+ * Scale up the migration-agent worker pool by creating exactly `newAgents` NEW worker agents,
+ * reusing the master node's image, flavor, and OpenStack credential (the same inputs the Scale-Up
+ * drawer uses).
  *
- * The master node itself runs one agent, so the worker target is `targetAgents - 1`. We create
- * only the delta over the workers that already exist, and never scale down. No-op when no new
- * workers are needed.
+ * `newAgents` is the count shown in the Plan dialog — the recommendation already accounts for the
+ * master's and existing agents' free capacity, so we create that many new workers verbatim (no
+ * master/existing subtraction). The Agents table then grows by exactly `newAgents`. Never scales
+ * down; no-op when zero.
  */
-export async function scaleAgentsForTrigger(targetAgents: number): Promise<void> {
-  const desiredWorkers = Math.max(0, targetAgents - 1)
+export async function scaleAgentsForTrigger(newAgents: number): Promise<void> {
+  const toCreate = Math.max(0, Math.floor(newAgents))
+  if (toCreate <= 0) return
   const nodes = (await getNodes()) ?? []
   const master = nodes.find((n) => n.spec?.nodeRole === 'master')
-  const existingWorkers = nodes.filter((n) => n.spec?.nodeRole !== 'master').length
-  const toCreate = desiredWorkers - existingWorkers
-  if (toCreate <= 0) return
   if (!master?.spec?.openstackImageID || !master?.spec?.openstackFlavorID) {
     throw new Error('Cannot scale agents: master node image/flavor not found.')
   }

@@ -1,5 +1,5 @@
 import type { OpenstackCreds } from 'src/api/openstack-creds/model'
-import type { SourceDataItem } from 'src/features/migration/hooks/useClusterData'
+import type { SourceDataItem, PcdDataItem } from 'src/features/migration/hooks/useClusterData'
 import type { BucketMapping, MigrationBucketConfig } from '../api/migration-buckets/model'
 import type { InventoryVm } from '../types'
 
@@ -21,6 +21,22 @@ export const findNoClusterSourceClusterId = (
   }
   return undefined
 }
+
+/**
+ * Find the "NO CLUSTER" destination PCD cluster id (a PCDCluster whose name marks it as the
+ * no-cluster placement). Mirrors {@link findNoClusterSourceClusterId} for the destination side so
+ * the default bucket and the editor's autoDefaults agree on the destination. Returns undefined if
+ * none exists (caller falls back to the first PCD).
+ */
+export const findNoClusterPcdClusterId = (
+  pcdData: Pick<PcdDataItem, 'id' | 'name'>[]
+): string | undefined =>
+  pcdData.find(
+    (p) =>
+      p.id.toLowerCase().startsWith('no-cluster-') ||
+      p.name?.toLowerCase().startsWith('no-cluster-') ||
+      p.name?.toUpperCase() === 'NO CLUSTER'
+  )?.id
 
 const distinct = (values: (string | undefined)[]): string[] =>
   Array.from(new Set(values.filter((v): v is string => Boolean(v))))

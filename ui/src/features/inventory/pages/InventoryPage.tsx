@@ -12,7 +12,11 @@ import { useClusterData } from 'src/features/migration/hooks/useClusterData'
 import { useInventoryVms } from '../hooks/useInventoryVms'
 import { deriveBucketStatus } from '../utils/bucketStatus'
 import type { BucketStatus } from '../types'
-import { buildBucketConfigDefaults, findNoClusterSourceClusterId } from '../utils/bucketDefaults'
+import {
+  buildBucketConfigDefaults,
+  findNoClusterSourceClusterId,
+  findNoClusterPcdClusterId
+} from '../utils/bucketDefaults'
 import { selectDefaultBucketVms } from '../utils/defaultBucketSelection'
 import { DEFAULT_BUCKET_NAME, DEFAULT_AGENT_PARAMS, BUCKET_TRIGGERED_LABEL } from '../constants'
 import { recommendAgents } from '../utils/agentRecommendation'
@@ -93,7 +97,12 @@ export default function InventoryPage() {
 
   // Stats strip counts.
   const totalVms = data.vms.length
-  const inBuckets = useMemo(() => Object.keys(data.bucketIdByVm).length, [data.bucketIdByVm])
+  // Count discovered VMs that belong to a bucket (not index keys): a bucket member can appear under
+  // several identifiers, and two VMs can share a display name — counting keys mis-counts both ways.
+  const inBuckets = useMemo(
+    () => data.vms.filter((vm) => Boolean(data.bucketIdByVm[vm.name])).length,
+    [data.vms, data.bucketIdByVm]
+  )
   const unbucketed = Math.max(0, totalVms - inBuckets)
 
   // Live bucket status (T049 / FR-017): derive from real Migration objects of member VMs.
@@ -189,7 +198,9 @@ export default function InventoryPage() {
         isDefault: true,
         config: {
           sourceCluster: sourceClusterId,
-          pcdCluster: pcdData[0].id,
+          // Destination = NO CLUSTER PCD (consistent with the editor's autoDefaults); fall back to
+          // the first PCD only if no no-cluster entry exists.
+          pcdCluster: findNoClusterPcdClusterId(pcdData) ?? pcdData[0].id,
           networkMappings: firstNetwork
             ? sourceNetworks.map((source) => ({ source, target: firstNetwork }))
             : [],
@@ -295,7 +306,9 @@ export default function InventoryPage() {
   }
 
   return (
-    <Box sx={{ p: 3, height: '100%', width: '100%', overflow: 'auto' }}>
+    <Box
+      sx={{ p: 3, height: '100%', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+    >
       {showNoCredential ? (
         <Banner
           variant="info"
@@ -305,7 +318,7 @@ export default function InventoryPage() {
           onAction={() => navigate('/dashboard/credentials/vm')}
         />
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
           <InventoryStatsStrip
             totalVms={totalVms}
             inBuckets={inBuckets}
@@ -315,17 +328,21 @@ export default function InventoryPage() {
             credName={data.credName}
           />
 
-          <BucketsTable
-            buckets={data.buckets}
-            statusByBucket={statusByBucket}
-            loading={data.isLoading}
-            onRefresh={handleRefresh}
-            onOpenDetails={setDetailsBucket}
-            onDelete={setDeleteTarget}
-            onTrigger={() => setTriggerOpen(true)}
-            triggerDisabled={data.buckets.length === 0}
-            triggerDisabledReason="Create a bucket before triggering migrations."
-          />
+          {/* flex:1 + minHeight:0 bounds the grid so its pagination footer stays pinned at the
+              bottom (the grid scrolls internally) instead of growing with the row count. */}
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <BucketsTable
+              buckets={data.buckets}
+              statusByBucket={statusByBucket}
+              loading={data.isLoading}
+              onRefresh={handleRefresh}
+              onOpenDetails={setDetailsBucket}
+              onDelete={setDeleteTarget}
+              onTrigger={() => setTriggerOpen(true)}
+              triggerDisabled={data.buckets.length === 0}
+              triggerDisabledReason="Create a bucket before triggering migrations."
+            />
+          </Box>
         </Box>
       )}
 
@@ -333,6 +350,8 @@ export default function InventoryPage() {
         open={Boolean(detailsBucket)}
         bucket={detailsBucket ?? undefined}
         statusOverride={detailsBucket ? statusByBucket[detailsBucket.metadata.name] : undefined}
+        sourceData={sourceData}
+        pcdData={pcdData}
         onClose={() => setDetailsBucket(null)}
         onEdit={(bucket) => {
           setDetailsBucket(null)

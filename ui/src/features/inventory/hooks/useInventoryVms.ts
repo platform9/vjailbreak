@@ -76,13 +76,34 @@ export const useInventoryVms = (): InventoryData => {
     [bucketsQuery.data]
   )
 
+  // A bucket member may be stored as a display name OR a VM id/key depending on what created the
+  // bucket (the UI writes display names; some external tools write the VM id, e.g.
+  // "xfs-root-automation-7764"). Index every inventory VM by all the identifiers a bucket might
+  // hold so membership resolves consistently regardless of style.
+  const vmByAnyKey = useMemo<Record<string, InventoryVm>>(() => {
+    const map: Record<string, InventoryVm> = {}
+    // Display name is authoritative — register every name first so a synthetic id (vm.id is
+    // `${name}-${vmid}`) or machine name can never shadow a real VM's display name.
+    for (const vm of vms) map[vm.name] = vm
+    for (const vm of vms) {
+      if (!(vm.id in map)) map[vm.id] = vm
+      if (vm.vmwareMachineName && !(vm.vmwareMachineName in map)) map[vm.vmwareMachineName] = vm
+    }
+    return map
+  }, [vms])
+
   const bucketIdByVm = useMemo<BucketIdByVm>(() => {
     const index: BucketIdByVm = {}
     for (const bucket of buckets) {
-      for (const vmName of bucket.spec.vms) index[vmName] = bucket.metadata.name
+      for (const member of bucket.spec.vms) {
+        // Canonicalize to the display name when resolvable (dropdowns/greying key by name);
+        // otherwise keep the raw stored value so unresolved members still block.
+        const key = vmByAnyKey[member]?.name ?? member
+        index[key] = bucket.metadata.name
+      }
     }
     return index
-  }, [buckets])
+  }, [buckets, vmByAnyKey])
 
   return {
     vms,

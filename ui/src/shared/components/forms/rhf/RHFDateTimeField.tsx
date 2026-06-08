@@ -65,6 +65,12 @@ export type RHFDateTimeFieldProps = PickerProps & {
   labelHelperText?: FieldLabelProps['helperText']
   placeholder?: string
   onPickerError?: (error: unknown) => void
+  /**
+   * Whether the calendar popper stays in the DOM flow (true, default — preserves existing
+   * behavior) or portals to the body (false). Set false when the field lives inside a small or
+   * overflow-clipped container (e.g. a narrow dialog) so the calendar isn't clipped/misaligned.
+   */
+  popperDisablePortal?: boolean
 }
 
 export default function RHFDateTimeField({
@@ -82,6 +88,7 @@ export default function RHFDateTimeField({
   minDateTime,
   disablePast,
   shouldDisableTime: customShouldDisableTime,
+  popperDisablePortal = true,
   ...rest
 }: RHFDateTimeFieldProps) {
   const { control } = useFormContext()
@@ -128,7 +135,7 @@ export default function RHFDateTimeField({
               }}
               slotProps={{
                 popper: {
-                  disablePortal: true,
+                  disablePortal: popperDisablePortal,
                   placement: 'bottom-start'
                 },
                 textField: {
