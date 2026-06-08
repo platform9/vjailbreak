@@ -4,9 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	"github.com/vmware/govmomi/simulator"
+	"github.com/vmware/govmomi/vim25"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -248,4 +251,42 @@ func TestShouldSkipVMwareMachineReconciliation_WhenMigrationExistsWithAnnotation
 	if !skip {
 		t.Fatalf("expected skip=true for VM with spaces in name via annotation path, got false (reason=%q)", reason)
 	}
+}
+
+// TestCollectVMsFromDatacenters_WithVMs verifies that VMs present in the
+// datacenter are returned and mapped to the correct datacenter name.
+func TestCollectVMsFromDatacenters_WithVMs(t *testing.T) {
+	model := simulator.VPX()
+	model.Machine = 2
+	simulator.Test(func(ctx context.Context, c *vim25.Client) {
+		vms, dcMap := collectVMsFromDatacenters(ctx, c, []string{"DC0"}, logr.Discard())
+		if len(vms) == 0 {
+			t.Error("expected VMs to be returned, got none")
+		}
+		if len(dcMap) != len(vms) {
+			t.Errorf("dcMap len=%d, vms len=%d; every VM should map to a datacenter", len(dcMap), len(vms))
+		}
+		for ref, dc := range dcMap {
+			if dc != "DC0" {
+				t.Errorf("VM %s mapped to datacenter %q, want %q", ref, dc, "DC0")
+			}
+		}
+	}, model)
+}
+
+// TestCollectVMsFromDatacenters_EmptyDatacenter verifies that a datacenter
+// with no VMs returns an empty list without error. This covers the notFoundError
+// handling added to prevent spurious ERROR logs when a datacenter is empty.
+func TestCollectVMsFromDatacenters_EmptyDatacenter(t *testing.T) {
+	model := simulator.VPX()
+	model.Machine = 0
+	simulator.Test(func(ctx context.Context, c *vim25.Client) {
+		vms, dcMap := collectVMsFromDatacenters(ctx, c, []string{"DC0"}, logr.Discard())
+		if len(vms) != 0 {
+			t.Errorf("expected no VMs for empty datacenter, got %d", len(vms))
+		}
+		if len(dcMap) != 0 {
+			t.Errorf("expected empty dcMap for empty datacenter, got %d entries", len(dcMap))
+		}
+	}, model)
 }
