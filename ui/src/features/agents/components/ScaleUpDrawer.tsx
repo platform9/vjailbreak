@@ -384,7 +384,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                 error={!!flavorsError}
               />
             </FormGrid>
-            {!useMasterSecurityGroups && (
+            {openstackCredsValidated && !!openstackCredentials && (
               <Alert severity="warning" sx={{ mt: 1 }}>
                 Security groups apply only when the vJailbreak VM is on a non-Layer 2 network.
               </Alert>
