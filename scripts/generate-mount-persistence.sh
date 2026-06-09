@@ -59,7 +59,8 @@ esac
 
 UDEV_RULES_FILE=$(mktemp)
 FSTAB_LINES_FILE=$(mktemp)
-trap 'rm -f "$UDEV_RULES_FILE" "$FSTAB_LINES_FILE"' EXIT
+FSTAB_ACTIVE=""   # set after FSTAB_PATH is known; stripped of comments/blanks
+trap 'rm -f "$UDEV_RULES_FILE" "$FSTAB_LINES_FILE" ${FSTAB_ACTIVE:+"$FSTAB_ACTIVE"}' EXIT
 
 get_fstab_id() {
   DEV="$1"
@@ -184,6 +185,12 @@ else
   FSTAB_PATH="/etc/fstab"
 fi
 
+# Prefilter: strip comment and blank lines so lookups and deduplication never
+# treat commented-out entries as live mounts.  The original file (with comments)
+# is still used as the source of truth when writing to tmp_fstab.
+FSTAB_ACTIVE=$(mktemp)
+grep -v '^[[:space:]]*#' "$FSTAB_PATH" 2>/dev/null | grep -v '^[[:space:]]*$' > "$FSTAB_ACTIVE" || true
+
 awk '{ src=$1; tgt=$2; fstype=$3;
        gsub(/\\040/, " ", tgt);
        print src "\t" tgt "\t" fstype }' /proc/mounts | \
@@ -225,8 +232,10 @@ while IFS="$(printf '\t')" read -r SRC TGT FST; do
   echo "ACTION==\"add\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
   echo "ACTION==\"change\", SUBSYSTEM==\"block\", $MATCH, SYMLINK+=\"disk/by-mountpoint/$SAFE_NAME\"" >> "$UDEV_RULES_FILE"
 
-  # Try to reuse options from existing fstab if present
-  OPTIONS=$(awk -v tgt="$TGT_FSTAB" '$2==tgt {print $4}' "$FSTAB_PATH" 2>/dev/null | head -n1)
+  # Try to reuse options from existing fstab if present.
+  # Use FSTAB_ACTIVE (comments stripped) so commented-out entries never
+  # bleed their options (e.g. "bind") into newly generated live entries.
+  OPTIONS=$(awk -v tgt="$TGT_FSTAB" '$2==tgt {print $4}' "$FSTAB_ACTIVE" 2>/dev/null | head -n1)
 
   if [ -z "$OPTIONS" ]; then
     # Fallback: use /proc/mounts
@@ -289,12 +298,21 @@ if $APPLY; then
 
     while IFS= read -r line; do
       skip=false
-      while IFS= read -r entry; do
-        mp=$(echo "$entry" | awk '{print $2}')
-        # Use exact field match instead of substring grep to avoid /boot matching /sysroot/boot
-        line_mp=$(echo "$line" | awk '{print $2}')
-        [ "$line_mp" = "$mp" ] && { skip=true; break; }
-      done < "$FSTAB_LINES_FILE"
+      # Never remove comment or blank lines — they are not live mount entries.
+      # Skipping them was the root cause of issue #2007 (commented bind-mount
+      # entries being rewritten as active UUID entries).
+      case "$line" in
+        ''|'#'*) ;;
+        *' #'*) ;;   # inline comment on an otherwise active line — treat as active
+        *)
+          while IFS= read -r entry; do
+            mp=$(echo "$entry" | awk '{print $2}')
+            # Use exact field match instead of substring grep to avoid /boot matching /sysroot/boot
+            line_mp=$(echo "$line" | awk '{print $2}')
+            [ "$line_mp" = "$mp" ] && { skip=true; break; }
+          done < "$FSTAB_LINES_FILE"
+          ;;
+      esac
       $skip || echo "$line" >> "$tmp_fstab"
     done < "$FSTAB_PATH"
 
