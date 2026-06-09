@@ -1158,7 +1158,7 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 		"redhat", "red hat", "rhel", "centos", "scientific linux",
 		"oracle linux", "fedora", "sles", "sled", "opensuse",
 		"alt linux", "debian", "ubuntu", "rocky linux",
-		"suse linux enterprise server", "alma linux",
+		"suse linux enterprise server", "suse linux enterprise desktop", "alma linux",
 	}
 
 	for _, s := range supportedOS {
