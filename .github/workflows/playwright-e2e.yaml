@@ -12,6 +12,7 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: "!startsWith(github.head_ref, 'pre-release/')"
     defaults:
       run:
@@ -29,6 +30,12 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('ui/yarn.lock') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
