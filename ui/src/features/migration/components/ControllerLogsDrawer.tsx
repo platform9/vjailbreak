@@ -54,6 +54,7 @@ export default function ControllerLogsDrawer({ open, onClose }: ControllerLogsDr
 
   return (
     <BaseLogsDrawer
+      data-testid="controller-logs-drawer"
       open={open}
       onClose={handleClose}
       title="Controller Logs"
