@@ -540,6 +540,24 @@ test.describe('MIG-008 — pod logs drawer', () => {
     ])
     expect(download.suggestedFilename()).toMatch(/\.txt$/)
   })
+
+  test('drawer header shows the migration VM name, consistent with Migration Details', async ({
+    page,
+  }) => {
+    const table = page.getByTestId('migrations-table')
+    await table
+      .locator('[role="row"]')
+      .filter({ hasText: 'test-vm-3' })
+      .getByRole('button', { name: /log/i })
+      .click()
+    const drawer = page.getByTestId('pod-logs-drawer')
+    await expect(drawer).toBeVisible()
+
+    // Header subtitle is the migration's spec.vmName ("test-vm-3") — the same name shown in the
+    // Migration Details drawer — not the derived migration object name ("test-vm-3-migration").
+    await expect(drawer.getByText('test-vm-3', { exact: true })).toBeVisible()
+    await expect(drawer.getByText('test-vm-3-migration', { exact: true })).toHaveCount(0)
+  })
 })
 
 // ─── MIG-009: Admin cutover trigger — single migration ────────────────────────
@@ -699,5 +717,47 @@ test.describe('MIG-010 — status and date filtering', () => {
     // Only Failed migration within 30 days (intersection of Failed + date window)
     await expect(table.getByText('test-vm-4')).toBeVisible()
     await expect(table.getByText('test-vm-3')).not.toBeVisible()
+  })
+})
+
+// ─── MIG-027: Controller logs drawer (app bar) ────────────────────────────────
+
+test.describe('MIG-027 — controller logs drawer', () => {
+  const CONTROLLER_POD = 'migration-controller-manager-abc123'
+  const SAMPLE_LOGS = [
+    'INFO 2026-05-20T10:00:00Z controller starting reconcile loop',
+    'INFO 2026-05-20T10:00:01Z reconciled migration test-vm-1',
+  ].join('\n')
+
+  test.beforeEach(async ({ page }) => {
+    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST)
+    // Controller pods lookup by label selector (control-plane=controller-manager)
+    await page.route(`**/k8s/api/v1/namespaces/${NS}/pods*`, (route) => {
+      if (route.request().method() === 'GET') {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [{ metadata: { name: CONTROLLER_POD, namespace: NS } }] }),
+        })
+      } else {
+        route.continue()
+      }
+    })
+    await page.route(API.podLogs(NS, CONTROLLER_POD), (route) => {
+      route.fulfill({ status: 200, contentType: 'text/plain', body: SAMPLE_LOGS })
+    })
+    await goToMigrations(page)
+  })
+
+  test('app bar logs button opens the Controller Logs drawer and streams logs', async ({ page }) => {
+    // The button uses an Article (logs) icon; it is targeted by its accessible label / testid,
+    // both stable across the icon swap.
+    await page.getByTestId('controller-logs-button').click()
+
+    const drawer = page.getByTestId('controller-logs-drawer')
+    await expect(drawer).toBeVisible()
+    await expect(drawer.getByText('Controller Logs')).toBeVisible()
+    await expect(drawer.getByText(/reconcile loop/i)).toBeVisible({ timeout: 5000 })
   })
 })

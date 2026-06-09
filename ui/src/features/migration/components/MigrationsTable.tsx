@@ -160,6 +160,7 @@ export default function MigrationsTable({
     namespace: string
     migrationName?: string
     migrationPhase?: Phase
+    vmName?: string
   } | null>(null)
 
   const logsDrawerMigrationPhase = useMemo(() => {
@@ -437,7 +438,8 @@ export default function MigrationsTable({
                         name: params.row.spec.podRef,
                         namespace: params.row.metadata?.namespace || '',
                         migrationName: params.row.metadata?.name || '',
-                        migrationPhase: params.row.status?.phase
+                        migrationPhase: params.row.status?.phase,
+                        vmName: params.row.spec?.vmName || ''
                       })
                       params.row.setLogsDrawerOpen(true)
                     }}
@@ -674,6 +676,7 @@ export default function MigrationsTable({
         namespace={selectedPod?.namespace || ''}
         migrationName={selectedPod?.migrationName || ''}
         migrationPhase={logsDrawerMigrationPhase}
+        vmName={selectedPod?.vmName || ''}
       />
 
       <MigrationDetailModal
