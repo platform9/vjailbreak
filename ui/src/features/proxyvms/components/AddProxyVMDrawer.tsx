@@ -45,10 +45,10 @@ function toK8sName(input: string): string {
 const validateSshPrivateKey = (value: string): string | null => {
   const trimmed = value.trim()
   if (!trimmed) return 'SSH private key is required'
-  const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
-  const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
+  const hasBegin = /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(trimmed)
+  const hasEnd = /-----END [A-Z ]*PRIVATE KEY-----/.test(trimmed)
   if (!hasBegin || !hasEnd) {
-    return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
+    return 'Invalid key format. Expected a PEM private key (e.g. -----BEGIN OPENSSH PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----)'
   }
   return null
 }
