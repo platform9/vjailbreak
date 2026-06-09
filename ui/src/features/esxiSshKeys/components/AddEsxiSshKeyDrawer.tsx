@@ -45,10 +45,10 @@ const validateOpenSshPrivateKey = (value: string): string | null => {
   if (/^ssh-privatekey\s*:/m.test(trimmed)) {
     return 'Paste only the key content (do not include "ssh-privatekey:")'
   }
-  const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
-  const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
+  const hasBegin = /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(trimmed)
+  const hasEnd = /-----END [A-Z ]*PRIVATE KEY-----/.test(trimmed)
   if (!hasBegin || !hasEnd) {
-    return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
+    return 'Invalid key format. Expected a PEM private key (e.g. -----BEGIN OPENSSH PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----)'
   }
   return null
 }
@@ -287,7 +287,7 @@ export default function AddEsxiSshKeyDrawer({
         <RHFTextField
           name="sshPrivateKey"
           label="SSH Private Key"
-          placeholder="-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+          placeholder="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
           required
           multiline
           minRows={12}
