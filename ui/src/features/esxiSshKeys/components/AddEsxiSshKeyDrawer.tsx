@@ -9,7 +9,7 @@ import { upsertESXiSSHCreds } from 'src/api/esxi-ssh-creds/esxiSshCreds'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
-import { isValidName } from 'src/utils'
+import { isValidName, validateSshPrivateKey } from 'src/utils'
 
 interface AddEsxiSshKeyDrawerProps {
   open: boolean
@@ -40,17 +40,10 @@ const toDnsCompatibleNameFromFilename = (filename: string) => {
 }
 
 const validateOpenSshPrivateKey = (value: string): string | null => {
-  const trimmed = value.trim()
-  if (!trimmed) return 'SSH private key is required'
-  if (/^ssh-privatekey\s*:/m.test(trimmed)) {
+  if (/^ssh-privatekey\s*:/m.test(value.trim())) {
     return 'Paste only the key content (do not include "ssh-privatekey:")'
   }
-  const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
-  const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
-  if (!hasBegin || !hasEnd) {
-    return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
-  }
-  return null
+  return validateSshPrivateKey(value)
 }
 
 export default function AddEsxiSshKeyDrawer({
@@ -287,7 +280,7 @@ export default function AddEsxiSshKeyDrawer({
         <RHFTextField
           name="sshPrivateKey"
           label="SSH Private Key"
-          placeholder="-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+          placeholder="-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n\nAlso accepted: RSA, EC, PKCS#8 (PRIVATE KEY), DSA"
           required
           multiline
           minRows={12}

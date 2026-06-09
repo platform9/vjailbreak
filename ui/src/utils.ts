@@ -152,3 +152,25 @@ export const formatDateTime = (value: unknown) => {
     hour12: false
   })
 }
+
+export const VALID_SSH_KEY_TYPES = [
+  'OPENSSH PRIVATE KEY',
+  'RSA PRIVATE KEY',
+  'EC PRIVATE KEY',
+  'PRIVATE KEY',
+  'DSA PRIVATE KEY'
+] as const
+
+export const validateSshPrivateKey = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return 'SSH private key is required'
+  const beginMatch = trimmed.match(/-----BEGIN ([A-Z ]+)-----/)
+  if (!beginMatch || !(VALID_SSH_KEY_TYPES as readonly string[]).includes(beginMatch[1])) {
+    return 'Invalid key format. Expected a PEM private key (e.g. -----BEGIN OPENSSH PRIVATE KEY-----)'
+  }
+  const keyType = beginMatch[1]
+  if (!trimmed.includes(`-----END ${keyType}-----`)) {
+    return `Invalid key format. Missing -----END ${keyType}-----`
+  }
+  return null
+}
