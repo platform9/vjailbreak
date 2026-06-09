@@ -3,7 +3,10 @@ name: Playwright E2E Tests
 on:
   pull_request:
     paths:
-      - 'ui/**'
+      - "ui/**"
+
+permissions:
+  contents: read
 
 jobs:
   e2e:
@@ -20,8 +23,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'yarn'
+          node-version: "20"
+          cache: "yarn"
           cache-dependency-path: ui/yarn.lock
 
       - name: Install dependencies
