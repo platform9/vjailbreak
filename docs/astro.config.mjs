@@ -67,6 +67,8 @@ export default defineConfig({
 						{ label: 'Network & Storage Mapping', slug: 'concepts/network-storage-mapping' },
 						{ label: 'Migration Options', slug: 'concepts/migration-options' },
 						{ label: 'Cluster Conversion', slug: 'concepts/cluster-conversion' },
+						{ label: 'Storage Accelerated Copy', slug: 'concepts/storage-accelerated-copy' },
+						{ label: 'Hot-Add Proxy Migration', slug: 'concepts/hot-add-proxy' },
 					],
 				},
 				{
