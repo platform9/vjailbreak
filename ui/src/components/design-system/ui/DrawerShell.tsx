@@ -93,6 +93,7 @@ export interface DrawerHeaderProps {
   actions?: ReactNode
   onClose?: () => void
   'data-testid'?: string
+  closeButtonTestId?: string
 }
 
 export function DrawerHeader({
@@ -101,7 +102,8 @@ export function DrawerHeader({
   icon,
   actions,
   onClose,
-  'data-testid': dataTestId = 'drawer-header'
+  'data-testid': dataTestId = 'drawer-header',
+  closeButtonTestId
 }: DrawerHeaderProps) {
   return (
     <Box
@@ -135,7 +137,7 @@ export function DrawerHeader({
           <IconButton
             aria-label="Close drawer"
             onClick={onClose}
-            data-testid={`${dataTestId}-close`}
+            data-testid={closeButtonTestId ?? `${dataTestId}-close`}
           >
             <CloseIcon />
           </IconButton>

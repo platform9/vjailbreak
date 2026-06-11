@@ -23,14 +23,15 @@ export function useOsAssignment({
 
   useEffect(() => {
     if (Object.keys(vmOSAssignments).length === 0) return
-    setVmsWithFlavor((prev) =>
-      prev.map((vm) => {
+    setVmsWithFlavor((prev) => {
+      const updated = prev.map((vm) => {
         if (vmOSAssignments && Object.prototype.hasOwnProperty.call(vmOSAssignments, vm.id)) {
           return { ...vm, osFamily: vmOSAssignments[vm.id] }
         }
         return vm
       })
-    )
+      return updated
+    })
   }, [vmOSAssignments, setVmsWithFlavor])
 
   const handleOSAssignment = async (vmId: string, osFamily: string) => {

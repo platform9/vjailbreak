@@ -732,11 +732,17 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("guestfish stderr (%s): %s", command, strings.TrimSpace(stderrBuf.String()))
 	}
-	return strings.ToLower(string(out)), nil
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(stderrBuf.String()))
+	}
+	return strings.ToLower(stdoutBuf.String()), nil
 }
 
 // GetDeviceNumberFromPartition returns the device index for a given partition name

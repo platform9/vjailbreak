@@ -151,7 +151,7 @@ func CreateESXIMigration(ctx context.Context, scope *scope.ClusterMigrationScope
 				constants.ESXiNameLabel:             esxiK8sName,
 				constants.VMwareCredsLabel:          scope.ClusterMigration.Spec.VMwareCredsRef.Name,
 				constants.RollingMigrationPlanLabel: scope.RollingMigrationPlan.Name,
-				constants.ClusterMigrationLabel:     scope.ClusterMigration.Name,
+				constants.ClusterMigrationLabel:     commonutils.SanitizeLabelValue(scope.ClusterMigration.Name),
 			},
 		},
 		Spec: vjailbreakv1alpha1.ESXIMigrationSpec{
@@ -481,20 +481,27 @@ func UpdateESXiNamesInRollingMigrationPlan(ctx context.Context, scope *scope.Rol
 	if err != nil {
 		return errors.Wrap(err, "failed to get vmware credentials")
 	}
+	// List all VMwareMachines for this credential set once. VMwareMachine k8s names are
+	// derived from name+MOID (GetVMK8sCompatibleName), so they cannot be reconstructed
+	// from the display name alone — we must list and match by Spec.VMInfo.Name instead.
+	vmList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := scope.Client.List(ctx, vmList,
+		client.InNamespace(scope.Namespace()),
+		client.MatchingLabels{constants.VMwareCredsLabel: vmwarecreds.Name},
+	); err != nil {
+		return errors.Wrap(err, "failed to list VMwareMachines")
+	}
+	vmByDisplayName := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(vmList.Items))
+	for i := range vmList.Items {
+		vmByDisplayName[vmList.Items[i].Spec.VMInfo.Name] = &vmList.Items[i]
+	}
 	// Update ESXi Name in RollingMigrationPlan for each VM in VM Sequence
 	for i, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
 		for j := range cluster.VMSequence {
-			k8sVMName, err := commonutils.GetK8sCompatibleVMWareObjectName(cluster.VMSequence[j].VMName, vmwarecreds.Name)
-			if err != nil {
-				return errors.Wrap(err, "failed to get vm name")
-			}
-			vm := &vjailbreakv1alpha1.VMwareMachine{}
-			err = scope.Client.Get(ctx, client.ObjectKey{
-				Name:      k8sVMName,
-				Namespace: scope.Namespace(),
-			}, vm)
-			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("Error getting VMInfo for VM '%s'", cluster.VMSequence[j].VMName))
+			vmName := cluster.VMSequence[j].VMName
+			vm, ok := vmByDisplayName[vmName]
+			if !ok {
+				return fmt.Errorf("error getting VMInfo for VM '%s': VMwareMachine not found", vmName)
 			}
 			scope.RollingMigrationPlan.Spec.ClusterSequence[i].VMSequence[j].ESXiName = vm.Spec.VMInfo.ESXiName
 		}
@@ -514,21 +521,44 @@ func ConvertVMSequenceToMigrationPlans(ctx context.Context, scope *scope.Cluster
 		return nil
 	}
 
-	// Collect all VM names from all clusters
-	batches := convertVMSequenceToBatches(scope, batchSize)
+	// Build a map from VM display name → vmid-keyed name (e.g. "ubuntu-1" → "ubuntu-1-180").
+	// VMwareMachine k8s object names are derived from name+MOID and cannot be reconstructed
+	// from display name alone, so MigrationPlan batches must use the vmid-keyed format that
+	// the migrationplan controller expects.
+	vmwareCreds, err := GetVMwareCredsFromRollingMigrationPlan(ctx, scope.Client, rollingMigrationPlan)
+	if err != nil {
+		return errors.Wrap(err, "failed to get vmware credentials for VM key lookup")
+	}
+	vmList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := scope.Client.List(ctx, vmList,
+		client.InNamespace(scope.Namespace()),
+		client.MatchingLabels{constants.VMwareCredsLabel: vmwareCreds.Name},
+	); err != nil {
+		return errors.Wrap(err, "failed to list VMwareMachines for VM key lookup")
+	}
+	vmKeyByDisplayName := make(map[string]string, len(vmList.Items))
+	for i := range vmList.Items {
+		vm := &vmList.Items[i]
+		vmKeyByDisplayName[vm.Spec.VMInfo.Name] = commonutils.GetVMUniqueKey(vm.Spec.VMInfo.Name, vm.Spec.VMInfo.VMID)
+	}
+
+	// Collect all VM keys from all clusters
+	batches := convertVMSequenceToBatches(scope, batchSize, vmKeyByDisplayName)
 
 	// Create a MigrationPlan for each batch
 	for i, batch := range batches {
-		err := convertBatchToMigrationPlan(ctx, scope, batch, i)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				continue
-			}
+		if err := convertBatchToMigrationPlan(ctx, scope, batch, i); err != nil {
 			return errors.Wrap(err, "failed to convert batch to migration plan")
 		}
 	}
 
-	// Log summary of batches created
+	// Persist the updated VMMigrationPlans list so the rolling migration plan
+	// controller can aggregate statuses. Without this update the list stays empty
+	// in the API server and aggregation never finds any plans.
+	if err := scope.Client.Update(ctx, scope.RollingMigrationPlan); err != nil {
+		return errors.Wrap(err, "failed to update RollingMigrationPlan with VM migration plan list")
+	}
+
 	klog.Infof("Created %d batches with a maximum of %d VMs per batch", len(batches), batchSize)
 
 	return nil
@@ -573,24 +603,30 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrat
 		},
 	}
 
-	// Create the migration plan
-	err := scope.Client.Create(ctx, &migrationPlan)
-	if err != nil {
+	// Create the migration plan; AlreadyExists is fine — it was created on a prior reconcile.
+	if err := scope.Client.Create(ctx, &migrationPlan); err != nil && !apierrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "failed to create migration plan")
 	}
-	// Add the migration plan to the rolling migration plan
+	// Always track the name regardless of whether we just created it or it already existed.
 	rollingMigrationPlan.Spec.VMMigrationPlans = append(rollingMigrationPlan.Spec.VMMigrationPlans, migrationPlan.Name)
 	return nil
 }
 
-func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize int) [][]string {
+func convertVMSequenceToBatches(scope *scope.ClusterMigrationScope, batchSize int, vmKeyByDisplayName map[string]string) [][]string {
 	var batches [][]string
 	rollingMigrationPlan := scope.RollingMigrationPlan
 
 	for _, cluster := range rollingMigrationPlan.Spec.ClusterSequence {
 		allVMs := make([]string, 0, len(cluster.VMSequence))
 		for _, vm := range cluster.VMSequence {
-			allVMs = append(allVMs, vm.VMName)
+			// Use vmid-keyed name (e.g. "ubuntu-1-180") so that the migrationplan
+			// controller can reconstruct the VMwareMachine k8s object name correctly.
+			vmKey, ok := vmKeyByDisplayName[vm.VMName]
+			if !ok {
+				klog.Warningf("VMwareMachine not found for VM %q, using display name as fallback", vm.VMName)
+				vmKey = vm.VMName
+			}
+			allVMs = append(allVMs, vmKey)
 		}
 
 		// Create batches of VMs
@@ -860,10 +896,34 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 
 	clusterK8sID := GetClusterK8sID(scope.RollingMigrationPlan.Spec.ClusterSequence[0].ClusterName, vmwareCredsInfo.Datacenter)
 
-	vmwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
+	allVMwareHosts, err := FilterVMwareHostsForCluster(ctx, scope.Client, clusterK8sID)
 	if err != nil {
 		return false, "", errors.Wrap(err, "failed to filter vmware hosts for cluster")
 	}
+
+	// Only validate the ESXi hosts that actually have VMs selected for migration.
+	// Look up each VM's actual ESXi host from its VMwareMachine object — the
+	// clusterSequence.esxiName field may not yet be populated (UpdateESXiNamesInRollingMigrationPlan
+	// runs after validation). Checking all cluster hosts would fail on unrelated hosts.
+	vmMachineList := &vjailbreakv1alpha1.VMwareMachineList{}
+	if err := scope.Client.List(ctx, vmMachineList,
+		client.InNamespace(scope.RollingMigrationPlan.Namespace),
+		client.MatchingLabels{constants.VMwareCredsLabel: vmwareCreds.Name},
+	); err != nil {
+		return false, "", errors.Wrap(err, "failed to list VMwareMachines for host scope filtering")
+	}
+	vmwareHosts := filterHostsForMigrationPlan(allVMwareHosts, vmMachineList.Items, scope.RollingMigrationPlan.Spec.ClusterSequence)
+
+	// Build the set of VM display names that are in this migration plan.
+	// These VMs will be powered off for cold migration and must not be treated as
+	// "blocked" during the maintenance mode check — they won't be vMotioned.
+	migrationVMNames := make(map[string]struct{})
+	for _, cluster := range scope.RollingMigrationPlan.Spec.ClusterSequence {
+		for _, vmEntry := range cluster.VMSequence {
+			migrationVMNames[vmEntry.VMName] = struct{}{}
+		}
+	}
+	config.MigrationVMNames = migrationVMNames
 
 	for _, vmwareHost := range vmwareHosts {
 		// This checks if the ESXi host can enter maintenance mode
@@ -901,6 +961,41 @@ func ValidateRollingMigrationPlan(ctx context.Context, scope *scope.RollingMigra
 	}
 
 	return true, "", nil
+}
+
+// filterHostsForMigrationPlan returns only the VMwareHost entries whose Spec.Name
+// matches an ESXi host that actually holds one of the VMs listed in clusterSequence.
+// This avoids validating unrelated hosts in the cluster.
+//
+// ESXi names are resolved from VMwareMachine.Spec.VMInfo.ESXiName rather than from
+// clusterSequence[].esxiName, because the latter may be stale or unpopulated before
+// UpdateESXiNamesInRollingMigrationPlan has run.
+func filterHostsForMigrationPlan(
+	allHosts []vjailbreakv1alpha1.VMwareHost,
+	vms []vjailbreakv1alpha1.VMwareMachine,
+	clusterSequence []vjailbreakv1alpha1.ClusterMigrationInfo,
+) []vjailbreakv1alpha1.VMwareHost {
+	vmByDisplayName := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(vms))
+	for i := range vms {
+		vmByDisplayName[vms[i].Spec.VMInfo.Name] = &vms[i]
+	}
+
+	targetESXi := make(map[string]struct{})
+	for _, cluster := range clusterSequence {
+		for _, vmEntry := range cluster.VMSequence {
+			if vm, ok := vmByDisplayName[vmEntry.VMName]; ok {
+				targetESXi[vm.Spec.VMInfo.ESXiName] = struct{}{}
+			}
+		}
+	}
+
+	filtered := make([]vjailbreakv1alpha1.VMwareHost, 0, len(targetESXi))
+	for _, host := range allHosts {
+		if _, isTarget := targetESXi[host.Spec.Name]; isTarget {
+			filtered = append(filtered, host)
+		}
+	}
+	return filtered
 }
 
 func isBMConfigValid(ctx context.Context, client client.Client, name string) bool {

@@ -21,6 +21,7 @@ import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQue
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
 import { createSecret, deleteSecret } from 'src/api/secrets/secrets'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { validateSshPrivateKey } from 'src/utils'
 
 interface FormData {
   vmwareCredsRef: string
@@ -40,17 +41,6 @@ function toK8sName(input: string): string {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 63)
-}
-
-const validateSshPrivateKey = (value: string): string | null => {
-  const trimmed = value.trim()
-  if (!trimmed) return 'SSH private key is required'
-  const hasBegin = /-----BEGIN OPENSSH PRIVATE KEY-----/.test(trimmed)
-  const hasEnd = /-----END OPENSSH PRIVATE KEY-----/.test(trimmed)
-  if (!hasBegin || !hasEnd) {
-    return 'Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)'
-  }
-  return null
 }
 
 const FORM_ID = 'add-proxy-vm-form'
@@ -266,8 +256,13 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                 <strong>/root/.ssh/authorized_keys</strong> before registering.
               </Alert>
 
-              <Box sx={{ display: 'flex', gap: 2, alignItems: { xs: 'flex-start', md: 'center' } }}>
-                <ActionButton tone="secondary" component="label" disabled={isSubmitting}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <ActionButton
+                  tone="secondary"
+                  component="label"
+                  disabled={isSubmitting}
+                  sx={{ whiteSpace: 'nowrap' }}
+                >
                   Upload key file
                   <input
                     type="file"
@@ -276,7 +271,8 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                   />
                 </ActionButton>
                 <Typography variant="body2" color="text.secondary">
-                  Paste only the OpenSSH private key content (no field name prefix).
+                  Paste only the private key content (OpenSSH, RSA, EC, PKCS#8, or DSA — no field
+                  name prefix).
                 </Typography>
               </Box>
 
@@ -288,7 +284,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                 minRows={10}
                 disabled={isSubmitting}
                 placeholder={
-                  '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'
+                  '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n\nAlso accepted: RSA, EC, PKCS#8 (PRIVATE KEY), DSA'
                 }
                 rules={{
                   required: 'SSH private key is required',

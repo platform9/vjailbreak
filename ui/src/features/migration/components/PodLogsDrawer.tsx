@@ -14,6 +14,7 @@ interface LogsDrawerProps {
   namespace: string
   migrationName?: string
   migrationPhase?: Phase
+  vmName?: string
 }
 
 export default function PodLogsDrawer({
@@ -22,7 +23,8 @@ export default function PodLogsDrawer({
   podName,
   namespace,
   migrationName,
-  migrationPhase
+  migrationPhase,
+  vmName
 }: LogsDrawerProps) {
   const [isPaused, setIsPaused] = useState(false)
   const [sessionKey, setSessionKey] = useState(0)
@@ -49,6 +51,12 @@ export default function PodLogsDrawer({
   }, [onClose])
 
   const vmDisplayName = useMemo(() => {
+    // Prefer the migration's spec.vmName — the same name shown in the Migration
+    // Details drawer header — so both views stay consistent. Fall back to deriving
+    // a name from the migration/pod object names only when vmName is unavailable.
+    const trimmedVmName = vmName?.trim()
+    if (trimmedVmName) return trimmedVmName
+
     const fromMigration = (() => {
       if (!migrationName) return null
       const withoutPrefix = migrationName.replace(/^migration-/, '')
@@ -63,7 +71,7 @@ export default function PodLogsDrawer({
     if (parts.length >= 4) return parts.slice(0, -3).join('-') || withoutPrefix
     if (parts.length >= 3) return parts.slice(0, -2).join('-') || withoutPrefix
     return withoutPrefix
-  }, [migrationName, podName])
+  }, [vmName, migrationName, podName])
 
   const handleDownload = useCallback(
     async (filteredLogs: string[]) => {
@@ -133,6 +141,7 @@ export default function PodLogsDrawer({
 
   return (
     <BaseLogsDrawer
+      data-testid="pod-logs-drawer"
       open={open}
       onClose={handleClose}
       title="Migration Pod Logs"

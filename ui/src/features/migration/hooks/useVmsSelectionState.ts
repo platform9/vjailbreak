@@ -64,6 +64,10 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
+  // Stabilize openstackFlavors reference — default [] in destructuring creates new ref each render,
+  // which would make the rebuild effect fire on every render (infinite loop).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableOpenstackFlavors = useMemo(() => openstackFlavors ?? [], [JSON.stringify(openstackFlavors)])
   const [rdmConfigurations, setRdmConfigurations] = useState<RdmConfiguration[]>([])
 
   // --- Toast ---
@@ -315,56 +319,57 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
 
   useEffect(() => {
     if (isRolling) return
-    const existingVmsMap = new Map(vmsWithFlavor.map((vm) => [vm.id, vm]))
-    const initialVmsWithFlavor = vmList.map((vm) => {
-      let flavor = ''
-      if (vm.targetFlavorId) {
-        const foundFlavor = openstackFlavors.find((f) => f.id === vm.targetFlavorId)
-        flavor = foundFlavor ? foundFlavor.name : vm.targetFlavorId
-      }
+    setVmsWithFlavor((prev) => {
+      const existingVmsMap = new Map(prev.map((vm) => [vm.id, vm]))
+      return vmList.map((vm) => {
+        let flavor = ''
+        if (vm.targetFlavorId) {
+          const foundFlavor = stableOpenstackFlavors.find((f) => f.id === vm.targetFlavorId)
+          flavor = foundFlavor ? foundFlavor.name : vm.targetFlavorId
+        }
 
-      const flavorNotFound = openstackCredName
-        ? vm.labels?.[openstackCredName] === 'NOT_FOUND'
-        : false
+        const flavorNotFound = openstackCredName
+          ? vm.labels?.[openstackCredName] === 'NOT_FOUND'
+          : false
 
-      const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
-      const existingVm = existingVmsMap.get(vm.id)
+        const powerState = vm.vmState === 'running' ? 'powered-on' : 'powered-off'
+        const existingVm = existingVmsMap.get(vm.id)
 
-      let allIPs = vm.networkInterfaces
-        ? vm.networkInterfaces
-            .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
-            .filter((ip) => ip && ip.trim() !== '')
-            .join(', ')
-        : vm.ipAddress || ''
+        let allIPs = vm.networkInterfaces
+          ? vm.networkInterfaces
+              .flatMap((nic) => (Array.isArray(nic.ipAddress) ? nic.ipAddress : []))
+              .filter((ip) => ip && ip.trim() !== '')
+              .join(', ')
+          : vm.ipAddress || ''
 
-      if (existingVm && existingVm.ipAddress && existingVm.ipAddress !== '—') {
-        allIPs = existingVm.ipAddress ?? allIPs
-      }
+        if (existingVm && existingVm.ipAddress && existingVm.ipAddress !== '—') {
+          allIPs = existingVm.ipAddress ?? allIPs
+        }
 
-      let preferredNetworkInterfaces = vm.networkInterfaces
-      if (existingVm && existingVm.networkInterfaces && existingVm.networkInterfaces.length > 0) {
-        preferredNetworkInterfaces = existingVm.networkInterfaces
-      }
-      preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
+        let preferredNetworkInterfaces = vm.networkInterfaces
+        if (existingVm && existingVm.networkInterfaces && existingVm.networkInterfaces.length > 0) {
+          preferredNetworkInterfaces = existingVm.networkInterfaces
+        }
+        preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
 
-      return {
-        ...vm,
-        ipAddress: allIPs || '—',
-        isMigrated:
-          migratedVms.has(vm.vmKey || vm.name) ||
-          migratedVms.has(vm.name) ||
-          Boolean(vm.isMigrated),
-        flavor,
-        flavorNotFound,
-        powerState,
-        osFamily: vm.osFamily,
-        ipValidationStatus: 'pending' as const,
-        ipValidationMessage: '',
-        networkInterfaces: preferredNetworkInterfaces,
-      }
+        return {
+          ...vm,
+          ipAddress: allIPs || '—',
+          isMigrated:
+            migratedVms.has(vm.vmKey || vm.name) ||
+            migratedVms.has(vm.name) ||
+            Boolean(vm.isMigrated),
+          flavor,
+          flavorNotFound,
+          powerState,
+          osFamily: existingVm?.osFamily ?? vm.osFamily,
+          ipValidationStatus: 'pending' as const,
+          ipValidationMessage: '',
+          networkInterfaces: preferredNetworkInterfaces,
+        }
+      })
     })
-    setVmsWithFlavor(initialVmsWithFlavor)
-  }, [vmList, migratedVms, openstackFlavors, openstackCredName, isRolling, vmsWithFlavor.length])
+  }, [vmList, migratedVms, stableOpenstackFlavors, openstackCredName, isRolling])
 
   // --- Missing IP warnings ---
   const missingInterfaceIpWarnings = useMemo(

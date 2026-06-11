@@ -231,6 +231,7 @@ export default function MigrationFormDrawer({
       header={
         <DrawerHeader
           data-testid="migration-form-header"
+          closeButtonTestId="migration-form-close"
           title="Start Migration"
           subtitle="Configure source/destination, select VMs, and map resources before starting"
           icon={<MigrationIcon />}

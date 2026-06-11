@@ -35,6 +35,7 @@ interface ResourceMappingProps {
   oneToManyMapping?: boolean
   fieldPrefix?: string
   required?: boolean
+  'data-testid'?: string
 }
 
 export default function ResourceMappingTable({
@@ -48,7 +49,8 @@ export default function ResourceMappingTable({
   error,
   oneToManyMapping = false,
   fieldPrefix = 'resourceMapping',
-  required = false
+  required = false,
+  'data-testid': dataTestId
 }: ResourceMappingProps) {
   const [showEmptyRow, setShowEmptyRow] = useState(true)
 
@@ -154,7 +156,7 @@ export default function ResourceMappingTable({
   }, [values, handleDeleteMapping])
 
   return (
-    <div>
+    <div data-testid={dataTestId}>
       {label && <Typography variant="body1">{label}</Typography>}
       <TableContainer component={Paper} sx={{ mt: 2, mb: 4 }}>
         <Table size="small" aria-label="resource-mapping">

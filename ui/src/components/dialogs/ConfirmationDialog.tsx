@@ -37,6 +37,7 @@ export interface ConfirmationDialogProps {
   actionColor?: 'error' | 'warning' | 'info' | 'primary' | 'success'
   actionVariant?: 'text' | 'outlined' | 'contained'
   cancelLabel?: string
+  confirmButtonTestId?: string
 
   onConfirm: () => Promise<void>
 
@@ -59,6 +60,7 @@ export default function ConfirmationDialog({
   actionColor = 'primary',
   actionVariant = 'contained',
   cancelLabel = 'Cancel',
+  confirmButtonTestId,
   onConfirm,
   additionalContent,
   errorMessage,
@@ -187,6 +189,7 @@ export default function ConfirmationDialog({
           {cancelLabel}
         </Button>
         <Button
+          data-testid={confirmButtonTestId}
           onClick={handleConfirm}
           color={actionColor}
           variant={actionVariant}

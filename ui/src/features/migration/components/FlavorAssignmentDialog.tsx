@@ -47,7 +47,7 @@ export function FlavorAssignmentDialog({
     : null
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog data-testid="flavor-assignment-dialog" open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>
         Assign Flavor to {selectedVMCount} {selectedVMCount === 1 ? 'VM' : 'VMs'}
       </DialogTitle>

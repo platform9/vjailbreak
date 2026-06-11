@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -352,6 +353,9 @@ func (r Impl) AssignHypervisor(ctx context.Context, hostID string, clusterName s
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read response body: %w", err)
+		}
+		if strings.Contains(string(body), "is already part of") {
+			return nil
 		}
 		return fmt.Errorf("failed to query the resmgr to assign hypervisor role: (%d) %s", resp.StatusCode, string(body))
 	}

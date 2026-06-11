@@ -33,6 +33,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	constants "github.com/platform9/vjailbreak/pkg/common/constants"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
@@ -290,7 +291,7 @@ func (r *ClusterMigrationReconciler) CheckAndUpdateClusterMigrationStatus(ctx co
 	log := scope.Logger
 	esxiMigrationList := &vjailbreakv1alpha1.ESXIMigrationList{}
 	if err := r.List(ctx, esxiMigrationList, client.InNamespace(scope.ClusterMigration.Namespace),
-		client.MatchingLabels{constants.ClusterMigrationLabel: scope.ClusterMigration.Name}); err != nil {
+		client.MatchingLabels{constants.ClusterMigrationLabel: commonutils.SanitizeLabelValue(scope.ClusterMigration.Name)}); err != nil {
 		return err
 	}
 

@@ -289,7 +289,11 @@ export function useFormValidation({
     fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
   )
 
-  const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
+  const step3HasErrors = Boolean(
+    fieldErrors['networksMapping'] ||
+    fieldErrors['storageMapping'] ||
+    ((params.vms?.length ?? 0) > 0 && (unmappedNetworksCount > 0 || unmappedStorageCount > 0))
+  )
 
   const step4Complete = Boolean(
     (params.securityGroups && params.securityGroups.length > 0) ||

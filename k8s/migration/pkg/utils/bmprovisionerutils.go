@@ -227,6 +227,7 @@ func ReclaimESXi(ctx context.Context, scope *scope.ESXIMigrationScope, bmProvide
 		err = bmProvider.ReclaimBM(ctx, newRequest) //nolint:govet // Safe - creating a new struct avoids copying mutex
 		if err == nil {
 			// Success, no need to retry
+			lastErr = nil
 			break
 		}
 

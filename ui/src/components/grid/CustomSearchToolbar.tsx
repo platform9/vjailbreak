@@ -95,7 +95,7 @@ const CustomSearchToolbar = ({
           {onDateFilterChange && (
             <>
               <Tooltip title="Filter by creation date">
-                <IconButton onClick={(e) => handleMenuClick(e, 'date')} size="small">
+                <IconButton data-testid="date-filter" onClick={(e) => handleMenuClick(e, 'date')} size="small">
                   <CalendarIcon
                     fontSize="small"
                     color={isDateFilterActive ? 'primary' : 'inherit'}
@@ -124,7 +124,7 @@ const CustomSearchToolbar = ({
           {onStatusFilterChange && (
             <>
               <Tooltip title="Filter by status">
-                <IconButton onClick={(e) => handleMenuClick(e, 'status')} size="small">
+                <IconButton data-testid="status-filter" onClick={(e) => handleMenuClick(e, 'status')} size="small">
                   <FilterListIcon color={isStatusFilterActive ? 'primary' : 'inherit'} />
                 </IconButton>
               </Tooltip>

@@ -4,7 +4,7 @@ import Paper from '@mui/material/Paper'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import TerminalIcon from '@mui/icons-material/Terminal'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 import { cleanupAllResources } from 'src/api/helpers'
 import ThemeToggle from './ThemeToggle'
 import ControllerLogsDrawer from '../../features/migration/components/ControllerLogsDrawer'
@@ -40,8 +40,14 @@ export default function ButtonAppBar({ hide = false }) {
           }}
         >
           <Tooltip title="Controller Logs">
-            <IconButton size="medium" onClick={() => setLogsOpen(true)} sx={{ mr: -2 }}>
-              <TerminalIcon />
+            <IconButton
+              size="medium"
+              onClick={() => setLogsOpen(true)}
+              sx={{ mr: -2 }}
+              aria-label="Controller Logs"
+              data-testid="controller-logs-button"
+            >
+              <ListAltIcon />
             </IconButton>
           </Tooltip>
           <ThemeToggle />
