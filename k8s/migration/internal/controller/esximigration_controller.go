@@ -154,6 +154,10 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return r.handleESXiConfiguringPCDHost(ctx, scope)
 	}
 
+	if scope.ESXIMigration.Status.Phase == vjailbreakv1alpha1.ESXIMigrationPhaseAssigningRole {
+		return r.handleESXiAssigningRole(ctx, scope)
+	}
+
 	inMaintenance, err := utils.CheckESXiInMaintenanceMode(ctx, r.Client, scope)
 	if err != nil {
 		log.Error(err, "Failed to check ESXi maintenance mode", "esxiName", scope.ESXIMigration.Spec.ESXiName)
@@ -309,9 +313,40 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	if err := utils.AssignHypervisorRoleToHost(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID, pcdClusterName); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to assign hypervisor role to PCD host")
 	}
+
+	scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseAssigningRole
+	err = r.Status().Update(ctx, scope.ESXIMigration)
+	if err != nil {
+		log.Error(err, "Failed to update ESXIMigration status", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
+	}
+	return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
+}
+
+func (r *ESXIMigrationReconciler) handleESXiAssigningRole(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
+	log := scope.Logger
+	log.Info("Waiting for hypervisor role assignment", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+
+	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
+	}
+	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
+	}
+	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, sourceVMwareCreds.Name)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
+	}
+
 	assigned, err := utils.WaitForHypervisorRoleAssignment(ctx, r.Client, destOpenstackCreds.Name, vmwareHost.Spec.HardwareUUID)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to wait for hypervisor role assignment")
+		scope.ESXIMigration.Status.Phase = vjailbreakv1alpha1.ESXIMigrationPhaseFailed
+		if updateErr := r.Status().Update(ctx, scope.ESXIMigration); updateErr != nil {
+			log.Error(updateErr, "Failed to update ESXIMigration status to Failed", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		}
+		return ctrl.Result{}, errors.Wrap(err, "hypervisor role assignment failed")
 	}
 	if !assigned {
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
@@ -325,7 +360,6 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 		return ctrl.Result{}, errors.Wrap(err, "failed to update ESXi migration status")
 	}
 
-	// Remove the ESXi host from vCenter before changing the phase
 	err = utils.RemoveESXiFromVCenter(ctx, r.Client, scope)
 	if err != nil {
 		log.Error(err, "Failed to remove ESXi from vCenter, retrying after one minute", "esxiName", scope.ESXIMigration.Spec.ESXiName)
