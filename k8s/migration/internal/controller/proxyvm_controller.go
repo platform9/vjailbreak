@@ -45,7 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-
 // ProxyVMReconciler reconciles a ProxyVM object
 type ProxyVMReconciler struct {
 	client.Client
