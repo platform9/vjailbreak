@@ -313,6 +313,11 @@ const (
 	// MigrationPlan status message prefix
 	MigrationPlanValidationFailedPrefix = "Migration plan validation failed"
 
+	// MigrationPlanRetryRequestedAnnotation marks a MigrationPlan for an explicit
+	// user-initiated retry (edit and retry). When present, the controller resets a
+	// failed plan — including validation failures — and removes the annotation.
+	MigrationPlanRetryRequestedAnnotation = "vjailbreak.k8s.pf9.io/retry-requested"
+
 	// ValidationStatusFailed is the status value for failed validation
 	ValidationStatusFailed = "Failed"
 	// ValidationStatusRevalidating is the status value while credential revalidation is in progress
