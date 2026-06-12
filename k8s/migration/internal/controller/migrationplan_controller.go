@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -81,6 +82,11 @@ type MigrationPlanReconciler struct {
 }
 
 var migrationPlanFinalizer = "migrationplan.vjailbreak.pf9.io/finalizer"
+
+// errStaleJobCleanedUp signals that a job left behind by a previously deleted Migration
+// (edit and retry) was removed and the reconcile must requeue to recreate it from the
+// current configuration.
+var errStaleJobCleanedUp = stderrors.New("stale job from previous migration run deleted")
 
 // The default image. This is replaced by Go linker flags in the Dockerfile
 var v2vimage = "platform9/v2v-helper:v0.1"
@@ -486,6 +492,18 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	if migrationplan.Status.MigrationStatus == corev1.PodFailed {
+		// Explicit user-initiated retry (edit and retry): the UI sets the retry-requested
+		// annotation after persisting any configuration edits and deleting the failed
+		// Migration. Reset the plan unconditionally — including validation failures,
+		// since the configuration may have been fixed — and clear the annotation first so
+		// the reset happens exactly once.
+		if _, requested := migrationplan.Annotations[constants.MigrationPlanRetryRequestedAnnotation]; requested {
+			if err := r.clearRetryRequestedAnnotation(ctx, migrationplan); err != nil {
+				return ctrl.Result{}, err
+			}
+			return r.resetFailedPlanForRetry(ctx, migrationplan)
+		}
+
 		// Check if any Migration objects exist for this MigrationPlan
 		migrationList := &vjailbreakv1alpha1.MigrationList{}
 		listOpts := []client.ListOption{
@@ -529,25 +547,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				return ctrl.Result{}, nil
 			}
 
-			r.ctxlog.Info("Resetting Plan status for retry", "migrationplan", migrationplan.Name)
-
-			err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				latest := &vjailbreakv1alpha1.MigrationPlan{}
-				if getErr := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, latest); getErr != nil {
-					if apierrors.IsNotFound(getErr) {
-						return nil
-					}
-					return getErr
-				}
-				latest.Status.MigrationStatus = ""
-				latest.Status.MigrationMessage = ""
-				return r.Status().Update(ctx, latest)
-			})
-
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
-			}
-			return ctrl.Result{Requeue: true}, nil
+			return r.resetFailedPlanForRetry(ctx, migrationplan)
 		}
 
 		r.ctxlog.Info("Migration failures still exist, skipping reconciliation", "migrationplan", migrationplan.Name)
@@ -743,6 +743,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
+			if stderrors.Is(err, errStaleJobCleanedUp) {
+				r.ctxlog.Info("Stale job from previous migration run deleted, requeuing to recreate it with current configuration", "migrationplan", migrationplan.Name)
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
 			return ctrl.Result{}, errors.Wrapf(err, "failed to trigger migration")
 		}
 
@@ -777,6 +781,52 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// resetFailedPlanForRetry clears a failed MigrationPlan's status so the next
+// reconciliation revalidates the plan and recreates the deleted Migration objects.
+func (r *MigrationPlanReconciler) resetFailedPlanForRetry(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) (ctrl.Result, error) {
+	r.ctxlog.Info("Resetting Plan status for retry", "migrationplan", migrationplan.Name)
+
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		latest := &vjailbreakv1alpha1.MigrationPlan{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, latest); getErr != nil {
+			if apierrors.IsNotFound(getErr) {
+				return nil
+			}
+			return getErr
+		}
+		latest.Status.MigrationStatus = ""
+		latest.Status.MigrationMessage = ""
+		return r.Status().Update(ctx, latest)
+	})
+
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reset status for retry")
+	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// clearRetryRequestedAnnotation removes the retry-requested annotation so an explicit
+// retry resets the plan exactly once. Cleared before the status reset: if the reset
+// fails, the user can request the retry again rather than the plan silently
+// auto-resetting on a future unrelated failure.
+func (r *MigrationPlanReconciler) clearRetryRequestedAnnotation(ctx context.Context, migrationplan *vjailbreakv1alpha1.MigrationPlan) error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		latest := &vjailbreakv1alpha1.MigrationPlan{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: migrationplan.Name, Namespace: migrationplan.Namespace}, latest); getErr != nil {
+			if apierrors.IsNotFound(getErr) {
+				return nil
+			}
+			return getErr
+		}
+		if _, ok := latest.Annotations[constants.MigrationPlanRetryRequestedAnnotation]; !ok {
+			return nil
+		}
+		delete(latest.Annotations, constants.MigrationPlanRetryRequestedAnnotation)
+		return r.Update(ctx, latest)
+	})
+	return errors.Wrap(err, "failed to clear retry-requested annotation")
 }
 
 // checkAndHandlePausedPlan checks if migration plan is paused and handles it
@@ -1118,6 +1168,11 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 
 	job := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: migrationplan.Namespace}, job)
+	if err == nil {
+		if staleErr := r.handleStaleJob(ctx, job, migrationobj, jobName); staleErr != nil {
+			return staleErr
+		}
+	}
 	if err != nil && apierrors.IsNotFound(err) {
 		r.ctxlog.Info(fmt.Sprintf("Creating new Job '%s' for VM '%s'", jobName, vm))
 		job = &batchv1.Job{
@@ -1314,6 +1369,24 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	return nil
 }
 
+// handleStaleJob deletes a job left behind by a previously deleted Migration (edit and
+// retry; garbage collection of the old Migration's job is asynchronous). Job pod templates
+// are immutable, so the stale job cannot be updated in place — it is deleted and
+// errStaleJobCleanedUp is returned so the reconcile requeues and recreates the job from
+// the current configuration. Returns nil when the job is owned by migrationobj.
+func (r *MigrationPlanReconciler) handleStaleJob(ctx context.Context, job *batchv1.Job, migrationobj *vjailbreakv1alpha1.Migration, jobName string) error {
+	if metav1.IsControlledBy(job, migrationobj) {
+		return nil
+	}
+	if job.GetDeletionTimestamp().IsZero() {
+		r.ctxlog.Info("Deleting stale job from previous migration run", "job", jobName, "migration", migrationobj.Name)
+		if err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil && !apierrors.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to delete stale job '%s'", jobName)
+		}
+	}
+	return errors.Wrapf(errStaleJobCleanedUp, "job '%s'", jobName)
+}
+
 // CreateFirstbootConfigMap creates a firstboot config map for migration
 func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration, vm string,
@@ -1345,6 +1418,25 @@ func (r *MigrationPlanReconciler) CreateFirstbootConfigMap(ctx context.Context,
 			r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
 			return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
 		}
+	} else if err == nil {
+		if !configMap.GetDeletionTimestamp().IsZero() {
+			return nil, errors.Errorf("firstboot config map '%s' from a previous migration run is still being deleted, requeue", configMapName)
+		}
+		if !metav1.IsControlledBy(configMap, migrationobj) {
+			// ConfigMap left behind by a previous Migration run (edit and retry).
+			// Refresh the script from the current plan and transfer ownership so GC of
+			// the old Migration cannot delete it mid-run.
+			r.ctxlog.Info(fmt.Sprintf("Rebuilding stale firstboot ConfigMap '%s' from previous migration run", configMapName), "migration", migrationobj.Name)
+			configMap.Data = map[string]string{
+				"user_firstboot.sh": migrationplan.Spec.FirstBootScript,
+			}
+			if err = r.adoptResource(migrationobj, configMap); err != nil {
+				return nil, err
+			}
+			if err = r.Update(ctx, configMap); err != nil {
+				return nil, errors.Wrapf(err, "failed to update stale firstboot config map '%s'", configMapName)
+			}
+		}
 	}
 	return configMap, nil
 }
@@ -1373,11 +1465,54 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			return nil, err
 		}
 	} else if err == nil {
-		if err = r.updateMigrationConfigMap(ctx, configMap, migrationobj, configMapName); err != nil {
+		if !configMap.GetDeletionTimestamp().IsZero() {
+			return nil, errors.Errorf("config map '%s' from a previous migration run is still being deleted, requeue", configMapName)
+		}
+		if !metav1.IsControlledBy(configMap, migrationobj) {
+			// ConfigMap left behind by a previous Migration run (edit and retry deletes
+			// the Migration; garbage collection of its ConfigMap is asynchronous).
+			// Rebuild the data from the current plan/template and transfer ownership so
+			// GC of the old Migration cannot delete it mid-run.
+			if err = r.rebuildStaleMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachine, arraycreds, proxyVM, configMap); err != nil {
+				return nil, err
+			}
+		} else if err = r.updateMigrationConfigMap(ctx, configMap, migrationobj, configMapName); err != nil {
 			return nil, err
 		}
 	}
 	return configMap, nil
+}
+
+// rebuildStaleMigrationConfigMap refreshes a migration ConfigMap that is still owned by a
+// previously deleted Migration. Data is rebuilt from the current MigrationPlan and
+// MigrationTemplate so configuration edited between retries takes effect, and controller
+// ownership is transferred to the new Migration.
+func (r *MigrationPlanReconciler) rebuildStaleMigrationConfigMap(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vm string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
+	configMap *corev1.ConfigMap,
+) error {
+	r.ctxlog.Info(fmt.Sprintf("Rebuilding stale ConfigMap '%s' from previous migration run", configMap.Name), "migration", migrationobj.Name)
+
+	configMapData, err := r.buildMigrationConfigMapData(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachine, arraycreds, proxyVM)
+	if err != nil {
+		return err
+	}
+	configMap.Data = configMapData
+	if err := r.adoptResource(migrationobj, configMap); err != nil {
+		return err
+	}
+	if err := r.Update(ctx, configMap); err != nil {
+		return errors.Wrapf(err, "failed to update stale config map '%s'", configMap.Name)
+	}
+	return nil
 }
 
 func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context,
@@ -1393,6 +1528,41 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 ) (*corev1.ConfigMap, error) {
 	r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 
+	configMapData, err := r.buildMigrationConfigMapData(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachine, arraycreds, proxyVM)
+	if err != nil {
+		return nil, err
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: migrationplan.Namespace,
+		},
+		Data: configMapData,
+	}
+
+	err = r.createResource(ctx, migrationobj, configMap)
+	if err != nil {
+		r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
+		return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
+	}
+
+	return configMap, nil
+}
+
+// buildMigrationConfigMapData computes the full data for a migration ConfigMap from the
+// current MigrationPlan, MigrationTemplate, mappings and VM information.
+func (r *MigrationPlanReconciler) buildMigrationConfigMapData(ctx context.Context,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vm string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	arraycreds *vjailbreakv1alpha1.ArrayCreds,
+	proxyVM *vjailbreakv1alpha1.ProxyVM,
+) (map[string]string, error) {
 	virtiodrivers := resolveVirtioDriverURL(migrationtemplate)
 
 	openstacknws, openstackvolumetypes, err := r.reconcileMapping(ctx, migrationtemplate, openstackcreds, vmwcreds, vm)
@@ -1434,21 +1604,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 		return nil, err
 	}
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: migrationplan.Namespace,
-		},
-		Data: configMapData,
-	}
-
-	err = r.createResource(ctx, migrationobj, configMap)
-	if err != nil {
-		r.ctxlog.Error(err, fmt.Sprintf("Failed to create ConfigMap '%s'", configMapName))
-		return nil, errors.Wrapf(err, "failed to create config map '%s'", configMapName)
-	}
-
-	return configMap, nil
+	return configMapData, nil
 }
 
 func resolveVirtioDriverURL(migrationtemplate *vjailbreakv1alpha1.MigrationTemplate) string {
@@ -1786,6 +1942,24 @@ func (r *MigrationPlanReconciler) createResource(ctx context.Context, owner meta
 	err = r.Create(ctx, controlled)
 	if err != nil {
 		return errors.Wrap(err, "failed to create resource")
+	}
+	return nil
+}
+
+// adoptResource transfers controller ownership of an existing object to owner, dropping
+// any controller reference left behind by a Migration deleted in a previous retry. Without
+// this, garbage collection of the old owner would delete the object mid-run.
+func (r *MigrationPlanReconciler) adoptResource(owner metav1.Object, controlled client.Object) error {
+	refs := controlled.GetOwnerReferences()
+	kept := make([]metav1.OwnerReference, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Controller == nil || !*ref.Controller {
+			kept = append(kept, ref)
+		}
+	}
+	controlled.SetOwnerReferences(kept)
+	if err := ctrl.SetControllerReference(owner, controlled, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set controller reference")
 	}
 	return nil
 }

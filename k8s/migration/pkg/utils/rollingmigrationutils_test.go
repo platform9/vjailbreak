@@ -184,7 +184,7 @@ func TestConvertVMSequenceToMigrationPlans_UsesVMIDKeyedNames(t *testing.T) {
 			},
 			ClusterSequence: []vjailbreakv1alpha1.ClusterMigrationInfo{
 				{
-					ClusterName:        "cluster-01",
+					ClusterName:          "cluster-01",
 					VMMigrationBatchSize: 10,
 					VMSequence: []vjailbreakv1alpha1.VMSequenceInfo{
 						{VMName: "ubuntu-1"},
