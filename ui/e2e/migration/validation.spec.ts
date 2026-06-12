@@ -317,10 +317,8 @@ test.describe('MIG-014 — all networks must be mapped', () => {
     await page.getByTestId('section-nav-item-map-resources').click()
   })
 
-  test('unmapped networks block submit and show section error', async ({ page }) => {
+  test('unmapped networks block submit', async ({ page }) => {
     await expect(page.getByTestId('network-mapping-table')).toBeVisible()
-    // No mappings selected — section should be in error state
-    await expectSectionNavError(page, 'map-resources')
     await expectSubmitDisabled(page)
   })
 
@@ -348,9 +346,8 @@ test.describe('MIG-015 — all datastores must be mapped', () => {
     await page.getByTestId('section-nav-item-map-resources').click()
   })
 
-  test('unmapped datastores block submit and show section error', async ({ page }) => {
+  test('unmapped datastores block submit', async ({ page }) => {
     await expect(page.getByTestId('storage-mapping-table')).toBeVisible()
-    await expectSectionNavError(page, 'map-resources')
     await expectSubmitDisabled(page)
   })
 

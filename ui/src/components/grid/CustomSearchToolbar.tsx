@@ -19,6 +19,7 @@ interface CustomSearchToolbarProps {
   statusFilterOptions?: string[]
   onDateFilterChange?: (filter: string) => void
   currentDateFilter?: string
+  refreshTooltip?: string
 }
 
 const CustomSearchToolbar = ({
@@ -31,7 +32,8 @@ const CustomSearchToolbar = ({
   currentStatusFilter = 'All',
   statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'],
   onDateFilterChange,
-  currentDateFilter = 'All Time'
+  currentDateFilter = 'All Time',
+  refreshTooltip = 'Refresh'
 }: CustomSearchToolbarProps) => {
   const [statusAnchorEl, setStatusAnchorEl] = useState<null | HTMLElement>(null)
   const [dateAnchorEl, setDateAnchorEl] = useState<null | HTMLElement>(null)
@@ -84,7 +86,7 @@ const CustomSearchToolbar = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {onRefresh && (
-            <Tooltip title="Refresh">
+            <Tooltip title={refreshTooltip}>
               <span>
                 <IconButton onClick={onRefresh} disabled={disableRefresh} size="small">
                   <RefreshRounded />

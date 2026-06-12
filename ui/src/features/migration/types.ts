@@ -310,6 +310,7 @@ export interface VmsSelectionStepProps {
   vmwareCluster?: string
   useGPU?: boolean
   showHeader?: boolean
+  onRevalidateCreds?: () => Promise<void>
 
   // Rolling-mode props
   vmsWithAssignments?: VM[]
