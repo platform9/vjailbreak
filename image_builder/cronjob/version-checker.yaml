@@ -36,6 +36,7 @@ metadata:
   namespace: migration-system
 spec:
   schedule: "0 0 * * *"
+  timeZone: "UTC"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -47,6 +48,10 @@ spec:
           containers:
             - name: version-checker
               image: quay.io/platform9/vjailbreak:alpine
+              envFrom:
+                - configMapRef:
+                    name: pf9-env
+                    optional: true
               command:
                 - /bin/sh
                 - -c
