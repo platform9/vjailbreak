@@ -1043,6 +1043,32 @@ func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID st
 	return true, nil
 }
 
+// StopServer issues a power-off (stop) request for an OpenStack server and
+// waits until it reaches the SHUTOFF state. Used when the migration is
+// configured to leave the target VM powered off (see MigrationStrategy
+// .powerOffTargetVm).
+func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string, vjailbreakSettings k8sutils.VjailbreakSettings) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s", serverID))
+	if err := servers.Stop(ctx, osclient.ComputeClient, serverID).ExtractErr(); err != nil {
+		return fmt.Errorf("failed to issue stop for server %s: %s", serverID, err)
+	}
+	for i := 0; i < vjailbreakSettings.VMActiveWaitRetryLimit; i++ {
+		result, err := servers.Get(ctx, osclient.ComputeClient, serverID).Extract()
+		if err != nil {
+			return fmt.Errorf("failed to get server status while waiting for shutoff: %s", err)
+		}
+		if result.Status == "SHUTOFF" {
+			PrintLog(fmt.Sprintf("Server %s is now powered off", serverID))
+			return nil
+		}
+		if result.Status == "ERROR" {
+			return fmt.Errorf("server %s went into ERROR state while stopping", serverID)
+		}
+		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
+	}
+	return fmt.Errorf("server %s did not reach SHUTOFF after %d retries", serverID, vjailbreakSettings.VMActiveWaitRetryLimit)
+}
+
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
 // Uses the manageable_volumes endpoint which is the standard Cinder manage API
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {

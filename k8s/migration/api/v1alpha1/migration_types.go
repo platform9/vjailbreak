@@ -105,6 +105,12 @@ type MigrationSpec struct {
 	// +optional
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 
+	// PowerOffTargetVM specifies whether to leave the migrated VM powered off
+	// in the target cloud instead of starting it. Useful when post-migration
+	// tasks must run before the VM's first boot. Defaults to false.
+	// +optional
+	PowerOffTargetVM bool `json:"powerOffTargetVm,omitempty"`
+
 	// NetworkOverrides is the JSON-serialized per-NIC overrides for IP and MAC preservation
 	// +optional
 	NetworkOverrides string `json:"networkOverrides,omitempty"`

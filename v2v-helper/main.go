@@ -140,6 +140,7 @@ func main() {
 		Thumbprint:              thumbprint,
 		Convert:                 migrationparams.OpenstackConvert,
 		DisconnectSourceNetwork: migrationparams.DisconnectSourceNetwork,
+		PowerOffTargetVM:        migrationparams.PowerOffTargetVM,
 		Openstackclients:        openstackclients,
 		Vcclient:                vcclient,
 		VMops:                   vmops,
@@ -224,6 +225,7 @@ TYPE=%s
 TARGET_FLAVOR_ID=%s
 TARGET_AVAILABILITY_ZONE=%s
 DISCONNECT_SOURCE_NETWORK=%s
+POWER_OFF_TARGET_VM=%v
 SECURITY_GROUPS=%s
 SERVER_GROUP=%s
 RDM_DISKS=%s
@@ -242,6 +244,7 @@ ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
 		migrationparams.TARGET_FLAVOR_ID,
 		migrationparams.TargetAvailabilityZone,
 		migrationparams.DisconnectSourceNetwork,
+		migrationparams.PowerOffTargetVM,
 		migrationparams.SecurityGroups,
 		migrationparams.ServerGroup,
 		migrationparams.RDMDisks,

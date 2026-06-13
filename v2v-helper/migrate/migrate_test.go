@@ -554,6 +554,59 @@ func TestCreateTargetInstance(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestCreateTargetInstance_PowerOffTargetVM(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockOpenStackOps.EXPECT().GetClosestFlavour(gomock.Any(), gomock.Any(), gomock.Any()).Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any(), gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+		MACAddress: "mac-address",
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetSecurityGroupIDs(gomock.Any(), gomock.Any(), gomock.Any()).Return([]string{}, nil).AnyTimes()
+	// With PowerOffTargetVM set, CreateTargetInstance must call StopServer exactly once.
+	mockOpenStackOps.EXPECT().StopServer(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
+	}
+
+	fakeCtrlClient := ctrlfake.NewClientBuilder().WithObjects(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.VjailbreakSettingsConfigMapName,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Data: map[string]string{},
+	}).Build()
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networknames:     []string{"network-name-1", "network-name-2"},
+		InPod:            false,
+		TargetFlavorId:   "flavor-id",
+		K8sClient:        fakeCtrlClient,
+		PowerOffTargetVM: true,
+	}
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
+	assert.NoError(t, err)
+}
+
 func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
