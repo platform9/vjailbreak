@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Collapse, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useForm } from 'react-hook-form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +14,7 @@ import {
   SurfaceCard
 } from 'src/components'
 import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
+import { get } from 'src/api/axios'
 
 import { postProxyVM } from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
@@ -21,7 +22,7 @@ import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQue
 import { useSSHKeyPairsQuery } from 'src/hooks/api/useSSHKeyPairsQuery'
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
 import { createSecret, deleteSecret } from 'src/api/secrets/secrets'
-import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { K8S_PROXY_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { validateSshPrivateKey } from 'src/utils'
 import type { ProxyVMDeploymentMode } from 'src/api/proxyvms/model'
 
@@ -30,10 +31,8 @@ type SSHKeySource = 'managed' | 'manual'
 interface FormData {
   vmwareCredsRef: string
   vmName: string
-  // SSH key fields
   sshKeyPairRef: string
   sshPrivateKey: string
-  // OVA fields
   ovaURL: string
   datacenter: string
   cluster: string
@@ -57,6 +56,7 @@ function toK8sName(input: string): string {
 }
 
 const FORM_ID = 'add-proxy-vm-form'
+const VJAILBREAK_SETTINGS_CM = 'vjailbreak-settings'
 
 export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProps) {
   const queryClient = useQueryClient()
@@ -72,6 +72,19 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
 
   const { data: sshKeyPairs = [] } = useSSHKeyPairsQuery()
   const keyPairOptions = sshKeyPairs.map((kp) => ({ label: kp.name, value: kp.name }))
+
+  // Fetch vjailbreak-settings to pre-populate OVA URL
+  const { data: settingsCM } = useQuery({
+    queryKey: ['vjailbreak-settings-cm'],
+    queryFn: () =>
+      get<{ data: Record<string, string> }>({
+        endpoint: `${K8S_PROXY_BASE_PATH}/namespaces/${VJAILBREAK_DEFAULT_NAMESPACE}/configmaps/${VJAILBREAK_SETTINGS_CM}`,
+        config: { mock: false }
+      }),
+    staleTime: 5 * 60_000,
+    enabled: open
+  })
+  const configMapOVAUrl = settingsCM?.data?.PROXY_VM_OVA_URL ?? ''
 
   const form = useForm<FormData>({
     defaultValues: {
@@ -90,17 +103,18 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     reValidateMode: 'onChange'
   })
 
-  const {
-    watch,
-    reset,
-    setValue,
-    trigger,
-    formState: { isValid }
-  } = form
-
+  const { watch, reset, setValue, trigger, formState: { isValid } } = form
   const vmwareCredsRef = watch('vmwareCredsRef')
 
-  const { data: vmOptions = [], isLoading: vmsLoading } = useQuery({
+  // Pre-fill OVA URL from ConfigMap when it loads
+  useEffect(() => {
+    if (configMapOVAUrl) {
+      setValue('ovaURL', configMapOVAUrl, { shouldDirty: false, shouldValidate: true })
+    }
+  }, [configMapOVAUrl, setValue])
+
+  // VM dropdown for "existing" mode (running VMs only)
+  const { data: runningVMOptions = [], isLoading: vmsLoading } = useQuery({
     queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef],
     queryFn: async () => {
       const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, vmwareCredsRef)
@@ -112,11 +126,36 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 30_000
   })
 
+  // All VMs for topology discovery in OVA mode
+  const { data: allVMs = [], isLoading: topologyLoading } = useQuery({
+    queryKey: ['vmwaremachines-topology', vmwareCredsRef],
+    queryFn: async () => {
+      const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, vmwareCredsRef)
+      return result.items
+    },
+    enabled: Boolean(vmwareCredsRef) && deploymentMode === 'ova',
+    staleTime: 60_000
+  })
+
+  const clusterOptions = useMemo(() => {
+    const names = [...new Set(allVMs.map((m) => m.spec.vms.clusterName).filter(Boolean) as string[])]
+    return names.sort().map((n) => ({ label: n, value: n }))
+  }, [allVMs])
+
+  const datastoreOptions = useMemo(() => {
+    const names = [...new Set(allVMs.flatMap((m) => m.spec.vms.datastores ?? []))]
+    return names.sort().map((n) => ({ label: n, value: n }))
+  }, [allVMs])
+
+  const networkOptions = useMemo(() => {
+    const names = [...new Set(allVMs.flatMap((m) => m.spec.vms.networks ?? []))]
+    return names.sort().map((n) => ({ label: n, value: n }))
+  }, [allVMs])
+
   useEffect(() => {
     setValue('vmName', '')
   }, [vmwareCredsRef, setValue])
 
-  // Re-validate required fields when mode toggles change
   useEffect(() => {
     trigger()
   }, [sshKeySource, deploymentMode, trigger])
@@ -154,7 +193,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     let secretName: string | null = null
 
     try {
-      // Build spec fields for SSH key
       const sshSpec =
         sshKeySource === 'managed'
           ? { sshKeyPairRef: { name: data.sshKeyPairRef } }
@@ -163,7 +201,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               return { sshKeySecretRef: { name: secretName } }
             })()
 
-      // Create secret when using manual key
       if (sshKeySource === 'manual' && secretName) {
         await createSecret(
           secretName,
@@ -172,7 +209,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         )
       }
 
-      // Build OVA spec if applicable
       const ovaSpec =
         deploymentMode === 'ova'
           ? {
@@ -190,10 +226,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       await postProxyVM({
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'ProxyVM',
-        metadata: {
-          name: vmNameSafe,
-          namespace: VJAILBREAK_DEFAULT_NAMESPACE
-        },
+        metadata: { name: vmNameSafe, namespace: VJAILBREAK_DEFAULT_NAMESPACE },
         spec: {
           vmName: data.vmName,
           vmwareCredsRef: { name: data.vmwareCredsRef },
@@ -206,7 +239,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
       handleClose()
     } catch (err) {
-      // Roll back manually-created secret on failure
       if (sshKeySource === 'manual' && secretName) {
         deleteSecret(secretName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
       }
@@ -228,7 +260,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     ? 'Select VMware credentials first'
     : vmsLoading
       ? 'Loading VMs...'
-      : vmOptions.length === 0
+      : runningVMOptions.length === 0
         ? 'No VMs found for selected credentials'
         : 'Search and select a VM'
 
@@ -292,7 +324,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               </ToggleButtonGroup>
             </Section>
 
-            {/* Proxy VM selection */}
+            {/* Proxy VM identity */}
             <Section>
               <SectionHeader
                 title="Proxy VM"
@@ -322,7 +354,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     <RHFSelect
                       name="vmName"
                       label="VM Name"
-                      options={vmOptions}
+                      options={runningVMOptions}
                       searchable
                       searchPlaceholder="Search VMs..."
                       rules={{ required: 'VM is required' }}
@@ -333,9 +365,9 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                 ) : (
                   <RHFTextField
                     name="vmName"
-                    label="VM Name"
+                    label="New VM Name"
                     required
-                    placeholder="Name for the new VM (e.g. my-proxy-vm)"
+                    placeholder="Name for the deployed VM (e.g. my-proxy-vm)"
                     rules={{ required: 'VM name is required' }}
                     disabled={isSubmitting}
                   />
@@ -343,22 +375,27 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               </Box>
             </Section>
 
-            {/* OVA Configuration — only shown in OVA mode */}
+            {/* OVA Configuration */}
             <Collapse in={deploymentMode === 'ova'} unmountOnExit>
               <Section>
                 <SectionHeader
                   title="OVA Configuration"
-                  subtitle="Specify where to deploy the Proxy VM OVA. Leave optional fields blank to use vCenter defaults."
+                  subtitle="Specify where to deploy the Proxy VM. Leave optional fields blank to use vCenter defaults."
                 />
                 <Box sx={{ display: 'grid', gap: 2 }}>
                   <RHFTextField
                     name="ovaURL"
                     label="OVA URL"
                     placeholder="https://example.com/proxy-vm.ova"
+                    helperText={
+                      configMapOVAUrl
+                        ? 'Pre-configured in vjailbreak-settings — edit to override'
+                        : undefined
+                    }
                     rules={
                       deploymentMode === 'ova'
                         ? {
-                            required: 'OVA URL is required when deploying from OVA',
+                            required: 'OVA URL is required',
                             pattern: {
                               value: /^https?:\/\/.+/,
                               message: 'Must be a valid HTTP/HTTPS URL'
@@ -368,38 +405,73 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     }
                     disabled={isSubmitting}
                   />
+
+                  <RHFTextField
+                    name="datacenter"
+                    label="Datacenter"
+                    placeholder="Leave blank for vCenter default"
+                    disabled={isSubmitting}
+                  />
+
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                    <RHFTextField
-                      name="datacenter"
-                      label="Datacenter"
-                      placeholder="Leave blank for default"
-                      disabled={isSubmitting}
-                    />
-                    <RHFTextField
+                    <RHFSelect
                       name="cluster"
                       label="Cluster / Resource Pool"
-                      placeholder="Leave blank for default"
-                      disabled={isSubmitting}
+                      options={clusterOptions}
+                      searchable
+                      searchPlaceholder="Search clusters..."
+                      placeholder={
+                        !vmwareCredsRef
+                          ? 'Select VMware credentials first'
+                          : topologyLoading
+                            ? 'Loading...'
+                            : clusterOptions.length === 0
+                              ? 'No clusters found'
+                              : 'Select or leave blank for default'
+                      }
+                      disabled={!vmwareCredsRef || topologyLoading}
                     />
-                    <RHFTextField
+                    <RHFSelect
                       name="datastore"
                       label="Datastore"
-                      placeholder="Leave blank for default"
-                      disabled={isSubmitting}
+                      options={datastoreOptions}
+                      searchable
+                      searchPlaceholder="Search datastores..."
+                      placeholder={
+                        !vmwareCredsRef
+                          ? 'Select VMware credentials first'
+                          : topologyLoading
+                            ? 'Loading...'
+                            : datastoreOptions.length === 0
+                              ? 'No datastores found'
+                              : 'Select or leave blank for default'
+                      }
+                      disabled={!vmwareCredsRef || topologyLoading}
                     />
-                    <RHFTextField
+                    <RHFSelect
                       name="network"
                       label="Network"
-                      placeholder="Leave blank for OVA default"
+                      options={networkOptions}
+                      searchable
+                      searchPlaceholder="Search networks..."
+                      placeholder={
+                        !vmwareCredsRef
+                          ? 'Select VMware credentials first'
+                          : topologyLoading
+                            ? 'Loading...'
+                            : networkOptions.length === 0
+                              ? 'No networks found'
+                              : 'Select or leave blank for OVA default'
+                      }
+                      disabled={!vmwareCredsRef || topologyLoading}
+                    />
+                    <RHFTextField
+                      name="folder"
+                      label="VM Folder"
+                      placeholder="Leave blank for root VM folder"
                       disabled={isSubmitting}
                     />
                   </Box>
-                  <RHFTextField
-                    name="folder"
-                    label="VM Folder"
-                    placeholder="Leave blank for root VM folder"
-                    disabled={isSubmitting}
-                  />
                 </Box>
               </Section>
             </Collapse>
@@ -439,7 +511,9 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     name="sshKeyPairRef"
                     label="SSH Key Pair"
                     options={keyPairOptions}
-                    rules={{ required: sshKeySource === 'managed' ? 'SSH key pair is required' : false }}
+                    rules={{
+                      required: sshKeySource === 'managed' ? 'SSH key pair is required' : false
+                    }}
                     placeholder={
                       keyPairOptions.length === 0
                         ? 'No key pairs found — create one on the SSH Key Pairs page'
@@ -470,8 +544,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                       />
                     </ActionButton>
                     <Typography variant="body2" color="text.secondary">
-                      Paste only the private key content (OpenSSH, RSA, EC, PKCS#8, or DSA — no
-                      field name prefix).
+                      Paste only the private key content (OpenSSH, RSA, EC, PKCS#8, or DSA).
                     </Typography>
                   </Box>
 
@@ -483,7 +556,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     minRows={10}
                     disabled={isSubmitting}
                     placeholder={
-                      '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n\nAlso accepted: RSA, EC, PKCS#8 (PRIVATE KEY), DSA'
+                      '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'
                     }
                     rules={
                       sshKeySource === 'manual'
