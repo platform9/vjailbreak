@@ -69,7 +69,9 @@ func (r *ProxyVMReconciler) deployOVAIfNeeded(ctx context.Context, proxyVM *vjai
 	if err != nil {
 		return fmt.Errorf("failed to download OVA from %s: %w", ovaURL, err)
 	}
-	defer os.Remove(ovaPath)
+	defer func() {
+		_ = os.Remove(ovaPath) //nolint:errcheck
+	}()
 
 	imp, opts, err := r.buildOVAImporter(ctx, proxyVM, vcClient)
 	if err != nil {
@@ -204,7 +206,9 @@ func downloadToTempFile(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() //nolint:errcheck
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d fetching OVA from %s", resp.StatusCode, url)
 	}
@@ -213,10 +217,12 @@ func downloadToTempFile(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close() //nolint:errcheck
+	}()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name()) //nolint:errcheck
 		return "", fmt.Errorf("failed to write OVA: %w", err)
 	}
 	return f.Name(), nil
@@ -281,13 +287,17 @@ func (r *ProxyVMReconciler) injectSSHPublicKey(ctx context.Context, proxyVM *vja
 		case <-time.After(5 * time.Second):
 		}
 	}
-	defer sshClient.Close()
+	defer func() {
+		_ = sshClient.Close() //nolint:errcheck
+	}()
 
 	sess, err := sshClient.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to open SSH session: %w", err)
 	}
-	defer sess.Close()
+	defer func() {
+		_ = sess.Close() //nolint:errcheck
+	}()
 
 	pubKeyLine := strings.TrimRight(string(pubKey), "\n\r") + "\n"
 	cmd := fmt.Sprintf(
