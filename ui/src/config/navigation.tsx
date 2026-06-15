@@ -69,6 +69,11 @@ export const navigationItems: NavigationItem[] = [
         icon: <VpnKeyIcon />
       },
       {
+        id: 'ssh-key-pairs',
+        label: 'SSH Key Pairs',
+        path: '/dashboard/ssh-key-pairs'
+      },
+      {
         id: 'proxy-vms',
         label: 'Proxy VMs',
         path: '/dashboard/proxy-vms',

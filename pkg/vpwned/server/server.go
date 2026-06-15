@@ -125,6 +125,9 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	}
 	mux.HandleFunc("/vpw/v1/k8s/", HandleK8sProxy)
 
+	// SSH key pair generation — generates RSA-4096, stores in k8s Secret, returns public key only.
+	mux.HandleFunc("/vpw/v1/generate-ssh-keypair", HandleGenerateSSHKeyPair)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -171,6 +174,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// Skip k8s proxy - registered with its own prefix handler above
 		if strings.HasPrefix(r.URL.Path, "/vpw/v1/k8s/") {
 			HandleK8sProxy(w, r)
+			return
+		}
+		// SSH key pair generation
+		if r.URL.Path == "/vpw/v1/generate-ssh-keypair" {
+			HandleGenerateSSHKeyPair(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)

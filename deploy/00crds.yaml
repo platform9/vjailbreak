@@ -2137,8 +2137,7 @@ spec:
                       description: Message provides detail for missing components.
                       type: string
                     name:
-                      description: Name is the component name (e.g. "lsblk", "qemu-nbd",
-                        "sshd").
+                      description: Name is the component name (e.g. "qemu-nbd", "sshd").
                       type: string
                     present:
                       description: Present indicates whether the component was found
