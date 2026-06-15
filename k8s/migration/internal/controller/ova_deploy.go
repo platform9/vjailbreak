@@ -216,6 +216,14 @@ func (r *ProxyVMReconciler) buildOVAImporter(ctx context.Context, proxyVM *vjail
 		Log:          logFn,
 	}
 
+	// For standalone ESXi hosts, ImportVApp requires an explicit host reference.
+	// Clusters don't need this — if the lookup fails we leave Host nil.
+	if spec != nil && spec.Cluster != "" {
+		if host, err := finder.HostSystem(ctx, spec.Cluster); err == nil {
+			imp.Host = host
+		}
+	}
+
 	vmName := proxyVM.Spec.VMName
 	opts := ovfimporter.Options{
 		Name:    &vmName,
