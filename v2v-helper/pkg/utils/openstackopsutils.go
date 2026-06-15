@@ -33,6 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
@@ -821,21 +822,62 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 	return osclient.createPortLowLevel(ctx, createOpts)
 }
 
+// l2PortBindingProfileKey is the binding profile flag PCD expects on ports that
+// belong to an L2-only network. Downstream consumers (e.g. the PCD Veeam Proxy)
+// use it to detect that a port is on an L2 network; without it, backup/restore
+// of migrated workloads fails. See PCD docs:
+//
+//	pcdctl port create ... --binding-profile '{"l2-port": true}'
+const l2PortBindingProfileKey = "l2-port"
+
+// buildPortCreateOptions layers the OpenStack port extensions required by
+// vJailbreak onto the base create options:
+//   - L2-only networks get the {"l2-port": true} binding profile so PCD treats
+//     the port as belonging to an L2 network.
+//   - Ports with no security groups get port security disabled.
+//
+// Both extensions implement ports.CreateOptsBuilder and compose, so they can be
+// layered together when both conditions apply. Kept as a pure function so the
+// option-building logic can be unit tested without an OpenStack client.
+func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool) ports.CreateOptsBuilder {
+	var optsBuilder ports.CreateOptsBuilder = createOpts
+
+	// For L2-only networks, attach the binding profile expected by PCD.
+	if isL2Network {
+		optsBuilder = portsbinding.CreateOptsExt{
+			CreateOptsBuilder: optsBuilder,
+			Profile:           map[string]any{l2PortBindingProfileKey: true},
+		}
+	}
+
+	// When no security groups are selected, disable port security.
+	if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
+		disabled := false
+		optsBuilder = portsecurity.PortCreateOptsExt{
+			CreateOptsBuilder:   optsBuilder,
+			PortSecurityEnabled: &disabled,
+		}
+	}
+
+	return optsBuilder
+}
+
 func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
 	var port *ports.Port
 	var err error
+
+	// Determine once (before the retry loop) whether this is an L2-only network
+	// so we can attach the required l2-port binding profile. A lookup failure is
+	// non-fatal: log it and create the port without the profile rather than
+	// failing migration outright.
+	isL2Network, l2Err := osclient.GetIsSimpleNetwork(ctx, createOpts.NetworkID)
+	if l2Err != nil {
+		return nil, fmt.Errorf("failed determine if network %s is L2: %s", createOpts.NetworkID, l2Err)
+	}
+
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
-		// When no security groups are selected, disable port security
-		if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
-			disabled := false
-			extOpts := portsecurity.PortCreateOptsExt{
-				CreateOptsBuilder:   createOpts,
-				PortSecurityEnabled: &disabled,
-			}
-			port, err = ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
-		} else {
-			port, err = ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
-		}
+		opts := buildPortCreateOptions(createOpts, isL2Network)
+		port, err = ports.Create(ctx, osclient.NetworkingClient, opts).Extract()
 		if err == nil {
 			return port, nil
 		}
