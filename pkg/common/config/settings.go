@@ -40,6 +40,7 @@ type VjailbreakSettings struct {
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
 	HTTPTimeoutSeconds                  int
+	ProxyVMOVAURL                       string
 }
 
 // Atoi is a helper function to convert string to int with a default value of 0
@@ -87,6 +88,7 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 			V2VHelperPodEphemeralStorageRequest: constants.V2VHelperPodEphemeralStorageRequest,
 			V2VHelperPodEphemeralStorageLimit:   constants.V2VHelperPodEphemeralStorageLimit,
 			HTTPTimeoutSeconds:                  constants.HTTPTimeoutSeconds,
+		ProxyVMOVAURL:                       "",
 		}, nil
 	}
 
@@ -216,5 +218,6 @@ func GetVjailbreakSettings(ctx context.Context, k8sClient client.Client) (*Vjail
 		V2VHelperPodEphemeralStorageRequest: vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageRequestKey],
 		V2VHelperPodEphemeralStorageLimit:   vjailbreakSettingsCM.Data[constants.V2VHelperPodEphemeralStorageLimitKey],
 		HTTPTimeoutSeconds:                  Atoi(vjailbreakSettingsCM.Data[constants.HTTPTimeoutSecondsKey]),
+		ProxyVMOVAURL:                       vjailbreakSettingsCM.Data["PROXY_VM_OVA_URL"],
 	}, nil
 }

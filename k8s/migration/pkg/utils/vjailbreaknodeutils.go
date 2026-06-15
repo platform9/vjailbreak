@@ -366,11 +366,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
-		Name:           vjNode.Name,
-		FlavorRef:      vjNode.Spec.OpenstackFlavorID,
-		Networks:       networkIDs,
-		SecurityGroups: securityGroups,
-		UserData:       []byte(commonutils.BuildUserData(constants.ENVFileLocation, GetNodeInternalIP(masterNode), string(token), hostEntries)),
+		Name:             vjNode.Name,
+		FlavorRef:        vjNode.Spec.OpenstackFlavorID,
+		Networks:         networkIDs,
+		SecurityGroups:   securityGroups,
+		UserData:         []byte(commonutils.BuildUserData(constants.ENVFileLocation, GetNodeInternalIP(masterNode), string(token), hostEntries)),
 		BlockDevice:      []servers.BlockDevice{rootDisk},
 		AvailabilityZone: availabilityZone,
 	}

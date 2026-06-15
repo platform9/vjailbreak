@@ -28,4 +28,5 @@ type VjailbreakSettings struct {
 	V2VHelperPodEphemeralStorageRequest string
 	V2VHelperPodEphemeralStorageLimit   string
 	HTTPTimeoutSeconds                  int
+	ProxyVMOVAURL                       string
 }

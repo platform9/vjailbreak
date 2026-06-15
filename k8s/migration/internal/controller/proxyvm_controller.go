@@ -45,7 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-
 // ProxyVMReconciler reconciles a ProxyVM object
 type ProxyVMReconciler struct {
 	client.Client
@@ -111,6 +110,13 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to connect to vCenter: %v", err))
 	}
 
+	// Deploy the Proxy VM from OVA if requested (idempotent — skips if VM already exists).
+	if proxyVM.Spec.DeploymentMode == vjailbreakv1alpha1.ProxyVMDeploymentModeOVA {
+		if err := r.deployOVAIfNeeded(ctx, proxyVM, vcClient); err != nil {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("OVA deployment failed: %v", err))
+		}
+	}
+
 	// Find the VM and get its guest IP
 	vmObj, err := vcClient.GetVMByName(ctx, proxyVM.Spec.VMName)
 	if err != nil {
@@ -137,8 +143,11 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, vmObj)
 	}
 
-	// Load the SSH private key from the per-ProxyVM k8s secret created during onboarding.
+	// Resolve SSH private key: prefer explicit SSHKeyPairRef, fall back to legacy per-ProxyVM secret.
 	sshSecretName := commonutils.HotAddSSHSecretName(proxyVM.Name)
+	if proxyVM.Spec.SSHKeyPairRef != nil {
+		sshSecretName = proxyVM.Spec.SSHKeyPairRef.Name
+	}
 	sshSecret := &corev1.Secret{}
 	if err := r.Get(ctx, k8stypes.NamespacedName{
 		Name:      sshSecretName,

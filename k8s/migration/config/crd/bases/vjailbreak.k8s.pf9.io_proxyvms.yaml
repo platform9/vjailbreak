@@ -54,6 +54,64 @@ spec:
           spec:
             description: ProxyVMSpec defines the desired state of ProxyVM
             properties:
+              deploymentMode:
+                default: existing
+                description: |-
+                  DeploymentMode controls how the Proxy VM is provisioned.
+                  "existing" (default): the VM must already exist in vCenter.
+                  "ova": the controller deploys the VM from an OVA template before verification.
+                enum:
+                - existing
+                - ova
+                type: string
+              ovaDeploymentSpec:
+                description: |-
+                  OVADeploymentSpec specifies OVA deployment parameters.
+                  Required when DeploymentMode is "ova".
+                properties:
+                  cluster:
+                    description: Cluster is the cluster or resource pool path. Uses
+                      first available if empty.
+                    type: string
+                  datacenter:
+                    description: Datacenter is the vCenter datacenter name. Uses vCenter
+                      default if empty.
+                    type: string
+                  datastore:
+                    description: Datastore is the datastore name. Uses first available
+                      if empty.
+                    type: string
+                  folder:
+                    description: Folder is the VM folder path relative to the datacenter.
+                      Uses root VM folder if empty.
+                    type: string
+                  network:
+                    description: Network is the network name for the VM's primary
+                      NIC. Uses OVA default if empty.
+                    type: string
+                  ovaURL:
+                    description: |-
+                      OVAURL is the HTTP(S) URL of the OVA file.
+                      Defaults to PROXY_VM_OVA_URL in the vjailbreak-settings ConfigMap if empty.
+                    type: string
+                type: object
+              sshKeyPairRef:
+                description: |-
+                  SSHKeyPairRef references a k8s Secret containing ssh-privatekey/ssh-publickey data.
+                  When set, this key is used for SSH access to the Proxy VM during verification, overriding
+                  the legacy "<name>-hot-add-ssh-key" secret convention.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               vmName:
                 description: VMName is the display name of the Proxy VM in vCenter.
                 type: string
