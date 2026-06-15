@@ -1,4 +1,5 @@
 graphify-out/cache/
+graphify-out/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 artifacts/*
 image_builder/deploy/*
 k8s/migration/dist/*
