@@ -27,7 +27,9 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/vmware/govmomi/object"
 	ovfimporter "github.com/vmware/govmomi/ovf/importer"
+	"github.com/vmware/govmomi/vim25/methods"
 	"github.com/vmware/govmomi/vim25/mo"
+	vimtypes "github.com/vmware/govmomi/vim25/types"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -65,23 +67,56 @@ func (r *ProxyVMReconciler) deployOVAIfNeeded(ctx context.Context, proxyVM *vjai
 	if err != nil {
 		return fmt.Errorf("failed to prepare OVA importer: %w", err)
 	}
-	// Stream the OVA directly from the URL into vCenter via govmomi's NFC upload —
-	// no local temp file needed. govmomi opens the URL on demand for each tar entry
-	// (OVF descriptor first, then each VMDK) and streams the bytes straight through
-	// to vCenter's NFC endpoint. The Opener.Client carries the vCenter session so
-	// that redirects through the vSphere management plane are authenticated correctly.
+	// Only the OVF descriptor (a few KB of XML) is fetched through the controller.
+	// Disk images are never downloaded here — ESXi pulls them directly from the OVA
+	// URL via HttpNfcLeasePullFromUrls_Task, the same API the vCenter UI uses when
+	// you choose "Deploy OVF Template → Enter URL".
 	imp.Archive = &ovfimporter.TapeArchive{
 		Path:   ovaURL,
 		Opener: ovfimporter.Opener{Client: vcClient.VCClient},
 	}
-	ctxlog.Info("Importing OVA from URL into vCenter", "url", ovaURL, "vm", proxyVM.Spec.VMName)
 
-	moRef, err := imp.Import(ctx, "*.ovf", opts)
+	ctxlog.Info("Creating OVA import lease in vCenter", "url", ovaURL, "vm", proxyVM.Spec.VMName)
+	info, lease, err := imp.ImportVApp(ctx, "*.ovf", opts)
 	if err != nil {
-		return fmt.Errorf("OVA import failed: %w", err)
+		return fmt.Errorf("failed to create OVA import lease: %w", err)
 	}
 
-	vmObj := object.NewVirtualMachine(vcClient.VCClient, *moRef)
+	// Build one source-file entry per disk so ESXi knows where to pull each VMDK from.
+	sourceFiles := make([]vimtypes.HttpNfcLeaseSourceFile, 0, len(info.Items))
+	for _, item := range info.Items {
+		sourceFiles = append(sourceFiles, vimtypes.HttpNfcLeaseSourceFile{
+			TargetDeviceId: item.DeviceId,
+			Url:            ovaURL,
+			MemberName:     item.Path,
+		})
+	}
+
+	ctxlog.Info("Requesting vCenter to pull OVA disks from URL", "disks", len(sourceFiles))
+	pullResp, err := methods.HttpNfcLeasePullFromUrls_Task(ctx, vcClient.VCClient, &vimtypes.HttpNfcLeasePullFromUrls_Task{
+		This:  lease.Reference(),
+		Files: sourceFiles,
+	})
+	if err != nil {
+		_ = lease.Abort(ctx, &vimtypes.LocalizedMethodFault{}) //nolint:errcheck
+		return fmt.Errorf("failed to start OVA pull from URL: %w", err)
+	}
+
+	pullTask := object.NewTask(vcClient.VCClient, pullResp.Returnval)
+	if err := pullTask.Wait(ctx); err != nil {
+		_ = lease.Abort(ctx, &vimtypes.LocalizedMethodFault{}) //nolint:errcheck
+		return fmt.Errorf("OVA pull from URL failed: %w", err)
+	}
+
+	if err := lease.Complete(ctx); err != nil {
+		return fmt.Errorf("failed to complete OVA import lease: %w", err)
+	}
+	ctxlog.Info("OVA deployed via vCenter pull", "vm", proxyVM.Spec.VMName)
+
+	vmObj, err := vcClient.GetVMByName(ctx, proxyVM.Spec.VMName)
+	if err != nil {
+		return fmt.Errorf("deployed VM %q not found after import: %w", proxyVM.Spec.VMName, err)
+	}
 	powerTask, err := vmObj.PowerOn(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to power on deployed VM: %w", err)
