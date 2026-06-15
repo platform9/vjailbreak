@@ -110,13 +110,6 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to connect to vCenter: %v", err))
 	}
 
-	// Deploy the Proxy VM from OVA if requested (idempotent — skips if VM already exists).
-	if proxyVM.Spec.DeploymentMode == vjailbreakv1alpha1.ProxyVMDeploymentModeOVA {
-		if err := r.deployOVAIfNeeded(ctx, proxyVM, vcClient); err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("OVA deployment failed: %v", err))
-		}
-	}
-
 	// Find the VM and get its guest IP
 	vmObj, err := vcClient.GetVMByName(ctx, proxyVM.Spec.VMName)
 	if err != nil {

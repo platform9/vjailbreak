@@ -21,45 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProxyVMDeploymentMode describes how the Proxy VM is provisioned.
-// +kubebuilder:validation:Enum=existing;ova
-type ProxyVMDeploymentMode string
-
-const (
-	// ProxyVMDeploymentModeExisting means the VM already exists in vCenter.
-	ProxyVMDeploymentModeExisting ProxyVMDeploymentMode = "existing"
-	// ProxyVMDeploymentModeOVA means the controller deploys the VM from an OVA template.
-	ProxyVMDeploymentModeOVA ProxyVMDeploymentMode = "ova"
-)
-
-// ProxyVMOVADeploymentSpec holds parameters for deploying a Proxy VM from an OVA template.
-type ProxyVMOVADeploymentSpec struct {
-	// OVAURL is the HTTP(S) URL of the OVA file.
-	// Defaults to PROXY_VM_OVA_URL in the vjailbreak-settings ConfigMap if empty.
-	// +optional
-	OVAURL string `json:"ovaURL,omitempty"`
-
-	// Datacenter is the vCenter datacenter name. Uses vCenter default if empty.
-	// +optional
-	Datacenter string `json:"datacenter,omitempty"`
-
-	// Cluster is the cluster or resource pool path. Uses first available if empty.
-	// +optional
-	Cluster string `json:"cluster,omitempty"`
-
-	// Datastore is the datastore name. Uses first available if empty.
-	// +optional
-	Datastore string `json:"datastore,omitempty"`
-
-	// Network is the network name for the VM's primary NIC. Uses OVA default if empty.
-	// +optional
-	Network string `json:"network,omitempty"`
-
-	// Folder is the VM folder path relative to the datacenter. Uses root VM folder if empty.
-	// +optional
-	Folder string `json:"folder,omitempty"`
-}
-
 // ProxyVMSpec defines the desired state of ProxyVM
 type ProxyVMSpec struct {
 	// VMName is the display name of the Proxy VM in vCenter.
@@ -74,17 +35,7 @@ type ProxyVMSpec struct {
 	// +optional
 	SSHKeyPairRef *corev1.LocalObjectReference `json:"sshKeyPairRef,omitempty"`
 
-	// DeploymentMode controls how the Proxy VM is provisioned.
-	// "existing" (default): the VM must already exist in vCenter.
-	// "ova": the controller deploys the VM from an OVA template before verification.
-	// +optional
-	// +kubebuilder:default=existing
-	DeploymentMode ProxyVMDeploymentMode `json:"deploymentMode,omitempty"`
 
-	// OVADeploymentSpec specifies OVA deployment parameters.
-	// Required when DeploymentMode is "ova".
-	// +optional
-	OVADeploymentSpec *ProxyVMOVADeploymentSpec `json:"ovaDeploymentSpec,omitempty"`
 }
 
 // ProxyVMComponentCheck records whether a required component was found on the Proxy VM.
