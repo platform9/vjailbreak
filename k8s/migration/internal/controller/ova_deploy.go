@@ -19,9 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -64,22 +61,21 @@ func (r *ProxyVMReconciler) deployOVAIfNeeded(ctx context.Context, proxyVM *vjai
 		return err
 	}
 
-	ctxlog.Info("Downloading OVA", "url", ovaURL)
-	ovaPath, err := downloadToTempFile(ctx, ovaURL)
-	if err != nil {
-		return fmt.Errorf("failed to download OVA from %s: %w", ovaURL, err)
-	}
-	defer func() {
-		_ = os.Remove(ovaPath) //nolint:errcheck
-	}()
-
 	imp, opts, err := r.buildOVAImporter(ctx, proxyVM, vcClient)
 	if err != nil {
 		return fmt.Errorf("failed to prepare OVA importer: %w", err)
 	}
-	imp.Archive = &ovfimporter.TapeArchive{Path: ovaPath}
+	// Stream the OVA directly from the URL into vCenter via govmomi's NFC upload —
+	// no local temp file needed. govmomi opens the URL on demand for each tar entry
+	// (OVF descriptor first, then each VMDK) and streams the bytes straight through
+	// to vCenter's NFC endpoint. The Opener.Client carries the vCenter session so
+	// that redirects through the vSphere management plane are authenticated correctly.
+	imp.Archive = &ovfimporter.TapeArchive{
+		Path:   ovaURL,
+		Opener: ovfimporter.Opener{Client: vcClient.VCClient},
+	}
+	ctxlog.Info("Importing OVA from URL into vCenter", "url", ovaURL, "vm", proxyVM.Spec.VMName)
 
-	ctxlog.Info("Importing OVA into vCenter", "vm", proxyVM.Spec.VMName)
 	moRef, err := imp.Import(ctx, "*.ovf", opts)
 	if err != nil {
 		return fmt.Errorf("OVA import failed: %w", err)
@@ -193,39 +189,6 @@ func (r *ProxyVMReconciler) buildOVAImporter(ctx context.Context, proxyVM *vjail
 	}
 
 	return imp, opts, nil
-}
-
-// downloadToTempFile downloads the OVA at url into a temp file and returns its path.
-// The caller is responsible for removing the file.
-func downloadToTempFile(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = resp.Body.Close() //nolint:errcheck
-	}()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d fetching OVA from %s", resp.StatusCode, url)
-	}
-
-	f, err := os.CreateTemp("", "vjailbreak-ova-*.ova")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck
-	}()
-
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		_ = os.Remove(f.Name()) //nolint:errcheck
-		return "", fmt.Errorf("failed to write OVA: %w", err)
-	}
-	return f.Name(), nil
 }
 
 // waitForGuestIP polls the VM until VMware Tools reports a guest IP or the timeout expires.
