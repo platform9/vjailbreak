@@ -872,7 +872,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	// failing migration outright.
 	isL2Network, l2Err := osclient.GetIsSimpleNetwork(ctx, createOpts.NetworkID)
 	if l2Err != nil {
-		PrintLog(fmt.Sprintf("failed to determine if network %s is L2, creating port without l2-port binding profile: %s", createOpts.NetworkID, l2Err))
+		return nil, fmt.Errorf("failed determine if network %s is L2: %s", createOpts.NetworkID, l2Err)
 	}
 
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
