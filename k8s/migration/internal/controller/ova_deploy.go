@@ -172,9 +172,13 @@ func (r *ProxyVMReconciler) buildOVAImporter(ctx context.Context, proxyVM *vjail
 		finder.SetDatacenter(dc)
 	}
 
-	poolPath := "*"
+	poolPath := "*/Resources"
 	if spec != nil && spec.Cluster != "" {
-		poolPath = spec.Cluster
+		if strings.HasSuffix(spec.Cluster, "/Resources") {
+			poolPath = spec.Cluster
+		} else {
+			poolPath = spec.Cluster + "/Resources"
+		}
 	}
 	pool, err := finder.ResourcePool(ctx, poolPath)
 	if err != nil {
