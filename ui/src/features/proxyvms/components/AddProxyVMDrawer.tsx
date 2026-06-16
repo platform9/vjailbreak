@@ -1,5 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Alert,
+  Box,
+  IconButton,
+  InputAdornment,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography
+} from '@mui/material'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import CheckIcon from '@mui/icons-material/Check'
 import { useForm } from 'react-hook-form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
@@ -18,19 +30,23 @@ import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components
 import { postProxyVM } from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
-import { useSSHKeyPairsQuery } from 'src/hooks/api/useSSHKeyPairsQuery'
+import { generateSSHKeyPair, deleteSSHKeyPair } from 'src/api/sshKeyPairs/sshKeyPairs'
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
-import { createSecret, deleteSecret } from 'src/api/secrets/secrets'
+import { createSecret } from 'src/api/secrets/secrets'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { validateSshPrivateKey } from 'src/utils'
 
-type SSHKeySource = 'managed' | 'manual'
+type SSHKeySource = 'generated' | 'manual'
 
 interface FormData {
   vmwareCredsRef: string
   vmName: string
-  sshKeyPairRef: string
   sshPrivateKey: string
+}
+
+interface GeneratedKey {
+  secretName: string
+  publicKey: string
 }
 
 interface AddProxyVMDrawerProps {
@@ -53,29 +69,32 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('managed')
+  const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
+  const [generatedKey, setGeneratedKey] = useState<GeneratedKey | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const generatedKeyRef = useRef<GeneratedKey | null>(null)
+
+  // Keep ref in sync so cleanup callback always has the latest value
+  useEffect(() => {
+    generatedKeyRef.current = generatedKey
+  }, [generatedKey])
 
   const { data: vmwareCreds = [] } = useVmwareCredentialsQuery()
   const credOptions = vmwareCreds
     .filter((c) => c.status?.vmwareValidationStatus?.toLowerCase() === 'succeeded')
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
 
-  const { data: sshKeyPairs = [] } = useSSHKeyPairsQuery()
-  const keyPairOptions = sshKeyPairs.map((kp) => ({ label: kp.name, value: kp.name }))
-
   const form = useForm<FormData>({
-    defaultValues: {
-      vmwareCredsRef: '',
-      vmName: '',
-      sshKeyPairRef: '',
-      sshPrivateKey: ''
-    },
+    defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '' },
     mode: 'onChange',
     reValidateMode: 'onChange'
   })
 
   const { watch, reset, setValue, trigger, formState: { isValid } } = form
   const vmwareCredsRef = watch('vmwareCredsRef')
+  const vmName = watch('vmName')
 
   const { data: runningVMOptions = [], isLoading: vmsLoading } = useQuery({
     queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef],
@@ -89,20 +108,68 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 30_000
   })
 
+  // Reset VM selection when credentials change
   useEffect(() => {
     setValue('vmName', '')
   }, [vmwareCredsRef, setValue])
 
+  // When switching key source or vm name changes, clear old generated key
+  useEffect(() => {
+    if (generatedKey) {
+      deleteSSHKeyPair(generatedKey.secretName).catch(() => {})
+      setGeneratedKey(null)
+      setGenerateError(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sshKeySource, vmName])
+
   useEffect(() => {
     trigger()
-  }, [sshKeySource, trigger])
+  }, [sshKeySource, generatedKey, trigger])
 
   const handleClose = useCallback(() => {
+    // Clean up any generated-but-not-submitted key
+    if (generatedKeyRef.current) {
+      deleteSSHKeyPair(generatedKeyRef.current.secretName).catch(() => {})
+    }
     reset()
     setSubmitError(null)
-    setSshKeySource('managed')
+    setGenerateError(null)
+    setGeneratedKey(null)
+    setCopied(false)
+    setSshKeySource('generated')
     onClose()
   }, [reset, onClose])
+
+  const handleGenerate = async () => {
+    const vmNameSafe = toK8sName(vmName)
+    if (!vmNameSafe) return
+    setIsGenerating(true)
+    setGenerateError(null)
+    const secretName = `${vmNameSafe}-keypair`
+    try {
+      const kp = await generateSSHKeyPair(secretName)
+      setGeneratedKey({ secretName, publicKey: kp.publicKey })
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Key generation failed.'
+      // 409 = secret already exists from a prior attempt — treat as success by re-fetching
+      if (err?.response?.status === 409) {
+        setGenerateError('A key pair with this name already exists. Delete the existing proxy VM entry or use a different VM name.')
+      } else {
+        setGenerateError(msg)
+      }
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleCopy = () => {
+    if (!generatedKey) return
+    navigator.clipboard.writeText(generatedKey.publicKey.trim()).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const handleKeyFileUpload = useCallback(
     async (file: File | null) => {
@@ -129,20 +196,22 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     let secretName: string | null = null
 
     try {
-      const sshSpec =
-        sshKeySource === 'managed'
-          ? { sshKeyPairRef: { name: data.sshKeyPairRef } }
-          : (() => {
-              secretName = vmNameSafe + '-hot-add-ssh-key'
-              return { sshKeySecretRef: { name: secretName } }
-            })()
+      let sshSpec: Record<string, unknown>
 
-      if (sshKeySource === 'manual' && secretName) {
+      if (sshKeySource === 'generated') {
+        if (!generatedKey) {
+          setSubmitError('Generate a key pair first.')
+          return
+        }
+        sshSpec = { sshKeyPairRef: { name: generatedKey.secretName } }
+      } else {
+        secretName = vmNameSafe + '-hot-add-ssh-key'
         await createSecret(
           secretName,
           { 'ssh-privatekey': data.sshPrivateKey.trim() },
           VJAILBREAK_DEFAULT_NAMESPACE
         )
+        sshSpec = { sshKeySecretRef: { name: secretName } }
       }
 
       await postProxyVM({
@@ -156,14 +225,19 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         }
       })
 
+      // Key was consumed — don't clean it up on close
+      setGeneratedKey(null)
+      generatedKeyRef.current = null
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
       handleClose()
     } catch (err) {
       if (sshKeySource === 'manual' && secretName) {
-        deleteSecret(secretName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+        import('src/api/secrets/secrets').then(({ deleteSecret }) =>
+          deleteSecret(secretName!, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+        )
       }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        setSubmitError(`A Proxy VM with this name already exists.`)
+        setSubmitError('A Proxy VM with this name already exists.')
       } else if (axios.isAxiosError(err)) {
         setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
       } else {
@@ -174,8 +248,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     }
   }
 
-  const isSubmitDisabled = isSubmitting || !isValid
-
   const vmSelectPlaceholder = !vmwareCredsRef
     ? 'Select VMware credentials first'
     : vmsLoading
@@ -183,6 +255,11 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       : runningVMOptions.length === 0
         ? 'No powered-on VMs found for selected credentials'
         : 'Search and select a VM'
+
+  const isSubmitDisabled =
+    isSubmitting ||
+    !isValid ||
+    (sshKeySource === 'generated' && !generatedKey)
 
   return (
     <DrawerShell
@@ -276,36 +353,90 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                 size="small"
                 sx={{ mb: 2 }}
               >
-                <ToggleButton value="managed">Managed Key Pair</ToggleButton>
-                <ToggleButton value="manual">Manual Private Key</ToggleButton>
+                <ToggleButton value="generated">Generate Key Pair</ToggleButton>
+                <ToggleButton value="manual">Upload Private Key</ToggleButton>
               </ToggleButtonGroup>
 
-              {sshKeySource === 'managed' ? (
+              {sshKeySource === 'generated' ? (
                 <Box sx={{ display: 'grid', gap: 2 }}>
-                  <Alert severity="info">
-                    Add the public key of the selected key pair to the Proxy VM&apos;s{' '}
-                    <strong>/root/.ssh/authorized_keys</strong> before registering.
-                  </Alert>
-                  <RHFSelect
-                    name="sshKeyPairRef"
-                    label="SSH Key Pair"
-                    options={keyPairOptions}
-                    rules={{
-                      required: sshKeySource === 'managed' ? 'SSH key pair is required' : false
-                    }}
-                    placeholder={
-                      keyPairOptions.length === 0
-                        ? 'No key pairs found — create one on the SSH Key Pairs page'
-                        : 'Select a key pair'
-                    }
-                    disabled={keyPairOptions.length === 0}
-                  />
+                  {!generatedKey ? (
+                    <>
+                      <Alert severity="info">
+                        Generate a key pair — the public key will appear here for you to copy into
+                        the Proxy VM&apos;s <strong>/root/.ssh/authorized_keys</strong> before
+                        submitting.
+                      </Alert>
+                      {generateError && (
+                        <Alert severity="error" onClose={() => setGenerateError(null)}>
+                          {generateError}
+                        </Alert>
+                      )}
+                      <ActionButton
+                        tone="primary"
+                        onClick={handleGenerate}
+                        loading={isGenerating}
+                        disabled={!vmName || isGenerating}
+                        sx={{ justifySelf: 'start' }}
+                      >
+                        Generate Key Pair
+                      </ActionButton>
+                      {!vmName && (
+                        <Typography variant="caption" color="text.secondary">
+                          Select a VM first to generate a key pair.
+                        </Typography>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Alert severity="success">
+                        Key pair generated. Copy the public key below and add it to{' '}
+                        <strong>/root/.ssh/authorized_keys</strong> on the Proxy VM before
+                        submitting.
+                      </Alert>
+                      <TextField
+                        label="Public Key (copy this to authorized_keys)"
+                        value={generatedKey.publicKey.trim()}
+                        multiline
+                        minRows={4}
+                        fullWidth
+                        InputProps={{
+                          readOnly: true,
+                          endAdornment: (
+                            <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+                              <Tooltip title={copied ? 'Copied!' : 'Copy public key'}>
+                                <IconButton onClick={handleCopy} size="small" edge="end">
+                                  {copied ? (
+                                    <CheckIcon fontSize="small" color="success" />
+                                  ) : (
+                                    <ContentCopyIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </Tooltip>
+                            </InputAdornment>
+                          )
+                        }}
+                        sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                      />
+                      <ActionButton
+                        tone="secondary"
+                        onClick={() => {
+                          deleteSSHKeyPair(generatedKey.secretName).catch(() => {})
+                          setGeneratedKey(null)
+                          setGenerateError(null)
+                        }}
+                        sx={{ justifySelf: 'start' }}
+                        disabled={isSubmitting}
+                      >
+                        Regenerate
+                      </ActionButton>
+                    </>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ display: 'grid', gap: 2 }}>
                   <Alert severity="info">
-                    Add the public key corresponding to your private key below to the Proxy VM&apos;s{' '}
-                    <strong>/root/.ssh/authorized_keys</strong> before registering.
+                    Add the public key corresponding to your private key to the Proxy VM&apos;s{' '}
+                    <strong>/root/.ssh/authorized_keys</strong> before submitting.
                   </Alert>
 
                   <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -323,7 +454,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                       />
                     </ActionButton>
                     <Typography variant="body2" color="text.secondary">
-                      Paste only the private key content (OpenSSH, RSA, EC, PKCS#8, or DSA).
+                      Or paste the private key below (OpenSSH, RSA, EC, PKCS#8).
                     </Typography>
                   </Box>
 
