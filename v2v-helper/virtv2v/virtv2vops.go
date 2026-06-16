@@ -33,7 +33,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, disks []vm.VMDisk, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -271,51 +271,6 @@ func IsSUSEFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "opensuse")
 }
 
-// IsDebianFamily returns true when osRelease identifies an Ubuntu or Debian guest.
-func IsDebianFamily(osRelease string) bool {
-	lowerRelease := strings.ToLower(osRelease)
-	return strings.Contains(lowerRelease, "ubuntu") ||
-		strings.Contains(lowerRelease, "debian")
-}
-
-func EnsureGrubMkconfigSymlink(disks []vm.VMDisk) error {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-
-	// Check that /usr/sbin/grub-mkconfig exists in the guest (it lives on /usr LV).
-	ans, err := RunCommandInGuestAllVolumes(disks, "is-file", false, "/usr/sbin/grub-mkconfig")
-	if err != nil || strings.TrimSpace(ans) != "true" {
-		log.Printf("EnsureGrubMkconfigSymlink: /usr/sbin/grub-mkconfig not present in guest, skipping")
-		return nil
-	}
-
-	// Check whether /sbin/grub-mkconfig already exists as a regular file (UsrMerge
-	// guests where /sbin -> usr/sbin on the same filesystem — is-file resolves it).
-	fileAns, fileErr := RunCommandInGuestAllVolumes(disks, "is-file", false, "/sbin/grub-mkconfig")
-	if fileErr == nil && strings.TrimSpace(fileAns) == "true" {
-		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already resolves to a file, skipping")
-		return nil
-	}
-
-	// Check whether a symlink already points there.
-	linkAns, linkErr := RunCommandInGuestAllVolumes(disks, "is-symlink", false, "/sbin/grub-mkconfig")
-	if linkErr == nil && strings.TrimSpace(linkAns) == "true" {
-		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a symlink, skipping")
-		return nil
-	}
-
-	// Create a RELATIVE symlink so that the libguestfs appliance kernel resolves the
-	// target as /sysroot/usr/sbin/grub-mkconfig (not the appliance's own /usr/sbin).
-	// Using an absolute target (/usr/sbin/grub-mkconfig) would be resolved from the
-	// appliance root and fail when /usr is a separate guest LV.
-	log.Printf("EnsureGrubMkconfigSymlink: creating /sbin/grub-mkconfig -> ../usr/sbin/grub-mkconfig")
-	_, err = RunCommandInGuestAllVolumes(disks, "ln-s", true, "../usr/sbin/grub-mkconfig", "/sbin/grub-mkconfig")
-	if err != nil {
-		return fmt.Errorf("failed to create grub-mkconfig symlink in guest: %w", err)
-	}
-	log.Printf("EnsureGrubMkconfigSymlink: symlink created successfully")
-	return nil
-}
-
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -446,7 +401,7 @@ func isBareDisk(path string) bool {
 	return lastChar < '0' || lastChar > '9'
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, disks []vm.VMDisk, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -507,15 +462,6 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 			rootArg = "first"
 		}
 		args = append(args, "--root", rootArg)
-	}
-
-	// Step 4: Pre-flight fix for Ubuntu/Debian grub-mkconfig path.
-	// virt-v2v's grub2-mkconfig binary search list omits /usr/sbin/grub-mkconfig
-	// (Ubuntu/Debian's path), so we ensure the symlink exists before conversion.
-	if strings.ToLower(ostype) == constants.OSFamilyLinux && IsDebianFamily(osRelease) {
-		if symErr := EnsureGrubMkconfigSymlink(disks); symErr != nil {
-			log.Printf("Warning: EnsureGrubMkconfigSymlink failed (continuing): %v", symErr)
-		}
 	}
 
 	start := time.Now()
