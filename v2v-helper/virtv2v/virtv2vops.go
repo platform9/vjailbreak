@@ -271,6 +271,47 @@ func IsSUSEFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "opensuse")
 }
 
+// IsDebianFamily returns true when osRelease identifies an Ubuntu or Debian guest.
+func IsDebianFamily(osRelease string) bool {
+	lowerRelease := strings.ToLower(osRelease)
+	return strings.Contains(lowerRelease, "ubuntu") ||
+		strings.Contains(lowerRelease, "debian")
+}
+
+func EnsureGrubMkconfigSymlink(diskPath string) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// Check that /usr/sbin/grub-mkconfig exists in the guest
+	ans, err := RunCommandInGuest(diskPath, "is-file /usr/sbin/grub-mkconfig", false)
+	if err != nil || strings.TrimSpace(ans) != "true" {
+		log.Printf("EnsureGrubMkconfigSymlink: /usr/sbin/grub-mkconfig not present in guest, skipping")
+		return nil
+	}
+
+	// Check whether /sbin/grub-mkconfig already exists as a regular file
+	fileAns, fileErr := RunCommandInGuest(diskPath, "is-file /sbin/grub-mkconfig", false)
+	if fileErr == nil && strings.TrimSpace(fileAns) == "true" {
+		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a file, skipping")
+		return nil
+	}
+
+	// Check whether /sbin/grub-mkconfig already exists as a symlink
+	linkAns, linkErr := RunCommandInGuest(diskPath, "is-symlink /sbin/grub-mkconfig", false)
+	if linkErr == nil && strings.TrimSpace(linkAns) == "true" {
+		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a symlink, skipping")
+		return nil
+	}
+
+	// Create the symlink virt-v2v expects
+	log.Printf("EnsureGrubMkconfigSymlink: creating /sbin/grub-mkconfig -> /usr/sbin/grub-mkconfig")
+	_, err = RunCommandInGuest(diskPath, "ln-s /usr/sbin/grub-mkconfig /sbin/grub-mkconfig", true)
+	if err != nil {
+		return fmt.Errorf("failed to create grub-mkconfig symlink in guest: %w", err)
+	}
+	log.Printf("EnsureGrubMkconfigSymlink: symlink created successfully")
+	return nil
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -462,6 +503,15 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 			rootArg = "first"
 		}
 		args = append(args, "--root", rootArg)
+	}
+
+	// Step 4: Pre-flight fix for Ubuntu/Debian grub-mkconfig path.
+	// virt-v2v's grub2-mkconfig binary search list omits /usr/sbin/grub-mkconfig
+	// (Ubuntu/Debian's path), so we ensure the symlink exists before conversion.
+	if strings.ToLower(ostype) == constants.OSFamilyLinux && IsDebianFamily(osRelease) {
+		if symErr := EnsureGrubMkconfigSymlink(diskPath); symErr != nil {
+			log.Printf("Warning: EnsureGrubMkconfigSymlink failed (continuing): %v", symErr)
+		}
 	}
 
 	start := time.Now()
