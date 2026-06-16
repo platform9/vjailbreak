@@ -148,16 +148,21 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setGenerateError(null)
     const secretName = `${vmNameSafe}-keypair`
     try {
-      const kp = await generateSSHKeyPair(secretName)
+      let kp
+      try {
+        kp = await generateSSHKeyPair(secretName)
+      } catch (err: any) {
+        if (err?.response?.status === 409) {
+          // Secret from a prior attempt — delete it and regenerate
+          await deleteSSHKeyPair(secretName)
+          kp = await generateSSHKeyPair(secretName)
+        } else {
+          throw err
+        }
+      }
       setGeneratedKey({ secretName, publicKey: kp.publicKey })
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Key generation failed.'
-      // 409 = secret already exists from a prior attempt — treat as success by re-fetching
-      if (err?.response?.status === 409) {
-        setGenerateError('A key pair with this name already exists. Delete the existing proxy VM entry or use a different VM name.')
-      } else {
-        setGenerateError(msg)
-      }
+      setGenerateError(err?.response?.data?.message || err?.message || 'Key generation failed.')
     } finally {
       setIsGenerating(false)
     }
@@ -237,7 +242,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         )
       }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        setSubmitError('A Proxy VM with this name already exists.')
+        setSubmitError('This VM is already registered as a Proxy VM. Use the Retry button in the table to re-verify it.')
       } else if (axios.isAxiosError(err)) {
         setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
       } else {

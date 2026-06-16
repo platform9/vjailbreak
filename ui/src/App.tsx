@@ -441,7 +441,6 @@ function App() {
               <Route path="storage-management" element={<StorageManagementPage />} />
               <Route path="esxi-ssh-keys" element={<EsxiSshKeysPage />} />
               <Route path="profiles" element={<ImageProfilesPage />} />
-              <Route path="ssh-key-pairs" element={<SSHKeyPairsPage />} />
               <Route path="proxy-vms" element={<ProxyVMsPage />} />
             </Route>
             <Route path="/onboarding" element={<Onboarding />} />
