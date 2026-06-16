@@ -27,3 +27,16 @@ export const deleteProxyVM = async (name: string, namespace = VJAILBREAK_DEFAULT
   const response = await axios.del<ProxyVM>({ endpoint })
   return response
 }
+
+export const retryProxyVMVerification = async (
+  name: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/${PROXY_VMS_RESOURCE}/${name}`
+  const patch = {
+    metadata: {
+      annotations: { 'vjailbreak.k8s.pf9.io/force-reconcile': String(Date.now()) }
+    }
+  }
+  return axios.patch<ProxyVM>({ endpoint, data: patch })
+}
