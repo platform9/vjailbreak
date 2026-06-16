@@ -8,6 +8,7 @@ import DnsIcon from '@mui/icons-material/Dns'
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
+import { ClickableTableCell } from 'src/components'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { deleteProxyVM, retryProxyVMVerification } from 'src/api/proxyvms/proxyVMs'
 import { deleteSecret } from 'src/api/secrets/secrets'
@@ -15,6 +16,7 @@ import { ProxyVM, ProxyVMValidationStatus } from 'src/api/proxyvms/model'
 import { useProxyVMsQuery, PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import AddProxyVMDrawer from './AddProxyVMDrawer'
+import ProxyVMDetailDrawer from './ProxyVMDetailDrawer'
 
 function statusColor(
   status: ProxyVMValidationStatus | undefined
@@ -48,9 +50,23 @@ function formatAge(creationTimestamp: string): string {
 const getColumns = (
   onDeleteClick: (vm: ProxyVM) => void,
   onRetryClick: (vm: ProxyVM) => void,
-  retryingNames: Set<string>
+  retryingNames: Set<string>,
+  onDetailClick: (vm: ProxyVM) => void
 ): GridColDef[] => [
-  { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 120 },
+  {
+    field: 'name',
+    headerName: 'Name',
+    flex: 1.2,
+    minWidth: 120,
+    renderCell: (params) => (
+      <ClickableTableCell
+        tooltipTitle="View details"
+        onClick={() => onDetailClick(params.row.rawObject)}
+      >
+        {params.value}
+      </ClickableTableCell>
+    )
+  },
   { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 120 },
   {
     field: 'status',
@@ -165,6 +181,8 @@ export default function ProxyVMsTable() {
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
   const [retryingNames, setRetryingNames] = useState<Set<string>>(new Set())
+  const [detailVM, setDetailVM] = useState<ProxyVM | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const handleRefresh = useCallback(() => {
     refetch()
@@ -282,9 +300,14 @@ export default function ProxyVMsTable() {
     [proxyVMs, rowSelectionModel]
   )
 
+  const handleDetailClick = useCallback((vm: ProxyVM) => {
+    setDetailVM(vm)
+    setDetailOpen(true)
+  }, [])
+
   const columns = useMemo(
-    () => getColumns(setDeleteTarget, handleRetry, retryingNames),
-    [handleRetry, retryingNames]
+    () => getColumns(setDeleteTarget, handleRetry, retryingNames, handleDetailClick),
+    [handleRetry, retryingNames, handleDetailClick]
   )
 
   const search = (
@@ -383,6 +406,12 @@ export default function ProxyVMsTable() {
       )}
 
       {addDrawerOpen && <AddProxyVMDrawer open onClose={() => setAddDrawerOpen(false)} />}
+
+      <ProxyVMDetailDrawer
+        open={detailOpen}
+        proxyVM={detailVM}
+        onClose={() => setDetailOpen(false)}
+      />
     </div>
   )
 }
