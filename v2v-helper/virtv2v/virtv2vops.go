@@ -281,30 +281,34 @@ func IsDebianFamily(osRelease string) bool {
 func EnsureGrubMkconfigSymlink(disks []vm.VMDisk) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	// Check that /usr/sbin/grub-mkconfig exists in the guest
+	// Check that /usr/sbin/grub-mkconfig exists in the guest (it lives on /usr LV).
 	ans, err := RunCommandInGuestAllVolumes(disks, "is-file", false, "/usr/sbin/grub-mkconfig")
 	if err != nil || strings.TrimSpace(ans) != "true" {
 		log.Printf("EnsureGrubMkconfigSymlink: /usr/sbin/grub-mkconfig not present in guest, skipping")
 		return nil
 	}
 
-	// Check whether /sbin/grub-mkconfig already exists as a regular file
+	// Check whether /sbin/grub-mkconfig already exists as a regular file (UsrMerge
+	// guests where /sbin -> usr/sbin on the same filesystem — is-file resolves it).
 	fileAns, fileErr := RunCommandInGuestAllVolumes(disks, "is-file", false, "/sbin/grub-mkconfig")
 	if fileErr == nil && strings.TrimSpace(fileAns) == "true" {
-		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a file, skipping")
+		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already resolves to a file, skipping")
 		return nil
 	}
 
-	// Check whether /sbin/grub-mkconfig already exists as a symlink
+	// Check whether a symlink already points there.
 	linkAns, linkErr := RunCommandInGuestAllVolumes(disks, "is-symlink", false, "/sbin/grub-mkconfig")
 	if linkErr == nil && strings.TrimSpace(linkAns) == "true" {
 		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a symlink, skipping")
 		return nil
 	}
 
-	// Create the symlink virt-v2v expects
-	log.Printf("EnsureGrubMkconfigSymlink: creating /sbin/grub-mkconfig -> /usr/sbin/grub-mkconfig")
-	_, err = RunCommandInGuestAllVolumes(disks, "ln-s", true, "/usr/sbin/grub-mkconfig", "/sbin/grub-mkconfig")
+	// Create a RELATIVE symlink so that the libguestfs appliance kernel resolves the
+	// target as /sysroot/usr/sbin/grub-mkconfig (not the appliance's own /usr/sbin).
+	// Using an absolute target (/usr/sbin/grub-mkconfig) would be resolved from the
+	// appliance root and fail when /usr is a separate guest LV.
+	log.Printf("EnsureGrubMkconfigSymlink: creating /sbin/grub-mkconfig -> ../usr/sbin/grub-mkconfig")
+	_, err = RunCommandInGuestAllVolumes(disks, "ln-s", true, "../usr/sbin/grub-mkconfig", "/sbin/grub-mkconfig")
 	if err != nil {
 		return fmt.Errorf("failed to create grub-mkconfig symlink in guest: %w", err)
 	}
