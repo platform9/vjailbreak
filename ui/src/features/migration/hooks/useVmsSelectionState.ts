@@ -39,6 +39,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     vmwareCluster,
     useGPU = false,
     showHeader = true,
+    retryVmName,
     error,
     vmsWithAssignments: vmsWithAssignmentsProp = [],
     setVmsWithAssignments: setVmsWithAssignmentsProp,
@@ -381,6 +382,24 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     })
   }, [vmList, migratedVms, stableOpenstackFlavors, openstackCredName, isRolling])
 
+  // --- Retry mode: show only the locked VM, un-gray it ---
+  const displayVmsWithFlavor = useMemo(() => {
+    if (!retryVmName) return vmsWithFlavor
+    return vmsWithFlavor
+      .filter((vm) => vm.name === retryVmName)
+      .map((vm) => ({ ...vm, isMigrated: false }))
+  }, [vmsWithFlavor, retryVmName])
+
+  // Auto-select the locked VM when it appears in retry mode.
+  useEffect(() => {
+    if (!retryVmName || isRolling) return
+    const vm = displayVmsWithFlavor.find((v) => v.name === retryVmName)
+    if (!vm) return
+    setSelectedVMs(new Set([vm.id]))
+    setFormVms([vm])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryVmName, displayVmsWithFlavor])
+
   // --- Missing IP warnings ---
   const missingInterfaceIpWarnings = useMemo(
     () =>
@@ -466,7 +485,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     openstackCredsValidated,
     openstackCredentials,
     // Standard state
-    vmsWithFlavor,
+    vmsWithFlavor: displayVmsWithFlavor,
     setRdmConfigurations,
     loadingVms,
     loadingMigratedVms,

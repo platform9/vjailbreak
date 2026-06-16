@@ -33,32 +33,32 @@ export function useFilteredMappings({
 }: UseFilteredMappingsParams) {
   const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
 
-  const filteredNetworkMappings = useMemo(
-    () =>
-      (params.networkMappings || []).filter(
-        (mapping) =>
-          vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
-      ),
-    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
-  )
+  // An empty target list means the destination data has not loaded yet — filtering
+  // against it would wipe valid mappings (e.g. ones prefilled for a retry) before the
+  // OpenStack credentials finish loading.
+  const filteredNetworkMappings = useMemo(() => {
+    if (openstackNetworkNames.length === 0) return params.networkMappings || []
+    return (params.networkMappings || []).filter(
+      (mapping) =>
+        vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
+    )
+  }, [params.networkMappings, vmwareNetworks, openstackNetworkNames])
 
-  const filteredStorageMappings = useMemo(
-    () =>
-      (params.storageMappings || []).filter(
-        (mapping) =>
-          vmWareStorage.includes(mapping.source) && openstackStorage.includes(mapping.target)
-      ),
-    [params.storageMappings, vmWareStorage, openstackStorage]
-  )
+  const filteredStorageMappings = useMemo(() => {
+    if (openstackStorage.length === 0) return params.storageMappings || []
+    return (params.storageMappings || []).filter(
+      (mapping) =>
+        vmWareStorage.includes(mapping.source) && openstackStorage.includes(mapping.target)
+    )
+  }, [params.storageMappings, vmWareStorage, openstackStorage])
 
-  const filteredArrayCredsMappings = useMemo(
-    () =>
-      (params.arrayCredsMappings || []).filter(
-        (mapping) =>
-          vmWareStorage.includes(mapping.source) && arrayCredsNames.includes(mapping.target)
-      ),
-    [params.arrayCredsMappings, vmWareStorage, arrayCredsNames]
-  )
+  const filteredArrayCredsMappings = useMemo(() => {
+    if (arrayCredsNames.length === 0) return params.arrayCredsMappings || []
+    return (params.arrayCredsMappings || []).filter(
+      (mapping) =>
+        vmWareStorage.includes(mapping.source) && arrayCredsNames.includes(mapping.target)
+    )
+  }, [params.arrayCredsMappings, vmWareStorage, arrayCredsNames])
 
   useEffect(() => {
     if (filteredNetworkMappings.length !== params.networkMappings?.length) {

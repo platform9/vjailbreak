@@ -39,6 +39,11 @@ export interface MigrationTemplateSpec {
   storageMapping: string
   targetPCDClusterName?: string
   useFlavorless?: boolean
+  useGPUFlavor?: boolean
+  storageCopyMethod?: string
+  arrayCredsMapping?: string
+  proxyVMRef?: { name: string }
+  osFamily?: string
 }
 
 export interface Destination {
@@ -47,6 +52,7 @@ export interface Destination {
 
 export interface Source {
   vmwareRef: string
+  datacenter?: string
 }
 
 export interface MigrationTemplateStatus {

@@ -53,6 +53,28 @@ export const patchMigrationPlan = async (
   return response
 }
 
+// Marks the plan for an explicit user-initiated retry. The controller resets a failed
+// plan (including validation failures), removes the annotation, and recreates the
+// deleted Migration objects from the plan's current configuration.
+export const RETRY_REQUESTED_ANNOTATION = 'vjailbreak.k8s.pf9.io/retry-requested'
+
+export const requestMigrationPlanRetry = async (
+  planName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  return patchMigrationPlan(
+    planName,
+    {
+      metadata: {
+        annotations: {
+          [RETRY_REQUESTED_ANNOTATION]: 'true'
+        }
+      }
+    },
+    namespace
+  )
+}
+
 export const getMigrationPlans = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<MigrationPlan[]> => {
