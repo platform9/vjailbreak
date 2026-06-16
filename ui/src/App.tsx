@@ -23,7 +23,6 @@ import { MigrationFormContext } from './features/migration/context/MigrationForm
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'
-import SSHKeyPairsPage from './features/sshKeyPairs/pages/SSHKeyPairsPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
