@@ -33,7 +33,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, disks []vm.VMDisk, diskPath string, osRelease string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -278,25 +278,25 @@ func IsDebianFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "debian")
 }
 
-func EnsureGrubMkconfigSymlink(diskPath string) error {
+func EnsureGrubMkconfigSymlink(disks []vm.VMDisk) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	// Check that /usr/sbin/grub-mkconfig exists in the guest
-	ans, err := RunCommandInGuest(diskPath, "is-file /usr/sbin/grub-mkconfig", false)
+	ans, err := RunCommandInGuestAllVolumes(disks, "is-file", false, "/usr/sbin/grub-mkconfig")
 	if err != nil || strings.TrimSpace(ans) != "true" {
 		log.Printf("EnsureGrubMkconfigSymlink: /usr/sbin/grub-mkconfig not present in guest, skipping")
 		return nil
 	}
 
 	// Check whether /sbin/grub-mkconfig already exists as a regular file
-	fileAns, fileErr := RunCommandInGuest(diskPath, "is-file /sbin/grub-mkconfig", false)
+	fileAns, fileErr := RunCommandInGuestAllVolumes(disks, "is-file", false, "/sbin/grub-mkconfig")
 	if fileErr == nil && strings.TrimSpace(fileAns) == "true" {
 		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a file, skipping")
 		return nil
 	}
 
 	// Check whether /sbin/grub-mkconfig already exists as a symlink
-	linkAns, linkErr := RunCommandInGuest(diskPath, "is-symlink /sbin/grub-mkconfig", false)
+	linkAns, linkErr := RunCommandInGuestAllVolumes(disks, "is-symlink", false, "/sbin/grub-mkconfig")
 	if linkErr == nil && strings.TrimSpace(linkAns) == "true" {
 		log.Printf("EnsureGrubMkconfigSymlink: /sbin/grub-mkconfig already exists as a symlink, skipping")
 		return nil
@@ -304,7 +304,7 @@ func EnsureGrubMkconfigSymlink(diskPath string) error {
 
 	// Create the symlink virt-v2v expects
 	log.Printf("EnsureGrubMkconfigSymlink: creating /sbin/grub-mkconfig -> /usr/sbin/grub-mkconfig")
-	_, err = RunCommandInGuest(diskPath, "ln-s /usr/sbin/grub-mkconfig /sbin/grub-mkconfig", true)
+	_, err = RunCommandInGuestAllVolumes(disks, "ln-s", true, "/usr/sbin/grub-mkconfig", "/sbin/grub-mkconfig")
 	if err != nil {
 		return fmt.Errorf("failed to create grub-mkconfig symlink in guest: %w", err)
 	}
@@ -442,7 +442,7 @@ func isBareDisk(path string) bool {
 	return lastChar < '0' || lastChar > '9'
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, disks []vm.VMDisk, diskPath string, osRelease string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -509,7 +509,7 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	// virt-v2v's grub2-mkconfig binary search list omits /usr/sbin/grub-mkconfig
 	// (Ubuntu/Debian's path), so we ensure the symlink exists before conversion.
 	if strings.ToLower(ostype) == constants.OSFamilyLinux && IsDebianFamily(osRelease) {
-		if symErr := EnsureGrubMkconfigSymlink(diskPath); symErr != nil {
+		if symErr := EnsureGrubMkconfigSymlink(disks); symErr != nil {
 			log.Printf("Warning: EnsureGrubMkconfigSymlink failed (continuing): %v", symErr)
 		}
 	}
