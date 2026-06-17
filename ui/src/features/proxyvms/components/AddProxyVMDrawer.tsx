@@ -153,13 +153,25 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 30_000
   })
 
-  // ── vCenter resources query (for create-mode dropdowns) ───────────────────
-  const { data: vcResources, isLoading: resourcesLoading } = useQuery({
-    queryKey: ['vcenter-resources', vmwareCredsRefCreate],
+  const datacenterCreate = createWatch('datacenter')
+
+  // Step 1: fetch datacenter list (no datacenter param needed)
+  const { data: dcResources, isLoading: dcLoading } = useQuery({
+    queryKey: ['vcenter-datacenters', vmwareCredsRefCreate],
     queryFn: () => getVCenterResources(vmwareCredsRefCreate),
     enabled: Boolean(vmwareCredsRefCreate) && formMode === 'create' && open,
     staleTime: 60_000
   })
+
+  // Step 2: fetch resources scoped to the selected datacenter
+  const { data: scopedResources, isLoading: scopedLoading } = useQuery({
+    queryKey: ['vcenter-scoped-resources', vmwareCredsRefCreate, datacenterCreate],
+    queryFn: () => getVCenterResources(vmwareCredsRefCreate, datacenterCreate),
+    enabled: Boolean(vmwareCredsRefCreate) && Boolean(datacenterCreate) && formMode === 'create' && open,
+    staleTime: 60_000
+  })
+
+  const resourcesLoading = dcLoading || scopedLoading
 
   const toOptions = (items: string[] | undefined) =>
     (items ?? []).map((v) => ({ label: v, value: v }))
@@ -176,6 +188,13 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   useEffect(() => {
     selectSetValue('vmName', '')
   }, [vmwareCredsRefSelect, selectSetValue])
+
+  // Clear scoped fields when credentials or datacenter change
+  useEffect(() => {
+    createSetValue('datastore', '')
+    createSetValue('network', '')
+    createSetValue('cluster', '')
+  }, [vmwareCredsRefCreate, datacenterCreate, createSetValue])
 
   // Sync creds across forms when mode switches
   useEffect(() => {
@@ -691,57 +710,57 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     <RHFSelect
                       name="datacenter"
                       label="Datacenter"
-                      options={toOptions(vcResources?.datacenters)}
+                      options={toOptions(dcResources?.datacenters)}
                       rules={{ required: 'Datacenter is required' }}
                       placeholder={
                         !vmwareCredsRefCreate
                           ? 'Select credentials first'
-                          : resourcesLoading
+                          : dcLoading
                             ? 'Loading…'
                             : 'Select datacenter'
                       }
-                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
+                      disabled={!vmwareCredsRefCreate || dcLoading || isSubmitting}
                     />
                     <RHFSelect
                       name="datastore"
                       label="Datastore"
-                      options={toOptions(vcResources?.datastores)}
+                      options={toOptions(scopedResources?.datastores)}
                       rules={{ required: 'Datastore is required' }}
                       placeholder={
-                        !vmwareCredsRefCreate
-                          ? 'Select credentials first'
-                          : resourcesLoading
+                        !datacenterCreate
+                          ? 'Select datacenter first'
+                          : scopedLoading
                             ? 'Loading…'
                             : 'Select datastore'
                       }
-                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
+                      disabled={!datacenterCreate || scopedLoading || isSubmitting}
                     />
                     <RHFSelect
                       name="network"
                       label="Network"
-                      options={toOptions(vcResources?.networks)}
+                      options={toOptions(scopedResources?.networks)}
                       rules={{ required: 'Network is required' }}
                       placeholder={
-                        !vmwareCredsRefCreate
-                          ? 'Select credentials first'
-                          : resourcesLoading
+                        !datacenterCreate
+                          ? 'Select datacenter first'
+                          : scopedLoading
                             ? 'Loading…'
                             : 'Select network'
                       }
-                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
+                      disabled={!datacenterCreate || scopedLoading || isSubmitting}
                     />
                     <RHFSelect
                       name="cluster"
                       label="Cluster / Host (optional)"
-                      options={toOptions(vcResources?.clusters)}
+                      options={toOptions(scopedResources?.clusters)}
                       placeholder={
-                        !vmwareCredsRefCreate
-                          ? 'Select credentials first'
-                          : resourcesLoading
+                        !datacenterCreate
+                          ? 'Select datacenter first'
+                          : scopedLoading
                             ? 'Loading…'
                             : 'Leave blank to use first available host'
                       }
-                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
+                      disabled={!datacenterCreate || scopedLoading || isSubmitting}
                     />
                   </Box>
                 </Section>

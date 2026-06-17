@@ -13,11 +13,12 @@ export interface VCenterResources {
 }
 
 export const getVCenterResources = async (
-  vmwareCredsRef: string
+  vmwareCredsRef: string,
+  datacenter?: string
 ): Promise<VCenterResources> => {
   return axios.get({
     endpoint: VCENTER_RESOURCES_ENDPOINT,
-    config: { params: { vmwareCredsRef } }
+    config: { params: { vmwareCredsRef, ...(datacenter ? { datacenter } : {}) } }
   })
 }
 

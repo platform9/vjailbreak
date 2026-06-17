@@ -17,10 +17,13 @@ type VCenterResourcesResponse struct {
 	Networks    []string `json:"networks"`
 }
 
-// HandleVCenterResources lists available vCenter resources for a given set of
-// VMware credentials.
+// HandleVCenterResources lists available vCenter resources.
 //
 // GET /vpw/v1/vcenter-resources?vmwareCredsRef=<name>
+//   → returns only { datacenters: [...] }
+//
+// GET /vpw/v1/vcenter-resources?vmwareCredsRef=<name>&datacenter=<dc>
+//   → returns { datacenters, clusters, datastores, networks } scoped to <dc>
 func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -32,16 +35,16 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "vmwareCredsRef query parameter is required", http.StatusBadRequest)
 		return
 	}
+	scopeDCName := r.URL.Query().Get("datacenter")
 
 	ctx := r.Context()
 
-	vcHost, vcUsername, vcPassword, preferredDC, err := credsFromVMwareCredsAll(ctx, credsRef)
+	vcHost, vcUsername, vcPassword, _, err := credsFromVMwareCredsAll(ctx, credsRef)
 	if err != nil {
 		http.Error(w, "failed to get credentials: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Single connection throughout — no reconnect between listings.
 	client, finder, err := connectVCenterNoDC(ctx, vcHost, vcUsername, vcPassword)
 	if err != nil {
 		http.Error(w, "failed to connect to vCenter: "+err.Error(), http.StatusInternalServerError)
@@ -56,35 +59,36 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 		Networks:    []string{},
 	}
 
-	// List all datacenters; keep the object we'll scope to.
-	var selectedDC *object.Datacenter
+	// Always list datacenters.
 	dcs, dcListErr := finder.DatacenterList(ctx, "*")
 	if dcListErr != nil {
 		logrus.Warnf("vcenter-resources[%s]: DatacenterList: %v", credsRef, dcListErr)
 	}
+
+	var selectedDC *object.Datacenter
 	for _, dc := range dcs {
 		name := path.Base(dc.InventoryPath)
 		resp.Datacenters = append(resp.Datacenters, name)
-		// Prefer the datacenter stored in credentials; otherwise use the first one.
-		if selectedDC == nil || name == preferredDC {
+		if scopeDCName != "" && name == scopeDCName {
 			selectedDC = dc
 		}
 	}
-	logrus.Infof("vcenter-resources[%s]: %d datacenter(s) found, scoping to %q",
-		credsRef, len(resp.Datacenters), func() string {
-			if selectedDC != nil {
-				return path.Base(selectedDC.InventoryPath)
-			}
-			return "(none)"
-		}())
+	logrus.Infof("vcenter-resources[%s]: %d datacenter(s), scopeDC=%q", credsRef, len(resp.Datacenters), scopeDCName)
 
-	if selectedDC == nil {
+	// If no datacenter was requested, return only the datacenter list.
+	if scopeDCName == "" {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
-	// Scope the finder to the selected datacenter — same connection, no re-login.
+	if selectedDC == nil {
+		logrus.Warnf("vcenter-resources[%s]: datacenter %q not found in list %v", credsRef, scopeDCName, resp.Datacenters)
+		http.Error(w, "datacenter not found: "+scopeDCName, http.StatusNotFound)
+		return
+	}
+
+	// Scope the existing finder to the requested datacenter — no reconnect.
 	finder.SetDatacenter(selectedDC)
 
 	// Clusters.
@@ -98,7 +102,7 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 		logrus.Warnf("vcenter-resources[%s]: ClusterComputeResourceList: %v", credsRef, clErr)
 	}
 
-	// Standalone hosts (merged into Clusters so the UI can pick either).
+	// Standalone hosts merged into Clusters.
 	if hosts, hErr := finder.HostSystemList(ctx, "*"); hErr == nil {
 		for _, h := range hosts {
 			if n := path.Base(h.InventoryPath); n != "" {
