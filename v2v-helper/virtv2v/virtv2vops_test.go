@@ -5,6 +5,7 @@ package virtv2v
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -214,6 +215,81 @@ func TestMountPersistenceScriptFlagSelection(t *testing.T) {
 			got := mountPersistenceScriptFlag(tt.osRelease)
 			assert.Equal(t, tt.wantFlag, got,
 				"wrong script flag for osRelease=%q", tt.osRelease)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// blockDriver arg selection
+// ---------------------------------------------------------------------------
+
+// buildV2VArgs is a thin wrapper that exposes the block-driver selection logic
+// without executing the command, for unit testing.
+func buildV2VArgs(ostype, blockDriver string) []string {
+	args := []string{"-v", "--no-fstrim"}
+	if strings.ToLower(ostype) == "windows" && blockDriver != "" {
+		args = append(args, "--block-driver", blockDriver)
+	}
+	return args
+}
+
+func TestConvertDisk_BlockDriverArg(t *testing.T) {
+	tests := []struct {
+		name            string
+		ostype          string
+		blockDriver     string
+		wantBlockDriver bool
+		wantValue       string
+	}{
+		{
+			name:            "windows virtio-scsi adds --block-driver",
+			ostype:          "windows",
+			blockDriver:     "virtio-scsi",
+			wantBlockDriver: true,
+			wantValue:       "virtio-scsi",
+		},
+		{
+			name:            "windows empty blockDriver omits flag (defaults to virtio-blk)",
+			ostype:          "windows",
+			blockDriver:     "",
+			wantBlockDriver: false,
+		},
+		{
+			name:            "linux ignores blockDriver",
+			ostype:          "linux",
+			blockDriver:     "virtio-scsi",
+			wantBlockDriver: false,
+		},
+		{
+			name:            "linux empty blockDriver omits flag",
+			ostype:          "linux",
+			blockDriver:     "",
+			wantBlockDriver: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := buildV2VArgs(tt.ostype, tt.blockDriver)
+			idx := -1
+			for i, a := range args {
+				if a == "--block-driver" {
+					idx = i
+					break
+				}
+			}
+			if tt.wantBlockDriver {
+				if idx == -1 {
+					t.Fatalf("expected --block-driver in args %v but not found", args)
+				}
+				if idx+1 >= len(args) || args[idx+1] != tt.wantValue {
+					t.Errorf("--block-driver value = %q, want %q", args[idx+1], tt.wantValue)
+				}
+			} else {
+				if idx != -1 {
+					t.Errorf("unexpected --block-driver in args %v", args)
+				}
+			}
 		})
 	}
 }
