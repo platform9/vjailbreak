@@ -125,6 +125,15 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	}
 	mux.HandleFunc("/vpw/v1/k8s/", HandleK8sProxy)
 
+	// SSH key pair generation — generates RSA-4096, stores in k8s Secret, returns public key only.
+	mux.HandleFunc("/vpw/v1/generate-ssh-keypair", HandleGenerateSSHKeyPair)
+
+	// Proxy VM creation from OVA — accepts deploy config, runs full creation routine async.
+	mux.HandleFunc("/vpw/v1/create-proxy-vm", HandleCreateProxyVM)
+
+	// vCenter resource listing — returns datacenters, clusters, datastores, networks.
+	mux.HandleFunc("/vpw/v1/vcenter-resources", HandleVCenterResources)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -173,6 +182,21 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 			HandleK8sProxy(w, r)
 			return
 		}
+		// SSH key pair generation
+		if r.URL.Path == "/vpw/v1/generate-ssh-keypair" {
+			HandleGenerateSSHKeyPair(w, r)
+			return
+		}
+		// Proxy VM creation from OVA
+		if r.URL.Path == "/vpw/v1/create-proxy-vm" {
+			HandleCreateProxyVM(w, r)
+			return
+		}
+		// vCenter resource listing
+		if r.URL.Path == "/vpw/v1/vcenter-resources" {
+			HandleVCenterResources(w, r)
+			return
+		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)
 	})
 
@@ -183,6 +207,8 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	ctx := context.Background()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
+
+	go prefetchProxyVMOVA()
 
 	go func() {
 		if err := startgRPCServer(ctx, "tcp", host+":"+port); err != nil {

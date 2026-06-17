@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	allowedServiceAccount = "system:serviceaccount:migration-system:ui-manager-sa"
-	tokenCacheTTL         = 60 * time.Second
+	allowedServiceAccount    = "system:serviceaccount:migration-system:ui-manager-sa"
+	tokenCacheTTL            = 60 * time.Second
+	migrationSystemNamespace = "migration-system"
 )
 
 // allowedRoute pairs an HTTP method with a path pattern.
