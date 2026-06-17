@@ -23,56 +23,32 @@ import (
 
 // ProxyVMSpec defines the desired state of ProxyVM
 type ProxyVMSpec struct {
-	// VMName is the display name of the Proxy VM in vCenter.
-	VMName string `json:"vmName"`
-
-	// VMwareCredsRef references the VMwareCreds used to locate and connect to the Proxy VM.
+	VMName         string                      `json:"vmName"`
 	VMwareCredsRef corev1.LocalObjectReference `json:"vmwareCredsRef"`
-
-	// SSHKeyPairRef references a k8s Secret containing ssh-privatekey/ssh-publickey data.
-	// When set, this key is used for SSH access to the Proxy VM during verification, overriding
-	// the legacy "<name>-hot-add-ssh-key" secret convention.
 	// +optional
 	SSHKeyPairRef *corev1.LocalObjectReference `json:"sshKeyPairRef,omitempty"`
-
-
 }
 
 // ProxyVMComponentCheck records whether a required component was found on the Proxy VM.
 type ProxyVMComponentCheck struct {
-	// Name is the component name (e.g. "qemu-nbd", "sshd").
-	Name string `json:"name"`
-	// Present indicates whether the component was found in PATH.
-	Present bool `json:"present"`
-	// Message provides detail for missing components.
+	Name    string `json:"name"`
+	Present bool   `json:"present"`
 	// +optional
 	Message string `json:"message,omitempty"`
 }
 
 // ProxyVMStatus defines the observed state of ProxyVM
 type ProxyVMStatus struct {
-	// ValidationStatus is one of: Pending, Verifying, Ready, VerificationFailed.
 	// +optional
 	ValidationStatus string `json:"validationStatus,omitempty"`
-
-	// ValidationMessage contains a human-readable summary of the last validation result.
 	// +optional
 	ValidationMessage string `json:"validationMessage,omitempty"`
-
-	// IPAddress is the IP address discovered from vCenter guest info.
 	// +optional
 	IPAddress string `json:"ipAddress,omitempty"`
-
-	// AttachedDiskCount is the number of source-snapshot disks currently attached
-	// to this Proxy VM across all active Hot-Add migrations. Max 60.
 	// +optional
 	AttachedDiskCount int `json:"attachedDiskCount,omitempty"`
-
-	// ComponentsVerified lists each required component and whether it was found.
 	// +optional
 	ComponentsVerified []ProxyVMComponentCheck `json:"componentsVerified,omitempty"`
-
-	// LastValidationTime records when the last verification completed.
 	// +optional
 	LastValidationTime *metav1.Time `json:"lastValidationTime,omitempty"`
 }
@@ -84,8 +60,7 @@ type ProxyVMStatus struct {
 // +kubebuilder:printcolumn:JSONPath=`.status.ipAddress`,name=IP,type=string
 // +kubebuilder:printcolumn:JSONPath=`.status.attachedDiskCount`,name=Attached-Disks,type=integer
 
-// ProxyVM is the Schema for a registered Proxy VM used in Hot-Add data copy migrations.
-// The controller validates SSH connectivity and required components on the referenced VM.
+// ProxyVM is the Schema for the proxyvms API.
 type ProxyVM struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

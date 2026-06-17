@@ -31,8 +31,6 @@ type generateSSHKeyPairResponse struct {
 	PublicKey string `json:"publicKey"`
 }
 
-// HandleGenerateSSHKeyPair generates an RSA-4096 key pair, stores both parts
-// in a k8s Secret (private key never returned), and returns only the public key.
 func HandleGenerateSSHKeyPair(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

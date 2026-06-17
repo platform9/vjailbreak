@@ -166,8 +166,6 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		}
 	}()
 
-	// Verify all required components in a single SSH session.
-	// Output format per line: "<name>:<path-or-MISSING>"
 	checkCmd := `for cmd in ` + strings.Join(constants.ProxyVMRequiredComponents, " ") + `; do printf '%s:%s\n' "$cmd" "$(which "$cmd" 2>/dev/null || echo MISSING)"; done`
 	checkOutput, execErr := sshClient.ExecuteCommand(checkCmd)
 	if execErr != nil {
@@ -259,8 +257,6 @@ func isDiskEnableUUIDSet(extraConfig []govmomitypes.BaseOptionValue) bool {
 	return false
 }
 
-// setDiskEnableUUIDAndReboot sets disk.enableUUID=TRUE on the VM, reboots it,
-// and requeues for re-verification after VMware Tools comes back up.
 func (r *ProxyVMReconciler) setDiskEnableUUIDAndReboot(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM, vmObj *object.VirtualMachine) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("disk.EnableUUID not set on Proxy VM — setting it and rebooting", "vm", proxyVM.Spec.VMName)
@@ -290,8 +286,6 @@ func (r *ProxyVMReconciler) setDiskEnableUUIDAndReboot(ctx context.Context, prox
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
-// parseComponentCheckOutput parses the output of the SSH component-check command.
-// Returns component results, missing component names, and whether all components are present.
 func parseComponentCheckOutput(output string) ([]vjailbreakv1alpha1.ProxyVMComponentCheck, []string, bool) {
 	results := make([]vjailbreakv1alpha1.ProxyVMComponentCheck, 0)
 	missing := []string{}

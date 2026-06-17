@@ -2072,9 +2072,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          ProxyVM is the Schema for a registered Proxy VM used in Hot-Add data copy migrations.
-          The controller validates SSH connectivity and required components on the referenced VM.
+        description: ProxyVM is the Schema for the proxyvms API.
         properties:
           apiVersion:
             description: |-
@@ -2098,9 +2096,8 @@ spec:
             properties:
               sshKeyPairRef:
                 description: |-
-                  SSHKeyPairRef references a k8s Secret containing ssh-privatekey/ssh-publickey data.
-                  When set, this key is used for SSH access to the Proxy VM during verification, overriding
-                  the legacy "<name>-hot-add-ssh-key" secret convention.
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
                 properties:
                   name:
                     default: ""
@@ -2114,11 +2111,11 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               vmName:
-                description: VMName is the display name of the Proxy VM in vCenter.
                 type: string
               vmwareCredsRef:
-                description: VMwareCredsRef references the VMwareCreds used to locate
-                  and connect to the Proxy VM.
+                description: |-
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
                 properties:
                   name:
                     default: ""
@@ -2139,26 +2136,17 @@ spec:
             description: ProxyVMStatus defines the observed state of ProxyVM
             properties:
               attachedDiskCount:
-                description: |-
-                  AttachedDiskCount is the number of source-snapshot disks currently attached
-                  to this Proxy VM across all active Hot-Add migrations. Max 60.
                 type: integer
               componentsVerified:
-                description: ComponentsVerified lists each required component and
-                  whether it was found.
                 items:
                   description: ProxyVMComponentCheck records whether a required component
                     was found on the Proxy VM.
                   properties:
                     message:
-                      description: Message provides detail for missing components.
                       type: string
                     name:
-                      description: Name is the component name (e.g. "qemu-nbd", "sshd").
                       type: string
                     present:
-                      description: Present indicates whether the component was found
-                        in PATH.
                       type: boolean
                   required:
                   - name
@@ -2166,21 +2154,13 @@ spec:
                   type: object
                 type: array
               ipAddress:
-                description: IPAddress is the IP address discovered from vCenter guest
-                  info.
                 type: string
               lastValidationTime:
-                description: LastValidationTime records when the last verification
-                  completed.
                 format: date-time
                 type: string
               validationMessage:
-                description: ValidationMessage contains a human-readable summary of
-                  the last validation result.
                 type: string
               validationStatus:
-                description: 'ValidationStatus is one of: Pending, Verifying, Ready,
-                  VerificationFailed.'
                 type: string
             type: object
         type: object
