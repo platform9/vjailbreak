@@ -332,13 +332,6 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 			}
 		} else {
 			if !deletedServers[attachedServerID] {
-				status, err := openstackops.GetServerStatus(ctx, attachedServerID)
-				if err != nil {
-					return errors.Wrapf(err, "failed to get status of orphaned server %s", attachedServerID)
-				}
-				if strings.ToUpper(status) != "ACTIVE" {
-					return fmt.Errorf("orphaned server %s is in %s state (not ACTIVE), skipping delete to preserve error visibility in PCD", attachedServerID, status)
-				}
 				migobj.logMessage(fmt.Sprintf("Volume %s is attached to orphaned server %s, deleting server", vmdisk.Name, attachedServerID))
 				if err := openstackops.DeleteServer(ctx, attachedServerID); err != nil {
 					return errors.Wrapf(err, "failed to delete orphaned server %s", attachedServerID)
