@@ -3,6 +3,10 @@ package server
 import (
 	"archive/tar"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/url"
@@ -15,30 +19,46 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/ovf/importer"
+	gossh "golang.org/x/crypto/ssh"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+
+	gosshcrypto "golang.org/x/crypto/ssh"
 )
 
 const (
 	proxyVMName = "vjailbreak-ha-proxy"
 
 	// Hardcoded deployment targets — update when generalising.
-	deployDatacenter   = "prison"
-	deployDatastore    = "datastore-nfs"
-	deployNetwork      = "network-19"
-	deployVMwareCreds  = "vmware-1"
+	deployDatacenter  = "prison"
+	deployDatastore   = "datastore-nfs"
+	deployNetwork     = "network-19"
+	deployVMwareCreds = "vmware-1"
+
+	vmRootUser     = "root"
+	vmRootPassword = "password"
 )
 
-var vmwareCredsGVR = schema.GroupVersionResource{
-	Group:    "vjailbreak.k8s.pf9.io",
-	Version:  "v1alpha1",
-	Resource: "vmwarecreds",
-}
+var (
+	vmwareCredsGVR = schema.GroupVersionResource{
+		Group:    "vjailbreak.k8s.pf9.io",
+		Version:  "v1alpha1",
+		Resource: "vmwarecreds",
+	}
+	proxyVMGVR = schema.GroupVersionResource{
+		Group:    "vjailbreak.k8s.pf9.io",
+		Version:  "v1alpha1",
+		Resource: "proxyvms",
+	}
+)
 
 // watchAndDeployProxyVM watches for VMwareCreds "vmware-1" to become validated
 // then deploys the proxy VM from the locally cached OVA exactly once.
@@ -118,7 +138,8 @@ func deployWhenOVAReady(ctx context.Context) {
 	}
 }
 
-// deployProxyVMFromOVA imports the OVA at ovaPath into vCenter as proxyVMName.
+// deployProxyVMFromOVA imports the OVA, powers on the VM, generates an SSH
+// keypair, installs it on the VM, then registers it as a ProxyVM CR.
 func deployProxyVMFromOVA(ovaPath string) {
 	ctx := context.Background()
 
@@ -135,14 +156,12 @@ func deployProxyVMFromOVA(ovaPath string) {
 	}
 	defer client.Logout(ctx)
 
-	// Datastore
 	ds, err := finder.Datastore(ctx, deployDatastore)
 	if err != nil {
 		logrus.Errorf("ova-deploy: datastore %q: %v", deployDatastore, err)
 		return
 	}
 
-	// Resource pool — no cluster, so use the first host's Resources pool.
 	hosts, err := finder.HostSystemList(ctx, "*")
 	if err != nil || len(hosts) == 0 {
 		logrus.Errorf("ova-deploy: no hosts found: %v", err)
@@ -150,22 +169,19 @@ func deployProxyVMFromOVA(ovaPath string) {
 	}
 	rp, err := hosts[0].ResourcePool(ctx)
 	if err != nil {
-		logrus.Errorf("ova-deploy: resource pool for host %s: %v", hosts[0].Name(), err)
+		logrus.Errorf("ova-deploy: resource pool: %v", err)
 		return
 	}
 
-	// VM folder — first folder in the datacenter.
 	folders, err := finder.FolderList(ctx, "*")
 	if err != nil || len(folders) == 0 {
 		logrus.Errorf("ova-deploy: no folder found: %v", err)
 		return
 	}
-	folder := folders[0]
 
-	// Import expects the descriptor entry name found inside the OVA tar.
 	ovfEntry, err := findDescriptorEntry(ovaPath)
 	if err != nil {
-		logrus.Errorf("ova-deploy: find descriptor in OVA: %v", err)
+		logrus.Errorf("ova-deploy: find descriptor: %v", err)
 		return
 	}
 	logrus.Infof("ova-deploy: using descriptor entry %q", ovfEntry)
@@ -180,28 +196,218 @@ func deployProxyVMFromOVA(ovaPath string) {
 		Finder:       finder,
 		ResourcePool: rp,
 		Datastore:    ds,
-		Folder:       folder,
+		Folder:       folders[0],
 		Archive:      &importer.TapeArchive{Path: ovaPath},
 	}
 
-	opts := importer.Options{
+	ref, err := imp.Import(ctx, ovfEntry, importer.Options{
 		Name: &name,
 		NetworkMapping: []importer.Network{
 			{Name: "VM Network", Network: deployNetwork},
 		},
-	}
-
-	ref, err := imp.Import(ctx, ovfEntry, opts)
+	})
 	if err != nil {
 		logrus.Errorf("ova-deploy: import failed: %v", err)
 		return
 	}
+	logrus.Infof("ova-deploy: VM %q deployed (ref=%s)", proxyVMName, ref.Value)
 
-	logrus.Infof("ova-deploy: VM %q deployed successfully (ref=%s)", proxyVMName, ref.Value)
+	// Power on
+	vmObj, err := powerOnVM(ctx, finder)
+	if err != nil {
+		logrus.Errorf("ova-deploy: power on: %v", err)
+		return
+	}
+
+	// Wait for IP (5 min timeout)
+	ip, err := waitForVMIP(ctx, vmObj)
+	if err != nil {
+		logrus.Errorf("ova-deploy: wait for IP: %v", err)
+		return
+	}
+	logrus.Infof("ova-deploy: VM IP: %s", ip)
+
+	// Generate keypair and store in k8s secret
+	keypairName := proxyVMName + "-keypair"
+	pubKey, err := generateAndStoreKeypair(ctx, keypairName)
+	if err != nil {
+		logrus.Errorf("ova-deploy: generate keypair: %v", err)
+		return
+	}
+
+	// Install public key on VM via SSH (root/password)
+	if err := installSSHPublicKey(ctx, ip, pubKey); err != nil {
+		logrus.Errorf("ova-deploy: install SSH key: %v", err)
+		return
+	}
+
+	// Register as ProxyVM CR
+	if err := createProxyVMCR(ctx, proxyVMName, deployVMwareCreds, keypairName); err != nil {
+		logrus.Errorf("ova-deploy: create ProxyVM CR: %v", err)
+		return
+	}
+
+	logrus.Infof("ova-deploy: proxy VM %q onboarded successfully", proxyVMName)
 }
 
-// credsFromVMwareCreds looks up the VMwareCreds CR by name, resolves its
-// spec.secretRef.name, then reads VCENTER_HOST/USERNAME/PASSWORD from that secret.
+func powerOnVM(ctx context.Context, finder *find.Finder) (*object.VirtualMachine, error) {
+	vm, err := finder.VirtualMachine(ctx, proxyVMName)
+	if err != nil {
+		return nil, fmt.Errorf("find VM: %v", err)
+	}
+	task, err := vm.PowerOn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("power on: %v", err)
+	}
+	if err := task.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("wait power on: %v", err)
+	}
+	logrus.Infof("ova-deploy: VM %q powered on", proxyVMName)
+	return vm, nil
+}
+
+func waitForVMIP(ctx context.Context, vm *object.VirtualMachine) (string, error) {
+	tctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	ip, err := vm.WaitForIP(tctx, true) // true = IPv4 only
+	if err != nil {
+		return "", fmt.Errorf("WaitForIP: %v", err)
+	}
+	return ip, nil
+}
+
+func generateAndStoreKeypair(ctx context.Context, secretName string) (string, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return "", fmt.Errorf("generate RSA key: %v", err)
+	}
+
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	pub, err := gosshcrypto.NewPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("marshal public key: %v", err)
+	}
+	publicKeyBytes := gosshcrypto.MarshalAuthorizedKey(pub)
+
+	if k8sAuthClient == nil {
+		return "", fmt.Errorf("k8s client not initialized")
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: migrationSystemNamespace,
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"ssh-privatekey": privateKeyPEM,
+			"ssh-publickey":  publicKeyBytes,
+		},
+	}
+
+	_, err = k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
+		return "", fmt.Errorf("store secret %q: %v", secretName, err)
+	}
+	if k8serrors.IsAlreadyExists(err) {
+		existing, getErr := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Get(ctx, secretName, metav1.GetOptions{})
+		if getErr != nil {
+			return "", fmt.Errorf("fetch existing secret %q: %v", secretName, getErr)
+		}
+		publicKeyBytes = existing.Data["ssh-publickey"]
+	}
+
+	logrus.Infof("ova-deploy: SSH keypair stored in secret %q", secretName)
+	return string(publicKeyBytes), nil
+}
+
+func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
+	cfg := &gossh.ClientConfig{
+		User:            vmRootUser,
+		Auth:            []gossh.AuthMethod{gossh.Password(vmRootPassword)},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(), //nolint:gosec
+		Timeout:         10 * time.Second,
+	}
+
+	addr := ip + ":22"
+	deadline := time.Now().Add(10 * time.Minute)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		conn, err := gossh.Dial("tcp", addr, cfg)
+		if err != nil {
+			logrus.Infof("ova-deploy: SSH not ready on %s — retrying in 15s", addr)
+			time.Sleep(15 * time.Second)
+			continue
+		}
+
+		session, err := conn.NewSession()
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SSH session: %v", err)
+		}
+
+		session.Stdin = strings.NewReader(strings.TrimSpace(pubKey) + "\n")
+		err = session.Run("mkdir -p /root/.ssh && chmod 700 /root/.ssh && tee -a /root/.ssh/authorized_keys > /dev/null && chmod 600 /root/.ssh/authorized_keys")
+		session.Close()
+		conn.Close()
+
+		if err != nil {
+			return fmt.Errorf("install authorized_keys: %v", err)
+		}
+		logrus.Infof("ova-deploy: public key installed on %s", ip)
+		return nil
+	}
+	return fmt.Errorf("SSH to %s timed out after 10 minutes", ip)
+}
+
+func createProxyVMCR(ctx context.Context, vmName, vmwareCredsName, keypairSecretName string) error {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("in-cluster config: %v", err)
+	}
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("dynamic client: %v", err)
+	}
+
+	proxyVM := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
+			"kind":       "ProxyVM",
+			"metadata": map[string]interface{}{
+				"name":      vmName,
+				"namespace": migrationSystemNamespace,
+			},
+			"spec": map[string]interface{}{
+				"vmName": vmName,
+				"vmwareCredsRef": map[string]interface{}{
+					"name": vmwareCredsName,
+				},
+				"sshKeyPairRef": map[string]interface{}{
+					"name": keypairSecretName,
+				},
+			},
+		},
+	}
+
+	_, err = dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Create(ctx, proxyVM, metav1.CreateOptions{})
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create ProxyVM CR: %v", err)
+	}
+	logrus.Infof("ova-deploy: ProxyVM CR %q created", vmName)
+	return nil
+}
+
 func credsFromVMwareCreds(ctx context.Context, credsName string) (host, username, password string, err error) {
 	cfg, cfgErr := rest.InClusterConfig()
 	if cfgErr != nil {
@@ -239,7 +445,6 @@ func credsFromVMwareCreds(ctx context.Context, credsName string) (host, username
 	return host, username, password, nil
 }
 
-// connectVCenter connects to vCenter and sets the datacenter on the finder.
 func connectVCenter(ctx context.Context, host, username, password string) (*govmomi.Client, *find.Finder, error) {
 	stripped := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://"), "/")
 	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", stripped))
@@ -261,12 +466,11 @@ func connectVCenter(ctx context.Context, host, username, password string) (*govm
 		return nil, nil, fmt.Errorf("datacenter %q: %v", deployDatacenter, err)
 	}
 	finder.SetDatacenter(dc)
-
 	return client, finder, nil
 }
 
-// findDescriptorEntry opens an OVA (tar) and returns the base name of the first
-// .ovf entry. Falls back to the first entry in the archive if no .ovf is found.
+// findDescriptorEntry scans an OVA (tar) for the first .ovf entry.
+// Falls back to the first entry in the archive if no .ovf is found.
 func findDescriptorEntry(ovaPath string) (string, error) {
 	f, err := os.Open(filepath.Clean(ovaPath))
 	if err != nil {
