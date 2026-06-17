@@ -497,6 +497,33 @@ if [ "$IS_MASTER" == "true" ]; then
     fi
   fi
 
+  # Fetch the proxy VM OVA so Hot-Add migrations are ready immediately.
+  # Re-running this block (or the fetch function directly) replaces the file,
+  # allowing OVA updates by changing PROXY_VM_OVA_URL in vjailbreak-settings.
+  fetch_proxy_vm_ova() {
+    local ova_dir="/home/ubuntu/proxy-vm-template"
+    local ova_file="${ova_dir}/ha-proxy-vm.ova"
+    local default_url="https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+    local ova_url
+
+    log "Creating proxy VM OVA directory: ${ova_dir}"
+    mkdir -p "$ova_dir"
+
+    ova_url=$(kubectl -n migration-system get configmap vjailbreak-settings \
+      -o jsonpath="{.data.PROXY_VM_OVA_URL}" 2>/dev/null || true)
+    ova_url="${ova_url:-$default_url}"
+
+    log "Fetching proxy VM OVA from ${ova_url}..."
+    if curl -fsSL --retry 3 --retry-delay 5 -o "${ova_file}.tmp" "$ova_url"; then
+      mv "${ova_file}.tmp" "$ova_file"
+      log "Proxy VM OVA saved to ${ova_file}"
+    else
+      rm -f "${ova_file}.tmp"
+      log "WARNING: Failed to download proxy VM OVA from ${ova_url}. Hot-Add will not be available until the OVA is present."
+    fi
+  }
+  fetch_proxy_vm_ova
+
 else
   log "Setting up K3s Worker..."
 

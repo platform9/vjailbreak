@@ -803,64 +803,6 @@ export const MOCK_VOLUME_IMAGE_PROFILES_LIST = {
   items: [MOCK_VOLUME_IMAGE_PROFILE_A, MOCK_VOLUME_IMAGE_PROFILE_B],
 }
 
-// ─── Settings ConfigMap fixtures ─────────────────────────────────────────────
-
-const baseSettingsData = {
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: '20',
-  PERIODIC_SYNC_INTERVAL: '1h',
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: '20',
-  VM_ACTIVE_WAIT_RETRY_LIMIT: '15',
-  DEFAULT_MIGRATION_METHOD: 'cold',
-  VCENTER_SCAN_CONCURRENCY_LIMIT: '10',
-  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: 'false',
-  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: 'false',
-  POPULATE_VMWARE_MACHINE_FLAVORS: 'true',
-  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: '10',
-  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: '15',
-  VCENTER_LOGIN_RETRY_LIMIT: '5',
-  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: '60',
-  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: '60',
-  VALIDATE_RDM_OWNER_VMS: 'true',
-  AUTO_FSTAB_UPDATE: 'true',
-  DEPLOYMENT_NAME: 'vJailbreak',
-  TIMEZONE: '',
-  NTP_SERVERS: '',
-  HTTP_TIMEOUT_SECONDS: '30',
-  AGENT_HOST_ENTRIES: '',
-}
-
-export const MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON = {
-  apiVersion: 'v1',
-  kind: 'ConfigMap',
-  metadata: {
-    name: 'vjailbreak-settings',
-    namespace: NS,
-    uid: 'uid-vjailbreak-settings',
-    resourceVersion: '1000',
-    creationTimestamp: '2024-01-01T00:00:00Z',
-  },
-  data: {
-    ...baseSettingsData,
-    DEFAULT_NETWORK_PERSISTENCE: 'true',
-  },
-}
-
-export const MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF = {
-  apiVersion: 'v1',
-  kind: 'ConfigMap',
-  metadata: {
-    name: 'vjailbreak-settings',
-    namespace: NS,
-    uid: 'uid-vjailbreak-settings',
-    resourceVersion: '1000',
-    creationTimestamp: '2024-01-01T00:00:00Z',
-  },
-  data: {
-    ...baseSettingsData,
-    DEFAULT_NETWORK_PERSISTENCE: 'false',
-  },
-}
-
 // ─── Rolling migration plan creation response ─────────────────────────────────
 
 export const MOCK_ROLLING_MIGRATION_PLAN_CREATED = {

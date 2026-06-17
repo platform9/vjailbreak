@@ -2079,16 +2079,25 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create volumes for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after HotAdd volume creation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
 		}
 		for idx, vmdisk := range vminfo.VMDisks {
 			path, err := migobj.AttachVolume(ctx, vmdisk)
 			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+				}
 				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
 			}
 			vminfo.VMDisks[idx].Path = path
 		}
 		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to perform HotAdd disk copy")
 		}
 
