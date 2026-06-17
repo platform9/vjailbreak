@@ -1305,8 +1305,9 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s)", vminfo.Name, osPath, vminfo.OSType))
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	blockDriver := blockDriverFromMetadata(migobj.ImageMetadata)
+	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s, blockDriver=%q)", vminfo.Name, osPath, vminfo.OSType, blockDriver))
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, blockDriver); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 	utils.PrintLog("virt-v2v conversion completed successfully")
@@ -1466,6 +1467,20 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 	}
 
 	return nil
+}
+
+// blockDriverFromMetadata returns the virt-v2v --block-driver value that
+// matches the hw_disk_bus / hw_scsi_model image properties the caller intends
+// to set on the migrated volume.  The two values must agree: if OpenStack
+// presents a virtio-scsi controller (hw_disk_bus=scsi, hw_scsi_model=virtio-scsi)
+// virt-v2v must make vioscsi boot-critical; if it presents virtio-blk
+// (hw_disk_bus=virtio, the default) virt-v2v must make viostor boot-critical.
+// Returning "" lets virt-v2v use its built-in default (virtio-blk / viostor).
+func blockDriverFromMetadata(metadata map[string]string) string {
+	if metadata["hw_disk_bus"] == "scsi" && metadata["hw_scsi_model"] == "virtio-scsi" {
+		return "virtio-scsi"
+	}
+	return ""
 }
 
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
