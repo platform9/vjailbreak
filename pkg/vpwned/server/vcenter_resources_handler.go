@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vmware/govmomi/object"
 )
 
 // VCenterResourcesResponse is the JSON response for GET /vpw/v1/vcenter-resources.
@@ -40,7 +41,7 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Single connection — no reconnect, so the session stays alive for all listings.
+	// Single connection throughout — no reconnect between listings.
 	client, finder, err := connectVCenterNoDC(ctx, vcHost, vcUsername, vcPassword)
 	if err != nil {
 		http.Error(w, "failed to connect to vCenter: "+err.Error(), http.StatusInternalServerError)
@@ -55,39 +56,36 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 		Networks:    []string{},
 	}
 
-	// List all datacenters.
+	// List all datacenters; keep the object we'll scope to.
+	var selectedDC *object.Datacenter
 	dcs, dcListErr := finder.DatacenterList(ctx, "*")
 	if dcListErr != nil {
-		logrus.Warnf("vcenter-resources: DatacenterList: %v", dcListErr)
+		logrus.Warnf("vcenter-resources[%s]: DatacenterList: %v", credsRef, dcListErr)
 	}
 	for _, dc := range dcs {
-		resp.Datacenters = append(resp.Datacenters, path.Base(dc.InventoryPath))
+		name := path.Base(dc.InventoryPath)
+		resp.Datacenters = append(resp.Datacenters, name)
+		// Prefer the datacenter stored in credentials; otherwise use the first one.
+		if selectedDC == nil || name == preferredDC {
+			selectedDC = dc
+		}
 	}
-	logrus.Infof("vcenter-resources: found %d datacenters", len(resp.Datacenters))
+	logrus.Infof("vcenter-resources[%s]: %d datacenter(s) found, scoping to %q",
+		credsRef, len(resp.Datacenters), func() string {
+			if selectedDC != nil {
+				return path.Base(selectedDC.InventoryPath)
+			}
+			return "(none)"
+		}())
 
-	// Pick which datacenter to scope to: prefer the one from credentials.
-	scopeDC := preferredDC
-	if scopeDC == "" && len(resp.Datacenters) > 0 {
-		scopeDC = resp.Datacenters[0]
-	}
-
-	if scopeDC == "" {
-		// Nothing more we can do without a datacenter.
+	if selectedDC == nil {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
-	// Scope the SAME finder to the datacenter — no second login.
-	dc, dcErr := finder.Datacenter(ctx, scopeDC)
-	if dcErr != nil {
-		logrus.Warnf("vcenter-resources: Datacenter(%q): %v", scopeDC, dcErr)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-		return
-	}
-	finder.SetDatacenter(dc)
-	logrus.Infof("vcenter-resources: scoped to datacenter %q", scopeDC)
+	// Scope the finder to the selected datacenter — same connection, no re-login.
+	finder.SetDatacenter(selectedDC)
 
 	// Clusters.
 	if clusters, clErr := finder.ClusterComputeResourceList(ctx, "*"); clErr == nil {
@@ -97,10 +95,10 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		logrus.Warnf("vcenter-resources: ClusterComputeResourceList: %v", clErr)
+		logrus.Warnf("vcenter-resources[%s]: ClusterComputeResourceList: %v", credsRef, clErr)
 	}
 
-	// Standalone hosts (added to Clusters so the UI can pick either).
+	// Standalone hosts (merged into Clusters so the UI can pick either).
 	if hosts, hErr := finder.HostSystemList(ctx, "*"); hErr == nil {
 		for _, h := range hosts {
 			if n := path.Base(h.InventoryPath); n != "" {
@@ -108,8 +106,9 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		logrus.Warnf("vcenter-resources: HostSystemList: %v", hErr)
+		logrus.Warnf("vcenter-resources[%s]: HostSystemList: %v", credsRef, hErr)
 	}
+	logrus.Infof("vcenter-resources[%s]: %d cluster/host(s)", credsRef, len(resp.Clusters))
 
 	// Datastores.
 	if datastores, dsErr := finder.DatastoreList(ctx, "*"); dsErr == nil {
@@ -119,9 +118,9 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		logrus.Warnf("vcenter-resources: DatastoreList: %v", dsErr)
+		logrus.Warnf("vcenter-resources[%s]: DatastoreList: %v", credsRef, dsErr)
 	}
-	logrus.Infof("vcenter-resources: found %d datastores", len(resp.Datastores))
+	logrus.Infof("vcenter-resources[%s]: %d datastore(s)", credsRef, len(resp.Datastores))
 
 	// Networks.
 	if networks, netErr := finder.NetworkList(ctx, "*"); netErr == nil {
@@ -131,9 +130,9 @@ func HandleVCenterResources(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		logrus.Warnf("vcenter-resources: NetworkList: %v", netErr)
+		logrus.Warnf("vcenter-resources[%s]: NetworkList: %v", credsRef, netErr)
 	}
-	logrus.Infof("vcenter-resources: found %d networks", len(resp.Networks))
+	logrus.Infof("vcenter-resources[%s]: %d network(s)", credsRef, len(resp.Networks))
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
