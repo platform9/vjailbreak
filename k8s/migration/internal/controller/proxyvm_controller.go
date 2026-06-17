@@ -75,6 +75,13 @@ func (r *ProxyVMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 	return r.reconcileNormal(ctx, proxyVM)
 }
 
+// proxyVMVCState holds the vCenter discovery results for a Proxy VM.
+type proxyVMVCState struct {
+	ip      string
+	vmObj   *object.VirtualMachine
+	uuidSet bool
+}
+
 func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 
@@ -98,109 +105,45 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		}
 	}
 
-	// Fetch vCenter credentials using the shared helper (VMwareCreds CR → secret → parsed fields).
-	vcCreds, err := vmwarepkg.GetVMwareCredsInfo(ctx, r.Client, proxyVM.Spec.VMwareCredsRef.Name)
-	if err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get VMwareCreds %q: %v", proxyVM.Spec.VMwareCredsRef.Name, err))
+	state, res, done, err := r.discoverProxyVMState(ctx, proxyVM)
+	if done {
+		return res, err
+	}
+	ctxlog.Info("Discovered Proxy VM IP", "ip", state.ip)
+
+	if !state.uuidSet {
+		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, state.vmObj)
 	}
 
-	// Connect to vCenter
-	vcClient, err := vcenter.VCenterClientBuilder(ctx, vcCreds.Username, vcCreds.Password, vcCreds.Host, vcCreds.Insecure)
-	if err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to connect to vCenter: %v", err))
+	privateKey, res, done, err := r.loadSSHKey(ctx, proxyVM)
+	if done {
+		return res, err
 	}
 
-	// Find the VM and get its guest IP
-	vmObj, err := vcClient.GetVMByName(ctx, proxyVM.Spec.VMName)
-	if err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("VM %q not found in vCenter: %v", proxyVM.Spec.VMName, err))
-	}
-
-	// Fetch guest properties: ipAddress and extraConfig
-	var vmProps mo.VirtualMachine
-	if err := vmObj.Properties(ctx, vmObj.Reference(), []string{"guest.ipAddress", "config.extraConfig"}, &vmProps); err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to fetch VM properties: %v", err))
-	}
-
-	ipAddress := ""
-	if vmProps.Guest != nil {
-		ipAddress = vmProps.Guest.IpAddress
-	}
-	if ipAddress == "" {
-		return r.failVerification(ctx, proxyVM, "Proxy VM has no guest IP address — ensure VMware Tools is running and the VM is powered on")
-	}
-	proxyVM.Status.IPAddress = ipAddress
-	ctxlog.Info("Discovered Proxy VM IP", "ip", ipAddress)
-
-	if vmProps.Config == nil || !isDiskEnableUUIDSet(vmProps.Config.ExtraConfig) {
-		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, vmObj)
-	}
-
-	// Resolve SSH private key: prefer explicit SSHKeyPairRef, fall back to legacy per-ProxyVM secret.
-	sshSecretName := commonutils.HotAddSSHSecretName(proxyVM.Name)
-	if proxyVM.Spec.SSHKeyPairRef != nil {
-		sshSecretName = proxyVM.Spec.SSHKeyPairRef.Name
-	}
-	sshSecret := &corev1.Secret{}
-	if err := r.Get(ctx, k8stypes.NamespacedName{
-		Name:      sshSecretName,
-		Namespace: proxyVM.Namespace,
-	}, sshSecret); err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get SSH secret %q: %v", sshSecretName, err))
-	}
-	privateKey, ok := sshSecret.Data["ssh-privatekey"]
-	if !ok || len(privateKey) == 0 {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("secret %q is missing 'ssh-privatekey' key", sshSecretName))
-	}
-
-	// Connect via SSH
 	sshClient := esxissh.NewClientWithTimeout(30 * time.Second)
-	connectCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := sshClient.Connect(connectCtx, ipAddress, "root", privateKey); err != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("SSH connection to Proxy VM %s failed: %v", ipAddress, err))
+	if connErr := sshClient.Connect(connectCtx, state.ip, "root", privateKey); connErr != nil {
+		proxyVM.Status.ValidationMessage = fmt.Sprintf("SSH connection to Proxy VM %s failed (retrying): %v", state.ip, connErr)
+		if updateErr := r.Status().Update(ctx, proxyVM); updateErr != nil && !apierrors.IsNotFound(updateErr) {
+			return ctrl.Result{}, updateErr
+		}
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 	defer func() {
-		if err := sshClient.Disconnect(); err != nil {
-			ctxlog.V(1).Info("Failed to disconnect SSH client", "ip", ipAddress, "error", err)
+		if discErr := sshClient.Disconnect(); discErr != nil {
+			ctxlog.V(1).Info("Failed to disconnect SSH client", "ip", state.ip, "error", discErr)
 		}
 	}()
 
-	checkCmd := `for cmd in ` + strings.Join(constants.ProxyVMRequiredComponents, " ") + `; do printf '%s:%s\n' "$cmd" "$(which "$cmd" 2>/dev/null || echo MISSING)"; done`
-	checkOutput, execErr := sshClient.ExecuteCommand(checkCmd)
-	if execErr != nil {
-		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to run component check on Proxy VM: %v", execErr))
+	componentResults, res, done, err := r.checkAndInstallComponents(ctx, proxyVM, sshClient)
+	if done {
+		return res, err
 	}
 
-	componentResults, missingComponents, allPresent := parseComponentCheckOutput(checkOutput)
 	now := metav1.Now()
 	proxyVM.Status.LastValidationTime = &now
-
-	if !allPresent {
-		if !checkInternetReachable(sshClient) {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components [%s] and internet not reachable for auto-install", strings.Join(missingComponents, ", ")))
-		}
-		rawDistro, err := detectOSDistro(sshClient)
-		if err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS detection failed: %v", err))
-		}
-		distro, ok := normaliseOSDistro(rawDistro)
-		if !ok {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS %q is not supported for auto-install", rawDistro))
-		}
-		installCmd := proxyVMInstallCmds[distro]
-		ctxlog.Info("auto-installing missing components", "distro", distro, "rawDistro", rawDistro, "missing", missingComponents)
-		if err := installMissingComponents(sshClient, installCmd); err != nil {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("auto-install on %q failed: %v", distro, err))
-		}
-		componentResults, missingComponents, allPresent = reVerifyComponents(sshClient)
-		if !allPresent {
-			return r.failVerification(ctx, proxyVM, fmt.Sprintf("components still missing after auto-install: %s", strings.Join(missingComponents, ", ")))
-		}
-	}
-
 	proxyVM.Status.ComponentsVerified = componentResults
-
 	proxyVM.Status.ValidationStatus = constants.ProxyVMStatusReady
 	proxyVM.Status.ValidationMessage = "All components verified. disk.EnableUUID=True."
 	if err := r.Status().Update(ctx, proxyVM); err != nil {
@@ -210,8 +153,118 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{}, err
 	}
 
-	ctxlog.Info("ProxyVM verification succeeded", "name", proxyVM.Name, "ip", ipAddress)
+	ctxlog.Info("ProxyVM verification succeeded", "name", proxyVM.Name, "ip", state.ip)
 	return ctrl.Result{RequeueAfter: 15 * time.Minute}, nil
+}
+
+// discoverProxyVMState connects to vCenter, finds the Proxy VM, and returns its IP and
+// disk.EnableUUID status. When done=true the caller must return (res, err) immediately.
+func (r *ProxyVMReconciler) discoverProxyVMState(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (*proxyVMVCState, ctrl.Result, bool, error) {
+	vcCreds, vcErr := vmwarepkg.GetVMwareCredsInfo(ctx, r.Client, proxyVM.Spec.VMwareCredsRef.Name)
+	if vcErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get VMwareCreds %q: %v", proxyVM.Spec.VMwareCredsRef.Name, vcErr))
+		return nil, res, true, err
+	}
+
+	vcClient, vcErr := vcenter.VCenterClientBuilder(ctx, vcCreds.Username, vcCreds.Password, vcCreds.Host, vcCreds.Insecure)
+	if vcErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to connect to vCenter: %v", vcErr))
+		return nil, res, true, err
+	}
+
+	vmObj, vcErr := vcClient.GetVMByName(ctx, proxyVM.Spec.VMName)
+	if vcErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("VM %q not found in vCenter: %v", proxyVM.Spec.VMName, vcErr))
+		return nil, res, true, err
+	}
+
+	var vmProps mo.VirtualMachine
+	if vcErr = vmObj.Properties(ctx, vmObj.Reference(), []string{"guest.ipAddress", "config.extraConfig"}, &vmProps); vcErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to fetch VM properties: %v", vcErr))
+		return nil, res, true, err
+	}
+
+	ip := ""
+	if vmProps.Guest != nil {
+		ip = vmProps.Guest.IpAddress
+	}
+	if ip == "" {
+		proxyVM.Status.ValidationMessage = "Waiting for Proxy VM guest IP (VMware Tools starting)..."
+		if updErr := r.Status().Update(ctx, proxyVM); updErr != nil && !apierrors.IsNotFound(updErr) {
+			return nil, ctrl.Result{}, true, updErr
+		}
+		return nil, ctrl.Result{RequeueAfter: 15 * time.Second}, true, nil
+	}
+	proxyVM.Status.IPAddress = ip
+
+	uuidSet := vmProps.Config != nil && isDiskEnableUUIDSet(vmProps.Config.ExtraConfig)
+	return &proxyVMVCState{ip: ip, vmObj: vmObj, uuidSet: uuidSet}, ctrl.Result{}, false, nil
+}
+
+// loadSSHKey resolves and returns the SSH private key for the Proxy VM.
+// When done=true the caller must return (res, err) immediately.
+func (r *ProxyVMReconciler) loadSSHKey(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) ([]byte, ctrl.Result, bool, error) {
+	sshSecretName := commonutils.HotAddSSHSecretName(proxyVM.Name)
+	if proxyVM.Spec.SSHKeyPairRef != nil {
+		sshSecretName = proxyVM.Spec.SSHKeyPairRef.Name
+	}
+	sshSecret := &corev1.Secret{}
+	if getErr := r.Get(ctx, k8stypes.NamespacedName{Name: sshSecretName, Namespace: proxyVM.Namespace}, sshSecret); getErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to get SSH secret %q: %v", sshSecretName, getErr))
+		return nil, res, true, err
+	}
+	key, ok := sshSecret.Data["ssh-privatekey"]
+	if !ok || len(key) == 0 {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("secret %q is missing 'ssh-privatekey' key", sshSecretName))
+		return nil, res, true, err
+	}
+	return key, ctrl.Result{}, false, nil
+}
+
+// checkAndInstallComponents runs the required-component check on the Proxy VM via SSH
+// and attempts auto-installation of any missing packages.
+// When done=true the caller must return (res, err) immediately.
+func (r *ProxyVMReconciler) checkAndInstallComponents(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM, sshClient *esxissh.Client) ([]vjailbreakv1alpha1.ProxyVMComponentCheck, ctrl.Result, bool, error) {
+	ctxlog := log.FromContext(ctx)
+
+	checkCmd := `for cmd in ` + strings.Join(constants.ProxyVMRequiredComponents, " ") + `; do printf '%s:%s\n' "$cmd" "$(which "$cmd" 2>/dev/null || echo MISSING)"; done`
+	checkOutput, execErr := sshClient.ExecuteCommand(checkCmd)
+	if execErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to run component check on Proxy VM: %v", execErr))
+		return nil, res, true, err
+	}
+
+	componentResults, missingComponents, allPresent := parseComponentCheckOutput(checkOutput)
+	if allPresent {
+		return componentResults, ctrl.Result{}, false, nil
+	}
+
+	if !checkInternetReachable(sshClient) {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components [%s] and internet not reachable for auto-install", strings.Join(missingComponents, ", ")))
+		return nil, res, true, err
+	}
+	rawDistro, distroErr := detectOSDistro(sshClient)
+	if distroErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS detection failed: %v", distroErr))
+		return nil, res, true, err
+	}
+	distro, ok := normaliseOSDistro(rawDistro)
+	if !ok {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS %q is not supported for auto-install", rawDistro))
+		return nil, res, true, err
+	}
+	installCmd := proxyVMInstallCmds[distro]
+	ctxlog.Info("auto-installing missing components", "distro", distro, "rawDistro", rawDistro, "missing", missingComponents)
+	if installErr := installMissingComponents(sshClient, installCmd); installErr != nil {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("auto-install on %q failed: %v", distro, installErr))
+		return nil, res, true, err
+	}
+	componentResults, missingComponents, allPresent = reVerifyComponents(sshClient)
+	if !allPresent {
+		res, err := r.failVerification(ctx, proxyVM, fmt.Sprintf("components still missing after auto-install: %s", strings.Join(missingComponents, ", ")))
+		return nil, res, true, err
+	}
+	return componentResults, ctrl.Result{}, false, nil
 }
 
 func (r *ProxyVMReconciler) reconcileDelete(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (ctrl.Result, error) {
@@ -296,7 +349,7 @@ func (r *ProxyVMReconciler) setDiskEnableUUIDAndReboot(ctx context.Context, prox
 	if err := r.Status().Update(ctx, proxyVM); err != nil && !apierrors.IsNotFound(err) {
 		ctxlog.V(1).Info("Failed to update status after reboot", "error", err)
 	}
-	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: 90 * time.Second}, nil
 }
 
 func parseComponentCheckOutput(output string) ([]vjailbreakv1alpha1.ProxyVMComponentCheck, []string, bool) {
