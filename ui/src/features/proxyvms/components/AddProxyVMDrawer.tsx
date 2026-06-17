@@ -165,19 +165,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 60_000
   })
 
-  const { data: polledVMs = [] } = useQuery({
-    queryKey: [...PROXY_VMS_QUERY_KEY, 'deploy-poll'],
-    queryFn: () => getProxyVMList(),
-    enabled: deploymentStarted,
-    refetchInterval: deploymentStarted ? 5000 : false
-  })
-
-  useEffect(() => {
-    if (!deploymentStarted || !deployedVMName) return
-    const appeared = polledVMs.some((vm) => vm.metadata?.name === deployedVMName)
-    if (appeared) handleClose()
-  }, [polledVMs, deploymentStarted, deployedVMName, handleClose])
-
   const toOptions = (items: string[] | undefined) =>
     (items ?? []).map((v) => ({ label: v, value: v }))
 
@@ -241,6 +228,19 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     resetAll()
     onClose()
   }, [resetAll, onClose])
+
+  const { data: polledVMs = [] } = useQuery({
+    queryKey: [...PROXY_VMS_QUERY_KEY, 'deploy-poll'],
+    queryFn: () => getProxyVMList(),
+    enabled: deploymentStarted,
+    refetchInterval: deploymentStarted ? 5000 : false
+  })
+
+  useEffect(() => {
+    if (!deploymentStarted || !deployedVMName) return
+    const appeared = polledVMs.some((vm) => vm.metadata?.name === deployedVMName)
+    if (appeared) handleClose()
+  }, [polledVMs, deploymentStarted, deployedVMName, handleClose])
 
   const handleGenerate = async () => {
     const vmNameSafe = toK8sName(vmNameSelect)
@@ -553,24 +553,26 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                             multiline
                             minRows={4}
                             fullWidth
-                            InputProps={{
-                              readOnly: true,
-                              endAdornment: (
-                                <InputAdornment
-                                  position="end"
-                                  sx={{ alignSelf: 'flex-start', mt: 1 }}
-                                >
-                                  <Tooltip title={copied ? 'Copied!' : 'Copy public key'}>
-                                    <IconButton onClick={handleCopy} size="small" edge="end">
-                                      {copied ? (
-                                        <CheckIcon fontSize="small" color="success" />
-                                      ) : (
-                                        <ContentCopyIcon fontSize="small" />
-                                      )}
-                                    </IconButton>
-                                  </Tooltip>
-                                </InputAdornment>
-                              )
+                            slotProps={{
+                              input: {
+                                readOnly: true,
+                                endAdornment: (
+                                  <InputAdornment
+                                    position="end"
+                                    sx={{ alignSelf: 'flex-start', mt: 1 }}
+                                  >
+                                    <Tooltip title={copied ? 'Copied!' : 'Copy public key'}>
+                                      <IconButton onClick={handleCopy} size="small" edge="end">
+                                        {copied ? (
+                                          <CheckIcon fontSize="small" color="success" />
+                                        ) : (
+                                          <ContentCopyIcon fontSize="small" />
+                                        )}
+                                      </IconButton>
+                                    </Tooltip>
+                                  </InputAdornment>
+                                )
+                              }
                             }}
                             sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
                           />
