@@ -753,6 +753,10 @@ const (
 
 	// ProxyVMFinalizer is the finalizer for ProxyVM resources
 	ProxyVMFinalizer = "proxyvm.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// Normalised OS distro constants used for auto-install logic.
+	ProxyVMOSDistroDebian = "debian"
+	ProxyVMOSDistroAlpine = "alpine"
 )
 
 var (

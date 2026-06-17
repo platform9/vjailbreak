@@ -174,19 +174,32 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 
 	componentResults, missingComponents, allPresent := parseComponentCheckOutput(checkOutput)
 	now := metav1.Now()
-	proxyVM.Status.ComponentsVerified = componentResults
 	proxyVM.Status.LastValidationTime = &now
 
 	if !allPresent {
-		msg := fmt.Sprintf("Missing required components: %s", strings.Join(missingComponents, ", "))
-		proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerificationFailed
-		proxyVM.Status.ValidationMessage = msg
-		if err := r.Status().Update(ctx, proxyVM); err != nil && !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, err
+		if !checkInternetReachable(sshClient) {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components [%s] and internet not reachable for auto-install", strings.Join(missingComponents, ", ")))
 		}
-		ctxlog.Info("ProxyVM verification failed", "reason", msg)
-		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		rawDistro, err := detectOSDistro(sshClient)
+		if err != nil {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS detection failed: %v", err))
+		}
+		distro, ok := normaliseOSDistro(rawDistro)
+		if !ok {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("missing components and OS %q is not supported for auto-install", rawDistro))
+		}
+		installCmd := proxyVMInstallCmds[distro]
+		ctxlog.Info("auto-installing missing components", "distro", distro, "rawDistro", rawDistro, "missing", missingComponents)
+		if err := installMissingComponents(sshClient, installCmd); err != nil {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("auto-install on %q failed: %v", distro, err))
+		}
+		componentResults, missingComponents, allPresent = reVerifyComponents(sshClient)
+		if !allPresent {
+			return r.failVerification(ctx, proxyVM, fmt.Sprintf("components still missing after auto-install: %s", strings.Join(missingComponents, ", ")))
+		}
 	}
+
+	proxyVM.Status.ComponentsVerified = componentResults
 
 	proxyVM.Status.ValidationStatus = constants.ProxyVMStatusReady
 	proxyVM.Status.ValidationMessage = "All components verified. disk.EnableUUID=True."
@@ -308,6 +321,68 @@ func parseComponentCheckOutput(output string) ([]vjailbreakv1alpha1.ProxyVMCompo
 		results = append(results, check)
 	}
 	return results, missing, allPresent
+}
+
+// proxyVMInstallCmds maps a normalised OS distro constant to the command that installs qemu-nbd.
+var proxyVMInstallCmds = map[string]string{
+	constants.ProxyVMOSDistroDebian: "apt-get install -y qemu-utils",
+	constants.ProxyVMOSDistroAlpine: "apk add --no-cache qemu-img",
+}
+
+// normaliseOSDistro maps a raw /etc/os-release ID value to a normalised distro constant.
+// Returns ("", false) for unsupported distributions.
+func normaliseOSDistro(rawID string) (string, bool) {
+	id := strings.ToLower(strings.TrimSpace(rawID))
+	switch {
+	case strings.Contains(id, "debian"), strings.Contains(id, "ubuntu"), strings.Contains(id, "mint"):
+		return constants.ProxyVMOSDistroDebian, true
+	case strings.Contains(id, "alpine"):
+		return constants.ProxyVMOSDistroAlpine, true
+	}
+	return "", false
+}
+
+func checkInternetReachable(sshClient *esxissh.Client) bool {
+	out, err := sshClient.ExecuteCommand("curl -sf --max-time 5 https://8.8.8.8 > /dev/null 2>&1 && echo ok || echo fail")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) == "ok"
+}
+
+func detectOSDistro(sshClient *esxissh.Client) (string, error) {
+	out, err := sshClient.ExecuteCommand("cat /etc/os-release 2>/dev/null")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return "", fmt.Errorf("failed to read /etc/os-release: %v", err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "ID=") {
+			continue
+		}
+		id := strings.ToLower(strings.Trim(strings.TrimPrefix(line, "ID="), `"' `))
+		if id != "" {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("ID field not found in /etc/os-release")
+}
+
+func installMissingComponents(sshClient *esxissh.Client, installCmd string) error {
+	out, err := sshClient.ExecuteCommand(installCmd)
+	if err != nil {
+		return fmt.Errorf("%v\noutput: %s", err, strings.TrimSpace(out))
+	}
+	return nil
+}
+
+func reVerifyComponents(sshClient *esxissh.Client) ([]vjailbreakv1alpha1.ProxyVMComponentCheck, []string, bool) {
+	checkCmd := `for cmd in ` + strings.Join(constants.ProxyVMRequiredComponents, " ") + `; do printf '%s:%s\n' "$cmd" "$(which "$cmd" 2>/dev/null || echo MISSING)"; done`
+	out, err := sshClient.ExecuteCommand(checkCmd)
+	if err != nil {
+		return nil, constants.ProxyVMRequiredComponents, false
+	}
+	return parseComponentCheckOutput(out)
 }
 
 // SetupWithManager sets up the controller with the Manager.
