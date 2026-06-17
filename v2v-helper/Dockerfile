@@ -53,11 +53,13 @@ RUN dnf install -y \
     ./nbdkit-python-plugin-1.47.5-1.fc44.x86_64.rpm \
     ./nbdkit-nbd-plugin-1.47.5-1.fc44.x86_64.rpm \
     ./nbdkit-selinux-1.47.5-1.fc44.noarch.rpm \
-    ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm \
     ./libguestfs-1.59.8-1.fc44.x86_64.rpm \
     ./libguestfs-appliance-1.59.8-1.fc44.x86_64.rpm \
     ./guestfs-tools-1.55.8-1.fc44.x86_64.rpm \
     netplan && \
+    # Install pf9-patched virt-v2v with --nodeps to bypass RPM dep version
+    # mismatches — all real runtime deps are already installed above.
+    rpm -ivh --nodeps ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
