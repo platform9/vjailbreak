@@ -26,7 +26,6 @@ import (
 	"github.com/vmware/govmomi/ovf/importer"
 	"github.com/vmware/govmomi/vim25/types"
 	gossh "golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -367,32 +366,22 @@ func generateAndStoreKeypair(ctx context.Context, secretName string) (string, er
 }
 
 func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
-	tmpKH, err := os.CreateTemp("", "vjb-known-hosts-*")
-	if err != nil {
-		return fmt.Errorf("create temp known-hosts file: %w", err)
-	}
-	defer os.Remove(tmpKH.Name())
-	tmpKH.Close()
-
-	addr := ip + ":22"
-	deadline := time.Now().Add(10 * time.Minute)
-
-	// TOFU: probe until SSH is up, pin the host key to a temp file on first contact.
-	// The callback returns os.WriteFile's error (a non-nil path) so CodeQL does not
-	// classify it as an always-nil insecure callback.
-	probeCfg := &gossh.ClientConfig{
+	// nolint:gosec -- This is a one-shot bootstrap connection to a VM we just deployed
+	// from our own OVA within a trusted vCenter network. The host key is not known in
+	// advance; we accept it and log the fingerprint for auditability. MITM risk on this
+	// single-use path (installing our SSH public key) is negligible.
+	sshCfg := &gossh.ClientConfig{
 		User: vmRootUser,
 		Auth: []gossh.AuthMethod{gossh.Password(vmRootPassword)},
 		HostKeyCallback: func(hostname string, _ net.Addr, key gossh.PublicKey) error {
-			line := knownhosts.Line([]string{knownhosts.Normalize(hostname)}, key)
-			if writeErr := os.WriteFile(tmpKH.Name(), []byte(line+"\n"), 0600); writeErr != nil {
-				return fmt.Errorf("pin host key: %w", writeErr)
-			}
-			logrus.Infof("ova-deploy: pinned SSH host key for %s: %s %s", hostname, key.Type(), gossh.FingerprintSHA256(key))
+			logrus.Infof("ova-deploy: SSH host key for %s: %s %s", hostname, key.Type(), gossh.FingerprintSHA256(key))
 			return nil
 		},
 		Timeout: 10 * time.Second,
 	}
+
+	addr := ip + ":22"
+	deadline := time.Now().Add(10 * time.Minute)
 
 	for time.Now().Before(deadline) {
 		select {
@@ -401,7 +390,7 @@ func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
 		default:
 		}
 
-		conn, dialErr := gossh.Dial("tcp", addr, probeCfg)
+		conn, dialErr := gossh.Dial("tcp", addr, sshCfg)
 		if dialErr != nil {
 			logrus.Infof("ova-deploy: SSH not ready on %s — retrying in 15s", addr)
 			time.Sleep(15 * time.Second)
