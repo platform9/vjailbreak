@@ -1,8 +1,10 @@
 package server
 
 import (
+	"archive/tar"
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -160,6 +162,14 @@ func deployProxyVMFromOVA(ovaPath string) {
 	}
 	folder := folders[0]
 
+	// Import expects the descriptor entry name found inside the OVA tar.
+	ovfEntry, err := findDescriptorEntry(ovaPath)
+	if err != nil {
+		logrus.Errorf("ova-deploy: find descriptor in OVA: %v", err)
+		return
+	}
+	logrus.Infof("ova-deploy: using descriptor entry %q", ovfEntry)
+
 	name := proxyVMName
 	imp := &importer.Importer{
 		Log: func(msg string) (int, error) {
@@ -181,7 +191,7 @@ func deployProxyVMFromOVA(ovaPath string) {
 		},
 	}
 
-	ref, err := imp.Import(ctx, ovaPath, opts)
+	ref, err := imp.Import(ctx, ovfEntry, opts)
 	if err != nil {
 		logrus.Errorf("ova-deploy: import failed: %v", err)
 		return
@@ -253,4 +263,37 @@ func connectVCenter(ctx context.Context, host, username, password string) (*govm
 	finder.SetDatacenter(dc)
 
 	return client, finder, nil
+}
+
+// findDescriptorEntry opens an OVA (tar) and returns the base name of the first
+// .ovf entry. Falls back to the first entry in the archive if no .ovf is found.
+func findDescriptorEntry(ovaPath string) (string, error) {
+	f, err := os.Open(filepath.Clean(ovaPath))
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	r := tar.NewReader(f)
+	first := ""
+	for {
+		h, err := r.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("reading archive: %v", err)
+		}
+		name := filepath.Base(h.Name)
+		if first == "" {
+			first = name
+		}
+		if strings.HasSuffix(strings.ToLower(name), ".ovf") {
+			return name, nil
+		}
+	}
+	if first == "" {
+		return "", fmt.Errorf("archive %q is empty", ovaPath)
+	}
+	return first, nil
 }
