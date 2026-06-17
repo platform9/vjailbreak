@@ -201,7 +201,6 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	defer cncl()
 
 	go prefetchProxyVMOVA()
-	go watchAndDeployProxyVM(ctx)
 
 	go func() {
 		if err := startgRPCServer(ctx, "tcp", host+":"+port); err != nil {

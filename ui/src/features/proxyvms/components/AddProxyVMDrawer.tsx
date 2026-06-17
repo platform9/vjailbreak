@@ -106,51 +106,75 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     mode: 'onChange',
     reValidateMode: 'onChange'
   })
-  const { watch: selectWatch, reset: selectReset, setValue: selectSetValue, trigger: selectTrigger, formState: { isValid: selectIsValid } } = selectForm
+  const {
+    watch: selectWatch,
+    reset: selectReset,
+    setValue: selectSetValue,
+    trigger: selectTrigger,
+    formState: { isValid: selectIsValid }
+  } = selectForm
   const vmwareCredsRefSelect = selectWatch('vmwareCredsRef')
   const vmNameSelect = selectWatch('vmName')
 
   // ── Create form ────────────────────────────────────────────────────────────
   const createForm = useForm<CreateFormData>({
-    defaultValues: { vmwareCredsRef: '', vmName: '', datacenter: '', datastore: '', network: '', cluster: '' },
+    defaultValues: {
+      vmwareCredsRef: '',
+      vmName: '',
+      datacenter: '',
+      datastore: '',
+      network: '',
+      cluster: ''
+    },
     mode: 'onChange',
     reValidateMode: 'onChange'
   })
-  const { watch: createWatch, reset: createReset, setValue: createSetValue, formState: { isValid: createIsValid } } = createForm
+  const {
+    watch: createWatch,
+    reset: createReset,
+    setValue: createSetValue,
+    formState: { isValid: createIsValid }
+  } = createForm
   const vmwareCredsRefCreate = createWatch('vmwareCredsRef')
 
   // Active credentials — whichever form is showing
   const activeCredsRef = formMode === 'select' ? vmwareCredsRefSelect : vmwareCredsRefCreate
 
   // ── VM list query ─────────────────────────────────────────────────────────
-  const { data: runningVMOptions = [], isLoading: vmsLoading } = useQuery({
+  const { data: runningVMs = [], isLoading: vmsLoading } = useQuery({
     queryKey: ['vmwaremachines-for-proxy', activeCredsRef],
     queryFn: async () => {
       const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, activeCredsRef)
       return result.items
         .filter((m) => m.status?.powerState === 'running')
-        .map((m) => ({ label: m.spec.vms.name, value: m.spec.vms.name }))
+        .map((m) => m.spec.vms.name)
     },
     enabled: Boolean(activeCredsRef) && open,
     staleTime: 30_000
   })
 
-  const showCreateOption =
-    Boolean(activeCredsRef) && !vmsLoading && runningVMOptions.length === 0
+  // True when the typed name doesn't match any running VM (and we've finished loading)
+  const vmNameEntered = vmNameSelect.trim().length > 0
+  const vmExists = runningVMs.some(
+    (n) => n.toLowerCase() === vmNameSelect.trim().toLowerCase()
+  )
+  const showCreateOffer =
+    vmNameEntered && !vmsLoading && Boolean(vmwareCredsRefSelect) && !vmExists
 
-  // Reset VM selection when credentials change (select mode)
+  // Reset VM name when credentials change
   useEffect(() => {
     selectSetValue('vmName', '')
   }, [vmwareCredsRefSelect, selectSetValue])
 
   // Sync creds across forms when mode switches
   useEffect(() => {
-    if (formMode === 'create' && vmwareCredsRefSelect) {
-      createSetValue('vmwareCredsRef', vmwareCredsRefSelect)
-    } else if (formMode === 'select' && vmwareCredsRefCreate) {
-      selectSetValue('vmwareCredsRef', vmwareCredsRefCreate)
+    if (formMode === 'create') {
+      if (vmwareCredsRefSelect) createSetValue('vmwareCredsRef', vmwareCredsRefSelect)
+      if (vmNameSelect) createSetValue('vmName', toK8sName(vmNameSelect))
+    } else {
+      if (vmwareCredsRefCreate) selectSetValue('vmwareCredsRef', vmwareCredsRefCreate)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formMode])
 
   // When switching key source or vm name changes, clear old generated key
@@ -160,7 +184,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       setGeneratedKey(null)
       setGenerateError(null)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sshKeySource, vmNameSelect])
 
   useEffect(() => {
@@ -229,6 +253,10 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     [selectSetValue]
   )
 
+  const switchToCreate = () => {
+    setFormMode('create')
+  }
+
   // ── Submit: select mode ────────────────────────────────────────────────────
   const onSelectSubmit = async (data: SelectFormData) => {
     setIsSubmitting(true)
@@ -277,7 +305,9 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         )
       }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        setSubmitError('This VM is already registered as a Proxy VM. Use the Retry button in the table to re-verify it.')
+        setSubmitError(
+          'This VM is already registered as a Proxy VM. Use the Retry button in the table to re-verify it.'
+        )
       } else if (axios.isAxiosError(err)) {
         setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
       } else {
@@ -312,25 +342,14 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     }
   }
 
-  const vmSelectPlaceholder = !activeCredsRef
-    ? 'Select VMware credentials first'
-    : vmsLoading
-      ? 'Loading VMs...'
-      : runningVMOptions.length === 0
-        ? 'No powered-on VMs found'
-        : 'Search and select a VM'
-
   const isSelectDisabled =
-    isSubmitting ||
-    !selectIsValid ||
-    (sshKeySource === 'generated' && !generatedKey)
+    isSubmitting || !selectIsValid || (sshKeySource === 'generated' && !generatedKey)
 
   const isCreateDisabled = isSubmitting || !createIsValid
 
   const activeFormId = formMode === 'select' ? SELECT_FORM_ID : CREATE_FORM_ID
-  const submitLabel = formMode === 'create'
-    ? (isSubmitting ? 'Creating...' : 'Create & Register VM')
-    : 'Add Proxy VM'
+  const submitLabel =
+    formMode === 'create' ? (isSubmitting ? 'Creating...' : 'Create & Register VM') : 'Add Proxy VM'
 
   return (
     <DrawerShell
@@ -372,19 +391,23 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             </Alert>
           )}
 
-          {/* ── Select mode ─────────────────────────────────────────────── */}
+          {/* ── Select (register existing VM) mode ───────────────────────── */}
           {formMode === 'select' && (
             <DesignSystemForm
               id={SELECT_FORM_ID}
               form={selectForm}
               onSubmit={onSelectSubmit}
-              keyboardSubmitProps={{ open, onClose: handleClose, isSubmitDisabled: isSelectDisabled }}
+              keyboardSubmitProps={{
+                open,
+                onClose: handleClose,
+                isSubmitDisabled: isSelectDisabled
+              }}
             >
               <Box sx={{ display: 'grid', gap: 2 }}>
                 <Section>
                   <SectionHeader
                     title="Proxy VM"
-                    subtitle="Select the VMware environment and the powered-on VM to register as a proxy."
+                    subtitle="Select the VMware environment and enter the name of the powered-on VM to register as a proxy."
                   />
                   <Box sx={{ display: 'grid', gap: 2 }}>
                     <RHFSelect
@@ -398,43 +421,51 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                           : 'Select credentials'
                       }
                     />
-                    {vmwareCredsRefSelect && !vmsLoading && (
-                      <Alert severity="info">
-                        Only powered-on VMs are listed. If the VM is missing, revalidate the credentials.
-                      </Alert>
-                    )}
-                    <RHFSelect
+
+                    <RHFTextField
                       name="vmName"
                       label="VM Name"
-                      options={runningVMOptions}
-                      searchable
-                      searchPlaceholder="Search VMs..."
-                      rules={{ required: 'VM is required' }}
-                      placeholder={vmSelectPlaceholder}
-                      disabled={!vmwareCredsRefSelect || vmsLoading}
+                      rules={{ required: 'VM name is required' }}
+                      placeholder={
+                        !vmwareCredsRefSelect
+                          ? 'Select credentials first'
+                          : vmsLoading
+                            ? 'Loading VMs…'
+                            : 'Enter the VM name'
+                      }
+                      disabled={!vmwareCredsRefSelect || vmsLoading || isSubmitting}
                     />
 
-                    {/* Offer to create a VM when no running VMs are found */}
-                    {showCreateOption && (
+                    {/* VM exists — green confirmation */}
+                    {vmNameEntered && !vmsLoading && vmExists && (
+                      <Alert severity="success">
+                        VM <strong>{vmNameSelect}</strong> found and powered on.
+                      </Alert>
+                    )}
+
+                    {/* VM not found — offer to create */}
+                    {showCreateOffer && (
                       <Alert
                         severity="warning"
                         action={
                           <ActionButton
                             tone="secondary"
                             size="small"
-                            onClick={() => setFormMode('create')}
+                            onClick={switchToCreate}
+                            disabled={isSubmitting}
                           >
                             Create VM
                           </ActionButton>
                         }
                       >
-                        No powered-on VMs found. Deploy a new Proxy VM from the OVA template instead.
+                        No running VM named <strong>{vmNameSelect}</strong> found. Deploy a new
+                        Proxy VM from the OVA template instead.
                       </Alert>
                     )}
                   </Box>
                 </Section>
 
-                {/* SSH Access */}
+                {/* SSH Access — only relevant when registering an existing VM */}
                 <Section>
                   <SectionHeader
                     title="SSH Access"
@@ -477,7 +508,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                           </ActionButton>
                           {!vmNameSelect && (
                             <Typography variant="caption" color="text.secondary">
-                              Select a VM first to generate a key pair.
+                              Enter a VM name first to generate a key pair.
                             </Typography>
                           )}
                         </>
@@ -583,13 +614,17 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             </DesignSystemForm>
           )}
 
-          {/* ── Create mode ──────────────────────────────────────────────── */}
+          {/* ── Create (deploy from OVA) mode ────────────────────────────── */}
           {formMode === 'create' && (
             <DesignSystemForm
               id={CREATE_FORM_ID}
               form={createForm}
               onSubmit={onCreateSubmit}
-              keyboardSubmitProps={{ open, onClose: handleClose, isSubmitDisabled: isCreateDisabled }}
+              keyboardSubmitProps={{
+                open,
+                onClose: handleClose,
+                isSubmitDisabled: isCreateDisabled
+              }}
             >
               <Box sx={{ display: 'grid', gap: 2 }}>
                 <Alert
@@ -605,14 +640,14 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     </ActionButton>
                   }
                 >
-                  A new Proxy VM will be deployed from the OVA template. SSH access is
-                  configured automatically — no key setup required.
+                  A new Proxy VM will be deployed from the OVA template. SSH access is configured
+                  automatically — no key setup required.
                 </Alert>
 
                 <Section>
                   <SectionHeader
                     title="VM Details"
-                    subtitle="Provide a name and target location for the new Proxy VM."
+                    subtitle="Provide a name and VMware credentials for the new Proxy VM."
                   />
                   <Box sx={{ display: 'grid', gap: 2 }}>
                     <RHFSelect
