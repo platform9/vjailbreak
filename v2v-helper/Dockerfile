@@ -87,7 +87,7 @@ RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-
     nbdkit-python-plugin-1.47.5-1.fc44 \
     nbdkit-nbd-plugin-1.47.5-1.fc44 \
     nbdkit-selinux-1.47.5-1.fc44.noarch \
-    virt-v2v-2.11.8-1.pf9.fc44.x86_64 \
+    virt-v2v-1:2.11.8-1.pf9.fc44.x86_64 \
     libguestfs-1.59.8-1.fc44.x86_64 \
     libguestfs-appliance-1.59.8-1.fc44.x86_64 \
     guestfs-tools-1.55.8-1.fc44.x86_64 && \
