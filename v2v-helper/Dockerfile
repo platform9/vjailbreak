@@ -57,14 +57,16 @@ RUN dnf install -y \
     ./libguestfs-appliance-1.59.8-1.fc44.x86_64.rpm \
     ./guestfs-tools-1.55.8-1.fc44.x86_64.rpm \
     netplan && \
-    # xfsprogs is required for XFS guest migrations (xfs_repair).
-    # Must be installed on the host AND listed in the supermin packages file so
-    # that supermin copies xfs_repair into the libguestfs appliance at runtime.
-    dnf install -y --nodocs --setopt=install_weak_deps=False xfsprogs mingw-srvany-redistributable && \
-    echo "xfsprogs" >> /usr/lib64/guestfs/supermin.d/packages && \
-    # Install pf9-patched virt-v2v with --nodeps to bypass RPM dep version
-    # mismatches — all real runtime deps are already installed above.
-    rpm -ivh --nodeps ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm && \
+    # Install pf9-patched virt-v2v via dnf (not rpm --nodeps) so that the
+    # RPM's explicit Requires and Recommends are honoured:
+    #   Requires:    xfsprogs, mingw-srvany-redistributable
+    #   Recommends:  reiserfs-utils, jfsutils, f2fs-tools
+    # The RPM's %post scriptlet registers the filesystem tools with the
+    # libguestfs supermin appliance, and the RPM bundles rhsrvany.exe /
+    # pnp_wait.exe for Windows firstboot support.
+    # AutoReq: no in the spec means only our explicit deps are resolved —
+    # no version conflicts with the vendored libguestfs above.
+    dnf install -y --nodocs ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
