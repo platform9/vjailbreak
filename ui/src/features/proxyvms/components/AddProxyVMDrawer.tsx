@@ -84,7 +84,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const [formMode, setFormMode] = useState<FormMode>('select')
   const [deploymentStarted, setDeploymentStarted] = useState(false)
 
-  // ── Select mode state ────────────────────────────────────────────────────
   const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
   const [generatedKey, setGeneratedKey] = useState<GeneratedKey | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -96,13 +95,11 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     generatedKeyRef.current = generatedKey
   }, [generatedKey])
 
-  // ── VMware credentials ────────────────────────────────────────────────────
   const { data: vmwareCreds = [] } = useVmwareCredentialsQuery()
   const credOptions = vmwareCreds
     .filter((c) => c.status?.vmwareValidationStatus?.toLowerCase() === 'succeeded')
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
 
-  // ── Select form ────────────────────────────────────────────────────────────
   const selectForm = useForm<SelectFormData>({
     defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '' },
     mode: 'onChange',
@@ -118,7 +115,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const vmwareCredsRefSelect = selectWatch('vmwareCredsRef')
   const vmNameSelect = selectWatch('vmName')
 
-  // ── Create form ────────────────────────────────────────────────────────────
   const createForm = useForm<CreateFormData>({
     defaultValues: {
       vmwareCredsRef: '',
@@ -138,11 +134,10 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     formState: { isValid: createIsValid }
   } = createForm
   const vmwareCredsRefCreate = createWatch('vmwareCredsRef')
+  const datacenterCreate = createWatch('datacenter')
 
-  // Active credentials — whichever form is showing
   const activeCredsRef = formMode === 'select' ? vmwareCredsRefSelect : vmwareCredsRefCreate
 
-  // ── VM list query ─────────────────────────────────────────────────────────
   const { data: runningVMs = [], isLoading: vmsLoading } = useQuery({
     queryKey: ['vmwaremachines-for-proxy', activeCredsRef],
     queryFn: async () => {
@@ -155,9 +150,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 30_000
   })
 
-  const datacenterCreate = createWatch('datacenter')
-
-  // Step 1: fetch datacenter list (no datacenter param needed)
   const { data: dcResources, isLoading: dcLoading } = useQuery({
     queryKey: ['vcenter-datacenters', vmwareCredsRefCreate],
     queryFn: () => getVCenterResources(vmwareCredsRefCreate),
@@ -165,7 +157,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 60_000
   })
 
-  // Step 2: fetch resources scoped to the selected datacenter
   const { data: scopedResources, isLoading: scopedLoading } = useQuery({
     queryKey: ['vcenter-scoped-resources', vmwareCredsRefCreate, datacenterCreate],
     queryFn: () => getVCenterResources(vmwareCredsRefCreate, datacenterCreate),
@@ -176,7 +167,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const toOptions = (items: string[] | undefined) =>
     (items ?? []).map((v) => ({ label: v, value: v }))
 
-  // True when the typed name doesn't match any running VM (and we've finished loading)
   const vmNameEntered = vmNameSelect.trim().length > 0
   const vmExists = runningVMs.some(
     (n) => n.toLowerCase() === vmNameSelect.trim().toLowerCase()
@@ -184,19 +174,16 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const showCreateOffer =
     vmNameEntered && !vmsLoading && Boolean(vmwareCredsRefSelect) && !vmExists
 
-  // Reset VM name when credentials change
   useEffect(() => {
     selectSetValue('vmName', '')
   }, [vmwareCredsRefSelect, selectSetValue])
 
-  // Clear scoped fields when credentials or datacenter change
   useEffect(() => {
     createSetValue('datastore', '')
     createSetValue('network', '')
     createSetValue('cluster', '')
   }, [vmwareCredsRefCreate, datacenterCreate, createSetValue])
 
-  // Sync creds across forms when mode switches
   useEffect(() => {
     if (formMode === 'create') {
       if (vmwareCredsRefSelect) createSetValue('vmwareCredsRef', vmwareCredsRefSelect)
@@ -207,7 +194,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formMode])
 
-  // When switching key source or vm name changes, clear old generated key
   useEffect(() => {
     if (generatedKey) {
       deleteSSHKeyPair(generatedKey.secretName).catch(() => {})
@@ -241,7 +227,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     onClose()
   }, [resetAll, onClose])
 
-  // ── Generate SSH keypair ──────────────────────────────────────────────────
   const handleGenerate = async () => {
     const vmNameSafe = toK8sName(vmNameSelect)
     if (!vmNameSafe) return
@@ -288,7 +273,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setFormMode('create')
   }
 
-  // ── Submit: select mode ────────────────────────────────────────────────────
   const onSelectSubmit = async (data: SelectFormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
@@ -349,7 +333,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     }
   }
 
-  // ── Submit: create mode ────────────────────────────────────────────────────
   const onCreateSubmit = async (data: CreateFormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
@@ -424,7 +407,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             </Alert>
           )}
 
-          {/* ── Select (register existing VM) mode ───────────────────────── */}
           {formMode === 'select' && (
             <DesignSystemForm
               id={SELECT_FORM_ID}
@@ -469,14 +451,12 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                       disabled={!vmwareCredsRefSelect || vmsLoading || isSubmitting}
                     />
 
-                    {/* VM exists — green confirmation */}
                     {vmNameEntered && !vmsLoading && vmExists && (
                       <Alert severity="success">
                         VM <strong>{vmNameSelect}</strong> found and powered on.
                       </Alert>
                     )}
 
-                    {/* VM not found — offer to create */}
                     {showCreateOffer && (
                       <Alert
                         severity="warning"
@@ -498,7 +478,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                   </Box>
                 </Section>
 
-                {/* SSH Access — only relevant when registering an existing VM */}
                 <Section>
                   <SectionHeader
                     title="SSH Access"
@@ -647,7 +626,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             </DesignSystemForm>
           )}
 
-          {/* ── Create (deploy from OVA) mode ────────────────────────────── */}
           {formMode === 'create' && deploymentStarted && (
             <Box sx={{ display: 'grid', gap: 2 }}>
               <Alert severity="success">

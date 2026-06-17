@@ -36,10 +36,8 @@ import (
 )
 
 const (
-	// defaultProxyVMName is used by the automatic watcher-triggered path.
 	defaultProxyVMName = "vjailbreak-ha-proxy"
 
-	// Default deployment targets used by the watcher path.
 	deployDatacenter  = "prison"
 	deployDatastore   = "datastore-nfs"
 	deployNetwork     = "network-19"
@@ -226,8 +224,6 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	}
 	logrus.Infof("ova-deploy[%s]: VM deployed (ref=%s)", deployCfg.VMName, ref.Value)
 
-	// Set disk.EnableUUID before powering on — the VM is off so no reboot is needed,
-	// and the ProxyVM controller requires this property to identify block devices.
 	vmRef := object.NewVirtualMachine(client.Client, *ref)
 	reconfTask, reconfErr := vmRef.Reconfigure(ctx, types.VirtualMachineConfigSpec{
 		ExtraConfig: []types.BaseOptionValue{
@@ -450,8 +446,6 @@ func createProxyVMCR(ctx context.Context, vmName, vmwareCredsName, keypairSecret
 		return fmt.Errorf("create ProxyVM CR: %v", err)
 	}
 
-	// CR already exists — patch sshKeyPairRef so it points to the correct keypair secret.
-	// This handles the case where the CR was created in a prior run without the field set.
 	patch := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"sshKeyPairRef": map[string]interface{}{
