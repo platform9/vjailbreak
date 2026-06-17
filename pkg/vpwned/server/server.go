@@ -128,6 +128,9 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// SSH key pair generation — generates RSA-4096, stores in k8s Secret, returns public key only.
 	mux.HandleFunc("/vpw/v1/generate-ssh-keypair", HandleGenerateSSHKeyPair)
 
+	// Proxy VM creation from OVA — accepts deploy config, runs full creation routine async.
+	mux.HandleFunc("/vpw/v1/create-proxy-vm", HandleCreateProxyVM)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -179,6 +182,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// SSH key pair generation
 		if r.URL.Path == "/vpw/v1/generate-ssh-keypair" {
 			HandleGenerateSSHKeyPair(w, r)
+			return
+		}
+		// Proxy VM creation from OVA
+		if r.URL.Path == "/vpw/v1/create-proxy-vm" {
+			HandleCreateProxyVM(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)

@@ -2,6 +2,23 @@ import axios from '../axios'
 import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 import { ProxyVM, ProxyVMList } from './model'
 
+const CREATE_PROXY_VM_ENDPOINT = '/dev-api/sdk/vpw/v1/create-proxy-vm'
+
+export interface CreateProxyVMFromOVARequest {
+  vmName: string
+  vmwareCredsRef: string
+  datacenter: string
+  datastore: string
+  network: string
+  cluster?: string
+}
+
+export const createProxyVMFromOVA = async (
+  req: CreateProxyVMFromOVARequest
+): Promise<{ status: string; message: string }> => {
+  return axios.post({ endpoint: CREATE_PROXY_VM_ENDPOINT, data: req })
+}
+
 const PROXY_VMS_RESOURCE = 'proxyvms'
 
 export const getProxyVMList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
