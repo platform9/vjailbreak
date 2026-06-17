@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -365,10 +366,13 @@ func generateAndStoreKeypair(ctx context.Context, secretName string) (string, er
 
 func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
 	sshCfg := &gossh.ClientConfig{
-		User:            vmRootUser,
-		Auth:            []gossh.AuthMethod{gossh.Password(vmRootPassword)},
-		HostKeyCallback: gossh.InsecureIgnoreHostKey(), //nolint:gosec
-		Timeout:         10 * time.Second,
+		User: vmRootUser,
+		Auth: []gossh.AuthMethod{gossh.Password(vmRootPassword)},
+		HostKeyCallback: func(hostname string, _ net.Addr, key gossh.PublicKey) error {
+			logrus.Infof("ova-deploy: SSH host key for %s: %s %s", hostname, key.Type(), gossh.FingerprintSHA256(key))
+			return nil
+		},
+		Timeout: 10 * time.Second,
 	}
 
 	addr := ip + ":22"
