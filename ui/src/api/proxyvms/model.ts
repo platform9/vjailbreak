@@ -8,9 +8,6 @@ export interface ProxyVMSpec {
   sshKeySecretRef?: {
     name: string
   }
-  sshKeyPairRef?: {
-    name: string
-  }
 }
 
 export interface ProxyVMStatus {

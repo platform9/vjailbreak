@@ -16,9 +16,7 @@
     "cy:run": "cypress run",
     "pw:open": "playwright test --ui",
     "pw:run": "playwright test",
-    "pw:run:migration": "playwright test e2e/migration/",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "pw:run:migration": "playwright test e2e/migration/"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.5.0",
@@ -86,7 +84,6 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
-    "vite-plugin-runtime-env": "^0.1.1",
-    "vitest": "^4.1.9"
+    "vite-plugin-runtime-env": "^0.1.1"
   }
 }

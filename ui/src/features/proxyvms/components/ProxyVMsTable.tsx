@@ -1,22 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Box, Button, Chip, CircularProgress, IconButton, Tooltip } from '@mui/material'
+import { Box, Button, Chip, IconButton, Tooltip } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningIcon from '@mui/icons-material/Warning'
 import DnsIcon from '@mui/icons-material/Dns'
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useQueryClient } from '@tanstack/react-query'
 import { CommonDataGrid, CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
-import { ClickableTableCell } from 'src/components'
 import { ConfirmationDialog } from 'src/components/dialogs'
-import { deleteProxyVM, retryProxyVMVerification } from 'src/api/proxyvms/proxyVMs'
+import { deleteProxyVM } from 'src/api/proxyvms/proxyVMs'
 import { deleteSecret } from 'src/api/secrets/secrets'
 import { ProxyVM, ProxyVMValidationStatus } from 'src/api/proxyvms/model'
 import { useProxyVMsQuery, PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import AddProxyVMDrawer from './AddProxyVMDrawer'
-import ProxyVMDetailDrawer from './ProxyVMDetailDrawer'
 
 function statusColor(
   status: ProxyVMValidationStatus | undefined
@@ -47,26 +44,8 @@ function formatAge(creationTimestamp: string): string {
   }
 }
 
-const getColumns = (
-  onDeleteClick: (vm: ProxyVM) => void,
-  onRetryClick: (vm: ProxyVM) => void,
-  retryingNames: Set<string>,
-  onDetailClick: (vm: ProxyVM) => void
-): GridColDef[] => [
-  {
-    field: 'name',
-    headerName: 'Name',
-    flex: 1.2,
-    minWidth: 120,
-    renderCell: (params) => (
-      <ClickableTableCell
-        tooltipTitle="View details"
-        onClick={() => onDetailClick(params.row.rawObject)}
-      >
-        {params.value}
-      </ClickableTableCell>
-    )
-  },
+const getColumns = (onDeleteClick: (vm: ProxyVM) => void): GridColDef[] => [
+  { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 120 },
   { field: 'vmName', headerName: 'VM Name', flex: 1.2, minWidth: 120 },
   {
     field: 'status',
@@ -120,51 +99,23 @@ const getColumns = (
   {
     field: 'actions',
     headerName: 'Actions',
-    width: 100,
+    width: 70,
     sortable: false,
     disableColumnMenu: true,
-    renderCell: (params) => {
-      const vm: ProxyVM = params.row.rawObject
-      const isFailed = vm.status?.validationStatus === 'VerificationFailed'
-      const isRetrying = retryingNames.has(vm.metadata.name)
-      return (
-        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          {isFailed && (
-            <Tooltip title="Retry verification">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRetryClick(vm)
-                  }}
-                  disabled={isRetrying}
-                  aria-label="retry verification"
-                >
-                  {isRetrying ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <RefreshIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
-          )}
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteClick(vm)
-              }}
-              aria-label="delete proxy vm"
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )
-    }
+    renderCell: (params) => (
+      <Tooltip title="Delete">
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDeleteClick(params.row.rawObject)
+          }}
+          aria-label="delete proxy vm"
+        >
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )
   }
 ]
 
@@ -180,33 +131,10 @@ export default function ProxyVMsTable() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
-  const [retryingNames, setRetryingNames] = useState<Set<string>>(new Set())
-  const [detailVM, setDetailVM] = useState<ProxyVM | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
 
   const handleRefresh = useCallback(() => {
     refetch()
   }, [refetch])
-
-  const handleRetry = useCallback(
-    async (vm: ProxyVM) => {
-      const name = vm.metadata.name
-      setRetryingNames((prev) => new Set(prev).add(name))
-      try {
-        await retryProxyVMVerification(name)
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
-        }, 1000)
-      } finally {
-        setRetryingNames((prev) => {
-          const next = new Set(prev)
-          next.delete(name)
-          return next
-        })
-      }
-    },
-    [queryClient]
-  )
 
   const handleBulkDeleteClick = () => {
     setBulkDeleteDialogOpen(true)
@@ -229,9 +157,10 @@ export default function ProxyVMsTable() {
           } catch (err: any) {
             if (err?.response?.status !== 404) throw err
           }
-          if (vm.spec.sshKeySecretRef?.name) {
-            deleteSecret(vm.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
-          }
+          deleteSecret(
+            vm.spec.sshKeySecretRef?.name || vm.metadata.name,
+            VJAILBREAK_DEFAULT_NAMESPACE
+          ).catch(() => {})
         })
       )
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
@@ -260,9 +189,10 @@ export default function ProxyVMsTable() {
       }
       // 404 = already gone, proceed with cleanup
     }
-    if (deleteTarget.spec.sshKeySecretRef?.name) {
-      deleteSecret(deleteTarget.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
-    }
+    deleteSecret(
+      deleteTarget.spec.sshKeySecretRef?.name || deleteTarget.metadata.name,
+      VJAILBREAK_DEFAULT_NAMESPACE
+    ).catch(() => {})
     queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
     refetch()
     setDeleteTarget(null)
@@ -298,15 +228,7 @@ export default function ProxyVMsTable() {
     [proxyVMs, rowSelectionModel]
   )
 
-  const handleDetailClick = useCallback((vm: ProxyVM) => {
-    setDetailVM(vm)
-    setDetailOpen(true)
-  }, [])
-
-  const columns = useMemo(
-    () => getColumns(setDeleteTarget, handleRetry, retryingNames, handleDetailClick),
-    [handleRetry, retryingNames, handleDetailClick]
-  )
+  const columns = useMemo(() => getColumns(setDeleteTarget), [])
 
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -404,12 +326,6 @@ export default function ProxyVMsTable() {
       )}
 
       {addDrawerOpen && <AddProxyVMDrawer open onClose={() => setAddDrawerOpen(false)} />}
-
-      <ProxyVMDetailDrawer
-        open={detailOpen}
-        proxyVM={detailVM}
-        onClose={() => setDetailOpen(false)}
-      />
     </div>
   )
 }
