@@ -58,6 +58,9 @@ type OpenstackOperations interface {
 	// GetCinderVolumeServices returns Cinder volume services (Host, Status, State)
 	// Returns a slice of structs with these fields - defined in implementation package to avoid import cycles
 	GetCinderVolumeServices(ctx context.Context) (interface{}, error)
+	GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error)
+	DeleteServer(ctx context.Context, serverID string) error
+	GetServerStatus(ctx context.Context, serverID string) (string, error)
 }
 
 func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
