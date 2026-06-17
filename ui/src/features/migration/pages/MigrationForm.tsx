@@ -412,15 +412,6 @@ export default function MigrationFormDrawer({
             <Banner variant="info" message="Loading the failed migration's configuration…" />
           </Box>
         ) : null}
-        {isRetryMode && !prefillLoading && (retryPlan?.spec?.virtualMachines?.flat().length ?? 0) > 1 ? (
-          <Box data-testid="retry-multivm-warning-banner" sx={{ mb: 2 }}>
-            <Banner
-              variant="warning"
-              title="Shared plan — edits affect future retries of all VMs"
-              message={`This plan contains ${retryPlan!.spec.virtualMachines.flat().length} VMs. Changes to migration strategy, security groups, network/storage mappings, and advanced options are plan-level. Currently running or scheduled VMs are not immediately affected, but if any of those VMs fail and are retried later they will use these updated settings.`}
-            />
-          </Box>
-        ) : null}
         <Box
           ref={contentRootRef}
           data-testid="migration-form-content"
@@ -481,7 +472,6 @@ export default function MigrationFormDrawer({
                 {isRetryMode ? (
                   <RetrySourceDestinationSummary
                     vmwareCredName={params.vmwareCreds?.existingCredName}
-                    datacenter={params.vmwareCreds?.datacenter}
                     sourceCluster={sourceCluster}
                     openstackCredName={params.openstackCreds?.existingCredName}
                     pcdClusters={pcdData}
