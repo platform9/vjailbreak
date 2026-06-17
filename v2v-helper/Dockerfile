@@ -13,7 +13,7 @@ ENV RELEASE_VERSION=$RELEASE_VERSION
 # - libnbd-devel: Development files for NBD (Network Block Device) support
 #   Installed from vendored fc44 RPM to match the runtime libnbd version exactly
 WORKDIR /tmp/rpms
-COPY v2v-helper/nbdkit/fc44-rpms/libnbd-devel-1.25.5-1.fc44.x86_64.rpm /tmp/rpms/
+COPY v2v-helper/nbdkit/libnbd-devel-1.25.5-1.fc44.x86_64.rpm /tmp/rpms/
 RUN dnf install -y golang \
     ./libnbd-devel-1.25.5-1.fc44.x86_64.rpm && \
     dnf clean all && rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/
@@ -31,7 +31,7 @@ COPY v2v-helper/manager manager
 FROM fedora:44
 
 WORKDIR /tmp/rpms
-COPY v2v-helper/nbdkit/fc44-rpms/*.rpm /tmp/rpms/
+COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
 
 # Install runtime dependencies with size optimizations:
 # - --nodocs: Skip documentation files
