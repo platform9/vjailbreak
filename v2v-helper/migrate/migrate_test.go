@@ -730,3 +730,55 @@ func TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(t *testing.T) {
 	err := migobj.cleanup(ctx, vminfo, "test partial volume failure", []string{"port-1"}, settings)
 	assert.NoError(t, err)
 }
+
+func TestBlockDriverFromMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]string
+		want     string
+	}{
+		{
+			name:     "nil metadata returns empty",
+			metadata: nil,
+			want:     "",
+		},
+		{
+			name:     "empty metadata returns empty",
+			metadata: map[string]string{},
+			want:     "",
+		},
+		{
+			name:     "hw_disk_bus=virtio (default) returns empty",
+			metadata: map[string]string{"hw_disk_bus": "virtio"},
+			want:     "",
+		},
+		{
+			name:     "hw_disk_bus=scsi without hw_scsi_model returns empty",
+			metadata: map[string]string{"hw_disk_bus": "scsi"},
+			want:     "",
+		},
+		{
+			name:     "hw_scsi_model=virtio-scsi without hw_disk_bus=scsi returns empty",
+			metadata: map[string]string{"hw_disk_bus": "virtio", "hw_scsi_model": "virtio-scsi"},
+			want:     "",
+		},
+		{
+			name:     "hw_disk_bus=scsi + hw_scsi_model=virtio-scsi returns virtio-scsi",
+			metadata: map[string]string{"hw_disk_bus": "scsi", "hw_scsi_model": "virtio-scsi"},
+			want:     "virtio-scsi",
+		},
+		{
+			name:     "unrelated keys return empty",
+			metadata: map[string]string{"os_type": "windows", "hw_qemu_guest_agent": "yes"},
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := blockDriverFromMetadata(tt.metadata)
+			if got != tt.want {
+				t.Errorf("blockDriverFromMetadata(%v) = %q, want %q", tt.metadata, got, tt.want)
+			}
+		})
+	}
+}

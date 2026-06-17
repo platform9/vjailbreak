@@ -33,7 +33,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string, blockDriver string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -401,7 +401,7 @@ func isBareDisk(path string) bool {
 	return lastChar < '0' || lastChar > '9'
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string, blockDriver string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -448,6 +448,13 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
+	// For Windows: select which block driver virt-v2v makes boot-critical.
+	// Must match the hw_disk_bus/hw_scsi_model set on the volume so the guest
+	// boots with the controller whose driver was prepared by virt-v2v.
+	if strings.ToLower(ostype) == constants.OSFamilyWindows && blockDriver != "" {
+		args = append(args, "--block-driver", blockDriver)
+	}
+
 	// Always use libvirtxml mode to convert all disks
 	args = append(args, "-i", "libvirtxml", xmlFile)
 	if strings.ToLower(ostype) != constants.OSFamilyWindows {
