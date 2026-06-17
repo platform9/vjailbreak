@@ -1085,6 +1085,35 @@ func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID st
 	return true, nil
 }
 
+func (osclient *OpenStackClients) GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error) {
+	var volume *volumes.Volume
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		volume, err = volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
+		if err == nil {
+			return volume, nil
+		}
+		PrintLog(fmt.Sprintf("Transient error getting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
+	return nil, fmt.Errorf("failed to get volume %s after %d attempts: %s", volumeID, constants.DeleteOperationRetryCount, err)
+}
+
+func (osclient *OpenStackClients) GetServerStatus(ctx context.Context, serverID string) (string, error) {
+	server, err := servers.Get(ctx, osclient.ComputeClient, serverID).Extract()
+	if err != nil {
+		return "", fmt.Errorf("failed to get server %s: %s", serverID, err)
+	}
+	return server.Status, nil
+}
+
+func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+	return DoRetryWithExponentialBackoff(ctx, func() error {
+		return servers.Delete(ctx, osclient.ComputeClient, serverID).ExtractErr()
+	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
+}
+
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
 // Uses the manageable_volumes endpoint which is the standard Cinder manage API
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {
