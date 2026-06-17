@@ -1017,3 +1017,48 @@ export const MOCK_RETRY_VMWARE_MACHINE_WITH_DC_ANNOTATION = {
     },
   },
 }
+
+// ─── Clone-plan fixtures (RET-007) ────────────────────────────────────────────
+// These are the API responses returned when the UI POSTs the clone resources
+// during "Edit & Retry" on a multi-VM plan.
+
+export const MOCK_RETRY_CLONE_TEMPLATE_SUFFIX = '-r-abc123'
+export const MOCK_RETRY_CLONE_TEMPLATE_NAME = `${MOCK_RETRY_TEMPLATE_NAME}${MOCK_RETRY_CLONE_TEMPLATE_SUFFIX}`
+export const MOCK_RETRY_CLONE_PLAN_NAME = `${MOCK_RETRY_PLAN_NAME}${MOCK_RETRY_CLONE_TEMPLATE_SUFFIX}`
+
+export const MOCK_RETRY_CLONE_TEMPLATE_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationTemplate',
+  metadata: { ...baseMeta(MOCK_RETRY_CLONE_TEMPLATE_NAME), labels: { refresh: 'false' } },
+  spec: {
+    source: { vmwareRef: 'vcenter-cred-1', datacenter: 'DC1' },
+    destination: { openstackRef: 'pcd-cred-1' },
+    networkMapping: 'new-netmap-uuid-1',
+    storageMapping: 'new-stormap-uuid-1',
+    targetPCDClusterName: 'pcd-cluster-1',
+    storageCopyMethod: 'normal',
+  },
+  status: {
+    openstack: { networks: [], volumeTypes: [] },
+    vmware: [],
+  },
+}
+
+export const MOCK_RETRY_CLONE_PLAN_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: {
+    ...baseMeta(MOCK_RETRY_CLONE_PLAN_NAME),
+    annotations: {
+      'vjailbreak.k8s.pf9.io/retry-clone-of': MOCK_RETRY_PLAN_NAME,
+      'vjailbreak.k8s.pf9.io/retry-clone-vm': MOCK_RETRY_VM_KEY,
+    },
+  },
+  spec: {
+    migrationStrategy: { type: 'cold', adminInitiatedCutOver: false },
+    migrationTemplate: MOCK_RETRY_CLONE_TEMPLATE_NAME,
+    retry: false,
+    virtualMachines: [[MOCK_RETRY_VM_KEY]],
+  },
+  status: { migrationStatus: 'Pending', migrationMessage: '' },
+}

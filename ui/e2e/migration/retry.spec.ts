@@ -30,6 +30,8 @@ import {
   MOCK_RETRY_TEMPLATE_NAME,
   MOCK_RETRY_VM_K8S_NAME,
   MOCK_RETRY_VM_KEY,
+  MOCK_RETRY_CLONE_TEMPLATE_CREATED,
+  MOCK_RETRY_CLONE_PLAN_CREATED,
 } from './helpers/migration.fixtures'
 
 const RETRY_ANNOTATION = 'vjailbreak.k8s.pf9.io/retry-requested'
@@ -340,7 +342,7 @@ test.describe('RET-003 — edit & retry persists edits before retrying', () => {
     const planPatches = planCalls.filter((c) => c.method === 'PATCH')
     expect(planPatches).toHaveLength(2)
     const specPatch = planPatches.find((c) => c.body?.spec)
-    const strategy = (specPatch?.body?.spec as Record<string, any>)?.migrationStrategy
+    const strategy = (specPatch?.body?.spec as Record<string, unknown>)?.migrationStrategy as Record<string, unknown> | undefined
     expect(strategy?.type).toBe('cold')
     const annotationPatch = planPatches.find(
       (c) =>
@@ -574,5 +576,239 @@ test.describe('RET-006 — multi-VM plan shows shared-plan warning banner', () =
       timeout: 10_000,
     })
     await expect(page.getByTestId('retry-multivm-warning-banner')).not.toBeVisible()
+  })
+})
+
+// ─── RET-007: clone-plan path for multi-VM plans ──────────────────────────────
+
+test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () => {
+  // Mounts a multi-VM plan and records all mutating API calls in order.
+  async function setupClonePlanRoutes(
+    page: Page,
+    calls: RecordedCall[],
+    order: string[],
+  ): Promise<void> {
+    await mockRetryPrefillRoutes(page)
+
+    // Override the plan route with the multi-VM variant.
+    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
+    await recordRoute(
+      page,
+      API.migrationPlanByName(MOCK_RETRY_PLAN_NAME),
+      {
+        GET: { body: MOCK_RETRY_MIGRATION_PLAN_MULTIVM },
+        PATCH: { body: MOCK_RETRY_MIGRATION_PLAN_MULTIVM },
+      },
+      calls,
+      'original-plan',
+      order,
+    )
+
+    // Clone MigrationTemplate POST.
+    await recordRoute(
+      page,
+      API.migrationTemplates,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_TEMPLATE_CREATED } },
+      calls,
+      'clone-template',
+      order,
+    )
+
+    // Clone MigrationPlan POST.
+    await recordRoute(
+      page,
+      API.migrationPlans,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_PLAN_CREATED } },
+      calls,
+      'clone-plan',
+      order,
+    )
+
+    // New mapping resources.
+    await recordRoute(
+      page,
+      API.networkMappings,
+      { POST: { status: 201, body: MOCK_RETRY_NETWORK_MAPPING_CREATED } },
+      calls,
+      'networkmapping',
+      order,
+    )
+    await recordRoute(
+      page,
+      API.storageMappings,
+      { POST: { status: 201, body: MOCK_RETRY_STORAGE_MAPPING_CREATED } },
+      calls,
+      'storagemapping',
+      order,
+    )
+
+    // Failed Migration DELETE.
+    await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
+    await recordRoute(
+      page,
+      API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
+      {
+        GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
+        DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
+      },
+      calls,
+      'migration',
+      order,
+    )
+  }
+
+  test('POSTs clone template and plan, PATCHes original plan, DELETEs migration last', async ({
+    page,
+  }) => {
+    const calls: RecordedCall[] = []
+    const order: string[] = []
+
+    await setupClonePlanRoutes(page, calls, order)
+
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+      timeout: 10_000,
+    })
+    await page.getByTestId('migration-form-edit-and-retry').click()
+    await expectDrawerClosed(page)
+
+    const writes = order.filter((o) => !o.startsWith('GET'))
+
+    // Clone template must be POSTed before clone plan.
+    expect(writes.indexOf('POST clone-template')).toBeLessThan(writes.indexOf('POST clone-plan'))
+    // Clone plan must be POSTed before original plan is PATCHed.
+    expect(writes.indexOf('POST clone-plan')).toBeLessThan(
+      writes.indexOf('PATCH original-plan'),
+    )
+    // Migration DELETE must be the very last write.
+    expect(writes[writes.length - 1]).toBe('DELETE migration')
+    // Original plan must NOT be annotated with retry-requested (that is only for patch-in-place).
+    const originalPlanPatches = calls.filter(
+      (c) => c.method === 'PATCH' && order.includes('PATCH original-plan'),
+    )
+    for (const p of originalPlanPatches) {
+      const annotations = (p.body?.metadata as Record<string, unknown> | undefined)
+        ?.annotations as Record<string, string> | undefined
+      expect(annotations?.[RETRY_ANNOTATION]).toBeUndefined()
+    }
+  })
+
+  test('clone plan spec has single VM and audit-trail annotations', async ({ page }) => {
+    const calls: RecordedCall[] = []
+    const order: string[] = []
+
+    await setupClonePlanRoutes(page, calls, order)
+
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+      timeout: 10_000,
+    })
+    await page.getByTestId('migration-form-edit-and-retry').click()
+    await expectDrawerClosed(page)
+
+    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    expect(clonePlanPost).toBeDefined()
+
+    const cloneMeta = clonePlanPost?.body?.metadata as Record<string, unknown> | undefined
+    const cloneAnnotations = cloneMeta?.annotations as Record<string, string> | undefined
+    expect(cloneAnnotations?.['vjailbreak.k8s.pf9.io/retry-clone-of']).toBe(MOCK_RETRY_PLAN_NAME)
+    expect(cloneAnnotations?.['vjailbreak.k8s.pf9.io/retry-clone-vm']).toBe(MOCK_RETRY_VM_KEY)
+
+    const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown> | undefined
+    const vms = cloneSpec?.virtualMachines as string[][] | undefined
+    expect(vms?.flat()).toHaveLength(1)
+    expect(vms?.flat()[0]).toBe(MOCK_RETRY_VM_KEY)
+  })
+
+  test('original plan PATCH removes the retrying VM from virtualMachines', async ({ page }) => {
+    const calls: RecordedCall[] = []
+    const order: string[] = []
+
+    await setupClonePlanRoutes(page, calls, order)
+
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+      timeout: 10_000,
+    })
+    await page.getByTestId('migration-form-edit-and-retry').click()
+    await expectDrawerClosed(page)
+
+    const patchCall = calls.find(
+      (c) => c.method === 'PATCH' && (c.body?.spec as Record<string, unknown> | undefined)?.virtualMachines,
+    )
+    expect(patchCall).toBeDefined()
+
+    const updatedVMs = (
+      (patchCall?.body?.spec as Record<string, unknown> | undefined)
+        ?.virtualMachines as string[][] | undefined
+    )?.flat() ?? []
+    // Retrying VM must be removed; other VM must remain.
+    expect(updatedVMs).not.toContain(MOCK_RETRY_VM_KEY)
+    expect(updatedVMs).toContain('other-vm-9999')
+  })
+
+  test('rollback DELETEs clone plan when original plan PATCH fails', async ({ page }) => {
+    const calls: RecordedCall[] = []
+    const order: string[] = []
+
+    await setupClonePlanRoutes(page, calls, order)
+
+    // Make the PATCH on the original plan fail with a 409 conflict.
+    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
+    await page.route(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME), (route: Route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN_MULTIVM),
+        })
+      } else if (method === 'PATCH') {
+        // Record the PATCH attempt before rejecting it.
+        calls.push({ method, body: route.request().postDataJSON() ?? undefined })
+        order.push('PATCH original-plan')
+        route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Conflict' }) })
+      } else {
+        route.continue()
+      }
+    })
+
+    // Track clone plan DELETE (rollback).
+    let clonePlanDeleted = false
+    await page.route(API.migrationPlans, (route: Route) => {
+      const method = route.request().method()
+      if (method === 'POST') {
+        calls.push({ method, body: route.request().postDataJSON() ?? undefined })
+        order.push('POST clone-plan')
+        route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(MOCK_RETRY_CLONE_PLAN_CREATED) })
+      } else {
+        route.continue()
+      }
+    })
+    await page.route(API.migrationPlanByName(MOCK_RETRY_CLONE_PLAN_CREATED.metadata.name), (route: Route) => {
+      if (route.request().method() === 'DELETE') {
+        clonePlanDeleted = true
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RETRY_CLONE_PLAN_CREATED) })
+      } else {
+        route.continue()
+      }
+    })
+
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+      timeout: 10_000,
+    })
+    await page.getByTestId('migration-form-edit-and-retry').click()
+
+    // Drawer stays open on error; error message shown.
+    await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
+    await expect(page.getByTestId('retry-error-message')).toBeVisible({ timeout: 10_000 })
+
+    // Clone plan was created then rolled back.
+    expect(order).toContain('POST clone-plan')
+    expect(clonePlanDeleted).toBe(true)
+    // Failed Migration must NOT have been deleted (rollback halts the sequence).
+    const migrationDeletes = calls.filter((c) => c.method === 'DELETE')
+    expect(migrationDeletes).toHaveLength(0)
   })
 })
