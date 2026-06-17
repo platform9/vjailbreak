@@ -262,15 +262,13 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 		return
 	}
 
-	// Create the CR now — the secret exists, so the controller can start verifying.
-	// SSH key install happens below concurrently; the controller retries SSH every 15s.
-	if err := createProxyVMCR(ctx, deployCfg.VMName, deployCfg.VMwareCredsRef, keypairName); err != nil {
-		logrus.Errorf("ova-deploy[%s]: create ProxyVM CR: %v", deployCfg.VMName, err)
+	if err := installSSHPublicKey(ctx, ip, pubKey); err != nil {
+		logrus.Errorf("ova-deploy[%s]: install SSH key: %v", deployCfg.VMName, err)
 		return
 	}
 
-	if err := installSSHPublicKey(ctx, ip, pubKey); err != nil {
-		logrus.Errorf("ova-deploy[%s]: install SSH key: %v", deployCfg.VMName, err)
+	if err := createProxyVMCR(ctx, deployCfg.VMName, deployCfg.VMwareCredsRef, keypairName); err != nil {
+		logrus.Errorf("ova-deploy[%s]: create ProxyVM CR: %v", deployCfg.VMName, err)
 		return
 	}
 
