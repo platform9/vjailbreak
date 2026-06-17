@@ -148,18 +148,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setGenerateError(null)
     const secretName = `${vmNameSafe}-keypair`
     try {
-      let kp
-      try {
-        kp = await generateSSHKeyPair(secretName)
-      } catch (err: any) {
-        if (err?.response?.status === 409) {
-          // Secret from a prior attempt — delete it and regenerate
-          await deleteSSHKeyPair(secretName)
-          kp = await generateSSHKeyPair(secretName)
-        } else {
-          throw err
-        }
-      }
+      const kp = await generateSSHKeyPair(secretName)
       setGeneratedKey({ secretName, publicKey: kp.publicKey })
     } catch (err: any) {
       setGenerateError(err?.response?.data?.message || err?.message || 'Key generation failed.')

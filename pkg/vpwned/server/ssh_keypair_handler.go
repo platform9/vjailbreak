@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -100,9 +101,20 @@ func HandleGenerateSSHKeyPair(w http.ResponseWriter, r *http.Request) {
 	if _, err := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Create(
 		context.Background(), secret, metav1.CreateOptions{},
 	); err != nil {
-		logrus.Errorf("generate-ssh-keypair: failed to create secret %q: %v", name, err)
-		http.Error(w, "failed to store key pair: "+err.Error(), http.StatusInternalServerError)
-		return
+		if !k8serrors.IsAlreadyExists(err) {
+			logrus.Errorf("generate-ssh-keypair: failed to create secret %q: %v", name, err)
+			http.Error(w, "failed to store key pair: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		existing, getErr := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Get(
+			context.Background(), name, metav1.GetOptions{},
+		)
+		if getErr != nil {
+			logrus.Errorf("generate-ssh-keypair: secret %q exists but could not be fetched: %v", name, getErr)
+			http.Error(w, "key pair already exists but could not be retrieved", http.StatusInternalServerError)
+			return
+		}
+		publicKeyBytes = existing.Data["ssh-publickey"]
 	}
 
 	w.Header().Set("Content-Type", "application/json")

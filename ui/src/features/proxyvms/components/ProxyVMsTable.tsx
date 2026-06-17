@@ -229,10 +229,9 @@ export default function ProxyVMsTable() {
           } catch (err: any) {
             if (err?.response?.status !== 404) throw err
           }
-          deleteSecret(
-            vm.spec.sshKeySecretRef?.name || vm.metadata.name,
-            VJAILBREAK_DEFAULT_NAMESPACE
-          ).catch(() => {})
+          if (vm.spec.sshKeySecretRef?.name) {
+            deleteSecret(vm.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+          }
         })
       )
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
@@ -261,10 +260,9 @@ export default function ProxyVMsTable() {
       }
       // 404 = already gone, proceed with cleanup
     }
-    deleteSecret(
-      deleteTarget.spec.sshKeySecretRef?.name || deleteTarget.metadata.name,
-      VJAILBREAK_DEFAULT_NAMESPACE
-    ).catch(() => {})
+    if (deleteTarget.spec.sshKeySecretRef?.name) {
+      deleteSecret(deleteTarget.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+    }
     queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
     refetch()
     setDeleteTarget(null)
