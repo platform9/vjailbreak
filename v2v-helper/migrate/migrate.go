@@ -1471,9 +1471,9 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 
 // blockDriverFromMetadata returns the virt-v2v --block-driver value that
 // matches the hw_disk_bus / hw_scsi_model image properties the caller intends
-// to set on the migrated volume.  The two values must agree: if OpenStack
-// presents a virtio-scsi controller (hw_disk_bus=scsi, hw_scsi_model=virtio-scsi)
-// virt-v2v must make vioscsi boot-critical; if it presents virtio-blk
+// to set on the migrated volume.  The two values must agree: if User wants to use
+// virtio-scsi controller (hw_disk_bus=scsi, hw_scsi_model=virtio-scsi)
+// virt-v2v must make vioscsi boot-critical; or else virtio-blk
 // (hw_disk_bus=virtio, the default) virt-v2v must make viostor boot-critical.
 // Returning "" lets virt-v2v use its built-in default (virtio-blk / viostor).
 func blockDriverFromMetadata(metadata map[string]string) string {
