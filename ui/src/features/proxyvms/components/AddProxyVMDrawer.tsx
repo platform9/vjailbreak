@@ -171,8 +171,6 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 60_000
   })
 
-  const resourcesLoading = dcLoading || scopedLoading
-
   const toOptions = (items: string[] | undefined) =>
     (items ?? []).map((v) => ({ label: v, value: v }))
 
