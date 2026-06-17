@@ -35,8 +35,6 @@ COPY --from=builder /app/pkg/vpwned/bin/vpwctl .
 # Uncomment and modify as needed
 COPY --from=builder /app/pkg/vpwned/openapiv3 /opt/platform9/vpwned/openapiv3
 
-# Set the timezone (optional)
-ENV TZ=UTC
 ENV LOG_LEVEL=info
 # Expose port if your application uses a network port
 EXPOSE 3001

@@ -939,6 +939,7 @@ const (
 	VailbreakProxy_ValidateOpenstackIp_FullMethodName             = "/api.VailbreakProxy/ValidateOpenstackIp"
 	VailbreakProxy_RevalidateCredentials_FullMethodName           = "/api.VailbreakProxy/RevalidateCredentials"
 	VailbreakProxy_InjectEnvVariables_FullMethodName              = "/api.VailbreakProxy/InjectEnvVariables"
+	VailbreakProxy_ApplyTimeSettings_FullMethodName               = "/api.VailbreakProxy/ApplyTimeSettings"
 	VailbreakProxy_CheckNetworkSubnetCompatibility_FullMethodName = "/api.VailbreakProxy/CheckNetworkSubnetCompatibility"
 )
 
@@ -949,6 +950,7 @@ type VailbreakProxyClient interface {
 	ValidateOpenstackIp(ctx context.Context, in *ValidateOpenstackIpRequest, opts ...grpc.CallOption) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(ctx context.Context, in *RevalidateCredentialsRequest, opts ...grpc.CallOption) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(ctx context.Context, in *InjectEnvVariablesRequest, opts ...grpc.CallOption) (*InjectEnvVariablesResponse, error)
+	ApplyTimeSettings(ctx context.Context, in *ApplyTimeSettingsRequest, opts ...grpc.CallOption) (*ApplyTimeSettingsResponse, error)
 	CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error)
 }
 
@@ -990,6 +992,16 @@ func (c *vailbreakProxyClient) InjectEnvVariables(ctx context.Context, in *Injec
 	return out, nil
 }
 
+func (c *vailbreakProxyClient) ApplyTimeSettings(ctx context.Context, in *ApplyTimeSettingsRequest, opts ...grpc.CallOption) (*ApplyTimeSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyTimeSettingsResponse)
+	err := c.cc.Invoke(ctx, VailbreakProxy_ApplyTimeSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *vailbreakProxyClient) CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckNetworkSubnetCompatibilityResponse)
@@ -1007,6 +1019,7 @@ type VailbreakProxyServer interface {
 	ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(context.Context, *RevalidateCredentialsRequest) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error)
+	ApplyTimeSettings(context.Context, *ApplyTimeSettingsRequest) (*ApplyTimeSettingsResponse, error)
 	CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error)
 	mustEmbedUnimplementedVailbreakProxyServer()
 }
@@ -1026,6 +1039,9 @@ func (UnimplementedVailbreakProxyServer) RevalidateCredentials(context.Context, 
 }
 func (UnimplementedVailbreakProxyServer) InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InjectEnvVariables not implemented")
+}
+func (UnimplementedVailbreakProxyServer) ApplyTimeSettings(context.Context, *ApplyTimeSettingsRequest) (*ApplyTimeSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyTimeSettings not implemented")
 }
 func (UnimplementedVailbreakProxyServer) CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckNetworkSubnetCompatibility not implemented")
@@ -1105,6 +1121,24 @@ func _VailbreakProxy_InjectEnvVariables_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VailbreakProxy_ApplyTimeSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTimeSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VailbreakProxyServer).ApplyTimeSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VailbreakProxy_ApplyTimeSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VailbreakProxyServer).ApplyTimeSettings(ctx, req.(*ApplyTimeSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckNetworkSubnetCompatibilityRequest)
 	if err := dec(in); err != nil {
@@ -1141,6 +1175,10 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InjectEnvVariables",
 			Handler:    _VailbreakProxy_InjectEnvVariables_Handler,
+		},
+		{
+			MethodName: "ApplyTimeSettings",
+			Handler:    _VailbreakProxy_ApplyTimeSettings_Handler,
 		},
 		{
 			MethodName: "CheckNetworkSubnetCompatibility",
