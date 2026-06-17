@@ -579,11 +579,22 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		migrationName := utils.MigrationNameFromVMName(vmk8sname)
 		existingMigration := &vjailbreakv1alpha1.Migration{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationName, Namespace: migrationplan.Namespace}, existingMigration); err == nil {
-			if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
-				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
-				terminalMigrations[vmName] = true
-				r.ctxlog.Info("Skipping terminal migration from validation", "vm", vmName, "phase", existingMigration.Status.Phase)
+			// Only treat as terminal if the Migration belongs to THIS plan and is not
+			// being deleted. A Migration with DeletionTimestamp is mid-cleanup from a
+			// retry (e.g., clone-and-retry deleted the old Migration before the new plan
+			// reconciles). The Migration name is deterministic per-VM regardless of plan,
+			// so a clone plan would otherwise find the original plan's deleted Migration
+			// and falsely skip creating a new one — causing allFinished=true (default)
+			// and the plan marking itself Succeeded with no work done.
+			belongsToThisPlan := existingMigration.Labels["migrationplan"] == migrationplan.Name
+			isBeingDeleted := existingMigration.DeletionTimestamp != nil
+			if belongsToThisPlan && !isBeingDeleted {
+				if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+					existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+					existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+					terminalMigrations[vmName] = true
+					r.ctxlog.Info("Skipping terminal migration from validation", "vm", vmName, "phase", existingMigration.Status.Phase)
+				}
 			}
 		}
 	}
@@ -1068,6 +1079,26 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		err = r.createResource(ctx, migrationplan, migrationobj)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create Migration for VM %s", vm)
+		}
+
+		// Reset VMwareMachine.Status.Migrated so the migration controller does not
+		// skip this VM. A previous attempt may have set it to true before failing
+		// (e.g., disk copy succeeded but port allocation failed). Reset ensures the
+		// new Migration starts cleanly and is not incorrectly treated as already done.
+		if vmMachine.Status.Migrated {
+			if resetErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &vjailbreakv1alpha1.VMwareMachine{}
+				if getErr := r.Get(ctx, types.NamespacedName{Name: vmMachine.Name, Namespace: vmMachine.Namespace}, latest); getErr != nil {
+					return getErr
+				}
+				latest.Status.Migrated = false
+				return r.Status().Update(ctx, latest)
+			}); resetErr != nil {
+				r.ctxlog.Error(resetErr, "Failed to reset VMwareMachine migrated status", "vm", vm)
+				// Non-fatal: log and continue; migration is created and will proceed
+			} else {
+				r.ctxlog.Info("Reset VMwareMachine migrated status for retry", "vm", vm)
+			}
 		}
 
 		// Set retryable status based on whether VM has RDM disks
