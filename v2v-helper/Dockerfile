@@ -57,6 +57,11 @@ RUN dnf install -y \
     ./libguestfs-appliance-1.59.8-1.fc44.x86_64.rpm \
     ./guestfs-tools-1.55.8-1.fc44.x86_64.rpm \
     netplan && \
+    # xfsprogs is required for XFS guest migrations (xfs_repair).
+    # Must be installed on the host AND listed in the supermin packages file so
+    # that supermin copies xfs_repair into the libguestfs appliance at runtime.
+    dnf install -y --nodocs --setopt=install_weak_deps=False xfsprogs && \
+    echo "xfsprogs" >> /usr/lib64/guestfs/supermin.d/packages && \
     # Install pf9-patched virt-v2v with --nodeps to bypass RPM dep version
     # mismatches — all real runtime deps are already installed above.
     rpm -ivh --nodeps ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm && \
