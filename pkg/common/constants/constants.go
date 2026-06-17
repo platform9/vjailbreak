@@ -757,6 +757,11 @@ const (
 	// Normalised OS distro constants used for auto-install logic.
 	ProxyVMOSDistroDebian = "debian"
 	ProxyVMOSDistroAlpine = "alpine"
+
+	ProxyVMOVAURLKey     = "PROXY_VM_OVA_URL"
+	ProxyVMOVAURLDefault = "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+	ProxyVMOVADir        = "/home/ubuntu/proxy-vm-template"
+	ProxyVMOVAFileName   = "ha-proxy-vm.ova"
 )
 
 var (

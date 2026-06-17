@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/sirupsen/logrus"
 )
 
@@ -53,7 +54,7 @@ func HandleCreateProxyVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ovaPath := filepath.Join(ovaDir, ovaFileName)
+	ovaPath := filepath.Join(constants.ProxyVMOVADir, constants.ProxyVMOVAFileName)
 
 	cfg := ProxyVMDeployConfig{
 		VMName:         req.VMName,
