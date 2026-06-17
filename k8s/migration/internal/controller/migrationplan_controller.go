@@ -588,6 +588,16 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			// and the plan marking itself Succeeded with no work done.
 			belongsToThisPlan := existingMigration.Labels["migrationplan"] == migrationplan.Name
 			isBeingDeleted := existingMigration.DeletionTimestamp != nil
+			if !belongsToThisPlan && isBeingDeleted {
+				// A Migration from another plan (e.g., the original plan on clone-and-retry)
+				// is being deleted but its finalizer hasn't been cleared yet. Migration names
+				// are deterministic per-VM, so the clone plan would collide: CreateMigration
+				// finds the same name, skips creation, and allMigrations stays empty →
+				// allFinished=true → falsely Succeeded. Requeue until it's fully gone.
+				r.ctxlog.Info("Old Migration from another plan is still being deleted, requeuing",
+					"vm", vmName, "otherPlan", existingMigration.Labels["migrationplan"])
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
 			if belongsToThisPlan && !isBeingDeleted {
 				if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
 					existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
