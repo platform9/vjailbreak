@@ -131,6 +131,9 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// Proxy VM creation from OVA — accepts deploy config, runs full creation routine async.
 	mux.HandleFunc("/vpw/v1/create-proxy-vm", HandleCreateProxyVM)
 
+	// vCenter resource listing — returns datacenters, clusters, datastores, networks.
+	mux.HandleFunc("/vpw/v1/vcenter-resources", HandleVCenterResources)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
 	option := []grpc.DialOption{
@@ -187,6 +190,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// Proxy VM creation from OVA
 		if r.URL.Path == "/vpw/v1/create-proxy-vm" {
 			HandleCreateProxyVM(w, r)
+			return
+		}
+		// vCenter resource listing
+		if r.URL.Path == "/vpw/v1/vcenter-resources" {
+			HandleVCenterResources(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)

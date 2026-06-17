@@ -3,6 +3,23 @@ import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../const
 import { ProxyVM, ProxyVMList } from './model'
 
 const CREATE_PROXY_VM_ENDPOINT = '/dev-api/sdk/vpw/v1/create-proxy-vm'
+const VCENTER_RESOURCES_ENDPOINT = '/dev-api/sdk/vpw/v1/vcenter-resources'
+
+export interface VCenterResources {
+  datacenters: string[]
+  clusters: string[]
+  datastores: string[]
+  networks: string[]
+}
+
+export const getVCenterResources = async (
+  vmwareCredsRef: string
+): Promise<VCenterResources> => {
+  return axios.get({
+    endpoint: VCENTER_RESOURCES_ENDPOINT,
+    config: { params: { vmwareCredsRef } }
+  })
+}
 
 export interface CreateProxyVMFromOVARequest {
   vmName: string

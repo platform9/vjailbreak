@@ -27,7 +27,7 @@ import {
 } from 'src/components'
 import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
 
-import { postProxyVM, createProxyVMFromOVA } from 'src/api/proxyvms/proxyVMs'
+import { postProxyVM, createProxyVMFromOVA, getVCenterResources } from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { generateSSHKeyPair, deleteSSHKeyPair } from 'src/api/sshKeyPairs/sshKeyPairs'
@@ -152,6 +152,17 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     enabled: Boolean(activeCredsRef) && open,
     staleTime: 30_000
   })
+
+  // ── vCenter resources query (for create-mode dropdowns) ───────────────────
+  const { data: vcResources, isLoading: resourcesLoading } = useQuery({
+    queryKey: ['vcenter-resources', vmwareCredsRefCreate],
+    queryFn: () => getVCenterResources(vmwareCredsRefCreate),
+    enabled: Boolean(vmwareCredsRefCreate) && formMode === 'create' && open,
+    staleTime: 60_000
+  })
+
+  const toOptions = (items: string[] | undefined) =>
+    (items ?? []).map((v) => ({ label: v, value: v }))
 
   // True when the typed name doesn't match any running VM (and we've finished loading)
   const vmNameEntered = vmNameSelect.trim().length > 0
@@ -677,32 +688,60 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
                     subtitle="Specify where in the VMware environment to deploy the VM."
                   />
                   <Box sx={{ display: 'grid', gap: 2 }}>
-                    <RHFTextField
+                    <RHFSelect
                       name="datacenter"
                       label="Datacenter"
+                      options={toOptions(vcResources?.datacenters)}
                       rules={{ required: 'Datacenter is required' }}
-                      placeholder="e.g. prison"
-                      disabled={isSubmitting}
+                      placeholder={
+                        !vmwareCredsRefCreate
+                          ? 'Select credentials first'
+                          : resourcesLoading
+                            ? 'Loading…'
+                            : 'Select datacenter'
+                      }
+                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
                     />
-                    <RHFTextField
+                    <RHFSelect
                       name="datastore"
                       label="Datastore"
+                      options={toOptions(vcResources?.datastores)}
                       rules={{ required: 'Datastore is required' }}
-                      placeholder="e.g. datastore-nfs"
-                      disabled={isSubmitting}
+                      placeholder={
+                        !vmwareCredsRefCreate
+                          ? 'Select credentials first'
+                          : resourcesLoading
+                            ? 'Loading…'
+                            : 'Select datastore'
+                      }
+                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
                     />
-                    <RHFTextField
+                    <RHFSelect
                       name="network"
                       label="Network"
+                      options={toOptions(vcResources?.networks)}
                       rules={{ required: 'Network is required' }}
-                      placeholder="e.g. network-19"
-                      disabled={isSubmitting}
+                      placeholder={
+                        !vmwareCredsRefCreate
+                          ? 'Select credentials first'
+                          : resourcesLoading
+                            ? 'Loading…'
+                            : 'Select network'
+                      }
+                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
                     />
-                    <RHFTextField
+                    <RHFSelect
                       name="cluster"
-                      label="Cluster (optional)"
-                      placeholder="Leave blank to use the first available host"
-                      disabled={isSubmitting}
+                      label="Cluster / Host (optional)"
+                      options={toOptions(vcResources?.clusters)}
+                      placeholder={
+                        !vmwareCredsRefCreate
+                          ? 'Select credentials first'
+                          : resourcesLoading
+                            ? 'Loading…'
+                            : 'Leave blank to use first available host'
+                      }
+                      disabled={!vmwareCredsRefCreate || resourcesLoading || isSubmitting}
                     />
                   </Box>
                 </Section>

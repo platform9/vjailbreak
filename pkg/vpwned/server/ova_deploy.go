@@ -260,11 +260,15 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 
 func resolveResourcePool(ctx context.Context, finder *find.Finder, cluster string) (*object.ResourcePool, error) {
 	if cluster != "" {
-		cl, err := finder.ClusterComputeResource(ctx, cluster)
-		if err != nil {
-			return nil, fmt.Errorf("cluster %q: %v", cluster, err)
+		// Try cluster name first
+		if cl, err := finder.ClusterComputeResource(ctx, cluster); err == nil {
+			return cl.ResourcePool(ctx)
 		}
-		return cl.ResourcePool(ctx)
+		// Fall back to standalone host (user may have entered a host IP or hostname)
+		if h, err := finder.HostSystem(ctx, cluster); err == nil {
+			return h.ResourcePool(ctx)
+		}
+		return nil, fmt.Errorf("neither a cluster nor a host named %q was found", cluster)
 	}
 	hosts, err := finder.HostSystemList(ctx, "*")
 	if err != nil || len(hosts) == 0 {
@@ -486,26 +490,64 @@ func credsFromVMwareCreds(ctx context.Context, credsName string) (host, username
 	return host, username, password, nil
 }
 
+// credsFromVMwareCredsAll is like credsFromVMwareCreds but also returns the
+// datacenter stored in the secret under the VCENTER_DATACENTER key.
+func credsFromVMwareCredsAll(ctx context.Context, credsName string) (host, username, password, datacenter string, err error) {
+	h, u, p, sErr := credsFromVMwareCreds(ctx, credsName)
+	if sErr != nil {
+		return "", "", "", "", sErr
+	}
+
+	cfg, cfgErr := rest.InClusterConfig()
+	if cfgErr != nil {
+		return h, u, p, "", nil // datacenter optional
+	}
+	dynClient, _ := dynamic.NewForConfig(cfg)
+	cr, getErr := dynClient.Resource(vmwareCredsGVR).Namespace(migrationSystemNamespace).Get(ctx, credsName, metav1.GetOptions{})
+	if getErr != nil {
+		return h, u, p, "", nil
+	}
+	secretName, _, _ := unstructured.NestedString(cr.Object, "spec", "secretRef", "name")
+	if secretName == "" {
+		secretName = credsName
+	}
+	if k8sAuthClient != nil {
+		secret, sGetErr := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Get(ctx, secretName, metav1.GetOptions{})
+		if sGetErr == nil {
+			datacenter = string(secret.Data["VCENTER_DATACENTER"])
+		}
+	}
+	return h, u, p, datacenter, nil
+}
+
 func connectVCenter(ctx context.Context, host, username, password, datacenter string) (*govmomi.Client, *find.Finder, error) {
-	stripped := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://"), "/")
-	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", stripped))
+	client, finder, err := connectVCenterNoDC(ctx, host, username, password)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse vCenter URL: %v", err)
+		return nil, nil, err
 	}
-	u.User = url.UserPassword(username, password)
-
-	client, err := govmomi.NewClient(ctx, u, true)
-	if err != nil {
-		return nil, nil, fmt.Errorf("connect to vCenter %q: %v", host, err)
-	}
-
-	finder := find.NewFinder(client.Client, true)
 	dc, err := finder.Datacenter(ctx, datacenter)
 	if err != nil {
 		client.Logout(ctx)
 		return nil, nil, fmt.Errorf("datacenter %q: %v", datacenter, err)
 	}
 	finder.SetDatacenter(dc)
+	return client, finder, nil
+}
+
+// connectVCenterNoDC connects to vCenter without scoping to a datacenter.
+// Use this when you need to list datacenters, then switch to connectVCenter.
+func connectVCenterNoDC(ctx context.Context, host, username, password string) (*govmomi.Client, *find.Finder, error) {
+	stripped := strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://"), "/")
+	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", stripped))
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse vCenter URL: %v", err)
+	}
+	u.User = url.UserPassword(username, password)
+	client, err := govmomi.NewClient(ctx, u, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect to vCenter %q: %v", host, err)
+	}
+	finder := find.NewFinder(client.Client, true)
 	return client, finder, nil
 }
 
