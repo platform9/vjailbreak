@@ -28,7 +28,7 @@ import {
 } from 'src/components'
 import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
 
-import { postProxyVM, createProxyVMFromOVA, getVCenterResources } from 'src/api/proxyvms/proxyVMs'
+import { postProxyVM, createProxyVMFromOVA, getVCenterResources, getProxyVMList } from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { generateSSHKeyPair, deleteSSHKeyPair } from 'src/api/sshKeyPairs/sshKeyPairs'
@@ -83,6 +83,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [formMode, setFormMode] = useState<FormMode>('select')
   const [deploymentStarted, setDeploymentStarted] = useState(false)
+  const [deployedVMName, setDeployedVMName] = useState<string | null>(null)
 
   const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
   const [generatedKey, setGeneratedKey] = useState<GeneratedKey | null>(null)
@@ -164,6 +165,19 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     staleTime: 60_000
   })
 
+  const { data: polledVMs = [] } = useQuery({
+    queryKey: [...PROXY_VMS_QUERY_KEY, 'deploy-poll'],
+    queryFn: () => getProxyVMList(),
+    enabled: deploymentStarted,
+    refetchInterval: deploymentStarted ? 5000 : false
+  })
+
+  useEffect(() => {
+    if (!deploymentStarted || !deployedVMName) return
+    const appeared = polledVMs.some((vm) => vm.metadata?.name === deployedVMName)
+    if (appeared) handleClose()
+  }, [polledVMs, deploymentStarted, deployedVMName, handleClose])
+
   const toOptions = (items: string[] | undefined) =>
     (items ?? []).map((v) => ({ label: v, value: v }))
 
@@ -217,6 +231,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setSshKeySource('generated')
     setFormMode('select')
     setDeploymentStarted(false)
+    setDeployedVMName(null)
   }, [selectReset, createReset])
 
   const handleClose = useCallback(() => {
@@ -346,6 +361,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         cluster: data.cluster || undefined
       })
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+      setDeployedVMName(data.vmName)
       setDeploymentStarted(true)
     } catch (err: any) {
       setSubmitError(
