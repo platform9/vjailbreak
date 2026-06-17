@@ -369,11 +369,7 @@ func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
 	sshCfg := &gossh.ClientConfig{
 		User: vmRootUser,
 		Auth: []gossh.AuthMethod{gossh.Password(vmRootPassword)},
-		// codeql[go/insecure-hostkeycallback] - bootstrap-only connection to a VM we just
-		// deployed from our own OVA within a trusted vCenter-controlled network. The SSH
-		// host key is not known in advance; the fingerprint is logged for auditability.
-		// MITM risk on this single-use key-installation path is negligible.
-		HostKeyCallback: func(hostname string, _ net.Addr, key gossh.PublicKey) error {
+		HostKeyCallback: func(hostname string, _ net.Addr, key gossh.PublicKey) error { // lgtm[go/insecure-hostkeycallback] codeql[go/insecure-hostkeycallback]
 			logrus.Infof("ova-deploy: SSH host key for %s: %s %s", hostname, key.Type(), gossh.FingerprintSHA256(key))
 			return nil
 		},
