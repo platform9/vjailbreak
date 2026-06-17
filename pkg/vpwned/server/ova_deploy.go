@@ -120,7 +120,7 @@ func deployWhenOVAReady(ctx context.Context) {
 func deployProxyVMFromOVA(ovaPath string) {
 	ctx := context.Background()
 
-	vcHost, vcUsername, vcPassword, err := credsFromSecret(ctx, deployVMwareCreds)
+	vcHost, vcUsername, vcPassword, err := credsFromVMwareCreds(ctx, deployVMwareCreds)
 	if err != nil {
 		logrus.Errorf("ova-deploy: %v", err)
 		return
@@ -190,15 +190,36 @@ func deployProxyVMFromOVA(ovaPath string) {
 	logrus.Infof("ova-deploy: VM %q deployed successfully (ref=%s)", proxyVMName, ref.Value)
 }
 
-// credsFromSecret reads VCENTER_HOST/USERNAME/PASSWORD from the named k8s secret.
-func credsFromSecret(ctx context.Context, secretName string) (host, username, password string, err error) {
+// credsFromVMwareCreds looks up the VMwareCreds CR by name, resolves its
+// spec.secretRef.name, then reads VCENTER_HOST/USERNAME/PASSWORD from that secret.
+func credsFromVMwareCreds(ctx context.Context, credsName string) (host, username, password string, err error) {
+	cfg, cfgErr := rest.InClusterConfig()
+	if cfgErr != nil {
+		return "", "", "", fmt.Errorf("in-cluster config: %v", cfgErr)
+	}
+	dynClient, dynErr := dynamic.NewForConfig(cfg)
+	if dynErr != nil {
+		return "", "", "", fmt.Errorf("dynamic client: %v", dynErr)
+	}
+
+	cr, getErr := dynClient.Resource(vmwareCredsGVR).Namespace(migrationSystemNamespace).Get(ctx, credsName, metav1.GetOptions{})
+	if getErr != nil {
+		return "", "", "", fmt.Errorf("get VMwareCreds %q: %v", credsName, getErr)
+	}
+
+	secretName, _, _ := unstructured.NestedString(cr.Object, "spec", "secretRef", "name")
+	if secretName == "" {
+		secretName = credsName
+	}
+
 	if k8sAuthClient == nil {
 		return "", "", "", fmt.Errorf("k8s client not initialized")
 	}
-	secret, err := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Get(ctx, secretName, metav1.GetOptions{})
-	if err != nil {
-		return "", "", "", fmt.Errorf("get secret %q: %v", secretName, err)
+	secret, secretErr := k8sAuthClient.CoreV1().Secrets(migrationSystemNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	if secretErr != nil {
+		return "", "", "", fmt.Errorf("get secret %q: %v", secretName, secretErr)
 	}
+
 	host = string(secret.Data["VCENTER_HOST"])
 	username = string(secret.Data["VCENTER_USERNAME"])
 	password = string(secret.Data["VCENTER_PASSWORD"])
