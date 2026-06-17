@@ -192,6 +192,8 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
 
+	go prefetchProxyVMOVA()
+
 	go func() {
 		if err := startgRPCServer(ctx, "tcp", host+":"+port); err != nil {
 			logrus.Error("cannot start grpc server", err)
