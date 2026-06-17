@@ -60,7 +60,7 @@ RUN dnf install -y \
     # xfsprogs is required for XFS guest migrations (xfs_repair).
     # Must be installed on the host AND listed in the supermin packages file so
     # that supermin copies xfs_repair into the libguestfs appliance at runtime.
-    dnf install -y --nodocs --setopt=install_weak_deps=False xfsprogs && \
+    dnf install -y --nodocs --setopt=install_weak_deps=False xfsprogs mingw-srvany-redistributable && \
     echo "xfsprogs" >> /usr/lib64/guestfs/supermin.d/packages && \
     # Install pf9-patched virt-v2v with --nodeps to bypass RPM dep version
     # mismatches — all real runtime deps are already installed above.
