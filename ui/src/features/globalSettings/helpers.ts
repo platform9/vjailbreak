@@ -15,6 +15,7 @@ export type SettingsForm = {
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: number
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
+  DEFAULT_NETWORK_PERSISTENCE: boolean
   DEPLOYMENT_NAME: string
   TIMEZONE: string
   NTP_SERVERS: string
@@ -181,6 +182,7 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
     VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
     AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
+    DEFAULT_NETWORK_PERSISTENCE: String(f.DEFAULT_NETWORK_PERSISTENCE),
     DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
     TIMEZONE: f.TIMEZONE,
     NTP_SERVERS: f.NTP_SERVERS,
@@ -251,6 +253,10 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
       defaults.VALIDATE_RDM_OWNER_VMS
     ),
     AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, defaults.AUTO_FSTAB_UPDATE),
+    DEFAULT_NETWORK_PERSISTENCE: parseBool(
+      data?.DEFAULT_NETWORK_PERSISTENCE,
+      defaults.DEFAULT_NETWORK_PERSISTENCE
+    ),
     DEPLOYMENT_NAME:
       typeof data?.DEPLOYMENT_NAME === 'string' ? data.DEPLOYMENT_NAME : defaults.DEPLOYMENT_NAME,
     TIMEZONE: typeof data?.TIMEZONE === 'string' ? data.TIMEZONE : defaults.TIMEZONE,

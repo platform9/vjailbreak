@@ -38,6 +38,7 @@ import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
+import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
 const drawerWidth = 1400
 
@@ -67,7 +68,7 @@ export default function MigrationFormDrawer({
   onSuccess
 }: MigrationFormDrawerProps) {
   const navigate = useNavigate()
-  const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
+  const { params, getParamsUpdater, updateParams } = useParams<FormValues>(defaultValues)
   const { pcdData } = useClusterData()
   const { reportError } = useErrorHandler({ component: 'MigrationForm' })
   const { track } = useAmplitude({ component: 'MigrationForm' })
@@ -83,6 +84,23 @@ export default function MigrationFormDrawer({
 
   // Generate a unique session ID for this form instance
   const [sessionId] = useState(() => `form-session-${Date.now()}`)
+
+  const { data: settingsConfigMap } = useSettingsConfigMapQuery()
+  const networkPersistenceSeedRef = useRef(false)
+
+  // Seed networkPersistence from the global default once per open session.
+  // Reset the flag when the drawer closes so the next open starts fresh.
+  useEffect(() => {
+    if (!open) {
+      networkPersistenceSeedRef.current = false
+      return
+    }
+    if (networkPersistenceSeedRef.current) return
+    if (!settingsConfigMap) return
+    networkPersistenceSeedRef.current = true
+    const raw = settingsConfigMap.data?.DEFAULT_NETWORK_PERSISTENCE
+    updateParams({ networkPersistence: raw === 'true' })
+  }, [open, settingsConfigMap, updateParams])
 
   const form = useForm<MigrationDrawerRHFValues, any, MigrationDrawerRHFValues>({
     defaultValues: {
