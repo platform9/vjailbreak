@@ -318,6 +318,19 @@ const (
 	// failed plan — including validation failures — and removes the annotation.
 	MigrationPlanRetryRequestedAnnotation = "vjailbreak.k8s.pf9.io/retry-requested"
 
+	// MigrationPlanRetryCloneOfAnnotation is set on a clone MigrationPlan created during
+	// edit-and-retry for multi-VM plans. Its value is the name of the original plan from
+	// which the retried VM was removed. The clone plan contains only the retried VM with
+	// the edited configuration; the original plan is patched to remove it.
+	// Used for audit and discoverability. The controller does not act on this annotation.
+	MigrationPlanRetryCloneOfAnnotation = "vjailbreak.k8s.pf9.io/retry-clone-of"
+
+	// MigrationPlanRetryCloneVMAnnotation is set on a clone MigrationPlan alongside
+	// MigrationPlanRetryCloneOfAnnotation and records the VM key (display-name-<moid>)
+	// that the clone was created for.
+	// Used for audit and discoverability. The controller does not act on this annotation.
+	MigrationPlanRetryCloneVMAnnotation = "vjailbreak.k8s.pf9.io/retry-clone-vm"
+
 	// ValidationStatusFailed is the status value for failed validation
 	ValidationStatusFailed = "Failed"
 	// ValidationStatusRevalidating is the status value while credential revalidation is in progress

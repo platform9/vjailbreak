@@ -543,7 +543,16 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		// If the specific "Failed" objects are gone (user deleted them for retry),
 		// but the plan still says "Failed", we reset the plan status.
 		if !hasExistingFailures || retryTriggeredByDeletion {
-			if strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
+			// Block auto-reset for ValidationFailed plans when the reset was triggered by
+			// a Migration deletion but the VM is still in the plan — this prevents the plan
+			// from silently looping back through a known-bad configuration. The user must
+			// either use Edit & Retry (which sets retry-requested) or fix the config.
+			//
+			// Exception: when ALL failures are genuinely gone (!hasExistingFailures &&
+			// !retryTriggeredByDeletion), the failed VM was likely removed from the plan
+			// via the clone-plan retry path. In that case, allow the reset so any remaining
+			// VMs (which may have already succeeded) can drive the plan to Succeeded.
+			if retryTriggeredByDeletion && strings.HasPrefix(migrationplan.Status.MigrationMessage, constants.MigrationPlanValidationFailedPrefix) {
 				return ctrl.Result{}, nil
 			}
 

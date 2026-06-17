@@ -83,8 +83,8 @@ The administrator retries a failed migration that belongs to a migration plan co
 - **FR-006**: The retry form MUST offer exactly two completion actions: "Retry without editing" and "Edit & Retry".
 - **FR-007**: "Retry without editing" MUST re-run the failed migration with unchanged configuration, behaviorally identical to the pre-existing retry, and MUST NOT write any configuration changes.
 - **FR-008**: "Edit & Retry" MUST persist the user's edits to the migration's stored configuration and then re-run the migration so that the re-run uses the edited configuration end-to-end (including any derived per-migration runtime configuration).
-- **FR-009**: Edits to per-VM settings MUST affect only the failed VM being retried; sibling VMs in the same plan MUST be unaffected.
-- **FR-010**: Edits to plan-wide settings MUST trigger a visible warning naming the sibling VMs in the same plan that will also be affected, shown before the user confirms "Edit & Retry".
+- **FR-009**: "Edit & Retry" MUST guarantee that no configuration change affects sibling VMs in the same plan. For multi-VM plans, the system achieves this by cloning the plan for the retried VM and removing that VM from the original plan — the user does not choose between per-VM and plan-wide scope.
+- **FR-010**: For multi-VM plans, the retry form MUST display a visible informational banner naming the other VMs in the plan, so the user knows their edits apply only to the retried VM and the clone is self-contained.
 - **FR-011**: The retry action (both variants) MUST NOT be offered for migrations marked not retryable (e.g., VMs with raw device mapping disks), preserving current behavior.
 - **FR-012**: Pre-populated values that are no longer valid in the destination environment (deleted flavor, network, volume type, mapping) MUST be flagged in the form, and "Edit & Retry" MUST be blocked until the user corrects them; "Retry without editing" remains available with a warning that it will likely fail again.
 - **FR-013**: A re-run after "Edit & Retry" MUST preserve previously completed incremental data-copy progress whenever the edited settings do not invalidate the copied data; configuration changes unrelated to disk content MUST NOT force a full re-copy.
@@ -116,8 +116,8 @@ The administrator retries a failed migration that belongs to a migration plan co
 
 - The existing migration creation form is reused for retry (same layout and steps), opened in a distinct retry mode, rather than building a separate editing screen.
 - Changing source/destination credentials, clusters, or the selected VM during retry is out of scope for this feature; these are displayed read-only.
-- Plan-wide edits intentionally apply to the whole plan (all member VMs' future runs) after an explicit warning; cloning the plan to isolate a single VM is deferred as a possible future enhancement.
-- Per-VM scope is available only for settings that are already stored per VM (e.g., per-NIC IP/MAC overrides); all other settings are plan-wide or template-wide by nature.
+- When "Edit & Retry" fires on a multi-VM plan, the system automatically creates a clone plan containing only the retried VM, with all edits scoped to that clone. The original plan is patched to remove the retried VM. This ensures no other VM in the plan is affected by the retried VM's configuration changes. 1-VM plans are patched in place (no clone).
+- Per-VM scope is available only for settings that are already stored per VM (e.g., per-NIC IP/MAC overrides); all other settings (strategy, securityGroups, advancedOptions) are cloned with the retried VM to preserve isolation.
 - The system's existing behavior of re-creating a deleted migration run from its plan is the retry mechanism being built upon; edits are applied to stored configuration before the re-run is triggered.
 - Migrations marked not retryable today (e.g., raw device mapping disks) stay not retryable; this feature does not expand retryability.
 - Concurrent edits to the same configuration by multiple users are resolved last-write-wins; pessimistic locking is out of scope.
