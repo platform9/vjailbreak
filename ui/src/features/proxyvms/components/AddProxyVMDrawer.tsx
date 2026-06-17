@@ -4,6 +4,7 @@ import {
   Box,
   IconButton,
   InputAdornment,
+  LinearProgress,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -81,6 +82,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [formMode, setFormMode] = useState<FormMode>('select')
+  const [deploymentStarted, setDeploymentStarted] = useState(false)
 
   // ── Select mode state ────────────────────────────────────────────────────
   const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
@@ -228,6 +230,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setCopied(false)
     setSshKeySource('generated')
     setFormMode('select')
+    setDeploymentStarted(false)
   }, [selectReset, createReset])
 
   const handleClose = useCallback(() => {
@@ -360,7 +363,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         cluster: data.cluster || undefined
       })
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
-      handleClose()
+      setDeploymentStarted(true)
     } catch (err: any) {
       setSubmitError(
         err?.response?.data?.message || err?.message || 'Failed to start VM creation.'
@@ -397,17 +400,19 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
+            {deploymentStarted ? 'Done' : 'Cancel'}
           </ActionButton>
-          <ActionButton
-            tone="primary"
-            type="submit"
-            form={activeFormId}
-            loading={isSubmitting}
-            disabled={formMode === 'select' ? isSelectDisabled : isCreateDisabled}
-          >
-            {submitLabel}
-          </ActionButton>
+          {!deploymentStarted && (
+            <ActionButton
+              tone="primary"
+              type="submit"
+              form={activeFormId}
+              loading={isSubmitting}
+              disabled={formMode === 'select' ? isSelectDisabled : isCreateDisabled}
+            >
+              {submitLabel}
+            </ActionButton>
+          )}
         </DrawerFooter>
       }
     >
@@ -643,7 +648,24 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
           )}
 
           {/* ── Create (deploy from OVA) mode ────────────────────────────── */}
-          {formMode === 'create' && (
+          {formMode === 'create' && deploymentStarted && (
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Alert severity="success">
+                Deployment started for <strong>{createForm.getValues('vmName')}</strong>.
+              </Alert>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary">
+                vJailbreak is deploying the OVA to vCenter, configuring SSH access, and
+                registering the Proxy VM. This typically takes <strong>3–5 minutes</strong>.
+              </Typography>
+              <Alert severity="info">
+                You can close this panel — the VM will appear in the Proxy VMs list once
+                provisioning is complete and verification begins automatically.
+              </Alert>
+            </Box>
+          )}
+
+          {formMode === 'create' && !deploymentStarted && (
             <DesignSystemForm
               id={CREATE_FORM_ID}
               form={createForm}

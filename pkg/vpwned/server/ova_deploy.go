@@ -22,6 +22,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/ovf/importer"
+	"github.com/vmware/govmomi/vim25/types"
 	gossh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -224,6 +225,24 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 		return
 	}
 	logrus.Infof("ova-deploy[%s]: VM deployed (ref=%s)", deployCfg.VMName, ref.Value)
+
+	// Set disk.EnableUUID before powering on — the VM is off so no reboot is needed,
+	// and the ProxyVM controller requires this property to identify block devices.
+	vmRef := object.NewVirtualMachine(client.Client, *ref)
+	reconfTask, reconfErr := vmRef.Reconfigure(ctx, types.VirtualMachineConfigSpec{
+		ExtraConfig: []types.BaseOptionValue{
+			&types.OptionValue{Key: "disk.enableUUID", Value: "TRUE"},
+		},
+	})
+	if reconfErr != nil {
+		logrus.Errorf("ova-deploy[%s]: reconfigure disk.EnableUUID: %v", deployCfg.VMName, reconfErr)
+		return
+	}
+	if err := reconfTask.Wait(ctx); err != nil {
+		logrus.Errorf("ova-deploy[%s]: wait reconfigure disk.EnableUUID: %v", deployCfg.VMName, err)
+		return
+	}
+	logrus.Infof("ova-deploy[%s]: disk.EnableUUID set to TRUE", deployCfg.VMName)
 
 	vmObj, err := powerOnVM(ctx, finder, deployCfg.VMName)
 	if err != nil {
