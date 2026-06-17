@@ -6,6 +6,7 @@ export const NS = 'migration-system'
 const V1A1 = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NS}`
 
 export const API = {
+  settingsConfigMap: `**/api/v1/namespaces/${NS}/configmaps/vjailbreak-settings`,
   migrations: `**${V1A1}/migrations`,
   migrationByName: (name: string) => `**${V1A1}/migrations/${name}`,
   migrationPlans: `**${V1A1}/migrationplans`,
@@ -45,6 +46,12 @@ export async function goToMigrations(page: Page): Promise<void> {
   await page.goto(ROUTES.migrations)
   await page.waitForURL(/\/dashboard\/migrations/)
   await expect(page.getByTestId('migrations-table')).toBeVisible({ timeout: 10_000 })
+}
+
+export async function goToGlobalSettings(page: Page): Promise<void> {
+  await page.goto('/dashboard/global-settings')
+  await page.waitForURL(/\/dashboard\/global-settings/)
+  await expect(page.getByTestId('global-settings-form')).toBeVisible({ timeout: 10_000 })
 }
 
 // ─── Form interactions ────────────────────────────────────────────────────────
