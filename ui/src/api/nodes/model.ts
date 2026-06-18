@@ -36,6 +36,7 @@ export interface Spec {
   openstackFlavorID: string
   openstackVolumeType?: string
   openstackSecurityGroups?: string[]
+  openstackServerGroup?: string
 }
 
 export interface Status {

@@ -1,4 +1,4 @@
-import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Alert } from '@mui/material'
+import { Box, FormControl, MenuItem, Select, Checkbox, ListItemText, Alert, Autocomplete, TextField } from '@mui/material'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import {
@@ -18,7 +18,7 @@ import { OpenstackCredentialsForm } from 'src/features/credentials/components'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { createNodes } from 'src/api/nodes/nodeMappings'
 import axios from 'axios'
-import { OpenstackCreds, OpenstackFlavor } from 'src/api/openstack-creds/model'
+import { OpenstackCreds, OpenstackFlavor, ServerGroupOption } from 'src/api/openstack-creds/model'
 import { NodeItem } from 'src/api/nodes/model'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
@@ -84,6 +84,9 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
   const [selectedSecurityGroups, setSelectedSecurityGroups] = useState<string[]>([])
   const [useMasterSecurityGroups, setUseMasterSecurityGroups] = useState(true)
 
+  const [serverGroups, setServerGroups] = useState<ServerGroupOption[]>([])
+  const [selectedServerGroup, setSelectedServerGroup] = useState('')
+
   const flavorOptions = useMemo(() => {
     return flavors
       .filter((flavor) => flavor.disk >= 60)
@@ -120,6 +123,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
     setSecurityGroups([])
     setSelectedSecurityGroups([])
     setUseMasterSecurityGroups(true)
+    setServerGroups([])
+    setSelectedServerGroup('')
   }, [reset])
 
   const handleClose = useCallback(() => {
@@ -134,6 +139,7 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       setSelectedVolumeType('')
       setUseMasterSecurityGroups(true)
       setSelectedSecurityGroups([])
+      setSelectedServerGroup('')
 
       if (credId) {
         try {
@@ -196,12 +202,18 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       // Default to using master's security groups
       setUseMasterSecurityGroups(true)
       setSelectedSecurityGroups([])
+
+      const srvGroups = openstackCredentials?.status?.openstack?.serverGroups || []
+      setServerGroups(srvGroups)
+      setSelectedServerGroup('')
     } else {
       setVolumeTypes([])
       setSelectedVolumeType('')
       setSecurityGroups([])
       setSelectedSecurityGroups([])
       setUseMasterSecurityGroups(true)
+      setServerGroups([])
+      setSelectedServerGroup('')
     }
   }, [openstackCredsValidated, openstackCredentials])
 
@@ -246,7 +258,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
           count: nodeCountNum,
           flavorId: values.flavor,
           volumeType: selectedVolumeType === 'USE_MASTER' ? undefined : selectedVolumeType,
-          securityGroups: useMasterSecurityGroups ? undefined : selectedSecurityGroups
+          securityGroups: useMasterSecurityGroups ? undefined : selectedSecurityGroups,
+          serverGroup: selectedServerGroup || undefined
         })
 
         setSuccess(true)
@@ -288,7 +301,8 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
       track,
       selectedSecurityGroups,
       selectedVolumeType,
-      useMasterSecurityGroups
+      useMasterSecurityGroups,
+      selectedServerGroup
     ]
   )
 
@@ -467,6 +481,26 @@ export default function ScaleUpDrawer({ open, onClose, masterNode }: ScaleUpDraw
                   </Select>
                 </Box>
               </FormControl>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <FieldLabel label="Server Group" align="flex-start" />
+                <Autocomplete
+                  options={serverGroups}
+                  getOptionLabel={(option) => `${option.name} (${option.policy})`}
+                  value={serverGroups.find((sg) => sg.id === selectedServerGroup) || null}
+                  onChange={(_, newValue) => setSelectedServerGroup(newValue?.id || '')}
+                  disabled={!openstackCredsValidated || !openstackCredentials}
+                  size="small"
+                  data-testid="scaleup-server-group"
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      size="small"
+                      placeholder="Select Server Group"
+                    />
+                  )}
+                />
+              </Box>
             </FormGrid>
 
             <Box sx={{ display: 'grid', gap: 1.5 }}>

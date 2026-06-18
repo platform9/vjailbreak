@@ -87,15 +87,15 @@ export const navigationItems: NavigationItem[] = [
     icon: <ConfigIcon />,
     children: [
       {
+        id: 'global-settings',
+        label: 'Global Settings',
+        path: '/dashboard/global-settings'
+      },
+      {
         id: 'baremetal-config',
         label: 'Bare Metal Config',
         path: '/dashboard/baremetal-config',
         icon: <Storage />
-      },
-      {
-        id: 'global-settings',
-        label: 'Global Settings',
-        path: '/dashboard/global-settings'
       }
     ]
   },
