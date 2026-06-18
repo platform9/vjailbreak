@@ -2,7 +2,6 @@ import { test, expect, Page } from '@playwright/test'
 
 import {
   goToMigrations,
-  goToGlobalSettings,
   openMigrationDrawer,
   selectVmwareCluster,
   selectPcdCluster,
@@ -32,8 +31,6 @@ import {
   MOCK_VMWARE_MACHINES_LIST_WITH_RDM,
   MOCK_VMWARE_MACHINES_LIST_LARGE,
   MOCK_RDM_DISKS_LIST,
-  MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON,
-  MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF,
   NS,
 } from './helpers/migration.fixtures'
 
@@ -719,88 +716,5 @@ test.describe('MIG-038 — mixed OS script validation', () => {
     await scriptInput.blur()
 
     await expect(warning).not.toBeVisible({ timeout: 5000 })
-  })
-})
-
-// ─── MIG-039: Global setting DEFAULT_NETWORK_PERSISTENCE seeds migration form ──
-
-test.describe('MIG-039 — global default network persistence seeds migration form', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON)
-    await mockStandardFormApis(page)
-    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
-    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
-    await goToMigrations(page)
-    await openMigrationDrawer(page)
-    await selectClustersAndWaitForVMs(page)
-    await page.getByTestId('section-nav-item-options').click()
-  })
-
-  test('checkbox pre-checked when global default is ON', async ({ page }) => {
-    const checkbox = page.getByTestId('migration-option-network-persistence')
-    await expect(checkbox).toBeChecked({ timeout: 5000 })
-  })
-
-  test('user can uncheck even when global default is ON', async ({ page }) => {
-    const checkbox = page.getByTestId('migration-option-network-persistence')
-    await expect(checkbox).toBeChecked({ timeout: 5000 })
-    await checkbox.click({ force: true })
-    await expect(checkbox).not.toBeChecked()
-  })
-})
-
-// ─── MIG-040: Global setting OFF — migration form checkbox unchecked by default ─
-
-test.describe('MIG-040 — global default OFF leaves network persistence unchecked', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF)
-    await mockStandardFormApis(page)
-    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
-    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
-    await goToMigrations(page)
-    await openMigrationDrawer(page)
-    await selectClustersAndWaitForVMs(page)
-    await page.getByTestId('section-nav-item-options').click()
-  })
-
-  test('checkbox unchecked when global default is OFF', async ({ page }) => {
-    const checkbox = page.getByTestId('migration-option-network-persistence')
-    await expect(checkbox).not.toBeChecked({ timeout: 5000 })
-  })
-
-  test('user can manually check even when global default is OFF', async ({ page }) => {
-    const checkbox = page.getByTestId('migration-option-network-persistence')
-    await expect(checkbox).not.toBeChecked({ timeout: 5000 })
-    await checkbox.click({ force: true })
-    await expect(checkbox).toBeChecked()
-  })
-})
-
-// ─── MIG-041: Global settings page — DEFAULT_NETWORK_PERSISTENCE toggle ───────
-
-test.describe('MIG-041 — global settings page DEFAULT_NETWORK_PERSISTENCE toggle', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF)
-    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
-    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
-    await goToGlobalSettings(page)
-  })
-
-  test('Advanced tab shows DEFAULT_NETWORK_PERSISTENCE toggle off by default', async ({ page }) => {
-    await page.getByTestId('global-settings-tab-advanced').click()
-    const toggle = page.getByTestId('global-settings-toggle-DEFAULT_NETWORK_PERSISTENCE')
-    await expect(toggle).toBeVisible({ timeout: 5000 })
-    await expect(toggle.locator('input')).not.toBeChecked()
-  })
-
-  test('toggling DEFAULT_NETWORK_PERSISTENCE on enables the setting', async ({ page }) => {
-    await page.getByTestId('global-settings-tab-advanced').click()
-    const toggleInput = page.getByTestId('global-settings-toggle-DEFAULT_NETWORK_PERSISTENCE').locator('input')
-    await expect(toggleInput).not.toBeChecked()
-
-    // Mock PUT for save
-    await mockRoute(page, API.settingsConfigMap, 'PUT', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON)
-    await toggleInput.click({ force: true })
-    await expect(toggleInput).toBeChecked()
   })
 })

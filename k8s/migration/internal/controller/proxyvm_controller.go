@@ -379,7 +379,7 @@ func parseComponentCheckOutput(output string) ([]vjailbreakv1alpha1.ProxyVMCompo
 // proxyVMInstallCmds maps a normalised OS distro constant to the command that installs qemu-nbd.
 var proxyVMInstallCmds = map[string]string{
 	constants.ProxyVMOSDistroDebian: "apt-get install -y qemu-utils",
-	constants.ProxyVMOSDistroAlpine: "apk add --no-cache qemu-img",
+	constants.ProxyVMOSDistroAlpine: "apk add --no-cache qemu-nbd",
 }
 
 // normaliseOSDistro maps a raw /etc/os-release ID value to a normalised distro constant.

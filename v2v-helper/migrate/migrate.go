@@ -292,6 +292,108 @@ func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 	return nil
 }
 
+// DetachAllVolumesWithCleanup is like DetachAllVolumes but handles the case where
+// a volume is attached to a foreign server (e.g. an orphaned target VM created by
+// a timed-out CreateTargetInstance call). Boot volumes cannot be hot-detached from
+// a running VM, so the foreign server is deleted first, then WaitForVolume polls
+// until Cinder reports the volume available.
+func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo vm.VMInfo) error {
+	openstackops := migobj.Openstackclients
+
+	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	if err != nil {
+		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
+	}
+
+	deletedServers := map[string]bool{}
+
+	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping detach for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
+
+		volume, err := openstackops.GetVolume(ctx, vmdisk.OpenstackVol.ID)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get volume state for disk %s", vmdisk.Name)
+		}
+
+		if len(volume.Attachments) == 0 {
+			migobj.logMessage(fmt.Sprintf("Volume %s is already detached, skipping", vmdisk.Name))
+			continue
+		}
+
+		attachedServerID := volume.Attachments[0].ServerID
+
+		if attachedServerID == vjailbreakUUID {
+			migobj.logMessage(fmt.Sprintf("Detaching volume %s from vJailbreak VM", vmdisk.Name))
+			if err := openstackops.DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
+				return errors.Wrap(err, "failed to detach volume from vJailbreak VM")
+			}
+		} else {
+			if !deletedServers[attachedServerID] {
+				migobj.logMessage(fmt.Sprintf("Volume %s is attached to orphaned server %s, deleting server", vmdisk.Name, attachedServerID))
+				if err := openstackops.DeleteServer(ctx, attachedServerID); err != nil {
+					return errors.Wrapf(err, "failed to delete orphaned server %s", attachedServerID)
+				}
+				deletedServers[attachedServerID] = true
+			}
+		}
+
+		if err := openstackops.WaitForVolume(ctx, vmdisk.OpenstackVol.ID); err != nil {
+			return errors.Wrapf(err, "failed to wait for volume %s to become available", vmdisk.Name)
+		}
+		migobj.logMessage(fmt.Sprintf("Volume %s detached from VM", vmdisk.Name))
+	}
+
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) error {
+	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	if err != nil {
+		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
+	}
+
+	var bootDisk *vm.VMDisk
+	for i := range vminfo.VMDisks {
+		if vminfo.VMDisks[i].Boot {
+			bootDisk = &vminfo.VMDisks[i]
+			break
+		}
+	}
+	if bootDisk == nil || bootDisk.OpenstackVol == nil {
+		return fmt.Errorf("no boot volume found")
+	}
+
+	volume, err := migobj.Openstackclients.GetVolume(ctx, bootDisk.OpenstackVol.ID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get boot volume")
+	}
+
+	if len(volume.Attachments) == 0 {
+		return fmt.Errorf("boot volume is not attached to any server")
+	}
+
+	attachedServerID := volume.Attachments[0].ServerID
+	if attachedServerID == vjailbreakUUID {
+		return fmt.Errorf("boot volume is still attached to vJailbreak VM")
+	}
+
+	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get target VM status")
+	}
+
+	if strings.ToUpper(status) != "ACTIVE" {
+		return fmt.Errorf("target VM %s is in %s state", attachedServerID, status)
+	}
+
+	migobj.logMessage(fmt.Sprintf("Boot volume attached to active target VM %s", attachedServerID))
+	return nil
+}
+
 func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
@@ -2057,11 +2159,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+		if recoveryErr := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo); recoveryErr == nil {
+			migobj.logMessage(fmt.Sprintf("VM created despite CreateTargetInstance error (%v), skipping cleanup", err))
+		} else {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				// combine both errors
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "failed to create target instance")
 		}
-		return errors.Wrap(err, "failed to create target instance")
 	}
 
 	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
@@ -2073,7 +2179,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
-	err := migobj.DetachAllVolumes(ctx, vminfo)
+	err := migobj.DetachAllVolumesWithCleanup(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))
 	}
