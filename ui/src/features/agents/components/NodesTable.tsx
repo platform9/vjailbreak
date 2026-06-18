@@ -254,6 +254,7 @@ const NodesToolbar = ({
             onClick={onScaleUp}
             disabled={loading}
             sx={{ height: 40 }}
+            data-testid="scaleup-open-button"
           >
             Scale Up
           </Button>
