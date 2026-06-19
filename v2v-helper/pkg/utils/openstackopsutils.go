@@ -483,6 +483,18 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	return fmt.Errorf("failed to apply profile metadata to boot volume %s after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
 
+// isHTTPTimeoutError returns true when err is a network/HTTP timeout. Cinder
+// may have committed the change server-side and only the response was lost, so
+// callers should verify actual volume state rather than assuming failure.
+func isHTTPTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "Client.Timeout exceeded")
+}
+
 func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume *volumes.Volume) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Setting volume %s as bootable, authurl %s, tenant %s", volume.ID, osclient.AuthURL, osclient.Tenant))
 	options := volumes.BootableOpts{
@@ -495,10 +507,26 @@ func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume 
 			return nil
 		}
 		PrintLog(fmt.Sprintf("Transient error setting volume %s as bootable (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
-		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+
+		// On a timeout the Cinder API may have already committed the change but
+		// the HTTP response never reached us. Verify immediately so we don't
+		// retry an operation that already succeeded.
+		if isHTTPTimeoutError(err) {
+			current, getErr := osclient.GetVolume(ctx, volume.ID)
+			if getErr == nil && current.Bootable == "true" {
+				PrintLog(fmt.Sprintf("Volume %s is already bootable (Cinder applied the change but HTTP response timed out); treating as success", volume.ID))
+				return nil
+			}
+		}
+
+		time.Sleep(setBootableRetryInterval)
 	}
 	return fmt.Errorf("failed to set volume %s as bootable after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
+
+// setBootableRetryInterval is the delay between SetVolumeBootable retry
+// attempts. Exposed as a variable so tests can set it to zero.
+var setBootableRetryInterval = time.Duration(constants.DeleteOperationRetryIntervalSeconds) * time.Second
 
 func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Getting closest flavor for %d vCPUs and %d MB RAM, authurl %s, tenant %s", cpu, memory, osclient.AuthURL, osclient.Tenant))

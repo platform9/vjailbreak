@@ -1,8 +1,16 @@
 package utils
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 )
 
@@ -96,5 +104,178 @@ func TestBuildPortCreateOptions(t *testing.T) {
 				t.Fatalf("port_security_enabled present = %v, want %v. port=%v", hasPortSec, tt.wantPortSecurityKey, port)
 			}
 		})
+	}
+}
+
+func TestIsHTTPTimeoutError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"context deadline exceeded", fmt.Errorf("Post \"https://cinder/action\": context deadline exceeded"), true},
+		{"Client.Timeout exceeded", fmt.Errorf("Post \"https://cinder/action\": Client.Timeout exceeded while awaiting headers"), true},
+		{"generic 500 error", fmt.Errorf("Expected HTTP response code [200] when accessing [POST https://cinder/action], but got 500 instead"), false},
+		{"connection refused", fmt.Errorf("dial tcp: connection refused"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isHTTPTimeoutError(tt.err)
+			if got != tt.want {
+				t.Errorf("isHTTPTimeoutError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// newTestBlockStorageClient builds a gophercloud ServiceClient pointed at srv,
+// optionally applying a custom http.Client (pass nil for default).
+func newTestBlockStorageClient(srv *httptest.Server, httpClient *http.Client) *gophercloud.ServiceClient {
+	provider := &gophercloud.ProviderClient{
+		TokenID:   "test-token",
+		Throwaway: true,
+	}
+	if httpClient != nil {
+		provider.HTTPClient = *httpClient
+	}
+	return &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		ResourceBase:   srv.URL + "/",
+	}
+}
+
+func TestSetVolumeBootable_SuccessOnFirstTry(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/action") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	client := &OpenStackClients{BlockStorageClient: newTestBlockStorageClient(srv, nil)}
+	vol := &volumes.Volume{ID: "vol-001"}
+
+	if err := client.SetVolumeBootable(t.Context(), vol); err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+}
+
+// TestSetVolumeBootable_TimeoutThenAlreadyBootable reproduces issue #1872:
+// the HTTP client times out on SetBootable, but Cinder already committed the
+// change server-side. The function must detect bootable=true via GetVolume and
+// return nil instead of failing the migration.
+func TestSetVolumeBootable_TimeoutThenAlreadyBootable(t *testing.T) {
+	// POST /action: deliberate slow response so the client HTTP timeout fires.
+	// GET /volumes/{id}: fast response confirming the volume is already bootable.
+	const actionDelayMs = 100
+	const clientTimeoutMs = 10
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/action") {
+			// Sleep longer than the client timeout to force "Client.Timeout exceeded".
+			time.Sleep(actionDelayMs * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// GET /volumes/{id} — responds immediately with bootable=true.
+		if r.Method == http.MethodGet {
+			vol := map[string]any{
+				"volume": map[string]any{
+					"id":       "vol-timeout",
+					"bootable": "true",
+					"status":   "available",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(vol)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	// Tight client timeout so SetBootable triggers "Client.Timeout exceeded".
+	// GetVolume uses the same client but the server responds instantly for GET.
+	tightClient := &http.Client{Timeout: clientTimeoutMs * time.Millisecond}
+
+	orig := setBootableRetryInterval
+	setBootableRetryInterval = 0
+	defer func() { setBootableRetryInterval = orig }()
+
+	client := &OpenStackClients{BlockStorageClient: newTestBlockStorageClient(srv, tightClient)}
+	vol := &volumes.Volume{ID: "vol-timeout"}
+
+	if err := client.SetVolumeBootable(t.Context(), vol); err != nil {
+		t.Fatalf("expected success (volume already bootable), got: %v", err)
+	}
+}
+
+func TestSetVolumeBootable_NonTimeoutErrorReturnsError(t *testing.T) {
+	// Non-timeout errors (e.g. 403 Forbidden) must not trigger the GetVolume
+	// verification shortcut — they should exhaust retries and return an error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/action") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	orig := setBootableRetryInterval
+	setBootableRetryInterval = 0
+	defer func() { setBootableRetryInterval = orig }()
+
+	client := &OpenStackClients{BlockStorageClient: newTestBlockStorageClient(srv, nil)}
+	vol := &volumes.Volume{ID: "vol-forbidden"}
+
+	err := client.SetVolumeBootable(t.Context(), vol)
+	if err == nil {
+		t.Fatal("expected error for consistent 403 responses, got nil")
+	}
+}
+
+func TestSetVolumeBootable_TimeoutButNotBootableReturnsError(t *testing.T) {
+	// SetBootable times out AND GetVolume shows bootable=false — must return error.
+	const actionDelayMs = 100
+	const clientTimeoutMs = 10
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/action") {
+			time.Sleep(actionDelayMs * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodGet {
+			vol := map[string]any{
+				"volume": map[string]any{
+					"id":       "vol-notbooted",
+					"bootable": "false",
+					"status":   "available",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(vol)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	tightClient := &http.Client{Timeout: clientTimeoutMs * time.Millisecond}
+
+	orig := setBootableRetryInterval
+	setBootableRetryInterval = 0
+	defer func() { setBootableRetryInterval = orig }()
+
+	client := &OpenStackClients{BlockStorageClient: newTestBlockStorageClient(srv, tightClient)}
+	vol := &volumes.Volume{ID: "vol-notbooted"}
+
+	err := client.SetVolumeBootable(t.Context(), vol)
+	if err == nil {
+		t.Fatal("expected error when GetVolume confirms not bootable, got nil")
 	}
 }
