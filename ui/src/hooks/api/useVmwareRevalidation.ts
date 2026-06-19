@@ -1,12 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { revalidateCredentials } from 'src/api/helpers'
-import { useVmwareCredentialsQuery, VMWARE_CREDS_QUERY_KEY } from 'src/hooks/api/useVmwareCredentialsQuery'
+import {
+  useVmwareCredentialQuery,
+  vmwareCredQueryKey,
+} from 'src/hooks/api/useVmwareCredentialQuery'
+import { VMWARE_CREDS_QUERY_KEY } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { VMwareCreds } from 'src/api/vmware-creds/model'
 
 const REVALIDATION_TIMEOUT_MS = 31 * 60 * 1000
+const REVALIDATION_TIMEOUT_MINUTES = Math.floor(REVALIDATION_TIMEOUT_MS / (60 * 1000))
 
 const normalizeStatus = (status?: string) => {
   if (!status) return 'Unknown'
@@ -26,6 +31,9 @@ export function useVmwareRevalidation({
   const queryClient = useQueryClient()
   const [isRevalidating, setIsRevalidating] = useState(false)
   const [timedOutRevalidating, setTimedOutRevalidating] = useState(false)
+  // Refs keep refetchInterval closure current without stale captures
+  const isRevalidatingRef = useRef(false)
+  const timedOutRevalidatingRef = useRef(false)
   const revalidationStartDataUpdatedAtRef = useRef(0)
   const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -38,27 +46,33 @@ export function useVmwareRevalidation({
 
   const clearActiveRevalidation = useCallback(() => {
     clearRevalidationTimeout()
+    isRevalidatingRef.current = false
     setIsRevalidating(false)
   }, [clearRevalidationTimeout])
 
-  const { data: vmwareCreds, dataUpdatedAt } = useVmwareCredentialsQuery(undefined, {
-    enabled: !!vmwareCredName,
-    staleTime: 0,
-    refetchOnMount: false,
-    refetchInterval: (query) => {
-      const data = query.state.data as VMwareCreds[] | undefined
-      const targetCred = data?.find((cred) => cred.metadata.name === vmwareCredName)
-      const isBackendRevalidating =
-        !timedOutRevalidating &&
-        normalizeStatus(targetCred?.status?.vmwareValidationStatus) === 'Revalidating'
-      return isRevalidating || isBackendRevalidating ? 5000 : false
-    },
-  })
+  // Poll a single credential — no O(n) list scan on every 5s tick
+  const { data: vmwareCred, dataUpdatedAt } = useVmwareCredentialQuery(
+    vmwareCredName ?? '',
+    undefined,
+    {
+      enabled: !!vmwareCredName,
+      staleTime: 0,
+      refetchOnMount: false,
+      refetchInterval: (query) => {
+        const data = query.state.data as VMwareCreds | undefined
+        const isBackendRevalidating =
+          !timedOutRevalidatingRef.current &&
+          normalizeStatus(data?.status?.vmwareValidationStatus) === 'Revalidating'
+        return isRevalidatingRef.current || isBackendRevalidating ? 5000 : false
+      },
+    }
+  )
 
   const { mutate: revalidate, isPending: isRevalidationApiPending } = useMutation({
     mutationFn: revalidateCredentials,
     onSuccess: () => {
       setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: vmwareCredQueryKey(vmwareCredName ?? '') })
         queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
       }, 500)
     },
@@ -73,22 +87,25 @@ export function useVmwareRevalidation({
 
   useEffect(() => {
     if (!isRevalidating || !vmwareCredName) return
-    const targetCred = vmwareCreds?.find((cred) => cred.metadata.name === vmwareCredName)
     const hasFreshStatus = dataUpdatedAt > revalidationStartDataUpdatedAtRef.current
 
-    if (targetCred) {
-      const status = normalizeStatus(targetCred.status?.vmwareValidationStatus)
-      if (!isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating') {
+    if (vmwareCred) {
+      const status = normalizeStatus(vmwareCred.status?.vmwareValidationStatus)
+      const isRevalidationComplete =
+        !isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating'
+      if (isRevalidationComplete) {
         clearActiveRevalidation()
+        timedOutRevalidatingRef.current = false
         setTimedOutRevalidating(false)
         onRevalidationComplete?.()
       }
     } else {
       clearActiveRevalidation()
+      timedOutRevalidatingRef.current = false
       setTimedOutRevalidating(false)
     }
   }, [
-    vmwareCreds,
+    vmwareCred,
     dataUpdatedAt,
     isRevalidating,
     isRevalidationApiPending,
@@ -100,28 +117,34 @@ export function useVmwareRevalidation({
   useEffect(() => clearRevalidationTimeout, [clearRevalidationTimeout])
 
   const handleRefreshAndRevalidate = useCallback(() => {
-    if (!vmwareCredName) return
-    const cred = vmwareCreds?.find((c) => c.metadata.name === vmwareCredName)
-    const credNamespace = cred?.metadata?.namespace || VJAILBREAK_DEFAULT_NAMESPACE
+    if (!vmwareCredName || isRevalidating) return
+    const credNamespace = vmwareCred?.metadata?.namespace || VJAILBREAK_DEFAULT_NAMESPACE
 
     revalidationStartDataUpdatedAtRef.current = dataUpdatedAt
     clearRevalidationTimeout()
+    // Update refs before async work so refetchInterval closure sees current values immediately
+    timedOutRevalidatingRef.current = false
     setTimedOutRevalidating(false)
+    isRevalidatingRef.current = true
     setIsRevalidating(true)
 
     revalidationTimeoutRef.current = setTimeout(() => {
       revalidationTimeoutRef.current = null
+      // Update refs before invalidateQueries — fixes stale closure in refetchInterval
+      timedOutRevalidatingRef.current = true
+      isRevalidatingRef.current = false
       setTimedOutRevalidating(true)
       setIsRevalidating(false)
       reportError(
         new Error(
-          'VMware credential revalidation is still in progress after 31 minutes. You can retry.'
+          `VMware credential revalidation is still in progress after ${REVALIDATION_TIMEOUT_MINUTES} minutes. You can retry.`
         ),
         {
           context: 'vmware-revalidation-timeout',
           metadata: { credentialName: vmwareCredName },
         }
       )
+      queryClient.invalidateQueries({ queryKey: vmwareCredQueryKey(vmwareCredName) })
       queryClient.invalidateQueries({ queryKey: VMWARE_CREDS_QUERY_KEY })
     }, REVALIDATION_TIMEOUT_MS)
 
@@ -132,7 +155,8 @@ export function useVmwareRevalidation({
     })
   }, [
     vmwareCredName,
-    vmwareCreds,
+    isRevalidating,
+    vmwareCred,
     dataUpdatedAt,
     clearRevalidationTimeout,
     revalidate,
