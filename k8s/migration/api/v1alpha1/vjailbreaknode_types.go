@@ -50,6 +50,12 @@ type VjailbreakNodeSpec struct {
 	// If empty, the security groups will be determined from the master node
 	// +optional
 	OpenstackSecurityGroups []string `json:"openstackSecurityGroups,omitempty"`
+
+	// OpenstackServerGroup is the ID of the OpenStack server group used for VM placement scheduling.
+	// When set, the agent VM is placed according to the server group's policy.
+	// If empty, default OpenStack scheduling applies.
+	// +optional
+	OpenstackServerGroup string `json:"openstackServerGroup,omitempty"`
 }
 
 // VjailbreakNodeStatus defines the observed state of VjailbreakNode including

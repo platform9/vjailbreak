@@ -197,6 +197,14 @@ func GetMasterK8sNode(ctx context.Context, k3sclient client.Client) (*corev1.Nod
 	return masterNode, nil
 }
 
+// buildSchedulerHints returns scheduler hints with the given server group ID, or nil if empty.
+func buildSchedulerHints(serverGroupID string) servers.SchedulerHintOptsBuilder {
+	if serverGroupID == "" {
+		return nil
+	}
+	return servers.SchedulerHintOpts{Group: serverGroupID}
+}
+
 // CreateOpenstackVMForWorkerNode creates a new OpenStack VM for a worker node
 func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client, scope *scope.VjailbreakNodeScope) (string, error) {
 	vjNode := scope.VjailbreakNode
@@ -383,7 +391,11 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 	}
 
 	// Create the VM
-	server, err := servers.Create(ctx, openstackClients.ComputeClient, serverCreateOpts, nil).Extract()
+	schedulerHints := buildSchedulerHints(vjNode.Spec.OpenstackServerGroup)
+	if schedulerHints != nil {
+		log.Info("Applying server group scheduler hint", "serverGroupID", vjNode.Spec.OpenstackServerGroup)
+	}
+	server, err := servers.Create(ctx, openstackClients.ComputeClient, serverCreateOpts, schedulerHints).Extract()
 	if err != nil {
 		// Clean up any ports we created on failure
 		for _, portID := range createdPorts {

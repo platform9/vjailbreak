@@ -30,8 +30,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/image_builder/scripts/install.sh": {
-    "mtime": 1781673014.9658244,
-    "ast_hash": "c3652e97e671c3f92becdbdee5c3f5ee",
+    "mtime": 1781760910.728993,
+    "ast_hash": "2235ade32b5066e3901e3e9367f6fb35",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/image_builder/scripts/log_collector.sh": {
@@ -60,7 +60,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/cmd/main.go": {
-    "mtime": 1781673014.9661434,
+    "mtime": 1781760910.7297769,
     "ast_hash": "dc6170c7f4343cbea6b2de885abf47a9",
     "semantic_hash": ""
   },
@@ -90,7 +90,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/internal/controller/migrationplan_controller.go": {
-    "mtime": 1781671611.913104,
+    "mtime": 1781754849.6989284,
     "ast_hash": "c030c43094c7c8339515df17e9cdc75b",
     "semantic_hash": ""
   },
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/internal/controller/proxyvm_controller.go": {
-    "mtime": 1781671611.9134014,
-    "ast_hash": "c8f0c550f399080bfc86960fc0075dd7",
+    "mtime": 1781760910.731168,
+    "ast_hash": "510fdebd3243f0665a4b78d23822afe8",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/internal/controller/clustermigration_controller_test.go": {
@@ -235,13 +235,13 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/api/v1alpha1/proxyvm_types.go": {
-    "mtime": 1780169283.503681,
-    "ast_hash": "bd7dab568f1b21818358894302d27478",
+    "mtime": 1781760910.729232,
+    "ast_hash": "8ca76c9397ba91407b8fb78e53352278",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/api/v1alpha1/vjailbreaknode_types.go": {
-    "mtime": 1778556565.2671623,
-    "ast_hash": "e7812ed7fc365d45231a5630624cab66",
+    "mtime": 1781845172.0201283,
+    "ast_hash": "b0feb17c9deb8e05d5c70fea02eaf326",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/api/v1alpha1/migration_types.go": {
@@ -380,13 +380,13 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/pkg/utils/vjailbreaknodeutils_test.go": {
-    "mtime": 1779781971.9181736,
-    "ast_hash": "a493159cfec20f6f16e89837eac7f00a",
+    "mtime": 1781845172.0225127,
+    "ast_hash": "63df130ec4b1a62727f62d431fee4db1",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/pkg/utils/vjailbreaknodeutils.go": {
-    "mtime": 1781671611.9148269,
-    "ast_hash": "2f56c3686bcad47bfc50dd4a84be3879",
+    "mtime": 1781845172.0217733,
+    "ast_hash": "bc16e43e8b7f8c5270b0b99e314d1c89",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/pkg/utils/types.go": {
@@ -550,8 +550,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/openstack/openstackops.go": {
-    "mtime": 1778556565.4905431,
-    "ast_hash": "1d3c12914c8f522b9c6ef3b90f6c885f",
+    "mtime": 1781760910.8187943,
+    "ast_hash": "b792eab9e647a2eb6545b1ea4444758e",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/vcenter/vcenterops.go": {
@@ -565,8 +565,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/virtv2v/virtv2vops_test.go": {
-    "mtime": 1780169283.5213428,
-    "ast_hash": "a8edfd72689d1362fb0576ed5ec04fb6",
+    "mtime": 1781760910.827211,
+    "ast_hash": "869ff62fd32e6f419a20fc8c732ee8ad",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/virtv2v/esp_detection.go": {
@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/virtv2v/virtv2vops.go": {
-    "mtime": 1781157017.258913,
-    "ast_hash": "1c03706af0445d9fbf89c0f5616a3405",
+    "mtime": 1781760910.82484,
+    "ast_hash": "88ba7b2d158cec52a24a60c66309594e",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/reporter/reporter.go": {
@@ -620,8 +620,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/migrate/migrate_test.go": {
-    "mtime": 1779963573.1501257,
-    "ast_hash": "36e0a106b2f993c6022e1b10841930d0",
+    "mtime": 1781760910.7440917,
+    "ast_hash": "19d4c1c792c62697ad4006e4e5a6b456",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/migrate/hotadd_copy.go": {
@@ -630,8 +630,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/migrate/migrate.go": {
-    "mtime": 1781175424.6582227,
-    "ast_hash": "a9cc84a393fa43654be3536f4e4f3af9",
+    "mtime": 1781760910.7430859,
+    "ast_hash": "b0fb46476c58cf7315d95b29014f679e",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/migrate/vaai_copy.go": {
@@ -655,12 +655,12 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/pkg/utils/openstackopsutils.go": {
-    "mtime": 1781673014.991831,
-    "ast_hash": "c2cec8671861310f2b4fddc78470b0bb",
+    "mtime": 1781852961.408549,
+    "ast_hash": "d53609d1e50468423d911212165f94c9",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/pkg/utils/utils.go": {
-    "mtime": 1781673015.0022426,
+    "mtime": 1781760910.8218303,
     "ast_hash": "fd0826cb1f2a044a654790496d2f0cbe",
     "semantic_hash": ""
   },
@@ -700,7 +700,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/.claude/settings.json": {
-    "mtime": 1781673014.771332,
+    "mtime": 1781760910.6453373,
     "ast_hash": "62b272b2446d1152846d60c9671260e4",
     "semantic_hash": ""
   },
@@ -725,7 +725,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/scripts/generate-mount-persistence.sh": {
-    "mtime": 1781673014.9749968,
+    "mtime": 1781760910.7393997,
     "ast_hash": "06fef472d20a6d16631b97c5441e86ef",
     "semantic_hash": ""
   },
@@ -790,7 +790,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/.specify/feature.json": {
-    "mtime": 1781671611.876775,
+    "mtime": 1781754849.6675463,
     "ast_hash": "ed8f80d0e2675c28beeaaee93cf430d6",
     "semantic_hash": ""
   },
@@ -915,13 +915,13 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/version.go": {
-    "mtime": 1781673014.9724004,
+    "mtime": 1781760910.7379456,
     "ast_hash": "f1f1c6f6a5cc1c131bbf2dc77353dcf9",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/server.go": {
-    "mtime": 1780556133.2803981,
-    "ast_hash": "fc49f7746a6d9ca166cda7db2b2b13ae",
+    "mtime": 1781760910.737528,
+    "ast_hash": "c6b3ab08f2b9686e922564af7c8f460c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/vddk_upload.go": {
@@ -930,7 +930,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/vjailbreak_proxy.go": {
-    "mtime": 1781673014.972677,
+    "mtime": 1781760910.7382092,
     "ast_hash": "d9ee0938c6df2c2ed4ff0f52ca02ffac",
     "semantic_hash": ""
   },
@@ -940,8 +940,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/k8s_proxy_handler.go": {
-    "mtime": 1779781971.9209635,
-    "ast_hash": "35a5d24fc639bf5871b133e18d90e76b",
+    "mtime": 1781760910.737032,
+    "ast_hash": "ba21cc923eca713fba413ef9307474b4",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/storage.go": {
@@ -970,7 +970,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/cli/serve.go": {
-    "mtime": 1781673014.9706426,
+    "mtime": 1781760910.735341,
     "ast_hash": "db770b4e648c31a957a1d930a28e6861",
     "semantic_hash": ""
   },
@@ -3060,7 +3060,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/api/proto/v1/service/api.pb.gw.go": {
-    "mtime": 1781673014.969386,
+    "mtime": 1781760910.7348354,
     "ast_hash": "0f7028b5e5a2b431bf949f178f6dd6d8",
     "semantic_hash": ""
   },
@@ -3100,8 +3100,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/common/constants/constants.go": {
-    "mtime": 1781671611.9154482,
-    "ast_hash": "b31551643c188cd7cfdf0d3a34d896cc",
+    "mtime": 1781760910.7328546,
+    "ast_hash": "2744545ccd2f81480b3311bf95c30f8d",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/common/utils/hosts_test.go": {
@@ -3135,12 +3135,12 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/common/timesettings/timesettings.go": {
-    "mtime": 1781673014.9678729,
+    "mtime": 1781760910.7336297,
     "ast_hash": "5b84d9b011593e284a2db1dd2119a320",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/common/timesettings/timesettings_test.go": {
-    "mtime": 1781673014.9679668,
+    "mtime": 1781760910.7337253,
     "ast_hash": "339e5abac81b7cb93237f2397625c7fa",
     "semantic_hash": ""
   },
@@ -3170,7 +3170,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/CLAUDE.md": {
-    "mtime": 1781673014.7724633,
+    "mtime": 1781760910.6458287,
     "ast_hash": "d719924eeec44d1f629a19986b774958",
     "semantic_hash": ""
   },
@@ -3185,7 +3185,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/image_builder/cronjob/version-checker.yaml": {
-    "mtime": 1781673014.9652052,
+    "mtime": 1781760910.7287357,
     "ast_hash": "844df3a9ca63268cea63dac38ba90e8d",
     "semantic_hash": ""
   },
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/image_builder/configs/vjailbreak-settings.yaml": {
-    "mtime": 1781674663.6549459,
-    "ast_hash": "6abd7944b5dc1a0c132abdfce16125ac",
+    "mtime": 1781760910.728529,
+    "ast_hash": "5426213a46bd60d80e7778deb99e9847",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/image_builder/configs/analytics-keys.yaml": {
@@ -3210,32 +3210,32 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/tasks.md": {
-    "mtime": 1781673014.9760659,
+    "mtime": 1781760910.7401924,
     "ast_hash": "127308654da73124db12ab8f4f54822f",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/research.md": {
-    "mtime": 1781673014.975714,
+    "mtime": 1781760910.7399573,
     "ast_hash": "e6d5b595f8ae0bbba86d6d783de0cee7",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/data-model.md": {
-    "mtime": 1781673014.9754202,
+    "mtime": 1781760910.7397237,
     "ast_hash": "6bb9466c639a6cc0cb97a9b441b50942",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/plan.md": {
-    "mtime": 1781673014.9755807,
+    "mtime": 1781760910.739839,
     "ast_hash": "02397f08aafba8e150ac067905838d37",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/spec.md": {
-    "mtime": 1781673014.9758832,
+    "mtime": 1781760910.7400846,
     "ast_hash": "2549e3267f7f70fb39549538f41d9a76",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/specs/004-ntp-timezone-config/checklists/requirements.md": {
-    "mtime": 1781673014.9752884,
+    "mtime": 1781760910.7395978,
     "ast_hash": "8df6f4e137cc9f8aaec649cb4da3d62a",
     "semantic_hash": ""
   },
@@ -3310,7 +3310,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/05controller-deployment.yaml": {
-    "mtime": 1781673014.7730212,
+    "mtime": 1781857766.480492,
     "ast_hash": "4958f2c242d98fc181ba0ed022fe0fbe",
     "semantic_hash": ""
   },
@@ -3325,8 +3325,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/installer.yaml": {
-    "mtime": 1781673014.7740793,
-    "ast_hash": "1670541729a23298287abee63118149c",
+    "mtime": 1781857766.3729277,
+    "ast_hash": "c17deb083747b821d88406b3965e7f1c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/04migrationplan.yaml": {
@@ -3335,12 +3335,12 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/04ui.yaml": {
-    "mtime": 1781673014.772779,
+    "mtime": 1781760910.6465526,
     "ast_hash": "d54c754edb512d29bd6d7d358bd7d926",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/06vpwned-deployment.yaml": {
-    "mtime": 1781673014.7732337,
+    "mtime": 1781857766.5205536,
     "ast_hash": "4928810eefdb14b286b5c7fb26aeaaf5",
     "semantic_hash": ""
   },
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/00crds.yaml": {
-    "mtime": 1781672876.9329224,
-    "ast_hash": "c9ae14db0185ffbc9830550becf7fab2",
+    "mtime": 1781857766.4333453,
+    "ast_hash": "cbdbfdd2ec104b2d8f5510c6bde6429c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/01openstackcreds.yaml": {
@@ -3370,7 +3370,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/deploy/07ui-deployment.yaml": {
-    "mtime": 1781673014.7734373,
+    "mtime": 1781857766.563832,
     "ast_hash": "e2ea31d8c15a51c62f71a431e4e123a4",
     "semantic_hash": ""
   },
@@ -3905,7 +3905,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/rbac/role.yaml": {
-    "mtime": 1781672874.3424878,
+    "mtime": 1781857763.687143,
     "ast_hash": "b32981280259721798f38ce2e5438e3a",
     "semantic_hash": ""
   },
@@ -4080,12 +4080,12 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/addons/k8s.svc.yaml": {
-    "mtime": 1781673014.9665158,
+    "mtime": 1781760910.729983,
     "ast_hash": "0af66ad93cb322616674cb00312c990c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/addons/kustomization.yaml": {
-    "mtime": 1781672876.615192,
+    "mtime": 1781857766.0894163,
     "ast_hash": "348e7aaa75a4a09fe2f441f0470cc511",
     "semantic_hash": ""
   },
@@ -4100,117 +4100,117 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_rollingmigrationplans.yaml": {
-    "mtime": 1781672874.6085923,
+    "mtime": 1781857763.8550997,
     "ast_hash": "3700b16634d9e18b8efe9e405a26e0aa",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrationplans.yaml": {
-    "mtime": 1781672874.5506277,
+    "mtime": 1781857763.8386579,
     "ast_hash": "1ff61b359a5a6be2c77c4832e0d3ed29",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_clustermigrations.yaml": {
-    "mtime": 1781672874.5124035,
+    "mtime": 1781857763.8318858,
     "ast_hash": "b703489ec168a2d51e0d0a7ffd27b8d3",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_networkmappings.yaml": {
-    "mtime": 1781672874.5669136,
+    "mtime": 1781857763.84135,
     "ast_hash": "2e017ff73b3071e819dc50f27bce7c13",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_esxisshcreds.yaml": {
-    "mtime": 1781672874.5317361,
+    "mtime": 1781857763.8351753,
     "ast_hash": "cfc1c923810570621643034c59749aa5",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwarecreds.yaml": {
-    "mtime": 1781672874.6328392,
+    "mtime": 1781857763.8597035,
     "ast_hash": "4bd2abf3f0e8eee320c9f7fb5b88c83f",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrations.yaml": {
-    "mtime": 1781672874.5401933,
+    "mtime": 1781857763.836986,
     "ast_hash": "f49e3a94582174ad80d2b99f1d67cf90",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_migrationtemplates.yaml": {
-    "mtime": 1781672874.5588365,
+    "mtime": 1781857763.8402271,
     "ast_hash": "6c7a1492b4da016cc9fa1e938c494593",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_bmconfigs.yaml": {
-    "mtime": 1781672874.5034173,
+    "mtime": 1781857763.8302677,
     "ast_hash": "6f58073453ee91a43273ae067bb41fce",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwareclusters.yaml": {
-    "mtime": 1781672874.6239703,
+    "mtime": 1781857763.858499,
     "ast_hash": "9bb05b646372c28a81558c7870f1fa3f",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_rdmdisks.yaml": {
-    "mtime": 1781672874.6004448,
+    "mtime": 1781857763.8525887,
     "ast_hash": "752cbc3c4a05b56222c17aaa703bbc8c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_esximigrations.yaml": {
-    "mtime": 1781672874.5222325,
+    "mtime": 1781857763.8335428,
     "ast_hash": "8eb05afb799f0c6dc4fa67633cfd9d96",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_storagemappings.yaml": {
-    "mtime": 1781672874.618097,
+    "mtime": 1781857763.8572783,
     "ast_hash": "4b79c3a90d612e848220ea74f28c30db",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_pcdhosts.yaml": {
-    "mtime": 1781672874.5873115,
+    "mtime": 1781857763.8483212,
     "ast_hash": "d2bc8e4c7fa18a9af32f98a9fc3a9035",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_pcdclusters.yaml": {
-    "mtime": 1781672874.5814455,
+    "mtime": 1781857763.846454,
     "ast_hash": "46a6370fca8de4ecd53c672fdc763a2c",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_openstackcreds.yaml": {
-    "mtime": 1781672874.5758612,
+    "mtime": 1781857763.8443816,
     "ast_hash": "9194656da423ed488262147bafcb55b3",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vjailbreaknodes.yaml": {
-    "mtime": 1781672874.6577854,
-    "ast_hash": "08af26f0c6f88e6e110d4c3b7284f9de",
+    "mtime": 1781857763.8655145,
+    "ast_hash": "3c4d381b3bdcbc614156b1bb0f000637",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_volumeimageprofiles.yaml": {
-    "mtime": 1781672874.665327,
+    "mtime": 1781857763.8677728,
     "ast_hash": "f67713091e6a26b256477f98fa8afcc5",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwaremachines.yaml": {
-    "mtime": 1781672874.6495848,
+    "mtime": 1781857763.8635044,
     "ast_hash": "de5125abc2028642131bd90a856e522f",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_proxyvms.yaml": {
-    "mtime": 1781672874.5945022,
-    "ast_hash": "6dd77837deab380f375390960903b5f7",
+    "mtime": 1781857763.8505504,
+    "ast_hash": "1d2eb5b505d11d5f0d81ba15c3961a01",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_vmwarehosts.yaml": {
-    "mtime": 1781672874.6414514,
+    "mtime": 1781857763.8609207,
     "ast_hash": "53df19f968c2bf691cddc50a1070f3fe",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_arraycreds.yaml": {
-    "mtime": 1781672874.4841287,
+    "mtime": 1781857763.826753,
     "ast_hash": "db3a84900edc7604179c66dac9c2885a",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/crd/bases/vjailbreak.k8s.pf9.io_arraycredsmappings.yaml": {
-    "mtime": 1781672874.4932432,
+    "mtime": 1781857763.828623,
     "ast_hash": "ac6a58529799e44faec64d1e5c58480d",
     "semantic_hash": ""
   },
@@ -4365,12 +4365,12 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/manager/kustomization.yaml": {
-    "mtime": 1781672876.5804985,
+    "mtime": 1781857766.0546083,
     "ast_hash": "5fb4cbd4e8d6c225264dc1f1742b359d",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/config/manager/manager.yaml": {
-    "mtime": 1781673014.967035,
+    "mtime": 1781760910.7308033,
     "ast_hash": "ce20f37e44c57583e3f988af12356c9d",
     "semantic_hash": ""
   },
@@ -4665,7 +4665,7 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/pkg/vpwned/deploy/k8s.svc.yaml": {
-    "mtime": 1781673014.9708521,
+    "mtime": 1781760910.735545,
     "ast_hash": "68f7990ad6f906feb22cc475a5064f97",
     "semantic_hash": ""
   },
@@ -7410,13 +7410,38 @@
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/k8s/migration/pkg/utils/rollingmigrationutils_test.go": {
-    "mtime": 1781671611.9136412,
+    "mtime": 1781754849.6997511,
     "ast_hash": "5f870907195686639b92650cc0628c45",
     "semantic_hash": ""
   },
   "/Users/sarikagautam/vjailbreak/v2v-helper/pkg/utils/openstackopsutils_test.go": {
-    "mtime": 1781673015.001403,
+    "mtime": 1781852961.4114716,
     "ast_hash": "5f9257b37cde85a445ec2f328c9b570f",
+    "semantic_hash": ""
+  },
+  "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/ova_deploy.go": {
+    "mtime": 1781760910.7371976,
+    "ast_hash": "cf91f1e3e67ec5e91ace2f95ec82877b",
+    "semantic_hash": ""
+  },
+  "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/ssh_keypair_handler.go": {
+    "mtime": 1781760910.7376218,
+    "ast_hash": "4c29d002773cb509f87823da9f2e8e78",
+    "semantic_hash": ""
+  },
+  "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/vcenter_resources_handler.go": {
+    "mtime": 1781760910.737707,
+    "ast_hash": "1468ec3f955b0b9095c609d86ccbe4bc",
+    "semantic_hash": ""
+  },
+  "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/ova_prefetch.go": {
+    "mtime": 1781760910.7373052,
+    "ast_hash": "21e6561aca2fdfa837d7ced31d8aa9ef",
+    "semantic_hash": ""
+  },
+  "/Users/sarikagautam/vjailbreak/pkg/vpwned/server/create_proxy_vm_handler.go": {
+    "mtime": 1781760910.736667,
+    "ast_hash": "539b1008ce37e629a703103685d1a7db",
     "semantic_hash": ""
   }
 }

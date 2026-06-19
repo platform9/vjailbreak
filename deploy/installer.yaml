@@ -2853,6 +2853,12 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackServerGroup:
+                description: |-
+                  OpenstackServerGroup is the ID of the OpenStack server group used for VM placement scheduling.
+                  When set, the agent VM is placed according to the server group's policy.
+                  If empty, default OpenStack scheduling applies.
+                type: string
               openstackVolumeType:
                 description: |-
                   OpenstackVolumeType is the volume type for the root disk of the VM
