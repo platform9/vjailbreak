@@ -4,6 +4,9 @@
  * Covers: clicking refresh triggers VMware credential revalidation (same API as
  * credentials page), spinner + disabled state during revalidation, VM list
  * refetch on success, and re-enable on error.
+ *
+ * NOTE: useVmwareRevalidation polls GET .../vmwarecreds/{name} (single credential)
+ * not the full list — all polling mocks target the by-name endpoint accordingly.
  */
 
 const namespace = 'migration-system'
@@ -82,10 +85,12 @@ const vmList = {
 /** Set up all the baseline API mocks required to open the migration form and
  *  reach the VM selection step with both creds validated. */
 function setupBaseMocks() {
+  // List endpoint — used by credential selectors and CredentialsTable
   cy.intercept('GET', `**/namespaces/${namespace}/vmwarecreds`, {
     body: { items: [vmwareCred] },
   }).as('getVmwareCreds')
 
+  // Single-credential endpoint — used by useVmwareCredentialQuery for polling
   cy.intercept('GET', `**/namespaces/${namespace}/vmwarecreds/${vmwareCredName}`, {
     body: vmwareCred,
   }).as('getVmwareCredByName')
@@ -175,15 +180,15 @@ describe('VM Selection Step — Refresh & Revalidate', () => {
   })
 
   it('refresh button spins and is disabled while revalidation is in progress', () => {
-    // Revalidate succeeds but poll initially returns Revalidating
     cy.intercept('POST', '**/revalidate_credentials', {
       statusCode: 200,
       body: {},
     }).as('revalidate')
 
-    // First poll returns Revalidating; keeps spinner alive
-    cy.intercept('GET', `**/namespaces/${namespace}/vmwarecreds`, {
-      body: { items: [vmwareCredRevalidating] },
+    // Override the single-credential endpoint to return Revalidating status.
+    // useVmwareRevalidation polls GET .../vmwarecreds/{name} — NOT the list.
+    cy.intercept('GET', `**/namespaces/${namespace}/vmwarecreds/${vmwareCredName}`, {
+      body: vmwareCredRevalidating,
     }).as('pollRevalidating')
 
     openFormAndSelectClusters()
@@ -207,15 +212,15 @@ describe('VM Selection Step — Refresh & Revalidate', () => {
       body: {},
     }).as('revalidate')
 
-    // Poll immediately returns Succeeded so the hook considers revalidation done
-    cy.intercept('GET', `**/namespaces/${namespace}/vmwarecreds`, {
-      body: { items: [vmwareCred] },
-    }).as('pollSucceeded')
+    // The single-credential endpoint (from setupBaseMocks getVmwareCredByName)
+    // already returns Succeeded — the hook sees completion when dataUpdatedAt
+    // advances after invalidateQueries triggers a fresh fetch.
 
-    // Track vmwaremachines refetch separately
+    // Track vmwaremachines fetches; reply with vmList so the component renders
     let machinesFetchCount = 0
-    cy.intercept('GET', `**/namespaces/${namespace}/vmwaremachines**`, () => {
+    cy.intercept('GET', `**/namespaces/${namespace}/vmwaremachines**`, (req) => {
       machinesFetchCount++
+      req.reply({ body: vmList })
     }).as('vmMachinesRefetch')
 
     openFormAndSelectClusters()
