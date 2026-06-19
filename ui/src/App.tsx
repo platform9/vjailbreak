@@ -23,6 +23,7 @@ import { MigrationFormContext } from './features/migration/context/MigrationForm
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'
+import MigrationDetailPage from './features/migration/pages/MigrationDetailPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -428,6 +429,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardIndexRedirect />} />
               <Route path="migrations" element={<MigrationsPage />} />
+              <Route path="migrations/:migrationName" element={<MigrationDetailPage />} />
               <Route path="agents" element={<AgentsPage />} />
               <Route
                 path="credentials"

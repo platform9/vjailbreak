@@ -5,9 +5,11 @@ import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import ListAltIcon from '@mui/icons-material/ListAlt'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { LogsDrawer } from '.'
 import { Migration, Phase } from '../api/migrations'
 import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
@@ -124,6 +126,7 @@ export default function MigrationsTable({
   loading = false
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
+  const navigate = useNavigate()
 
   const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
     staleTime: 0,
@@ -393,12 +396,20 @@ export default function MigrationsTable({
           const currentDisk = params.row?.status?.currentDisk
           const totalDisks = params.row?.status?.totalDisks
           const syncWarningMessage = params.row?.status?.syncWarningMessage
+          const migrationName = params.row?.metadata?.name
           return conditions ? (
-            <MigrationProgress
-              phase={phase}
-              progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
-              syncWarningMessage={syncWarningMessage}
-            />
+            <Box
+              sx={{ cursor: 'pointer', width: '100%' }}
+              onClick={() => {
+                if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
+              }}
+            >
+              <MigrationProgress
+                phase={phase}
+                progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+                syncWarningMessage={syncWarningMessage}
+              />
+            </Box>
           ) : null
         }
       },
@@ -429,6 +440,18 @@ export default function MigrationsTable({
 
           return (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Tooltip title="View migration details">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    params.row.setSelectedMigrationDetail?.(params.row)
+                    params.row.setMigrationDetailModalOpen?.(true)
+                  }}
+                  size="small"
+                >
+                  <OpenInNewIcon />
+                </IconButton>
+              </Tooltip>
               {params.row.spec?.podRef && (
                 <Tooltip title="View pod logs">
                   <IconButton
