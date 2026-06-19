@@ -20,6 +20,7 @@ import { useToast } from './useToast'
 import { useStandardColumns } from './useStandardColumns'
 import { useRollingColumns } from './useRollingColumns'
 import { fromVmDataWithFlavor, fromVM, normalizeNetworkInterfaces } from '../utils/vmAdapters'
+import { useVmwareRevalidation } from 'src/hooks/api/useVmwareRevalidation'
 
 const { useCallback, useEffect, useMemo, useState } = React
 
@@ -182,6 +183,15 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     vmwareCredName,
     clusterName,
     datacenterName,
+  })
+
+  // --- Standard: VMware revalidation + refresh ---
+  const {
+    isRevalidating,
+    handleRefreshAndRevalidate,
+  } = useVmwareRevalidation({
+    vmwareCredName,
+    onRevalidationComplete: refreshVMList,
   })
 
   // --- Standard: flavor assignment ---
@@ -466,6 +476,8 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     isRowSelectable,
     rowSelectionModelArray,
     refreshVMList,
+    isRevalidating,
+    handleRefreshAndRevalidate,
     // RDM
     rdmDisks,
     rdmDisksLoading,
