@@ -173,6 +173,35 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
     })
   })
 
+  test('both action buttons are disabled while prefill data is loading', async ({ page }) => {
+    // Delay the migration fetch so we can observe query.isLoading → buttons disabled.
+    let resolveMigration!: () => void
+    await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
+    await page.route(API.migrationByName(MOCK_RETRY_MIGRATION_NAME), async (route) => {
+      await new Promise<void>((r) => { resolveMigration = r })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_MIGRATION_FAILED_RETRYABLE),
+      })
+    })
+
+    await goToMigrations(page)
+    const row = page.getByRole('row').filter({ hasText: 'test-vm-retry' })
+    await row.locator('[data-testid="ReplayIcon"]').click()
+    await expectDrawerOpen(page)
+
+    // While query is loading both action buttons must be disabled.
+    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeDisabled()
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
+
+    // Unblock the fetch — form should populate and buttons become enabled.
+    resolveMigration()
+    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeEnabled({
+      timeout: 10_000,
+    })
+  })
+
   test('cancel closes the drawer without any write', async ({ page }) => {
     const writes: string[] = []
     await page.route('**/apis/vjailbreak.k8s.pf9.io/**', (route) => {
@@ -247,6 +276,46 @@ test.describe('RET-002 — retry without editing', () => {
     expect(migrationCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1)
     const writeOrder = order.filter((o) => !o.startsWith('GET'))
     expect(writeOrder).toEqual(['PATCH plan', 'DELETE migration'])
+  })
+
+  test('both buttons are disabled while retry-without-edit mutation is pending', async ({
+    page,
+  }) => {
+    // Hold the plan PATCH so mutation.isPending stays true long enough to assert.
+    let resolvePatch!: () => void
+    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
+    await page.route(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME), async (route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN),
+        })
+      } else if (method === 'PATCH') {
+        await new Promise<void>((r) => { resolvePatch = r })
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN),
+        })
+      } else {
+        route.continue()
+      }
+    })
+
+    await openRetryDrawer(page)
+    const retryBtn = page.getByTestId('migration-form-retry-without-edit')
+    await expect(retryBtn).toBeEnabled({ timeout: 10_000 })
+    await retryBtn.click()
+
+    // While mutation isPending, both action buttons must be disabled.
+    await expect(retryBtn).toBeDisabled()
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
+
+    // Unblock so the mutation can settle and the drawer close.
+    resolvePatch()
+    await expectDrawerClosed(page)
   })
 })
 
@@ -800,9 +869,12 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     })
     await page.getByTestId('migration-form-edit-and-retry').click()
 
-    // Drawer stays open on error; error message shown.
+    // Drawer stays open on error; error message shown with the prefix from useRetrySubmit.
     await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
     await expect(page.getByTestId('retry-error-message')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('retry-error-message')).toContainText(
+      'Failed to apply edits and retry',
+    )
 
     // Clone plan was created then rolled back.
     expect(order).toContain('POST clone-plan')

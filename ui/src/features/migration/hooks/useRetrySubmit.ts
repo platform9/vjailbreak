@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react'
-import { QueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useMutation, QueryClient } from '@tanstack/react-query'
 import { NavigateFunction } from 'react-router-dom'
 import { deleteMigration } from 'src/api/migrations/migrations'
 import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
@@ -85,9 +85,6 @@ export function useRetrySubmit({
   onSuccess,
   reportError
 }: UseRetrySubmitParams): UseRetrySubmitResult {
-  const [retrySubmitting, setRetrySubmitting] = useState(false)
-  const [retryError, setRetryError] = useState<string | null>(null)
-
   const finishRetry = useCallback(
     (message: string) => {
       queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
@@ -104,21 +101,6 @@ export function useRetrySubmit({
     await requestMigrationPlanRetry(planName, retryConfig.namespace)
     await deleteMigration(retryConfig.migrationName, retryConfig.namespace)
   }, [retryConfig, retryPlan])
-
-  const handleRetryWithoutEdit = useCallback(async () => {
-    setRetrySubmitting(true)
-    setRetryError(null)
-    try {
-      await triggerRetry()
-      finishRetry(`Retry started for ${retryConfig?.vmName}`)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setRetryError(`Failed to start retry: ${message}`)
-      reportError(err as Error, { context: 'retry-without-edit' })
-    } finally {
-      setRetrySubmitting(false)
-    }
-  }, [triggerRetry, finishRetry, retryConfig, reportError])
 
   const buildPlanPatchSpec = useCallback(() => {
     const timeWindow =
@@ -197,9 +179,8 @@ export function useRetrySubmit({
         : null,
       // Send overrides when present; null explicitly clears any existing overrides
       // that the user removed (merge-patch omit would silently keep stale values).
-      networkOverridesPerVM: Object.keys(networkOverridesPerVM).length > 0
-        ? networkOverridesPerVM
-        : null,
+      networkOverridesPerVM:
+        Object.keys(networkOverridesPerVM).length > 0 ? networkOverridesPerVM : null,
       advancedOptions: {
         periodicSyncEnabled: Boolean(selectedMigrationOptions.periodicSyncEnabled),
         periodicSyncInterval: params.periodicSyncInterval || null,
@@ -225,8 +206,7 @@ export function useRetrySubmit({
       storageCopyMethod: params.storageCopyMethod || 'normal',
       useGPUFlavor: params.useGPU || false,
       useFlavorless: Boolean(selectedMigrationOptions.useFlavorless),
-      targetPCDClusterName:
-        selectedPcdClusterName || retryTemplate?.spec?.targetPCDClusterName || ''
+      targetPCDClusterName: selectedPcdClusterName || retryTemplate?.spec?.targetPCDClusterName || ''
     }
 
     if (networkMappingRequired && params.networkMappings?.length) {
@@ -255,7 +235,11 @@ export function useRetrySubmit({
 
     // 4. Per-VM flavor override.
     if (vmK8sName && selectedFlavorId && selectedFlavorId !== (retryVm?.targetFlavorId || '')) {
-      await patchVMwareMachine(vmK8sName, { spec: { targetFlavorId: selectedFlavorId } }, namespace)
+      await patchVMwareMachine(
+        vmK8sName,
+        { spec: { targetFlavorId: selectedFlavorId } },
+        namespace
+      )
     }
 
     // 5. Trigger the retry only after every edit is persisted.
@@ -318,8 +302,7 @@ export function useRetrySubmit({
       storageCopyMethod: params.storageCopyMethod || 'normal',
       useGPUFlavor: params.useGPU || false,
       useFlavorless: Boolean(selectedMigrationOptions.useFlavorless),
-      targetPCDClusterName:
-        selectedPcdClusterName || originalTemplateSpec.targetPCDClusterName || '',
+      targetPCDClusterName: selectedPcdClusterName || originalTemplateSpec.targetPCDClusterName || '',
       ...(params.storageCopyMethod === 'HotAdd' && params.proxyVMRef
         ? { proxyVMRef: { name: params.proxyVMRef } }
         : {})
@@ -388,7 +371,11 @@ export function useRetrySubmit({
 
     // 6. Per-VM flavor override.
     if (vmK8sName && selectedFlavorId && selectedFlavorId !== (retryVm?.targetFlavorId || '')) {
-      await patchVMwareMachine(vmK8sName, { spec: { targetFlavorId: selectedFlavorId } }, namespace)
+      await patchVMwareMachine(
+        vmK8sName,
+        { spec: { targetFlavorId: selectedFlavorId } },
+        namespace
+      )
     }
 
     // 7. DELETE the failed Migration last so the controller cannot recreate it under
@@ -408,37 +395,46 @@ export function useRetrySubmit({
     buildPlanPatchSpec
   ])
 
-  const handleEditAndRetry = useCallback(async () => {
-    if (!retryConfig || !retryTemplate) return
-    setRetrySubmitting(true)
-    setRetryError(null)
-    try {
+  const retryWithoutEditMutation = useMutation({
+    mutationFn: triggerRetry,
+    onSuccess: () => finishRetry(`Retry started for ${retryConfig?.vmName}`),
+    onError: (err: Error) => reportError(err, { context: 'retry-without-edit' })
+  })
+
+  const editAndRetryMutation = useMutation({
+    mutationFn: async () => {
+      if (!retryConfig || !retryTemplate) return
       const isMultiVMPlan = (retryPlan?.spec?.virtualMachines?.flat()?.length ?? 0) > 1
       if (isMultiVMPlan) {
         await cloneAndRetry()
       } else {
         await patchInPlace()
       }
-      finishRetry(`Configuration updated, retry started for ${retryConfig.vmName}`)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setRetryError(`Failed to apply edits and retry: ${message}`)
-      reportError(err as Error, {
+    },
+    onSuccess: () =>
+      finishRetry(`Configuration updated, retry started for ${retryConfig?.vmName}`),
+    onError: (err: Error) =>
+      reportError(err, {
         context: 'edit-and-retry',
         metadata: { plan: retryPlan?.metadata?.name, template: retryTemplate?.metadata?.name }
       })
-    } finally {
-      setRetrySubmitting(false)
-    }
-  }, [
-    retryConfig,
-    retryTemplate,
-    retryPlan,
-    patchInPlace,
-    cloneAndRetry,
-    finishRetry,
-    reportError
-  ])
+  })
 
-  return { retrySubmitting, retryError, handleRetryWithoutEdit, handleEditAndRetry }
+  const retrySubmitting =
+    retryWithoutEditMutation.isPending || editAndRetryMutation.isPending
+
+  const retryError =
+    (retryWithoutEditMutation.error
+      ? `Failed to start retry: ${retryWithoutEditMutation.error.message}`
+      : null) ??
+    (editAndRetryMutation.error
+      ? `Failed to apply edits and retry: ${editAndRetryMutation.error.message}`
+      : null)
+
+  return {
+    retrySubmitting,
+    retryError,
+    handleRetryWithoutEdit: () => retryWithoutEditMutation.mutateAsync(),
+    handleEditAndRetry: () => editAndRetryMutation.mutateAsync()
+  }
 }
