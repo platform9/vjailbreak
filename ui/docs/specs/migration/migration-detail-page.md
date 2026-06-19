@@ -4,6 +4,7 @@
 **Entry file**: `src/features/migration/pages/MigrationDetailPage.tsx`  
 **Feature branch**: `private/main/sarika/ui-fixes`  
 **Created**: 2026-06-12  
+**Last updated**: 2026-06-19  
 **Status**: Implemented, visual-QA complete
 
 ---
@@ -16,7 +17,9 @@ Full-page view for a single `Migration` CRD. Shows live status, phase progress, 
 
 ## Route & Navigation
 
-- Linked from `MigrationsTable` — clicking migration name navigates to `/dashboard/migrations/<name>`.
+- Linked from `MigrationsTable` via **two** click targets:
+  - Clicking the migration **name** (Name column) → navigates to `/dashboard/migrations/<name>`
+  - Clicking the migration **progress bar** (Progress column) → same navigation
 - `MigrationDetailHeader` renders a breadcrumb "Migrations > \<vmName\>" with the "Migrations" link navigating back.
 - URL param: `migrationName` (k8s resource name, e.g. `migration-centos7-succeeded`).
 
@@ -26,8 +29,8 @@ Full-page view for a single `Migration` CRD. Shows live status, phase progress, 
 
 ```
 MigrationDetailPage
-├─ MigrationDetailHeader          # breadcrumb, title, phase chip, action buttons
-├─ MigrationKpiStrip              # 6 KPI cells: Started, Elapsed, Remaining, Source, Destination, Agent
+├─ MigrationDetailHeader          # breadcrumb, title, phase chip, action buttons, subtitle
+├─ MigrationKpiStrip              # 6 KPI cells: Started, Total Elapsed, Remaining, Source, Destination, Agent
 ├─ MigrationNextActionBanner      # phase-contextual Alert (info/warning/success/error)
 ├─ Tabs: Overview | Debug logs | Events (disabled) | Resources (disabled)
 └─ [overview tab]
@@ -65,12 +68,14 @@ useMigrationDetailQuery(migrationName: string, namespace?: string): UseQueryResu
 **File**: `src/hooks/api/useMigrationDetailResourcesQuery.ts`
 
 Fetches related resources referenced by the migration:
-- `vmwareCreds` → used for SOURCE KPI cell (`hostName || datacenter`)
-- `openstackCreds` → used for DESTINATION KPI cell (`projectName`)
+- `vmwareCreds` → used for SOURCE KPI cell (`hostName || datacenter`) and header subtitle
+- `openstackCreds` → used for DESTINATION KPI cell (`projectName`) and header subtitle
 - `migrationTemplate` → fallback for `migrationType`, `networkMapping`, `storageMapping`
 - `networkMapping`, `storageMapping` → shown in `MigrationSpecCard`
 
 Returns `MigrationDetailResources | null`. 404s are non-fatal — cells show `—`.
+
+`resources` is passed to both `MigrationDetailHeader` and `MigrationKpiStrip` from `MigrationDetailPage`.
 
 ---
 
@@ -121,7 +126,7 @@ export function isMigrationFailed(migration: Migration): boolean {
 ### `MigrationDetailHeader`
 **File**: `src/features/migration/components/detail/MigrationDetailHeader.tsx`
 
-Props: `{ migration, onBack, onCutoverSuccess? }`
+Props: `{ migration, onBack, onCutoverSuccess?, resources? }`
 
 | Phase state | Buttons shown |
 |-------------|---------------|
@@ -132,22 +137,26 @@ Props: `{ migration, onBack, onCutoverSuccess? }`
 
 - Retry button is always disabled with tooltip "Retry is not yet available in this version".
 - Cancel triggers a confirmation dialog → calls `deleteMigration()` → navigates back to list.
-- Title shows `spec.vmName || metadata.name`.
-- Subtitle shows `metadata.name` (k8s resource) and `spec.migrationPlan` if set.
+- Title shows `spec.vmName || metadata.name` with `letterSpacing: '-0.015em'` (condensed bold look).
+- **Subtitle** (two formats):
+  - When resources loaded: `"Migrating {vmName} from {source} to {dest}"` with monospace Fira Code for technical terms
+  - Fallback (no resources): `"Migration: {metadata.name} · Plan: {plan}"` (monospace)
+  - Source = `vmwareCreds.spec.hostName || datacenter || vmwareCredsRef`
+  - Dest = `openstackCreds.spec.projectName || openstackCredsRef`
 
 ### `MigrationKpiStrip`
 **File**: `src/features/migration/components/detail/MigrationKpiStrip.tsx`
 
-6 cells in a horizontal flex strip:
+6 cells in a horizontal flex strip. Technical value cells (Source, Destination, Agent) render in `"Fira Code", monospace` at `0.8rem`. All values use `fontWeight: 600`.
 
-| Cell | Source |
-|------|--------|
-| Started | `metadata.creationTimestamp` formatted to "Jun 12, 02:30" |
-| Elapsed | `calculateTimeElapsed(creationTs, status)` |
-| Remaining | "Completed" for terminal phases, "—" otherwise |
-| Source | `vmwareCreds.spec.hostName || vmwareCreds.spec.datacenter || vmwareCredsRef || '—'` |
-| Destination | `openstackCreds.spec.projectName || openstackCredsRef || '—'` |
-| Agent | `status.agentName || '—'` |
+| Cell | Source | Font |
+|------|--------|------|
+| Started | `metadata.creationTimestamp` formatted to "Jun 12, 02:30" | regular |
+| Total Elapsed | `calculateTimeElapsed(creationTs, status)` | regular |
+| Remaining | `'Completed'` (Succeeded) / `'Halted'` (Failed/ValidationFailed) / `'—'` | regular |
+| Source | `vmwareCreds.spec.hostName \|\| datacenter \|\| vmwareCredsRef \|\| '—'` | monospace |
+| Destination | `openstackCreds.spec.projectName \|\| openstackCredsRef \|\| '—'` | monospace |
+| Agent | `status.agentName \|\| '—'` | monospace |
 
 **Known issue**: 6 cells may overflow on tablet/narrow viewports — no responsive fallback.
 
@@ -168,9 +177,17 @@ Renders MUI `<Alert>` above the tabs:
 **File**: `src/features/migration/components/detail/MigrationPhaseStepper.tsx`
 
 Horizontal 5-step rail. Each step has:
-- **Circle icon**: green check (done), blue spinner (active), red X (failed), grey dot (pending)
-- **Connector line**: colored to match left step's status
-- **Label row**: `stepLabel` (caption) + `phaseDef.label` (body2, bold if active/failed)
+- **Circle icon** (40×40px):
+  - `done` → green filled (`success.main`), white check ✓
+  - `active` → blue filled (`primary.main`), white spinner
+  - `failed` → red filled (`error.main`), white ✕
+  - `pending` → transparent with `2px grey.300` border, small grey.400 center dot
+- **Connector line** (2px height): colored to match left step's status
+- **Step label** (`STEP N`): uppercase, `0.65rem`, `letterSpacing: 0.8`
+  - `active` → `primary.main`, `fontWeight: 700`
+  - `failed` → `error.main`, `fontWeight: 700`
+  - `done` / `pending` → `text.disabled`, `fontWeight: 400`
+- **Phase name** (body2): bold if active/failed, colored by status
 - **Meta text**: elapsed time (done), "Xm Ys elapsed" (active), "Pending" (pending), "Halted · Xs" (failed)
 - **Detail text**: human-readable status detail from `phaseUtils.ts`
 
@@ -203,11 +220,12 @@ Returns `null` for Failed / ValidationFailed (ErrorCard shown instead).
 
 Shown only when `isMigrationFailed()` returns true.
 
+- **Border**: `1px solid divider` + `4px solid error.main` left accent (not full error border)
 - **Header**: error icon, `phase` label + `lastTransitionTime`, error title with `wordBreak: 'break-word'`, copy-diagnostic icon button
 - **Error title source**: `errorCondition.message || (phase === 'ValidationFailed' ? 'Validation failed' : 'Migration failed')`
 - **Error condition lookup**: `conditions.find((c) => c.type === 'Failed') || conditions.find((c) => c.status === 'False')`
 - **"What happened" section**: all conditions where `status === 'False' || type === 'Failed'` — rendered as MUI `<Alert severity="error">`
-- **Resolution steps**: 4 generic steps (review logs, check source VM, verify target capacity, retry)
+- **Resolution steps**: 4 generic steps — numbered circles use `primary.main` filled background with white text (not gray)
 - **"Raw conditions" accordion**: collapsible, shows all conditions in monospace
 
 **Bug fixed 2026-06-12**: Previously `conditions.find((c) => c.type === 'Failed' || c.reason === 'Migration')` matched `Validated` condition first (all have `reason: 'Migration'`). Fixed to `c.type === 'Failed'` only.
@@ -216,9 +234,13 @@ Shown only when `isMigrationFailed()` returns true.
 **File**: `src/features/migration/components/detail/MigrationActivityTimeline.tsx`
 
 - Renders `status.conditions` sorted by `lastTransitionTime` ascending
-- Each entry: time (monospace), `type — message`, reason caption
+- **Row layout**: `[timestamp col 60px] [icon+line col] [content col]` — timestamp is left of dot (matches design)
+- Each entry: time in fixed-width monospace left column, colored icon, `type — message` text
 - Icon: green check (`status === 'True'`), red error (`type === 'Failed' || status === 'False' && type !== 'Migrating'`), grey circle (other)
-- Vertical connecting line between entries
+- Vertical connecting line: `width: '2px'` (not `width: 1` which maps to 100% in MUI sx)
+- Header row: "Activity timeline" (left) + "View full history" stub link (right, `opacity: 0.5`, no-op)
+
+**Bug fixed 2026-06-19**: `width: 1` on vertical connector rendered as `width: 100%` due to MUI sx fraction mapping. Fixed to `width: '2px'`.
 
 ### `MigrationSpecCard`
 **File**: `src/features/migration/components/detail/MigrationSpecCard.tsx`
@@ -272,6 +294,30 @@ Fields shown:
   gap: 2,
   mt: 2,
 }}>
+```
+
+---
+
+## Design System / Theming
+
+### Font Stack
+
+- **Body / UI**: `Fira Sans` (loaded via Google Fonts CDN in `index.html`, weights 300/400/500/700)
+- **Monospace / technical values**: `"Fira Code", "SF Mono", "Monaco", "Consolas", "Roboto Mono", monospace`
+  - Used in: KPI Source/Destination/Agent cells, header subtitle technical terms, activity timeline timestamps, raw conditions accordion
+- **Eina04**: Loaded locally via `@font-face` in `ThemeContext.tsx` (not used in current typography definitions)
+
+### Design Tokens (`src/theme/colors.ts`)
+
+In addition to palette colors, the following design tokens are exported for use in detail/complex components:
+
+```typescript
+DESIGN_CODE_BG = '#0d1117'          // dark code block background
+DESIGN_CODE_TEXT = '#e6edf3'         // code block text
+DESIGN_BADGE_BG = '#f1f5f9'          // error code badge background (light)
+DESIGN_BADGE_TEXT = '#475569'         // error code badge text
+DESIGN_KPI_LABEL_LIGHT = '#64748b'   // KPI strip label color in light mode
+DESIGN_KPI_LABEL_DARK = '#94a3b8'    // KPI strip label color in dark mode
 ```
 
 ---
@@ -359,8 +405,9 @@ server.use(cors({ origin: true, credentials: true }))
 |------|--------|-------|
 | Debug logs follow toggle | low | `follow` hardcoded `true`, no UI to pause live stream |
 | KpiStrip 6-col responsive | low | Cells may overflow on tablet; no breakpoint fallback |
-| SOURCE/DESTINATION KPIs show `—` in mock | non-blocking | vmwarecreds/openstackcreds endpoints not mocked |
+| SOURCE/DESTINATION KPIs show `—` in mock | non-blocking | vmwarecreds/openstackcreds endpoints not mocked; header subtitle also falls back to k8s name |
 | Retry button wired to backend | blocked | No PATCH endpoint yet; button disabled with tooltip |
 | No "View VM in PCD" link for Succeeded | deferred | OpenStack instance ID not exposed in Migration API |
+| "View full history" link in ActivityTimeline | deferred | Events tab disabled; link stub renders but has no onClick |
 | Events tab | deferred | Disabled stub |
 | Resources tab | deferred | Disabled stub |

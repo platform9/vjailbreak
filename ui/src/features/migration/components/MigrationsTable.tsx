@@ -444,8 +444,7 @@ export default function MigrationsTable({
                 <IconButton
                   onClick={(e) => {
                     e.stopPropagation()
-                    params.row.setSelectedMigrationDetail?.(params.row)
-                    params.row.setMigrationDetailModalOpen?.(true)
+                    if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
                   }}
                   size="small"
                 >

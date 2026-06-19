@@ -76,8 +76,8 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
       </Tooltip>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Trigger Admin Cutover</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Trigger Admin Cutover</DialogTitle>
+        <DialogContent sx={{ px: 3, pb: 2 }}>
           <DialogContentText>
             Are you sure you want to trigger the admin cutover for migration "{migrationName}"? This
             will start the cutover process and cannot be undone.
@@ -89,7 +89,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
           <Button onClick={() => setOpen(false)} disabled={isLoading}>
             Cancel
           </Button>

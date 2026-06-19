@@ -78,14 +78,17 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
 
   const elapsed = creationTs ? calculateTimeElapsed(creationTs.toString(), status) : '—'
 
-  const isFailed = status?.phase === 'Failed' || status?.phase === 'ValidationFailed'
-  const remaining = status?.phase === 'Succeeded' ? 'Completed' : isFailed ? 'Halted' : '—'
+  // const isFailed = status?.phase === 'Failed' || status?.phase === 'ValidationFailed'
+  // const remaining = status?.phase === 'Succeeded' ? 'Completed' : isFailed ? 'Halted' : '—'
 
+  const vmSpec = (resources?.vmwareMachine?.spec as any)?.vms || {}
+  const vmMeta = (resources?.vmwareMachine?.metadata as any) || {}
   const vmwareCreds = resources?.vmwareCreds as VMwareCreds | null | undefined
   const sourceValue =
-    vmwareCreds?.spec?.hostName ||
+    (vmSpec?.clusterName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
     vmwareCreds?.spec?.datacenter ||
-    resources?.vmwareCredsRef ||
+    vmwareCreds?.spec?.hostName ||
     '—'
 
   const openstackCreds = resources?.openstackCreds as OpenstackCreds | null | undefined
@@ -96,13 +99,16 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
 
   const agentValue = status?.agentName || '—'
 
+  const destClusterValue = resources?.migrationTemplate?.spec?.targetPCDClusterName || '—'
+
   const cells = [
-    { label: 'Started',       value: startedAt,   mono: false },
-    { label: 'Total Elapsed', value: elapsed,      mono: false },
-    { label: 'Remaining',     value: remaining,    mono: false },
-    { label: 'Source',        value: sourceValue,  mono: true  },
-    { label: 'Destination',   value: destValue,    mono: true  },
-    { label: 'Agent',         value: agentValue,   mono: true  },
+    { label: 'Started',             value: startedAt,        mono: false },
+    { label: 'Total Elapsed',       value: elapsed,          mono: false },
+    // { label: 'Remaining',        value: remaining,        mono: false },
+    { label: 'Source Cluster',      value: sourceValue,      mono: true  },
+    { label: 'Destination Cluster', value: destClusterValue, mono: true  },
+    { label: 'Destination Tenant',  value: destValue,        mono: true  },
+    { label: 'Agent',               value: agentValue,       mono: true  },
   ]
 
   return (
