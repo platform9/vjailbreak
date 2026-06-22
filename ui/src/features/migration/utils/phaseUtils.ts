@@ -90,7 +90,7 @@ function doneDetail(designIndex: number, conditions: Condition[]): string {
       return c?.message ? String(c.message) : 'Disk transfer complete.'
     }
     case 3: return 'Cutover complete.'
-    case 4: return 'Target VM is healthy.'
+    case 4: return 'Migration completed successfully.'
     default: return 'Complete.'
   }
 }

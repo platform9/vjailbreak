@@ -152,7 +152,7 @@ export default function MigrationDetailHeader({
                 size="small"
                 onClick={() => setCancelOpen(true)}
               >
-                Cancel migration
+                Delete migration
               </Button>
             </>
           )}
@@ -166,10 +166,11 @@ export default function MigrationDetailHeader({
               />
               <Button
                 variant="outlined"
+                color="error"
                 size="small"
                 onClick={() => setCancelOpen(true)}
               >
-                Cancel
+                Delete migration
               </Button>
             </>
           )}
@@ -181,7 +182,7 @@ export default function MigrationDetailHeader({
               size="small"
               onClick={() => setCancelOpen(true)}
             >
-              Cancel migration
+              Delete migration
             </Button>
           )}
         </Box>
@@ -238,14 +239,14 @@ export default function MigrationDetailHeader({
 
       {/* Cancel confirmation dialog */}
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Cancel migration?</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Delete migration?</DialogTitle>
+        <DialogContent sx={{ px: 3, pb: 2 }}>
           <DialogContentText>
             This will delete the migration object for <strong>{vmName}</strong>. The source VM will
             not be modified. This action cannot be undone.
           </DialogContentText>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
           <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>
             Back
           </Button>
@@ -255,7 +256,7 @@ export default function MigrationDetailHeader({
             onClick={handleCancel}
             disabled={cancelling}
           >
-            {cancelling ? 'Cancelling…' : 'Cancel migration'}
+            {cancelling ? 'Deleting…' : 'Delete migration'}
           </Button>
         </DialogActions>
       </Dialog>

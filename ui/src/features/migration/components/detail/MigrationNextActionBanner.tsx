@@ -41,8 +41,7 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
     case Phase.Succeeded:
       return (
         <Alert severity="success" sx={{ mb: 2 }}>
-          <strong>Migration succeeded.</strong> The target VM is running in PCD. The source VM is
-          still present in vCenter — decommission when ready.
+          <strong>Migration succeeded.</strong> The target VM is running in PCD.
         </Alert>
       )
 

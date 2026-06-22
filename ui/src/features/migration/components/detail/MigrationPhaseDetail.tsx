@@ -112,7 +112,6 @@ const CUTOVER_CHECKLIST = [
   'Run a final CBT delta sync to capture changed blocks',
   'Detach volumes from worker, attach to target instance',
   'Boot target VM in PCD and run guest health checks',
-  'Disconnect source network on the original VM',
 ]
 
 function AwaitingCutoverDetail({
@@ -215,8 +214,7 @@ function SuccessDetail({ migration }: { migration: Migration }) {
         {vmName} is running in PCD
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        The target VM passed all post-boot health checks. The original VM has been powered off and
-        disconnected from its source network.
+        The VM has been migrated to PCD. Verify the target VM status in the destination environment.
       </Typography>
     </Box>
   )

@@ -91,7 +91,7 @@ export default function MigrationDetailPage() {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v as TabId)}>
           <Tab label="Overview" value="overview" />
-          <Tab label="Debug logs" value="logs" />
+          <Tab label="Pod logs" value="logs" />
           <Tab label="Events" disabled sx={{ opacity: 0.4 }} />
           <Tab label="Resources" disabled sx={{ opacity: 0.4 }} />
         </Tabs>
