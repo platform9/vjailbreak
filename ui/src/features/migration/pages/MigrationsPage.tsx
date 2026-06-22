@@ -1,26 +1,16 @@
 import { useState, useEffect } from 'react'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
-import { useQueryClient } from '@tanstack/react-query'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
-import { useMigrationsQuery, MIGRATIONS_QUERY_KEY } from '../hooks/useMigrationsQuery'
-import { deleteMigration } from '../api/migrations'
-import { getMigrationPlan, patchMigrationPlan } from '../api/migrationPlans'
-import { ConfirmationDialog } from 'src/components/dialogs'
+import { useMigrationsQuery } from '../hooks/useMigrationsQuery'
 import { Migration } from '../api/migrations'
 import MigrationsTable from '../components/MigrationsTable'
-import WarningIcon from '@mui/icons-material/Warning'
+import DeleteMigrationDialog from '../components/DeleteMigrationDialog'
 import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
-import { useAmplitude } from 'src/hooks/useAmplitude'
-import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
-import { getRegionNameForMigrationPlan } from 'src/utils/regionNameResolver'
 
 export default function MigrationsPage() {
-  const queryClient = useQueryClient()
-  const { track } = useAmplitude({ component: 'MigrationsPage' })
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
-  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [openSnackbar, setOpenSnackbar] = useState(false)
 
   const {
@@ -38,6 +28,7 @@ export default function MigrationsPage() {
   })
 
   useMigrationStatusMonitor(migrations)
+
   useEffect(() => {
     const showSuccess = sessionStorage.getItem('showUpgradeSuccess')
     if (showSuccess === 'true') {
@@ -54,118 +45,19 @@ export default function MigrationsPage() {
     }
   }
 
-  const handleDeleteClose = () => {
-    setDeleteDialogOpen(false)
-    setSelectedMigrations([])
-    setDeleteError(null)
-  }
-
   const handleDeleteSelected = (migrations: Migration[]) => {
     setSelectedMigrations(migrations)
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteMigration = async (migrations: Migration[]) => {
-    const migrationsSnapshot = migrations
-    try {
-      const migrationPlanUpdates = migrations.reduce(
-        (acc, migration) => {
-          const planId = migration.spec.migrationPlan
-          if (!acc[planId]) {
-            acc[planId] = {
-              vmsToRemove: new Set<string>(),
-              migrationsToDelete: new Set<string>()
-            }
-          }
-          const vmKey =
-            migration.metadata?.annotations?.['vjailbreak.k8s.pf9.io/original-vm-name'] ||
-            migration.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] ||
-            migration.spec.vmName
-          acc[planId].vmsToRemove.add(vmKey)
-          acc[planId].migrationsToDelete.add(migration.metadata.name)
-          return acc
-        },
-        {} as Record<string, { vmsToRemove: Set<string>; migrationsToDelete: Set<string> }>
-      )
-
-      await Promise.all(
-        Object.entries(migrationPlanUpdates).map(
-          async ([planId, { vmsToRemove, migrationsToDelete }]) => {
-            const migrationPlan = await getMigrationPlan(planId)
-            const updatedVirtualMachines = migrationPlan.spec.virtualMachines?.[0]?.filter(
-              (vm) => !vmsToRemove.has(vm)
-            )
-
-            await patchMigrationPlan(planId, {
-              spec: {
-                virtualMachines: [updatedVirtualMachines]
-              }
-            })
-
-            await Promise.all(
-              Array.from(migrationsToDelete).map((migrationName) => deleteMigration(migrationName))
-            )
-          }
-        )
-      )
-
-      migrationsSnapshot.forEach((migration) => {
-        void (async () => {
-          const regionName = await getRegionNameForMigrationPlan(
-            migration.spec?.migrationPlan,
-            migration.metadata?.namespace
-          )
-
-          track(AMPLITUDE_EVENTS.MIGRATION_DELETED, {
-            migrationName: migration.metadata?.name,
-            migrationPlan: migration.spec?.migrationPlan,
-            vmName: migration.spec?.vmName,
-            regionName,
-            namespace: migration.metadata?.namespace
-          })
-        })()
-      })
-
-      queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
-      handleDeleteClose()
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-
-      migrationsSnapshot.forEach((migration) => {
-        void (async () => {
-          const regionName = await getRegionNameForMigrationPlan(
-            migration.spec?.migrationPlan,
-            migration.metadata?.namespace
-          )
-
-          track(AMPLITUDE_EVENTS.MIGRATION_DELETE_FAILED, {
-            migrationName: migration.metadata?.name,
-            migrationPlan: migration.spec?.migrationPlan,
-            vmName: migration.spec?.vmName,
-            regionName,
-            namespace: migration.metadata?.namespace,
-            errorMessage
-          })
-        })()
-      })
-
-      setDeleteError(errorMessage)
-    }
+  const handleDeleteClose = () => {
+    setDeleteDialogOpen(false)
+    setSelectedMigrations([])
   }
 
   const handleCloseSnackbar = (_event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return
-    }
+    if (reason === 'clickaway') return
     setOpenSnackbar(false)
-  }
-
-  const getCustomErrorMessage = (error: Error | string) => {
-    const baseMessage = 'Failed to delete migrations'
-    if (error instanceof Error) {
-      return `${baseMessage}: ${error.message}`
-    }
-    return baseMessage
   }
 
   return (
@@ -178,29 +70,12 @@ export default function MigrationsPage() {
         loading={isMigrationsLoading}
       />
 
-      <ConfirmationDialog
+      <DeleteMigrationDialog
         open={deleteDialogOpen}
         onClose={handleDeleteClose}
-        title="Confirm Delete Migration"
-        confirmButtonTestId="confirm-delete-button"
-        icon={<WarningIcon color="warning" />}
-        message={
-          selectedMigrations.length > 1
-            ? 'Are you sure you want to delete these migrations?'
-            : `Are you sure you want to delete migration "${selectedMigrations[0]?.metadata.name}"?`
-        }
-        items={selectedMigrations.map((m) => ({
-          id: m.metadata.name,
-          name: m.metadata.name
-        }))}
-        actionLabel="Delete"
-        actionColor="error"
-        actionVariant="outlined"
-        onConfirm={() => handleDeleteMigration(selectedMigrations)}
-        customErrorMessage={getCustomErrorMessage}
-        errorMessage={deleteError}
-        onErrorChange={setDeleteError}
+        migrations={selectedMigrations}
       />
+
       <Snackbar
         open={openSnackbar}
         autoHideDuration={6000}

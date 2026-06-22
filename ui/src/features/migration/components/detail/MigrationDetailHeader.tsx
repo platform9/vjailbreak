@@ -4,25 +4,20 @@ import {
   Breadcrumbs,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   Link,
   Tooltip,
   Typography,
 } from '@mui/material'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import RefreshIcon from '@mui/icons-material/Refresh'
-import { Migration, Phase } from '../../api/migrations'
+import { Migration, Phase, deleteMigration } from '../../api/migrations'
 import { getPhaseColorKey, getPhaseLabel } from '../../utils/phaseUtils'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
-import { deleteMigration } from '../../api/migrations'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResourcesQuery'
 import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
+import DeleteMigrationDialog from '../DeleteMigrationDialog'
 
 const PHASE_CHIP_COLOR: Record<
   ReturnType<typeof getPhaseColorKey>,
@@ -48,8 +43,7 @@ export default function MigrationDetailHeader({
   onCutoverSuccess,
   resources,
 }: MigrationDetailHeaderProps) {
-  const [cancelOpen, setCancelOpen] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   const phase = migration.status?.phase as Phase | undefined
   const phaseLabel = getPhaseLabel(phase)
@@ -75,20 +69,20 @@ export default function MigrationDetailHeader({
     null
 
   const isFailed = phase === Phase.Failed || phase === Phase.ValidationFailed
+  const showRetry = phase === Phase.Failed
+  const isRetryDisabled = (migration.status as { retryable?: boolean } | undefined)?.retryable === false
   const isAwaitingCutover =
     phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime
   const isTerminal = phase === Phase.Succeeded || isFailed
 
-  const handleCancel = async () => {
-    setCancelling(true)
+  // Retry = direct delete without confirmation dialog (same behaviour as table row retry)
+  const handleRetry = async () => {
+    if (!migrationName) return
     try {
       await deleteMigration(migrationName, namespace)
-      setCancelOpen(false)
       onBack()
-    } catch {
-      // ignore
-    } finally {
-      setCancelling(false)
+    } catch (err) {
+      console.error('Failed to retry migration:', err)
     }
   }
 
@@ -134,23 +128,32 @@ export default function MigrationDetailHeader({
         <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
           {isFailed && (
             <>
-              <Tooltip title="Retry is not yet available in this version">
-                <span>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={<RefreshIcon />}
-                    disabled
-                  >
-                    Retry
-                  </Button>
-                </span>
-              </Tooltip>
+              {showRetry && (
+                <Tooltip
+                  title={
+                    isRetryDisabled
+                      ? 'This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration.'
+                      : 'Retry migration'
+                  }
+                >
+                  <span>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<RefreshIcon />}
+                      disabled={isRetryDisabled}
+                      onClick={handleRetry}
+                    >
+                      Retry
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
               <Button
                 variant="outlined"
                 color="error"
                 size="small"
-                onClick={() => setCancelOpen(true)}
+                onClick={() => setDeleteDialogOpen(true)}
               >
                 Delete migration
               </Button>
@@ -168,7 +171,7 @@ export default function MigrationDetailHeader({
                 variant="outlined"
                 color="error"
                 size="small"
-                onClick={() => setCancelOpen(true)}
+                onClick={() => setDeleteDialogOpen(true)}
               >
                 Delete migration
               </Button>
@@ -180,7 +183,7 @@ export default function MigrationDetailHeader({
               variant="outlined"
               color="error"
               size="small"
-              onClick={() => setCancelOpen(true)}
+              onClick={() => setDeleteDialogOpen(true)}
             >
               Delete migration
             </Button>
@@ -237,29 +240,12 @@ export default function MigrationDetailHeader({
         )}
       </Typography>
 
-      {/* Cancel confirmation dialog */}
-      <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Delete migration?</DialogTitle>
-        <DialogContent sx={{ px: 3, pb: 2 }}>
-          <DialogContentText>
-            This will delete the migration object for <strong>{vmName}</strong>. The source VM will
-            not be modified. This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
-          <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>
-            Back
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleCancel}
-            disabled={cancelling}
-          >
-            {cancelling ? 'Deleting…' : 'Delete migration'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteMigrationDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        migrations={[migration]}
+        onSuccess={onBack}
+      />
     </Box>
   )
 }
