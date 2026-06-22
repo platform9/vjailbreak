@@ -10,14 +10,10 @@ import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import {
   deleteMigrationPlan,
   patchMigrationPlan,
-  postMigrationPlan,
-  requestMigrationPlanRetry
+  postMigrationPlan
 } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/features/migration/api/migration-plans/model'
-import {
-  patchMigrationTemplate,
-  postMigrationTemplate
-} from 'src/features/migration/api/migration-templates/migrationTemplates'
+import { postMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
 import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
 import { CUTOVER_TYPES } from '../constants'
@@ -95,12 +91,11 @@ export function useRetrySubmit({
     [queryClient, onSuccess, onClose, navigate]
   )
 
+
   const triggerRetry = useCallback(async () => {
     if (!retryConfig) throw new Error('Retry context is missing')
-    const planName = retryPlan?.metadata?.name || retryConfig.planName
-    await requestMigrationPlanRetry(planName, retryConfig.namespace)
     await deleteMigration(retryConfig.migrationName, retryConfig.namespace)
-  }, [retryConfig, retryPlan])
+  }, [retryConfig])
 
   const buildPlanPatchSpec = useCallback(() => {
     const timeWindow =
@@ -192,80 +187,6 @@ export function useRetrySubmit({
     }
   }, [params, selectedMigrationOptions, retryPlan])
 
-  // Single-VM plan path: patch the existing plan/template/mappings in place, then
-  // trigger retry via annotation + Migration delete.
-  const patchInPlace = useCallback(async () => {
-    if (!retryConfig || !retryTemplate) return
-    const namespace = retryConfig.namespace
-    const planName = retryPlan?.metadata?.name || retryConfig.planName
-    const templateName = retryTemplate.metadata?.name
-
-    // 1. Fresh mapping resources (same pattern as the standard form: mappings are
-    //    immutable per submission, the template points at the latest ones).
-    const templateSpec: Record<string, unknown> = {
-      storageCopyMethod: params.storageCopyMethod || 'normal',
-      useGPUFlavor: params.useGPU || false,
-      useFlavorless: Boolean(selectedMigrationOptions.useFlavorless),
-      targetPCDClusterName: selectedPcdClusterName || retryTemplate?.spec?.targetPCDClusterName || ''
-    }
-
-    if (networkMappingRequired && params.networkMappings?.length) {
-      const created = await postNetworkMapping(
-        createNetworkMappingJson({ networkMappings: params.networkMappings }),
-        namespace
-      )
-      templateSpec.networkMapping = created.metadata.name
-    }
-
-    if (params.storageCopyMethod !== 'StorageAcceleratedCopy' && params.storageMappings?.length) {
-      const created = await postStorageMapping(
-        createStorageMappingJson({ storageMappings: params.storageMappings }),
-        namespace
-      )
-      templateSpec.storageMapping = created.metadata.name
-    }
-
-    if (params.storageCopyMethod === 'HotAdd' && params.proxyVMRef) {
-      templateSpec.proxyVMRef = { name: params.proxyVMRef }
-    }
-
-    // 2. Template, 3. plan: all configuration writes land before the retry trigger.
-    await patchMigrationTemplate(templateName, { spec: templateSpec })
-    await patchMigrationPlan(planName, { spec: buildPlanPatchSpec() }, namespace)
-
-    // 4. Per-VM flavor override.
-    if (vmK8sName && selectedFlavorId && selectedFlavorId !== (retryVm?.targetFlavorId || '')) {
-      await patchVMwareMachine(
-        vmK8sName,
-        { spec: { targetFlavorId: selectedFlavorId } },
-        namespace
-      )
-    }
-
-    // 5. Trigger the retry only after every edit is persisted.
-    await triggerRetry()
-  }, [
-    retryConfig,
-    retryTemplate,
-    retryPlan,
-    retryVm,
-    vmK8sName,
-    selectedFlavorId,
-    selectedPcdClusterName,
-    params,
-    selectedMigrationOptions,
-    networkMappingRequired,
-    buildPlanPatchSpec,
-    triggerRetry
-  ])
-
-  // Multi-VM plan path: create a clone plan containing only the retrying VM (with
-  // edited config), remove the VM from the original plan, then delete the failed
-  // Migration. The controller picks up the clone plan as a normal 1-VM plan.
-  //
-  // Order matters: clone plan first → patch original → delete Migration. This prevents
-  // the controller from recreating the Migration under the original plan before the VM
-  // has been removed from it.
   const cloneAndRetry = useCallback(async () => {
     if (!retryConfig || !retryTemplate || !retryPlan) return
     const namespace = retryConfig.namespace
@@ -353,20 +274,27 @@ export function useRetrySubmit({
       namespace
     )
 
-    // 5. PATCH original plan to remove the retrying VM. On failure, delete the clone
-    //    plan so Kubernetes GC cascades to any Migration the controller already spawned.
-    const updatedVMs = (retryPlan.spec?.virtualMachines || [])
-      .map((batch) => batch.filter((v) => v !== retryingVMKey))
-      .filter((batch) => batch.length > 0)
-    try {
-      await patchMigrationPlan(
-        retryPlan.metadata.name,
-        { spec: { virtualMachines: updatedVMs } },
-        namespace
-      )
-    } catch (err) {
-      await deleteMigrationPlan(clonePlan.metadata.name, namespace).catch(() => undefined)
-      throw err
+    // 5. Handle the original plan.
+    //    Single-VM: delete old plan entirely — Kubernetes GC cascades to its owned resources.
+    //    Multi-VM: remove the retrying VM so the controller doesn't recreate the Migration
+    //    under the old plan. On PATCH failure, rollback by deleting the clone plan.
+    const isLastVMInPlan = (retryPlan.spec?.virtualMachines?.flat()?.length ?? 0) <= 1
+    if (isLastVMInPlan) {
+      await deleteMigrationPlan(retryPlan.metadata.name, namespace)
+    } else {
+      const updatedVMs = (retryPlan.spec?.virtualMachines || [])
+        .map((batch) => batch.filter((v) => v !== retryingVMKey))
+        .filter((batch) => batch.length > 0)
+      try {
+        await patchMigrationPlan(
+          retryPlan.metadata.name,
+          { spec: { virtualMachines: updatedVMs } },
+          namespace
+        )
+      } catch (err) {
+        await deleteMigrationPlan(clonePlan.metadata.name, namespace).catch(() => undefined)
+        throw err
+      }
     }
 
     // 6. Per-VM flavor override.
@@ -404,12 +332,7 @@ export function useRetrySubmit({
   const editAndRetryMutation = useMutation({
     mutationFn: async () => {
       if (!retryConfig || !retryTemplate) return
-      const isMultiVMPlan = (retryPlan?.spec?.virtualMachines?.flat()?.length ?? 0) > 1
-      if (isMultiVMPlan) {
-        await cloneAndRetry()
-      } else {
-        await patchInPlace()
-      }
+      await cloneAndRetry()
     },
     onSuccess: () =>
       finishRetry(`Configuration updated, retry started for ${retryConfig?.vmName}`),

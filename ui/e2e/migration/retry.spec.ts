@@ -34,8 +34,6 @@ import {
   MOCK_RETRY_CLONE_PLAN_CREATED,
 } from './helpers/migration.fixtures'
 
-const RETRY_ANNOTATION = 'vjailbreak.k8s.pf9.io/retry-requested'
-
 // Mounts every route the retry drawer needs to load the failed migration's
 // configuration. Individual tests override specific routes for their scenario.
 async function mockRetryPrefillRoutes(page: Page): Promise<void> {
@@ -224,25 +222,12 @@ test.describe('RET-002 — retry without editing', () => {
     await mockRetryPrefillRoutes(page)
   })
 
-  test('annotates the plan then deletes the migration, with no config writes', async ({
+  test('deletes the migration only — no writes to plan, template, or mappings', async ({
     page,
   }) => {
-    const planCalls: RecordedCall[] = []
     const migrationCalls: RecordedCall[] = []
     const order: string[] = []
 
-    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
-    await recordRoute(
-      page,
-      API.migrationPlanByName(MOCK_RETRY_PLAN_NAME),
-      {
-        GET: { body: MOCK_RETRY_MIGRATION_PLAN },
-        PATCH: { body: MOCK_RETRY_MIGRATION_PLAN },
-      },
-      planCalls,
-      'plan',
-      order,
-    )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
     await recordRoute(
       page,
@@ -256,48 +241,48 @@ test.describe('RET-002 — retry without editing', () => {
       order,
     )
 
+    // Track any write other than DELETE — none should occur.
+    const unexpectedWrites: string[] = []
+    await page.route('**/apis/vjailbreak.k8s.pf9.io/**', (route) => {
+      const method = route.request().method()
+      if (method !== 'GET' && method !== 'DELETE') {
+        unexpectedWrites.push(`${method} ${route.request().url()}`)
+      }
+      route.fallback()
+    })
+
     await openRetryDrawer(page)
     await expect(page.getByTestId('migration-form-retry-without-edit')).toBeEnabled({
       timeout: 10_000,
     })
     await page.getByTestId('migration-form-retry-without-edit').click()
-
     await expectDrawerClosed(page)
 
-    // Exactly one PATCH (the retry annotation) and one DELETE, in that order.
-    const patches = planCalls.filter((c) => c.method === 'PATCH')
-    expect(patches).toHaveLength(1)
-    const annotations = (patches[0].body?.metadata as Record<string, unknown> | undefined)
-      ?.annotations as Record<string, string> | undefined
-    expect(annotations?.[RETRY_ANNOTATION]).toBe('true')
-    // No spec edits in retry-without-editing.
-    expect(patches[0].body?.spec).toBeUndefined()
-
+    // Exactly one DELETE on the Migration; no PATCHes or POSTs on any resource.
     expect(migrationCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1)
-    const writeOrder = order.filter((o) => !o.startsWith('GET'))
-    expect(writeOrder).toEqual(['PATCH plan', 'DELETE migration'])
+    expect(unexpectedWrites).toHaveLength(0)
   })
 
   test('both buttons are disabled while retry-without-edit mutation is pending', async ({
     page,
   }) => {
-    // Hold the plan PATCH so mutation.isPending stays true long enough to assert.
-    let resolvePatch!: () => void
-    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
-    await page.route(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME), async (route) => {
+    // Hold the Migration DELETE so mutation.isPending stays true long enough to assert.
+    let resolveDelete!: () => void
+    await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
+    await page.route(API.migrationByName(MOCK_RETRY_MIGRATION_NAME), async (route) => {
       const method = route.request().method()
       if (method === 'GET') {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN),
+          body: JSON.stringify(MOCK_MIGRATION_FAILED_RETRYABLE),
         })
-      } else if (method === 'PATCH') {
-        await new Promise<void>((r) => { resolvePatch = r })
+      } else if (method === 'DELETE') {
+        await new Promise<void>((r) => { resolveDelete = r })
         route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN),
+          body: JSON.stringify(MOCK_MIGRATION_FAILED_RETRYABLE),
         })
       } else {
         route.continue()
@@ -313,27 +298,27 @@ test.describe('RET-002 — retry without editing', () => {
     await expect(retryBtn).toBeDisabled()
     await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
 
-    // Unblock so the mutation can settle and the drawer close.
-    resolvePatch()
+    // Unblock so the mutation settles and the drawer closes.
+    resolveDelete()
     await expectDrawerClosed(page)
   })
 })
 
-// ─── RET-003: edit and retry ──────────────────────────────────────────────────
+// ─── RET-003: edit and retry (single-VM plan — always clone) ─────────────────
 
-test.describe('RET-003 — edit & retry persists edits before retrying', () => {
+test.describe('RET-003 — edit & retry always clones (single-VM plan)', () => {
   test.beforeEach(async ({ page }) => {
     await mockRetryPrefillRoutes(page)
   })
 
-  test('creates mappings, patches template and plan, then annotates and deletes', async ({
+  // Single-VM Edit & Retry follows the same clone path as multi-VM (RET-007):
+  //   POST mappings → POST clone template → POST clone plan →
+  //   DELETE old plan → DELETE old migration
+  // No PATCH on the original plan or template.
+  test('POSTs clone template and plan, DELETEs old plan and migration last', async ({
     page,
   }) => {
-    const planCalls: RecordedCall[] = []
-    const migrationCalls: RecordedCall[] = []
-    const templateCalls: RecordedCall[] = []
-    const networkMappingCalls: RecordedCall[] = []
-    const storageMappingCalls: RecordedCall[] = []
+    const calls: RecordedCall[] = []
     const order: string[] = []
 
     await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
@@ -342,10 +327,10 @@ test.describe('RET-003 — edit & retry persists edits before retrying', () => {
       API.migrationPlanByName(MOCK_RETRY_PLAN_NAME),
       {
         GET: { body: MOCK_RETRY_MIGRATION_PLAN },
-        PATCH: { body: MOCK_RETRY_MIGRATION_PLAN },
+        DELETE: { body: MOCK_RETRY_MIGRATION_PLAN },
       },
-      planCalls,
-      'plan',
+      calls,
+      'original-plan',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
@@ -356,27 +341,31 @@ test.describe('RET-003 — edit & retry persists edits before retrying', () => {
         GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
         DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
       },
-      migrationCalls,
+      calls,
       'migration',
       order,
     )
-    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
     await recordRoute(
       page,
-      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
-      {
-        GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-        PATCH: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-      },
-      templateCalls,
-      'template',
+      API.migrationTemplates,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_TEMPLATE_CREATED } },
+      calls,
+      'clone-template',
+      order,
+    )
+    await recordRoute(
+      page,
+      API.migrationPlans,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_PLAN_CREATED } },
+      calls,
+      'clone-plan',
       order,
     )
     await recordRoute(
       page,
       API.networkMappings,
       { POST: { status: 201, body: MOCK_RETRY_NETWORK_MAPPING_CREATED } },
-      networkMappingCalls,
+      calls,
       'networkmapping',
       order,
     )
@@ -384,7 +373,7 @@ test.describe('RET-003 — edit & retry persists edits before retrying', () => {
       page,
       API.storageMappings,
       { POST: { status: 201, body: MOCK_RETRY_STORAGE_MAPPING_CREATED } },
-      storageMappingCalls,
+      calls,
       'storagemapping',
       order,
     )
@@ -393,41 +382,26 @@ test.describe('RET-003 — edit & retry persists edits before retrying', () => {
     const editAndRetry = page.getByTestId('migration-form-edit-and-retry')
     await expect(editAndRetry).toBeEnabled({ timeout: 10_000 })
     await editAndRetry.click()
-
     await expectDrawerClosed(page)
 
+    const writes = order.filter((o) => !o.startsWith('GET'))
+
     // New mapping resources created.
-    expect(networkMappingCalls.filter((c) => c.method === 'POST')).toHaveLength(1)
-    expect(storageMappingCalls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(writes).toContain('POST networkmapping')
+    expect(writes).toContain('POST storagemapping')
 
-    // Template re-pointed at the new mappings.
-    const templatePatch = templateCalls.find((c) => c.method === 'PATCH')
-    expect(templatePatch).toBeDefined()
-    const templateSpec = templatePatch?.body?.spec as Record<string, unknown>
-    expect(templateSpec.networkMapping).toBe('new-netmap-uuid-1')
-    expect(templateSpec.storageMapping).toBe('new-stormap-uuid-1')
+    // Clone template before clone plan.
+    expect(writes.indexOf('POST clone-template')).toBeLessThan(writes.indexOf('POST clone-plan'))
 
-    // Plan received a spec patch and the retry annotation.
-    const planPatches = planCalls.filter((c) => c.method === 'PATCH')
-    expect(planPatches).toHaveLength(2)
-    const specPatch = planPatches.find((c) => c.body?.spec)
-    const strategy = (specPatch?.body?.spec as Record<string, unknown>)?.migrationStrategy as Record<string, unknown> | undefined
-    expect(strategy?.type).toBe('cold')
-    const annotationPatch = planPatches.find(
-      (c) =>
-        ((c.body?.metadata as Record<string, unknown> | undefined)?.annotations as
-          | Record<string, string>
-          | undefined)?.[RETRY_ANNOTATION] === 'true',
-    )
-    expect(annotationPatch).toBeDefined()
+    // Old plan deleted before old migration — clone plan must be in place first.
+    expect(writes.indexOf('POST clone-plan')).toBeLessThan(writes.indexOf('DELETE original-plan'))
+    expect(writes.indexOf('DELETE original-plan')).toBeLessThan(writes.indexOf('DELETE migration'))
 
-    // The migration is deleted last, after all configuration writes.
-    expect(migrationCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1)
-    const writeOrder = order.filter((o) => !o.startsWith('GET'))
-    expect(writeOrder[writeOrder.length - 1]).toBe('DELETE migration')
-    expect(writeOrder.indexOf('PATCH template')).toBeLessThan(
-      writeOrder.indexOf('DELETE migration'),
-    )
+    // Migration deleted last.
+    expect(writes[writes.length - 1]).toBe('DELETE migration')
+
+    // No PATCH on original plan or original template.
+    expect(writes.filter((w) => w.startsWith('PATCH'))).toHaveLength(0)
   })
 })
 
@@ -485,10 +459,12 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     )
   })
 
-  test('plan PATCH includes networkOverridesPerVM when existing override loaded from plan', async ({
+  // With always-clone, IP overrides are checked in the clone plan's POST body, not a
+  // PATCH on the original plan.
+  test('clone plan spec carries networkOverridesPerVM when override loaded from original plan', async ({
     page,
   }) => {
-    const planCalls: RecordedCall[] = []
+    const calls: RecordedCall[] = []
     const order: string[] = []
 
     await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
@@ -497,52 +473,50 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
       API.migrationPlanByName(MOCK_RETRY_PLAN_NAME),
       {
         GET: { body: MOCK_RETRY_MIGRATION_PLAN_WITH_IP_OVERRIDE },
-        PATCH: { body: MOCK_RETRY_MIGRATION_PLAN_WITH_IP_OVERRIDE },
+        DELETE: { body: MOCK_RETRY_MIGRATION_PLAN_WITH_IP_OVERRIDE },
       },
-      planCalls,
-      'plan',
+      calls,
+      'original-plan',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
     await recordRoute(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
-      {
-        GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-        DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-      },
-      [],
+      { GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE }, DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE } },
+      calls,
       'migration',
       order,
     )
-    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
     await recordRoute(
       page,
-      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
-      {
-        GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-        PATCH: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-      },
-      [],
-      'template',
+      API.migrationTemplates,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_TEMPLATE_CREATED } },
+      calls,
+      'clone-template',
+      order,
+    )
+    await recordRoute(
+      page,
+      API.migrationPlans,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_PLAN_CREATED } },
+      calls,
+      'clone-plan',
       order,
     )
     await mockRoute(page, API.networkMappings, 'POST', MOCK_RETRY_NETWORK_MAPPING_CREATED)
     await mockRoute(page, API.storageMappings, 'POST', MOCK_RETRY_STORAGE_MAPPING_CREATED)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
-      timeout: 10_000,
-    })
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({ timeout: 10_000 })
     await page.getByTestId('migration-form-edit-and-retry').click()
     await expectDrawerClosed(page)
 
-    // The spec patch on the plan must carry networkOverridesPerVM with the
-    // pre-existing override (prefill restored it into form state → buildPlanPatchSpec picked it up).
-    const specPatch = planCalls.filter((c) => c.method === 'PATCH').find((c) => c.body?.spec)
-    expect(specPatch).toBeDefined()
-    const planSpec = specPatch?.body?.spec as Record<string, unknown>
-    const overrides = planSpec?.networkOverridesPerVM as Record<string, unknown> | null | undefined
+    // Clone plan POST body must carry the IP override from the original plan's prefill.
+    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    expect(clonePlanPost).toBeDefined()
+    const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
+    const overrides = cloneSpec?.networkOverridesPerVM as Record<string, unknown> | null | undefined
     expect(overrides).not.toBeNull()
     expect(overrides).toBeDefined()
     const vmOverrides = (overrides as Record<string, unknown>)[MOCK_RETRY_VM_KEY] as
@@ -554,65 +528,59 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     expect(vmOverrides?.[0].UserAssignedIP).toBe('10.0.0.50')
   })
 
-  test('plan PATCH sends networkOverridesPerVM: null when plan had no overrides', async ({
+  test('clone plan spec sends networkOverridesPerVM: null when original plan had no overrides', async ({
     page,
   }) => {
-    // Use the standard plan (no networkOverridesPerVM) and verify the patch explicitly
-    // clears overrides so stale values from a previous retry are not kept.
-    const planCalls: RecordedCall[] = []
+    const calls: RecordedCall[] = []
     const order: string[] = []
 
     await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
     await recordRoute(
       page,
       API.migrationPlanByName(MOCK_RETRY_PLAN_NAME),
-      {
-        GET: { body: MOCK_RETRY_MIGRATION_PLAN },
-        PATCH: { body: MOCK_RETRY_MIGRATION_PLAN },
-      },
-      planCalls,
-      'plan',
+      { GET: { body: MOCK_RETRY_MIGRATION_PLAN }, DELETE: { body: MOCK_RETRY_MIGRATION_PLAN } },
+      calls,
+      'original-plan',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
     await recordRoute(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
-      {
-        GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-        DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-      },
-      [],
+      { GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE }, DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE } },
+      calls,
       'migration',
       order,
     )
-    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
     await recordRoute(
       page,
-      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
-      {
-        GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-        PATCH: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
-      },
-      [],
-      'template',
+      API.migrationTemplates,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_TEMPLATE_CREATED } },
+      calls,
+      'clone-template',
+      order,
+    )
+    await recordRoute(
+      page,
+      API.migrationPlans,
+      { POST: { status: 201, body: MOCK_RETRY_CLONE_PLAN_CREATED } },
+      calls,
+      'clone-plan',
       order,
     )
     await mockRoute(page, API.networkMappings, 'POST', MOCK_RETRY_NETWORK_MAPPING_CREATED)
     await mockRoute(page, API.storageMappings, 'POST', MOCK_RETRY_STORAGE_MAPPING_CREATED)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
-      timeout: 10_000,
-    })
+    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({ timeout: 10_000 })
     await page.getByTestId('migration-form-edit-and-retry').click()
     await expectDrawerClosed(page)
 
-    const specPatch = planCalls.filter((c) => c.method === 'PATCH').find((c) => c.body?.spec)
-    expect(specPatch).toBeDefined()
-    const planSpec = specPatch?.body?.spec as Record<string, unknown>
-    // null explicitly clears any stale overrides on the server via merge-patch semantics.
-    expect(planSpec?.networkOverridesPerVM).toBeNull()
+    // null explicitly clears stale overrides via merge-patch semantics on the clone plan.
+    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    expect(clonePlanPost).toBeDefined()
+    const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
+    expect(cloneSpec?.networkOverridesPerVM).toBeNull()
   })
 })
 
@@ -751,15 +719,6 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     )
     // Migration DELETE must be the very last write.
     expect(writes[writes.length - 1]).toBe('DELETE migration')
-    // Original plan must NOT be annotated with retry-requested (that is only for patch-in-place).
-    const originalPlanPatches = calls.filter(
-      (c) => c.method === 'PATCH' && order.includes('PATCH original-plan'),
-    )
-    for (const p of originalPlanPatches) {
-      const annotations = (p.body?.metadata as Record<string, unknown> | undefined)
-        ?.annotations as Record<string, string> | undefined
-      expect(annotations?.[RETRY_ANNOTATION]).toBeUndefined()
-    }
   })
 
   test('clone plan spec has single VM and audit-trail annotations', async ({ page }) => {
