@@ -32,6 +32,11 @@ variable "ingress_nginx_version" {
   default = "4.14.3"
 }
 
+variable "proxy_vm_ova_url" {
+  type    = string
+  default = "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+}
+
 source "qemu" "vjailbreak-image" {
   disk_image           = true
   skip_compaction      = true
@@ -182,6 +187,19 @@ build {
     "sudo helm pull ingress-nginx/ingress-nginx --version ${var.ingress_nginx_version} --untar --untardir /etc/pf9/",
     "sudo apt-get clean",
     "sudo rm -rf /var/lib/apt/lists/*",
+    ]
+  }
+
+  provisioner "shell" {
+    environment_vars = [
+      "PROXY_VM_OVA_URL=${var.proxy_vm_ova_url}"
+    ]
+    inline = [
+      "sudo mkdir -p /home/ubuntu/proxy-vm-template",
+      "sudo chown ubuntu:ubuntu /home/ubuntu/proxy-vm-template",
+      "echo 'Downloading proxy VM OVA from '\"$PROXY_VM_OVA_URL\"' ...'",
+      "curl -fsSL --retry 3 --retry-delay 10 -o /home/ubuntu/proxy-vm-template/ha-proxy-vm.ova \"$PROXY_VM_OVA_URL\"",
+      "echo 'Proxy VM OVA downloaded successfully.'",
     ]
   }
 }
