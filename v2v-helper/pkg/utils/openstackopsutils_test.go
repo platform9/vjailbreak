@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,28 +106,6 @@ func TestBuildPortCreateOptions(t *testing.T) {
 	}
 }
 
-func TestIsHTTPTimeoutError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"nil error", nil, false},
-		{"context deadline exceeded", fmt.Errorf("Post \"https://cinder/action\": context deadline exceeded"), true},
-		{"Client.Timeout exceeded", fmt.Errorf("Post \"https://cinder/action\": Client.Timeout exceeded while awaiting headers"), true},
-		{"generic 500 error", fmt.Errorf("Expected HTTP response code [200] when accessing [POST https://cinder/action], but got 500 instead"), false},
-		{"connection refused", fmt.Errorf("dial tcp: connection refused"), false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isHTTPTimeoutError(tt.err)
-			if got != tt.want {
-				t.Errorf("isHTTPTimeoutError(%v) = %v, want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
 // newTestBlockStorageClient builds a gophercloud ServiceClient pointed at srv,
 // optionally applying a custom http.Client (pass nil for default).
 func newTestBlockStorageClient(srv *httptest.Server, httpClient *http.Client) *gophercloud.ServiceClient {
@@ -163,11 +140,11 @@ func TestSetVolumeBootable_SuccessOnFirstTry(t *testing.T) {
 	}
 }
 
-// TestSetVolumeBootable_TimeoutThenAlreadyBootable reproduces issue #1872:
-// the HTTP client times out on SetBootable, but Cinder already committed the
+// TestSetVolumeBootable_ErrorThenAlreadyBootable reproduces issue #1872:
+// SetBootable returns an error (e.g. timeout) but Cinder already committed the
 // change server-side. The function must detect bootable=true via GetVolume and
 // return nil instead of failing the migration.
-func TestSetVolumeBootable_TimeoutThenAlreadyBootable(t *testing.T) {
+func TestSetVolumeBootable_ErrorThenAlreadyBootable(t *testing.T) {
 	// POST /action: deliberate slow response so the client HTTP timeout fires.
 	// GET /volumes/{id}: fast response confirming the volume is already bootable.
 	const actionDelayMs = 100
@@ -238,7 +215,7 @@ func TestSetVolumeBootable_NonTimeoutErrorReturnsError(t *testing.T) {
 	}
 }
 
-func TestSetVolumeBootable_TimeoutButNotBootableReturnsError(t *testing.T) {
+func TestSetVolumeBootable_ErrorButNotBootableReturnsError(t *testing.T) {
 	// SetBootable times out AND GetVolume shows bootable=false — must return error.
 	const actionDelayMs = 100
 	const clientTimeoutMs = 10
