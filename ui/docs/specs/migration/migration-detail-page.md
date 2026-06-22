@@ -4,7 +4,7 @@
 **Entry file**: `src/features/migration/pages/MigrationDetailPage.tsx`  
 **Feature branch**: `1980-enhance-user-experience-with-new-ui`  
 **Created**: 2026-06-12  
-**Last updated**: 2026-06-22  
+**Last updated**: 2026-06-22 (session 2)  
 **Status**: Implemented, visual-QA complete
 
 ---
@@ -17,10 +17,10 @@ Full-page view for a single `Migration` CRD. Shows live status, phase progress, 
 
 ## Route & Navigation
 
-- Linked from `MigrationsTable` via **three** click targets:
+- Linked from `MigrationsTable` via **two** click targets:
   - Clicking the migration **name** (Name column) → navigates to `/dashboard/migrations/<name>`
   - Clicking the migration **progress bar** (Progress column) → same navigation
-  - Clicking the **"View migration details" icon** (Actions column) → same navigation (changed from opening modal)
+- The "View migration details" icon button and "View pod logs" icon button have been **removed** from the Actions column. The `MigrationDetailModal` drawer and `PodLogsDrawer` have been removed from `MigrationsTable` — their functionality lives exclusively in the detail page tabs.
 - `MigrationDetailHeader` renders a breadcrumb "Migrations > \<vmName\>" with the "Migrations" link navigating back.
 - URL param: `migrationName` (k8s resource name, e.g. `migration-centos7-succeeded`).
 
@@ -157,20 +157,50 @@ Props: `{ migration, onBack, onCutoverSuccess?, resources? }`
 
 | Phase state | Buttons shown |
 |-------------|---------------|
-| Failed / ValidationFailed | Retry (disabled, tooltip) + **Delete migration** |
+| Failed | **Retry** (enabled unless `status.retryable === false`) + **Delete migration** |
+| ValidationFailed | **Delete migration** only (no Retry) |
 | AwaitingAdminCutOver | TriggerAdminCutoverButton + **Delete migration** |
 | Active (not terminal/failed/cutover) | **Delete migration** |
 | Succeeded | No action buttons |
 
-- Retry button is always disabled with tooltip "Retry is not yet available in this version".
-- **Delete migration** button triggers a confirmation dialog → calls `deleteMigration()` → navigates back to list.
-- Dialog title: "Delete migration?" / confirm button: "Delete migration" / progress: "Deleting…"
+- **Retry button**: enabled for `Phase.Failed` only. Disabled when `status.retryable === false` with tooltip "This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration." Enabled tooltip: "Retry migration". On click: calls `deleteMigration(migrationName, namespace)` directly (no dialog) then navigates back — same behaviour as the Retry icon in `MigrationsTable`.
+- **Delete migration** button opens `DeleteMigrationDialog` (shared component — see below). Full delete flow: patches `MigrationPlan.spec.virtualMachines` to remove the VM, deletes the `Migration` object, tracks Amplitude events, invalidates `MIGRATIONS_QUERY_KEY`. Errors surfaced in dialog (not silently swallowed).
 - Title shows `spec.vmName || metadata.name` with `letterSpacing: '-0.015em'` (condensed bold look).
 - **Subtitle** (two formats):
   - When resources loaded: `"Migrating {vmName} from {source} to {dest}"` with monospace Fira Code for technical terms
   - Fallback (no resources): `"Migration: {metadata.name} · Plan: {plan}"` (monospace)
   - Source = `vmwareCreds.spec.hostName || datacenter || vmwareCredsRef`
   - Dest = `openstackCreds.spec.projectName || openstackCredsRef`
+
+### `DeleteMigrationDialog`
+**File**: `src/features/migration/components/DeleteMigrationDialog.tsx`
+
+Shared confirmation dialog used by both `MigrationDetailHeader` and `MigrationsPage`.
+
+Props: `{ open, onClose, migrations: Migration[], onSuccess? }`
+
+- Accepts one or more `Migration` objects; title/description adapt ("Delete migration?" vs "Delete N migrations?")
+- Internally uses `useDeleteMigrations` hook — handles full delete flow
+- Shows loading state ("Deleting…") on confirm button
+- Surfaces errors inline via `<Alert>` (replaces the old silent-catch pattern)
+- `onSuccess()` called after successful delete; `onClose()` called after success or cancel
+
+### `useDeleteMigrations` hook
+**File**: `src/features/migration/hooks/useDeleteMigrations.ts`
+
+Shared delete logic extracted from `MigrationsPage.handleDeleteMigration`.
+
+Returns `{ deleteMigrations, isDeleting, error, setError }`.
+
+`deleteMigrations(migrations: Migration[]): Promise<boolean>` — full flow:
+1. Groups migrations by `spec.migrationPlan`; migrations without a plan go to a separate list
+2. For each plan: fetches plan, filters `spec.virtualMachines[0]` to remove deleted VMs, patches plan via `patchMigrationPlan`, deletes each migration via `deleteMigration`
+3. Migrations without a plan: calls `deleteMigration` directly
+4. Fires `MIGRATION_DELETED` / `MIGRATION_DELETE_FAILED` Amplitude events
+5. Calls `queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })`
+6. Returns `true` on success, `false` on error (sets `error` state)
+
+---
 
 ### `MigrationKpiStrip`
 **File**: `src/features/migration/components/detail/MigrationKpiStrip.tsx`
@@ -521,7 +551,7 @@ server.use(cors({ origin: true, credentials: true }))
 | Item | Impact | Notes |
 |------|--------|-------|
 | KpiStrip responsive | low | Cells may overflow on tablet; no breakpoint fallback |
-| Retry button wired to backend | blocked | No PATCH endpoint yet; button disabled with tooltip |
+| ~~Retry button wired to backend~~ | ~~blocked~~ | **Resolved**: Retry calls `deleteMigration` directly + navigates back |
 | No "View VM in PCD" link for Succeeded | deferred | OpenStack instance ID not exposed in Migration API |
 | Events tab: "View full history" stub | deferred | Link renders but has no onClick |
 | Resources tab | deferred | Disabled stub |
@@ -552,3 +582,7 @@ server.use(cors({ origin: true, credentials: true }))
 | 2026-06-22 | ErrorCard redesign: header with phase chip + Copy bundle button; `body1` error title; troubleshooting link; "Show raw log lines" accordion |
 | 2026-06-22 | `failedDetail()` in phaseUtils: no longer returns raw condition message — returns short phase-specific text |
 | 2026-06-22 | SuccessDetail redesign: "MIGRATION COMPLETE · elapsed" header + stat boxes (Target VM, Disks, Agent); no health checks; no action buttons |
+| 2026-06-22 (s2) | **MigrationsTable**: removed `MigrationDetailModal` drawer + `PodLogsDrawer`; removed "View migration details" + "View pod logs" icon buttons from Actions column; name column click → navigate (was open modal) |
+| 2026-06-22 (s2) | **Progress column**: added `LinearProgress` bar (3px, rounded) — indeterminate for Validating / copy phases without disk info; determinate for copy phases with `currentDisk`/`totalDisks`; no bar for Succeeded/Failed/Cutover |
+| 2026-06-22 (s2) | **Retry enabled**: `Phase.Failed` only; disabled if `status.retryable === false`; calls `deleteMigration` directly + navigates back (no dialog); matches table behaviour |
+| 2026-06-22 (s2) | **Shared delete infra**: extracted `useDeleteMigrations` hook + `DeleteMigrationDialog` component; full flow (MigrationPlan patch + delete + analytics + cache invalidation); replaces inline dialog in header (was silently catching errors) and `ConfirmationDialog` in `MigrationsPage` |
