@@ -20,14 +20,17 @@ import ProxyVMDetailDrawer from './ProxyVMDetailDrawer'
 
 function statusColor(
   status: ProxyVMValidationStatus | undefined
-): 'default' | 'warning' | 'success' | 'error' {
+): 'default' | 'info' | 'warning' | 'success' | 'error' {
   switch (status) {
     case 'Ready':
       return 'success'
     case 'Verifying':
       return 'warning'
     case 'VerificationFailed':
+    case 'DeployFailed':
       return 'error'
+    case 'Deploying':
+      return 'info'
     default:
       return 'default'
   }
@@ -168,7 +171,7 @@ const getColumns = (
   }
 ]
 
-const STATUS_FILTER_OPTIONS = ['All', 'Pending', 'Verifying', 'Ready', 'VerificationFailed']
+const STATUS_FILTER_OPTIONS = ['All', 'Deploying', 'DeployFailed', 'Pending', 'Verifying', 'Ready', 'VerificationFailed']
 
 export default function ProxyVMsTable() {
   const queryClient = useQueryClient()

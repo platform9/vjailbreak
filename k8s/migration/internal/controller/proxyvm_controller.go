@@ -93,6 +93,13 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// While OVA deploy is running or has failed, the ova_deploy goroutine owns status.
+	// Controller must not touch this CR until the deploy goroutine sets it to Pending.
+	switch proxyVM.Status.ValidationStatus {
+	case constants.ProxyVMStatusDeploying, constants.ProxyVMStatusDeployFailed:
+		return ctrl.Result{}, nil
+	}
+
 	// Skip Verifying broadcast for already-Ready VMs to avoid spurious UI flips.
 	if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
 		proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerifying

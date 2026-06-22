@@ -1,4 +1,10 @@
-export type ProxyVMValidationStatus = 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'
+export type ProxyVMValidationStatus =
+  | 'Deploying'
+  | 'DeployFailed'
+  | 'Pending'
+  | 'Verifying'
+  | 'Ready'
+  | 'VerificationFailed'
 
 export interface ProxyVMSpec {
   vmName: string

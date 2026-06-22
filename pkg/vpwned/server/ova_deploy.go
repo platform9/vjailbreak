@@ -162,15 +162,33 @@ func deployWhenOVAReady(ctx context.Context) {
 func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	ctx := context.Background()
 
+	dynClient, err := newDynClient()
+	if err != nil {
+		logrus.Errorf("ova-deploy[%s]: k8s client: %v", deployCfg.VMName, err)
+		return
+	}
+
+	// Create the CR immediately so it is visible in the UI with "Deploying" status.
+	if err := createDeployingProxyVMCR(ctx, dynClient, deployCfg.VMName, deployCfg.VMwareCredsRef); err != nil {
+		logrus.Errorf("ova-deploy[%s]: create ProxyVM CR: %v", deployCfg.VMName, err)
+		return
+	}
+
+	setFailed := func(msg string) {
+		patchProxyVMStatus(ctx, dynClient, deployCfg.VMName, constants.ProxyVMStatusDeployFailed, msg)
+	}
+
 	vcHost, vcUsername, vcPassword, err := credsFromVMwareCreds(ctx, deployCfg.VMwareCredsRef)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to get vCenter credentials: %v", err))
 		return
 	}
 
 	client, finder, err := connectVCenter(ctx, vcHost, vcUsername, vcPassword, deployCfg.Datacenter)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to connect to vCenter: %v", err))
 		return
 	}
 	defer client.Logout(ctx)
@@ -178,24 +196,28 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	ds, err := finder.Datastore(ctx, deployCfg.Datastore)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: datastore %q: %v", deployCfg.VMName, deployCfg.Datastore, err)
+		setFailed(fmt.Sprintf("Datastore %q not found: %v", deployCfg.Datastore, err))
 		return
 	}
 
 	rp, err := resolveResourcePool(ctx, finder, deployCfg.Cluster)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: resource pool: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to resolve resource pool: %v", err))
 		return
 	}
 
 	folders, err := finder.FolderList(ctx, "*")
 	if err != nil || len(folders) == 0 {
 		logrus.Errorf("ova-deploy[%s]: no folder found: %v", deployCfg.VMName, err)
+		setFailed("No VM folder found in datacenter")
 		return
 	}
 
 	ovfEntry, err := findDescriptorEntry(ovaPath)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: find descriptor: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to read OVA descriptor: %v", err))
 		return
 	}
 	logrus.Infof("ova-deploy[%s]: descriptor entry %q", deployCfg.VMName, ovfEntry)
@@ -222,6 +244,7 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	})
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: import failed: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("OVA import failed: %v", err))
 		return
 	}
 	logrus.Infof("ova-deploy[%s]: VM deployed (ref=%s)", deployCfg.VMName, ref.Value)
@@ -234,10 +257,12 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	})
 	if reconfErr != nil {
 		logrus.Errorf("ova-deploy[%s]: reconfigure disk.EnableUUID: %v", deployCfg.VMName, reconfErr)
+		setFailed(fmt.Sprintf("Failed to set disk.EnableUUID: %v", reconfErr))
 		return
 	}
 	if err := reconfTask.Wait(ctx); err != nil {
 		logrus.Errorf("ova-deploy[%s]: wait reconfigure disk.EnableUUID: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to apply disk.EnableUUID reconfigure: %v", err))
 		return
 	}
 	logrus.Infof("ova-deploy[%s]: disk.EnableUUID set to TRUE", deployCfg.VMName)
@@ -245,12 +270,14 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	vmObj, err := powerOnVM(ctx, finder, deployCfg.VMName)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: power on: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to power on VM: %v", err))
 		return
 	}
 
 	ip, err := waitForVMIP(ctx, vmObj)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: wait for IP: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Timed out waiting for VM IP address: %v", err))
 		return
 	}
 	logrus.Infof("ova-deploy[%s]: VM IP: %s", deployCfg.VMName, ip)
@@ -259,19 +286,24 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	pubKey, err := generateAndStoreKeypair(ctx, keypairName)
 	if err != nil {
 		logrus.Errorf("ova-deploy[%s]: generate keypair: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to generate SSH keypair: %v", err))
 		return
 	}
 
 	if err := installSSHPublicKey(ctx, ip, pubKey); err != nil {
 		logrus.Errorf("ova-deploy[%s]: install SSH key: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to install SSH public key on VM: %v", err))
 		return
 	}
 
-	if err := createProxyVMCR(ctx, deployCfg.VMName, deployCfg.VMwareCredsRef, keypairName); err != nil {
-		logrus.Errorf("ova-deploy[%s]: create ProxyVM CR: %v", deployCfg.VMName, err)
+	if err := patchProxyVMSSHKeyRef(ctx, dynClient, deployCfg.VMName, keypairName); err != nil {
+		logrus.Errorf("ova-deploy[%s]: patch sshKeyPairRef: %v", deployCfg.VMName, err)
+		setFailed(fmt.Sprintf("Failed to record SSH keypair reference: %v", err))
 		return
 	}
 
+	// Hand off to the controller by transitioning to Pending.
+	patchProxyVMStatus(ctx, dynClient, deployCfg.VMName, constants.ProxyVMStatusPending, "VM deployed; awaiting controller verification")
 	logrus.Infof("ova-deploy[%s]: proxy VM onboarded successfully", deployCfg.VMName)
 }
 
@@ -419,17 +451,43 @@ func installSSHPublicKey(ctx context.Context, ip, pubKey string) error {
 	return fmt.Errorf("SSH to %s timed out after 10 minutes", ip)
 }
 
-func createProxyVMCR(ctx context.Context, vmName, vmwareCredsName, keypairSecretName string) error {
+// newDynClient builds a dynamic Kubernetes client from the in-cluster config.
+func newDynClient() (dynamic.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		return fmt.Errorf("in-cluster config: %v", err)
+		return nil, fmt.Errorf("in-cluster config: %v", err)
 	}
-	dynClient, err := dynamic.NewForConfig(cfg)
+	client, err := dynamic.NewForConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("dynamic client: %v", err)
+		return nil, fmt.Errorf("dynamic client: %v", err)
 	}
+	return client, nil
+}
 
-	proxyVM := &unstructured.Unstructured{
+// patchProxyVMStatus updates the status subresource of a ProxyVM CR.
+func patchProxyVMStatus(ctx context.Context, dynClient dynamic.Interface, vmName, status, message string) {
+	patch := map[string]interface{}{
+		"status": map[string]interface{}{
+			"validationStatus":  status,
+			"validationMessage": message,
+		},
+	}
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		logrus.Errorf("ova-deploy[%s]: marshal status patch: %v", vmName, err)
+		return
+	}
+	if _, err := dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Patch(
+		ctx, vmName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{}, "status",
+	); err != nil {
+		logrus.Errorf("ova-deploy[%s]: patch ProxyVM status to %q: %v", vmName, status, err)
+	}
+}
+
+// createDeployingProxyVMCR creates the ProxyVM CR (idempotent) and sets its status to
+// Deploying so the VM appears in the UI table immediately when deploy starts.
+func createDeployingProxyVMCR(ctx context.Context, dynClient dynamic.Interface, vmName, vmwareCredsName string) error {
+	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "vjailbreak.k8s.pf9.io/v1alpha1",
 			"kind":       "ProxyVM",
@@ -442,22 +500,24 @@ func createProxyVMCR(ctx context.Context, vmName, vmwareCredsName, keypairSecret
 				"vmwareCredsRef": map[string]interface{}{
 					"name": vmwareCredsName,
 				},
-				"sshKeyPairRef": map[string]interface{}{
-					"name": keypairSecretName,
-				},
 			},
 		},
 	}
-
-	_, err = dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Create(ctx, proxyVM, metav1.CreateOptions{})
-	if err == nil {
-		logrus.Infof("ova-deploy: ProxyVM CR %q created", vmName)
-		return nil
-	}
-	if !k8serrors.IsAlreadyExists(err) {
+	_, err := dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create ProxyVM CR: %v", err)
 	}
+	if k8serrors.IsAlreadyExists(err) {
+		logrus.Infof("ova-deploy[%s]: ProxyVM CR already exists; resetting status to Deploying", vmName)
+	} else {
+		logrus.Infof("ova-deploy[%s]: ProxyVM CR created", vmName)
+	}
+	patchProxyVMStatus(ctx, dynClient, vmName, constants.ProxyVMStatusDeploying, "OVA deployment in progress...")
+	return nil
+}
 
+// patchProxyVMSSHKeyRef patches spec.sshKeyPairRef once the keypair secret is ready.
+func patchProxyVMSSHKeyRef(ctx context.Context, dynClient dynamic.Interface, vmName, keypairSecretName string) error {
 	patch := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"sshKeyPairRef": map[string]interface{}{
@@ -465,16 +525,16 @@ func createProxyVMCR(ctx context.Context, vmName, vmwareCredsName, keypairSecret
 			},
 		},
 	}
-	patchBytes, jsonErr := json.Marshal(patch)
-	if jsonErr != nil {
-		return fmt.Errorf("marshal patch: %v", jsonErr)
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshal patch: %v", err)
 	}
-	if _, patchErr := dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Patch(
+	if _, err := dynClient.Resource(proxyVMGVR).Namespace(migrationSystemNamespace).Patch(
 		ctx, vmName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
-	); patchErr != nil {
-		return fmt.Errorf("patch ProxyVM CR sshKeyPairRef: %v", patchErr)
+	); err != nil {
+		return fmt.Errorf("patch sshKeyPairRef: %v", err)
 	}
-	logrus.Infof("ova-deploy: ProxyVM CR %q already existed — patched sshKeyPairRef to %q", vmName, keypairSecretName)
+	logrus.Infof("ova-deploy[%s]: sshKeyPairRef set to %q", vmName, keypairSecretName)
 	return nil
 }
 
