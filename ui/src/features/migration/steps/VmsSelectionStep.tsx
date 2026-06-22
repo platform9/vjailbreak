@@ -71,6 +71,7 @@ interface StandardToolbarWithActionsProps {
   rdmVMsCount: number
   onRefresh?: () => void
   disableRefresh?: boolean
+  isRefreshing?: boolean
   placeholder?: string
   [key: string]: unknown
 }
@@ -187,7 +188,8 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
     handleVmSelection,
     isRowSelectable,
     rowSelectionModelArray,
-    refreshVMList,
+    isRevalidating,
+    handleRefreshAndRevalidate,
     rdmDisks,
     rdmDisksLoading,
     rdmConfigDialogOpen,
@@ -336,13 +338,14 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
                   toolbar: (props) => (
                     <StandardToolbarWithActions
                       {...props}
-                      onRefresh={() => refreshVMList()}
+                      onRefresh={() => handleRefreshAndRevalidate()}
                       disableRefresh={
                         loadingVms ||
                         loadingMigratedVms ||
                         !vmwareCredsValidated ||
                         !openstackCredsValidated
                       }
+                      isRefreshing={isRevalidating}
                       placeholder="Search by Name, Network Interface, CPU, or Memory"
                       rowSelectionModel={rowSelectionModelArray}
                       onAssignFlavor={standardFlavor.handleOpenFlavorDialog}
