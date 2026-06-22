@@ -257,7 +257,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 	gomock.InOrder(
 		mockVMOps.EXPECT().TakeSnapshot("migration-snap").Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().UpdateDisksInfo(gomock.Any()).Return(nil).AnyTimes(),
+		mockVMOps.EXPECT().UpdateDisksInfo(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		mockVMOps.EXPECT().GetVMInfo("linux", gomock.Any()).Return(vm.VMInfo{
 			Name:   "test-vm",
 			OSType: "linux",

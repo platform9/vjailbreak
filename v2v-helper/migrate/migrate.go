@@ -907,7 +907,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")
 	}
 
-	err = vmops.UpdateDisksInfo(&vminfo)
+	// Cold migrations never use CBT, so the snapshot disks have no change IDs
+	// (especially on legacy hardware version < 7). Only require change IDs for
+	// non-cold migrations, which rely on them for incremental copies.
+	err = vmops.UpdateDisksInfo(&vminfo, migobj.MigrationType != "cold")
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to update disk info")
 	}
@@ -1113,6 +1116,25 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
 		}
+
+		// If migration type is cold, check power state and exit the live replicate function.
+		if migobj.MigrationType == "cold" {
+			// Verify VM is actually powered off
+			if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+				if stateErr != nil {
+					return stateErr
+				}
+				if currState != types.VirtualMachinePowerStatePoweredOff {
+					return fmt.Errorf("Cold migration requires the VM to remain powered off. However, the VM was found in the '%s' state after power-off and snapshot copy. Aborting migration to avoid data inconsistency.", currState)
+				}
+				return nil
+			}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+				return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
+			}
+			break
+		}
+
 		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")

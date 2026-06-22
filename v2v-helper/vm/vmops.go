@@ -36,7 +36,7 @@ type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
-	UpdateDisksInfo(*VMInfo) error
+	UpdateDisksInfo(*VMInfo, bool) error
 	IsCBTEnabled() (bool, error)
 	GetHardwareVersion() (int, error)
 	EnableCBT() error
@@ -386,7 +386,13 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
+// UpdateDisksInfo records, for each VM disk, the backing file and name of the
+// current snapshot (needed to copy from the snapshot over NBD) and the CBT
+// change ID. When requireChangeID is false (cold migrations, which copy each
+// disk once in full while the VM is powered off and never use Changed Block
+// Tracking), a missing change ID is tolerated instead of failing - this is
+// expected on legacy virtual hardware (version < 7) where CBT is unsupported.
+func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo, requireChangeID bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	var snapbackingdisk []string
 	var snapname []string
@@ -431,16 +437,26 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 			case *types.VirtualDisk:
 				backing := disk.Backing.(types.BaseVirtualDeviceFileBackingInfo)
 				info := backing.GetVirtualDeviceFileBackingInfo()
+				var changeIDValue string
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					// On cold migrations (requireChangeID == false) CBT is never
+					// used, so a missing change ID is expected - particularly on
+					// legacy hardware (version < 7). Record the backing disk info
+					// and continue without a change ID instead of failing.
+					if requireChangeID {
+						return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					}
+					log.Printf("Change ID unavailable for device key %d (%s); continuing without CBT", disk.Key, err)
+				} else {
+					changeIDValue = changeid.Value
 				}
 				snapshotInfo[disk.Key] = struct {
 					FileName string
 					ChangeID string
 				}{
 					FileName: info.FileName,
-					ChangeID: changeid.Value,
+					ChangeID: changeIDValue,
 				}
 			}
 		}
