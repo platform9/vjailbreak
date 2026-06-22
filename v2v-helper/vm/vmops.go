@@ -386,12 +386,6 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-// UpdateDisksInfo records, for each VM disk, the backing file and name of the
-// current snapshot (needed to copy from the snapshot over NBD) and the CBT
-// change ID. When requireChangeID is false (cold migrations, which copy each
-// disk once in full while the VM is powered off and never use Changed Block
-// Tracking), a missing change ID is tolerated instead of failing - this is
-// expected on legacy virtual hardware (version < 7) where CBT is unsupported.
 func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo, requireChangeID bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	var snapbackingdisk []string
@@ -440,10 +434,8 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo, requireChangeID bool) error 
 				var changeIDValue string
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					// On cold migrations (requireChangeID == false) CBT is never
-					// used, so a missing change ID is expected - particularly on
-					// legacy hardware (version < 7). Record the backing disk info
-					// and continue without a change ID instead of failing.
+					// For cold migrations, CBT is not used. Missing change IDs are expected
+					// (especially on hardware version < 7), so continue without failing.
 					if requireChangeID {
 						return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
 					}
@@ -575,10 +567,8 @@ func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 			return false, fmt.Errorf("failed to get VM properties: %s", err)
 		}
 	}
-	// On VMs running virtual hardware version < 7, the changeTrackingEnabled
-	// property is not present in the VMware API response (CBT is unsupported on
-	// such hardware - see VMware KB 1020128). Treat an absent value as "CBT not
-	// enabled" instead of dereferencing a nil pointer and panicking.
+	// CBT is unsupported on virtual hardware < 7. If changeTrackingEnabled
+	// is absent, treat CBT as disabled and avoid nil pointer dereferences.
 	if o.Config == nil || o.Config.ChangeTrackingEnabled == nil {
 		return false, nil
 	}
@@ -593,11 +583,11 @@ func parseHardwareVersion(version string) int {
 	if trimmed == "" {
 		return 0
 	}
-	n, err := strconv.Atoi(trimmed)
+	parsedHarwareVersion, err := strconv.Atoi(trimmed)
 	if err != nil {
 		return 0
 	}
-	return n
+	return parsedHarwareVersion
 }
 
 // GetHardwareVersion returns the numeric virtual hardware version of the VM

@@ -480,23 +480,20 @@ func (migobj *Migrate) validateDiskMapping(vminfo vm.VMInfo) error {
 func (migobj *Migrate) EnableCBTWrapper() error {
 	vmops := migobj.VMops
 
-	// Cold migrations copy each disk once while the source VM is powered off, so
-	// Changed Block Tracking (CBT) is never needed. Skip it entirely. This also
-	// allows VMs on legacy virtual hardware (version < 7), which cannot support
-	// CBT at all, to be migrated successfully via cold migration.
+	// If it is cold migration we do not need to enable CBT.
 	if migobj.MigrationType == "cold" {
 		migobj.logMessage("Cold migration selected: skipping CBT check and enablement")
 		return nil
 	}
 
-	// CBT requires virtual hardware version 7 or newer (VMware KB 1020128). On
-	// older VMs the changeTrackingEnabled property is absent in the vCenter API
-	// response, which previously caused a nil-pointer panic. Detect this up front
-	// and fail with a clear, actionable error instead of crashing.
-	hwVersion, err := vmops.GetHardwareVersion()
-	if err != nil {
-		return errors.Wrap(err, "failed to determine virtual hardware version")
+	// CBT requires virtual hardware >= 7. Fail with a clear error if
+	// changeTrackingEnabled is unavailable, instead of panicking.
+	hwVersion, VersionErr := vmops.GetHardwareVersion()
+	if VersionErr != nil {
+		migobj.logMessage(fmt.Sprintf("Could not determine hardware version, Trying to enable CBT: %s", VersionErr))
 	}
+	migobj.logMessage(fmt.Sprintf("Hardware version detected: %s", hwVersion))
+
 	if hwVersion > 0 && hwVersion < vm.MinCBTHardwareVersion {
 		return fmt.Errorf(
 			"changed block tracking (CBT) is not supported on virtual hardware version %d "+
