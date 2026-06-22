@@ -193,6 +193,21 @@ func (mr *MockVMOperationsMockRecorder) IsCBTEnabled() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCBTEnabled", reflect.TypeOf((*MockVMOperations)(nil).IsCBTEnabled))
 }
 
+// GetHardwareVersion mocks base method.
+func (m *MockVMOperations) GetHardwareVersion() (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHardwareVersion")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHardwareVersion indicates an expected call of GetHardwareVersion.
+func (mr *MockVMOperationsMockRecorder) GetHardwareVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHardwareVersion", reflect.TypeOf((*MockVMOperations)(nil).GetHardwareVersion))
+}
+
 // ListSnapshots mocks base method.
 func (m *MockVMOperations) ListSnapshots() ([]types.VirtualMachineSnapshotTree, error) {
 	m.ctrl.T.Helper()

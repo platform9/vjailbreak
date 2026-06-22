@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,12 +27,18 @@ import (
 
 //go:generate mockgen -source=vmops.go -destination=vmops_mock.go -package=vm
 
+// MinCBTHardwareVersion is the minimum VMware virtual hardware version that
+// supports Changed Block Tracking (CBT). VMs on older hardware versions cannot
+// use CBT and must be migrated using cold migration. See VMware KB 1020128.
+const MinCBTHardwareVersion = 7
+
 type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
 	UpdateDisksInfo(*VMInfo) error
 	IsCBTEnabled() (bool, error)
+	GetHardwareVersion() (int, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
 	DeleteSnapshot(name string) error
@@ -552,7 +559,55 @@ func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 			return false, fmt.Errorf("failed to get VM properties: %s", err)
 		}
 	}
+	// On VMs running virtual hardware version < 7, the changeTrackingEnabled
+	// property is not present in the VMware API response (CBT is unsupported on
+	// such hardware - see VMware KB 1020128). Treat an absent value as "CBT not
+	// enabled" instead of dereferencing a nil pointer and panicking.
+	if o.Config == nil || o.Config.ChangeTrackingEnabled == nil {
+		return false, nil
+	}
 	return *o.Config.ChangeTrackingEnabled, nil
+}
+
+// parseHardwareVersion extracts the numeric virtual hardware version from a
+// VMware config.version string such as "vmx-07". It returns 0 when the value is
+// empty or cannot be parsed.
+func parseHardwareVersion(version string) int {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(version), "vmx-")
+	if trimmed == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// GetHardwareVersion returns the numeric virtual hardware version of the VM
+// (e.g. 4 for "vmx-04", 13 for "vmx-13"). It returns 0 when the version cannot
+// be determined.
+func (vmops *VMOps) GetHardwareVersion() (int, error) {
+	vm := vmops.VMObj
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+	if err != nil {
+		if !vcenter.IsTransientVCenterError(err) {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return 0, fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		err = vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+	}
+	if o.Config == nil {
+		return 0, nil
+	}
+	return parseHardwareVersion(o.Config.Version), nil
 }
 
 func (vmops *VMOps) EnableCBT() error {

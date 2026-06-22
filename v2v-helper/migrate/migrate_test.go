@@ -133,24 +133,67 @@ func TestCreateVolumes(t *testing.T) {
 }
 
 func TestEnableCBTWrapper(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	// Hot migration on CBT-capable hardware enables CBT as before.
+	t.Run("hot migration enables CBT on supported hardware", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	mockVMOps := vm.NewMockVMOperations(ctrl)
-	gomock.InOrder(
-		mockVMOps.EXPECT().IsCBTEnabled().Return(false, nil).AnyTimes(),
-		mockVMOps.EXPECT().EnableCBT().Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().IsCBTEnabled().Return(true, nil).AnyTimes(),
-		mockVMOps.EXPECT().TakeSnapshot(gomock.Any()).Return(nil).AnyTimes(),
-		mockVMOps.EXPECT().DeleteSnapshot(gomock.Any()).Return(nil).AnyTimes(),
-	)
+		mockVMOps := vm.NewMockVMOperations(ctrl)
+		mockVMOps.EXPECT().GetHardwareVersion().Return(13, nil)
+		gomock.InOrder(
+			mockVMOps.EXPECT().IsCBTEnabled().Return(false, nil),
+			mockVMOps.EXPECT().EnableCBT().Return(nil),
+			mockVMOps.EXPECT().IsCBTEnabled().Return(true, nil),
+			mockVMOps.EXPECT().TakeSnapshot(gomock.Any()).Return(nil),
+			mockVMOps.EXPECT().DeleteSnapshot(gomock.Any()).Return(nil),
+		)
 
-	migobj := Migrate{
-		VMops:         mockVMOps,
-		EventReporter: make(chan string),
-	}
-	err := migobj.EnableCBTWrapper()
-	assert.NoError(t, err)
+		migobj := Migrate{
+			VMops:         mockVMOps,
+			MigrationType: "hot",
+			EventReporter: make(chan string, 16),
+		}
+		err := migobj.EnableCBTWrapper()
+		assert.NoError(t, err)
+	})
+
+	// Cold migration must not touch CBT at all - no hardware-version check and
+	// no CBT calls are made.
+	t.Run("cold migration skips CBT entirely", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockVMOps := vm.NewMockVMOperations(ctrl)
+		// No EXPECT() calls: gomock fails the test if any VM operation is invoked.
+
+		migobj := Migrate{
+			VMops:         mockVMOps,
+			MigrationType: "cold",
+			EventReporter: make(chan string, 16),
+		}
+		err := migobj.EnableCBTWrapper()
+		assert.NoError(t, err)
+	})
+
+	// Legacy hardware (version < 7) cannot support CBT. A hot migration must fail
+	// gracefully with an actionable error instead of panicking, and must never
+	// attempt to read or enable CBT.
+	t.Run("legacy hardware fails gracefully on hot migration", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockVMOps := vm.NewMockVMOperations(ctrl)
+		mockVMOps.EXPECT().GetHardwareVersion().Return(4, nil)
+
+		migobj := Migrate{
+			VMops:         mockVMOps,
+			MigrationType: "hot",
+			EventReporter: make(chan string, 16),
+		}
+		err := migobj.EnableCBTWrapper()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cold migration")
+	})
 }
 
 func TestLiveReplicateDisks(t *testing.T) {

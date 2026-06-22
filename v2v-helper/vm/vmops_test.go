@@ -161,6 +161,47 @@ func TestIsCBTEnabled(t *testing.T) {
 	assert.True(t, enabled)
 }
 
+func TestParseHardwareVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		want    int
+	}{
+		{name: "legacy hardware version 4", version: "vmx-04", want: 4},
+		{name: "minimum CBT-capable version 7", version: "vmx-07", want: 7},
+		{name: "modern double-digit version", version: "vmx-13", want: 13},
+		{name: "version without leading zero", version: "vmx-4", want: 4},
+		{name: "surrounding whitespace", version: " vmx-09 ", want: 9},
+		{name: "empty string", version: "", want: 0},
+		{name: "missing numeric suffix", version: "vmx-", want: 0},
+		{name: "unparseable value", version: "vmx-abc", want: 0},
+		{name: "unexpected format", version: "esx-7", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseHardwareVersion(tt.version); got != tt.want {
+				t.Errorf("parseHardwareVersion(%q) = %d, want %d", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetHardwareVersion(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmName := "DC0_H0_VM0"
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
+
+	hwVersion, err := vmops.GetHardwareVersion()
+	assert.NoError(t, err)
+	// The govmomi simulator reports a modern, CBT-capable hardware version for
+	// its default VMs. We assert it is positive and at least the CBT minimum so
+	// the test stays robust against simulator version bumps.
+	assert.GreaterOrEqual(t, hwVersion, MinCBTHardwareVersion)
+}
+
 func TestTakeSnapshot(t *testing.T) {
 	simVC, model, server, err := simulateVCenter()
 	defer cleanupSimulator(model, server)
