@@ -122,15 +122,12 @@ function pendingDetail(designIndex: number): string {
   }
 }
 
-function failedDetail(migration: Migration, designIndex: number): string {
-  const conditions = migration.status?.conditions || []
-  const failCond = conditions.find((c) => c.type === 'Failed')
-  if (failCond?.message) return String(failCond.message)
+function failedDetail(_migration: Migration, designIndex: number): string {
   switch (designIndex) {
-    case 1: return 'Validation check failed.'
-    case 2: return 'Disk copy failed.'
-    case 3: return 'Cutover failed.'
-    default: return 'Failed.'
+    case 1: return 'Validation check failed. See error details below.'
+    case 2: return 'Disk copy failed. See error details below.'
+    case 3: return 'Cutover failed. See error details below.'
+    default: return 'Migration halted. See error details below.'
   }
 }
 

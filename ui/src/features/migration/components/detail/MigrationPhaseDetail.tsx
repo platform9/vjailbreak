@@ -194,28 +194,129 @@ function AwaitingCutoverDetail({
 
 // ─── Success ──────────────────────────────────────────────────────────────────
 
-function SuccessDetail({ migration }: { migration: Migration }) {
-  const vmName = migration.spec?.vmName || migration.metadata?.name || '—'
+function calcMigrationElapsed(
+  start: Date | string | undefined,
+  endMs: number
+): string {
+  if (!start || !endMs) return ''
+  const diffMs = endMs - new Date(start).getTime()
+  if (diffMs <= 0) return ''
+  const hours = Math.floor(diffMs / 3_600_000)
+  const mins = Math.floor((diffMs % 3_600_000) / 60_000)
+  if (hours > 0) return `${hours}h ${mins}m total`
+  return `${mins}m total`
+}
+
+function SuccessStatBox({
+  label,
+  value,
+  sub,
+}: {
+  label: string
+  value: string
+  sub?: string
+}) {
   return (
     <Box
       sx={{
-        p: 3,
+        flex: 1,
+        p: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        minWidth: 0,
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        fontWeight={600}
+        sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.8 }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        variant="body1"
+        fontWeight={700}
+        sx={{ mt: 0.5, wordBreak: 'break-word' }}
+      >
+        {value}
+      </Typography>
+      {sub && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+          {sub}
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+function SuccessDetail({ migration }: { migration: Migration }) {
+  const vmName = (migration.spec?.vmName as string | undefined) || migration.metadata?.name || '—'
+  const podRef = (migration.spec?.podRef as string | undefined) || undefined
+  const totalDisks = migration.status?.totalDisks
+  const agentName = migration.status?.agentName
+
+  const conditions = migration.status?.conditions ?? []
+  const lastConditionMs = conditions.reduce((max, c) => {
+    const t = c.lastTransitionTime ? new Date(c.lastTransitionTime).getTime() : 0
+    return t > max ? t : max
+  }, 0)
+  const elapsed = calcMigrationElapsed(migration.metadata?.creationTimestamp, lastConditionMs)
+
+  return (
+    <Box
+      sx={{
         bgcolor: 'background.paper',
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'success.light',
         mb: 2,
+        overflow: 'hidden',
       }}
     >
-      <Typography variant="caption" color="success.main" sx={{ display: 'block', mb: 0.5 }}>
-        Migration complete
-      </Typography>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-        {vmName} is running in PCD
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        The VM has been migrated to PCD. Verify the target VM status in the destination environment.
-      </Typography>
+      {/* Header */}
+      <Box sx={{ px: 3, pt: 2.5, pb: 2 }}>
+        <Typography
+          variant="caption"
+          fontWeight={700}
+          sx={{
+            display: 'block',
+            color: 'success.main',
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+            mb: 0.75,
+          }}
+        >
+          Migration complete{elapsed ? ` · ${elapsed.toUpperCase()}` : ''}
+        </Typography>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
+          {vmName} is running in PCD
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          The VM has been migrated to PCD. Verify the target VM status in the destination environment.
+        </Typography>
+      </Box>
+
+      {/* Stat boxes */}
+      <Box
+        sx={{
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          px: 3,
+          py: 2,
+          display: 'flex',
+          gap: 1.5,
+          flexWrap: 'wrap',
+        }}
+      >
+        <SuccessStatBox label="Target VM" value={vmName} sub={podRef} />
+        <SuccessStatBox
+          label="Disks migrated"
+          value={totalDisks != null ? `${totalDisks} disk${totalDisks !== 1 ? 's' : ''}` : '—'}
+        />
+        <SuccessStatBox label="Agent" value={agentName || '—'} />
+      </Box>
     </Box>
   )
 }

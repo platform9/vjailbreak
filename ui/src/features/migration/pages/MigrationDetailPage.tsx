@@ -19,12 +19,12 @@ import {
   MigrationPhaseStepper,
   MigrationPhaseDetail,
   MigrationErrorCard,
-  MigrationActivityTimeline,
-  MigrationSpecCard,
   MigrationDetailDebugLogs,
+  MigrationEventsTab,
+  MigrationDetailsTab,
 } from '../components/detail'
 
-type TabId = 'overview' | 'logs'
+type TabId = 'overview' | 'logs' | 'events' | 'details'
 
 export default function MigrationDetailPage() {
   const { migrationName } = useParams<{ migrationName: string }>()
@@ -91,8 +91,9 @@ export default function MigrationDetailPage() {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v as TabId)}>
           <Tab label="Overview" value="overview" />
+          <Tab label="Details" value="details" />
+          <Tab label="Events" value="events" />
           <Tab label="Pod logs" value="logs" />
-          <Tab label="Events" disabled sx={{ opacity: 0.4 }} />
           <Tab label="Resources" disabled sx={{ opacity: 0.4 }} />
         </Tabs>
       </Box>
@@ -100,33 +101,27 @@ export default function MigrationDetailPage() {
       {/* Overview tab */}
       {tab === 'overview' && (
         <Box>
-          {/* Phase stepper */}
           <MigrationPhaseStepper migration={migration} />
-
-          {/* Error card (failed) or phase detail (active/done) */}
           {failed
             ? <MigrationErrorCard migration={migration} />
             : <MigrationPhaseDetail migration={migration} onCutoverSuccess={() => refetch()} />
           }
-
-          {/* Two-column meta row */}
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-              gap: 2,
-              mt: 2,
-            }}
-          >
-            <MigrationActivityTimeline migration={migration} />
-            <MigrationSpecCard migration={migration} resources={resources} />
-          </Box>
         </Box>
       )}
 
       {/* Logs tab */}
       {tab === 'logs' && (
         <MigrationDetailDebugLogs migration={migration} />
+      )}
+
+      {/* Events tab */}
+      {tab === 'events' && (
+        <MigrationEventsTab migration={migration} />
+      )}
+
+      {/* Details tab */}
+      {tab === 'details' && (
+        <MigrationDetailsTab migration={migration} />
       )}
     </Box>
   )

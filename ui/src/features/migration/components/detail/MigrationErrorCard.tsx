@@ -1,23 +1,28 @@
 import { useState } from 'react'
 import {
-  Alert,
   Box,
+  Button,
   Collapse,
-  IconButton,
+  Link,
   Paper,
   Tooltip,
   Typography,
 } from '@mui/material'
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { Migration, Condition } from '../../api/migrations'
+
+const TROUBLESHOOTING_URL =
+  'https://platform9.github.io/vjailbreak/guides/troubleshooting/troubleshooting/'
+
 
 const GENERIC_STEPS = [
   {
     title: 'Review the error message and pod logs',
-    body: 'The Debug Logs tab contains the full pod output. Filter by ERROR or FATAL to find the root cause.',
+    body: 'Go to the Pod logs tab and filter by ERROR or FATAL to find the root cause.',
   },
   {
     title: 'Check source VM accessibility',
@@ -56,8 +61,8 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
     errorCondition?.message
       ? String(errorCondition.message)
       : phase === 'ValidationFailed'
-      ? 'Validation failed'
-      : 'Migration failed'
+        ? 'Validation failed'
+        : 'Migration failed'
 
   const errorTimestamp = errorCondition?.lastTransitionTime
     ? new Date(errorCondition.lastTransitionTime).toLocaleString(undefined, {
@@ -69,9 +74,9 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
       })
     : '—'
 
-  const failedConditions = conditions.filter(
+  const failedConditionCount = conditions.filter(
     (c) => c.status === 'False' || c.type === 'Failed'
-  )
+  ).length
 
   const handleCopy = async () => {
     const text = [
@@ -96,8 +101,6 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'divider',
-        borderLeftWidth: 4,
-        borderLeftColor: 'error.main',
         mb: 2,
         overflow: 'hidden',
       }}
@@ -105,62 +108,76 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
       {/* Header */}
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 1.5,
           px: 3,
           pt: 2.5,
           pb: 2,
           borderBottom: '1px solid',
           borderColor: 'divider',
+          bgcolor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(211, 47, 47, 0.08)'
+              : 'rgba(211, 47, 47, 0.04)',
         }}
       >
-        <ErrorOutlineIcon sx={{ color: 'error.main', mt: 0.25, flexShrink: 0 }} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', gap: 1, mb: 0.25 }}>
-            <Typography variant="caption" color="text.secondary">
+        {/* Phase + timestamp row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <WarningAmberIcon sx={{ color: 'error.main', fontSize: 18 }} />
+            <Typography
+              variant="caption"
+              sx={{
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'rgba(211,47,47,0.2)' : 'rgba(211,47,47,0.1)',
+                color: 'error.main',
+                fontWeight: 700,
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 0.5,
+                letterSpacing: 0.5,
+              }}
+            >
               {phase}
             </Typography>
-            <Typography variant="caption" color="text.disabled">
-              ·
-            </Typography>
+            <Typography variant="caption" color="text.disabled">·</Typography>
             <Typography variant="caption" color="text.secondary">
               {errorTimestamp}
             </Typography>
           </Box>
-          <Typography variant="subtitle1" fontWeight={700} color="error.main" sx={{ wordBreak: 'break-word' }}>
-            {errorTitle}
-          </Typography>
+
+          <Tooltip title={copied ? 'Copied!' : 'Copy diagnostic bundle'}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={<ContentCopyIcon fontSize="small" />}
+              onClick={handleCopy}
+              sx={{ fontSize: '0.75rem', py: 0.5 }}
+            >
+              {copied ? 'Copied!' : 'Copy diagnostic bundle'}
+            </Button>
+          </Tooltip>
         </Box>
-        <Tooltip title={copied ? 'Copied!' : 'Copy diagnostic info'}>
-          <IconButton size="small" onClick={handleCopy} sx={{ flexShrink: 0 }}>
-            <ContentCopyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+
+        {/* Error title */}
+        <Typography
+          variant="body1"
+          fontWeight={700}
+          color="error.main"
+          sx={{ wordBreak: 'break-word', lineHeight: 1.5 }}
+        >
+          {errorTitle}
+        </Typography>
       </Box>
 
       {/* Body */}
-      <Box sx={{ px: 3, py: 2.5 }}>
-        {/* Conditions summary */}
-        {failedConditions.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              What happened
-            </Typography>
-            {failedConditions.map((c, idx) => (
-              <Alert key={idx} severity="error" sx={{ mb: 1, py: 0.5 }}>
-                <Typography variant="body2">
-                  <strong>{String(c.type)}</strong>
-                  {c.message ? ` — ${String(c.message)}` : ''}
-                </Typography>
-              </Alert>
-            ))}
-          </Box>
-        )}
-
-        {/* Resolution steps */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+      <Box sx={{ px: 3, py: 2.5, display: 'grid', gap: 2.5 }}>
+        {/* Recommended resolution */}
+        <Box>
+          <Typography
+            variant="overline"
+            color="text.secondary"
+            sx={{ display: 'block', mb: 1.5, letterSpacing: 1 }}
+          >
             Recommended resolution
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -196,23 +213,32 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
           </Box>
         </Box>
 
-        {/* Collapsible raw conditions */}
+        {/* Troubleshooting link */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            Need more help?
+          </Typography>
+          <Link
+            href={TROUBLESHOOTING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="body2"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+          >
+            Troubleshooting guide
+            <OpenInNewIcon sx={{ fontSize: 13 }} />
+          </Link>
+        </Box>
+
+        {/* Collapsible raw log lines */}
         {conditions.length > 0 && (
-          <Box>
+          <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1.5 }}>
             <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                cursor: 'pointer',
-                py: 0.5,
-                borderTop: '1px solid',
-                borderColor: 'divider',
-                pt: 1.5,
-              }}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', py: 0.5 }}
               onClick={() => setLogsExpanded((v) => !v)}
             >
               <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                Raw conditions ({conditions.length})
+                Show raw log lines from the failure ({failedConditionCount})
               </Typography>
               {logsExpanded ? (
                 <ExpandLessIcon fontSize="small" sx={{ color: 'text.secondary' }} />
@@ -237,7 +263,10 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
                   <Box
                     key={idx}
                     sx={{
-                      color: c.type === 'Failed' || c.status === 'False' ? 'error.main' : 'text.primary',
+                      color:
+                        c.type === 'Failed' || c.status === 'False'
+                          ? 'error.main'
+                          : 'text.primary',
                       mb: 0.25,
                     }}
                   >

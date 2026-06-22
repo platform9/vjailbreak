@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Full-page view for a single `Migration` CRD. Shows live status, phase progress, contextual action buttons, error details, spec metadata, activity timeline, and streaming pod logs. Replaces previous table-only approach where users had no drill-down view.
+Full-page view for a single `Migration` CRD. Shows live status, phase progress, contextual action buttons, error details, activity events, migration detail info, and streaming pod logs. Replaces previous table-only approach where users had no drill-down view.
 
 ---
 
@@ -31,23 +31,26 @@ Full-page view for a single `Migration` CRD. Shows live status, phase progress, 
 ```
 MigrationDetailPage
 ├─ MigrationDetailHeader          # breadcrumb, title, phase chip, action buttons, subtitle
-├─ MigrationKpiStrip              # 5 KPI cells: Started, Total Elapsed, Source Cluster, Destination Cluster, Destination Tenant, Agent
+├─ MigrationKpiStrip              # KPI cells: Started, Total Elapsed, Source Cluster, Destination Cluster, Destination Tenant, Agent
 ├─ MigrationNextActionBanner      # phase-contextual Alert (info/warning/success/error)
-├─ Tabs: Overview | Pod logs | Events (disabled) | Resources (disabled)
-└─ [overview tab]
-   ├─ MigrationPhaseStepper       # 5-step horizontal rail
-   ├─ MigrationErrorCard          # shown only when isMigrationFailed()
-   │   OR MigrationPhaseDetail    # shown when not failed
-   │       ├─ CopyingPhaseDetail        (copying/converting phases)
-   │       ├─ AwaitingCutoverDetail     (AwaitingAdminCutOver / AwaitingCutOverStartTime)
-   │       ├─ SuccessDetail            (Succeeded)
-   │       └─ GenericActiveDetail      (Pending / Validating / fallback)
-   └─ [2-col grid]
-      ├─ MigrationActivityTimeline # conditions sorted by lastTransitionTime
-      └─ MigrationSpecCard         # key/value grid of spec fields
-   [logs tab]
+├─ Tabs: Overview | Details | Events | Pod logs | Resources (disabled)
+├─ [overview tab]
+│  ├─ MigrationPhaseStepper       # 5-step horizontal rail
+│  └─ MigrationErrorCard          # shown only when isMigrationFailed()
+│      OR MigrationPhaseDetail    # shown when not failed
+│          ├─ CopyingPhaseDetail        (copying/converting phases)
+│          ├─ AwaitingCutoverDetail     (AwaitingAdminCutOver / AwaitingCutOverStartTime)
+│          ├─ SuccessDetail            (Succeeded)
+│          └─ GenericActiveDetail      (Pending / Validating / fallback)
+├─ [details tab]
+│  └─ MigrationDetailsTab         # flat layout: environment, general info, mappings, policies, image profiles
+├─ [events tab]
+│  └─ MigrationEventsTab          # conditions timeline with search/filter/sort
+└─ [logs tab]
    └─ MigrationDetailDebugLogs    # streaming pod logs — dark theme viewer with filter controls
 ```
+
+**Note**: Activity Timeline and Migration Spec sections were removed from Overview tab. Their content moved to Events tab and Details tab respectively (expanded versions).
 
 ---
 
@@ -73,12 +76,14 @@ Fetches related resources referenced by the migration:
 - `vmwareMachine` → primary source for **Source Cluster** KPI (`spec.vms.clusterName || label vjailbreak.k8s.pf9.io/vmware-cluster`)
 - `openstackCreds` → used for DESTINATION TENANT KPI cell (`projectName`) and header subtitle
 - `migrationTemplate` → source of **Destination Cluster** KPI (`spec.targetPCDClusterName`); fallback for `migrationType`, `networkMapping`, `storageMapping`
-- `networkMapping`, `storageMapping` → shown in `MigrationSpecCard`
+- `networkMapping`, `storageMapping` → shown in `MigrationDetailsTab`
 - `pcdClusters` → available for cluster→tenant resolution
+- `migrationPlan`, `openstackCredsList`, `rdmDisks`, `arrayCredsMapping` → used by `MigrationDetailsTab`
 
 Returns `MigrationDetailResources | null`. 404s are non-fatal — cells show `—`.
 
-`resources` is passed to both `MigrationDetailHeader` and `MigrationKpiStrip` from `MigrationDetailPage`.
+`resources` is passed to `MigrationDetailHeader` and `MigrationKpiStrip` from `MigrationDetailPage`.  
+`MigrationDetailsTab` calls the hook internally (React Query cache hit — same query key).
 
 ---
 
@@ -122,10 +127,24 @@ export function isMigrationFailed(migration: Migration): boolean {
 }
 ```
 
+### `failedDetail()` — stepper detail text for failed step (phaseUtils.ts)
+
+Returns short phase-specific text; does NOT return the raw condition message (avoids repeating the full error shown in ErrorCard):
+
+```typescript
+function failedDetail(_migration: Migration, designIndex: number): string {
+  switch (designIndex) {
+    case 1: return 'Validation check failed. See error details below.'
+    case 2: return 'Disk copy failed. See error details below.'
+    case 3: return 'Cutover failed. See error details below.'
+    default: return 'Migration halted. See error details below.'
+  }
+}
+```
+
 ### Done step detail text (phaseUtils.ts)
 
-`case 4: return 'Migration completed successfully.'`  
-(Previously "Target VM is healthy." — changed because VM health is not verified.)
+`case 4: return 'Migration completed successfully.'`
 
 ---
 
@@ -144,7 +163,7 @@ Props: `{ migration, onBack, onCutoverSuccess?, resources? }`
 | Succeeded | No action buttons |
 
 - Retry button is always disabled with tooltip "Retry is not yet available in this version".
-- **Delete migration** button (previously "Cancel migration") triggers a confirmation dialog → calls `deleteMigration()` → navigates back to list.
+- **Delete migration** button triggers a confirmation dialog → calls `deleteMigration()` → navigates back to list.
 - Dialog title: "Delete migration?" / confirm button: "Delete migration" / progress: "Deleting…"
 - Title shows `spec.vmName || metadata.name` with `letterSpacing: '-0.015em'` (condensed bold look).
 - **Subtitle** (two formats):
@@ -162,7 +181,7 @@ Props: `{ migration, onBack, onCutoverSuccess?, resources? }`
 |------|--------|------|
 | Started | `metadata.creationTimestamp` formatted to "Jun 12, 02:30" | regular |
 | Total Elapsed | `calculateTimeElapsed(creationTs, status)` | regular |
-| ~~Remaining~~ | ~~`'Completed'` / `'Halted'` / `'—'`~~ | _commented out_ |
+| ~~Remaining~~ | ~~commented out~~ | _commented out_ |
 | Source Cluster | `vmwareMachine.spec.vms.clusterName \|\| label[vmware-cluster] \|\| vmwareCreds.datacenter \|\| hostName \|\| '—'` | monospace |
 | Destination Cluster | `migrationTemplate.spec.targetPCDClusterName \|\| '—'` | monospace |
 | Destination Tenant | `openstackCreds.spec.projectName \|\| openstackCredsRef \|\| '—'` | monospace |
@@ -185,8 +204,6 @@ Renders MUI `<Alert>` above the tabs:
 | Succeeded | success | "**Migration succeeded.** The target VM is running in PCD." |
 | Failed/ValidationFailed | error | "**Migration halted.** Review the error details below before retrying." |
 
-Note: Succeeded message no longer includes decommission reminder (removed 2026-06-22).
-
 ### `MigrationPhaseStepper`
 **File**: `src/features/migration/components/detail/MigrationPhaseStepper.tsx`
 
@@ -203,7 +220,7 @@ Horizontal 5-step rail. Each step has:
   - `done` / `pending` → `text.disabled`, `fontWeight: 400`
 - **Phase name** (body2): bold if active/failed, colored by status
 - **Meta text**: elapsed time (done), "Xm Ys elapsed" (active), "Pending" (pending), "Halted · Xs" (failed)
-- **Detail text**: human-readable status detail from `phaseUtils.ts`
+- **Detail text**: human-readable status detail from `phaseUtils.ts` — short text for failed (no raw message)
 
 Phase states derived by `derivePhaseStates(migration)` in `phaseUtils.ts`.
 
@@ -224,12 +241,20 @@ Router — picks sub-component by K8s phase:
   2. Run a final CBT delta sync to capture changed blocks
   3. Detach volumes from worker, attach to target instance
   4. Boot target VM in PCD and run guest health checks
-  - ~~"Disconnect source network on the original VM"~~ — removed 2026-06-22
 
 **`SuccessDetail`** (Succeeded)
-- Success-bordered card: "\<vmName\> is running in PCD"
-- Body text: "The VM has been migrated to PCD. Verify the target VM status in the destination environment."
-- (Previous health check assertion removed — actual health data not available from API)
+- Two-section card with `success.light` border:
+  - **Header** (`px: 3, pt: 2.5, pb: 2`):
+    - Green uppercase caption: `MIGRATION COMPLETE · {Xh Ym TOTAL}` — elapsed auto-calculated from `metadata.creationTimestamp` to last condition `lastTransitionTime`
+    - Bold title: `{vmName} is running in PCD`
+    - Subtitle: `"The VM has been migrated to PCD. Verify the target VM status in the destination environment."`
+  - **Stat boxes row** (separated by top border, `px: 3, py: 2`, `display: flex, gap: 1.5`):
+    - **TARGET VM**: `spec.vmName` / sub: `spec.podRef`
+    - **DISKS MIGRATED**: `status.totalDisks` count
+    - **AGENT**: `status.agentName`
+    - Each box: individual border, uppercase label (`0.8rem`, `letterSpacing: 0.8`), bold `body1` value
+- No health checks (not available from API)
+- No action buttons (View VM in PCD / Download report / etc.)
 
 **`GenericActiveDetail`** (Pending / Validating / fallback)
 - Plain card showing current phase string
@@ -241,57 +266,98 @@ Returns `null` for Failed / ValidationFailed (ErrorCard shown instead).
 
 Shown only when `isMigrationFailed()` returns true.
 
-- **Border**: `1px solid divider` + `4px solid error.main` left accent (not full error border)
-- **Header**: error icon, `phase` label + `lastTransitionTime`, error title with `wordBreak: 'break-word'`, copy-diagnostic icon button
-- **Error title source**: `errorCondition.message || (phase === 'ValidationFailed' ? 'Validation failed' : 'Migration failed')`
-- **Error condition lookup**: `conditions.find((c) => c.type === 'Failed') || conditions.find((c) => c.status === 'False')`
-- **"What happened" section**: all conditions where `status === 'False' || type === 'Failed'` — rendered as MUI `<Alert severity="error">`
-- **Resolution steps**: 4 generic steps — numbered circles use `primary.main` filled background with white text (not gray)
-- **"Raw conditions" accordion**: collapsible, shows all conditions in monospace
+**Layout**:
+- **Header** (subtle red-tinted `bgcolor`, separated by bottom border):
+  - Left: `WarningAmberIcon` + phase chip (red badge, red text) + `·` + timestamp
+  - Right: "Copy diagnostic bundle" outlined button (`ContentCopyIcon`)
+  - Below: Error title — `body1` `fontWeight: 700` `color: error.main` `wordBreak: break-word`
+- **Body** (`px: 3, py: 2.5, display: grid, gap: 2.5`):
+  - **Recommended resolution** (overline) → 4 numbered generic steps (blue filled circles)
+  - **"Need more help?"** + `"Troubleshooting guide ↗"` link → `https://platform9.github.io/vjailbreak/guides/troubleshooting/troubleshooting/`
+  - **"Show raw log lines from the failure (N)"** → collapsible accordion showing all conditions in monospace; count = failed conditions only
+
+**Error title source**: `errorCondition.message || (phase === 'ValidationFailed' ? 'Validation failed' : 'Migration failed')`
+
+**Error condition lookup**: `conditions.find((c) => c.type === 'Failed') || conditions.find((c) => c.status === 'False')`
+
+**No separate "What happened" / "Why this happens" sections** — these were removed; the error title alone carries the primary message.
+
+**Generic resolution steps**:
+1. Review the error message and pod logs — "Go to the Pod logs tab and filter by ERROR or FATAL to find the root cause."
+2. Check source VM accessibility — "Verify the vCenter host, ESXi host, and datastore are reachable from the vJailbreak appliance."
+3. Verify target capacity — "Confirm the OpenStack Cinder pool has enough free capacity for all disks in the migration."
+4. Retry the migration — "After addressing the issue, use the Retry button. vJailbreak will resume from the last checkpoint."
 
 **Bug fixed 2026-06-12**: Previously `conditions.find((c) => c.type === 'Failed' || c.reason === 'Migration')` matched `Validated` condition first (all have `reason: 'Migration'`). Fixed to `c.type === 'Failed'` only.
+
+### `MigrationEventsTab`
+**File**: `src/features/migration/components/detail/MigrationEventsTab.tsx`
+
+Enabled tab showing all `status.conditions` in an enhanced interactive timeline. Replaces the previous `MigrationActivityTimeline` component that was in the Overview two-column grid.
+
+**Toolbar**:
+- Search field (`minWidth: 240`) — filters by `type`, `message`, `reason`
+- Status filter `ToggleButtonGroup`: All (N) | ✓ {success count} | ✗ {error count} | ○ {pending count}
+- Sort `ToggleButtonGroup` (right-aligned): "Oldest first" | "Newest first"
+
+**Status classification** (`conditionStatus(c)`):
+- `'error'` → `type === 'Failed'` or (`status === 'False'` and `type !== 'Migrating'`)
+- `'success'` → `status === 'True'`
+- `'pending'` → everything else
+
+**Event card layout** (per condition):
+- Left: icon (20px) + vertical connector line (2px divider, minHeight 20)
+- Right card (`border: '1px solid divider'`, `borderLeft: '3px solid {accentColor}'`, `borderRadius: 1.5`):
+  - Row: **type** (bold) + status Chip (outlined) + full datetime (monospace, `0.72rem`)
+  - Message (body2, text.secondary)
+  - Reason (caption, text.disabled, `"Reason: {reason}"`)
+
+**Accent colors**: success → `success.main`, error → `error.main`, pending → `divider`
+
+**Empty states**: "No events recorded yet" / "No events match the current filters."
+
+**Full datetime format**: `toLocaleString` with month/day/year/hour/minute/second
+
+### `MigrationDetailsTab`
+**File**: `src/features/migration/components/detail/MigrationDetailsTab.tsx`
+
+Second tab (position 2). Shows same content as `MigrationDetailModal` (General + Advanced tabs) in a flat full-page layout. The modal (`src/components/migrations/MigrationDetailModal.tsx`) is NOT removed — this tab exists for team review/approval before the modal is deprecated.
+
+**Data**: Calls `useMigrationDetailResourcesQuery({ open: true, migration })` internally — hits React Query cache from the page-level call.
+
+**Sections (flat, no inner tabs)**:
+
+1. **Migration Environment** (`SurfaceCard`) — `KeyValueGrid` using `MIGRATION_ENVIRONMENT_FIELDS` constants:
+   - Source Datacenter, Source Cluster, ESXi Host, Destination Tenant, Destination Cluster
+
+2. **General Info** (`SurfaceCard`) — `KeyValueGrid` using inline items:
+   - VM Name, Migration Type, Created At, Guest OS, CPU, Memory, Total Disks, Network Adapters, vJailbreak Agent, RDM Disks
+   - Network Details table (if NIC data present): MAC Handling, MAC Address, IP Handling, IP Addresses
+   - RDM Disks table (if `data.rdmDisks` present)
+
+3. **Mappings** (`SurfaceCard`) — two `MappingTable` sub-components:
+   - Network Mapping (source → target)
+   - Storage Mapping — normal: datastore → volume type; accelerated: datastore → array credentials
+
+4. **Migration Policies** (`SurfaceCard`) — `KeyValueGrid` using `MIGRATION_POLICY_FIELDS` constants:
+   - "View only enabled options" toggle (`Switch`) defaults to `true`
+   - Post-migration script (shown in `Paper` code block if configured)
+
+5. **Image Profiles** (`SurfaceCard`) — shown only when `planAdvanced.imageProfiles` is configured
+
+**Imports from existing infra** (same as MigrationDetailModal):
+- `normalizeMappingRows`, `isDefaultishValue` from `src/components/migrations/helpers`
+- `MIGRATION_ENVIRONMENT_FIELDS`, `MIGRATION_POLICY_FIELDS` from `src/components/migrations/migrationDetailConstants`
+- `KeyValueGrid`, `SurfaceCard`, `FieldLabel` from `src/components`
+- `formatDateTime`, `formatDiskSize` from `src/utils`
 
 ### `TriggerAdminCutoverButton`
 **File**: `src/features/migration/components/TriggerAdminCutover/TriggerAdminCutoverButton.tsx`
 
 Confirmation dialog spacing: `DialogTitle` `px:3, pt:3, pb:1` / `DialogContent` `px:3, pb:2` / `DialogActions` `px:3, pb:3, gap:1`.
 
-### `MigrationActivityTimeline`
-**File**: `src/features/migration/components/detail/MigrationActivityTimeline.tsx`
-
-- Renders `status.conditions` sorted by `lastTransitionTime` ascending
-- **Row layout**: `[timestamp col 60px] [icon+line col] [content col]` — timestamp is left of dot (matches design)
-- Each entry: time in fixed-width monospace left column, colored icon, `type — message` text
-- Icon: green check (`status === 'True'`), red error (`type === 'Failed' || status === 'False' && type !== 'Migrating'`), grey circle (other)
-- Vertical connecting line: `width: '2px'` (not `width: 1` which maps to 100% in MUI sx)
-- Header row: "Activity timeline" (left) + "View full history" stub link (right, `opacity: 0.5`, no-op)
-
-**Bug fixed 2026-06-19**: `width: 1` on vertical connector rendered as `width: 100%` due to MUI sx fraction mapping. Fixed to `width: '2px'`.
-
-### `MigrationSpecCard`
-**File**: `src/features/migration/components/detail/MigrationSpecCard.tsx`
-
-Uses `<KeyValueGrid items={items} labelWidth={180} mdGrids={1} />` — `mdGrids={1}` = 2-column layout, appropriate for half-page context. (`mdGrids={2}` = 4-column, causes overflow in this layout.)
-
-Fields shown:
-
-| Label | Source |
-|-------|--------|
-| Migration name | `metadata.name` |
-| VM name | `spec.vmName` |
-| Plan | `spec.migrationPlan || metadata.labels.migrationplan` |
-| Migration type | `spec.migrationType || migrationTemplate.spec.migrationType` |
-| Cutover | `spec.initiateCutover ? 'Admin initiated' : 'Automatic'` |
-| Disconnect source network | `spec.disconnectSourceNetwork ? 'Yes' : 'No'` |
-| Total disks | `status.totalDisks` |
-| Pod ref | `spec.podRef` |
-| Network mapping | from `resources.networkMapping` or template |
-| Storage mapping | from `resources.storageMapping` or template |
-
-### `MigrationDetailDebugLogs` (renamed tab: "Pod logs")
+### `MigrationDetailDebugLogs` (tab: "Pod logs")
 **File**: `src/features/migration/components/detail/MigrationDetailDebugLogs.tsx`
-
-Completely redesigned 2026-06-22 with dark terminal aesthetic.
 
 - Pod name from `spec.podRef`
 - Uses `useDirectPodLogs({ podName, namespace, enabled: !isPaused, follow: isLive, sessionKey })`
@@ -307,7 +373,7 @@ Completely redesigned 2026-06-22 with dark terminal aesthetic.
 - Download icon (`FileDownloadOutlinedIcon`) — saves filtered lines as `.txt`
 - Reconnect icon (`SyncIcon`) — increments `sessionKey`, calls `reconnect()`
 
-**Note**: Toolbar vertical dividers must use `width: '1px'` not `width: 1` — MUI sx treats `1` as `100%` (fraction). See bug fixed in ActivityTimeline same issue.
+**Note**: Toolbar vertical dividers must use `width: '1px'` not `width: 1` — MUI sx treats `1` as `100%` (fraction).
 
 **Meta bar** (dark `#161b22` background, `#30363d` border):
 - `X / Y lines · N errors N warnings N info N debug`
@@ -327,7 +393,7 @@ Completely redesigned 2026-06-22 with dark terminal aesthetic.
 
 **State**:
 - `isPaused: boolean` — user-controlled live toggle
-- `follow: boolean` — auto-scroll (writable, was previously hardcoded)
+- `follow: boolean` — auto-scroll (writable)
 - `sessionKey: number` — incremented on reconnect
 
 ---
@@ -339,17 +405,9 @@ Completely redesigned 2026-06-22 with dark terminal aesthetic.
 <Box sx={{ maxWidth: '100%', px: 3, py: 3 }}>
 ```
 
-`maxWidth: '100%'` — not `maxWidth: 1280`. The dashboard content area is already constrained by the sidebar layout. Using a fixed pixel value extends the container beyond the visible viewport.
+`maxWidth: '100%'` — not `maxWidth: 1280`. The dashboard content area is already constrained by the sidebar layout.
 
-**Two-column grid** (Activity Timeline + Spec Card):
-```tsx
-<Box sx={{
-  display: 'grid',
-  gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-  gap: 2,
-  mt: 2,
-}}>
-```
+**Tab content**: full-width, no grid wrapper. Each tab renders its own layout internally.
 
 ---
 
@@ -359,7 +417,7 @@ Completely redesigned 2026-06-22 with dark terminal aesthetic.
 
 - **Body / UI**: `Fira Sans` (loaded via Google Fonts CDN in `index.html`, weights 300/400/500/700)
 - **Monospace / technical values**: `"Fira Code", "SF Mono", "Monaco", "Consolas", "Roboto Mono", monospace`
-  - Used in: KPI Source/Destination/Agent cells, header subtitle technical terms, activity timeline timestamps, raw conditions accordion, pod log viewer
+  - Used in: KPI Source/Destination/Agent cells, header subtitle technical terms, events tab timestamps, raw conditions accordion, pod log viewer
 - **Eina04**: Loaded locally via `@font-face` in `ThemeContext.tsx` (not used in current typography definitions)
 
 ### Design Tokens (`src/theme/colors.ts`)
@@ -436,7 +494,7 @@ Returns a `Migration` object. Key fields used by detail page:
 |------|-------|---------|
 | `migration-u22-converting-disk` | ConvertingDisk | Active copy with disk progress bars |
 | `migration-win2019-cutover` | AwaitingAdminCutOver | Cutover CTA, warning banner |
-| `migration-centos7-succeeded` | Succeeded | All steps green, success card |
+| `migration-centos7-succeeded` | Succeeded | All steps green, success card with stat boxes |
 | `migration-rhel8-failed-copy` | Failed (copy step) | Error card, failed condition |
 | `migration-debian11-validation-failed` | ValidationFailed | Error card at step 2 |
 
@@ -465,10 +523,10 @@ server.use(cors({ origin: true, credentials: true }))
 | KpiStrip responsive | low | Cells may overflow on tablet; no breakpoint fallback |
 | Retry button wired to backend | blocked | No PATCH endpoint yet; button disabled with tooltip |
 | No "View VM in PCD" link for Succeeded | deferred | OpenStack instance ID not exposed in Migration API |
-| "View full history" link in ActivityTimeline | deferred | Events tab disabled; link stub renders but has no onClick |
-| Events tab | deferred | Disabled stub |
+| Events tab: "View full history" stub | deferred | Link renders but has no onClick |
 | Resources tab | deferred | Disabled stub |
 | Pod logs: source filter only works for structured lines | low | Unstructured log lines won't appear in any source bucket except ALL |
+| MigrationDetailsTab replaces drawer | deferred | Drawer (`MigrationDetailModal`) kept until team approves detail page; remove drawer after approval |
 
 ---
 
@@ -482,9 +540,15 @@ server.use(cors({ origin: true, credentials: true }))
 | 2026-06-22 | KpiStrip: Remaining commented out; Source→Source Cluster (vmwareMachine source); new Destination Cluster cell; Destination→Destination Tenant |
 | 2026-06-22 | Success banner: removed decommission text |
 | 2026-06-22 | Done step detail: "Migration completed successfully." (was: "Target VM is healthy.") |
-| 2026-06-22 | SuccessDetail card: removed health check assertion |
 | 2026-06-22 | Cutover checklist: removed "Disconnect source network on the original VM" |
 | 2026-06-22 | "Cancel migration" → "Delete migration" on all buttons/dialogs |
 | 2026-06-22 | Tab "Debug logs" → "Pod logs" |
-| 2026-06-22 | MigrationDetailDebugLogs: full dark-theme redesign; Live toggle (isPaused state); Follow auto-scroll; toolbar divider `'1px'` fix |
+| 2026-06-22 | MigrationDetailDebugLogs: full dark-theme redesign; Live toggle; Follow auto-scroll; toolbar divider `'1px'` fix |
 | 2026-06-22 | TriggerAdminCutoverButton: dialog padding improved |
+| 2026-06-22 | **Events tab enabled** — `MigrationEventsTab` component with search/filter/sort; conditions moved from Overview timeline |
+| 2026-06-22 | **Details tab added** (position 2) — `MigrationDetailsTab` flat layout matching drawer content; drawer kept for review |
+| 2026-06-22 | Overview tab: removed ActivityTimeline + SpecCard + two-column grid |
+| 2026-06-22 | Tab order: Overview → Details → Events → Pod logs → Resources |
+| 2026-06-22 | ErrorCard redesign: header with phase chip + Copy bundle button; `body1` error title; troubleshooting link; "Show raw log lines" accordion |
+| 2026-06-22 | `failedDetail()` in phaseUtils: no longer returns raw condition message — returns short phase-specific text |
+| 2026-06-22 | SuccessDetail redesign: "MIGRATION COMPLETE · elapsed" header + stat boxes (Target VM, Disks, Agent); no health checks; no action buttons |
