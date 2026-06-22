@@ -495,10 +495,24 @@ func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume 
 			return nil
 		}
 		PrintLog(fmt.Sprintf("Transient error setting volume %s as bootable (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
-		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+
+		// Cinder may have committed the change server-side even when the API
+		// call returns an error (e.g. timeout, 5xx). Verify actual state so we
+		// don't retry an operation that already succeeded.
+		current, getErr := osclient.GetVolume(ctx, volume.ID)
+		if getErr == nil && current.Bootable == "true" {
+			PrintLog(fmt.Sprintf("Volume %s is already bootable (Cinder applied the change but returned an error); treating as success", volume.ID))
+			return nil
+		}
+
+		time.Sleep(setBootableRetryInterval)
 	}
 	return fmt.Errorf("failed to set volume %s as bootable after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
+
+// setBootableRetryInterval is the delay between SetVolumeBootable retry
+// attempts. Exposed as a variable so tests can set it to zero.
+var setBootableRetryInterval = time.Duration(constants.DeleteOperationRetryIntervalSeconds) * time.Second
 
 func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Getting closest flavor for %d vCPUs and %d MB RAM, authurl %s, tenant %s", cpu, memory, osclient.AuthURL, osclient.Tenant))
