@@ -386,8 +386,8 @@ export default function MigrationsTable({
           ].includes(phase)
           const isValidating = phase === Phase.Validating
 
-          const diskNum = currentDisk ? parseInt(currentDisk, 10) : null
-          const diskProgress = diskNum && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
+          const diskNum = currentDisk != null ? parseInt(currentDisk, 10) : null
+          const diskProgress = diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
 
           const progressVariant: 'indeterminate' | 'determinate' | undefined =
             isCopyPhase && diskProgress !== null ? 'determinate'

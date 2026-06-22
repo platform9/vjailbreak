@@ -43,7 +43,7 @@ export function useDeleteMigrations() {
       await Promise.all([
         ...Object.entries(byPlan).map(async ([planId, { vmsToRemove, migrationsToDelete }]) => {
           const plan = await getMigrationPlan(planId)
-          const updatedVMs = plan.spec.virtualMachines?.[0]?.filter((vm) => !vmsToRemove.has(vm))
+          const updatedVMs = plan.spec.virtualMachines?.[0]?.filter((vm) => !vmsToRemove.has(vm)) ?? []
           await patchMigrationPlan(planId, { spec: { virtualMachines: [updatedVMs] } })
           await Promise.all(Array.from(migrationsToDelete).map((name) => deleteMigration(name)))
         }),
