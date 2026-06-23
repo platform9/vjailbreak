@@ -58,3 +58,11 @@ export const DARK_SECONDARY_LIGHT = '#6c7a93'
 export const LIGHT_SECONDARY = '#444f5f'
 export const LIGHT_SECONDARY_DARK = '#353f4c'
 export const LIGHT_SECONDARY_LIGHT = '#5a6679'
+
+// Design tokens — used for consistent styling in detail/complex components
+export const DESIGN_CODE_BG = '#0d1117'          // dark code block background
+export const DESIGN_CODE_TEXT = '#e6edf3'         // code block text
+export const DESIGN_BADGE_BG = '#f1f5f9'          // error code badge background (light)
+export const DESIGN_BADGE_TEXT = '#475569'         // error code badge text
+export const DESIGN_KPI_LABEL_LIGHT = '#64748b'   // KPI strip label color in light mode
+export const DESIGN_KPI_LABEL_DARK = '#94a3b8'    // KPI strip label color in dark mode
