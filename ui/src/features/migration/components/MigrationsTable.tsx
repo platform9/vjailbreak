@@ -387,12 +387,15 @@ export default function MigrationsTable({
           const isValidating = phase === Phase.Validating
 
           const diskNum = currentDisk != null ? parseInt(currentDisk, 10) : null
-          const diskProgress = diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
+          const diskProgress =
+            diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
 
           const progressVariant: 'indeterminate' | 'determinate' | undefined =
-            isCopyPhase && diskProgress !== null ? 'determinate'
-            : isCopyPhase || isValidating ? 'indeterminate'
-            : undefined
+            isCopyPhase && diskProgress !== null
+              ? 'determinate'
+              : isCopyPhase || isValidating
+                ? 'indeterminate'
+                : undefined
 
           const progressValue = diskProgress ?? 0
           const barColor = syncWarningMessage ? 'warning' : 'primary'
@@ -448,6 +451,17 @@ export default function MigrationsTable({
 
           return (
             <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}>
+              <Tooltip title={'Delete migration'}>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    params.row.onDelete(params.row.metadata?.name)
+                  }}
+                  size="small"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
               {showAdminCutover && (
                 <TriggerAdminCutoverButton
                   migrationName={migrationName}
@@ -485,17 +499,6 @@ export default function MigrationsTable({
                   </span>
                 </Tooltip>
               )}
-              <Tooltip title={'Delete migration'}>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    params.row.onDelete(params.row.metadata?.name)
-                  }}
-                  size="small"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
             </Box>
           )
         }
@@ -655,7 +658,6 @@ export default function MigrationsTable({
         errorMessage={bulkCutoverError}
         onErrorChange={setBulkCutoverError}
       />
-
     </>
   )
 }
