@@ -20,11 +20,8 @@ import { CUTOVER_TYPES } from '../constants'
 import type { RetryMigrationConfig } from '../context/MigrationFormContext'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
 
-const RETRY_CLONE_OF_ANNOTATION = 'vjailbreak.k8s.pf9.io/retry-clone-of'
-const RETRY_CLONE_VM_ANNOTATION = 'vjailbreak.k8s.pf9.io/retry-clone-vm'
-
-// Trim base name to fit within the Kubernetes 63-char DNS label limit imposed by
-// the clone suffix, then strip trailing hyphens left by the truncation.
+// Trim base name to fit within the Kubernetes 63-char DNS label limit, then strip
+// trailing hyphens left by the truncation.
 export function makeCloneName(original: string, suffix: string): string {
   const maxBase = 63 - suffix.length
   const base = original.slice(0, maxBase).replace(/-+$/, '')
@@ -59,11 +56,11 @@ interface UseRetrySubmitResult {
   handleEditAndRetry: () => Promise<void>
 }
 
-// Implements the two retry actions. "Retry without editing" only annotates the plan and
-// deletes the failed Migration (no configuration writes). "Edit & Retry" persists the
-// form's edits to the plan's own resources first, then triggers the same retry. The
-// annotation must land before the Migration delete so the controller resets the plan
-// even after validation failures.
+// Implements the two retry actions.
+// "Retry without editing": just deletes the failed Migration — controller recreates it unchanged.
+// "Edit & Retry": removes the VM from the old plan (or deletes the plan if it's the last VM),
+// deletes the old Migration, then creates a fresh set of resources (NetworkMapping,
+// StorageMapping, MigrationTemplate, MigrationPlan) with the user's edits applied.
 export function useRetrySubmit({
   retryConfig,
   params,
@@ -91,7 +88,6 @@ export function useRetrySubmit({
     [queryClient, onSuccess, onClose, navigate]
   )
 
-
   const triggerRetry = useCallback(async () => {
     if (!retryConfig) throw new Error('Retry context is missing')
     await deleteMigration(retryConfig.migrationName, retryConfig.namespace)
@@ -101,7 +97,6 @@ export function useRetrySubmit({
     const timeWindow =
       selectedMigrationOptions.cutoverOption && params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
 
-    // Build networkOverridesPerVM from params.vms (same logic as useMigrationFormSubmit).
     const networkOverridesPerVM: Record<
       string,
       Array<{
@@ -149,8 +144,6 @@ export function useRetrySubmit({
       })
     }
 
-    // Cleared optional fields are sent as explicit nulls: merge-patch removes the key so
-    // the recreated Migration does not silently keep stale values.
     return {
       migrationStrategy: {
         type: params.dataCopyMethod || retryPlan?.spec?.migrationStrategy?.type || 'cold',
@@ -187,39 +180,57 @@ export function useRetrySubmit({
     }
   }, [params, selectedMigrationOptions, retryPlan])
 
-  const cloneAndRetry = useCallback(async () => {
+  const performEditAndRetry = useCallback(async () => {
     if (!retryConfig || !retryTemplate || !retryPlan) return
     const namespace = retryConfig.namespace
     const suffix = `-r-${Date.now().toString(36).slice(-6)}`
     const retryingVMKey = retryVm?.vmKey || retryVm?.name || retryConfig.vmName
 
-    // 1. Clone NetworkMapping.
-    let cloneNetworkMappingName: string | undefined
+    // 1. Remove the retrying VM from the old plan. If it's the last VM, delete the whole plan.
+    const isLastVMInPlan = (retryPlan.spec?.virtualMachines?.flat()?.length ?? 0) <= 1
+    if (isLastVMInPlan) {
+      await deleteMigrationPlan(retryPlan.metadata.name, namespace)
+    } else {
+      const updatedVMs = (retryPlan.spec?.virtualMachines || [])
+        .map((batch) => batch.filter((v) => v !== retryingVMKey))
+        .filter((batch) => batch.length > 0)
+      await patchMigrationPlan(
+        retryPlan.metadata.name,
+        { spec: { virtualMachines: updatedVMs } },
+        namespace
+      )
+    }
+
+    // 2. Delete the failed Migration — GC cascades to owned Job and ConfigMaps.
+    await deleteMigration(retryConfig.migrationName, namespace)
+
+    // 3. Create new NetworkMapping.
+    let newNetworkMappingName: string | undefined
     if (networkMappingRequired && params.networkMappings?.length) {
       const created = await postNetworkMapping(
         createNetworkMappingJson({ networkMappings: params.networkMappings }),
         namespace
       )
-      cloneNetworkMappingName = created.metadata.name
+      newNetworkMappingName = created.metadata.name
     }
 
-    // 2. Clone StorageMapping.
-    let cloneStorageMappingName: string | undefined
+    // 4. Create new StorageMapping.
+    let newStorageMappingName: string | undefined
     if (params.storageCopyMethod !== 'StorageAcceleratedCopy' && params.storageMappings?.length) {
       const created = await postStorageMapping(
         createStorageMappingJson({ storageMappings: params.storageMappings }),
         namespace
       )
-      cloneStorageMappingName = created.metadata.name
+      newStorageMappingName = created.metadata.name
     }
 
-    // 3. POST clone MigrationTemplate: inherit immutable source/destination fields from
+    // 5. POST new MigrationTemplate: inherit immutable source/destination fields from
     //    the original, override everything the user may have edited.
     const originalTemplateSpec = retryTemplate.spec || {}
-    const cloneTemplateSpec = {
+    const newTemplateSpec = {
       ...originalTemplateSpec,
-      ...(cloneNetworkMappingName !== undefined && { networkMapping: cloneNetworkMappingName }),
-      ...(cloneStorageMappingName !== undefined && { storageMapping: cloneStorageMappingName }),
+      ...(newNetworkMappingName !== undefined && { networkMapping: newNetworkMappingName }),
+      ...(newStorageMappingName !== undefined && { storageMapping: newStorageMappingName }),
       storageCopyMethod: params.storageCopyMethod || 'normal',
       useGPUFlavor: params.useGPU || false,
       useFlavorless: Boolean(selectedMigrationOptions.useFlavorless),
@@ -228,76 +239,47 @@ export function useRetrySubmit({
         ? { proxyVMRef: { name: params.proxyVMRef } }
         : {})
     }
-    const cloneTemplateName = makeCloneName(retryTemplate.metadata.name, suffix)
-    const cloneTemplate = await postMigrationTemplate(
+    const newTemplate = await postMigrationTemplate(
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationTemplate',
-        metadata: { name: cloneTemplateName },
-        spec: cloneTemplateSpec
+        metadata: { name: makeCloneName(retryTemplate.metadata.name, suffix) },
+        spec: newTemplateSpec
       },
       namespace
     )
 
-    // 4. POST clone MigrationPlan: single-VM, edited spec, audit-trail annotations.
+    // 6. POST new MigrationPlan: single VM, fresh configuration with the user's edits.
     //    networkOverridesPerVM is filtered to only the retrying VM so other VMs' overrides
-    //    from the form state do not leak into the clone plan.
+    //    from the form state do not leak into the new plan.
     const planPatch = buildPlanPatchSpec()
     const filteredOverrides = planPatch.networkOverridesPerVM
       ? Object.fromEntries(
           Object.entries(planPatch.networkOverridesPerVM).filter(([key]) => key === retryingVMKey)
         )
       : null
-    const cloneOverrides =
+    const newPlanOverrides =
       filteredOverrides && Object.keys(filteredOverrides).length > 0 ? filteredOverrides : null
 
-    const clonePlanName = makeCloneName(retryPlan.metadata.name, suffix)
-    const clonePlan: MigrationPlan = await postMigrationPlan(
+    await postMigrationPlan(
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationPlan',
         metadata: {
-          name: clonePlanName,
-          annotations: {
-            [RETRY_CLONE_OF_ANNOTATION]: retryPlan.metadata.name,
-            [RETRY_CLONE_VM_ANNOTATION]: retryingVMKey
-          }
+          name: makeCloneName(retryPlan.metadata.name, suffix)
         },
         spec: {
           ...planPatch,
-          migrationTemplate: cloneTemplate.metadata.name,
+          migrationTemplate: newTemplate.metadata.name,
           virtualMachines: [[retryingVMKey]],
           retry: false,
-          networkOverridesPerVM: cloneOverrides
+          networkOverridesPerVM: newPlanOverrides
         }
       },
       namespace
     )
 
-    // 5. Handle the original plan.
-    //    Single-VM: delete old plan entirely — Kubernetes GC cascades to its owned resources.
-    //    Multi-VM: remove the retrying VM so the controller doesn't recreate the Migration
-    //    under the old plan. On PATCH failure, rollback by deleting the clone plan.
-    const isLastVMInPlan = (retryPlan.spec?.virtualMachines?.flat()?.length ?? 0) <= 1
-    if (isLastVMInPlan) {
-      await deleteMigrationPlan(retryPlan.metadata.name, namespace)
-    } else {
-      const updatedVMs = (retryPlan.spec?.virtualMachines || [])
-        .map((batch) => batch.filter((v) => v !== retryingVMKey))
-        .filter((batch) => batch.length > 0)
-      try {
-        await patchMigrationPlan(
-          retryPlan.metadata.name,
-          { spec: { virtualMachines: updatedVMs } },
-          namespace
-        )
-      } catch (err) {
-        await deleteMigrationPlan(clonePlan.metadata.name, namespace).catch(() => undefined)
-        throw err
-      }
-    }
-
-    // 6. Per-VM flavor override.
+    // 7. Per-VM flavor override.
     if (vmK8sName && selectedFlavorId && selectedFlavorId !== (retryVm?.targetFlavorId || '')) {
       await patchVMwareMachine(
         vmK8sName,
@@ -305,10 +287,6 @@ export function useRetrySubmit({
         namespace
       )
     }
-
-    // 7. DELETE the failed Migration last so the controller cannot recreate it under
-    //    the original plan between step 4 (clone plan created) and step 5 (VM removed).
-    await deleteMigration(retryConfig.migrationName, namespace)
   }, [
     retryConfig,
     retryTemplate,
@@ -332,7 +310,7 @@ export function useRetrySubmit({
   const editAndRetryMutation = useMutation({
     mutationFn: async () => {
       if (!retryConfig || !retryTemplate) return
-      await cloneAndRetry()
+      await performEditAndRetry()
     },
     onSuccess: () =>
       finishRetry(`Configuration updated, retry started for ${retryConfig?.vmName}`),

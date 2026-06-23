@@ -1018,9 +1018,8 @@ export const MOCK_RETRY_VMWARE_MACHINE_WITH_DC_ANNOTATION = {
   },
 }
 
-// ─── Clone-plan fixtures (RET-007) ────────────────────────────────────────────
-// These are the API responses returned when the UI POSTs the clone resources
-// during "Edit & Retry" on a multi-VM plan.
+// ─── New-plan fixtures (RET-003, RET-007) ─────────────────────────────────────
+// API responses returned when the UI POSTs new resources during "Edit & Retry".
 
 export const MOCK_RETRY_CLONE_TEMPLATE_SUFFIX = '-r-abc123'
 export const MOCK_RETRY_CLONE_TEMPLATE_NAME = `${MOCK_RETRY_TEMPLATE_NAME}${MOCK_RETRY_CLONE_TEMPLATE_SUFFIX}`
@@ -1047,13 +1046,7 @@ export const MOCK_RETRY_CLONE_TEMPLATE_CREATED = {
 export const MOCK_RETRY_CLONE_PLAN_CREATED = {
   apiVersion: API_VERSION,
   kind: 'MigrationPlan',
-  metadata: {
-    ...baseMeta(MOCK_RETRY_CLONE_PLAN_NAME),
-    annotations: {
-      'vjailbreak.k8s.pf9.io/retry-clone-of': MOCK_RETRY_PLAN_NAME,
-      'vjailbreak.k8s.pf9.io/retry-clone-vm': MOCK_RETRY_VM_KEY,
-    },
-  },
+  metadata: baseMeta(MOCK_RETRY_CLONE_PLAN_NAME),
   spec: {
     migrationStrategy: { type: 'cold', adminInitiatedCutOver: false },
     migrationTemplate: MOCK_RETRY_CLONE_TEMPLATE_NAME,

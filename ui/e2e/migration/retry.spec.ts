@@ -304,18 +304,18 @@ test.describe('RET-002 — retry without editing', () => {
   })
 })
 
-// ─── RET-003: edit and retry (single-VM plan — always clone) ─────────────────
+// ─── RET-003: edit and retry (single-VM plan) ────────────────────────────────
 
-test.describe('RET-003 — edit & retry always clones (single-VM plan)', () => {
+test.describe('RET-003 — edit & retry deletes old plan and migration first, then creates fresh resources (single-VM plan)', () => {
   test.beforeEach(async ({ page }) => {
     await mockRetryPrefillRoutes(page)
   })
 
-  // Single-VM Edit & Retry follows the same clone path as multi-VM (RET-007):
-  //   POST mappings → POST clone template → POST clone plan →
-  //   DELETE old plan → DELETE old migration
-  // No PATCH on the original plan or template.
-  test('POSTs clone template and plan, DELETEs old plan and migration last', async ({
+  // Single-VM Edit & Retry:
+  //   DELETE old plan → DELETE old migration →
+  //   POST new mappings → POST new template → POST new plan
+  // No PATCH on the original plan (it's deleted entirely since there's only one VM).
+  test('DELETEs old plan and migration first, then POSTs new template and plan', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -386,21 +386,22 @@ test.describe('RET-003 — edit & retry always clones (single-VM plan)', () => {
 
     const writes = order.filter((o) => !o.startsWith('GET'))
 
-    // New mapping resources created.
+    // Old plan deleted first (only VM → delete whole plan).
+    expect(writes[0]).toBe('DELETE original-plan')
+    // Migration deleted second.
+    expect(writes[1]).toBe('DELETE migration')
+
+    // New mapping resources created after deletions.
     expect(writes).toContain('POST networkmapping')
     expect(writes).toContain('POST storagemapping')
 
-    // Clone template before clone plan.
+    // New template before new plan.
     expect(writes.indexOf('POST clone-template')).toBeLessThan(writes.indexOf('POST clone-plan'))
 
-    // Old plan deleted before old migration — clone plan must be in place first.
-    expect(writes.indexOf('POST clone-plan')).toBeLessThan(writes.indexOf('DELETE original-plan'))
-    expect(writes.indexOf('DELETE original-plan')).toBeLessThan(writes.indexOf('DELETE migration'))
+    // New plan is the last write.
+    expect(writes[writes.length - 1]).toBe('POST clone-plan')
 
-    // Migration deleted last.
-    expect(writes[writes.length - 1]).toBe('DELETE migration')
-
-    // No PATCH on original plan or original template.
+    // No PATCH on original plan.
     expect(writes.filter((w) => w.startsWith('PATCH'))).toHaveLength(0)
   })
 })
@@ -459,9 +460,7 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     )
   })
 
-  // With always-clone, IP overrides are checked in the clone plan's POST body, not a
-  // PATCH on the original plan.
-  test('clone plan spec carries networkOverridesPerVM when override loaded from original plan', async ({
+  test('new plan spec carries networkOverridesPerVM when override loaded from original plan', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -512,8 +511,9 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     await page.getByTestId('migration-form-edit-and-retry').click()
     await expectDrawerClosed(page)
 
-    // Clone plan POST body must carry the IP override from the original plan's prefill.
-    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    // New plan POST body must carry the IP override from the original plan's prefill.
+    const clonePlanIdx = order.findIndex((o) => o === 'POST clone-plan')
+    const clonePlanPost = clonePlanIdx >= 0 ? calls[clonePlanIdx] : undefined
     expect(clonePlanPost).toBeDefined()
     const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
     const overrides = cloneSpec?.networkOverridesPerVM as Record<string, unknown> | null | undefined
@@ -528,7 +528,7 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     expect(vmOverrides?.[0].UserAssignedIP).toBe('10.0.0.50')
   })
 
-  test('clone plan spec sends networkOverridesPerVM: null when original plan had no overrides', async ({
+  test('new plan spec sends networkOverridesPerVM: null when original plan had no overrides', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -576,8 +576,9 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     await page.getByTestId('migration-form-edit-and-retry').click()
     await expectDrawerClosed(page)
 
-    // null explicitly clears stale overrides via merge-patch semantics on the clone plan.
-    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    // null explicitly clears any stale overrides on the new plan.
+    const clonePlanIdx = order.findIndex((o) => o === 'POST clone-plan')
+    const clonePlanPost = clonePlanIdx >= 0 ? calls[clonePlanIdx] : undefined
     expect(clonePlanPost).toBeDefined()
     const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
     expect(cloneSpec?.networkOverridesPerVM).toBeNull()
@@ -616,9 +617,9 @@ test.describe('RET-006 — multi-VM plan shows shared-plan warning banner', () =
   })
 })
 
-// ─── RET-007: clone-plan path for multi-VM plans ──────────────────────────────
+// ─── RET-007: multi-VM plan — PATCH first, then create fresh resources ────────
 
-test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () => {
+test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan first', () => {
   // Mounts a multi-VM plan and records all mutating API calls in order.
   async function setupClonePlanRoutes(
     page: Page,
@@ -694,7 +695,7 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     )
   }
 
-  test('POSTs clone template and plan, PATCHes original plan, DELETEs migration last', async ({
+  test('PATCHes original plan first, DELETEs migration, then POSTs new template and plan', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -711,17 +712,17 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
 
     const writes = order.filter((o) => !o.startsWith('GET'))
 
-    // Clone template must be POSTed before clone plan.
+    // Original plan PATCHed first to remove the retrying VM.
+    expect(writes[0]).toBe('PATCH original-plan')
+    // Migration deleted second.
+    expect(writes[1]).toBe('DELETE migration')
+    // New template must be POSTed before new plan.
     expect(writes.indexOf('POST clone-template')).toBeLessThan(writes.indexOf('POST clone-plan'))
-    // Clone plan must be POSTed before original plan is PATCHed.
-    expect(writes.indexOf('POST clone-plan')).toBeLessThan(
-      writes.indexOf('PATCH original-plan'),
-    )
-    // Migration DELETE must be the very last write.
-    expect(writes[writes.length - 1]).toBe('DELETE migration')
+    // New plan is the last write.
+    expect(writes[writes.length - 1]).toBe('POST clone-plan')
   })
 
-  test('clone plan spec has single VM and audit-trail annotations', async ({ page }) => {
+  test('new plan spec has a single VM (the retrying VM)', async ({ page }) => {
     const calls: RecordedCall[] = []
     const order: string[] = []
 
@@ -734,13 +735,9 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     await page.getByTestId('migration-form-edit-and-retry').click()
     await expectDrawerClosed(page)
 
-    const clonePlanPost = calls.find((c) => c.method === 'POST' && order.includes('POST clone-plan'))
+    const clonePlanIdx = order.findIndex((o) => o === 'POST clone-plan')
+    const clonePlanPost = clonePlanIdx >= 0 ? calls[clonePlanIdx] : undefined
     expect(clonePlanPost).toBeDefined()
-
-    const cloneMeta = clonePlanPost?.body?.metadata as Record<string, unknown> | undefined
-    const cloneAnnotations = cloneMeta?.annotations as Record<string, string> | undefined
-    expect(cloneAnnotations?.['vjailbreak.k8s.pf9.io/retry-clone-of']).toBe(MOCK_RETRY_PLAN_NAME)
-    expect(cloneAnnotations?.['vjailbreak.k8s.pf9.io/retry-clone-vm']).toBe(MOCK_RETRY_VM_KEY)
 
     const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown> | undefined
     const vms = cloneSpec?.virtualMachines as string[][] | undefined
@@ -775,13 +772,13 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     expect(updatedVMs).toContain('other-vm-9999')
   })
 
-  test('rollback DELETEs clone plan when original plan PATCH fails', async ({ page }) => {
+  test('PATCH failure shows error and does not POST new resources', async ({ page }) => {
     const calls: RecordedCall[] = []
     const order: string[] = []
 
     await setupClonePlanRoutes(page, calls, order)
 
-    // Make the PATCH on the original plan fail with a 409 conflict.
+    // Override the plan route so PATCH fails with 409.
     await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
     await page.route(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME), (route: Route) => {
       const method = route.request().method()
@@ -792,31 +789,9 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
           body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN_MULTIVM),
         })
       } else if (method === 'PATCH') {
-        // Record the PATCH attempt before rejecting it.
         calls.push({ method, body: route.request().postDataJSON() ?? undefined })
         order.push('PATCH original-plan')
         route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Conflict' }) })
-      } else {
-        route.continue()
-      }
-    })
-
-    // Track clone plan DELETE (rollback).
-    let clonePlanDeleted = false
-    await page.route(API.migrationPlans, (route: Route) => {
-      const method = route.request().method()
-      if (method === 'POST') {
-        calls.push({ method, body: route.request().postDataJSON() ?? undefined })
-        order.push('POST clone-plan')
-        route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(MOCK_RETRY_CLONE_PLAN_CREATED) })
-      } else {
-        route.continue()
-      }
-    })
-    await page.route(API.migrationPlanByName(MOCK_RETRY_CLONE_PLAN_CREATED.metadata.name), (route: Route) => {
-      if (route.request().method() === 'DELETE') {
-        clonePlanDeleted = true
-        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RETRY_CLONE_PLAN_CREATED) })
       } else {
         route.continue()
       }
@@ -828,18 +803,19 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan uses clone plan', () =>
     })
     await page.getByTestId('migration-form-edit-and-retry').click()
 
-    // Drawer stays open on error; error message shown with the prefix from useRetrySubmit.
+    // Drawer stays open on error.
     await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
     await expect(page.getByTestId('retry-error-message')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('retry-error-message')).toContainText(
       'Failed to apply edits and retry',
     )
 
-    // Clone plan was created then rolled back.
-    expect(order).toContain('POST clone-plan')
-    expect(clonePlanDeleted).toBe(true)
-    // Failed Migration must NOT have been deleted (rollback halts the sequence).
-    const migrationDeletes = calls.filter((c) => c.method === 'DELETE')
-    expect(migrationDeletes).toHaveLength(0)
+    const writes = order.filter((o) => !o.startsWith('GET'))
+    // PATCH was attempted.
+    expect(writes).toContain('PATCH original-plan')
+    // No new resources POSTed — PATCH failed before step 2 (migration delete) and beyond.
+    expect(writes.filter((w) => w.startsWith('POST'))).toHaveLength(0)
+    // Migration NOT deleted.
+    expect(writes.filter((w) => w === 'DELETE migration')).toHaveLength(0)
   })
 })
