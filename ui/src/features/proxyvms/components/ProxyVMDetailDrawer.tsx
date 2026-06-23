@@ -13,13 +13,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CheckIcon from '@mui/icons-material/Check'
 import DnsIcon from '@mui/icons-material/Dns'
 import { useQuery } from '@tanstack/react-query'
-import {
-  DrawerShell,
-  DrawerHeader,
-  KeyValueGrid,
-  StatusChip,
-  SurfaceCard
-} from 'src/components'
+import { DrawerShell, DrawerHeader, KeyValueGrid, StatusChip, SurfaceCard } from 'src/components'
 import type { StatusChipTone } from 'src/components'
 import { getSecret } from 'src/api/secrets/secrets'
 import { ProxyVM, ProxyVMValidationStatus } from 'src/api/proxyvms/model'
@@ -101,7 +95,14 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
     { label: 'Last validated', value: lastValidated },
     { label: 'Created', value: createdAt },
     ...(status?.componentsVerified?.length
-      ? [{ label: 'Components verified', value: status.componentsVerified.join(', ') }]
+      ? [
+          {
+            label: 'Components verified',
+            value: status.componentsVerified
+              .map((c) => `${c.name} ${c.present ? '✓' : '✗'}`)
+              .join(', ')
+          }
+        ]
       : [])
   ]
 
@@ -137,7 +138,14 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
           }
         >
           {status?.validationMessage && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color={
+                validationStatus === 'DeployFailed' || validationStatus === 'VerificationFailed'
+                  ? 'error.main'
+                  : 'text.secondary'
+              }
+            >
               {status.validationMessage}
             </Typography>
           )}
@@ -166,7 +174,7 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
               </Alert>
             ) : publicKey ? (
               <TextField
-                label="Public Key"
+                label=""
                 value={publicKey.trim()}
                 multiline
                 minRows={4}
@@ -196,7 +204,8 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
             )
           ) : spec.sshKeySecretRef ? (
             <Alert severity="info">
-              This vJailbreak Proxy VM uses a manually uploaded private key — no public key is stored.
+              This vJailbreak Proxy VM uses a manually uploaded private key — no public key is
+              stored.
             </Alert>
           ) : validationStatus === 'Ready' ? (
             <Alert severity="warning">No SSH key configured for this vJailbreak Proxy VM.</Alert>

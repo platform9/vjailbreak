@@ -19,12 +19,18 @@ export interface ProxyVMSpec {
   }
 }
 
+export interface ProxyVMComponentCheck {
+  name: string
+  present: boolean
+  message?: string
+}
+
 export interface ProxyVMStatus {
   validationStatus: ProxyVMValidationStatus
   validationMessage?: string
   ipAddress?: string
   attachedDiskCount?: number
-  componentsVerified?: string[]
+  componentsVerified?: ProxyVMComponentCheck[]
   lastValidationTime?: string
 }
 
