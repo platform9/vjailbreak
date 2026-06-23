@@ -193,6 +193,21 @@ func (mr *MockVMOperationsMockRecorder) IsCBTEnabled() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCBTEnabled", reflect.TypeOf((*MockVMOperations)(nil).IsCBTEnabled))
 }
 
+// GetHardwareVersion mocks base method.
+func (m *MockVMOperations) GetHardwareVersion() (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHardwareVersion")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHardwareVersion indicates an expected call of GetHardwareVersion.
+func (mr *MockVMOperationsMockRecorder) GetHardwareVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHardwareVersion", reflect.TypeOf((*MockVMOperations)(nil).GetHardwareVersion))
+}
+
 // ListSnapshots mocks base method.
 func (m *MockVMOperations) ListSnapshots() ([]types.VirtualMachineSnapshotTree, error) {
 	m.ctrl.T.Helper()
@@ -237,17 +252,17 @@ func (mr *MockVMOperationsMockRecorder) UpdateDiskInfo(arg0, arg1, arg2 interfac
 }
 
 // UpdateDisksInfo mocks base method.
-func (m *MockVMOperations) UpdateDisksInfo(arg0 *VMInfo) error {
+func (m *MockVMOperations) UpdateDisksInfo(arg0 *VMInfo, arg1 bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDisksInfo", arg0)
+	ret := m.ctrl.Call(m, "UpdateDisksInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateDisksInfo indicates an expected call of UpdateDisksInfo.
-func (mr *MockVMOperationsMockRecorder) UpdateDisksInfo(arg0 interface{}) *gomock.Call {
+func (mr *MockVMOperationsMockRecorder) UpdateDisksInfo(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDisksInfo", reflect.TypeOf((*MockVMOperations)(nil).UpdateDisksInfo), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDisksInfo", reflect.TypeOf((*MockVMOperations)(nil).UpdateDisksInfo), arg0, arg1)
 }
 
 // VMGuestShutdown mocks base method.
