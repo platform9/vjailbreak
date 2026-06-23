@@ -574,62 +574,40 @@ func TestCreateMigrationConfigMap_RetryWithoutEditMatchesFreshCreate(t *testing.
 	}
 }
 
-func TestReconcileMigrationPlanJob_RetryAnnotationResetsFailedPlan(t *testing.T) {
+// TestReconcileMigrationPlanJob_RetryWithoutEditResetsFailedPlan verifies that deleting
+// a failed Migration (retry without edit) causes the plan to reset and requeue, but that
+// ValidationFailed plans are blocked from auto-resetting when retryTriggeredByDeletion.
+func TestReconcileMigrationPlanJob_RetryWithoutEditResetsFailedPlan(t *testing.T) {
 	tests := []struct {
 		name             string
-		annotations      map[string]string
 		migrationMessage string
 		wantRequeue      bool
 		wantStatus       corev1.PodPhase
 	}{
 		{
-			name:             "retry annotation resets validation-failed plan",
-			annotations:      map[string]string{constants.MigrationPlanRetryRequestedAnnotation: "true"},
-			migrationMessage: constants.MigrationPlanValidationFailedPrefix + ": VM failed validation",
-			wantRequeue:      true,
-			wantStatus:       "",
-		},
-		{
-			name:             "validation-failed plan without annotation stays blocked",
-			annotations:      nil,
-			migrationMessage: constants.MigrationPlanValidationFailedPrefix + ": VM failed validation",
-			wantRequeue:      false,
-			wantStatus:       corev1.PodFailed,
-		},
-		{
-			name:             "plain failure with deleted migration still resets without annotation",
-			annotations:      nil,
+			name:             "plain failure with deleted migration resets",
 			migrationMessage: "Migration failed for VM test-vm",
 			wantRequeue:      true,
 			wantStatus:       "",
 		},
 		{
-			// Retry-of-retry: the first retry created a clone plan. If the clone plan's
-			// Migration also fails, the user retries again via the clone plan (which is now
-			// a 1-VM plan). The retry-requested annotation must reset the clone plan just
-			// like any other plan; the clone audit annotations must not interfere.
-			name: "retry annotation resets failed clone plan (retry-of-retry)",
-			annotations: map[string]string{
-				constants.MigrationPlanRetryRequestedAnnotation: "true",
-				constants.MigrationPlanRetryCloneOfAnnotation:   "original-plan",
-				constants.MigrationPlanRetryCloneVMAnnotation:   "some-vm-1001",
-			},
-			migrationMessage: "Migration for VM 'some-vm' failed: disk conversion error",
-			wantRequeue:      true,
-			wantStatus:       "",
+			// ValidationFailed + migration deleted by UI: controller blocks auto-reset so
+			// the user cannot silently re-run unchanged config through a ValidationFailed plan.
+			name:             "validation-failed plan stays blocked when migration deleted",
+			migrationMessage: constants.MigrationPlanValidationFailedPrefix + ": VM failed validation",
+			wantRequeue:      false,
+			wantStatus:       corev1.PodFailed,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newRetryFixtures(t)
-			f.plan.Annotations = tt.annotations
 			f.plan.Status = vjailbreakv1alpha1.MigrationPlanStatus{
 				MigrationStatus:  corev1.PodFailed,
 				MigrationMessage: tt.migrationMessage,
 			}
-			// The failed Migration object has been deleted by the UI retry action;
-			// only the plan remains. Remove the Migration from the fixture set.
+			// The failed Migration has been deleted by the UI; only the plan remains.
 			objs := []client.Object{f.plan, f.template, f.vmwcreds, f.oscreds, f.netmap, f.stormap, f.vmMachine, f.settingsCM}
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(f.scheme).
@@ -654,9 +632,6 @@ func TestReconcileMigrationPlanJob_RetryAnnotationResetsFailedPlan(t *testing.T)
 			if latest.Status.MigrationStatus != tt.wantStatus {
 				t.Errorf("plan status = %q, want %q", latest.Status.MigrationStatus, tt.wantStatus)
 			}
-			if _, ok := latest.Annotations[constants.MigrationPlanRetryRequestedAnnotation]; ok {
-				t.Errorf("retry-requested annotation still present after reconcile")
-			}
 		})
 	}
 }
@@ -673,8 +648,8 @@ func TestCreateMigration_ClonePlanMigrationRefIsClonePlan(t *testing.T) {
 	clonePlan.Name = "test-plan-r-xyz789"
 	clonePlan.ResourceVersion = ""
 	clonePlan.Annotations = map[string]string{
-		constants.MigrationPlanRetryCloneOfAnnotation: f.plan.Name,
-		constants.MigrationPlanRetryCloneVMAnnotation: f.vmKey,
+		"vjailbreak.k8s.pf9.io/retry-clone-of": f.plan.Name,
+		"vjailbreak.k8s.pf9.io/retry-clone-vm": f.vmKey,
 	}
 
 	// Reconciler has the clone plan only — no pre-existing Migration (it was deleted before the clone).
@@ -709,59 +684,6 @@ func TestCreateMigration_ClonePlanMigrationRefIsClonePlan(t *testing.T) {
 	}
 	if n := len(originalPlanMigrations.Items); n != 0 {
 		t.Errorf("original plan has %d Migration(s), want 0 — clone plan must own the Migration", n)
-	}
-}
-
-// TestReconcileMigrationPlanJob_ClonePlanAnnotationsPreservedNotCleared verifies that
-// only the transient retry-requested annotation is removed by the controller; the
-// permanent clone audit annotations (retry-clone-of, retry-clone-vm) must survive the
-// reset so they remain available for auditing and future cleanup.
-func TestReconcileMigrationPlanJob_ClonePlanAnnotationsPreservedNotCleared(t *testing.T) {
-	f := newRetryFixtures(t)
-	ctx := context.Background()
-
-	f.plan.Annotations = map[string]string{
-		constants.MigrationPlanRetryRequestedAnnotation: "true",
-		constants.MigrationPlanRetryCloneOfAnnotation:   "original-plan",
-		constants.MigrationPlanRetryCloneVMAnnotation:   f.vmKey,
-	}
-	f.plan.Status = vjailbreakv1alpha1.MigrationPlanStatus{
-		MigrationStatus:  corev1.PodFailed,
-		MigrationMessage: "Migration for VM 'test-vm' failed: network error",
-	}
-
-	// No Migration in the store (deleted by UI before annotation was set).
-	objs := []client.Object{f.plan, f.template, f.vmwcreds, f.oscreds, f.netmap, f.stormap, f.vmMachine, f.settingsCM}
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(f.scheme).
-		WithObjects(objs...).
-		WithStatusSubresource(&vjailbreakv1alpha1.MigrationPlan{}, &vjailbreakv1alpha1.Migration{}).
-		Build()
-	r := &MigrationPlanReconciler{Client: fakeClient, Scheme: f.scheme}
-
-	result, err := r.ReconcileMigrationPlanJob(ctx, f.plan, nil)
-	if err != nil {
-		t.Fatalf("ReconcileMigrationPlanJob() returned error: %v", err)
-	}
-	if !result.Requeue {
-		t.Errorf("requeue = false, want true — clone plan retry must reset and requeue")
-	}
-
-	latest := &vjailbreakv1alpha1.MigrationPlan{}
-	if err := r.Get(ctx, types.NamespacedName{Name: f.plan.Name, Namespace: retryTestNamespace}, latest); err != nil {
-		t.Fatalf("failed to fetch plan: %v", err)
-	}
-
-	// Transient annotation must be cleared.
-	if _, ok := latest.Annotations[constants.MigrationPlanRetryRequestedAnnotation]; ok {
-		t.Errorf("retry-requested annotation still present — must be cleared after reset")
-	}
-	// Permanent audit annotations must survive.
-	if v := latest.Annotations[constants.MigrationPlanRetryCloneOfAnnotation]; v != "original-plan" {
-		t.Errorf("retry-clone-of annotation = %q, want %q — audit annotation must be preserved", v, "original-plan")
-	}
-	if v := latest.Annotations[constants.MigrationPlanRetryCloneVMAnnotation]; v != f.vmKey {
-		t.Errorf("retry-clone-vm annotation = %q, want %q — audit annotation must be preserved", v, f.vmKey)
 	}
 }
 
