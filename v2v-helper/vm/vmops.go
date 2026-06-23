@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,12 +27,18 @@ import (
 
 //go:generate mockgen -source=vmops.go -destination=vmops_mock.go -package=vm
 
+// MinCBTHardwareVersion is the minimum VMware virtual hardware version that
+// supports Changed Block Tracking (CBT). VMs on older hardware versions cannot
+// use CBT and must be migrated using cold migration. See VMware KB 1020128.
+const MinCBTHardwareVersion = 7
+
 type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
-	UpdateDisksInfo(*VMInfo) error
+	UpdateDisksInfo(*VMInfo, bool) error
 	IsCBTEnabled() (bool, error)
+	GetHardwareVersion() (int, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
 	DeleteSnapshot(name string) error
@@ -379,7 +386,7 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
+func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo, requireChangeID bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	var snapbackingdisk []string
 	var snapname []string
@@ -424,16 +431,24 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 			case *types.VirtualDisk:
 				backing := disk.Backing.(types.BaseVirtualDeviceFileBackingInfo)
 				info := backing.GetVirtualDeviceFileBackingInfo()
+				var changeIDValue string
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					// For cold migrations, CBT is not used. Missing change IDs are expected
+					// (especially on hardware version < 7), so continue without failing.
+					if requireChangeID {
+						return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					}
+					log.Printf("Change ID unavailable for device key %d (%s); continuing without CBT", disk.Key, err)
+				} else {
+					changeIDValue = changeid.Value
 				}
 				snapshotInfo[disk.Key] = struct {
 					FileName string
 					ChangeID string
 				}{
 					FileName: info.FileName,
-					ChangeID: changeid.Value,
+					ChangeID: changeIDValue,
 				}
 			}
 		}
@@ -552,7 +567,53 @@ func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 			return false, fmt.Errorf("failed to get VM properties: %s", err)
 		}
 	}
+	// CBT is unsupported on virtual hardware < 7. If changeTrackingEnabled
+	// is absent, treat CBT as disabled and avoid nil pointer dereferences.
+	if o.Config == nil || o.Config.ChangeTrackingEnabled == nil {
+		return false, nil
+	}
 	return *o.Config.ChangeTrackingEnabled, nil
+}
+
+// parseHardwareVersion extracts the numeric virtual hardware version from a
+// VMware config.version string such as "vmx-07". It returns 0 when the value is
+// empty or cannot be parsed.
+func parseHardwareVersion(version string) int {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(version), "vmx-")
+	if trimmed == "" {
+		return 0
+	}
+	parsedHarwareVersion, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0
+	}
+	return parsedHarwareVersion
+}
+
+// GetHardwareVersion returns the numeric virtual hardware version of the VM
+// (e.g. 4 for "vmx-04", 13 for "vmx-13"). It returns 0 when the version cannot
+// be determined.
+func (vmops *VMOps) GetHardwareVersion() (int, error) {
+	vm := vmops.VMObj
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+	if err != nil {
+		if !vcenter.IsTransientVCenterError(err) {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return 0, fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		err = vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+	}
+	if o.Config == nil {
+		return 0, nil
+	}
+	return parseHardwareVersion(o.Config.Version), nil
 }
 
 func (vmops *VMOps) EnableCBT() error {

@@ -15,6 +15,7 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/simulator"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/soap"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -159,6 +160,141 @@ func TestIsCBTEnabled(t *testing.T) {
 	enabled, err := vmops.IsCBTEnabled()
 	assert.NoError(t, err)
 	assert.True(t, enabled)
+}
+
+func TestParseHardwareVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		want    int
+	}{
+		{name: "legacy hardware version 4", version: "vmx-04", want: 4},
+		{name: "minimum CBT-capable version 7", version: "vmx-07", want: 7},
+		{name: "modern double-digit version", version: "vmx-13", want: 13},
+		{name: "version without leading zero", version: "vmx-4", want: 4},
+		{name: "surrounding whitespace", version: " vmx-09 ", want: 9},
+		{name: "empty string", version: "", want: 0},
+		{name: "missing numeric suffix", version: "vmx-", want: 0},
+		{name: "unparseable value", version: "vmx-abc", want: 0},
+		{name: "unexpected format", version: "esx-7", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseHardwareVersion(tt.version); got != tt.want {
+				t.Errorf("parseHardwareVersion(%q) = %d, want %d", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetHardwareVersion(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmName := "DC0_H0_VM0"
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
+
+	hwVersion, err := vmops.GetHardwareVersion()
+	assert.NoError(t, err)
+	// The govmomi simulator reports a modern, CBT-capable hardware version for
+	// its default VMs. We assert it is positive and at least the CBT minimum so
+	// the test stays robust against simulator version bumps.
+	assert.GreaterOrEqual(t, hwVersion, MinCBTHardwareVersion)
+}
+
+func TestGetChangeID(t *testing.T) {
+	tests := []struct {
+		name      string
+		disk      *types.VirtualDisk
+		wantErr   string
+		wantValue string
+	}{
+		{
+			name: "CBT disabled - empty change ID on flat backing",
+			disk: &types.VirtualDisk{
+				VirtualDevice: types.VirtualDevice{
+					Key:     2000,
+					Backing: &types.VirtualDiskFlatVer2BackingInfo{ChangeId: ""},
+				},
+			},
+			wantErr: "CBT is not enabled on disk 2000",
+		},
+		{
+			name: "CBT enabled - valid change ID is parsed",
+			disk: &types.VirtualDisk{
+				VirtualDevice: types.VirtualDevice{
+					Key:     2000,
+					Backing: &types.VirtualDiskFlatVer2BackingInfo{ChangeId: "52 3c/446"},
+				},
+			},
+			wantValue: "52 3c/446",
+		},
+		{
+			name: "unsupported backing type",
+			disk: &types.VirtualDisk{
+				VirtualDevice: types.VirtualDevice{
+					Key:     2000,
+					Backing: &types.VirtualDeviceFileBackingInfo{},
+				},
+			},
+			wantErr: "failed to get change ID",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changeID, err := getChangeID(tt.disk)
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantValue, changeID.Value)
+		})
+	}
+}
+
+// TestUpdateDisksInfoToleratesMissingChangeID verifies the cold-migration fix:
+// when requireChangeID is false, a snapshot disk without a CBT change ID (as on
+// legacy hardware version < 7) does not fail the call, and the snapshot backing
+// disk/name still get recorded so the disk can be copied over NBD.
+func TestUpdateDisksInfoToleratesMissingChangeID(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmName := "DC0_H0_VM0"
+	vmops, _ := VMOpsBuilder(context.Background(), *simVC, vmName, "", nil)
+
+	// Deliberately do NOT enable CBT, then snapshot - this mirrors a cold
+	// migration of a VM whose disks carry no change ID.
+	err = vmops.TakeSnapshot("cold-test-snap")
+	assert.NoError(t, err)
+
+	// Build VMInfo disks from the simulator VM's actual virtual disks so the
+	// device keys match what UpdateDisksInfo reads from the snapshot.
+	var o mo.VirtualMachine
+	err = vmops.VMObj.Properties(context.Background(), vmops.VMObj.Reference(), []string{"config.hardware.device"}, &o)
+	assert.NoError(t, err)
+
+	vminfo := &VMInfo{}
+	for _, device := range o.Config.Hardware.Device {
+		if vd, ok := device.(*types.VirtualDisk); ok {
+			vminfo.VMDisks = append(vminfo.VMDisks, VMDisk{
+				Name: "disk-0",
+				Disk: vd,
+			})
+		}
+	}
+	assert.NotEmpty(t, vminfo.VMDisks, "simulator VM should have at least one disk")
+
+	// requireChangeID == false: cold migration must not fail on a missing CBT
+	// change ID, and the snapshot backing disk must still be recorded.
+	err = vmops.UpdateDisksInfo(vminfo, false)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, vminfo.VMDisks[0].SnapBackingDisk)
+	assert.NotEmpty(t, vminfo.VMDisks[0].Snapname)
 }
 
 func TestTakeSnapshot(t *testing.T) {
