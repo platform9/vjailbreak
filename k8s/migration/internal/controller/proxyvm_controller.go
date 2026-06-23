@@ -277,6 +277,9 @@ func (r *ProxyVMReconciler) checkAndInstallComponents(ctx context.Context, proxy
 func (r *ProxyVMReconciler) reconcileDelete(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
+	if proxyVM.Spec.SSHKeyPairRef != nil && proxyVM.Spec.SSHKeyPairRef.Name != "" {
+		sshSecretName = proxyVM.Spec.SSHKeyPairRef.Name
+	}
 	sshSecret := &corev1.Secret{}
 	if err := r.Get(ctx, k8stypes.NamespacedName{
 		Name:      sshSecretName,
