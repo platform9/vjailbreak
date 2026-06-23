@@ -214,7 +214,7 @@ export default function AddSSHKeyPairDrawer({ open, onClose }: AddSSHKeyPairDraw
         {isGenerateMode && !generatedPublicKey && (
           <Typography variant="body2" color="text.secondary">
             vJailbreak will generate an RSA-4096 key pair. The private key is stored securely and
-            never exposed. You will receive the public key to add to your Proxy VM&apos;s
+            never exposed. You will receive the public key to add to your vJailbreak Proxy VM&apos;s
             authorized_keys.
           </Typography>
         )}
@@ -222,7 +222,7 @@ export default function AddSSHKeyPairDrawer({ open, onClose }: AddSSHKeyPairDraw
         {isGenerateMode && generatedPublicKey && (
           <>
             <Alert severity="success">
-              Key pair generated successfully. Copy the public key below and add it to your Proxy
+              Key pair generated successfully. Copy the public key below and add it to your vJailbreak Proxy
               VM&apos;s <code>~/.ssh/authorized_keys</code>.
             </Alert>
             <TextField

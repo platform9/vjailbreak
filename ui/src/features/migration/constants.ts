@@ -38,7 +38,7 @@ export const VM_CUTOVER_OPTIONS = [
 export const STORAGE_COPY_METHOD_OPTIONS = [
   { value: 'normal', label: 'Standard Copy' },
   { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' },
-  { value: 'HotAdd', label: 'Hot-Add via Proxy VM' }
+  { value: 'HotAdd', label: 'vJailbreak Accelerated Copy' }
 ] as const
 
 // ---------------------------------------------------------------------------

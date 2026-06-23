@@ -99,7 +99,8 @@ export default function SSHAccessSection({
               <>
                 <Alert severity="success">
                   Key pair generated. Copy the public key below and add it to{' '}
-                  <strong>/root/.ssh/authorized_keys</strong> on the Proxy VM before registering.
+                  <strong>/root/.ssh/authorized_keys</strong> on the vJailbreak Proxy VM before
+                  registering.
                 </Alert>
                 <TextField
                   label="Public Key (copy this to authorized_keys)"
@@ -111,10 +112,7 @@ export default function SSHAccessSection({
                     input: {
                       readOnly: true,
                       endAdornment: (
-                        <InputAdornment
-                          position="end"
-                          sx={{ alignSelf: 'flex-start', mt: 1 }}
-                        >
+                        <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
                           <Tooltip title={copied ? 'Copied!' : 'Copy public key'}>
                             <IconButton onClick={onCopy} size="small" edge="end">
                               {copied ? (
@@ -144,7 +142,7 @@ export default function SSHAccessSection({
         ) : (
           <Box sx={{ display: 'grid', gap: 2 }}>
             <Alert severity="info">
-              Add the public key corresponding to your private key to the Proxy VM&apos;s{' '}
+              Add the public key corresponding to your private key to the vJailbreak Proxy VM&apos;s{' '}
               <strong>/root/.ssh/authorized_keys</strong> before submitting.
             </Alert>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>

@@ -304,12 +304,12 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
         setSubmitError(
-          'This VM is already registered as a Proxy VM. Use the Retry button in the table to re-verify it.'
+          'This VM is already registered as a vJailbreak Proxy VM. Use the Retry button in the table to re-verify it.'
         )
       } else if (axios.isAxiosError(err)) {
-        setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
+        setSubmitError(err.response?.data?.message || 'Failed to create vJailbreak Proxy VM.')
       } else {
-        setSubmitError('Failed to create Proxy VM.')
+        setSubmitError('Failed to create vJailbreak Proxy VM.')
       }
     } finally {
       setIsSubmitting(false)
@@ -349,17 +349,17 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
         : 'Deploy & Register VM'
       : isSubmitting
         ? 'Registering...'
-        : 'Register Proxy VM'
+        : 'Register vJailbreak Proxy VM'
   const subtitle =
     formMode === 'create'
-      ? 'A new Proxy VM is deployed from the OVA template and registered automatically.'
-      : 'Register a powered-on VM you have already prepared as a Hot-Add proxy.'
+      ? 'A new vJailbreak Proxy VM is deployed from the OVA template and registered automatically.'
+      : 'Register a powered-on VM you have already prepared as a vJailbreak Accelerated Copy proxy.'
 
   return (
     <DrawerShell
       open={open}
       onClose={handleClose}
-      header={<DrawerHeader title="Add Proxy VM" subtitle={subtitle} onClose={handleClose} />}
+      header={<DrawerHeader title="Add vJailbreak Proxy VM" subtitle={subtitle} onClose={handleClose} />}
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={handleClose} disabled={isSubmitting}>
@@ -395,7 +395,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               selected={formMode === 'create'}
               onClick={() => !deploymentStarted && setFormMode('create')}
               icon={<CloudDownloadOutlinedIcon fontSize="small" />}
-              title="Deploy a new Proxy VM"
+              title="Deploy a new vJailbreak Proxy VM"
               description="Spin one up from the bundled OVA template. SSH access is configured automatically."
               recommended
             />
@@ -447,10 +447,10 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               <LinearProgress />
               <Typography variant="body2" color="text.secondary">
                 vJailbreak is deploying the OVA to vCenter, configuring SSH access, and registering
-                the Proxy VM. This typically takes <strong>3–5 minutes</strong>.
+                the vJailbreak Proxy VM. This typically takes <strong>3–5 minutes</strong>.
               </Typography>
               <Alert severity="info">
-                You can close this panel — the VM will appear in the Proxy VMs list once
+                You can close this panel — the VM will appear in the vJailbreak Proxy VMs list once
                 provisioning is complete and verification begins automatically.
               </Alert>
             </Box>

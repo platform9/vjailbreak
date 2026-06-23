@@ -242,7 +242,7 @@ export default function ProxyVMsTable() {
       setRowSelectionModel([])
       setBulkDeleteDialogOpen(false)
     } catch (err: any) {
-      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VMs.')
+      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete vJailbreak Proxy VMs.')
     } finally {
       setDeleting(false)
     }
@@ -257,7 +257,7 @@ export default function ProxyVMsTable() {
     } catch (err: any) {
       const status = err?.response?.status
       if (status !== 404) {
-        setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete Proxy VM.')
+        setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete vJailbreak Proxy VM.')
         setDeleting(false)
         return
       }
@@ -342,12 +342,12 @@ export default function ProxyVMsTable() {
       onClick={() => setAddDrawerOpen(true)}
       sx={{ height: 40 }}
     >
-      Add Proxy VM
+      Add vJailbreak Proxy VM
     </Button>
   )
 
   const toolbar = (
-    <ListingToolbar title="Proxy VMs" icon={<DnsIcon />} search={search} actions={actions} />
+    <ListingToolbar title="vJailbreak Proxy VMs" icon={<DnsIcon />} search={search} actions={actions} />
   )
 
   return (
@@ -366,16 +366,16 @@ export default function ProxyVMsTable() {
         }}
         slots={{ toolbar: () => toolbar }}
         pageSizeOptions={[10, 25, 50, 100]}
-        emptyMessage="No Proxy VMs configured"
+        emptyMessage="No vJailbreak Proxy VMs configured"
         sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
       />
 
       {deleteTarget && (
         <ConfirmationDialog
           open
-          title="Delete Proxy VM"
+          title="Delete vJailbreak Proxy VM"
           icon={<WarningIcon color="warning" />}
-          message={`Are you sure you want to delete Proxy VM "${deleteTarget.metadata.name}"?`}
+          message={`Are you sure you want to delete vJailbreak Proxy VM "${deleteTarget.metadata.name}"?`}
           actionLabel="Delete"
           actionColor="error"
           actionVariant="outlined"
@@ -392,9 +392,9 @@ export default function ProxyVMsTable() {
       {bulkDeleteDialogOpen && (
         <ConfirmationDialog
           open
-          title="Delete Proxy VMs"
+          title="Delete vJailbreak Proxy VMs"
           icon={<WarningIcon color="warning" />}
-          message={`Are you sure you want to delete ${rowSelectionModel.length} Proxy VM${rowSelectionModel.length > 1 ? 's' : ''}?`}
+          message={`Are you sure you want to delete ${rowSelectionModel.length} vJailbreak Proxy VM${rowSelectionModel.length > 1 ? 's' : ''}?`}
           items={selectedItems.map((vm) => ({ id: vm.metadata.name, name: vm.metadata.name }))}
           actionLabel="Delete"
           actionColor="error"

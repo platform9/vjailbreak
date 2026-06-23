@@ -124,7 +124,7 @@ export function useRollingFormSubmit({
       }
 
       if (storageCopyMethod === 'HotAdd' && !params.proxyVMRef) {
-        setStorageMappingError('Please select a Proxy VM to use for Hot-Add data copy')
+        setStorageMappingError('Please select a vJailbreak Proxy VM to use for Accelerated Copy data copy')
         setSubmitting(false)
         return
       }

@@ -90,7 +90,7 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
   const isInProgress = validationStatus === 'Deploying' || validationStatus === 'Verifying'
 
   const generalItems = [
-    { label: 'Proxy VM name', value: metadata.name },
+    { label: 'vJailbreak Proxy VM name', value: metadata.name },
     { label: 'VM name', value: spec.vmName },
     { label: 'VMware credentials', value: spec.vmwareCredsRef.name },
     { label: 'IP address', value: status?.ipAddress },
@@ -115,7 +115,7 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
         <DrawerHeader
           icon={<DnsIcon color="primary" />}
           title={metadata.name}
-          subtitle="Proxy VM details"
+          subtitle="vJailbreak Proxy VM details"
           onClose={onClose}
         />
       }
@@ -150,7 +150,7 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
         <SurfaceCard
           variant="card"
           title="SSH Access"
-          subtitle="Public key to add to /root/.ssh/authorized_keys on the Proxy VM."
+          subtitle="Public key to add to /root/.ssh/authorized_keys on the vJailbreak Proxy VM."
         >
           {keyPairSecretName ? (
             keyLoading ? (
@@ -196,10 +196,10 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
             )
           ) : spec.sshKeySecretRef ? (
             <Alert severity="info">
-              This Proxy VM uses a manually uploaded private key — no public key is stored.
+              This vJailbreak Proxy VM uses a manually uploaded private key — no public key is stored.
             </Alert>
           ) : validationStatus === 'Ready' ? (
-            <Alert severity="warning">No SSH key configured for this Proxy VM.</Alert>
+            <Alert severity="warning">No SSH key configured for this vJailbreak Proxy VM.</Alert>
           ) : (
             <Typography variant="body2" color="text.secondary">
               SSH key will be available once the VM is ready.

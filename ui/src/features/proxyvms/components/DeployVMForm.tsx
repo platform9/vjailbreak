@@ -97,7 +97,7 @@ export default function DeployVMForm({
               disabled={isSubmitting}
             />
             <Typography variant="caption" color="text.secondary">
-              Becomes both the vSphere VM name and the Proxy VM record. Must be unique.
+              Becomes both the vSphere VM name and the vJailbreak Proxy VM record. Must be unique.
             </Typography>
           </Box>
         </Section>
