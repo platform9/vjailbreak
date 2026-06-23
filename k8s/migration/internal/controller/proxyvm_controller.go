@@ -95,8 +95,13 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 
 	// While OVA deploy is running or has failed, the ova_deploy goroutine owns status.
 	// Controller must not touch this CR until the deploy goroutine sets it to Pending.
+	// Deploying: poll every 30s because the status→Pending transition is a status-subresource
+	// patch that does NOT change metadata.generation and therefore bypasses GenerationChangedPredicate.
+	// DeployFailed: nothing to do until the user deletes and re-creates the CR.
 	switch proxyVM.Status.ValidationStatus {
-	case constants.ProxyVMStatusDeploying, constants.ProxyVMStatusDeployFailed:
+	case constants.ProxyVMStatusDeploying:
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	case constants.ProxyVMStatusDeployFailed:
 		return ctrl.Result{}, nil
 	}
 
