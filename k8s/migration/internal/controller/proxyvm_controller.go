@@ -93,6 +93,18 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// While OVA deploy is running or has failed, the ova_deploy goroutine owns status.
+	// Controller must not touch this CR until the deploy goroutine sets it to Pending.
+	// Deploying: poll every 30s because the status→Pending transition is a status-subresource
+	// patch that does NOT change metadata.generation and therefore bypasses GenerationChangedPredicate.
+	// DeployFailed: nothing to do until the user deletes and re-creates the CR.
+	switch proxyVM.Status.ValidationStatus {
+	case constants.ProxyVMStatusDeploying:
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	case constants.ProxyVMStatusDeployFailed:
+		return ctrl.Result{}, nil
+	}
+
 	// Skip Verifying broadcast for already-Ready VMs to avoid spurious UI flips.
 	if proxyVM.Status.ValidationStatus != constants.ProxyVMStatusReady {
 		proxyVM.Status.ValidationStatus = constants.ProxyVMStatusVerifying
@@ -270,6 +282,9 @@ func (r *ProxyVMReconciler) checkAndInstallComponents(ctx context.Context, proxy
 func (r *ProxyVMReconciler) reconcileDelete(ctx context.Context, proxyVM *vjailbreakv1alpha1.ProxyVM) (ctrl.Result, error) {
 	ctxlog := log.FromContext(ctx)
 	sshSecretName := proxyVM.Name + "-" + constants.HotAddSSHSecretSuffix
+	if proxyVM.Spec.SSHKeyPairRef != nil && proxyVM.Spec.SSHKeyPairRef.Name != "" {
+		sshSecretName = proxyVM.Spec.SSHKeyPairRef.Name
+	}
 	sshSecret := &corev1.Secret{}
 	if err := r.Get(ctx, k8stypes.NamespacedName{
 		Name:      sshSecretName,

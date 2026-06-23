@@ -26,6 +26,7 @@ export type RHFSelectProps = {
   error?: boolean
   searchable?: boolean
   searchPlaceholder?: string
+  required?: boolean
 }
 
 export default function RHFSelect({

@@ -341,18 +341,18 @@ export default function NetworkAndStorageMappingStep({
                     fieldPrefix="storageMapping"
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select a verified Proxy VM to use for Hot-Add disk access during migration.
+                    Select a verified vJailbreak Proxy VM to use for Accelerated Copy disk access during migration.
                   </Typography>
                   {readyProxyVMs.length === 0 ? (
                     <Alert severity="warning" sx={{ mb: 2 }}>
-                      No Ready Proxy VM found. Add and verify a Proxy VM on the Proxy VMs page
-                      before starting a Hot-Add migration.
+                      No Ready vJailbreak Proxy VM found. Add and verify a vJailbreak Proxy VM on the vJailbreak Proxy VMs page
+                      before starting a vJailbreak Accelerated Copy migration.
                     </Alert>
                   ) : null}
 
                   <Box sx={{ mb: 2 }}>
                     <Box sx={{ mb: 1 }}>
-                      <FieldLabel label="Proxy VM" required align="flex-start" />
+                      <FieldLabel label="vJailbreak Proxy VM" required align="flex-start" />
                     </Box>
                     <FormControl
                       fullWidth
@@ -366,7 +366,7 @@ export default function NetworkAndStorageMappingStep({
                         onChange={(e) => onChange('proxyVMRef')(e.target.value)}
                         disabled={readyProxyVMs.length === 0}
                         renderValue={(selected) => {
-                          if (!selected) return <em>Select Proxy VM</em>
+                          if (!selected) return <em>Select vJailbreak Proxy VM</em>
                           const vm = readyProxyVMs.find((v) => v.metadata.name === selected)
                           return vm?.status?.ipAddress
                             ? `${vm.metadata.name} (${vm.status.ipAddress})`

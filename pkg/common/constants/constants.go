@@ -740,6 +740,8 @@ const (
 	HotAddPortRangeMax = 11808
 
 	// ProxyVM validation statuses
+	ProxyVMStatusDeploying          = "Deploying"
+	ProxyVMStatusDeployFailed       = "DeployFailed"
 	ProxyVMStatusPending            = "Pending"
 	ProxyVMStatusVerifying          = "Verifying"
 	ProxyVMStatusReady              = "Ready"

@@ -70,7 +70,7 @@ export const navigationItems: NavigationItem[] = [
       },
       {
         id: 'proxy-vms',
-        label: 'Proxy VMs',
+        label: 'vJailbreak Proxy VMs',
         path: '/dashboard/proxy-vms',
         badge: {
           label: 'Beta',
