@@ -4,7 +4,7 @@ import { Section, SectionHeader } from 'src/components'
 import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
 import type { UseFormReturn } from 'react-hook-form'
 import type { Option } from 'src/shared/components/forms/rhf/RHFSelect'
-import type { CreateFormData } from './types'
+import type { CreateFormData, VMOption } from './types'
 
 export const CREATE_FORM_ID = 'create-proxy-vm-form'
 
@@ -29,6 +29,7 @@ interface DeployVMFormProps {
   dcLoading: boolean
   scopedLoading: boolean
   isSubmitting: boolean
+  vmOptions?: VMOption[]
 }
 
 function toOptions(items: string[] | undefined) {
@@ -48,7 +49,8 @@ export default function DeployVMForm({
   scopedResources,
   dcLoading,
   scopedLoading,
-  isSubmitting
+  isSubmitting,
+  vmOptions = []
 }: DeployVMFormProps) {
   return (
     <DesignSystemForm
@@ -62,6 +64,7 @@ export default function DeployVMForm({
           <RHFSelect
             name="vmwareCredsRef"
             label="VMware Credentials"
+            required
             options={credOptions}
             rules={{ required: 'VMware credentials are required' }}
             placeholder={
@@ -77,6 +80,7 @@ export default function DeployVMForm({
             <RHFTextField
               name="vmName"
               label="VM Name"
+              required
               rules={{
                 required: 'VM name is required',
                 validate: (val: string) => {
@@ -84,6 +88,8 @@ export default function DeployVMForm({
                   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(val))
                     return 'Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen.'
                   if (val.length > 63) return 'Must be 63 characters or fewer'
+                  if (vmOptions.some((v) => v.name === val))
+                    return 'A VM with this name already exists in the selected vCenter.'
                   return true
                 }
               }}
@@ -106,6 +112,7 @@ export default function DeployVMForm({
             <RHFSelect
               name="datacenter"
               label="Datacenter"
+              required
               options={toOptions(dcResources?.datacenters)}
               rules={{ required: 'Datacenter is required' }}
               placeholder={
@@ -120,6 +127,7 @@ export default function DeployVMForm({
             <RHFSelect
               name="datastore"
               label="Datastore"
+              required
               options={toOptions(scopedResources?.datastores)}
               rules={{ required: 'Datastore is required' }}
               placeholder={
@@ -134,6 +142,7 @@ export default function DeployVMForm({
             <RHFSelect
               name="network"
               label="Network"
+              required
               options={toOptions(scopedResources?.networks)}
               rules={{ required: 'Network is required' }}
               placeholder={

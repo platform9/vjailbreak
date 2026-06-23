@@ -32,7 +32,7 @@ export default function VMAutocomplete({
   return (
     <Box sx={{ display: 'grid', gap: 1 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <FieldLabel label="Proxy VM" align="flex-start" />
+        <FieldLabel label="Proxy VM" required align="flex-start" />
         <Autocomplete<VMOption>
           options={options}
           loading={loading}

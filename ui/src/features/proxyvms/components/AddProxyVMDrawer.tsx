@@ -50,7 +50,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [formMode, setFormMode] = useState<FormMode>('select')
+  const [formMode, setFormMode] = useState<FormMode>('create')
   const [deploymentStarted, setDeploymentStarted] = useState(false)
   const [deployedVMName, setDeployedVMName] = useState<string | null>(null)
   const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
@@ -471,6 +471,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               dcLoading={dcLoading}
               scopedLoading={scopedLoading}
               isSubmitting={isSubmitting}
+              vmOptions={vmOptions}
             />
           )}
         </Box>

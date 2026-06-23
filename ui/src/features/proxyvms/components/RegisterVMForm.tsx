@@ -74,6 +74,7 @@ export default function RegisterVMForm({
           <RHFSelect
             name="vmwareCredsRef"
             label="VMware Credentials"
+            required
             options={credOptions}
             rules={{ required: 'VMware credentials are required' }}
             placeholder={
