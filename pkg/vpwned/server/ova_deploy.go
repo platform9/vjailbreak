@@ -237,7 +237,8 @@ func deployProxyVMFromOVA(ovaPath string, deployCfg ProxyVMDeployConfig) {
 	}
 
 	ref, err := imp.Import(ctx, ovfEntry, importer.Options{
-		Name: &name,
+		Name:             &name,
+		DiskProvisioning: string(types.OvfCreateImportSpecParamsDiskProvisioningTypeThin),
 		NetworkMapping: []importer.Network{
 			{Name: "VM Network", Network: deployCfg.Network},
 		},
