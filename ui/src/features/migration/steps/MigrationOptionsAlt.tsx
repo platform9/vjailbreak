@@ -266,7 +266,7 @@ export default function MigrationOptionsAlt({
 
               {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  Hot-Add migration requires Cold or Mock copy. Other data copy methods are not available.
+                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available.
                 </Alert>
               )}
               <OptionRow>

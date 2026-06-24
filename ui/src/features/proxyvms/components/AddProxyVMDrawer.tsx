@@ -1,33 +1,36 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, Typography } from '@mui/material'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Box, LinearProgress, Typography } from '@mui/material'
+import CloudDownloadOutlinedIcon from '@mui/icons-material/CloudDownloadOutlined'
+import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined'
 import { useForm } from 'react-hook-form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 
+import { ActionButton, DrawerFooter, DrawerHeader, DrawerShell, SurfaceCard } from 'src/components'
 import {
-  ActionButton,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerShell,
-  Section,
-  SectionHeader,
-  SurfaceCard
-} from 'src/components'
-import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
-
-import { postProxyVM } from 'src/api/proxyvms/proxyVMs'
+  postProxyVM,
+  createProxyVMFromOVA,
+  getVCenterResources,
+  getProxyVMList
+} from 'src/api/proxyvms/proxyVMs'
 import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
+import { generateSSHKeyPair, deleteSSHKeyPair } from 'src/api/sshKeyPairs/sshKeyPairs'
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
-import { createSecret, deleteSecret } from 'src/api/secrets/secrets'
+import { createSecret } from 'src/api/secrets/secrets'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
-import { validateSshPrivateKey } from 'src/utils'
 
-interface FormData {
-  vmwareCredsRef: string
-  vmName: string
-  sshPrivateKey: string
-}
+import MethodCard from './MethodCard'
+import RegisterVMForm, { SELECT_FORM_ID } from './RegisterVMForm'
+import DeployVMForm, { CREATE_FORM_ID } from './DeployVMForm'
+import type {
+  FormMode,
+  SSHKeySource,
+  VMOption,
+  GeneratedKey,
+  SelectFormData,
+  CreateFormData
+} from './types'
 
 interface AddProxyVMDrawerProps {
   open: boolean
@@ -43,54 +46,191 @@ function toK8sName(input: string): string {
     .slice(0, 63)
 }
 
-const FORM_ID = 'add-proxy-vm-form'
-
 export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProps) {
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [formMode, setFormMode] = useState<FormMode>('create')
+  const [deploymentStarted, setDeploymentStarted] = useState(false)
+  const [deployedVMName, setDeployedVMName] = useState<string | null>(null)
+  const [sshKeySource, setSshKeySource] = useState<SSHKeySource>('generated')
+  const [generatedKey, setGeneratedKey] = useState<GeneratedKey | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [selectedVM, setSelectedVM] = useState<VMOption | null>(null)
+  const generatedKeyRef = useRef<GeneratedKey | null>(null)
+
+  useEffect(() => {
+    generatedKeyRef.current = generatedKey
+  }, [generatedKey])
 
   const { data: vmwareCreds = [] } = useVmwareCredentialsQuery()
   const credOptions = vmwareCreds
     .filter((c) => c.status?.vmwareValidationStatus?.toLowerCase() === 'succeeded')
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
 
-  const form = useForm<FormData>({
+  const selectForm = useForm<SelectFormData>({
     defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '' },
     mode: 'onChange',
     reValidateMode: 'onChange'
   })
-
   const {
-    watch,
-    reset,
-    setValue,
-    formState: { isValid }
-  } = form
+    watch: selectWatch,
+    reset: selectReset,
+    setValue: selectSetValue,
+    trigger: selectTrigger,
+    formState: { isValid: selectIsValid }
+  } = selectForm
+  const vmwareCredsRefSelect = selectWatch('vmwareCredsRef')
+  const vmNameSelect = selectWatch('vmName')
 
-  const vmwareCredsRef = watch('vmwareCredsRef')
+  const createForm = useForm<CreateFormData>({
+    defaultValues: {
+      vmwareCredsRef: '',
+      vmName: '',
+      datacenter: '',
+      datastore: '',
+      network: '',
+      cluster: ''
+    },
+    mode: 'onChange',
+    reValidateMode: 'onChange'
+  })
+  const {
+    watch: createWatch,
+    reset: createReset,
+    setValue: createSetValue,
+    formState: { isValid: createIsValid }
+  } = createForm
+  const vmwareCredsRefCreate = createWatch('vmwareCredsRef')
+  const datacenterCreate = createWatch('datacenter')
+
+  const activeCredsRef = formMode === 'select' ? vmwareCredsRefSelect : vmwareCredsRefCreate
 
   const { data: vmOptions = [], isLoading: vmsLoading } = useQuery({
-    queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef],
+    queryKey: ['vmwaremachines-for-proxy', activeCredsRef],
     queryFn: async () => {
-      const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, vmwareCredsRef)
+      const result = await getVMwareMachines(VJAILBREAK_DEFAULT_NAMESPACE, activeCredsRef)
       return result.items
         .filter((m) => m.status?.powerState === 'running')
-        .map((m) => ({ label: m.spec.vms.name, value: m.spec.vms.name }))
+        .map(
+          (m): VMOption => ({
+            name: m.spec.vms.name,
+            ipAddress: m.spec.vms.ipAddress || m.spec.vms.assignedIp,
+            cpu: m.spec.vms.cpu,
+            powerState: m.status?.powerState ?? 'unknown'
+          })
+        )
     },
-    enabled: Boolean(vmwareCredsRef),
+    enabled: Boolean(activeCredsRef) && open,
     staleTime: 30_000
   })
 
+  const { data: dcResources, isLoading: dcLoading } = useQuery({
+    queryKey: ['vcenter-datacenters', vmwareCredsRefCreate],
+    queryFn: () => getVCenterResources(vmwareCredsRefCreate),
+    enabled: Boolean(vmwareCredsRefCreate) && formMode === 'create' && open,
+    staleTime: 60_000
+  })
+
+  const { data: scopedResources, isLoading: scopedLoading } = useQuery({
+    queryKey: ['vcenter-scoped-resources', vmwareCredsRefCreate, datacenterCreate],
+    queryFn: () => getVCenterResources(vmwareCredsRefCreate, datacenterCreate),
+    enabled:
+      Boolean(vmwareCredsRefCreate) && Boolean(datacenterCreate) && formMode === 'create' && open,
+    staleTime: 60_000
+  })
+
   useEffect(() => {
-    setValue('vmName', '')
-  }, [vmwareCredsRef, setValue])
+    selectSetValue('vmName', '')
+    setSelectedVM(null)
+  }, [vmwareCredsRefSelect, selectSetValue])
+
+  useEffect(() => {
+    createSetValue('datastore', '')
+    createSetValue('network', '')
+    createSetValue('cluster', '')
+  }, [vmwareCredsRefCreate, datacenterCreate, createSetValue])
+
+  useEffect(() => {
+    if (formMode === 'create') {
+      if (vmwareCredsRefSelect) createSetValue('vmwareCredsRef', vmwareCredsRefSelect)
+    } else {
+      if (vmwareCredsRefCreate) selectSetValue('vmwareCredsRef', vmwareCredsRefCreate)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formMode])
+
+  useEffect(() => {
+    if (generatedKey) {
+      deleteSSHKeyPair(generatedKey.secretName).catch(() => {})
+      setGeneratedKey(null)
+      setGenerateError(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sshKeySource, vmNameSelect])
+
+  useEffect(() => {
+    selectTrigger()
+  }, [sshKeySource, generatedKey, selectTrigger])
+
+  const resetAll = useCallback(() => {
+    selectReset()
+    createReset()
+    setSubmitError(null)
+    setGenerateError(null)
+    setGeneratedKey(null)
+    setCopied(false)
+    setSshKeySource('generated')
+    setFormMode('select')
+    setDeploymentStarted(false)
+    setDeployedVMName(null)
+    setSelectedVM(null)
+  }, [selectReset, createReset])
 
   const handleClose = useCallback(() => {
-    reset()
-    setSubmitError(null)
+    if (generatedKeyRef.current)
+      deleteSSHKeyPair(generatedKeyRef.current.secretName).catch(() => {})
+    resetAll()
     onClose()
-  }, [reset, onClose])
+  }, [resetAll, onClose])
+
+  const { data: polledVMs = [] } = useQuery({
+    queryKey: [...PROXY_VMS_QUERY_KEY, 'deploy-poll'],
+    queryFn: () => getProxyVMList(),
+    enabled: deploymentStarted,
+    refetchInterval: deploymentStarted ? 5000 : false
+  })
+
+  useEffect(() => {
+    if (!deploymentStarted || !deployedVMName) return
+    if (polledVMs.some((vm) => vm.metadata?.name === deployedVMName)) handleClose()
+  }, [polledVMs, deploymentStarted, deployedVMName, handleClose])
+
+  const handleGenerate = async () => {
+    const vmNameSafe = toK8sName(vmNameSelect)
+    if (!vmNameSafe) return
+    setIsGenerating(true)
+    setGenerateError(null)
+    const secretName = `${vmNameSafe}-keypair`
+    try {
+      const kp = await generateSSHKeyPair(secretName)
+      setGeneratedKey({ secretName, publicKey: kp.publicKey })
+    } catch (err: any) {
+      setGenerateError(err?.response?.data?.message || err?.message || 'Key generation failed.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleCopy = () => {
+    if (!generatedKey) return
+    navigator.clipboard.writeText(generatedKey.publicKey.trim()).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const handleKeyFileUpload = useCallback(
     async (file: File | null) => {
@@ -101,201 +241,241 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
       }
       try {
         const text = await file.text()
-        setValue('sshPrivateKey', text, { shouldDirty: true, shouldValidate: true })
+        selectSetValue('sshPrivateKey', text, { shouldDirty: true, shouldValidate: true })
         setSubmitError(null)
       } catch {
         setSubmitError('Failed to read key file.')
       }
     },
-    [setValue]
+    [selectSetValue]
   )
 
-  const onSubmit = async (data: FormData) => {
+  const handleVMChange = useCallback(
+    (vm: VMOption | null) => {
+      setSelectedVM(vm)
+      selectSetValue('vmName', vm?.name ?? '', { shouldValidate: true, shouldDirty: true })
+    },
+    [selectSetValue]
+  )
+
+  const handleRegenerateKey = useCallback(() => {
+    if (generatedKey) deleteSSHKeyPair(generatedKey.secretName).catch(() => {})
+    setGeneratedKey(null)
+    setGenerateError(null)
+  }, [generatedKey])
+
+  const onSelectSubmit = async (data: SelectFormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
     const vmNameSafe = toK8sName(data.vmName)
-    const proxyVmName = vmNameSafe + '-hot-add-ssh-key'
-    let secretCreated = false
+    let secretName: string | null = null
     try {
-      await createSecret(
-        proxyVmName,
-        { 'ssh-privatekey': data.sshPrivateKey.trim() },
-        VJAILBREAK_DEFAULT_NAMESPACE
-      )
-      secretCreated = true
-
+      let sshSpec: Record<string, unknown>
+      if (sshKeySource === 'generated') {
+        if (!generatedKey) {
+          setSubmitError('Generate a key pair first.')
+          return
+        }
+        sshSpec = { sshKeyPairRef: { name: generatedKey.secretName } }
+      } else {
+        secretName = vmNameSafe + '-hot-add-ssh-key'
+        await createSecret(
+          secretName,
+          { 'ssh-privatekey': data.sshPrivateKey.trim() },
+          VJAILBREAK_DEFAULT_NAMESPACE
+        )
+        sshSpec = { sshKeySecretRef: { name: secretName } }
+      }
       await postProxyVM({
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'ProxyVM',
-        metadata: {
-          name: vmNameSafe,
-          namespace: VJAILBREAK_DEFAULT_NAMESPACE
-        },
-        spec: {
-          vmName: data.vmName,
-          vmwareCredsRef: { name: data.vmwareCredsRef },
-          sshKeySecretRef: { name: proxyVmName }
-        }
+        metadata: { name: vmNameSafe, namespace: VJAILBREAK_DEFAULT_NAMESPACE },
+        spec: { vmName: data.vmName, vmwareCredsRef: { name: data.vmwareCredsRef }, ...sshSpec }
       })
-
+      setGeneratedKey(null)
+      generatedKeyRef.current = null
       queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
       handleClose()
     } catch (err) {
-      if (secretCreated) {
-        deleteSecret(proxyVmName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+      if (sshKeySource === 'manual' && secretName) {
+        import('src/api/secrets/secrets').then(({ deleteSecret }) =>
+          deleteSecret(secretName!, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+        )
       }
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        setSubmitError(`A Proxy VM with the name "${proxyVmName}" already exists.`)
+        setSubmitError(
+          'This VM is already registered as a vJailbreak Proxy VM. Use the Retry button in the table to re-verify it.'
+        )
       } else if (axios.isAxiosError(err)) {
-        setSubmitError(err.response?.data?.message || 'Failed to create Proxy VM.')
+        setSubmitError(err.response?.data?.message || 'Failed to create vJailbreak Proxy VM.')
       } else {
-        setSubmitError('Failed to create Proxy VM.')
+        setSubmitError('Failed to create vJailbreak Proxy VM.')
       }
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const isSubmitDisabled = isSubmitting || !isValid
+  const onCreateSubmit = async (data: CreateFormData) => {
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      await createProxyVMFromOVA({
+        vmName: data.vmName,
+        vmwareCredsRef: data.vmwareCredsRef,
+        datacenter: data.datacenter,
+        datastore: data.datastore,
+        network: data.network,
+        cluster: data.cluster || undefined
+      })
+      queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
+      setDeployedVMName(data.vmName)
+      setDeploymentStarted(true)
+    } catch (err: any) {
+      setSubmitError(err?.response?.data?.message || err?.message || 'Failed to start VM creation.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-  const vmSelectPlaceholder = !vmwareCredsRef
-    ? 'Select VMware credentials first'
-    : vmsLoading
-      ? 'Loading VMs...'
-      : vmOptions.length === 0
-        ? 'No VMs found for selected credentials'
-        : 'Search and select a VM'
+  const isSelectDisabled =
+    isSubmitting || !selectIsValid || (sshKeySource === 'generated' && !generatedKey)
+  const isCreateDisabled = isSubmitting || !createIsValid
+  const activeFormId = formMode === 'select' ? SELECT_FORM_ID : CREATE_FORM_ID
+  const submitLabel =
+    formMode === 'create'
+      ? isSubmitting
+        ? 'Deploying...'
+        : 'Deploy & Register VM'
+      : isSubmitting
+        ? 'Registering...'
+        : 'Register vJailbreak Proxy VM'
+  const subtitle =
+    formMode === 'create'
+      ? 'A new vJailbreak Proxy VM is deployed from the OVA template and registered automatically.'
+      : 'Register a powered-on VM you have already prepared as a vJailbreak Accelerated Copy proxy.'
 
   return (
     <DrawerShell
       open={open}
       onClose={handleClose}
-      header={
-        <DrawerHeader
-          title="Add Proxy VM"
-          subtitle="Register a Proxy VM for Hot-Add data copy migrations"
-          onClose={handleClose}
-        />
-      }
+      header={<DrawerHeader title="Add vJailbreak Proxy VM" subtitle={subtitle} onClose={handleClose} />}
       footer={
         <DrawerFooter>
           <ActionButton tone="secondary" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
+            {deploymentStarted ? 'Done' : 'Cancel'}
           </ActionButton>
-          <ActionButton
-            tone="primary"
-            type="submit"
-            form={FORM_ID}
-            loading={isSubmitting}
-            disabled={isSubmitDisabled}
-          >
-            Add Proxy VM
-          </ActionButton>
+          {!deploymentStarted && (
+            <ActionButton
+              tone="primary"
+              type="submit"
+              form={activeFormId}
+              loading={isSubmitting}
+              disabled={formMode === 'select' ? isSelectDisabled : isCreateDisabled}
+            >
+              {submitLabel}
+            </ActionButton>
+          )}
         </DrawerFooter>
       }
     >
-      <DesignSystemForm
-        id={FORM_ID}
-        form={form}
-        onSubmit={onSubmit}
-        keyboardSubmitProps={{ open, onClose: handleClose, isSubmitDisabled }}
-      >
-        <SurfaceCard>
-          <Box sx={{ display: 'grid', gap: 2 }}>
-            {submitError && (
-              <Alert severity="error" onClose={() => setSubmitError(null)}>
-                {submitError}
-              </Alert>
-            )}
+      <SurfaceCard>
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          {submitError && (
+            <Alert severity="error" onClose={() => setSubmitError(null)}>
+              {submitError}
+            </Alert>
+          )}
 
-            <Section>
-              <SectionHeader
-                title="Proxy VM"
-                subtitle="Select the VMware environment and the vCenter VM to register as a proxy."
-              />
-              <Box sx={{ display: 'grid', gap: 2 }}>
-                <RHFSelect
-                  name="vmwareCredsRef"
-                  label="VMware Credentials"
-                  options={credOptions}
-                  rules={{ required: 'VMware credentials are required' }}
-                  placeholder={
-                    credOptions.length === 0
-                      ? 'No validated VMware credentials found'
-                      : 'Select credentials'
-                  }
-                />
-
-                {vmwareCredsRef && !vmsLoading && (
-                  <Alert severity="info">
-                    Only powered on VMs can be added as a Proxy VM. If the VM is powered on but not
-                    listed, please revalidate the credentials.
-                  </Alert>
-                )}
-                <RHFSelect
-                  name="vmName"
-                  label="VM Name"
-                  options={vmOptions}
-                  searchable
-                  searchPlaceholder="Search VMs..."
-                  rules={{ required: 'VM is required' }}
-                  placeholder={vmSelectPlaceholder}
-                  disabled={!vmwareCredsRef || vmsLoading}
-                />
-              </Box>
-            </Section>
-
-            <Section>
-              <SectionHeader
-                title="SSH Access"
-                subtitle="Provide the private key used to SSH into the proxy VM for disk access."
-              />
-
-              <Alert severity="info">
-                Add the public key corresponding to your private key below to the Proxy VM's{' '}
-                <strong>/root/.ssh/authorized_keys</strong> before registering.
-              </Alert>
-
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <ActionButton
-                  tone="secondary"
-                  component="label"
-                  disabled={isSubmitting}
-                  sx={{ whiteSpace: 'nowrap' }}
-                >
-                  Upload key file
-                  <input
-                    type="file"
-                    hidden
-                    onChange={(e) => handleKeyFileUpload(e.target.files?.[0] ?? null)}
-                  />
-                </ActionButton>
-                <Typography variant="body2" color="text.secondary">
-                  Paste only the private key content (OpenSSH, RSA, EC, PKCS#8, or DSA — no field
-                  name prefix).
-                </Typography>
-              </Box>
-
-              <RHFTextField
-                name="sshPrivateKey"
-                label="SSH Private Key"
-                required
-                multiline
-                minRows={10}
-                disabled={isSubmitting}
-                placeholder={
-                  '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n\nAlso accepted: RSA, EC, PKCS#8 (PRIVATE KEY), DSA'
-                }
-                rules={{
-                  required: 'SSH private key is required',
-                  validate: (val: string) => validateSshPrivateKey(val) || true
-                }}
-                onValueChange={() => setSubmitError(null)}
-              />
-            </Section>
+          <Box sx={{ display: 'grid', gap: 1 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1 }}>
+              Method
+            </Typography>
+            <MethodCard
+              selected={formMode === 'create'}
+              onClick={() => !deploymentStarted && setFormMode('create')}
+              icon={<CloudDownloadOutlinedIcon fontSize="small" />}
+              title="Deploy a new vJailbreak Proxy VM"
+              description="Spin one up from the bundled OVA template. SSH access is configured automatically."
+              recommended
+            />
+            <MethodCard
+              selected={formMode === 'select'}
+              onClick={() => !deploymentStarted && setFormMode('select')}
+              icon={<ComputerOutlinedIcon fontSize="small" />}
+              title="Register an existing VM"
+              description="Point vJailbreak at a powered-on VM you've already prepared as a proxy."
+            />
           </Box>
-        </SurfaceCard>
-      </DesignSystemForm>
+
+          <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', my: 2 }} />
+
+          {formMode === 'select' && (
+            <RegisterVMForm
+              form={selectForm}
+              onSubmit={onSelectSubmit}
+              open={open}
+              onClose={handleClose}
+              isSubmitDisabled={isSelectDisabled}
+              credOptions={credOptions}
+              vmwareCredsRefSelect={vmwareCredsRefSelect}
+              vmOptions={vmOptions}
+              vmsLoading={vmsLoading}
+              selectedVM={selectedVM}
+              onVMChange={handleVMChange}
+              isSubmitting={isSubmitting}
+              sshKeySource={sshKeySource}
+              onSshKeySourceChange={setSshKeySource}
+              generatedKey={generatedKey}
+              isGenerating={isGenerating}
+              generateError={generateError}
+              onClearGenerateError={() => setGenerateError(null)}
+              copied={copied}
+              onGenerate={handleGenerate}
+              onRegenerateKey={handleRegenerateKey}
+              onCopy={handleCopy}
+              onKeyFileUpload={handleKeyFileUpload}
+              onSubmitErrorChange={setSubmitError}
+            />
+          )}
+
+          {formMode === 'create' && deploymentStarted && (
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Alert severity="success">
+                Deployment started for <strong>{createForm.getValues('vmName')}</strong>.
+              </Alert>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary">
+                vJailbreak is deploying the OVA to vCenter, configuring SSH access, and registering
+                the vJailbreak Proxy VM. This typically takes <strong>3–5 minutes</strong>.
+              </Typography>
+              <Alert severity="info">
+                You can close this panel — the VM will appear in the vJailbreak Proxy VMs list once
+                provisioning is complete and verification begins automatically.
+              </Alert>
+            </Box>
+          )}
+
+          {formMode === 'create' && !deploymentStarted && (
+            <DeployVMForm
+              form={createForm}
+              onSubmit={onCreateSubmit}
+              open={open}
+              onClose={handleClose}
+              isSubmitDisabled={isCreateDisabled}
+              credOptions={credOptions}
+              vmwareCredsRefCreate={vmwareCredsRefCreate}
+              datacenterCreate={datacenterCreate}
+              dcResources={dcResources}
+              scopedResources={scopedResources}
+              dcLoading={dcLoading}
+              scopedLoading={scopedLoading}
+              isSubmitting={isSubmitting}
+              vmOptions={vmOptions}
+            />
+          )}
+        </Box>
+      </SurfaceCard>
     </DrawerShell>
   )
 }

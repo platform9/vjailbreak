@@ -1,16 +1,14 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, LinearProgress } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import ListAltIcon from '@mui/icons-material/ListAlt'
-import { LogsDrawer } from '.'
-import { Migration, Phase } from '../api/migrations'
-import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
+import { Phase } from '../api/migrations'
 import MigrationProgress from '../components/MigrationProgress'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
@@ -124,6 +122,7 @@ export default function MigrationsTable({
   loading = false
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
+  const navigate = useNavigate()
 
   const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
     staleTime: 0,
@@ -150,24 +149,8 @@ export default function MigrationsTable({
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
   const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null)
-  const [migrationDetailModalOpen, setMigrationDetailModalOpen] = useState(false)
-  const [selectedMigrationDetail, setSelectedMigrationDetail] = useState<Migration | null>(null)
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
-  const [logsDrawerOpen, setLogsDrawerOpen] = useState(false)
-  const [selectedPod, setSelectedPod] = useState<{
-    name: string
-    namespace: string
-    migrationName?: string
-    migrationPhase?: Phase
-    vmName?: string
-  } | null>(null)
-
-  const logsDrawerMigrationPhase = useMemo(() => {
-    if (!logsDrawerOpen || !selectedPod?.migrationName) return selectedPod?.migrationPhase
-    const current = migrations.find((m) => m.metadata?.name === selectedPod.migrationName)
-    return current?.status?.phase ?? selectedPod?.migrationPhase
-  }, [logsDrawerOpen, migrations, selectedPod?.migrationName, selectedPod?.migrationPhase])
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
@@ -323,8 +306,8 @@ export default function MigrationsTable({
               <ClickableTableCell
                 tooltipTitle={tooltipTitle}
                 onClick={() => {
-                  params.row.setSelectedMigrationDetail?.(params.row)
-                  params.row.setMigrationDetailModalOpen?.(true)
+                  const migName = params.row?.metadata?.name
+                  if (migName) navigate(`/dashboard/migrations/${migName}`)
                 }}
               >
                 {displayVmName}
@@ -393,12 +376,51 @@ export default function MigrationsTable({
           const currentDisk = params.row?.status?.currentDisk
           const totalDisks = params.row?.status?.totalDisks
           const syncWarningMessage = params.row?.status?.syncWarningMessage
+          const migrationName = params.row?.metadata?.name
+
+          const isCopyPhase = [
+            Phase.CopyingBlocks,
+            Phase.CopyingChangedBlocks,
+            Phase.ConvertingDisk,
+            Phase.AwaitingDataCopyStart
+          ].includes(phase)
+          const isValidating = phase === Phase.Validating
+
+          const diskNum = currentDisk != null ? parseInt(currentDisk, 10) : null
+          const diskProgress =
+            diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
+
+          const progressVariant: 'indeterminate' | 'determinate' | undefined =
+            isCopyPhase && diskProgress !== null
+              ? 'determinate'
+              : isCopyPhase || isValidating
+                ? 'indeterminate'
+                : undefined
+
+          const progressValue = diskProgress ?? 0
+          const barColor = syncWarningMessage ? 'warning' : 'primary'
+
           return conditions ? (
-            <MigrationProgress
-              phase={phase}
-              progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
-              syncWarningMessage={syncWarningMessage}
-            />
+            <Box
+              sx={{ cursor: 'pointer', width: '100%', py: 0.25 }}
+              onClick={() => {
+                if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
+              }}
+            >
+              <MigrationProgress
+                phase={phase}
+                progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+                syncWarningMessage={syncWarningMessage}
+              />
+              {progressVariant && (
+                <LinearProgress
+                  variant={progressVariant}
+                  value={progressValue}
+                  color={barColor as 'primary' | 'success' | 'warning'}
+                  sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
+                />
+              )}
+            </Box>
           ) : null
         }
       },
@@ -428,27 +450,18 @@ export default function MigrationsTable({
           const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
 
           return (
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {params.row.spec?.podRef && (
-                <Tooltip title="View pod logs">
-                  <IconButton
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      params.row.setSelectedPod({
-                        name: params.row.spec.podRef,
-                        namespace: params.row.metadata?.namespace || '',
-                        migrationName: params.row.metadata?.name || '',
-                        migrationPhase: params.row.status?.phase,
-                        vmName: params.row.spec?.vmName || ''
-                      })
-                      params.row.setLogsDrawerOpen(true)
-                    }}
-                    size="small"
-                  >
-                    <ListAltIcon />
-                  </IconButton>
-                </Tooltip>
-              )}
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}>
+              <Tooltip title={'Delete migration'}>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    params.row.onDelete(params.row.metadata?.name)
+                  }}
+                  size="small"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
               {showAdminCutover && (
                 <TriggerAdminCutoverButton
                   migrationName={migrationName}
@@ -486,17 +499,6 @@ export default function MigrationsTable({
                   </span>
                 </Tooltip>
               )}
-              <Tooltip title={'Delete migration'}>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    params.row.onDelete(params.row.metadata?.name)
-                  }}
-                  size="small"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
             </Box>
           )
         }
@@ -570,21 +572,9 @@ export default function MigrationsTable({
       filteredMigrations?.map((migration) => ({
         ...migration,
         onDelete: onDeleteMigration,
-        refetchMigrations,
-        setSelectedPod,
-        setLogsDrawerOpen,
-        setMigrationDetailModalOpen,
-        setSelectedMigrationDetail
+        refetchMigrations
       })) || [],
-    [
-      filteredMigrations,
-      onDeleteMigration,
-      refetchMigrations,
-      setLogsDrawerOpen,
-      setMigrationDetailModalOpen,
-      setSelectedMigrationDetail,
-      setSelectedPod
-    ]
+    [filteredMigrations, onDeleteMigration, refetchMigrations]
   )
 
   return (
@@ -667,27 +657,6 @@ export default function MigrationsTable({
         onConfirm={handleBulkAdminCutover}
         errorMessage={bulkCutoverError}
         onErrorChange={setBulkCutoverError}
-      />
-
-      <LogsDrawer
-        open={logsDrawerOpen}
-        onClose={() => setLogsDrawerOpen(false)}
-        podName={selectedPod?.name || ''}
-        namespace={selectedPod?.namespace || ''}
-        migrationName={selectedPod?.migrationName || ''}
-        migrationPhase={logsDrawerMigrationPhase}
-        vmName={selectedPod?.vmName || ''}
-      />
-
-      <MigrationDetailModal
-        open={migrationDetailModalOpen}
-        migration={selectedMigrationDetail}
-        onClose={() => setMigrationDetailModalOpen(false)}
-        isDuplicate={
-          selectedMigrationDetail
-            ? duplicateVmNames.has(selectedMigrationDetail.spec?.vmName || '')
-            : false
-        }
       />
     </>
   )
