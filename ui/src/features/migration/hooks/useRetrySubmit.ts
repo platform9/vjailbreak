@@ -68,13 +68,10 @@ interface UseRetrySubmitParams {
 interface UseRetrySubmitResult {
   retrySubmitting: boolean
   retryError: string | null
-  handleRetryWithoutEdit: () => Promise<void>
   handleEditAndRetry: () => Promise<void>
 }
 
-// Implements the two retry actions.
-// "Retry without editing": just deletes the failed Migration — controller recreates it unchanged.
-// "Edit & Retry": removes the VM from the old plan (or deletes the plan if it's the last VM),
+// Removes the VM from the old plan (or deletes the plan if it's the last VM),
 // deletes the old Migration, then creates a fresh set of resources (NetworkMapping,
 // StorageMapping, MigrationTemplate, MigrationPlan) with the user's edits applied.
 export function useRetrySubmit({
@@ -103,11 +100,6 @@ export function useRetrySubmit({
     },
     [queryClient, onSuccess, onClose, navigate]
   )
-
-  const triggerRetry = useCallback(async () => {
-    if (!retryConfig) throw new Error('Retry context is missing')
-    await deleteMigration(retryConfig.migrationName, retryConfig.namespace)
-  }, [retryConfig])
 
   const buildPlanPatchSpec = useCallback(() => {
     const timeWindow =
@@ -321,12 +313,6 @@ export function useRetrySubmit({
     buildPlanPatchSpec
   ])
 
-  const retryWithoutEditMutation = useMutation({
-    mutationFn: triggerRetry,
-    onSuccess: () => finishRetry(`Retry started for ${retryConfig?.vmName}`),
-    onError: (err: Error) => reportError(err, { context: 'retry-without-edit' })
-  })
-
   const editAndRetryMutation = useMutation({
     mutationFn: async () => {
       if (!retryConfig || !retryTemplate) return
@@ -341,21 +327,15 @@ export function useRetrySubmit({
       })
   })
 
-  const retrySubmitting =
-    retryWithoutEditMutation.isPending || editAndRetryMutation.isPending
+  const retrySubmitting = editAndRetryMutation.isPending
 
-  const retryError =
-    (retryWithoutEditMutation.error
-      ? `Failed to start retry: ${retryWithoutEditMutation.error.message}`
-      : null) ??
-    (editAndRetryMutation.error
-      ? `Failed to apply edits and retry: ${editAndRetryMutation.error.message}`
-      : null)
+  const retryError = editAndRetryMutation.error
+    ? `Failed to apply edits and retry: ${editAndRetryMutation.error.message}`
+    : null
 
   return {
     retrySubmitting,
     retryError,
-    handleRetryWithoutEdit: () => retryWithoutEditMutation.mutateAsync(),
     handleEditAndRetry: () => editAndRetryMutation.mutateAsync()
   }
 }

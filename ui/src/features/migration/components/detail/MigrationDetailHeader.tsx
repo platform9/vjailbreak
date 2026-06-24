@@ -134,7 +134,7 @@ export default function MigrationDetailHeader({
                   title={
                     isRetryDisabled
                       ? 'This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration.'
-                      : 'Edit & Retry migration'
+                      : 'Retry migration'
                   }
                 >
                   <span>
