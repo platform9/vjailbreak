@@ -199,7 +199,6 @@ export function useRetrySubmit({
   const performEditAndRetry = useCallback(async () => {
     if (!retryConfig || !retryTemplate || !retryPlan) return
     const namespace = retryConfig.namespace
-    const suffix = `-r-${Date.now().toString(36).slice(-6)}`
     const retryingVMKey = retryVm?.vmKey || retryVm?.name || retryConfig.vmName
 
     // 1. Remove the retrying VM from the old plan. If it's the last VM, delete the whole plan.
@@ -262,7 +261,7 @@ export function useRetrySubmit({
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationTemplate',
-        metadata: { name: makeCloneName(retryTemplate.metadata.name, suffix) },
+        metadata: { name: makeCloneName(retryTemplate.metadata.name.replace(/-r$/, ''), '-r') },
         spec: newTemplateSpec
       },
       namespace
@@ -285,7 +284,9 @@ export function useRetrySubmit({
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationPlan',
         metadata: {
-          name: makeCloneName(retryPlan.metadata.name, suffix)
+          name: isLastVMInPlan
+            ? retryPlan.metadata.name
+            : makeCloneName(retryPlan.metadata.name.replace(/-r$/, ''), '-r')
         },
         spec: {
           ...planPatch,
