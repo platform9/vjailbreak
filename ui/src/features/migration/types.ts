@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
+import type { RetryMigrationConfig } from './context/MigrationFormContext'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
@@ -108,6 +109,7 @@ export interface MigrationFormDrawerProps {
   onClose: () => void
   reloadMigrations?: () => void
   onSuccess?: (message: string) => void
+  retryConfig?: RetryMigrationConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +312,8 @@ export interface VmsSelectionStepProps {
   vmwareCluster?: string
   useGPU?: boolean
   showHeader?: boolean
+  // When set, the table shows only this VM (by name) and treats it as not migrated.
+  retryVmName?: string
 
   // Rolling-mode props
   vmsWithAssignments?: VM[]

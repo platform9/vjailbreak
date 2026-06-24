@@ -1,7 +1,7 @@
 import { Box, Alert, Divider, Typography, useMediaQuery } from '@mui/material'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from '../steps/MigrationOptionsAlt'
@@ -38,6 +38,10 @@ import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
+import { useRetryPrefill } from '../hooks/useRetryPrefill'
+import { useRetrySubmit } from '../hooks/useRetrySubmit'
+import { Banner } from 'src/components'
+import { RetrySourceDestinationSummary } from '../components/RetryMigration'
 
 const drawerWidth = 1400
 
@@ -64,10 +68,12 @@ const defaultValues: Partial<FormValues> = {}
 export default function MigrationFormDrawer({
   open,
   onClose,
-  onSuccess
+  onSuccess,
+  retryConfig
 }: MigrationFormDrawerProps) {
+  const isRetryMode = Boolean(retryConfig)
   const navigate = useNavigate()
-  const { params, getParamsUpdater } = useParams<FormValues>(defaultValues)
+  const { params, getParamsUpdater, updateParams } = useParams<FormValues>(defaultValues)
   const { pcdData } = useClusterData()
   const { reportError } = useErrorHandler({ component: 'MigrationForm' })
   const { track } = useAmplitude({ component: 'MigrationForm' })
@@ -78,8 +84,11 @@ export default function MigrationFormDrawer({
   const queryClient = useQueryClient()
 
   // Migration Options - Checked or Unchecked state
-  const { params: selectedMigrationOptions, getParamsUpdater: updateSelectedMigrationOptions } =
-    useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
+  const {
+    params: selectedMigrationOptions,
+    getParamsUpdater: updateSelectedMigrationOptions,
+    updateParams: updateSelectedMigrationOptionsBulk
+  } = useParams<SelectedMigrationOptionsType>(defaultMigrationOptions)
 
   // Generate a unique session ID for this form instance
   const [sessionId] = useState(() => `form-session-${Date.now()}`)
@@ -108,7 +117,56 @@ export default function MigrationFormDrawer({
     vmwareCredsValidated,
     openstackCredsValidated,
     targetPCDClusterName
-  } = useCredentialFetching({ params, pcdData, getFieldErrorsUpdater })
+  } = useCredentialFetching({
+    params,
+    pcdData,
+    getFieldErrorsUpdater,
+    // Retry mode reuses the plan's existing template; never auto-create or auto-patch it.
+    disableTemplateSync: isRetryMode
+  })
+
+  const { prefillLoading, blockingError, retryPlan, retryTemplate, retryVm, vmK8sName, sourceCluster } =
+    useRetryPrefill({
+      open,
+      retryConfig,
+      pcdData,
+      updateParams,
+      updateSelectedOptions: updateSelectedMigrationOptionsBulk,
+      form,
+      setMigrationTemplate
+    })
+
+  const [selectedFlavorId, setSelectedFlavorId] = useState('')
+  useEffect(() => {
+    setSelectedFlavorId(retryVm?.targetFlavorId || '')
+  }, [retryVm])
+
+  // Resolve selected PCD cluster name from id for template patching.
+  const selectedPcdClusterName = useMemo(
+    () => pcdData.find((p) => p.id === params.pcdCluster)?.name || params.pcdCluster || '',
+    [pcdData, params.pcdCluster]
+  )
+
+  // Re-resolve pcdCluster from name → id once pcdData finishes loading.
+  // useRetryPrefill runs at drawer open; if pcdData isn't ready yet it stores
+  // the cluster name string. Once pcdData loads, swap it for the real id so
+  // the target-cluster dropdown selects the right item.
+  useEffect(() => {
+    if (!isRetryMode || !pcdData.length || !params.pcdCluster) return
+    const alreadyId = pcdData.some((p) => p.id === params.pcdCluster)
+    if (alreadyId) return
+    const match = pcdData.find((p) => p.name === params.pcdCluster)
+    if (match) updateParams({ pcdCluster: match.id })
+  }, [pcdData, isRetryMode, params.pcdCluster, updateParams])
+
+  // When target cluster changes in retry mode, reset network/storage mappings because
+  // the previously mapped networks/volume-types may not exist on the new cluster.
+  const handleRetryClusterChange = useCallback(
+    (newClusterId: string) => {
+      updateParams({ pcdCluster: newClusterId, networkMappings: [], storageMappings: [] })
+    },
+    [updateParams]
+  )
 
   // Query RDM disks
   const { data: rdmDisks = [] } = useRdmDisksQuery({
@@ -185,6 +243,29 @@ export default function MigrationFormDrawer({
     networkMappingRequired
   })
 
+  const { retrySubmitting, retryError, handleRetryWithoutEdit, handleEditAndRetry } =
+    useRetrySubmit({
+      retryConfig,
+      params,
+      selectedMigrationOptions,
+      retryPlan,
+      retryTemplate,
+      retryVm,
+      vmK8sName,
+      selectedFlavorId,
+      selectedPcdClusterName,
+      networkMappingRequired,
+      queryClient,
+      navigate,
+      onClose,
+      onSuccess,
+      reportError
+    })
+
+  // In retry mode the template belongs to the live MigrationPlan — the standard close
+  // handler would delete it. Cancelling a retry must not modify anything.
+  const handleDrawerClose = isRetryMode ? onClose : handleClose
+
   const scrollToSection = useCallback((id: string) => {
     const map: Record<string, React.RefObject<HTMLDivElement | null>> = {
       'source-destination': section1Ref,
@@ -222,7 +303,7 @@ export default function MigrationFormDrawer({
     <DrawerShell
       data-testid="migration-form-drawer"
       open={open}
-      onClose={handleClose}
+      onClose={handleDrawerClose}
       width={drawerWidth}
       ModalProps={{
         keepMounted: false,
@@ -232,40 +313,105 @@ export default function MigrationFormDrawer({
         <DrawerHeader
           data-testid="migration-form-header"
           closeButtonTestId="migration-form-close"
-          title="Start Migration"
-          subtitle="Configure source/destination, select VMs, and map resources before starting"
+          title={isRetryMode ? 'Retry Migration' : 'Start Migration'}
+          subtitle={
+            isRetryMode
+              ? `Review and adjust the configuration of "${retryConfig?.vmName}" before retrying`
+              : 'Configure source/destination, select VMs, and map resources before starting'
+          }
           icon={<MigrationIcon />}
-          onClose={handleClose}
+          onClose={handleDrawerClose}
         />
       }
       footer={
-        <DrawerFooter data-testid="migration-form-footer">
-          <ActionButton tone="secondary" onClick={handleClose} data-testid="migration-form-cancel">
-            Cancel
-          </ActionButton>
-          <ActionButton
-            tone="primary"
-            onClick={handleSubmit}
-            disabled={submitDisabled}
-            loading={submitting}
-            data-testid="migration-form-submit"
-          >
-            Start Migration
-          </ActionButton>
-        </DrawerFooter>
+        isRetryMode ? (
+          <DrawerFooter data-testid="migration-form-footer">
+            <ActionButton
+              tone="secondary"
+              onClick={handleDrawerClose}
+              data-testid="migration-form-cancel"
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="secondary"
+              onClick={handleRetryWithoutEdit}
+              disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
+              loading={retrySubmitting}
+              data-testid="migration-form-retry-without-edit"
+            >
+              Retry Without Editing
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              onClick={handleEditAndRetry}
+              disabled={
+                Boolean(blockingError) || prefillLoading || retrySubmitting || disableSubmit
+              }
+              loading={retrySubmitting}
+              data-testid="migration-form-edit-and-retry"
+            >
+              Edit & Retry
+            </ActionButton>
+          </DrawerFooter>
+        ) : (
+          <DrawerFooter data-testid="migration-form-footer">
+            <ActionButton
+              tone="secondary"
+              onClick={handleClose}
+              data-testid="migration-form-cancel"
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              onClick={handleSubmit}
+              disabled={submitDisabled}
+              loading={submitting}
+              data-testid="migration-form-submit"
+            >
+              Start Migration
+            </ActionButton>
+          </DrawerFooter>
+        )
       }
     >
       <DesignSystemForm
         form={form}
         onSubmit={async () => {
+          if (isRetryMode) {
+            await handleEditAndRetry()
+            return
+          }
           await handleSubmit()
         }}
         keyboardSubmitProps={{
           open,
-          onClose: handleClose,
-          isSubmitDisabled: disableSubmit || submitting
+          onClose: handleDrawerClose,
+          isSubmitDisabled: isRetryMode
+            ? Boolean(blockingError) || prefillLoading || retrySubmitting || disableSubmit
+            : disableSubmit || submitting
         }}
       >
+        {isRetryMode && blockingError ? (
+          <Box data-testid="retry-blocking-banner" sx={{ mb: 2 }}>
+            <Banner
+              variant="error"
+              title="This migration cannot be retried"
+              message={blockingError}
+            />
+          </Box>
+        ) : null}
+        {isRetryMode && retryError ? (
+          <Box data-testid="retry-error-banner" sx={{ mb: 2 }}>
+            <Banner variant="error" title="Retry failed" message={retryError} />
+          </Box>
+        ) : null}
+        {isRetryMode && prefillLoading ? (
+          <Box data-testid="retry-prefill-loading-banner" sx={{ mb: 2 }}>
+            <Banner variant="info" message="Loading the failed migration's configuration…" />
+          </Box>
+        ) : null}
         <Box
           ref={contentRootRef}
           data-testid="migration-form-content"
@@ -316,16 +462,32 @@ export default function MigrationFormDrawer({
               <SurfaceCard
                 variant="section"
                 title="Source And Destination"
-                subtitle="Choose where you migrate from and where you migrate to"
+                subtitle={
+                  isRetryMode
+                    ? 'Locked to the failed migration’s environments'
+                    : 'Choose where you migrate from and where you migrate to'
+                }
                 data-testid="migration-form-step1-card"
               >
-                <SourceDestinationClusterSelection
-                  onChange={getParamsUpdater}
-                  errors={fieldErrors}
-                  vmwareCluster={params.vmwareCluster}
-                  pcdCluster={params.pcdCluster}
-                  showHeader={false}
-                />
+                {isRetryMode ? (
+                  <RetrySourceDestinationSummary
+                    vmwareCredName={params.vmwareCreds?.existingCredName}
+                    sourceCluster={sourceCluster}
+                    openstackCredName={params.openstackCreds?.existingCredName}
+                    pcdClusters={pcdData}
+                    selectedPcdClusterId={params.pcdCluster || ''}
+                    onPcdClusterChange={handleRetryClusterChange}
+                    disabled={prefillLoading || retrySubmitting}
+                  />
+                ) : (
+                  <SourceDestinationClusterSelection
+                    onChange={getParamsUpdater}
+                    errors={fieldErrors}
+                    vmwareCluster={params.vmwareCluster}
+                    pcdCluster={params.pcdCluster}
+                    showHeader={false}
+                  />
+                )}
               </SurfaceCard>
             </Box>
 
@@ -335,31 +497,57 @@ export default function MigrationFormDrawer({
             <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
               <SurfaceCard
                 variant="section"
-                title="Select VMs"
-                subtitle="Pick the virtual machines you want to migrate"
+                title={isRetryMode ? 'Virtual Machine' : 'Select VMs'}
+                subtitle={
+                  isRetryMode
+                    ? 'The failed VM is locked for this retry'
+                    : 'Pick the virtual machines you want to migrate'
+                }
                 data-testid="migration-form-step2-card"
               >
-                <VmsSelectionStep
-                  mode="standard"
-                  onChange={getParamsUpdater}
-                  error={fieldErrors['vms']}
-                  open={open}
-                  vmwareCredsValidated={vmwareCredsValidated}
-                  openstackCredsValidated={openstackCredsValidated}
-                  sessionId={sessionId}
-                  openstackFlavors={openstackCredentials?.spec?.flavors}
-                  vmwareCredName={params.vmwareCreds?.existingCredName}
-                  openstackCredName={params.openstackCreds?.existingCredName}
-                  openstackCredentials={openstackCredentials}
-                  vmwareCluster={params.vmwareCluster}
-                  useGPU={params.useGPU}
-                  showHeader={false}
-                />
-                {vmValidation.hasError && (
-                  <Alert severity="warning">{vmValidation.errorMessage}</Alert>
-                )}
-                {rdmValidation.hasConfigError && (
-                  <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                {isRetryMode ? (
+                  <VmsSelectionStep
+                    mode="standard"
+                    onChange={getParamsUpdater}
+                    error={fieldErrors['vms']}
+                    open={open}
+                    vmwareCredsValidated={vmwareCredsValidated}
+                    openstackCredsValidated={openstackCredsValidated}
+                    sessionId={sessionId}
+                    openstackFlavors={openstackCredentials?.spec?.flavors}
+                    vmwareCredName={params.vmwareCreds?.existingCredName}
+                    openstackCredName={params.openstackCreds?.existingCredName}
+                    openstackCredentials={openstackCredentials}
+                    vmwareCluster={params.vmwareCluster}
+                    useGPU={params.useGPU}
+                    showHeader={false}
+                    retryVmName={retryConfig?.vmName}
+                  />
+                ) : (
+                  <>
+                    <VmsSelectionStep
+                      mode="standard"
+                      onChange={getParamsUpdater}
+                      error={fieldErrors['vms']}
+                      open={open}
+                      vmwareCredsValidated={vmwareCredsValidated}
+                      openstackCredsValidated={openstackCredsValidated}
+                      sessionId={sessionId}
+                      openstackFlavors={openstackCredentials?.spec?.flavors}
+                      vmwareCredName={params.vmwareCreds?.existingCredName}
+                      openstackCredName={params.openstackCreds?.existingCredName}
+                      openstackCredentials={openstackCredentials}
+                      vmwareCluster={params.vmwareCluster}
+                      useGPU={params.useGPU}
+                      showHeader={false}
+                    />
+                    {vmValidation.hasError && (
+                      <Alert severity="warning">{vmValidation.errorMessage}</Alert>
+                    )}
+                    {rdmValidation.hasConfigError && (
+                      <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                    )}
+                  </>
                 )}
               </SurfaceCard>
             </Box>
@@ -438,9 +626,9 @@ export default function MigrationFormDrawer({
                 />
               </SurfaceCard>
             </Box>
-            <Divider />
+            {!isRetryMode && <Divider />}
 
-            <Box ref={reviewRef} data-testid="migration-form-step-review">
+            {!isRetryMode && <Box ref={reviewRef} data-testid="migration-form-step-review">
               <SurfaceCard
                 variant="section"
                 title="Preview"
@@ -521,7 +709,7 @@ export default function MigrationFormDrawer({
                   </Box>
                 </Box>
               </SurfaceCard>
-            </Box>
+            </Box>}
           </Box>
         </Box>
       </DesignSystemForm>

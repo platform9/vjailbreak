@@ -14,7 +14,7 @@ import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import AddIcon from '@mui/icons-material/Add'
-import { triggerAdminCutover, deleteMigration } from '../api/migrations'
+import { triggerAdminCutover } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
@@ -437,14 +437,16 @@ export default function MigrationsTable({
           const showRetryButton = phase === Phase.Failed
           const isRetryDisabled = retryable === false
 
-          const handleRetry = async () => {
+          // Opens the migration form in retry mode, pre-populated with the failed
+          // migration's configuration. The form triggers the actual retry.
+          const handleRetry = () => {
             if (!migrationName || !namespace) return
-            try {
-              await deleteMigration(migrationName, namespace)
-              params.row.refetchMigrations?.()
-            } catch (error) {
-              console.error('Failed retry:', error)
-            }
+            openMigrationForm('standard', {
+              migrationName,
+              namespace,
+              planName: params.row?.spec?.migrationPlan || params.row?.metadata?.labels?.migrationplan || '',
+              vmName: params.row?.spec?.vmName || ''
+            })
           }
 
           const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
@@ -473,7 +475,7 @@ export default function MigrationsTable({
                   title={
                     isRetryDisabled
                       ? 'This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration.'
-                      : 'Retry migration'
+                      : 'Edit & Retry migration'
                   }
                 >
                   <span>
@@ -504,7 +506,7 @@ export default function MigrationsTable({
         }
       }
     ]
-  }, [destinationByPlan, pulse, duplicateVmNames])
+  }, [destinationByPlan, pulse, duplicateVmNames, openMigrationForm])
 
   const selectedMigrations = useMemo(
     () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],

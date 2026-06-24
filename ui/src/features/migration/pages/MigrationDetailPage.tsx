@@ -94,7 +94,8 @@ export default function MigrationDetailPage() {
           <Tab label="Details" value="details" />
           <Tab label="Events" value="events" />
           <Tab label="Pod logs" value="logs" />
-          <Tab label="Resources" disabled sx={{ opacity: 0.4 }} />
+          {/* TODO: re-enable when Resources tab is implemented */}
+          {/* <Tab label="Resources" disabled sx={{ opacity: 0.4 }} /> */}
         </Tabs>
       </Box>
 

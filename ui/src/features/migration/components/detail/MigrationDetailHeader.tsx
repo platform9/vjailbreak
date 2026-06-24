@@ -10,7 +10,8 @@ import {
 } from '@mui/material'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import RefreshIcon from '@mui/icons-material/Refresh'
-import { Migration, Phase, deleteMigration } from '../../api/migrations'
+import { Migration, Phase } from '../../api/migrations'
+import { useMigrationFormActions } from '../../context/MigrationFormContext'
 import { getPhaseColorKey, getPhaseLabel } from '../../utils/phaseUtils'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
@@ -44,6 +45,7 @@ export default function MigrationDetailHeader({
   resources,
 }: MigrationDetailHeaderProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const { openMigrationForm } = useMigrationFormActions()
 
   const phase = migration.status?.phase as Phase | undefined
   const phaseLabel = getPhaseLabel(phase)
@@ -75,15 +77,14 @@ export default function MigrationDetailHeader({
     phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime
   const isTerminal = phase === Phase.Succeeded || isFailed
 
-  // Retry = direct delete without confirmation dialog (same behaviour as table row retry)
-  const handleRetry = async () => {
+  const planName =
+    (migration.metadata?.labels as unknown as Record<string, string> | undefined)?.migrationplan ||
+    (migration.spec as { migrationPlan?: string } | undefined)?.migrationPlan ||
+    ''
+
+  const handleRetry = () => {
     if (!migrationName) return
-    try {
-      await deleteMigration(migrationName, namespace)
-      onBack()
-    } catch (err) {
-      console.error('Failed to retry migration:', err)
-    }
+    openMigrationForm('standard', { migrationName, namespace, planName, vmName })
   }
 
   return (
@@ -133,7 +134,7 @@ export default function MigrationDetailHeader({
                   title={
                     isRetryDisabled
                       ? 'This migration cannot be retried because the VM has RDM disks. To retry, manually restart the migration.'
-                      : 'Retry migration'
+                      : 'Edit & Retry migration'
                   }
                 >
                   <span>
