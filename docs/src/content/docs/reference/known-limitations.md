@@ -154,13 +154,13 @@ Each filesystem must also have at least **100 free inodes**.
 
 **Workaround**: Before migrating, free up space inside the source VM on any full partitions. Check with `df -h` (Linux) or Disk Management (Windows).
 
-## Warm Migration Requires Virtual Hardware Version 7 or Newer
+## Hot Migration Requires Virtual Hardware Version 7 or Newer
 
-vJailbreak **Warm migration** (**Copy live VMs, then power off**) relies on VMware **Changed Block Tracking (CBT)** to copy only changed disk blocks during the live sync phase. CBT is available only on VMs running **virtual hardware version 7 or newer** (VMware KB 1020128).
+vJailbreak **Hot migration** (**Copy live VMs, then power off**) relies on VMware **Changed Block Tracking (CBT)** to copy only changed disk blocks during the live sync phase. CBT is available only on VMs running **virtual hardware version 7 or newer** (VMware KB 1020128).
 
-VMs on older hardware versions (for example, version 4) do not expose the CBT property at all, so Warm migration cannot track changed blocks for them.
+VMs on older hardware versions (for example, version 4) do not expose the CBT property at all, so Hot migration cannot track changed blocks for them.
 
-**Symptom**: A Warm migration of a legacy-hardware VM fails at the CBT step. The reported error looks similar to:
+**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step. The reported error looks similar to:
 
 ```
 CBT is not enabled on disk <id>
@@ -169,9 +169,9 @@ CBT is not enabled on disk <id>
 **What to do** — choose one:
 
 1. **Use cold migration** (**Power off VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
-2. **Upgrade the VM's virtual hardware version** to 7 or newer in vCenter, then use warm migration if you need minimal downtime. Upgrading the hardware version requires a VM power-off and cannot be reversed — review VMware's documentation before proceeding.
+2. **Upgrade the VM's virtual hardware version** to 7 or newer in vCenter, then use Hot migration if you need minimal downtime. Upgrading the hardware version requires a VM power-off and cannot be reversed — review VMware's documentation before proceeding.
 
-| VM virtual hardware version | warm migration | Cold migration |
+| VM virtual hardware version | Hot migration | Cold migration |
 |---|---|---|
 | 7 or newer | Supported | Supported |
 | Below 7 (e.g., version 4) | Not supported — use cold migration | Supported |
@@ -184,7 +184,7 @@ To check a VM's hardware version in vCenter, select the VM and look at **VM Hard
 
 Cold migration (**Power off VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.
 
-warm migration (**Copy live VMs, then power off**) minimizes downtime but still requires a brief power-off during the final cutover phase to synchronize the last changed blocks. Applications should be tested for graceful handling of this cutover reboot.
+Hot migration (**Copy live VMs, then power off**) minimizes downtime but still requires a brief power-off during the final cutover phase to synchronize the last changed blocks. Applications should be tested for graceful handling of this cutover reboot.
 
 :::caution
 Before migrating, verify that your application starts cleanly after a cold reboot. Applications that require manual intervention to restart (e.g., databases with crash-inconsistent state) should be cleanly shut down inside the VM before initiating cold migration.
