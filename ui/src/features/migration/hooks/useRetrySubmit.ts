@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useMutation, QueryClient } from '@tanstack/react-query'
 import { NavigateFunction } from 'react-router-dom'
-import { deleteMigration } from 'src/api/migrations/migrations'
+import { deleteMigration, getMigration } from 'src/api/migrations/migrations'
 import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
@@ -19,6 +19,22 @@ import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
 import { CUTOVER_TYPES } from '../constants'
 import type { RetryMigrationConfig } from '../context/MigrationFormContext'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
+
+async function pollUntilGone(
+  fetcher: () => Promise<unknown>,
+  pollIntervalMs = 500,
+  timeoutMs = 30000
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      await fetcher()
+      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs))
+    } catch {
+      return
+    }
+  }
+}
 
 // Trim base name to fit within the Kubernetes 63-char DNS label limit, then strip
 // trailing hyphens left by the truncation.
@@ -201,8 +217,11 @@ export function useRetrySubmit({
       )
     }
 
-    // 2. Delete the failed Migration — GC cascades to owned Job and ConfigMaps.
+    // 2. Delete the failed Migration, then wait for it to be fully gone before creating
+    //    new resources. Plan entry removal is already confirmed by step 1's PATCH.
+    //    GC cascades to owned ConfigMaps and Job once the Migration object disappears.
     await deleteMigration(retryConfig.migrationName, namespace)
+    await pollUntilGone(() => getMigration(retryConfig.migrationName, namespace))
 
     // 3. Create new NetworkMapping.
     let newNetworkMappingName: string | undefined

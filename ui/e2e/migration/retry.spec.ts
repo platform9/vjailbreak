@@ -106,6 +106,36 @@ interface RecordedCall {
   body: Record<string, unknown> | undefined
 }
 
+// Like recordRoute but returns 404 on GET after a DELETE is received.
+// Used for Migration routes so pollUntilGone() terminates once the delete lands.
+async function recordRouteGone404AfterDelete(
+  page: Page,
+  url: string,
+  responseByMethod: Record<string, { status?: number; body: Record<string, unknown> }>,
+  calls: RecordedCall[],
+  label: string,
+  order: string[],
+): Promise<void> {
+  let deleted = false
+  await page.route(url, (route: Route) => {
+    const method = route.request().method()
+    if (method === 'GET' && deleted) {
+      route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'not found' }) })
+      return
+    }
+    const handler = responseByMethod[method]
+    if (!handler) return route.continue()
+    calls.push({ method, body: route.request().postDataJSON() ?? undefined })
+    order.push(`${method} ${label}`)
+    if (method === 'DELETE') deleted = true
+    route.fulfill({
+      status: handler.status ?? 200,
+      contentType: 'application/json',
+      body: JSON.stringify(handler.body),
+    })
+  })
+}
+
 async function recordRoute(
   page: Page,
   url: string,
@@ -334,7 +364,7 @@ test.describe('RET-003 — edit & retry deletes old plan and migration first, th
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await recordRoute(
+    await recordRouteGone404AfterDelete(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
       {
@@ -479,7 +509,7 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await recordRoute(
+    await recordRouteGone404AfterDelete(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
       { GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE }, DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE } },
@@ -544,7 +574,7 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await recordRoute(
+    await recordRouteGone404AfterDelete(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
       { GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE }, DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE } },
@@ -680,9 +710,9 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan f
       order,
     )
 
-    // Failed Migration DELETE.
+    // Failed Migration DELETE — returns 404 on subsequent GETs so pollUntilGone() terminates.
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await recordRoute(
+    await recordRouteGone404AfterDelete(
       page,
       API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
       {
