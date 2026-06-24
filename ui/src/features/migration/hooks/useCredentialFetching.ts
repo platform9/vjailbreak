@@ -21,8 +21,8 @@ interface UseCredentialFetchingParams {
   pcdData: Array<{ id: string; name?: string }>
   getFieldErrorsUpdater: (key: string) => (value: string) => void
   // Retry mode: the template belongs to an existing MigrationPlan and is seeded via
-  // setMigrationTemplate. Disables automatic template creation/patching so no
-  // configuration is written unless the user explicitly chooses "Edit & Retry".
+  // setMigrationTemplate. Disables automatic template creation/patching until
+  // the user submits the Retry action.
   disableTemplateSync?: boolean
 }
 

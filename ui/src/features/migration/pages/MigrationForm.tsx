@@ -243,7 +243,7 @@ export default function MigrationFormDrawer({
     networkMappingRequired
   })
 
-  const { retrySubmitting, retryError, handleRetryWithoutEdit, handleEditAndRetry } =
+  const { retrySubmitting, retryError, handleEditAndRetry } =
     useRetrySubmit({
       retryConfig,
       params,
@@ -334,24 +334,15 @@ export default function MigrationFormDrawer({
               Cancel
             </ActionButton>
             <ActionButton
-              tone="secondary"
-              onClick={handleRetryWithoutEdit}
-              disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
-              loading={retrySubmitting}
-              data-testid="migration-form-retry-without-edit"
-            >
-              Retry Without Editing
-            </ActionButton>
-            <ActionButton
               tone="primary"
               onClick={handleEditAndRetry}
               disabled={
                 Boolean(blockingError) || prefillLoading || retrySubmitting || disableSubmit
               }
               loading={retrySubmitting}
-              data-testid="migration-form-edit-and-retry"
+              data-testid="migration-form-retry"
             >
-              Edit & Retry
+              Retry
             </ActionButton>
           </DrawerFooter>
         ) : (

@@ -190,19 +190,18 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
     // Multi-VM warning banner must NOT appear for a single-VM plan
     await expect(page.getByTestId('retry-multivm-warning-banner')).not.toBeVisible()
 
-    // Dual footer actions
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeVisible()
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeVisible()
+    // Single retry action
+    await expect(page.getByTestId('migration-form-retry')).toBeVisible()
     await expect(page.getByTestId('migration-form-submit')).not.toBeVisible()
 
-    // Edit & Retry becomes enabled once the prefilled config validates
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    // Retry button becomes enabled once the prefilled config validates
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
   })
 
-  test('both action buttons are disabled while prefill data is loading', async ({ page }) => {
-    // Delay the migration fetch so we can observe query.isLoading → buttons disabled.
+  test('retry button is disabled while prefill data is loading', async ({ page }) => {
+    // Delay the migration fetch so we can observe query.isLoading → button disabled.
     let resolveMigration!: () => void
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
     await page.route(API.migrationByName(MOCK_RETRY_MIGRATION_NAME), async (route) => {
@@ -219,13 +218,12 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
     await row.locator('[data-testid="ReplayIcon"]').click()
     await expectDrawerOpen(page)
 
-    // While query is loading both action buttons must be disabled.
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeDisabled()
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
+    // While query is loading the retry button must be disabled.
+    await expect(page.getByTestId('migration-form-retry')).toBeDisabled()
 
-    // Unblock the fetch — form should populate and buttons become enabled.
+    // Unblock the fetch — form should populate and button becomes enabled.
     resolveMigration()
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
   })
@@ -245,103 +243,14 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
   })
 })
 
-// ─── RET-002: retry without editing ───────────────────────────────────────────
+// ─── RET-003: retry (single-VM plan) ─────────────────────────────────────────
 
-test.describe('RET-002 — retry without editing', () => {
+test.describe('RET-003 — retry deletes old plan and migration first, then creates fresh resources (single-VM plan)', () => {
   test.beforeEach(async ({ page }) => {
     await mockRetryPrefillRoutes(page)
   })
 
-  test('deletes the migration only — no writes to plan, template, or mappings', async ({
-    page,
-  }) => {
-    const migrationCalls: RecordedCall[] = []
-    const order: string[] = []
-
-    await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await recordRoute(
-      page,
-      API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
-      {
-        GET: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-        DELETE: { body: MOCK_MIGRATION_FAILED_RETRYABLE },
-      },
-      migrationCalls,
-      'migration',
-      order,
-    )
-
-    // Track any write other than DELETE — none should occur.
-    const unexpectedWrites: string[] = []
-    await page.route('**/apis/vjailbreak.k8s.pf9.io/**', (route) => {
-      const method = route.request().method()
-      if (method !== 'GET' && method !== 'DELETE') {
-        unexpectedWrites.push(`${method} ${route.request().url()}`)
-      }
-      route.fallback()
-    })
-
-    await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeEnabled({
-      timeout: 10_000,
-    })
-    await page.getByTestId('migration-form-retry-without-edit').click()
-    await expectDrawerClosed(page)
-
-    // Exactly one DELETE on the Migration; no PATCHes or POSTs on any resource.
-    expect(migrationCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1)
-    expect(unexpectedWrites).toHaveLength(0)
-  })
-
-  test('both buttons are disabled while retry-without-edit mutation is pending', async ({
-    page,
-  }) => {
-    // Hold the Migration DELETE so mutation.isPending stays true long enough to assert.
-    let resolveDelete!: () => void
-    await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
-    await page.route(API.migrationByName(MOCK_RETRY_MIGRATION_NAME), async (route) => {
-      const method = route.request().method()
-      if (method === 'GET') {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(MOCK_MIGRATION_FAILED_RETRYABLE),
-        })
-      } else if (method === 'DELETE') {
-        await new Promise<void>((r) => { resolveDelete = r })
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(MOCK_MIGRATION_FAILED_RETRYABLE),
-        })
-      } else {
-        route.continue()
-      }
-    })
-
-    await openRetryDrawer(page)
-    const retryBtn = page.getByTestId('migration-form-retry-without-edit')
-    await expect(retryBtn).toBeEnabled({ timeout: 10_000 })
-    await retryBtn.click()
-
-    // While mutation isPending, both action buttons must be disabled.
-    await expect(retryBtn).toBeDisabled()
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
-
-    // Unblock so the mutation settles and the drawer closes.
-    resolveDelete()
-    await expectDrawerClosed(page)
-  })
-})
-
-// ─── RET-003: edit and retry (single-VM plan) ────────────────────────────────
-
-test.describe('RET-003 — edit & retry deletes old plan and migration first, then creates fresh resources (single-VM plan)', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockRetryPrefillRoutes(page)
-  })
-
-  // Single-VM Edit & Retry:
+  // Single-VM Retry:
   //   DELETE old plan → DELETE old migration →
   //   POST new mappings → POST new template → POST new plan
   // No PATCH on the original plan (it's deleted entirely since there's only one VM).
@@ -409,9 +318,9 @@ test.describe('RET-003 — edit & retry deletes old plan and migration first, th
     )
 
     await openRetryDrawer(page)
-    const editAndRetry = page.getByTestId('migration-form-edit-and-retry')
-    await expect(editAndRetry).toBeEnabled({ timeout: 10_000 })
-    await editAndRetry.click()
+    const retryBtn = page.getByTestId('migration-form-retry')
+    await expect(retryBtn).toBeEnabled({ timeout: 10_000 })
+    await retryBtn.click()
     await expectDrawerClosed(page)
 
     const writes = order.filter((o) => !o.startsWith('GET'))
@@ -436,10 +345,50 @@ test.describe('RET-003 — edit & retry deletes old plan and migration first, th
   })
 })
 
+// ─── RET-002: retry button disabled while mutation pending ────────────────────
+
+test.describe('RET-002 — retry button is disabled while mutation is in flight', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRetryPrefillRoutes(page)
+  })
+
+  test('Retry button disabled while plan DELETE is pending', async ({ page }) => {
+    // Hold the plan DELETE so mutation.isPending stays true long enough to assert.
+    let resolvePlanDelete!: () => void
+    await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
+    await page.route(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME), async (route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN),
+        })
+      } else if (method === 'DELETE') {
+        await new Promise<void>((r) => { resolvePlanDelete = r })
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RETRY_MIGRATION_PLAN) })
+      } else {
+        route.continue()
+      }
+    })
+
+    await openRetryDrawer(page)
+    const retryBtn = page.getByTestId('migration-form-retry')
+    await expect(retryBtn).toBeEnabled({ timeout: 10_000 })
+    await retryBtn.click()
+
+    // While mutation is pending the button must be disabled.
+    await expect(retryBtn).toBeDisabled()
+
+    // Unblock — let the test clean up.
+    resolvePlanDelete()
+  })
+})
+
 // ─── RET-004: blocking errors ─────────────────────────────────────────────────
 
 test.describe('RET-004 — missing resources block the retry', () => {
-  test('missing migration template shows blocking banner and disables both actions', async ({
+  test('missing migration template shows blocking banner and disables retry', async ({
     page,
   }) => {
     await mockRetryPrefillRoutes(page)
@@ -458,8 +407,7 @@ test.describe('RET-004 — missing resources block the retry', () => {
     await expect(page.getByTestId('retry-blocking-banner')).toContainText(
       MOCK_RETRY_TEMPLATE_NAME,
     )
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeDisabled()
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeDisabled()
+    await expect(page.getByTestId('migration-form-retry')).toBeDisabled()
   })
 
   test('missing credentials show blocking banner naming the credential', async ({ page }) => {
@@ -471,13 +419,13 @@ test.describe('RET-004 — missing resources block the retry', () => {
 
     await expect(page.getByTestId('retry-blocking-banner')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('retry-blocking-banner')).toContainText('vcenter-cred-1')
-    await expect(page.getByTestId('migration-form-retry-without-edit')).toBeDisabled()
+    await expect(page.getByTestId('migration-form-retry')).toBeDisabled()
   })
 })
 
 // ─── RET-005: IP overrides round-tripped through the retry form ───────────────
 
-test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry', () => {
+test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => {
   test.beforeEach(async ({ page }) => {
     await mockRetryPrefillRoutes(page)
     // Replace the single-VM plan with the IP-override variant.
@@ -537,8 +485,8 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     await mockRoute(page, API.storageMappings, 'POST', MOCK_RETRY_STORAGE_MAPPING_CREATED)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({ timeout: 10_000 })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
+    await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
     // New plan POST body must carry the IP override from the original plan's prefill.
@@ -602,8 +550,8 @@ test.describe('RET-005 — IP overrides are preserved and sent on Edit & Retry',
     await mockRoute(page, API.storageMappings, 'POST', MOCK_RETRY_STORAGE_MAPPING_CREATED)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({ timeout: 10_000 })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
+    await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
     // null explicitly clears any stale overrides on the new plan.
@@ -640,7 +588,7 @@ test.describe('RET-006 — multi-VM plan shows shared-plan warning banner', () =
     await mockRetryPrefillRoutes(page)
     // Standard single-VM plan — banner must be absent.
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
     await expect(page.getByTestId('retry-multivm-warning-banner')).not.toBeVisible()
@@ -649,7 +597,7 @@ test.describe('RET-006 — multi-VM plan shows shared-plan warning banner', () =
 
 // ─── RET-007: multi-VM plan — PATCH first, then create fresh resources ────────
 
-test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan first', () => {
+test.describe('RET-007 — Retry on multi-VM plan patches original plan first', () => {
   // Mounts a multi-VM plan and records all mutating API calls in order.
   async function setupClonePlanRoutes(
     page: Page,
@@ -734,10 +682,10 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan f
     await setupClonePlanRoutes(page, calls, order)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
     const writes = order.filter((o) => !o.startsWith('GET'))
@@ -759,10 +707,10 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan f
     await setupClonePlanRoutes(page, calls, order)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
     const clonePlanIdx = order.findIndex((o) => o === 'POST clone-plan')
@@ -782,10 +730,10 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan f
     await setupClonePlanRoutes(page, calls, order)
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
     const patchCall = calls.find(
@@ -828,10 +776,10 @@ test.describe('RET-007 — Edit & Retry on multi-VM plan patches original plan f
     })
 
     await openRetryDrawer(page)
-    await expect(page.getByTestId('migration-form-edit-and-retry')).toBeEnabled({
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({
       timeout: 10_000,
     })
-    await page.getByTestId('migration-form-edit-and-retry').click()
+    await page.getByTestId('migration-form-retry').click()
 
     // Drawer stays open on error.
     await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
