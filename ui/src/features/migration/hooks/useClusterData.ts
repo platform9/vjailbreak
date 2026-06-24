@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { getVmwareCredentialsList } from 'src/api/vmware-creds/vmwareCreds'
 import { getVMwareClusters } from 'src/api/vmware-clusters/vmwareClusters'
 import { getPCDClusters } from 'src/api/pcd-clusters'
-import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
+import { getOpenstackCredentialsList } from 'src/api/openstack-creds/openstackCreds'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { VMwareCluster } from 'src/api/vmware-clusters/model'
 import { PCDCluster } from 'src/api/pcd-clusters/model'
+import { OpenstackCreds } from 'src/api/openstack-creds/model'
 
 export interface SourceDataItem {
   credName: string
@@ -113,40 +114,47 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
     setLoadingPCD(true)
     setError(null)
     try {
-      const pcdClusters = await getPCDClusters(VJAILBREAK_DEFAULT_NAMESPACE)
+      // Fetch PCD clusters and all OpenStack credentials in parallel. Fetching
+      // the full creds list once (instead of one request per cluster) avoids an
+      // N+1 request storm that, at scale (100s of creds), causes some per-cred
+      // requests to be throttled/fail and leaves the tenant field unpopulated.
+      // Tenant name is a non-critical display detail, so a failure to load the
+      // credentials list must not block the cluster list from rendering. Catch
+      // it independently and fall back to an empty list (blank tenant names).
+      const [pcdClusters, openstackCredsList] = await Promise.all([
+        getPCDClusters(VJAILBREAK_DEFAULT_NAMESPACE),
+        getOpenstackCredentialsList(VJAILBREAK_DEFAULT_NAMESPACE).catch((err) => {
+          console.error('Failed to fetch OpenStack credentials list:', err)
+          return undefined
+        })
+      ])
 
       if (!pcdClusters || pcdClusters.items.length === 0) {
         setPcdData([])
         return
       }
 
-      const clusterDataPromises = pcdClusters.items.map(async (cluster: PCDCluster) => {
+      // Build an in-memory lookup of credential name -> tenant (projectName).
+      const projectNameByCred = new Map<string, string>(
+        (openstackCredsList || []).map((cred: OpenstackCreds) => [
+          cred.metadata.name,
+          cred.spec?.projectName || ''
+        ])
+      )
+
+      const clusterData = pcdClusters.items.map((cluster: PCDCluster) => {
         const clusterName = cluster.spec.clusterName
         const openstackCredName =
           cluster.metadata.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
-
-        let tenantName = ''
-        if (openstackCredName) {
-          try {
-            const openstackCreds = await getOpenstackCredentials(
-              openstackCredName,
-              VJAILBREAK_DEFAULT_NAMESPACE
-            )
-            tenantName = openstackCreds?.spec?.projectName || ''
-          } catch (error) {
-            console.error(`Failed to fetch OpenStack credentials for ${openstackCredName}:`, error)
-          }
-        }
 
         return {
           id: cluster.metadata.name,
           name: clusterName,
           openstackCredName: openstackCredName,
-          tenantName: tenantName
+          tenantName: openstackCredName ? projectNameByCred.get(openstackCredName) || '' : ''
         }
       })
 
-      const clusterData = await Promise.all(clusterDataPromises)
       setPcdData(clusterData)
     } catch (error) {
       console.error('Failed to fetch PCD clusters:', error)
