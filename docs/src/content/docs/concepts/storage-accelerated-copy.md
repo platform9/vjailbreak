@@ -31,7 +31,7 @@ Storage-Accelerated Copy bypasses this limitation by:
 - **Supported storage arrays**: Pure Storage FlashArray or NetApp ONTAP
 - **Shared storage**: Both VMware datastores and PCD must be backed by the same storage array.
 - **ESXi SSH access**: SSH access to ESXi hosts with root privileges
-- **iSCSI connectivity**: ESXi hosts must have iSCSI initiators configured to the storage array
+- **Storage connectivity**: ESXi hosts must be connected to the storage array via iSCSI (initiators configured) or Fibre Channel
 
 ## Supported Storage Arrays
 
@@ -102,14 +102,10 @@ This will create two files:
 - `~/.ssh/esxi_migration_key` - Private key (keep this secure)
 - `~/.ssh/esxi_migration_key.pub` - Public key (to be copied to ESXi)
 
-:::tip
-**Alternative: Ed25519 Keys (Modern ESXi versions)**
+:::caution
+**Use RSA keys, not Ed25519**
 
-For ESXi 7.0 and later, you can use Ed25519 keys which are more secure and faster:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/esxi_migration_key -C "vjailbreak-migration"
-```
+Ed25519 keys are not reliably accepted for passwordless authentication on ESXi 8.x. Even with the public key correctly installed in `/etc/ssh/keys-root/authorized_keys` (correct permissions, `PubkeyAuthentication` enabled, SSH restarted), the host may keep prompting for a password. Use the 4096-bit RSA key shown above, which works for passwordless SSH across supported ESXi versions.
 :::
 
 #### Step 3: Copy Public Key to ESXi Hosts
@@ -294,7 +290,7 @@ After adding PCD credentials to vJailbreak, the system automatically creates Arr
 - `vt-pure-iscsi-pure-iscsi-2` (Vendor: Pure Storage, Credentials: Pending)
 
 :::tip
-Only storage backends with supported vendors (Pure Storage, NetApp) For now we support only pure storage and netapp, ( As and when requirement arises we will keep adding support for other storage vendors ) nfs and other backends will be auto-discovered but cannot be configured for array-level XCOPY operations.
+Only storage backends with supported vendors (Pure Storage and NetApp) can be configured for array-level XCOPY operations. NFS and other backends are still auto-discovered, but cannot be used for Storage Accelerated Copy. Support for additional storage vendors will be added in future releases.
 :::
 
 ## Using the UI
@@ -565,6 +561,7 @@ Error: clone progress stalled - no update for 5 minutes
    ```
 
 3. Review vmkfstools process on ESXi:
+   ```bash
    ps | grep vmkfstools
    ps -c | grep vmkfstools
    ```
