@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, LinearProgress } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
@@ -378,7 +378,7 @@ export default function MigrationsTable({
           const syncWarningMessage = params.row?.status?.syncWarningMessage
           const migrationName = params.row?.metadata?.name
 
-          const isCopyPhase = [
+          {/* const isCopyPhase = [
             Phase.CopyingBlocks,
             Phase.CopyingChangedBlocks,
             Phase.ConvertingDisk,
@@ -399,6 +399,7 @@ export default function MigrationsTable({
 
           const progressValue = diskProgress ?? 0
           const barColor = syncWarningMessage ? 'warning' : 'primary'
+          */}
 
           return conditions ? (
             <Box
@@ -412,14 +413,14 @@ export default function MigrationsTable({
                 progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
                 syncWarningMessage={syncWarningMessage}
               />
-              {progressVariant && (
+              {/* {progressVariant && (
                 <LinearProgress
                   variant={progressVariant}
                   value={progressValue}
                   color={barColor as 'primary' | 'success' | 'warning'}
                   sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
                 />
-              )}
+              )} */}
             </Box>
           ) : null
         }

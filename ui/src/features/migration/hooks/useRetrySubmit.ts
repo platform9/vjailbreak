@@ -13,7 +13,10 @@ import {
   postMigrationPlan
 } from 'src/features/migration/api/migration-plans/migrationPlans'
 import { MigrationPlan } from 'src/features/migration/api/migration-plans/model'
-import { postMigrationTemplate } from 'src/features/migration/api/migration-templates/migrationTemplates'
+import {
+  deleteMigrationTemplate,
+  postMigrationTemplate
+} from 'src/features/migration/api/migration-templates/migrationTemplates'
 import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
 import { CUTOVER_TYPES } from '../constants'
@@ -36,13 +39,6 @@ async function pollUntilGone(
   }
 }
 
-// Trim base name to fit within the Kubernetes 63-char DNS label limit, then strip
-// trailing hyphens left by the truncation.
-export function makeCloneName(original: string, suffix: string): string {
-  const maxBase = 63 - suffix.length
-  const base = original.slice(0, maxBase).replace(/-+$/, '')
-  return base + suffix
-}
 
 interface UseRetrySubmitParams {
   retryConfig?: RetryMigrationConfig
@@ -193,10 +189,12 @@ export function useRetrySubmit({
     const namespace = retryConfig.namespace
     const retryingVMKey = retryVm?.vmKey || retryVm?.name || retryConfig.vmName
 
-    // 1. Remove the retrying VM from the old plan. If it's the last VM, delete the whole plan.
+    // 1. Remove the retrying VM from the old plan. If it's the last VM, delete the whole plan
+    //    and the old template (freeing both names for the new resources below).
     const isLastVMInPlan = (retryPlan.spec?.virtualMachines?.flat()?.length ?? 0) <= 1
     if (isLastVMInPlan) {
       await deleteMigrationPlan(retryPlan.metadata.name, namespace)
+      await deleteMigrationTemplate(retryTemplate.metadata.name, namespace).catch(() => undefined)
     } else {
       const updatedVMs = (retryPlan.spec?.virtualMachines || [])
         .map((batch) => batch.filter((v) => v !== retryingVMKey))
@@ -209,9 +207,12 @@ export function useRetrySubmit({
     }
 
     // 2. Delete the failed Migration, then wait for it to be fully gone before creating
-    //    new resources. Plan entry removal is already confirmed by step 1's PATCH.
-    //    GC cascades to owned ConfigMaps and Job once the Migration object disappears.
-    await deleteMigration(retryConfig.migrationName, namespace)
+    //    new resources. When isLastVMInPlan the plan deletion above triggers GC cascade,
+    //    so the Migration may already be gone by the time we reach this step — treat 404 as success.
+    await deleteMigration(retryConfig.migrationName, namespace).catch((err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status !== 404) throw err
+    })
     await pollUntilGone(() => getMigration(retryConfig.migrationName, namespace))
 
     // 3. Create new NetworkMapping.
@@ -253,7 +254,7 @@ export function useRetrySubmit({
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationTemplate',
-        metadata: { name: makeCloneName(retryTemplate.metadata.name.replace(/-r$/, ''), '-r') },
+        metadata: { name: crypto.randomUUID() },
         spec: newTemplateSpec
       },
       namespace
@@ -275,11 +276,7 @@ export function useRetrySubmit({
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
         kind: 'MigrationPlan',
-        metadata: {
-          name: isLastVMInPlan
-            ? retryPlan.metadata.name
-            : makeCloneName(retryPlan.metadata.name.replace(/-r$/, ''), '-r')
-        },
+        metadata: { name: crypto.randomUUID() },
         spec: {
           ...planPatch,
           migrationTemplate: newTemplate.metadata.name,

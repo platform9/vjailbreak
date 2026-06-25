@@ -336,9 +336,7 @@ export default function MigrationFormDrawer({
             <ActionButton
               tone="primary"
               onClick={handleEditAndRetry}
-              disabled={
-                Boolean(blockingError) || prefillLoading || retrySubmitting || disableSubmit
-              }
+              disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
               loading={retrySubmitting}
               data-testid="migration-form-retry"
             >
@@ -380,7 +378,7 @@ export default function MigrationFormDrawer({
           open,
           onClose: handleDrawerClose,
           isSubmitDisabled: isRetryMode
-            ? Boolean(blockingError) || prefillLoading || retrySubmitting || disableSubmit
+            ? Boolean(blockingError) || prefillLoading || retrySubmitting
             : disableSubmit || submitting
         }}
       >
