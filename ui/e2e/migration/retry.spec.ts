@@ -10,7 +10,9 @@ import {
 } from './helpers/migration.helpers'
 import {
   MOCK_MIGRATIONS_LIST_WITH_RETRYABLE,
+  MOCK_MIGRATIONS_LIST_MULTI_FAILED,
   MOCK_MIGRATION_FAILED_RETRYABLE,
+  MOCK_MIGRATION_FAILED_RETRYABLE_2,
   MOCK_RETRY_MIGRATION_PLAN,
   MOCK_RETRY_MIGRATION_PLAN_WITH_IP_OVERRIDE,
   MOCK_RETRY_MIGRATION_PLAN_MULTIVM,
@@ -26,12 +28,14 @@ import {
   MOCK_OPENSTACK_CREDS_LIST,
   MOCK_MIGRATION_PLANS_LIST_EMPTY,
   MOCK_RETRY_MIGRATION_NAME,
+  MOCK_RETRY_MIGRATION_NAME_2,
   MOCK_RETRY_PLAN_NAME,
   MOCK_RETRY_TEMPLATE_NAME,
   MOCK_RETRY_VM_K8S_NAME,
   MOCK_RETRY_VM_KEY,
   MOCK_RETRY_CLONE_TEMPLATE_CREATED,
   MOCK_RETRY_CLONE_PLAN_CREATED,
+  NS,
 } from './helpers/migration.fixtures'
 
 // Mounts every route the retry drawer needs to load the failed migration's
@@ -245,16 +249,16 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
 
 // ─── RET-003: retry (single-VM plan) ─────────────────────────────────────────
 
-test.describe('RET-003 — retry deletes old plan and migration first, then creates fresh resources (single-VM plan)', () => {
+test.describe('RET-003 — retry deletes old plan+template and migration first, then creates fresh resources (single-VM plan)', () => {
   test.beforeEach(async ({ page }) => {
     await mockRetryPrefillRoutes(page)
   })
 
   // Single-VM Retry:
-  //   DELETE old plan → DELETE old migration →
-  //   POST new mappings → POST new template → POST new plan
-  // No PATCH on the original plan (it's deleted entirely since there's only one VM).
-  test('DELETEs old plan and migration first, then POSTs new template and plan', async ({
+  //   DELETE old plan → DELETE old template → DELETE old migration (404-tolerant) →
+  //   POST new mappings → POST new template (UUID name) → POST new plan (UUID name)
+  // No PATCH on the original plan (deleted entirely — only one VM).
+  test('DELETEs old plan, old template, and migration first, then POSTs new template and plan', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -270,6 +274,19 @@ test.describe('RET-003 — retry deletes old plan and migration first, then crea
       },
       calls,
       'original-plan',
+      order,
+    )
+    // Template DELETE happens in step 1b for single-VM plans (frees the name for the new UUID-named template).
+    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
+    await recordRoute(
+      page,
+      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
+      {
+        GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
+        DELETE: { body: MOCK_RETRY_MIGRATION_TEMPLATE },
+      },
+      calls,
+      'original-template',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
@@ -327,8 +344,10 @@ test.describe('RET-003 — retry deletes old plan and migration first, then crea
 
     // Old plan deleted first (only VM → delete whole plan).
     expect(writes[0]).toBe('DELETE original-plan')
-    // Migration deleted second.
-    expect(writes[1]).toBe('DELETE migration')
+    // Old template deleted second (frees name; new template gets a fresh UUID).
+    expect(writes[1]).toBe('DELETE original-template')
+    // Migration deleted third (404-tolerant: GC cascade from plan deletion may beat us).
+    expect(writes[2]).toBe('DELETE migration')
 
     // New mapping resources created after deletions.
     expect(writes).toContain('POST networkmapping')
@@ -456,6 +475,15 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
       'original-plan',
       order,
     )
+    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
+    await recordRoute(
+      page,
+      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
+      { GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE }, DELETE: { body: MOCK_RETRY_MIGRATION_TEMPLATE } },
+      calls,
+      'original-template',
+      order,
+    )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
     await recordRouteGone404AfterDelete(
       page,
@@ -519,6 +547,15 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
       { GET: { body: MOCK_RETRY_MIGRATION_PLAN }, DELETE: { body: MOCK_RETRY_MIGRATION_PLAN } },
       calls,
       'original-plan',
+      order,
+    )
+    await page.unroute(API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME))
+    await recordRoute(
+      page,
+      API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME),
+      { GET: { body: MOCK_RETRY_MIGRATION_TEMPLATE }, DELETE: { body: MOCK_RETRY_MIGRATION_TEMPLATE } },
+      calls,
+      'original-template',
       order,
     )
     await page.unroute(API.migrationByName(MOCK_RETRY_MIGRATION_NAME))
@@ -795,5 +832,133 @@ test.describe('RET-007 — Retry on multi-VM plan patches original plan first', 
     expect(writes.filter((w) => w.startsWith('POST'))).toHaveLength(0)
     // Migration NOT deleted.
     expect(writes.filter((w) => w === 'DELETE migration')).toHaveLength(0)
+  })
+})
+
+// ─── RET-008: bulk retry ───────────────────────────────────────────────────────
+
+test.describe('RET-008 — bulk retry from the migrations table', () => {
+  // Sets up the page with two Failed+retryable migrations and wires up DELETE mocks.
+  async function setupBulkRetry(
+    page: Page,
+    migration1Calls: string[],
+    migration2Calls: string[],
+  ): Promise<void> {
+    await mockRoute(page, API.vmwareCreds, 'GET', MOCK_VMWARE_CREDS_LIST)
+    await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_MULTI_FAILED)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
+
+    await page.route(
+      API.migrationByName(MOCK_RETRY_MIGRATION_NAME),
+      (route) => {
+        const method = route.request().method()
+        if (method === 'DELETE') {
+          migration1Calls.push('DELETE migration-1')
+          route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
+        } else {
+          route.continue()
+        }
+      },
+    )
+
+    await page.route(
+      API.migrationByName(MOCK_RETRY_MIGRATION_NAME_2),
+      (route) => {
+        const method = route.request().method()
+        if (method === 'DELETE') {
+          migration2Calls.push('DELETE migration-2')
+          route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
+        } else {
+          route.continue()
+        }
+      },
+    )
+  }
+
+  test('"Retry Selected" button appears only when all selected rows are Failed+retryable', async ({
+    page,
+  }) => {
+    await mockRoute(page, API.vmwareCreds, 'GET', MOCK_VMWARE_CREDS_LIST)
+    await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_MULTI_FAILED)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
+
+    await goToMigrations(page)
+
+    // Select first row — it's Failed+retryable → button should appear
+    const row1 = page.getByRole('row').filter({ hasText: 'test-vm-retry' }).first()
+    await row1.locator('input[type="checkbox"]').click()
+    await expect(page.getByTestId('bulk-retry-button')).toBeVisible()
+    await expect(page.getByTestId('bulk-retry-button')).toContainText('Retry Selected (1)')
+  })
+
+  test('bulk retry DELETEs each migration and makes no plan PATCH or POST calls', async ({
+    page,
+  }) => {
+    const migration1Calls: string[] = []
+    const migration2Calls: string[] = []
+    const writes: string[] = []
+
+    await setupBulkRetry(page, migration1Calls, migration2Calls)
+
+    // Record any write to plans/templates (must not happen in bulk retry).
+    await page.route(`**/${NS}/migrationplans**`, (route) => {
+      const method = route.request().method()
+      if (method !== 'GET') writes.push(`${method} plan-endpoint`)
+      route.continue()
+    })
+    await page.route(`**/${NS}/migrationtemplates**`, (route) => {
+      const method = route.request().method()
+      if (method !== 'GET') writes.push(`${method} template-endpoint`)
+      route.continue()
+    })
+
+    await goToMigrations(page)
+
+    // Select both rows.
+    const rows = page.getByRole('row').filter({ hasText: /test-vm-retry/ })
+    await rows.first().locator('input[type="checkbox"]').click()
+    await rows.last().locator('input[type="checkbox"]').click()
+
+    await expect(page.getByTestId('bulk-retry-button')).toBeVisible()
+    await page.getByTestId('bulk-retry-button').click()
+
+    // Confirm in dialog.
+    await expect(page.getByTestId('confirm-bulk-retry-button')).toBeVisible()
+    await page.getByTestId('confirm-bulk-retry-button').click()
+
+    // Both migration DELETEs must fire.
+    await expect(async () => {
+      expect(migration1Calls).toContain('DELETE migration-1')
+      expect(migration2Calls).toContain('DELETE migration-2')
+    }).toPass({ timeout: 10_000 })
+
+    // No plan or template writes of any kind.
+    expect(writes.filter((w) => !w.startsWith('GET'))).toHaveLength(0)
+  })
+
+  test('"Retry Selected" button is absent when selection includes a non-Failed migration', async ({
+    page,
+  }) => {
+    // Mix: one Failed retryable + one Running migration.
+    const mixedList = {
+      ...MOCK_MIGRATIONS_LIST_MULTI_FAILED,
+      items: [MOCK_MIGRATION_FAILED_RETRYABLE, { ...MOCK_MIGRATION_FAILED_RETRYABLE_2, status: { phase: 'CopyingBlocks', conditions: [] } }],
+    }
+    await mockRoute(page, API.vmwareCreds, 'GET', MOCK_VMWARE_CREDS_LIST)
+    await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+    await mockRoute(page, API.migrations, 'GET', mixedList)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
+
+    await goToMigrations(page)
+
+    // Select both rows (one Failed, one Running).
+    const rows = page.getByRole('row').filter({ hasText: /test-vm-retry/ })
+    await rows.first().locator('input[type="checkbox"]').click()
+    await rows.last().locator('input[type="checkbox"]').click()
+
+    // Button must not appear because not ALL selected are retryable Failed.
+    await expect(page.getByTestId('bulk-retry-button')).not.toBeVisible()
   })
 })

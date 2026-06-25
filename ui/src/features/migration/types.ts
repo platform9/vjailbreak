@@ -361,6 +361,9 @@ declare module '@mui/x-data-grid' {
     onDeleteSelected: () => void
     onBulkAdminCutover: () => void
     numEligibleForCutover: number
+    onBulkRetry: () => void
+    numEligibleForRetry: number
+    isBulkRetryLoading: boolean
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
     onStatusFilterChange: (filter: string) => void
     currentStatusFilter: string
@@ -377,6 +380,9 @@ export interface CustomToolbarProps extends GridToolbarProps {
   onDeleteSelected: () => void
   onBulkAdminCutover: () => void
   numEligibleForCutover: number
+  onBulkRetry: () => void
+  numEligibleForRetry: number
+  isBulkRetryLoading: boolean
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
   onStatusFilterChange: (filter: string) => void
   currentStatusFilter: string
