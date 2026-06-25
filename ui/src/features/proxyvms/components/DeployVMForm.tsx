@@ -1,5 +1,4 @@
 import { Alert, Box, Typography } from '@mui/material'
-import CheckIcon from '@mui/icons-material/Check'
 import { Section, SectionHeader } from 'src/components'
 import { DesignSystemForm, RHFSelect, RHFTextField } from 'src/shared/components/forms'
 import type { UseFormReturn } from 'react-hook-form'
@@ -60,6 +59,11 @@ export default function DeployVMForm({
       keyboardSubmitProps={{ open, onClose, isSubmitDisabled }}
     >
       <Box sx={{ display: 'grid', gap: 2 }}>
+        <Alert severity="info">
+          The OVA is deployed, powered on, and registered automatically. SSH keys are injected at
+          boot — nothing else to configure.
+        </Alert>
+
         <Section>
           <RHFSelect
             name="vmwareCredsRef"
@@ -166,10 +170,6 @@ export default function DeployVMForm({
           </Box>
         </Section>
 
-        <Alert severity="success" icon={<CheckIcon fontSize="inherit" />}>
-          The OVA is deployed, powered on, and registered automatically. SSH keys are injected at
-          boot — nothing else to configure.
-        </Alert>
       </Box>
     </DesignSystemForm>
   )

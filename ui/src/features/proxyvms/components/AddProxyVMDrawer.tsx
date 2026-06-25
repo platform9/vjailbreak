@@ -71,7 +71,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
 
   const selectForm = useForm<SelectFormData>({
-    defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '' },
+    defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '', authorizedKeysConfirmed: false },
     mode: 'onChange',
     reValidateMode: 'onChange'
   })

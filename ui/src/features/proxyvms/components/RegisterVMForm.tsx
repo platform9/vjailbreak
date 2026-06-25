@@ -62,6 +62,7 @@ export default function RegisterVMForm({
   onKeyFileUpload,
   onSubmitErrorChange
 }: RegisterVMFormProps) {
+  const sshPrivateKey = form.watch('sshPrivateKey')
   return (
     <DesignSystemForm
       id={SELECT_FORM_ID}
@@ -106,6 +107,7 @@ export default function RegisterVMForm({
           vmSelected={Boolean(selectedVM)}
           isSubmitting={isSubmitting}
           copied={copied}
+          hasPrivateKey={Boolean(sshPrivateKey?.trim())}
           onGenerate={onGenerate}
           onRegenerateKey={onRegenerateKey}
           onCopy={onCopy}
