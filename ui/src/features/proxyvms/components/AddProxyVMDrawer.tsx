@@ -183,7 +183,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
     setGeneratedKey(null)
     setCopied(false)
     setSshKeySource('generated')
-    setFormMode('select')
+    setFormMode('create')
     setDeploymentStarted(false)
     setDeployedVMName(null)
     setSelectedVM(null)
