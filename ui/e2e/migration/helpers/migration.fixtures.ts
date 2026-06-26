@@ -1019,11 +1019,11 @@ export const MOCK_RETRY_VMWARE_MACHINE_WITH_DC_ANNOTATION = {
 }
 
 // ─── New-plan fixtures (RET-003, RET-007) ─────────────────────────────────────
-// API responses returned when the UI POSTs new resources during "Edit & Retry".
+// Retry now creates new resources with crypto.randomUUID() names (no -r suffix).
+// These fixtures use stable UUID-shaped names so tests can match API responses.
 
-export const MOCK_RETRY_CLONE_TEMPLATE_SUFFIX = '-r-abc123'
-export const MOCK_RETRY_CLONE_TEMPLATE_NAME = `${MOCK_RETRY_TEMPLATE_NAME}${MOCK_RETRY_CLONE_TEMPLATE_SUFFIX}`
-export const MOCK_RETRY_CLONE_PLAN_NAME = `${MOCK_RETRY_PLAN_NAME}${MOCK_RETRY_CLONE_TEMPLATE_SUFFIX}`
+export const MOCK_RETRY_CLONE_TEMPLATE_NAME = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+export const MOCK_RETRY_CLONE_PLAN_NAME = 'ffffffff-0000-1111-2222-333333333333'
 
 export const MOCK_RETRY_CLONE_TEMPLATE_CREATED = {
   apiVersion: API_VERSION,
@@ -1054,4 +1054,36 @@ export const MOCK_RETRY_CLONE_PLAN_CREATED = {
     virtualMachines: [[MOCK_RETRY_VM_KEY]],
   },
   status: { migrationStatus: 'Pending', migrationMessage: '' },
+}
+
+// ─── Bulk-retry fixtures (RET-008) ────────────────────────────────────────────
+
+export const MOCK_RETRY_MIGRATION_NAME_2 = 'migration-vcenter-cred-1-test-vm-retry-2'
+
+export const MOCK_MIGRATION_FAILED_RETRYABLE_2 = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: {
+    ...baseMeta(MOCK_RETRY_MIGRATION_NAME_2),
+    labels: { migrationplan: 'retry-plan-2' },
+    annotations: { 'vjailbreak.k8s.pf9.io/original-vm-name': 'test-vm-retry-2-9002' },
+  },
+  spec: {
+    migrationPlan: 'retry-plan-2',
+    podRef: 'v2v-helper-retry-2',
+    vmName: 'test-vm-retry-2',
+    migrationType: 'cold',
+  },
+  status: {
+    phase: 'Failed',
+    retryable: true,
+    conditions: [],
+  },
+}
+
+export const MOCK_MIGRATIONS_LIST_MULTI_FAILED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationList',
+  metadata: listMeta(),
+  items: [MOCK_MIGRATION_FAILED_RETRYABLE, MOCK_MIGRATION_FAILED_RETRYABLE_2],
 }

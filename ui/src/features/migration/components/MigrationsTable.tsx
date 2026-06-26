@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, LinearProgress } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
@@ -14,7 +14,7 @@ import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import AddIcon from '@mui/icons-material/Add'
-import { triggerAdminCutover } from '../api/migrations'
+import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
@@ -43,6 +43,9 @@ const CustomToolbar = ({
   onDeleteSelected,
   onBulkAdminCutover,
   numEligibleForCutover,
+  onBulkRetry,
+  numEligibleForRetry,
+  isBulkRetryLoading,
   refetchMigrations,
   onStatusFilterChange,
   currentStatusFilter,
@@ -76,6 +79,20 @@ const CustomToolbar = ({
               sx={{ height: 40 }}
             >
               Trigger Cutover ({numEligibleForCutover})
+            </Button>
+          )}
+
+          {numEligibleForRetry > 0 && (
+            <Button
+              data-testid="bulk-retry-button"
+              variant="outlined"
+              color="primary"
+              startIcon={<ReplayIcon />}
+              onClick={onBulkRetry}
+              disabled={isBulkRetryLoading}
+              sx={{ height: 40 }}
+            >
+              Retry Selected ({numEligibleForRetry})
             </Button>
           )}
         </>
@@ -149,6 +166,9 @@ export default function MigrationsTable({
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
   const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null)
+  const [isBulkRetryLoading, setIsBulkRetryLoading] = useState(false)
+  const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false)
+  const [bulkRetryError, setBulkRetryError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
 
@@ -378,7 +398,7 @@ export default function MigrationsTable({
           const syncWarningMessage = params.row?.status?.syncWarningMessage
           const migrationName = params.row?.metadata?.name
 
-          const isCopyPhase = [
+          {/* const isCopyPhase = [
             Phase.CopyingBlocks,
             Phase.CopyingChangedBlocks,
             Phase.ConvertingDisk,
@@ -399,6 +419,7 @@ export default function MigrationsTable({
 
           const progressValue = diskProgress ?? 0
           const barColor = syncWarningMessage ? 'warning' : 'primary'
+          */}
 
           return conditions ? (
             <Box
@@ -412,14 +433,14 @@ export default function MigrationsTable({
                 progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
                 syncWarningMessage={syncWarningMessage}
               />
-              {progressVariant && (
+              {/* {progressVariant && (
                 <LinearProgress
                   variant={progressVariant}
                   value={progressValue}
                   color={barColor as 'primary' | 'success' | 'warning'}
                   sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
                 />
-              )}
+              )} */}
             </Box>
           ) : null
         }
@@ -520,6 +541,16 @@ export default function MigrationsTable({
     [selectedMigrations]
   )
 
+  const eligibleForRetry = useMemo(
+    () =>
+      selectedMigrations.filter(
+        (m) => m.status?.phase === Phase.Failed && (m.status as { retryable?: boolean })?.retryable !== false
+      ),
+    [selectedMigrations]
+  )
+  const allSelectedRetryable =
+    selectedMigrations.length > 0 && eligibleForRetry.length === selectedMigrations.length
+
   const handleDeleteSelected = useCallback(() => {
     if (onDeleteSelected) {
       onDeleteSelected(selectedMigrations)
@@ -566,6 +597,29 @@ export default function MigrationsTable({
       setBulkCutoverError(null)
     }
   }, [isBulkCutoverLoading])
+
+  const handleBulkRetry = useCallback(async () => {
+    if (eligibleForRetry.length === 0) return
+    setBulkRetryError(null)
+    setIsBulkRetryLoading(true)
+    try {
+      await Promise.allSettled(
+        eligibleForRetry.map((m) =>
+          deleteMigration(
+            m.metadata?.name || '',
+            (m.metadata?.namespace as string | undefined) || 'migration-system'
+          )
+        )
+      )
+      await refetchMigrations()
+      setSelectedRows([])
+      setBulkRetryDialogOpen(false)
+    } catch (err) {
+      setBulkRetryError(err instanceof Error ? err.message : 'Failed to retry migrations')
+    } finally {
+      setIsBulkRetryLoading(false)
+    }
+  }, [eligibleForRetry, refetchMigrations])
 
   const hasSelectionActions = onDeleteSelected !== undefined && onDeleteMigration !== undefined
 
@@ -619,6 +673,9 @@ export default function MigrationsTable({
                 onDeleteSelected: handleDeleteSelected,
                 onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
                 numEligibleForCutover: eligibleForCutover.length,
+                onBulkRetry: () => setBulkRetryDialogOpen(true),
+                numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
+                isBulkRetryLoading,
                 refetchMigrations,
                 onStatusFilterChange: setStatusFilter,
                 currentStatusFilter: statusFilter,
@@ -634,6 +691,42 @@ export default function MigrationsTable({
         loading={loading}
         emptyMessage="No migrations available"
       />
+
+      <Dialog
+        open={bulkRetryDialogOpen}
+        onClose={() => { if (!isBulkRetryLoading) { setBulkRetryDialogOpen(false); setBulkRetryError(null) } }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ px: 3, pt: 3, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ReplayIcon color="primary" fontSize="small" />
+          {`Retry ${eligibleForRetry.length} migration${eligibleForRetry.length !== 1 ? 's' : ''}?`}
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pb: 2 }}>
+          <DialogContentText>
+            {`This will retry ${eligibleForRetry.length} migration object${eligibleForRetry.length !== 1 ? 's' : ''} without changing their configurations. Source VMs will not be modified.`}
+          </DialogContentText>
+          {bulkRetryError && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setBulkRetryError(null)}>
+              {bulkRetryError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => { setBulkRetryDialogOpen(false); setBulkRetryError(null) }} disabled={isBulkRetryLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={handleBulkRetry}
+            disabled={isBulkRetryLoading}
+            data-testid="confirm-bulk-retry-button"
+          >
+            {isBulkRetryLoading ? 'Retrying…' : 'Retry'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmationDialog
         open={bulkCutoverDialogOpen}
