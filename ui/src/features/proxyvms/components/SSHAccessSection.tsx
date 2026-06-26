@@ -1,6 +1,10 @@
 import {
   Alert,
   Box,
+  Checkbox,
+  FormControl,
+  FormControlLabel,
+  FormHelperText,
   IconButton,
   InputAdornment,
   TextField,
@@ -11,10 +15,11 @@ import {
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CheckIcon from '@mui/icons-material/Check'
+import { Controller, useFormContext } from 'react-hook-form'
 import { ActionButton, Section, SectionHeader } from 'src/components'
 import { RHFTextField } from 'src/shared/components/forms'
 import { validateSshPrivateKey } from 'src/utils'
-import type { SSHKeySource, GeneratedKey } from './types'
+import type { SSHKeySource, GeneratedKey, SelectFormData } from './types'
 
 interface SSHAccessSectionProps {
   sshKeySource: SSHKeySource
@@ -26,11 +31,59 @@ interface SSHAccessSectionProps {
   vmSelected: boolean
   isSubmitting: boolean
   copied: boolean
+  hasPrivateKey?: boolean
   onGenerate: () => void
   onRegenerateKey: () => void
   onCopy: () => void
   onKeyFileUpload: (file: File | null) => void
   onSubmitErrorChange: (e: string | null) => void
+}
+
+function AuthorizedKeysConfirmation() {
+  const { control } = useFormContext<SelectFormData>()
+  return (
+    <Controller
+      name="authorizedKeysConfirmed"
+      control={control}
+      rules={{ validate: (v) => v === true || 'Required' }}
+      shouldUnregister
+      render={({ field, fieldState }) => (
+        <FormControl error={Boolean(fieldState.error)}>
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              px: 1.5,
+              py: 0.5
+            }}
+          >
+            <FormControlLabel
+              control={
+                <Checkbox
+                  {...field}
+                  checked={field.value}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  I&apos;ve added this public key to the proxy VM&apos;s{' '}
+                  <code>authorized_keys</code>.
+                </Typography>
+              }
+            />
+          </Box>
+          {fieldState.error && (
+            <FormHelperText sx={{ ml: 0, fontWeight: 600 }}>
+              {fieldState.error.message}
+            </FormHelperText>
+          )}
+        </FormControl>
+      )}
+    />
+  )
 }
 
 export default function SSHAccessSection({
@@ -43,6 +96,7 @@ export default function SSHAccessSection({
   vmSelected,
   isSubmitting,
   copied,
+  hasPrivateKey = false,
   onGenerate,
   onRegenerateKey,
   onCopy,
@@ -97,13 +151,13 @@ export default function SSHAccessSection({
               </>
             ) : (
               <>
-                <Alert severity="success">
-                  Key pair generated. Copy the public key below and add it to{' '}
+                <Alert severity="warning">
+                  Copy the public key below and add it to{' '}
                   <strong>/root/.ssh/authorized_keys</strong> on the vJailbreak Proxy VM before
                   registering.
                 </Alert>
                 <TextField
-                  label="Public Key (copy this to authorized_keys)"
+                  label=""
                   value={generatedKey.publicKey.trim()}
                   multiline
                   minRows={4}
@@ -136,15 +190,24 @@ export default function SSHAccessSection({
                 >
                   Regenerate
                 </ActionButton>
+                <AuthorizedKeysConfirmation />
               </>
             )}
           </Box>
         ) : (
           <Box sx={{ display: 'grid', gap: 2 }}>
-            <Alert severity="info">
-              Add the public key corresponding to your private key to the vJailbreak Proxy VM&apos;s{' '}
-              <strong>/root/.ssh/authorized_keys</strong> before submitting.
-            </Alert>
+            {hasPrivateKey ? (
+              <Alert severity="warning">
+                Before clicking Register, ensure the public key corresponding to this private key is
+                added to <strong>/root/.ssh/authorized_keys</strong> on the vJailbreak Proxy VM.
+              </Alert>
+            ) : (
+              <Alert severity="info">
+                Upload or paste the SSH private key for the vJailbreak Proxy VM. Make sure the
+                corresponding public key is already added to{' '}
+                <strong>/root/.ssh/authorized_keys</strong> on the VM before registering.
+              </Alert>
+            )}
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <ActionButton
                 tone="secondary"
@@ -179,6 +242,7 @@ export default function SSHAccessSection({
               }}
               onValueChange={() => onSubmitErrorChange(null)}
             />
+            {hasPrivateKey && <AuthorizedKeysConfirmation />}
           </Box>
         )}
       </Box>

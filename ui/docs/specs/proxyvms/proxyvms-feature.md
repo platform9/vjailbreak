@@ -4,7 +4,7 @@
 **API path**: `src/api/proxyvms/`  
 **Query hook**: `src/hooks/api/useProxyVMsQuery.ts`  
 **Generated**: 2026-05-27  
-**Last updated**: 2026-06-22  
+**Last updated**: 2026-06-25  
 **GitHub Issue**: [#1971](https://github.com/platform9/vjailbreak/issues/1971)  
 **Related feature**: See `docs/specs/migration/migration-feature.md` — HotAdd storage copy method extension
 
@@ -45,7 +45,7 @@ src/features/proxyvms/
 ├── pages/
 │   └── ProxyVMsPage.tsx         — Thin page wrapper, renders ProxyVMsTable
 └── components/
-    ├── types.ts                 — Shared types (FormMode, SSHKeySource, VMOption, form data shapes)
+    ├── types.ts                 — Shared types (FormMode, SSHKeySource, VMOption, SelectFormData incl. authorizedKeysConfirmed, CreateFormData, GeneratedKey)
     ├── MethodCard.tsx           — Radio-style method selection card component
     ├── VMAutocomplete.tsx       — Searchable VM dropdown with IP/vCPU display + selected VM chip
     ├── SSHAccessSection.tsx     — SSH key section (generate key pair / upload private key toggle)
@@ -224,6 +224,8 @@ Rendered inside `DesignSystemForm id="add-proxy-vm-form"`. Sections:
 **SSH Access**
 - `SSHAccessSection` — toggle between generate / upload
 
+**Internal**: watches `form.watch('sshPrivateKey')` and passes `hasPrivateKey={Boolean(value.trim())}` to `SSHAccessSection`.
+
 ---
 
 ### VMAutocomplete (`components/VMAutocomplete.tsx`)
@@ -262,19 +264,28 @@ staleTime: 30_000
 
 Uses `useFormContext` (must render inside `DesignSystemForm`).
 
+**Props**: `sshKeySource`, `generatedKey`, `hasPrivateKey` (bool — whether manual key is pasted/uploaded), plus callbacks.
+
 **Toggle**: `ToggleButtonGroup` — `"Generate Key Pair"` | `"Upload Private Key"`
 
 **Generate Key Pair tab**:
-1. Info Alert: "Generate a key pair, then add the public key to the VM's `/root/.ssh/authorized_keys` before registering."
+1. Info Alert: "Generate a key pair, then add the public key to the VM's `/root/.ssh/authorized_keys` before registering." (shown before key generated)
 2. "Generate Key Pair" `ActionButton` — disabled until VM selected. Calls `generateSSHKeyPair(secretName)`.
-3. On success: shows public key in read-only `TextField` with copy button + "Regenerate" button.
-4. Regenerate: calls `deleteSSHKeyPair(secretName)` then clears state.
+3. On success: shows Warning Alert ("Copy the public key below and add it to `/root/.ssh/authorized_keys`…"), public key in read-only `TextField` with copy button, "Regenerate" button, then `<AuthorizedKeysConfirmation />`.
+4. Regenerate: calls `deleteSSHKeyPair(secretName)` then clears state (also unregisters confirmation checkbox via `shouldUnregister`).
 5. Cleanup: on SSH source change or VM deselect, deletes the generated key secret.
 
 **Upload Private Key tab**:
-1. Info Alert: add public key to `authorized_keys` first.
+1. Info Alert ("Upload or paste your SSH private key…") when no key present. Warning Alert ("Before clicking Register, ensure public key is added to `authorized_keys`…") once key present (`hasPrivateKey`).
 2. "Upload key file" button — reads file text → `setValue('sshPrivateKey', text)`.
 3. Paste textarea `RHFTextField name="sshPrivateKey"`.
+4. `{hasPrivateKey && <AuthorizedKeysConfirmation />}` — shown after key pasted/uploaded.
+
+**`AuthorizedKeysConfirmation`** (internal sub-component):
+- `Controller name="authorizedKeysConfirmed"` with `shouldUnregister` + `rules={{ validate: v => v === true || 'Required' }}`
+- Renders bordered Box containing `FormControlLabel` + `Checkbox`, with bold red `FormHelperText` on error
+- Label: "I've added this public key to the proxy VM's `authorized_keys`."
+- Unregisters (and resets validation) when unmounted (key cleared or tab switched)
 
 **SSH key secret naming**: `${toK8sName(vmName)}-keypair` (generated), `${toK8sName(vmName)}-hot-add-ssh-key` (manual).
 
@@ -283,6 +294,8 @@ Uses `useFormContext` (must render inside `DesignSystemForm`).
 ### DeployVMForm (`components/DeployVMForm.tsx`)
 
 Rendered inside `DesignSystemForm id="create-proxy-vm-form"`. Sections:
+
+**Info Alert** (`severity="info"`, always visible at top): "The OVA is deployed, powered on, and registered automatically. SSH keys are injected at boot — nothing else to configure."
 
 **VMware Environment**
 - VMware Credentials `RHFSelect`
@@ -297,8 +310,6 @@ Rendered inside `DesignSystemForm id="create-proxy-vm-form"`. Sections:
 - Network `RHFSelect` — same scoped query
 - Cluster/Host (optional) `RHFSelect` — same scoped query
 
-**Info Alert** (always visible at bottom): "The OVA is deployed, powered on, and registered automatically. SSH keys are injected at boot — nothing else to configure."
-
 **Scoped resource queries**:
 ```
 queryKey: ['vcenter-datacenters', vmwareCredsRef]
@@ -312,6 +323,38 @@ staleTime: 60_000
 **Deployment polling** (in `AddProxyVMDrawer`):
 - After `createProxyVMFromOVA` succeeds: sets `deploymentStarted = true`, records `deployedVMName`.
 - Polls `getProxyVMList()` every 5s until the new VM appears in the list, then auto-closes the drawer.
+
+---
+
+### ProxyVMDetailDrawer (`components/ProxyVMDetailDrawer.tsx`)
+
+Opens from row click in `ProxyVMsTable`. Width 760px.
+
+**General section** — `KeyValueGrid` items:
+
+| Label | Value |
+|-------|-------|
+| VM name | `spec.vmName` |
+| VMware credentials | `spec.vmwareCredsRef.name` |
+| IP address | `status.ipAddress` |
+| Attached disks | `status.attachedDiskCount` |
+| Last validated | `status.lastValidationTime` |
+| Components verified | `status.componentsVerified` joined (always shown, `—` if absent) |
+| Created | `metadata.creationTimestamp` |
+
+> Note: `vJailbreak Proxy VM name` (K8s metadata.name) is NOT shown — it is displayed as the drawer title. Only `VM name` (vCenter display name) is in the grid.
+
+**SSH Access section**:
+
+`isOVADeployed = !spec.sshKeyPairRef && !spec.sshKeySecretRef`
+
+| Condition | Subtitle | Content |
+|-----------|----------|---------|
+| `isOVADeployed` (still deploying or pending) | — | "SSH access is configured automatically during OVA deployment." |
+| `isOVADeployed` + `Ready` | — | "No SSH key configured" warning (should not occur in practice) |
+| `sshKeyPairRef` set | "SSH public key used by vJailbreak to access this Proxy VM." | Read-only public key `TextField` with copy button |
+| `sshKeySecretRef` set (manual upload) | "SSH public key used by vJailbreak to access this Proxy VM." | Info alert: manually uploaded key, no public key stored |
+| Key secret missing/unreadable | "SSH public key used by vJailbreak to access this Proxy VM." | Warning alert with secret name |
 
 ---
 
@@ -537,6 +580,7 @@ HotAdd → createStorageMapping(params.storageMappings)
 | sshPrivateKey format     | Must contain OpenSSH headers                                  | "Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)" |
 | SSH key file size        | Upload > 1 MB                                                 | "File too large. SSH private key must be under 1 MB."                                    |
 | Generated key required   | Register mode, generate tab, no key generated yet             | "Generate a key pair first."                                                             |
+| authorizedKeysConfirmed  | Register mode; generate tab after key generated, OR upload tab after key pasted | "Required" (bold red FormHelperText below checkbox) |
 
 ---
 

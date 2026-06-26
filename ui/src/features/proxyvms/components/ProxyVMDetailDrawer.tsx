@@ -83,8 +83,9 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
   const validationStatus = status?.validationStatus ?? 'Pending'
   const isInProgress = validationStatus === 'Deploying' || validationStatus === 'Verifying'
 
+  const isOVADeployed = !spec.sshKeyPairRef && !spec.sshKeySecretRef
+
   const generalItems = [
-    { label: 'vJailbreak Proxy VM name', value: metadata.name },
     { label: 'VM name', value: spec.vmName },
     { label: 'VMware credentials', value: spec.vmwareCredsRef.name },
     { label: 'IP address', value: status?.ipAddress },
@@ -93,7 +94,6 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
       value: status?.attachedDiskCount != null ? String(status.attachedDiskCount) : undefined
     },
     { label: 'Last validated', value: lastValidated },
-    { label: 'Created', value: createdAt },
     ...(status?.componentsVerified?.length
       ? [
           {
@@ -103,7 +103,13 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
               .join(', ')
           }
         ]
-      : [])
+      : [
+          {
+            label: 'Components verified',
+            value: '—'
+          }
+        ]),
+    { label: 'Created', value: createdAt }
   ]
 
   return (
@@ -158,7 +164,9 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
         <SurfaceCard
           variant="card"
           title="SSH Access"
-          subtitle="Public key to add to /root/.ssh/authorized_keys on the vJailbreak Proxy VM."
+          subtitle={
+            isOVADeployed ? undefined : 'SSH public key used by vJailbreak to access this Proxy VM.'
+          }
         >
           {keyPairSecretName ? (
             keyLoading ? (
@@ -207,6 +215,10 @@ export default function ProxyVMDetailDrawer({ open, proxyVM, onClose }: ProxyVMD
               This vJailbreak Proxy VM uses a manually uploaded private key — no public key is
               stored.
             </Alert>
+          ) : isOVADeployed ? (
+            <Typography variant="body2" color="text.secondary">
+              SSH access is configured automatically during OVA deployment.
+            </Typography>
           ) : validationStatus === 'Ready' ? (
             <Alert severity="warning">No SSH key configured for this vJailbreak Proxy VM.</Alert>
           ) : (

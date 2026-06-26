@@ -12,6 +12,7 @@ export interface SelectFormData {
   vmwareCredsRef: string
   vmName: string
   sshPrivateKey: string
+  authorizedKeysConfirmed: boolean
 }
 
 export interface CreateFormData {
