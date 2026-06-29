@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test'
 
 import {
   goToMigrations,
+  goToGlobalSettings,
   openMigrationDrawer,
   selectVmwareCluster,
   selectPcdCluster,
@@ -31,6 +32,8 @@ import {
   MOCK_VMWARE_MACHINES_LIST_WITH_RDM,
   MOCK_VMWARE_MACHINES_LIST_LARGE,
   MOCK_RDM_DISKS_LIST,
+  MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON,
+  MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF,
   NS,
 } from './helpers/migration.fixtures'
 
@@ -716,5 +719,87 @@ test.describe('MIG-038 — mixed OS script validation', () => {
     await scriptInput.blur()
 
     await expect(warning).not.toBeVisible({ timeout: 5000 })
+  })
+})
+
+// ─── MIG-039: Global default network persistence ON seeds migration form ───────
+
+test.describe('MIG-039 — global default network persistence seeds migration form', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON)
+    await mockStandardFormApis(page)
+    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
+    await goToMigrations(page)
+    await openMigrationDrawer(page)
+    await selectClustersAndWaitForVMs(page)
+    // Navigate to the migration options step (section 5)
+    await page.getByTestId('section-nav-item-5').click()
+  })
+
+  test('checkbox is pre-checked when global default is ON', async ({ page }) => {
+    const checkbox = page.getByTestId('migration-option-network-persistence')
+    await expect(checkbox).toBeVisible({ timeout: 10_000 })
+    await expect(checkbox).toBeChecked()
+  })
+
+  test('user can uncheck the pre-checked checkbox', async ({ page }) => {
+    const checkbox = page.getByTestId('migration-option-network-persistence')
+    await expect(checkbox).toBeChecked({ timeout: 10_000 })
+    await checkbox.click()
+    await expect(checkbox).not.toBeChecked()
+  })
+})
+
+// ─── MIG-040: Global default network persistence OFF leaves checkbox unchecked ─
+
+test.describe('MIG-040 — global default OFF leaves network persistence unchecked', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF)
+    await mockStandardFormApis(page)
+    await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
+    await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
+    await goToMigrations(page)
+    await openMigrationDrawer(page)
+    await selectClustersAndWaitForVMs(page)
+    await page.getByTestId('section-nav-item-5').click()
+  })
+
+  test('checkbox is unchecked when global default is OFF', async ({ page }) => {
+    const checkbox = page.getByTestId('migration-option-network-persistence')
+    await expect(checkbox).toBeVisible({ timeout: 10_000 })
+    await expect(checkbox).not.toBeChecked()
+  })
+
+  test('user can manually check the unchecked checkbox', async ({ page }) => {
+    const checkbox = page.getByTestId('migration-option-network-persistence')
+    await expect(checkbox).not.toBeChecked({ timeout: 10_000 })
+    await checkbox.click()
+    await expect(checkbox).toBeChecked()
+  })
+})
+
+// ─── MIG-041: Global settings page DEFAULT_NETWORK_PERSISTENCE toggle ─────────
+
+test.describe('MIG-041 — global settings DEFAULT_NETWORK_PERSISTENCE toggle', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRoute(page, API.settingsConfigMap, 'GET', MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF)
+    await goToGlobalSettings(page)
+    await page.getByTestId('global-settings-tab-advanced').click()
+  })
+
+  test('DEFAULT_NETWORK_PERSISTENCE toggle is visible on Advanced tab', async ({ page }) => {
+    await expect(
+      page.getByTestId('global-settings-toggle-DEFAULT_NETWORK_PERSISTENCE')
+    ).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('toggle can be switched on', async ({ page }) => {
+    const toggle = page.getByTestId('global-settings-toggle-DEFAULT_NETWORK_PERSISTENCE')
+    await expect(toggle).toBeVisible({ timeout: 10_000 })
+    const checkbox = toggle.locator('input[type="checkbox"]')
+    await expect(checkbox).not.toBeChecked()
+    await toggle.click()
+    await expect(checkbox).toBeChecked()
   })
 })
