@@ -22,7 +22,7 @@ import { useRollingColumns } from './useRollingColumns'
 import { fromVmDataWithFlavor, fromVM, normalizeNetworkInterfaces } from '../utils/vmAdapters'
 import { useVmwareRevalidation } from 'src/hooks/api/useVmwareRevalidation'
 
-const { useCallback, useEffect, useMemo, useState } = React
+const { useCallback, useEffect, useMemo, useRef, useState } = React
 
 // Merges user-assigned IP addresses from the retry prefill into the VMware-fetched
 // NIC list. Only overrides ipAddress for NICs where preserveIp[i] === false
@@ -87,6 +87,10 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
+  // Tracks whether the one-time retry prefill merge has been applied.
+  // Prevents the merge effect from re-firing when user changes vmsWithFlavor
+  // (e.g. via "Assign IP" dialog), which would overwrite their edits.
+  const retryPrefillMergedRef = useRef(false)
   // Stabilize openstackFlavors reference — default [] in destructuring creates new ref each render,
   // which would make the rebuild effect fire on every render (infinite loop).
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -398,6 +402,12 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
           ipValidationStatus: 'pending' as const,
           ipValidationMessage: '',
           networkInterfaces: preferredNetworkInterfaces,
+          // Preserve user-applied IP override state (e.g. from retry prefill).
+          // Without this, rebuilds triggered by migratedVms/flavor changes would
+          // drop preserveIp, causing StandardIpAddressCell to fall back to the
+          // original VMware IP even when a custom IP was assigned.
+          ...(existingVm?.preserveIp !== undefined && { preserveIp: existingVm.preserveIp }),
+          ...(existingVm?.preserveMac !== undefined && { preserveMac: existingVm.preserveMac }),
         }
       })
     })
@@ -425,12 +435,15 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
 
   // Merge prefilled IP override data into vmsWithFlavor so the "Assign IP" dialog
   // shows the user's previous assignment instead of raw VMware machine IPs.
-  // Runs when either retryPrefillVm or displayVmsWithFlavor changes, covering both
-  // timing cases: prefill arrives before or after the VM list loads.
+  // The ref guard ensures this runs exactly once: subsequent setVmsWithFlavor calls
+  // (e.g. user edits in "Assign IP" dialog) change displayVmsWithFlavor, which would
+  // re-trigger this effect and overwrite the user's changes without the guard.
   useEffect(() => {
     if (!retryVmName || !retryPrefillVm || isRolling) return
+    if (retryPrefillMergedRef.current) return
     const vmInList = displayVmsWithFlavor.find((v) => v.name === retryVmName)
     if (!vmInList) return
+    retryPrefillMergedRef.current = true
     setVmsWithFlavor((prev) => {
       const idx = prev.findIndex((v) => v.name === retryVmName)
       if (idx === -1) return prev
