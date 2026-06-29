@@ -682,6 +682,7 @@ export default function MigrationOptionsAlt({
                 label="Persist source network interfaces"
                 control={
                   <Checkbox
+                    data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
                     onChange={(e) => {
                       onChange('networkPersistence')(e.target.checked)

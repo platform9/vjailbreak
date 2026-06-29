@@ -420,15 +420,16 @@ export function useFormValidation({
     fieldErrors
   ])
 
+  const anyNetworkOptionSet = Boolean(
+    params.disconnectSourceNetwork ||
+      params.fallbackToDHCP ||
+      params.networkPersistence ||
+      params.removeVMwareTools
+  )
+
   const step5Complete = Boolean(
-    touchedSections.options &&
-      (areSelectedMigrationOptionsConfigured ||
-        Boolean(
-          params.disconnectSourceNetwork ||
-            params.fallbackToDHCP ||
-            params.networkPersistence ||
-            params.removeVMwareTools
-        )) &&
+    (touchedSections.options || anyNetworkOptionSet) &&
+      (areSelectedMigrationOptionsConfigured || anyNetworkOptionSet) &&
       !step5HasErrors
   )
 

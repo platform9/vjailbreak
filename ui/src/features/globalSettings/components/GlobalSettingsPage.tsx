@@ -92,6 +92,7 @@ const DEFAULTS: SettingsForm = {
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
   AUTO_FSTAB_UPDATE: true,
+  DEFAULT_NETWORK_PERSISTENCE: false,
   DEPLOYMENT_NAME: 'vJailbreak',
   TIMEZONE: '',
   NTP_SERVERS: '',
@@ -145,7 +146,8 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
     'POPULATE_VMWARE_MACHINE_FLAVORS',
     'VALIDATE_RDM_OWNER_VMS',
-    'AUTO_FSTAB_UPDATE'
+    'AUTO_FSTAB_UPDATE',
+    'DEFAULT_NETWORK_PERSISTENCE'
   ],
   hosts: ['AGENT_HOST_ENTRIES'],
   vddk: []
@@ -265,6 +267,8 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
     'Fetch VMware hardware flavors to enrich instance sizing details.',
   VALIDATE_RDM_OWNER_VMS: 'Ensure Raw Device Mapping owners are validated before migration.',
   AUTO_FSTAB_UPDATE: 'Automatically update fstab entries during VM migration.',
+  DEFAULT_NETWORK_PERSISTENCE:
+    'When enabled, the "Persist source network interfaces" option will be pre-checked by default in the migration form. Users can still override it per migration.',
   HTTP_TIMEOUT_SECONDS: 'Timeout in seconds for all outbound HTTP/HTTPS calls made by the migration system. Default is 30 seconds.',
   PROXY_ENABLED: 'Turn on to route outbound HTTP/HTTPS traffic via the configured proxy.',
   PROXY_HTTP_SCHEME:
@@ -290,6 +294,7 @@ type ToggleKey = Extract<
   | 'POPULATE_VMWARE_MACHINE_FLAVORS'
   | 'VALIDATE_RDM_OWNER_VMS'
   | 'AUTO_FSTAB_UPDATE'
+  | 'DEFAULT_NETWORK_PERSISTENCE'
 >
 
 const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string }> = [
@@ -318,6 +323,12 @@ const TOGGLE_FIELDS: Array<{ key: ToggleKey; label: string; description: string 
     label: 'Auto Fstab Update',
     description:
       'Automatically update fstab entries to ensure proper disk mounting after migration.'
+  },
+  {
+    key: 'DEFAULT_NETWORK_PERSISTENCE',
+    label: 'Persist Source Network Interfaces',
+    description:
+      'Pre-check "Persist source network interfaces" in the migration form by default. Users can override this per migration.'
   }
 ]
 
@@ -470,7 +481,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
       'CLEANUP_PORTS_AFTER_MIGRATION_FAILURE',
       'POPULATE_VMWARE_MACHINE_FLAVORS',
       'VALIDATE_RDM_OWNER_VMS',
-      'AUTO_FSTAB_UPDATE'
+      'AUTO_FSTAB_UPDATE',
+      'DEFAULT_NETWORK_PERSISTENCE'
     ]
     bools.forEach((k) => {
       const val = state[k]

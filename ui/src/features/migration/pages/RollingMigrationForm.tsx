@@ -11,7 +11,7 @@ import {
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
@@ -33,6 +33,7 @@ import { useRollingFormValidation } from '../hooks/useRollingFormValidation'
 import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useRollingFormSync } from '../hooks/useRollingFormSync'
+import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -139,7 +140,25 @@ export default function RollingMigrationFormDrawer({
   const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
 
   // Migration Options state
-  const { params, getParamsUpdater } = useParams<RollingFormParams>({})
+  const { params, getParamsUpdater, updateParams } = useParams<RollingFormParams>({})
+
+  const { data: settingsConfigMap } = useSettingsConfigMapQuery()
+  const networkPersistenceSeedRef = useRef(false)
+
+  // Seed networkPersistence from the global default once per open session.
+  // Reset the flag when the drawer closes so the next open starts fresh.
+  useEffect(() => {
+    if (!open) {
+      networkPersistenceSeedRef.current = false
+      return
+    }
+    if (networkPersistenceSeedRef.current) return
+    if (!settingsConfigMap) return
+    networkPersistenceSeedRef.current = true
+    const raw = settingsConfigMap.data?.DEFAULT_NETWORK_PERSISTENCE
+    updateParams({ networkPersistence: raw === 'true' })
+  }, [open, settingsConfigMap, updateParams])
+
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const getFieldErrorsUpdater = useCallback(
     (key: string | number) => (value: string) => {
