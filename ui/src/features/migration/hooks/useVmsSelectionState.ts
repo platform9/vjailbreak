@@ -4,7 +4,7 @@ import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { VmData } from 'src/features/migration/api/migration-templates/model'
+import { VmData, VmNetworkInterface } from 'src/features/migration/api/migration-templates/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { getMissingInterfaceIpWarnings } from '../components/missingInterfaceIpWarnings'
@@ -22,7 +22,27 @@ import { useRollingColumns } from './useRollingColumns'
 import { fromVmDataWithFlavor, fromVM, normalizeNetworkInterfaces } from '../utils/vmAdapters'
 import { useVmwareRevalidation } from 'src/hooks/api/useVmwareRevalidation'
 
-const { useCallback, useEffect, useMemo, useState } = React
+const { useCallback, useEffect, useMemo, useRef, useState } = React
+
+// Merges user-assigned IP addresses from the retry prefill into the VMware-fetched
+// NIC list. Only overrides ipAddress for NICs where preserveIp[i] === false
+// (user had a custom assignment). NICs with preserveIp[i] !== false keep the
+// VMware-fetched IP unchanged.
+function mergeNicIpOverrides(
+  existingNics: VmNetworkInterface[],
+  prefillNics: VmNetworkInterface[],
+  preserveIpMap: Record<number, boolean>,
+): VmNetworkInterface[] {
+  if (existingNics.length === 0) return existingNics
+  return existingNics.map((nic, i) => {
+    if (preserveIpMap[i] !== false) return nic
+    const prefillNic = prefillNics[i]
+    if (!prefillNic) return nic
+    const prefillIp = prefillNic.ipAddress
+    if (!prefillIp || prefillIp.length === 0) return nic
+    return { ...nic, ipAddress: prefillIp }
+  })
+}
 
 export function useVmsSelectionState(props: VmsSelectionStepProps) {
   const {
@@ -40,6 +60,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     useGPU = false,
     showHeader = true,
     retryVmName,
+    retryPrefillVm,
     error,
     vmsWithAssignments: vmsWithAssignmentsProp = [],
     setVmsWithAssignments: setVmsWithAssignmentsProp,
@@ -66,6 +87,10 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
   const [migratedVms, setMigratedVms] = useState<Set<string>>(new Set())
   const [loadingMigratedVms, setLoadingMigratedVms] = useState(false)
   const [vmsWithFlavor, setVmsWithFlavor] = useState<VmDataWithFlavor[]>([])
+  // Tracks whether the one-time retry prefill merge has been applied.
+  // Prevents the merge effect from re-firing when user changes vmsWithFlavor
+  // (e.g. via "Assign IP" dialog), which would overwrite their edits.
+  const retryPrefillMergedRef = useRef(false)
   // Stabilize openstackFlavors reference — default [] in destructuring creates new ref each render,
   // which would make the rebuild effect fire on every render (infinite loop).
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,6 +402,12 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
           ipValidationStatus: 'pending' as const,
           ipValidationMessage: '',
           networkInterfaces: preferredNetworkInterfaces,
+          // Preserve user-applied IP override state (e.g. from retry prefill).
+          // Without this, rebuilds triggered by migratedVms/flavor changes would
+          // drop preserveIp, causing StandardIpAddressCell to fall back to the
+          // original VMware IP even when a custom IP was assigned.
+          ...(existingVm?.preserveIp !== undefined && { preserveIp: existingVm.preserveIp }),
+          ...(existingVm?.preserveMac !== undefined && { preserveMac: existingVm.preserveMac }),
         }
       })
     })
@@ -391,14 +422,48 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
   }, [vmsWithFlavor, retryVmName])
 
   // Auto-select the locked VM when it appears in retry mode.
+  // setFormVms is intentionally omitted: useRetryPrefill already sets params.vms
+  // with correct preserveIp/preserveMac/networkInterfaces from the original plan.
+  // Calling setFormVms here with raw API data would overwrite those values.
   useEffect(() => {
     if (!retryVmName || isRolling) return
     const vm = displayVmsWithFlavor.find((v) => v.name === retryVmName)
     if (!vm) return
     setSelectedVMs(new Set([vm.id]))
-    setFormVms([vm])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryVmName, displayVmsWithFlavor])
+
+  // Merge prefilled IP override data into vmsWithFlavor so the "Assign IP" dialog
+  // shows the user's previous assignment instead of raw VMware machine IPs.
+  // The ref guard ensures this runs exactly once: subsequent setVmsWithFlavor calls
+  // (e.g. user edits in "Assign IP" dialog) change displayVmsWithFlavor, which would
+  // re-trigger this effect and overwrite the user's changes without the guard.
+  useEffect(() => {
+    if (!retryVmName || !retryPrefillVm || isRolling) return
+    if (retryPrefillMergedRef.current) return
+    const vmInList = displayVmsWithFlavor.find((v) => v.name === retryVmName)
+    if (!vmInList) return
+    retryPrefillMergedRef.current = true
+    setVmsWithFlavor((prev) => {
+      const idx = prev.findIndex((v) => v.name === retryVmName)
+      if (idx === -1) return prev
+      const existing = prev[idx]
+      const mergedNetworkInterfaces = mergeNicIpOverrides(
+        existing.networkInterfaces ?? [],
+        retryPrefillVm.networkInterfaces ?? [],
+        retryPrefillVm.preserveIp ?? {},
+      )
+      const updated = [...prev]
+      updated[idx] = {
+        ...existing,
+        preserveIp: retryPrefillVm.preserveIp ?? existing.preserveIp,
+        preserveMac: retryPrefillVm.preserveMac ?? existing.preserveMac,
+        networkInterfaces: mergedNetworkInterfaces,
+      }
+      return updated
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryVmName, retryPrefillVm, displayVmsWithFlavor, isRolling])
 
   // --- Missing IP warnings ---
   const missingInterfaceIpWarnings = useMemo(

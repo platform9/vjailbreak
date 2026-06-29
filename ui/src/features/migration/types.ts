@@ -314,6 +314,10 @@ export interface VmsSelectionStepProps {
   showHeader?: boolean
   // When set, the table shows only this VM (by name) and treats it as not migrated.
   retryVmName?: string
+  // Prefilled VmData from useRetryPrefill (carries preserveIp/preserveMac/networkInterfaces
+  // from the original plan). Merged into vmsWithFlavor so the "Assign IP" dialog shows
+  // the user's previous configuration instead of raw VMware machine data.
+  retryPrefillVm?: VmData
 
   // Rolling-mode props
   vmsWithAssignments?: VM[]
