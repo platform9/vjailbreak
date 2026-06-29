@@ -273,9 +273,19 @@ func GetArrayCreds(ctx context.Context, k8sClient client.Client, arrayCredsName 
 }
 
 // GetHotAddPrivateKey retrieves the SSH private key used to connect to the given Proxy VM.
-// The secret is named "{proxyVMName}-hot-add-ssh-key" and is created during Proxy VM onboarding.
+// It checks ProxyVM.Spec.SSHKeyPairRef for an explicit secret name before falling back to
+// the default "{proxyVMName}-hot-add-ssh-key" convention.
 func GetHotAddPrivateKey(ctx context.Context, k8sClient client.Client, proxyVMName string) ([]byte, error) {
 	secretName := commonutils.HotAddSSHSecretName(proxyVMName)
+
+	proxyVM := &vjailbreakv1alpha1.ProxyVM{}
+	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
+		Name:      proxyVMName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, proxyVM); err == nil && proxyVM.Spec.SSHKeyPairRef != nil && proxyVM.Spec.SSHKeyPairRef.Name != "" {
+		secretName = proxyVM.Spec.SSHKeyPairRef.Name
+	}
+
 	secret := &corev1.Secret{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
 		Name:      secretName,
