@@ -529,6 +529,7 @@ export default function MigrationFormDrawer({
                     useGPU={params.useGPU}
                     showHeader={false}
                     retryVmName={retryConfig?.vmName}
+                    retryPrefillVm={params.vms?.[0]}
                   />
                 ) : (
                   <>

@@ -598,6 +598,24 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
     const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
     expect(cloneSpec?.networkOverridesPerVM).toBeNull()
   })
+
+  test('"Assign IP" dialog shows user-assigned IP from original plan, not raw VMware IP', async ({
+    page,
+  }) => {
+    // The IP-override plan is already set in beforeEach.
+    // VMware machine CR has ipAddress '192.168.1.150'; the plan override has
+    // preserveIP=false + UserAssignedIP='10.0.0.50'. The dialog must show 10.0.0.50.
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
+
+    await page.getByTestId('bulk-ip-edit-button').click()
+    const dialog = page.getByTestId('bulk-ip-dialog')
+    await expect(dialog).toBeVisible()
+
+    // User-assigned IP must appear; raw VMware IP must not.
+    await expect(dialog).toContainText('10.0.0.50')
+    await expect(dialog).not.toContainText('192.168.1.150')
+  })
 })
 
 // ─── RET-006: multi-VM plan warning banner ────────────────────────────────────

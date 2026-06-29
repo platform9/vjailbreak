@@ -40,6 +40,7 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
     useGPU = false,
     showHeader = true,
     retryVmName,
+    retryPrefillVm,
     error,
     vmsWithAssignments: vmsWithAssignmentsProp = [],
     setVmsWithAssignments: setVmsWithAssignmentsProp,
@@ -391,14 +392,46 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
   }, [vmsWithFlavor, retryVmName])
 
   // Auto-select the locked VM when it appears in retry mode.
+  // setFormVms is intentionally omitted: useRetryPrefill already sets params.vms
+  // with correct preserveIp/preserveMac/networkInterfaces from the original plan.
+  // Calling setFormVms here with raw API data would overwrite those values.
   useEffect(() => {
     if (!retryVmName || isRolling) return
     const vm = displayVmsWithFlavor.find((v) => v.name === retryVmName)
     if (!vm) return
     setSelectedVMs(new Set([vm.id]))
-    setFormVms([vm])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryVmName, displayVmsWithFlavor])
+
+  // Merge prefilled IP override data into vmsWithFlavor so the "Assign IP" dialog
+  // shows the user's previous assignment instead of raw VMware machine IPs.
+  // Runs when either retryPrefillVm or displayVmsWithFlavor changes, covering both
+  // timing cases: prefill arrives before or after the VM list loads.
+  useEffect(() => {
+    if (!retryVmName || !retryPrefillVm || isRolling) return
+    const vmInList = displayVmsWithFlavor.find((v) => v.name === retryVmName)
+    if (!vmInList) return
+    setVmsWithFlavor((prev) => {
+      const idx = prev.findIndex((v) => v.name === retryVmName)
+      if (idx === -1) return prev
+      const existing = prev[idx]
+      const updated = [...prev]
+      updated[idx] = {
+        ...existing,
+        preserveIp: retryPrefillVm.preserveIp ?? existing.preserveIp,
+        preserveMac: retryPrefillVm.preserveMac ?? existing.preserveMac,
+        // Only override ipAddress for NICs where user had a custom assignment
+        // (preserveIP=false). NICs with preserveIP=true keep the VMware-fetched IP.
+        networkInterfaces: existing.networkInterfaces?.map((nic, i) => {
+          const isUserAssigned = retryPrefillVm.preserveIp?.[i] === false
+          const prefillIp = retryPrefillVm.networkInterfaces?.[i]?.ipAddress
+          return isUserAssigned && prefillIp ? { ...nic, ipAddress: prefillIp } : nic
+        }) ?? existing.networkInterfaces,
+      }
+      return updated
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryVmName, retryPrefillVm, displayVmsWithFlavor, isRolling])
 
   // --- Missing IP warnings ---
   const missingInterfaceIpWarnings = useMemo(
