@@ -21,7 +21,7 @@ import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import type { CustomToolbarProps, MigrationsTableProps } from '../types'
-import { TooltipContent, ClickableTableCell } from 'src/components'
+import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 import { STATUS_ORDER } from '../constants'
 import { getProgressText, IN_PROGRESS_PHASES } from '../utils/migrationTableUtils'
@@ -238,7 +238,7 @@ export default function MigrationsTable({
       {
         field: 'name',
         headerName: 'Name',
-        flex: 0.7,
+        flex: 1.2,
         valueGetter: (_, row) => row.spec?.vmName,
         renderCell: (params) => {
           const vmName = params.row?.spec?.vmName || '-'
@@ -323,15 +323,21 @@ export default function MigrationsTable({
                   />
                 </Tooltip>
               )}
-              <ClickableTableCell
-                tooltipTitle={tooltipTitle}
-                onClick={() => {
-                  const migName = params.row?.metadata?.name
-                  if (migName) navigate(`/dashboard/migrations/${migName}`)
-                }}
-              >
-                {displayVmName}
-              </ClickableTableCell>
+              <Tooltip title={tooltipTitle} arrow>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'primary.main',
+                    cursor: 'pointer',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  {displayVmName}
+                </Typography>
+              </Tooltip>
             </Box>
           )
         }
@@ -340,7 +346,7 @@ export default function MigrationsTable({
         field: 'status',
         headerName: 'Status',
         valueGetter: (_, row) => row?.status?.phase || 'Pending',
-        flex: 0.5,
+        flex: 0.8,
         sortComparator: (v1, v2) => {
           const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER
           const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER
@@ -351,13 +357,13 @@ export default function MigrationsTable({
         field: 'agent',
         headerName: 'Agent',
         valueGetter: (_, row) => row.status?.agentName,
-        flex: 1
+        flex: 0.8
       },
       {
         field: 'timeElapsed',
         headerName: 'Time Elapsed',
         valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
-        flex: 0.8,
+        flex: 0.5,
         renderCell: (params) => {
           const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
           const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
@@ -448,7 +454,8 @@ export default function MigrationsTable({
       {
         field: 'actions',
         headerName: 'Actions',
-        flex: 1,
+        flex: 0.4,
+        minWidth: 90,
         renderCell: (params) => {
           const phase = params.row?.status?.phase
           const initiateCutover = params.row?.spec?.initiateCutover
@@ -473,7 +480,10 @@ export default function MigrationsTable({
           const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
 
           return (
-            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}>
+            <Box
+              sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <Tooltip title={'Delete migration'}>
                 <IconButton
                   onClick={(e) => {
@@ -690,6 +700,11 @@ export default function MigrationsTable({
         getRowId={(row) => row.metadata?.name}
         loading={loading}
         emptyMessage="No migrations available"
+        onRowClick={(params) => {
+          const migName = params.row?.metadata?.name
+          if (migName) navigate(`/dashboard/migrations/${migName}`)
+        }}
+        sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
       />
 
       <Dialog

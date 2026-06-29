@@ -1,7 +1,7 @@
 import { Migration, Phase, Condition } from '../api/migrations'
 import { calculateTimeElapsed } from 'src/utils'
 
-export type PhaseStatus = 'done' | 'active' | 'pending' | 'failed'
+export type PhaseStatus = 'done' | 'active' | 'paused' | 'pending' | 'failed'
 
 export interface PhaseState {
   status: PhaseStatus
@@ -17,11 +17,12 @@ export interface DesignPhaseDef {
 }
 
 export const DESIGN_PHASE_DEFS: DesignPhaseDef[] = [
-  { key: 'pending',    label: 'Pending',        stepLabel: 'Step 1' },
-  { key: 'validating', label: 'Validating',     stepLabel: 'Step 2' },
-  { key: 'copying',    label: 'Copying Blocks', stepLabel: 'Step 3' },
-  { key: 'cutover',    label: 'Cutover',        stepLabel: 'Step 4' },
-  { key: 'done',       label: 'Done',           stepLabel: 'Step 5' },
+  { key: 'pending',    label: 'Pending',         stepLabel: 'Step 1' },
+  { key: 'validating', label: 'Validating',      stepLabel: 'Step 2' },
+  { key: 'copying',    label: 'Copying Blocks',  stepLabel: 'Step 3' },
+  { key: 'cutover',    label: 'Cutover',         stepLabel: 'Step 4' },
+  { key: 'converting', label: 'Converting Disk', stepLabel: 'Step 5' },
+  { key: 'done',       label: 'Done',            stepLabel: 'Step 6' },
 ]
 
 // K8s Phase → design phase index (0–4)
@@ -35,13 +36,14 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
       return 1
     case Phase.CopyingBlocks:
     case Phase.CopyingChangedBlocks:
-    case Phase.ConvertingDisk:
       return 2
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
       return 3
-    case Phase.Succeeded:
+    case Phase.ConvertingDisk:
       return 4
+    case Phase.Succeeded:
+      return 5
     case Phase.Failed: {
       const validatedOk = conditions.some((c) => c.type === 'Validated' && c.status === 'True')
       const copyStarted = conditions.some((c) => c.type === 'DataCopy')
@@ -90,7 +92,8 @@ function doneDetail(designIndex: number, conditions: Condition[]): string {
       return c?.message ? String(c.message) : 'Disk transfer complete.'
     }
     case 3: return 'Cutover complete.'
-    case 4: return 'Migration completed successfully.'
+    case 4: return 'Disk conversion complete.'
+    case 5: return 'Migration completed successfully.'
     default: return 'Complete.'
   }
 }
@@ -107,6 +110,12 @@ function activeDetail(migration: Migration, designIndex: number): string {
       return 'Transferring disk data…'
     }
     case 3: return 'Waiting for admin to initiate cutover.'
+    case 4: {
+      if (status?.currentDisk && status?.totalDisks) {
+        return `Converting disk ${status.currentDisk} of ${status.totalDisks}`
+      }
+      return 'Converting disk format…'
+    }
     default: return 'In progress…'
   }
 }
@@ -117,7 +126,8 @@ function pendingDetail(designIndex: number): string {
     case 1: return 'Will start after agent picks up task.'
     case 2: return 'Will start when validation completes.'
     case 3: return 'Will start when copy completes.'
-    case 4: return 'Pending cutover.'
+    case 4: return 'Will start after cutover.'
+    case 5: return 'Pending.'
     default: return 'Pending.'
   }
 }
@@ -127,15 +137,21 @@ function failedDetail(_migration: Migration, designIndex: number): string {
     case 1: return 'Validation check failed. See error details below.'
     case 2: return 'Disk copy failed. See error details below.'
     case 3: return 'Cutover failed. See error details below.'
+    case 4: return 'Disk conversion failed. See error details below.'
     default: return 'Migration halted. See error details below.'
   }
 }
 
 /**
- * Maps a Migration CRD to the 5 design-phase states used by MigrationPhaseStepper.
- * Returns an array of exactly 5 PhaseState items.
+ * Maps a Migration CRD to the design-phase states used by MigrationPhaseStepper.
+ * Returns an array of PhaseState items matching DESIGN_PHASE_DEFS length.
+ * @param options.minDesignIndex - clamp the active index to at least this value (used to
+ *   prevent visual step-back during final delta sync after admin cutover is triggered)
  */
-export function derivePhaseStates(migration: Migration): PhaseState[] {
+export function derivePhaseStates(
+  migration: Migration,
+  options?: { minDesignIndex?: number; cutoverTriggered?: boolean }
+): PhaseState[] {
   const phase = migration.status?.phase
   const conditions = migration.status?.conditions || []
   const creationTs = migration.metadata?.creationTimestamp
@@ -148,7 +164,10 @@ export function derivePhaseStates(migration: Migration): PhaseState[] {
     )
   }
 
-  const currentIndex = getDesignIndex(phase as Phase, conditions)
+  const rawIndex = getDesignIndex(phase as Phase, conditions)
+  const currentIndex = options?.minDesignIndex != null
+    ? Math.max(rawIndex, options.minDesignIndex)
+    : rawIndex
   const failed = isFailed(phase as Phase)
   const succeeded = phase === Phase.Succeeded
 
@@ -156,7 +175,7 @@ export function derivePhaseStates(migration: Migration): PhaseState[] {
     if (succeeded) {
       const elapsed =
         conditionElapsed(creationTs?.toString(), conditions,
-          i === 1 ? 'Validated' : i === 2 ? 'DataCopy' : i === 4 ? 'Migrated' : ''
+          i === 1 ? 'Validated' : i === 2 ? 'DataCopy' : i === 5 ? 'Migrated' : ''
         ) ?? null
       return { status: 'done', elapsed, detail: doneDetail(i, conditions), eta: null }
     }
@@ -192,8 +211,11 @@ export function derivePhaseStates(migration: Migration): PhaseState[] {
       }
     }
     if (i === currentIndex) {
+      const isPaused =
+        (phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
+        !options?.cutoverTriggered
       return {
-        status: 'active',
+        status: isPaused ? 'paused' : 'active',
         elapsed: creationTs ? calculateTimeElapsed(creationTs.toString(), migration.status) : null,
         detail: activeDetail(migration, i),
         eta: null,

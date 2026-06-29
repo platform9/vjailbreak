@@ -1,6 +1,7 @@
 import { Box, CircularProgress, Typography } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
+import PauseIcon from '@mui/icons-material/Pause'
 import { Migration } from '../../api/migrations'
 import {
   DESIGN_PHASE_DEFS,
@@ -12,6 +13,7 @@ import {
 const STATUS_BG_COLOR: Record<PhaseStatus, string> = {
   done: 'success.main',
   active: 'primary.main',
+  paused: 'warning.main',
   failed: 'error.main',
   pending: 'grey.300',
 }
@@ -33,8 +35,9 @@ function StepCircle({ status }: { status: PhaseStatus }) {
         flexShrink: 0,
       }}
     >
-      {status === 'done' && <CheckIcon sx={{ color: 'white', fontSize: 18 }} />}
+      {status === 'done'   && <CheckIcon sx={{ color: 'white', fontSize: 18 }} />}
       {status === 'active' && <CircularProgress size={16} sx={{ color: 'white' }} />}
+      {status === 'paused' && <PauseIcon sx={{ color: 'white', fontSize: 18 }} />}
       {status === 'failed' && <CloseIcon sx={{ color: 'white', fontSize: 18 }} />}
       {status === 'pending' && (
         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'grey.400' }} />
@@ -48,6 +51,7 @@ function connectorBgColor(status: PhaseStatus): string {
     case 'done':   return 'success.main'
     case 'failed': return 'error.main'
     case 'active': return 'primary.main'
+    case 'paused': return 'warning.main'
     default:       return 'grey.300'
   }
 }
@@ -62,6 +66,7 @@ function metaText(state: PhaseState): string {
       ].filter(Boolean)
       return parts.join(' · ') || '—'
     }
+    case 'paused': return state.elapsed ? `${state.elapsed} elapsed` : 'Awaiting admin'
     case 'pending': return state.eta ? `est. ${state.eta}` : 'Pending'
     case 'failed':  return `Halted · ${state.elapsed ?? '—'}`
   }
@@ -69,10 +74,14 @@ function metaText(state: PhaseState): string {
 
 interface MigrationPhaseStepperProps {
   migration: Migration
+  cutoverTriggered?: boolean
 }
 
-export default function MigrationPhaseStepper({ migration }: MigrationPhaseStepperProps) {
-  const phaseStates = derivePhaseStates(migration)
+export default function MigrationPhaseStepper({ migration, cutoverTriggered }: MigrationPhaseStepperProps) {
+  const phaseStates = derivePhaseStates(migration, {
+    minDesignIndex: cutoverTriggered ? 3 : undefined,
+    cutoverTriggered,
+  })
 
   return (
     <Box
@@ -114,12 +123,13 @@ export default function MigrationPhaseStepper({ migration }: MigrationPhaseStepp
                   variant="caption"
                   color={
                     state.status === 'active' ? 'primary.main' :
+                    state.status === 'paused' ? 'warning.main' :
                     state.status === 'failed' ? 'error.main' :
                     'text.disabled'
                   }
                   sx={{
                     display: 'block',
-                    fontWeight: state.status === 'active' || state.status === 'failed' ? 700 : 400,
+                    fontWeight: state.status === 'active' || state.status === 'paused' || state.status === 'failed' ? 700 : 400,
                     letterSpacing: 0.8,
                     textTransform: 'uppercase',
                     fontSize: '0.65rem',
@@ -129,9 +139,10 @@ export default function MigrationPhaseStepper({ migration }: MigrationPhaseStepp
                 </Typography>
                 <Typography
                   variant="body2"
-                  fontWeight={state.status === 'active' || state.status === 'failed' ? 700 : 500}
+                  fontWeight={state.status === 'active' || state.status === 'paused' || state.status === 'failed' ? 700 : 500}
                   color={
                     state.status === 'active' ? 'primary.main' :
+                    state.status === 'paused' ? 'warning.main' :
                     state.status === 'failed' ? 'error.main' :
                     state.status === 'done'   ? 'text.primary' :
                     'text.disabled'
