@@ -114,13 +114,6 @@ export const useClusterData = (autoFetch: boolean = true): UseClusterDataReturn 
     setLoadingPCD(true)
     setError(null)
     try {
-      // Fetch PCD clusters and all OpenStack credentials in parallel. Fetching
-      // the full creds list once (instead of one request per cluster) avoids an
-      // N+1 request storm that, at scale (100s of creds), causes some per-cred
-      // requests to be throttled/fail and leaves the tenant field unpopulated.
-      // Tenant name is a non-critical display detail, so a failure to load the
-      // credentials list must not block the cluster list from rendering. Catch
-      // it independently and fall back to an empty list (blank tenant names).
       const [pcdClusters, openstackCredsList] = await Promise.all([
         getPCDClusters(VJAILBREAK_DEFAULT_NAMESPACE),
         getOpenstackCredentialsList(VJAILBREAK_DEFAULT_NAMESPACE).catch((err) => {
