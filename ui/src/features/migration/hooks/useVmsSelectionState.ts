@@ -4,7 +4,7 @@ import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useAmplitude } from 'src/hooks/useAmplitude'
 import { useRdmConfigValidation } from 'src/hooks/useRdmConfigValidation'
-import { VmData } from 'src/features/migration/api/migration-templates/model'
+import { VmData, VmNetworkInterface } from 'src/features/migration/api/migration-templates/model'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { getMissingInterfaceIpWarnings } from '../components/missingInterfaceIpWarnings'
@@ -23,6 +23,26 @@ import { fromVmDataWithFlavor, fromVM, normalizeNetworkInterfaces } from '../uti
 import { useVmwareRevalidation } from 'src/hooks/api/useVmwareRevalidation'
 
 const { useCallback, useEffect, useMemo, useState } = React
+
+// Merges user-assigned IP addresses from the retry prefill into the VMware-fetched
+// NIC list. Only overrides ipAddress for NICs where preserveIp[i] === false
+// (user had a custom assignment). NICs with preserveIp[i] !== false keep the
+// VMware-fetched IP unchanged.
+function mergeNicIpOverrides(
+  existingNics: VmNetworkInterface[],
+  prefillNics: VmNetworkInterface[],
+  preserveIpMap: Record<number, boolean>,
+): VmNetworkInterface[] {
+  if (existingNics.length === 0) return existingNics
+  return existingNics.map((nic, i) => {
+    if (preserveIpMap[i] !== false) return nic
+    const prefillNic = prefillNics[i]
+    if (!prefillNic) return nic
+    const prefillIp = prefillNic.ipAddress
+    if (!prefillIp || prefillIp.length === 0) return nic
+    return { ...nic, ipAddress: prefillIp }
+  })
+}
 
 export function useVmsSelectionState(props: VmsSelectionStepProps) {
   const {
@@ -415,18 +435,17 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
       const idx = prev.findIndex((v) => v.name === retryVmName)
       if (idx === -1) return prev
       const existing = prev[idx]
+      const mergedNetworkInterfaces = mergeNicIpOverrides(
+        existing.networkInterfaces ?? [],
+        retryPrefillVm.networkInterfaces ?? [],
+        retryPrefillVm.preserveIp ?? {},
+      )
       const updated = [...prev]
       updated[idx] = {
         ...existing,
         preserveIp: retryPrefillVm.preserveIp ?? existing.preserveIp,
         preserveMac: retryPrefillVm.preserveMac ?? existing.preserveMac,
-        // Only override ipAddress for NICs where user had a custom assignment
-        // (preserveIP=false). NICs with preserveIP=true keep the VMware-fetched IP.
-        networkInterfaces: existing.networkInterfaces?.map((nic, i) => {
-          const isUserAssigned = retryPrefillVm.preserveIp?.[i] === false
-          const prefillIp = retryPrefillVm.networkInterfaces?.[i]?.ipAddress
-          return isUserAssigned && prefillIp ? { ...nic, ipAddress: prefillIp } : nic
-        }) ?? existing.networkInterfaces,
+        networkInterfaces: mergedNetworkInterfaces,
       }
       return updated
     })
