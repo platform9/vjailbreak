@@ -44,7 +44,7 @@ const POLICY_DEFAULT_LABELS: Record<string, string> = {
   scheduleDataCopy: 'Immediate',
   cutoverPolicy: 'Immediate',
   renameSuffix: 'None',
-  folderName: 'None',
+  folderName: 'Off',
   disconnectSourceNetwork: 'Off',
   fallbackToDhcp: 'Off',
   networkPersistence: 'Off',

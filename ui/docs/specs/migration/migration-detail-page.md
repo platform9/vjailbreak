@@ -4,7 +4,7 @@
 **Entry file**: `src/features/migration/pages/MigrationDetailPage.tsx`  
 **Feature branch**: `1980-enhance-user-experience-with-new-ui`  
 **Created**: 2026-06-12  
-**Last updated**: 2026-06-29 (session 3)  
+**Last updated**: 2026-06-29 (session 4)  
 **Status**: Implemented, visual-QA complete
 
 ---
@@ -390,9 +390,19 @@ Second tab (position 2). Shows same content as `MigrationDetailModal` (General +
    - Network Mapping (source → target)
    - Storage Mapping — normal: datastore → volume type; accelerated: datastore → array credentials
 
-4. **Migration Policies** (`SurfaceCard`) — `KeyValueGrid` using `MIGRATION_POLICY_FIELDS` constants:
-   - "View only enabled options" toggle (`Switch`) defaults to `true`
-   - Post-migration script (shown in `Paper` code block if configured)
+4. **Migration Policies** (`SurfaceCard`) — redesigned split-view layout (no toggle switch):
+   - **Badge** in card header: `"X configured · Y default"`
+   - **Configured rows** (grid `220px 1fr`): fields where value is not defaultish, rendered via `PolicyValueCell`:
+     - `"Time window (start - end)"` → blue `● Time window` chip + date text
+     - `"Admin initiated (text)"` → amber `● Admin initiated` chip + text
+     - `"Enabled"` → green `● On` chip
+     - Other non-default values → plain `Typography`
+   - **Post-migration script**: shown as last configured row (first line of script), monospace font; not shown if unset
+   - **Defaults accordion** (collapsible): "Show N policies using defaults ▼" / "Policies using defaults (N) ▲"
+     - 2-col muted grid; values from `POLICY_DEFAULT_LABELS` (human-readable: "Off", "None", "Immediate")
+   - `POLICY_DEFAULT_LABELS` map: `securityGroups/serverGroup/renameSuffix → 'None'`, `scheduleDataCopy/cutoverPolicy → 'Immediate'`, `folderName → 'Off'`, all boolean fields → `'Off'`
+   - Chip colors: `alpha(theme.palette.X.main, 0.12)` bg + `X.dark` text — no hardcoded hex
+   - **`Move VM to folder`** (was "Folder Name"): label updated in `MIGRATION_POLICY_FIELDS`; default label `'Off'`
 
 5. **Image Profiles** (`SurfaceCard`) — shown only when `planAdvanced.imageProfiles` is configured
 
@@ -616,3 +626,9 @@ server.use(cors({ origin: true, credentials: true }))
 | 2026-06-29 (s3) | **MigrationsTable — name as link**: Migration name rendered as `Typography` with `color: 'primary.main'` and `&:hover: textDecoration: underline`; replaced `ClickableTableCell` |
 | 2026-06-29 (s3) | **MigrationsTable — column flex**: name 0.7→1.2, status 0.5→0.8, agent 1.0→0.8, timeElapsed 0.8→0.5, progress 2.0 (unchanged), actions 1.0→0.4 + `minWidth: 90` |
 | 2026-06-29 (s3) | **MigrationProgress / MigrationProgressWithPopover**: Pause icon color `#1976d2→#ed6c02` (orange); all hardcoded hex/named colors replaced with MUI theme tokens (`warning.main`, `success.main`, `error.main`, `text.disabled`, `text.primary`) via `sx` prop |
+| 2026-06-29 (s4) | **Bug fix — Cutover Policy (both tab + modal)**: `!initiateCutoverEnabled` guard fired before `vmCutoverStart/vmCutoverEnd` check → time-window always showed N/A. Fixed by reordering: `adminInitiatedCutOver` → `vmCutoverStart\|vmCutoverEnd` → `!initiateCutoverEnabled` guard → "Immediately after data copy" |
+| 2026-06-29 (s4) | **Migration Policies redesign** (tab only): removed "View only enabled options" toggle; split into configured rows (with `PolicyValueCell` chip rendering) + collapsible defaults accordion (2-col muted grid, human-readable labels). Badge counter added to card header. |
+| 2026-06-29 (s4) | **`PolicyValueCell`**: time window → blue `● Time window` chip + date; admin initiated → amber chip; Enabled → green `● On` chip. Colors use `alpha(theme.palette.X.main, 0.12)` + `X.dark` — no hardcoded hex. |
+| 2026-06-29 (s4) | **Grid alignment**: configured policy rows use `gridTemplateColumns: '220px 1fr'` (was flex + minWidth 200) — fixes long labels pushing value column. |
+| 2026-06-29 (s4) | **"Folder Name" → "Move VM to folder"**: label updated in `MIGRATION_POLICY_FIELDS`; default label `'Off'` (was `'Root'`). |
+| 2026-06-29 (s4) | **Refactor** `MigrationDetailsTab`: removed IIFE from JSX, moved `configuredCount`/`defaultCount`/`defaultRowCount` to component body, extracted `CHIP_SX` constant, stable `key={left.key}` in defaults grid. |
