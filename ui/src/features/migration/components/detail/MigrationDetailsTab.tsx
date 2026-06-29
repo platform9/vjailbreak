@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { alpha } from '@mui/material/styles'
 import {
   Alert,
   Box,
   CircularProgress,
   Chip,
+  Collapse,
   Divider,
-  FormControlLabel,
   IconButton,
   Paper,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -19,6 +19,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
@@ -35,6 +37,76 @@ import { formatDateTime, formatDiskSize } from 'src/utils'
 import { Migration } from '../../api/migrations'
 
 const enabledOrNA = (value: unknown) => (value === true ? 'Enabled' : 'N/A')
+
+const POLICY_DEFAULT_LABELS: Record<string, string> = {
+  securityGroups: 'None',
+  serverGroup: 'None',
+  scheduleDataCopy: 'Immediate',
+  cutoverPolicy: 'Immediate',
+  renameSuffix: 'None',
+  folderName: 'None',
+  disconnectSourceNetwork: 'Off',
+  fallbackToDhcp: 'Off',
+  networkPersistence: 'Off',
+  removeVMwareTools: 'Off',
+  useGPUFlavor: 'Off',
+  useFlavorless: 'Off',
+}
+
+const CHIP_SX = { fontWeight: 600, fontSize: '0.68rem', height: 20, borderRadius: '10px' } as const
+
+function PolicyValueCell({ value }: { value: string }) {
+  const timeWindowMatch = value.match(/^Time window \((.+)\)$/)
+  if (timeWindowMatch) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Chip
+          size="small"
+          label="● Time window"
+          sx={{
+            ...CHIP_SX,
+            bgcolor: (theme) => alpha(theme.palette.info.main, 0.12),
+            color: 'info.dark',
+          }}
+        />
+        <Typography variant="body2">{timeWindowMatch[1]}</Typography>
+      </Box>
+    )
+  }
+  const adminMatch = value.match(/^Admin initiated \((.+)\)$/)
+  if (adminMatch) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Chip
+          size="small"
+          label="● Admin initiated"
+          sx={{
+            ...CHIP_SX,
+            bgcolor: (theme) => alpha(theme.palette.warning.main, 0.12),
+            color: 'warning.dark',
+          }}
+        />
+        <Typography variant="body2" color="text.secondary">{adminMatch[1]}</Typography>
+      </Box>
+    )
+  }
+  if (value === 'Enabled') {
+    return (
+      <Box sx={{ display: 'flex' }}>
+        <Chip
+          size="small"
+          label="● On"
+          sx={{
+            ...CHIP_SX,
+            bgcolor: (theme) => alpha(theme.palette.success.main, 0.12),
+            color: 'success.dark',
+          }}
+        />
+      </Box>
+    )
+  }
+  return <Typography variant="body2">{value}</Typography>
+}
 
 function MappingTable({
   rows,
@@ -95,7 +167,7 @@ interface MigrationDetailsTabProps {
 }
 
 export default function MigrationDetailsTab({ migration }: MigrationDetailsTabProps) {
-  const [onlyShowOverrides, setOnlyShowOverrides] = useState(true)
+  const [showDefaults, setShowDefaults] = useState(false)
 
   const { data, isLoading, error } = useMigrationDetailResourcesQuery({ open: true, migration })
 
@@ -319,7 +391,6 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
   const cutoverPolicy = useMemo(() => {
-    if (!initiateCutoverEnabled) return 'N/A'
     if (planStrategy?.adminInitiatedCutOver === true) {
       const periodicSyncValue = periodicSyncEnabled
         ? periodicSyncInterval
@@ -333,6 +404,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       const end = planStrategy?.vmCutoverEnd ? formatDateTime(planStrategy.vmCutoverEnd) : 'N/A'
       return `Time window (${start} - ${end})`
     }
+    if (!initiateCutoverEnabled) return 'N/A'
     return 'Immediately after data copy'
   }, [
     initiateCutoverEnabled,
@@ -432,17 +504,19 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const migrationPolicyItems = useMemo(
     () =>
       MIGRATION_POLICY_FIELDS.map((field) => ({
+        key: field.key,
         label: field.label,
         value: (migrationPolicyValues as any)[field.key] as string,
       })),
     [migrationPolicyValues]
   )
-  const visiblePolicyItems = useMemo(
-    () =>
-      onlyShowOverrides
-        ? migrationPolicyItems.filter((item) => !isDefaultishValue(item.value))
-        : migrationPolicyItems,
-    [migrationPolicyItems, onlyShowOverrides]
+  const configuredPolicyItems = useMemo(
+    () => migrationPolicyItems.filter((item) => !isDefaultishValue(item.value)),
+    [migrationPolicyItems]
+  )
+  const defaultPolicyItems = useMemo(
+    () => migrationPolicyItems.filter((item) => isDefaultishValue(item.value)),
+    [migrationPolicyItems]
   )
 
   const selectedImageProfileNames = useMemo(() => {
@@ -484,9 +558,9 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
     return raw
   }, [planSpec?.firstBootScript])
 
-  const handleOnlyShowOverridesChange = useCallback((checked: boolean) => {
-    setOnlyShowOverrides(checked)
-  }, [])
+  const configuredCount = configuredPolicyItems.length + (postMigrationScript ? 1 : 0)
+  const defaultCount = defaultPolicyItems.length
+  const defaultRowCount = Math.ceil(defaultPolicyItems.length / 2)
 
   if (isLoading) {
     return (
@@ -695,47 +769,148 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
         variant="card"
         title="Migration Policies"
         subtitle="Flags and post-migration actions"
+        actions={
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+            {configuredCount} configured · {defaultCount} default
+          </Typography>
+        }
       >
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                size="small"
-                checked={onlyShowOverrides}
-                onChange={(e) => handleOnlyShowOverridesChange(e.target.checked)}
-              />
-            }
-            label={<Typography variant="body2">View only enabled options</Typography>}
-          />
-        </Box>
-
-        {visiblePolicyItems.length ? (
-          <KeyValueGrid items={visiblePolicyItems} />
+        {/* Configured rows */}
+        {configuredPolicyItems.length === 0 && !postMigrationScript ? (
+          <Typography variant="body2" color="text.secondary">No policies configured.</Typography>
         ) : (
-          <Typography variant="body2">No advanced options configured.</Typography>
-        )}
-
-        {postMigrationScript || !onlyShowOverrides ? (
-          <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-            <FieldLabel label="Post-migration script" />
-            {postMigrationScript ? (
-              <Paper
-                variant="outlined"
-                sx={{ p: 2, backgroundColor: (theme) => theme.palette.action.hover }}
-              >
-                <Typography
-                  variant="caption"
-                  component="pre"
-                  sx={{ m: 0, whiteSpace: 'pre-wrap' }}
+          <Box>
+            {configuredPolicyItems.map((item, idx) => {
+              const isLast = idx === configuredPolicyItems.length - 1 && !postMigrationScript
+              return (
+                <Box
+                  key={item.key}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '220px 1fr',
+                    alignItems: 'center',
+                    py: 1.25,
+                    borderBottom: isLast ? 'none' : '1px solid',
+                    borderColor: 'divider',
+                    gap: 2,
+                  }}
                 >
-                  {postMigrationScript}
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {item.label}
+                  </Typography>
+                  <PolicyValueCell value={item.value} />
+                </Box>
+              )
+            })}
+            {postMigrationScript && (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '220px 1fr',
+                  alignItems: 'flex-start',
+                  py: 1.25,
+                  gap: 2,
+                }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Post-migration script
                 </Typography>
-              </Paper>
-            ) : (
-              <Typography variant="body2">N/A</Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ fontFamily: '"Fira Code", monospace', wordBreak: 'break-all' }}
+                >
+                  {postMigrationScript.split('\n')[0].trim() || postMigrationScript}
+                </Typography>
+              </Box>
             )}
           </Box>
-        ) : null}
+        )}
+
+        {/* Defaults accordion */}
+        {defaultPolicyItems.length > 0 && (
+          <Box sx={{ mt: configuredCount > 0 ? 1.5 : 0 }}>
+            <Box
+              onClick={() => setShowDefaults((v) => !v)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                py: 1.25,
+                px: 1.5,
+                cursor: 'pointer',
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+                '&:hover': { bgcolor: 'action.selected' },
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {showDefaults
+                  ? `Policies using defaults (${defaultCount})`
+                  : `Show ${defaultCount} policies using defaults`}
+              </Typography>
+              {showDefaults ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+            </Box>
+            <Collapse in={showDefaults}>
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', mt: 1 }}>
+                {Array.from({ length: defaultRowCount }).map((_, rowIdx) => {
+                  const left = defaultPolicyItems[rowIdx * 2]
+                  const right = defaultPolicyItems[rowIdx * 2 + 1]
+                  const isLastRow = rowIdx === defaultRowCount - 1
+                  return (
+                    <Box
+                      key={left.key}
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        borderBottom: isLastRow ? 'none' : '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          px: 1.5,
+                          py: 0.875,
+                          borderRight: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                          {left.label}
+                        </Typography>
+                        <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.78rem', ml: 1 }}>
+                          {POLICY_DEFAULT_LABELS[left.key] || 'N/A'}
+                        </Typography>
+                      </Box>
+                      {right ? (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            px: 1.5,
+                            py: 0.875,
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                            {right.label}
+                          </Typography>
+                          <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.78rem', ml: 1 }}>
+                            {POLICY_DEFAULT_LABELS[right.key] || 'N/A'}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box />
+                      )}
+                    </Box>
+                  )
+                })}
+              </Box>
+            </Collapse>
+          </Box>
+        )}
       </SurfaceCard>
 
       {/* Image Profiles */}
