@@ -34,6 +34,7 @@ interface RegisterVMFormProps {
   onCopy: () => void
   onKeyFileUpload: (file: File | null) => void
   onSubmitErrorChange: (e: string | null) => void
+  registeredVMNames?: Set<string>
 }
 
 export default function RegisterVMForm({
@@ -60,7 +61,8 @@ export default function RegisterVMForm({
   onRegenerateKey,
   onCopy,
   onKeyFileUpload,
-  onSubmitErrorChange
+  onSubmitErrorChange,
+  registeredVMNames
 }: RegisterVMFormProps) {
   const sshPrivateKey = form.watch('sshPrivateKey')
   return (
@@ -94,6 +96,7 @@ export default function RegisterVMForm({
             value={selectedVM}
             onChange={onVMChange}
             credSelected={Boolean(vmwareCredsRefSelect)}
+            registeredVMNames={registeredVMNames}
           />
         </Section>
 
