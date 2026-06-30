@@ -9,7 +9,7 @@ function KpiCell({
   label,
   value,
   sub,
-  mono = false,
+  mono = false
 }: {
   label: string
   value: string
@@ -27,7 +27,7 @@ function KpiCell({
           letterSpacing: 0.8,
           fontSize: '0.7rem',
           fontWeight: 600,
-          mb: 0.25,
+          mb: 0.25
         }}
       >
         {label}
@@ -37,7 +37,7 @@ function KpiCell({
         fontWeight={600}
         sx={{
           display: 'block',
-          ...(mono && { fontFamily: '"Fira Code", monospace', fontSize: '0.8rem' }),
+          ...(mono && { fontFamily: '"Fira Code", monospace', fontSize: '0.8rem' })
         }}
         noWrap
         title={value}
@@ -72,7 +72,7 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit',
+        minute: '2-digit'
       })
     : '—'
 
@@ -83,32 +83,31 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
 
   const vmSpec = (resources?.vmwareMachine?.spec as any)?.vms || {}
   const vmMeta = (resources?.vmwareMachine?.metadata as any) || {}
-  const vmwareCreds = resources?.vmwareCreds as VMwareCreds | null | undefined
-  const sourceValue =
+  const esxiHostName =
+    (vmSpec?.esxiName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/esxi-name'] as string) ||
+    ''
+  const rawCluster =
     (vmSpec?.clusterName as string) ||
     (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
-    vmwareCreds?.spec?.datacenter ||
-    vmwareCreds?.spec?.hostName ||
-    '—'
+    ''
+  const sourceValue = rawCluster && rawCluster !== esxiHostName ? rawCluster : 'No cluster'
 
   const openstackCreds = resources?.openstackCreds as OpenstackCreds | null | undefined
-  const destValue =
-    openstackCreds?.spec?.projectName ||
-    resources?.openstackCredsRef ||
-    '—'
+  const destValue = openstackCreds?.spec?.projectName || resources?.openstackCredsRef || '—'
 
   const agentValue = status?.agentName || '—'
 
   const destClusterValue = resources?.migrationTemplate?.spec?.targetPCDClusterName || '—'
 
   const cells = [
-    { label: 'Started',             value: startedAt,        mono: false },
-    { label: 'Total Elapsed',       value: elapsed,          mono: false },
+    { label: 'Started', value: startedAt, mono: false },
+    { label: 'Total Elapsed', value: elapsed, mono: false },
     // { label: 'Remaining',        value: remaining,        mono: false },
-    { label: 'Source Cluster',      value: sourceValue,      mono: true  },
-    { label: 'Destination Cluster', value: destClusterValue, mono: true  },
-    { label: 'Destination Tenant',  value: destValue,        mono: true  },
-    { label: 'Agent',               value: agentValue,       mono: true  },
+    { label: 'Source Cluster', value: sourceValue, mono: true },
+    { label: 'Destination Cluster', value: destClusterValue, mono: true },
+    { label: 'Destination Tenant', value: destValue, mono: true },
+    { label: 'Agent', value: agentValue, mono: true }
   ]
 
   return (
@@ -120,7 +119,7 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
         border: '1px solid',
         borderColor: 'divider',
         mb: 2,
-        overflow: 'hidden',
+        overflow: 'hidden'
       }}
     >
       {cells.map((cell, idx) => (
