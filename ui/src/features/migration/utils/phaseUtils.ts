@@ -51,11 +51,14 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
       return 5
     case Phase.Failed: {
       const validatedOk = conditions.some((c) => c.type === 'Validated' && c.status === 'True')
-      const copyCompleted = conditions.some((c) => c.type === 'DataCopy' && c.status === 'True')
       const copyStarted = conditions.some((c) => c.type === 'DataCopy')
-      if (copyCompleted) return 4   // copy succeeded → failed during conversion
-      if (copyStarted || validatedOk) return 2  // failed during copy
-      return 1  // failed during validation
+      // 'Migrating' condition is set when "Converting disk" event fires (first line of ConvertVolumes).
+      // This is the only reliable signal that conversion started, for both regular and HotAdd migrations
+      // (HotAdd doesn't fire "Copying disk" events, so DataCopy condition is never set for HotAdd).
+      const convertStarted = conditions.some((c) => c.type === 'Migrating' && c.status === 'True')
+      if (convertStarted) return 4
+      if (copyStarted || validatedOk) return 2
+      return 1
     }
     default:
       return 0
