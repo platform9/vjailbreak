@@ -10,6 +10,7 @@ interface VMAutocompleteProps {
   value: VMOption | null
   onChange: (vm: VMOption | null) => void
   credSelected: boolean
+  registeredVMNames?: Set<string>
 }
 
 function VMInfoText({ vm }: { vm: VMOption }) {
@@ -27,7 +28,8 @@ export default function VMAutocomplete({
   disabled,
   value,
   onChange,
-  credSelected
+  credSelected,
+  registeredVMNames = new Set()
 }: VMAutocompleteProps) {
   return (
     <Box sx={{ display: 'grid', gap: 1 }}>
@@ -41,6 +43,7 @@ export default function VMAutocomplete({
           onChange={(_, v) => onChange(v)}
           getOptionLabel={(o) => o.name}
           isOptionEqualToValue={(a, b) => a.name === b.name}
+          getOptionDisabled={(o) => registeredVMNames.has(o.name)}
           filterOptions={(opts, { inputValue }) => {
             const q = inputValue.toLowerCase()
             return opts.filter(
@@ -62,23 +65,40 @@ export default function VMAutocomplete({
               }
             />
           )}
-          renderOption={(props, option) => (
-            <Box component="li" {...props} key={option.name}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                <FiberManualRecordIcon
-                  sx={{
-                    fontSize: 10,
-                    color: option.powerState === 'running' ? 'success.main' : 'text.disabled',
-                    flexShrink: 0
-                  }}
-                />
-                <Typography variant="body2" sx={{ flex: 1 }}>
-                  {option.name}
-                </Typography>
-                <VMInfoText vm={option} />
+          renderOption={(props, option) => {
+            const isRegistered = registeredVMNames.has(option.name)
+            return (
+              <Box component="li" {...props} key={option.name}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                  <FiberManualRecordIcon
+                    sx={{
+                      fontSize: 10,
+                      color:
+                        isRegistered
+                          ? 'text.disabled'
+                          : option.powerState === 'running'
+                            ? 'success.main'
+                            : 'text.disabled',
+                      flexShrink: 0
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{ flex: 1, color: isRegistered ? 'text.disabled' : 'inherit' }}
+                  >
+                    {option.name}
+                  </Typography>
+                  {isRegistered ? (
+                    <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+                      Already registered
+                    </Typography>
+                  ) : (
+                    <VMInfoText vm={option} />
+                  )}
+                </Box>
               </Box>
-            </Box>
-          )}
+            )
+          }}
           noOptionsText={!credSelected ? 'Select credentials first' : 'No powered-on VMs found'}
           slotProps={{ paper: { sx: { mt: 0.5 } } }}
         />

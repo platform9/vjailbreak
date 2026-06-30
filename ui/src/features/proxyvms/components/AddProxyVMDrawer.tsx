@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, LinearProgress, Typography } from '@mui/material'
 import CloudDownloadOutlinedIcon from '@mui/icons-material/CloudDownloadOutlined'
 import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined'
@@ -13,7 +13,7 @@ import {
   getVCenterResources,
   getProxyVMList
 } from 'src/api/proxyvms/proxyVMs'
-import { PROXY_VMS_QUERY_KEY } from 'src/hooks/api/useProxyVMsQuery'
+import { PROXY_VMS_QUERY_KEY, useProxyVMsQuery } from 'src/hooks/api/useProxyVMsQuery'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { generateSSHKeyPair, deleteSSHKeyPair } from 'src/api/sshKeyPairs/sshKeyPairs'
 import { getVMwareMachines } from 'src/api/vmware-machines/vmwareMachines'
@@ -69,6 +69,12 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
   const credOptions = vmwareCreds
     .filter((c) => c.status?.vmwareValidationStatus?.toLowerCase() === 'succeeded')
     .map((c) => ({ label: c.metadata.name, value: c.metadata.name }))
+
+  const { data: existingProxyVMs = [] } = useProxyVMsQuery(undefined, { enabled: open })
+  const registeredVMNames = useMemo(
+    () => new Set(existingProxyVMs.map((vm) => vm.spec.vmName)),
+    [existingProxyVMs]
+  )
 
   const selectForm = useForm<SelectFormData>({
     defaultValues: { vmwareCredsRef: '', vmName: '', sshPrivateKey: '', authorizedKeysConfirmed: false },
@@ -436,6 +442,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               onCopy={handleCopy}
               onKeyFileUpload={handleKeyFileUpload}
               onSubmitErrorChange={setSubmitError}
+              registeredVMNames={registeredVMNames}
             />
           )}
 
