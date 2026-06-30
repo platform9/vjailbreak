@@ -51,9 +51,11 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
       return 5
     case Phase.Failed: {
       const validatedOk = conditions.some((c) => c.type === 'Validated' && c.status === 'True')
+      const copyCompleted = conditions.some((c) => c.type === 'DataCopy' && c.status === 'True')
       const copyStarted = conditions.some((c) => c.type === 'DataCopy')
-      if (copyStarted || validatedOk) return 2
-      return 1
+      if (copyCompleted) return 4   // copy succeeded → failed during conversion
+      if (copyStarted || validatedOk) return 2  // failed during copy
+      return 1  // failed during validation
     }
     default:
       return 0
