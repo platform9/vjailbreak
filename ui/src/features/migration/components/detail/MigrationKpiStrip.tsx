@@ -2,7 +2,6 @@ import { Box, Divider, Typography } from '@mui/material'
 import { Migration } from '../../api/migrations'
 import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResourcesQuery'
 import { calculateTimeElapsed } from 'src/utils'
-import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 
 function KpiCell({
