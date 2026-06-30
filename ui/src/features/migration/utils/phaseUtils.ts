@@ -36,6 +36,11 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
       return 1
     case Phase.CopyingBlocks:
     case Phase.CopyingChangedBlocks:
+    case Phase.SnapshottingSourceVM:
+    case Phase.AttachingDisksToProxy:
+    case Phase.IdentifyingBlockDevices:
+    case Phase.HotAddTransferInProgress:
+    case Phase.HotAddCleanup:
       return 2
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
@@ -104,15 +109,19 @@ function activeDetail(migration: Migration, designIndex: number): string {
     case 0: return 'Waiting for available agent.'
     case 1: return 'Running pre-flight checks…'
     case 2: {
-      if (status?.currentDisk && status?.totalDisks) {
-        return `Disk ${status.currentDisk} of ${status.totalDisks}`
+      if (status?.currentDisk != null && status?.totalDisks) {
+        const diskNum = parseInt(String(status.currentDisk), 10)
+        const display = Number.isNaN(diskNum) ? status.currentDisk : diskNum + 1
+        return `Disk ${display} of ${status.totalDisks}`
       }
       return 'Transferring disk data…'
     }
     case 3: return 'Waiting for admin to initiate cutover.'
     case 4: {
-      if (status?.currentDisk && status?.totalDisks) {
-        return `Converting disk ${status.currentDisk} of ${status.totalDisks}`
+      if (status?.currentDisk != null && status?.totalDisks) {
+        const diskNum = parseInt(String(status.currentDisk), 10)
+        const display = Number.isNaN(diskNum) ? status.currentDisk : diskNum + 1
+        return `Converting disk ${display} of ${status.totalDisks}`
       }
       return 'Converting disk format…'
     }
@@ -253,9 +262,14 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     case Phase.Validating:            return 'Validating'
     case Phase.ValidationFailed:      return 'Validation Failed'
     case Phase.AwaitingDataCopyStart: return 'Awaiting Copy Start'
-    case Phase.CopyingBlocks:         return 'Copying Blocks'
-    case Phase.CopyingChangedBlocks:  return 'Copying Changed Blocks'
-    case Phase.ConvertingDisk:        return 'Converting Disk'
+    case Phase.CopyingBlocks:             return 'Copying Blocks'
+    case Phase.CopyingChangedBlocks:      return 'Copying Changed Blocks'
+    case Phase.SnapshottingSourceVM:      return 'Snapshotting Source VM'
+    case Phase.AttachingDisksToProxy:     return 'Attaching Disks to Proxy'
+    case Phase.IdentifyingBlockDevices:   return 'Identifying Block Devices'
+    case Phase.HotAddTransferInProgress:  return 'HotAdd Transfer In Progress'
+    case Phase.HotAddCleanup:             return 'HotAdd Cleanup'
+    case Phase.ConvertingDisk:            return 'Converting Disk'
     case Phase.AwaitingAdminCutOver:  return 'Awaiting Admin Cutover'
     case Phase.AwaitingCutOverStartTime: return 'Awaiting Cutover Window'
     case Phase.Succeeded:             return 'Succeeded'

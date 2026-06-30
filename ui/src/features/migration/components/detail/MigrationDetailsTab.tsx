@@ -193,6 +193,15 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const useGPUFlavor = templateSpec?.useGPUFlavor === true
   const storageCopyMethod = (templateSpec?.storageCopyMethod as string) || 'normal'
   const isStorageAcceleratedCopy = storageCopyMethod === 'StorageAcceleratedCopy'
+  const isHotAdd = storageCopyMethod === 'HotAdd'
+
+  const COPY_METHOD_LABELS: Record<string, string> = {
+    normal: 'Standard Copy',
+    StorageAcceleratedCopy: 'Storage Accelerated Copy',
+    HotAdd: 'vJailbreak Accelerated Copy',
+  }
+  const dataCopyMethodLabel = COPY_METHOD_LABELS[storageCopyMethod] ?? storageCopyMethod
+  const proxyVMName = (templateSpec?.proxyVMRef?.name as string) || 'N/A'
 
   const vmSpec = (data?.vmwareMachine?.spec as any)?.vms || {}
   const vmMeta = (data?.vmwareMachine?.metadata as any) || {}
@@ -459,6 +468,8 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
     () => [
       { label: 'VM Name', value: displayVmName || 'N/A' },
       { label: 'Migration Type', value: migrationType },
+      { label: 'Data Copy Method', value: dataCopyMethodLabel },
+      ...(isHotAdd ? [{ label: 'vJailbreak Proxy VM', value: proxyVMName }] : []),
       { label: 'Created At', value: createdAt },
       { label: 'Guest OS', value: guestOS },
       { label: 'CPU', value: cpu },
@@ -468,7 +479,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       { label: 'vJailbreak Agent', value: (migrationStatus?.agentName as string) || 'N/A' },
       { label: 'RDM Disks', value: rdmDisksSummary },
     ],
-    [cpu, createdAt, diskCount, displayVmName, guestOS, memory, migrationStatus?.agentName, migrationType, networkAdapterCount, rdmDisksSummary]
+    [cpu, createdAt, dataCopyMethodLabel, diskCount, displayVmName, guestOS, isHotAdd, memory, migrationStatus?.agentName, migrationType, networkAdapterCount, proxyVMName, rdmDisksSummary]
   )
 
   const migrationEnvironmentValues = useMemo(
