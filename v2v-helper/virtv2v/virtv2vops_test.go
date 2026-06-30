@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -311,4 +312,126 @@ func TestConvertDisk_BlockDriverArg(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// buildWildcardNetplanYAML – guest netplan generation
+//
+// Regression coverage for the DHCP-migration bug: a NIC with no fixed IP (empty
+// non-nil slice, set upstream when preserveIP=false / "Fallback to DHCP") used to
+// be skipped, leaving the guest with no network config. It must now emit DHCP,
+// and when NO NIC has a fixed IP the output must be the name-wildcard catch-all
+// (robust to renamed interfaces / a reassigned MAC).
+// ---------------------------------------------------------------------------
+
+func TestBuildWildcardNetplanYAML(t *testing.T) {
+	tests := []struct {
+		name      string
+		macToIPs  map[string][]vm.IpEntry
+		gatewayIP map[string]string
+		macToDNS  map[string][]string
+		want      string
+	}{
+		{
+			name: "static single NIC with gateway and DNS",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {{IP: "10.0.0.5", Prefix: 24}},
+			},
+			gatewayIP: map[string]string{"aa:bb:cc:dd:ee:01": "10.0.0.1"},
+			macToDNS:  map[string][]string{"aa:bb:cc:dd:ee:01": {"8.8.8.8"}},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:bb:cc:dd:ee:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 10.0.0.5/24\n" +
+				"      routes:\n" +
+				"        - to: default\n" +
+				"          via: 10.0.0.1\n" +
+				"      nameservers:\n" +
+				"        addresses:\n" +
+				"          - 8.8.8.8\n",
+		},
+		{
+			name: "zero prefix defaults to /24",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {{IP: "192.168.1.50", Prefix: 0}},
+			},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:bb:cc:dd:ee:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 192.168.1.50/24\n",
+		},
+		{
+			// THE BUG: a single NIC with its IP cleared used to be skipped entirely.
+			name: "no fixed IP -> name-wildcard DHCP catch-all",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {},
+			},
+			want: netplanDHCPWildcard,
+		},
+		{
+			name:     "empty map -> name-wildcard DHCP catch-all",
+			macToIPs: map[string][]vm.IpEntry{},
+			want:     netplanDHCPWildcard,
+		},
+		{
+			name: "mixed static + DHCP NIC, deterministic sorted order",
+			macToIPs: map[string][]vm.IpEntry{
+				"bb:bb:bb:bb:bb:02": {},                             // DHCP (no fixed IP)
+				"aa:aa:aa:aa:aa:01": {{IP: "10.0.0.9", Prefix: 24}}, // static
+			},
+			gatewayIP: map[string]string{"aa:aa:aa:aa:aa:01": "10.0.0.1"},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:aa:aa:aa:aa:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 10.0.0.9/24\n" +
+				"      routes:\n" +
+				"        - to: default\n" +
+				"          via: 10.0.0.1\n" +
+				"    vj1:\n" +
+				"      match:\n" +
+				"        macaddress: bb:bb:bb:bb:bb:02\n" +
+				"      dhcp4: true\n" +
+				"      optional: true\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildWildcardNetplanYAML(tt.macToIPs, tt.gatewayIP, tt.macToDNS)
+			assert.Equal(t, tt.want, got, "netplan YAML mismatch")
+		})
+	}
+}
+
+// TestBuildWildcardNetplanYAML_DHCPNicNotSkipped is an explicit regression guard:
+// every NIC passed in must appear in the output (none silently dropped).
+func TestBuildWildcardNetplanYAML_DHCPNicNotSkipped(t *testing.T) {
+	macToIPs := map[string][]vm.IpEntry{
+		"aa:aa:aa:aa:aa:01": {{IP: "10.0.0.9", Prefix: 24}}, // static
+		"bb:bb:bb:bb:bb:02": {},                             // DHCP
+	}
+	got := buildWildcardNetplanYAML(macToIPs, nil, nil)
+	for mac := range macToIPs {
+		assert.Contains(t, got, "macaddress: "+mac,
+			"NIC %s must be present in the generated netplan", mac)
+	}
+	assert.Contains(t, got, "dhcp4: true", "the IP-less NIC must be configured for DHCP")
 }
