@@ -30,9 +30,7 @@ The condition that must be met is that the vJailbreak VM itself has access to KV
 ## Enabling Nested Virtualization
 
 ### Step 1 — Enable nested KVM on the compute host
-
-This is a kernel-module setting and cannot be controlled by `cpu_mode`. On each
-compute host that will run vjailbreak VMs:
+On each compute host that will run vjailbreak VMs:
 
 ```
 cat /sys/module/kvm_intel/parameters/nested   # expect Y (or 1)
