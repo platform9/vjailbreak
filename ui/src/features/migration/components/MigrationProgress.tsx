@@ -39,6 +39,11 @@ export default function MigrationProgress({ progressText, phase, syncWarningMess
         Phase.AwaitingDataCopyStart,
         Phase.CopyingBlocks,
         Phase.CopyingChangedBlocks,
+        Phase.SnapshottingSourceVM,
+        Phase.AttachingDisksToProxy,
+        Phase.IdentifyingBlockDevices,
+        Phase.HotAddTransferInProgress,
+        Phase.HotAddCleanup,
         Phase.ConvertingDisk,
         Phase.AwaitingCutOverStartTime
       ].includes(phase as Phase)
