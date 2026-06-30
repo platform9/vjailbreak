@@ -54,30 +54,22 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 
 ## Setting Up the Proxy VM
 
-### Option A: Deploy the Recommended OVA (Easiest)
+### Option A: Deploy from the vJailbreak UI (Easiest)
 
-Platform9 provides a pre-configured OVA with all required components installed:
+vJailbreak can deploy and register the Proxy VM in a single step directly from the UI:
 
-1. In vSphere Client, right-click the desired cluster or resource pool and select **Deploy OVF Template**
-2. Enter the following URL directly in the OVF source field:
-   ```
-   https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova
-   ```
-3. Follow the deployment wizard, selecting the target datastore and network
-4. Power on the VM once deployed
+1. Navigate to **Hot-Add Proxy** in the left sidebar
+2. Click **Add Proxy VM** and select **Deploy a new vJailbreak Proxy VM**
+3. Select your VMware credentials and fill in the deployment target (datacenter, datastore, network, and optionally a cluster or host)
+4. Enter a unique VM name and click **Deploy & Register VM**
 
-**Default credentials for the OVA:**
-
-| Field | Value |
-|-------|-------|
-| Username | `root` |
-| Password | `password` |
+vJailbreak will import the pre-configured OVA into vCenter, power the VM on, generate and inject an SSH key pair automatically, and register the Proxy VM — no manual key setup required. The VM appears in the list with status **Deploying** and transitions to **Ready** once verification completes (typically 3–5 minutes).
 
 :::caution
-Change the default password immediately after deployment in production environments.
+The OVA image uses default credentials (`root` / `password`) for the initial SSH key injection step. Change the root password on the VM after deployment in production environments.
 :::
 
-### Option B: Use a Custom Linux VM
+### Option B: Register an Existing Linux VM
 
 Any Linux VM can serve as the Proxy VM provided it meets the requirements. Install the necessary utilities:
 
@@ -108,27 +100,49 @@ This setting is required for vJailbreak to match attached disks to their block d
 
 ## SSH Key Configuration
 
-vJailbreak SSHes into the Proxy VM using a key pair you provide. The setup is straightforward:
+:::note
+This section applies to **Option B** (registering an existing VM). When using Option A (UI-based OVA deploy), SSH keys are generated and injected automatically — no manual key steps are needed.
+:::
 
-1. Generate a key pair **anywhere** — your workstation, a jump host, or the Proxy VM itself
-2. Place the **public key** in the Proxy VM's `authorized_keys` file
-3. Paste the **private key** into the vJailbreak UI when registering the Proxy VM
+When registering an existing VM, vJailbreak needs SSH access to the Proxy VM. The UI offers two ways to provide the key pair:
 
-vJailbreak stores the private key as a Kubernetes secret and uses it during verification and migration.
+### Sub-option 1: Let vJailbreak Generate the Key Pair
 
-#### Step 1: Generate a Key Pair
+1. In the **Add Proxy VM** drawer, select **Register an existing VM**
+2. Select your VMware credentials and the VM
+3. Under **SSH Access**, choose **Generate Key Pair** and click **Generate**
+4. The UI displays the public key — copy it and add it to the Proxy VM's `authorized_keys`:
+   ```bash
+   # On the Proxy VM (as root)
+   echo "<paste public key here>" >> ~/.ssh/authorized_keys
+   chmod 600 ~/.ssh/authorized_keys
+   ```
+5. Click **Register**
 
-Run this on any machine you have access to:
+vJailbreak stores the generated private key as a Kubernetes secret automatically.
+
+### Sub-option 2: Upload Your Own Private Key
+
+If you have an existing key pair already configured on the VM:
+
+1. Under **SSH Access**, choose **Upload Private Key**
+2. Upload the private key file or paste its contents into the text area
+3. Confirm the corresponding public key is already in the VM's `authorized_keys`
+4. Click **Register**
+
+vJailbreak stores the uploaded private key as a Kubernetes secret and uses it during verification and migration.
+
+#### Generating a Key Pair Manually
+
+If you prefer to generate the key pair yourself outside of vJailbreak:
 
 ```bash
 ssh-keygen -t rsa -b 4096 -f proxy_vm_key -N ""
 ```
 
 This produces two files:
-- `proxy_vm_key` — private key (paste this into vJailbreak)
+- `proxy_vm_key` — private key (upload this into vJailbreak)
 - `proxy_vm_key.pub` — public key (add this to the Proxy VM)
-
-#### Step 2: Add the Public Key to the Proxy VM
 
 On the Proxy VM, append the public key to root's `authorized_keys`:
 
@@ -145,14 +159,6 @@ If you have temporary password SSH access, you can use `ssh-copy-id` from your w
 
 ```bash
 ssh-copy-id -i proxy_vm_key.pub root@<proxy-vm-ip>
-```
-
-#### Step 3: Keep the Private Key Ready
-
-You will paste the contents of `proxy_vm_key` into the vJailbreak UI in the next step. Display it with:
-
-```bash
-cat proxy_vm_key
 ```
 
 :::note
@@ -312,7 +318,7 @@ If the migration is stuck after taking the snapshot and the source VM remains po
 2. If the Proxy VM became unavailable, the migration will not auto-recover — clean up manually:
    ```bash
    # Remove the snapshot from vCenter
-   govc snapshot.remove -vm "<source-vm>" "vjailbreak-<migration-id>"
+   govc snapshot.remove -vm "<source-vm>" "vjailbreak-hotadd-snap"
    ```
 3. Detach any disks vJailbreak attached to the Proxy VM before retrying
 
