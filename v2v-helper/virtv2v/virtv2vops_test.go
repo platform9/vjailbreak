@@ -95,41 +95,60 @@ func TestIsSUSEFamily(t *testing.T) {
 // correctly gates the call in the migration flow.
 // ---------------------------------------------------------------------------
 
-// TestMkinitrdLVMWrapperContent verifies the embedded wrapper script contains
-// the required translation logic and safety guards.
+// mkinitrdLVMWrapperFile is the on-disk source of the wrapper script that the
+// v2v-helper image ships at mkinitrdLVMWrapperPath. The script used to be an
+// embedded Go const (mkinitrdLVMWrapper) but was moved to
+// scripts/mkinitrd-lvm-wrapper.sh and is COPY'd into the image at build time, so
+// the tests now validate the file that actually ships. Relative to this package
+// dir (v2v-helper/virtv2v), the repo-root scripts/ dir is two levels up.
+var mkinitrdLVMWrapperFile = filepath.Join("..", "..", "scripts", "mkinitrd-lvm-wrapper.sh")
+
+// readMkinitrdLVMWrapper loads the wrapper script content from disk.
+func readMkinitrdLVMWrapper(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(mkinitrdLVMWrapperFile)
+	require.NoError(t, err, "wrapper script must exist at %s", mkinitrdLVMWrapperFile)
+	return string(b)
+}
+
+// TestMkinitrdLVMWrapperContent verifies the wrapper script contains the
+// required translation logic and safety guards.
 func TestMkinitrdLVMWrapperContent(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
+
 	// Verify the wrapper calls the original binary
-	assert.Contains(t, mkinitrdLVMWrapper, "/sbin/mkinitrd.orig",
+	assert.Contains(t, wrapper, "/sbin/mkinitrd.orig",
 		"wrapper must delegate to the backed-up original")
 
 	// Verify -d flag handling is present
-	assert.Contains(t, mkinitrdLVMWrapper, "-d",
+	assert.Contains(t, wrapper, "-d",
 		"wrapper must handle the -d flag")
 
 	// Verify /dev/mapper translation is present
-	assert.Contains(t, mkinitrdLVMWrapper, "/dev/mapper/",
+	assert.Contains(t, wrapper, "/dev/mapper/",
 		"wrapper must translate to /dev/mapper/ path")
 
 	// Verify argument-boundary preservation via xargs -0
-	assert.Contains(t, mkinitrdLVMWrapper, "xargs -0",
+	assert.Contains(t, wrapper, "xargs -0",
 		"wrapper must use xargs -0 to preserve argument boundaries across spaces")
 
 	// Verify temp-file cleanup on exit
-	assert.Contains(t, mkinitrdLVMWrapper, "trap",
+	assert.Contains(t, wrapper, "trap",
 		"wrapper must clean up temp file via trap")
 
 	// Verify shebang
-	assert.True(t, len(mkinitrdLVMWrapper) > 0 && mkinitrdLVMWrapper[0:2] == "#!",
+	assert.True(t, len(wrapper) > 0 && wrapper[0:2] == "#!",
 		"wrapper must start with a shebang")
 }
 
 // TestMkinitrdWrapperWritable verifies the wrapper can be written to disk with
 // correct permissions (mirrors the write step inside FixLegacyMkinitrd).
 func TestMkinitrdWrapperWritable(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
 	dir := t.TempDir()
 	wrapperPath := filepath.Join(dir, "mkinitrd-lvm-wrapper.sh")
 
-	err := os.WriteFile(wrapperPath, []byte(mkinitrdLVMWrapper), 0755)
+	err := os.WriteFile(wrapperPath, []byte(wrapper), 0755)
 	require.NoError(t, err, "wrapper should be writable")
 
 	info, err := os.Stat(wrapperPath)
@@ -139,7 +158,7 @@ func TestMkinitrdWrapperWritable(t *testing.T) {
 
 	content, err := os.ReadFile(wrapperPath)
 	require.NoError(t, err)
-	assert.Equal(t, mkinitrdLVMWrapper, string(content),
+	assert.Equal(t, wrapper, string(content),
 		"wrapper content must round-trip through disk without modification")
 }
 
@@ -293,4 +312,3 @@ func TestConvertDisk_BlockDriverArg(t *testing.T) {
 		})
 	}
 }
-
