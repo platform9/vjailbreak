@@ -27,6 +27,8 @@ The v2v-helper pod already mounts the host `/dev` directory into the pod at `/de
 
 The condition that must be met is that the vJailbreak VM itself has access to KVM, which requires nested virtualization to be enabled at every layer of the stack.
 
+⚠️ **Caution — this affects all VMs on the compute host, not just vjailbreak.**
+
 ## Enabling Nested Virtualization
 
 ### Step 1 — Enable nested KVM on the compute host
