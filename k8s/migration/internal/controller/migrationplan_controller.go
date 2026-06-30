@@ -45,6 +45,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1055,6 +1056,76 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+// buildCloudsYAMLEnvVars reads the credential Secret referenced by an
+// OpenstackCreds resource and, when it carries a clouds.yaml key, returns the
+// full set of OS_* env vars (auth, microversion floor, region/interface/TLS
+// settings) derived from the selected cloud entry.
+//
+// Without this, a clouds.yaml-keyed Secret mounted via EnvFrom on the v2v-helper
+// pod produces no usable env vars — the only key in the Secret is the literal
+// "clouds.yaml" string, which is not a valid POSIX env var name, so Kubernetes
+// silently skips it. The v2v-helper's authOptionsFromEnv then fails immediately
+// with "Missing environment variable OS_AUTH_URL".
+//
+// For legacy OS_*-keyed Secrets, returns nil — those env vars are auto-loaded
+// by the EnvFrom block in the pod spec. Errors are non-fatal at the call site;
+// the legacy path remains available even when this helper returns an error.
+func buildCloudsYAMLEnvVars(ctx context.Context, k3sclient client.Client, secretName, cloudName string) ([]corev1.EnvVar, error) {
+	secret := &corev1.Secret{}
+	if err := k3sclient.Get(ctx, types.NamespacedName{
+		Namespace: constants.NamespaceMigrationSystem,
+		Name:      secretName,
+	}, secret); err != nil {
+		return nil, fmt.Errorf("get credential Secret %s: %w", secretName, err)
+	}
+	if !utils.SecretContainsCloudsYAML(secret.Data) {
+		return nil, nil
+	}
+	cfg, err := utils.ParseCloudsYAML(secret.Data["clouds.yaml"], cloudName)
+	if err != nil {
+		return nil, fmt.Errorf("parse clouds.yaml in Secret %s: %w", secretName, err)
+	}
+
+	envVars := []corev1.EnvVar{}
+	addIfNonEmpty := func(name, value string) {
+		if value != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: name, Value: value})
+		}
+	}
+
+	// Core auth fields — always present for any auth_type.
+	addIfNonEmpty("OS_AUTH_URL", cfg.AuthOptions.IdentityEndpoint)
+	addIfNonEmpty("OS_REGION_NAME", cfg.RegionName)
+	addIfNonEmpty("OS_INTERFACE", cfg.Interface)
+	if cfg.Verify != nil && !*cfg.Verify {
+		envVars = append(envVars, corev1.EnvVar{Name: "OS_INSECURE", Value: "true"})
+	}
+
+	// Auth-method-specific fields.
+	switch cfg.AuthType {
+	case "v3applicationcredential":
+		addIfNonEmpty("OS_APPLICATION_CREDENTIAL_ID", cfg.AuthOptions.ApplicationCredentialID)
+		addIfNonEmpty("OS_APPLICATION_CREDENTIAL_SECRET", cfg.AuthOptions.ApplicationCredentialSecret)
+	default:
+		// v3password / password / empty: user + password + project scope.
+		addIfNonEmpty("OS_USERNAME", cfg.AuthOptions.Username)
+		addIfNonEmpty("OS_USERID", cfg.AuthOptions.UserID)
+		addIfNonEmpty("OS_PASSWORD", cfg.AuthOptions.Password)
+		addIfNonEmpty("OS_DOMAIN_NAME", cfg.AuthOptions.DomainName)
+		addIfNonEmpty("OS_USER_DOMAIN_NAME", cfg.AuthOptions.DomainName)
+		addIfNonEmpty("OS_PROJECT_NAME", cfg.AuthOptions.TenantName)
+		addIfNonEmpty("OS_TENANT_NAME", cfg.AuthOptions.TenantName)
+		addIfNonEmpty("OS_PROJECT_ID", cfg.AuthOptions.TenantID)
+	}
+
+	// Operator-configured microversion floor values.
+	for _, p := range utils.MicroversionsToEnvVars(cfg.Microversions) {
+		envVars = append(envVars, corev1.EnvVar{Name: p.Name, Value: p.Value})
+	}
+
+	return envVars, nil
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1064,6 +1135,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
+	openstackCloudName string,
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arrayCredsSecretRef string,
 ) error {
@@ -1108,6 +1180,24 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "FLAVORLESS_FLAVOR_ID",
 			Value: vmMachine.Spec.TargetFlavorID,
 		})
+	}
+
+	// When the credential Secret is clouds.yaml-keyed, EnvFrom silently
+	// skips the "clouds.yaml" key (not a valid POSIX env var name), so the
+	// v2v-helper pod receives no OS_* env vars and authOptionsFromEnv fails
+	// immediately. Parse the clouds.yaml here and inject the full set of
+	// OS_* env vars (auth fields per auth_type, region/interface/TLS, and
+	// the per-service microversion floor values) explicitly. For legacy
+	// OS_*-keyed Secrets this is a no-op — those env vars are auto-loaded
+	// by EnvFrom.
+	if openstackSecretRef != "" {
+		cloudsEnvVars, err := buildCloudsYAMLEnvVars(ctx, r.Client, openstackSecretRef, openstackCloudName)
+		if err != nil {
+			r.ctxlog.Info("could not derive OS_* env vars from credential Secret; legacy OS_* path will still be honored via EnvFrom",
+				"secret", openstackSecretRef, "err", err.Error())
+		} else {
+			envVars = append(envVars, cloudsEnvVars...)
+		}
 	}
 
 	// Get vjailbreak settings for pod resource configuration
@@ -1815,7 +1905,18 @@ func (r *MigrationPlanReconciler) checkStatusSuccess(ctx context.Context,
 		if !ok {
 			return false, errors.Wrap(err, "failed to convert credentials to OpenstackCreds")
 		}
-		if openstackCreds.Status.OpenStackValidationStatus != string(corev1.PodSucceeded) {
+		// Conditions are authoritative when present (the controller and the
+		// vpwned proxy both write them alongside the flat status field).
+		// Fall back to the legacy flat field only when the Conditions slice
+		// is entirely empty — that case exists for pre-upgrade resources
+		// not yet re-reconciled by the upgraded OpenstackCreds controller.
+		var ready bool
+		if len(openstackCreds.Status.Conditions) > 0 {
+			ready = meta.IsStatusConditionTrue(openstackCreds.Status.Conditions, utils.ConditionCredentialsValidated)
+		} else {
+			ready = openstackCreds.Status.OpenStackValidationStatus == string(corev1.PodSucceeded)
+		}
+		if !ready {
 			return false, errors.Errorf("openstackcreds '%s' CR is not validated", openstackCreds.Name)
 		}
 	}
@@ -2114,6 +2215,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
+			openstackcreds.Spec.CloudName,
 			vmMachineObj,
 			arraycredsSecretRef)
 		if err != nil {

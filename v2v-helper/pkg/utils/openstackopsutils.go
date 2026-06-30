@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/pkg/common/microversion"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -303,7 +304,7 @@ func (osclient *OpenStackClients) AttachVolumeToVM(ctx context.Context, volumeID
 		return fmt.Errorf("failed to get instance ID: %s", err)
 	}
 	PrintLog(fmt.Sprintf("OPENSTACK API: Attaching volume %s to VM %s, authurl %s, tenant %s", volumeID, instanceID, osclient.AuthURL, osclient.Tenant))
-	osclient.ComputeClient.Microversion = "2.60"
+	osclient.ComputeClient.Microversion = microversion.Floor(os.Getenv("OS_COMPUTE_API_VERSION"), "2.60")
 
 	vjailbreakSettings, err := k8sutils.GetVjailbreakSettings(ctx, osclient.K8sClient)
 	if err != nil {
@@ -937,7 +938,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		// 400 ("'none' is not of type 'array'") because pre-2.37 the
 		// networks field is schema-typed as an array. The RDM path below
 		// bumps to "2.60" when needed; "2.37" is the floor for "none".
-		osclient.ComputeClient.Microversion = "2.37"
+		osclient.ComputeClient.Microversion = microversion.Floor(os.Getenv("OS_COMPUTE_API_VERSION"), "2.37")
 		serverCreateOpts.Networks = "none"
 		PrintLog(fmt.Sprintf(
 			"VM %s has no network interfaces; creating server with networks='none' at compute microversion 2.37",
@@ -1034,8 +1035,9 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	}
 
 	for _, disk := range vminfo.RDMDisks {
-		// Set the Nova API version to 2.6
-		osclient.ComputeClient.Microversion = "2.60"
+		// Set the Nova API version to 2.60 (multi-attach support), honoring the
+		// operator-configured floor if higher.
+		osclient.ComputeClient.Microversion = microversion.Floor(os.Getenv("OS_COMPUTE_API_VERSION"), "2.60")
 		blockDevice := servers.BlockDevice{
 			DeleteOnTermination: false,
 			DestinationType:     servers.DestinationVolume,
