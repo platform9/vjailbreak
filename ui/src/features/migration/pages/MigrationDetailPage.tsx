@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -12,6 +12,7 @@ import {
 import { useMigrationDetailQuery } from '../hooks/useMigrationDetailQuery'
 import { useMigrationDetailResourcesQuery } from 'src/hooks/api/useMigrationDetailResourcesQuery'
 import { isMigrationFailed } from '../utils/phaseUtils'
+import { Phase } from '../api/migrations'
 import {
   MigrationDetailHeader,
   MigrationKpiStrip,
@@ -30,6 +31,7 @@ export default function MigrationDetailPage() {
   const { migrationName } = useParams<{ migrationName: string }>()
   const navigate = useNavigate()
   const [tab, setTab] = useState<TabId>('overview')
+  const [cutoverTriggered, setCutoverTriggered] = useState(false)
 
   const {
     data: migration,
@@ -42,6 +44,32 @@ export default function MigrationDetailPage() {
     open: true,
     migration: migration ?? null,
   })
+
+  // After admin triggers cutover, poll aggressively until the phase advances past CopyingChangedBlocks
+  useEffect(() => {
+    if (!cutoverTriggered) return
+    const id = setInterval(() => { refetch() }, 2000)
+    return () => clearInterval(id)
+  }, [cutoverTriggered, refetch])
+
+  // Stop aggressive polling once migration moves past the final-delta-sync phase
+  useEffect(() => {
+    if (!cutoverTriggered) return
+    const phase = migration?.status?.phase as Phase | undefined
+    if (
+      phase &&
+      phase !== Phase.AwaitingAdminCutOver &&
+      phase !== Phase.AwaitingCutOverStartTime &&
+      phase !== Phase.CopyingChangedBlocks
+    ) {
+      setCutoverTriggered(false)
+    }
+  }, [cutoverTriggered, migration?.status?.phase])
+
+  const handleCutoverSuccess = useCallback(() => {
+    setCutoverTriggered(true)
+    refetch()
+  }, [refetch])
 
   if (!migrationName) {
     return <Alert severity="error">No migration name provided.</Alert>
@@ -77,7 +105,7 @@ export default function MigrationDetailPage() {
       <MigrationDetailHeader
         migration={migration}
         onBack={() => navigate('/dashboard/migrations')}
-        onCutoverSuccess={() => refetch()}
+        onCutoverSuccess={handleCutoverSuccess}
         resources={resources}
       />
 
@@ -102,10 +130,10 @@ export default function MigrationDetailPage() {
       {/* Overview tab */}
       {tab === 'overview' && (
         <Box>
-          <MigrationPhaseStepper migration={migration} />
+          <MigrationPhaseStepper migration={migration} cutoverTriggered={cutoverTriggered} />
           {failed
             ? <MigrationErrorCard migration={migration} />
-            : <MigrationPhaseDetail migration={migration} onCutoverSuccess={() => refetch()} />
+            : <MigrationPhaseDetail migration={migration} onCutoverSuccess={handleCutoverSuccess} />
           }
         </Box>
       )}

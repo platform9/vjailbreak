@@ -5,7 +5,10 @@ export type MigrationEnvironmentFieldKey =
   | 'destinationTenant'
   | 'destinationCluster'
 
-export const MIGRATION_ENVIRONMENT_FIELDS: Array<{ key: MigrationEnvironmentFieldKey; label: string }> = [
+export const MIGRATION_ENVIRONMENT_FIELDS: Array<{
+  key: MigrationEnvironmentFieldKey
+  label: string
+}> = [
   { key: 'sourceDatacenter', label: 'Datacenter' },
   { key: 'sourceCluster', label: 'Source Cluster' },
   { key: 'esxiHost', label: 'ESX Host' },
@@ -33,7 +36,7 @@ export const MIGRATION_POLICY_FIELDS: Array<{ key: MigrationPolicyFieldKey; labe
   { key: 'scheduleDataCopy', label: 'Schedule Data Copy' },
   { key: 'cutoverPolicy', label: 'Cutover Policy' },
   { key: 'renameSuffix', label: 'Rename Suffix' },
-  { key: 'folderName', label: 'Folder Name' },
+  { key: 'folderName', label: 'Move to folder in VMware' },
   { key: 'disconnectSourceNetwork', label: 'Disconnect source network' },
   { key: 'fallbackToDhcp', label: 'Fallback to DHCP' },
   { key: 'networkPersistence', label: 'Persist source network' },

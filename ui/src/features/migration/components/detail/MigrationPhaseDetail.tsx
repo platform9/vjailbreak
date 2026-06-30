@@ -105,6 +105,37 @@ function CopyingPhaseDetail({ migration }: { migration: Migration }) {
   )
 }
 
+// ─── Converting Disk ─────────────────────────────────────────────────────────
+
+function ConvertingDiskDetail({ migration }: { migration: Migration }) {
+  const status = migration.status
+  const totalDisks = status?.totalDisks
+
+  return (
+    <Box
+      sx={{
+        p: 3,
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        mb: 2,
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        Currently · Converting Disk
+      </Typography>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+        Converting Disk Format
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {`Converting ${totalDisks != null ? `${totalDisks} ` : ''}disk${totalDisks !== 1 ? 's' : ''} from VMDK to target format using virt-v2v.`}
+      </Typography>
+      <LinearProgress variant="indeterminate" sx={{ height: 6, borderRadius: 3 }} />
+    </Box>
+  )
+}
+
 // ─── Awaiting Cutover ─────────────────────────────────────────────────────────
 
 const CUTOVER_CHECKLIST = [
@@ -364,9 +395,11 @@ export default function MigrationPhaseDetail({
   switch (phase) {
     case Phase.CopyingBlocks:
     case Phase.CopyingChangedBlocks:
-    case Phase.ConvertingDisk:
     case Phase.AwaitingDataCopyStart:
       return <CopyingPhaseDetail migration={migration} />
+
+    case Phase.ConvertingDisk:
+      return <ConvertingDiskDetail migration={migration} />
 
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
