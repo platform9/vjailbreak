@@ -136,11 +136,7 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if connErr := sshClient.Connect(connectCtx, state.ip, "root", privateKey); connErr != nil {
-		proxyVM.Status.ValidationMessage = fmt.Sprintf("SSH connection to Proxy VM %s failed (retrying): %v", state.ip, connErr)
-		if updateErr := r.Status().Update(ctx, proxyVM); updateErr != nil && !apierrors.IsNotFound(updateErr) {
-			return ctrl.Result{}, updateErr
-		}
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("SSH connection to Proxy VM %s failed: %v", state.ip, connErr))
 	}
 	defer func() {
 		if discErr := sshClient.Disconnect(); discErr != nil {
