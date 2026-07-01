@@ -734,8 +734,16 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   )
 
   const onResetDefaults = useCallback(() => {
+    if (isTimeSettingsDisabled) {
+      rhfForm.reset({
+        ...DEFAULTS,
+        TIMEZONE: form.TIMEZONE,
+        NTP_SERVERS: form.NTP_SERVERS
+      })
+      return
+    }
     rhfForm.reset({ ...DEFAULTS })
-  }, [rhfForm])
+  }, [rhfForm, isTimeSettingsDisabled, form.TIMEZONE, form.NTP_SERVERS])
 
   const onSave = useCallback(
     async (e: React.FormEvent) => {
