@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,41 +96,60 @@ func TestIsSUSEFamily(t *testing.T) {
 // correctly gates the call in the migration flow.
 // ---------------------------------------------------------------------------
 
-// TestMkinitrdLVMWrapperContent verifies the embedded wrapper script contains
-// the required translation logic and safety guards.
+// mkinitrdLVMWrapperFile is the on-disk source of the wrapper script that the
+// v2v-helper image ships at mkinitrdLVMWrapperPath. The script used to be an
+// embedded Go const (mkinitrdLVMWrapper) but was moved to
+// scripts/mkinitrd-lvm-wrapper.sh and is COPY'd into the image at build time, so
+// the tests now validate the file that actually ships. Relative to this package
+// dir (v2v-helper/virtv2v), the repo-root scripts/ dir is two levels up.
+var mkinitrdLVMWrapperFile = filepath.Join("..", "..", "scripts", "mkinitrd-lvm-wrapper.sh")
+
+// readMkinitrdLVMWrapper loads the wrapper script content from disk.
+func readMkinitrdLVMWrapper(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(mkinitrdLVMWrapperFile)
+	require.NoError(t, err, "wrapper script must exist at %s", mkinitrdLVMWrapperFile)
+	return string(b)
+}
+
+// TestMkinitrdLVMWrapperContent verifies the wrapper script contains the
+// required translation logic and safety guards.
 func TestMkinitrdLVMWrapperContent(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
+
 	// Verify the wrapper calls the original binary
-	assert.Contains(t, mkinitrdLVMWrapper, "/sbin/mkinitrd.orig",
+	assert.Contains(t, wrapper, "/sbin/mkinitrd.orig",
 		"wrapper must delegate to the backed-up original")
 
 	// Verify -d flag handling is present
-	assert.Contains(t, mkinitrdLVMWrapper, "-d",
+	assert.Contains(t, wrapper, "-d",
 		"wrapper must handle the -d flag")
 
 	// Verify /dev/mapper translation is present
-	assert.Contains(t, mkinitrdLVMWrapper, "/dev/mapper/",
+	assert.Contains(t, wrapper, "/dev/mapper/",
 		"wrapper must translate to /dev/mapper/ path")
 
 	// Verify argument-boundary preservation via xargs -0
-	assert.Contains(t, mkinitrdLVMWrapper, "xargs -0",
+	assert.Contains(t, wrapper, "xargs -0",
 		"wrapper must use xargs -0 to preserve argument boundaries across spaces")
 
 	// Verify temp-file cleanup on exit
-	assert.Contains(t, mkinitrdLVMWrapper, "trap",
+	assert.Contains(t, wrapper, "trap",
 		"wrapper must clean up temp file via trap")
 
 	// Verify shebang
-	assert.True(t, len(mkinitrdLVMWrapper) > 0 && mkinitrdLVMWrapper[0:2] == "#!",
+	assert.True(t, len(wrapper) > 0 && wrapper[0:2] == "#!",
 		"wrapper must start with a shebang")
 }
 
 // TestMkinitrdWrapperWritable verifies the wrapper can be written to disk with
 // correct permissions (mirrors the write step inside FixLegacyMkinitrd).
 func TestMkinitrdWrapperWritable(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
 	dir := t.TempDir()
 	wrapperPath := filepath.Join(dir, "mkinitrd-lvm-wrapper.sh")
 
-	err := os.WriteFile(wrapperPath, []byte(mkinitrdLVMWrapper), 0755)
+	err := os.WriteFile(wrapperPath, []byte(wrapper), 0755)
 	require.NoError(t, err, "wrapper should be writable")
 
 	info, err := os.Stat(wrapperPath)
@@ -139,7 +159,7 @@ func TestMkinitrdWrapperWritable(t *testing.T) {
 
 	content, err := os.ReadFile(wrapperPath)
 	require.NoError(t, err)
-	assert.Equal(t, mkinitrdLVMWrapper, string(content),
+	assert.Equal(t, wrapper, string(content),
 		"wrapper content must round-trip through disk without modification")
 }
 
@@ -294,3 +314,124 @@ func TestConvertDisk_BlockDriverArg(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// buildWildcardNetplanYAML – guest netplan generation
+//
+// Regression coverage for the DHCP-migration bug: a NIC with no fixed IP (empty
+// non-nil slice, set upstream when preserveIP=false / "Fallback to DHCP") used to
+// be skipped, leaving the guest with no network config. It must now emit DHCP,
+// and when NO NIC has a fixed IP the output must be the name-wildcard catch-all
+// (robust to renamed interfaces / a reassigned MAC).
+// ---------------------------------------------------------------------------
+
+func TestBuildWildcardNetplanYAML(t *testing.T) {
+	tests := []struct {
+		name      string
+		macToIPs  map[string][]vm.IpEntry
+		gatewayIP map[string]string
+		macToDNS  map[string][]string
+		want      string
+	}{
+		{
+			name: "static single NIC with gateway and DNS",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {{IP: "10.0.0.5", Prefix: 24}},
+			},
+			gatewayIP: map[string]string{"aa:bb:cc:dd:ee:01": "10.0.0.1"},
+			macToDNS:  map[string][]string{"aa:bb:cc:dd:ee:01": {"8.8.8.8"}},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:bb:cc:dd:ee:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 10.0.0.5/24\n" +
+				"      routes:\n" +
+				"        - to: default\n" +
+				"          via: 10.0.0.1\n" +
+				"      nameservers:\n" +
+				"        addresses:\n" +
+				"          - 8.8.8.8\n",
+		},
+		{
+			name: "zero prefix defaults to /24",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {{IP: "192.168.1.50", Prefix: 0}},
+			},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:bb:cc:dd:ee:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 192.168.1.50/24\n",
+		},
+		{
+			// THE BUG: a single NIC with its IP cleared used to be skipped entirely.
+			name: "no fixed IP -> name-wildcard DHCP catch-all",
+			macToIPs: map[string][]vm.IpEntry{
+				"aa:bb:cc:dd:ee:01": {},
+			},
+			want: netplanDHCPWildcard,
+		},
+		{
+			name:     "empty map -> name-wildcard DHCP catch-all",
+			macToIPs: map[string][]vm.IpEntry{},
+			want:     netplanDHCPWildcard,
+		},
+		{
+			name: "mixed static + DHCP NIC, deterministic sorted order",
+			macToIPs: map[string][]vm.IpEntry{
+				"bb:bb:bb:bb:bb:02": {},                             // DHCP (no fixed IP)
+				"aa:aa:aa:aa:aa:01": {{IP: "10.0.0.9", Prefix: 24}}, // static
+			},
+			gatewayIP: map[string]string{"aa:aa:aa:aa:aa:01": "10.0.0.1"},
+			want: "network:\n" +
+				"  version: 2\n" +
+				"  renderer: networkd\n" +
+				"  ethernets:\n" +
+				"    vj0:\n" +
+				"      match:\n" +
+				"        macaddress: aa:aa:aa:aa:aa:01\n" +
+				"      dhcp4: false\n" +
+				"      addresses:\n" +
+				"        - 10.0.0.9/24\n" +
+				"      routes:\n" +
+				"        - to: default\n" +
+				"          via: 10.0.0.1\n" +
+				"    vj1:\n" +
+				"      match:\n" +
+				"        macaddress: bb:bb:bb:bb:bb:02\n" +
+				"      dhcp4: true\n" +
+				"      optional: true\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildWildcardNetplanYAML(tt.macToIPs, tt.gatewayIP, tt.macToDNS)
+			assert.Equal(t, tt.want, got, "netplan YAML mismatch")
+		})
+	}
+}
+
+// TestBuildWildcardNetplanYAML_DHCPNicNotSkipped is an explicit regression guard:
+// every NIC passed in must appear in the output (none silently dropped).
+func TestBuildWildcardNetplanYAML_DHCPNicNotSkipped(t *testing.T) {
+	macToIPs := map[string][]vm.IpEntry{
+		"aa:aa:aa:aa:aa:01": {{IP: "10.0.0.9", Prefix: 24}}, // static
+		"bb:bb:bb:bb:bb:02": {},                             // DHCP
+	}
+	got := buildWildcardNetplanYAML(macToIPs, nil, nil)
+	for mac := range macToIPs {
+		assert.Contains(t, got, "macaddress: "+mac,
+			"NIC %s must be present in the generated netplan", mac)
+	}
+	assert.Contains(t, got, "dhcp4: true", "the IP-less NIC must be configured for DHCP")
+}
