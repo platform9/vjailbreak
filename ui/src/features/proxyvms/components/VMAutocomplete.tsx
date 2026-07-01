@@ -116,8 +116,7 @@ export default function VMAutocomplete({
 
       {!value && credSelected && (
         <Typography variant="caption" color="text.secondary">
-          Only powered-on VMs in the selected vCenter are listed — pick one instead of typing a
-          name.
+          Only powered-on Linux VMs from the selected vCenter are listed.
         </Typography>
       )}
 
