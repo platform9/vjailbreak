@@ -6,6 +6,7 @@ export interface VMOption {
   ipAddress?: string
   cpu: number
   powerState: string
+  osFamily?: string
 }
 
 export interface SelectFormData {

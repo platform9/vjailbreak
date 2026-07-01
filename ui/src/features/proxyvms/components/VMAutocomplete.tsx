@@ -43,7 +43,9 @@ export default function VMAutocomplete({
           onChange={(_, v) => onChange(v)}
           getOptionLabel={(o) => o.name}
           isOptionEqualToValue={(a, b) => a.name === b.name}
-          getOptionDisabled={(o) => registeredVMNames.has(o.name)}
+          getOptionDisabled={(o) =>
+            registeredVMNames.has(o.name) || o.osFamily !== 'linuxGuest'
+          }
           filterOptions={(opts, { inputValue }) => {
             const q = inputValue.toLowerCase()
             return opts.filter(
@@ -67,6 +69,8 @@ export default function VMAutocomplete({
           )}
           renderOption={(props, option) => {
             const isRegistered = registeredVMNames.has(option.name)
+            const isNonLinux = option.osFamily !== 'linuxGuest'
+            const isDisabled = isRegistered || isNonLinux
             return (
               <Box component="li" {...props} key={option.name}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
@@ -74,7 +78,7 @@ export default function VMAutocomplete({
                     sx={{
                       fontSize: 10,
                       color:
-                        isRegistered
+                        isDisabled
                           ? 'text.disabled'
                           : option.powerState === 'running'
                             ? 'success.main'
@@ -84,11 +88,17 @@ export default function VMAutocomplete({
                   />
                   <Typography
                     variant="body2"
-                    sx={{ flex: 1, color: isRegistered ? 'text.disabled' : 'inherit' }}
+                    sx={{ flex: 1, color: isDisabled ? 'text.disabled' : 'inherit' }}
                   >
                     {option.name}
                   </Typography>
-                  {isRegistered ? (
+                  {isNonLinux ? (
+                    <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+                      {option.osFamily === 'windowsGuest'
+                        ? 'Windows not supported'
+                        : 'Requires Linux OS'}
+                    </Typography>
+                  ) : isRegistered ? (
                     <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
                       Already registered
                     </Typography>
@@ -106,8 +116,7 @@ export default function VMAutocomplete({
 
       {!value && credSelected && (
         <Typography variant="caption" color="text.secondary">
-          Only powered-on VMs in the selected vCenter are listed — pick one instead of typing a
-          name.
+          Only powered-on Linux VMs from the selected vCenter are listed.
         </Typography>
       )}
 
