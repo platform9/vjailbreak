@@ -125,7 +125,8 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
             name: m.spec.vms.name,
             ipAddress: m.spec.vms.ipAddress || m.spec.vms.assignedIp,
             cpu: m.spec.vms.cpu,
-            powerState: m.status?.powerState ?? 'unknown'
+            powerState: m.status?.powerState ?? 'unknown',
+            osFamily: m.spec.vms.osFamily
           })
         )
     },
