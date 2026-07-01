@@ -222,14 +222,15 @@ export default function MigrationDetailModal({
     (vmMeta?.annotations?.['vjailbreak.k8s.pf9.io/datacenter'] as string) ||
     (templateSpec?.source?.datacenter as string) ||
     'N/A'
-  const sourceCluster =
-    (vmSpec?.clusterName as string) ||
-    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
-    'N/A'
   const esxiHost =
     (vmSpec?.esxiName as string) ||
     (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/esxi-name'] as string) ||
     'N/A'
+  const rawSourceCluster =
+    (vmSpec?.clusterName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
+    ''
+  const sourceCluster = rawSourceCluster && rawSourceCluster !== esxiHost ? rawSourceCluster : 'No cluster'
 
   const guestOS = (vmSpec?.osFamily as string) || 'N/A'
   const cpu = typeof vmSpec?.cpu === 'number' ? String(vmSpec.cpu) : 'N/A'

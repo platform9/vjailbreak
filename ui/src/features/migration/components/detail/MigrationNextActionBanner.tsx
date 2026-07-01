@@ -13,6 +13,11 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
   switch (phase) {
     case Phase.CopyingBlocks:
     case Phase.CopyingChangedBlocks:
+    case Phase.SnapshottingSourceVM:
+    case Phase.AttachingDisksToProxy:
+    case Phase.IdentifyingBlockDevices:
+    case Phase.HotAddTransferInProgress:
+    case Phase.HotAddCleanup:
     case Phase.ConvertingDisk:
     case Phase.AwaitingDataCopyStart:
     case Phase.Validating:
