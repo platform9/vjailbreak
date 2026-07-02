@@ -179,7 +179,8 @@ const TAB_META: Record<TabKey, { label: string; helper: string; icon: React.Reac
   },
   hosts: {
     label: 'Host Entries',
-    helper: 'Custom hostname-to-IP mappings injected into agent node VMs at provisioning time.',
+    helper:
+      'Custom hostname-to-IP mappings injected into agent node VMs at provisioning time. Supports ESXi hosts, vCenter, PCD, and OpenStack endpoints.',
     icon: <LanOutlinedIcon fontSize="small" />
   },
   vddk: {

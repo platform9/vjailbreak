@@ -157,29 +157,25 @@ export function HostEntriesTab({ value, onChange, disabled }: HostEntriesTabProp
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Custom hostname-to-IP mappings injected into agent nodes at provisioning time.
-          Supports ESXi hosts, vCenter, PCD, and OpenStack endpoints.
-        </Typography>
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={handleAddStart}
-          disabled={disabled || adding || editingIdx !== null}
-          data-testid="host-entries-add-btn"
-        >
-          Add Entry
-        </Button>
-      </Box>
-
       <TableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 600, width: '180px' }}>IP Address</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Hostnames (comma-separated)</TableCell>
-              <TableCell sx={{ width: '88px' }} />
+              <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disableElevation
+                  startIcon={<AddIcon />}
+                  onClick={handleAddStart}
+                  disabled={disabled || adding || editingIdx !== null}
+                  data-testid="host-entries-add-btn"
+                >
+                  Add Entry
+                </Button>
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -207,7 +203,7 @@ export function HostEntriesTab({ value, onChange, disabled }: HostEntriesTabProp
                       error={Boolean(editError)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     <Tooltip title="Save">
                       <IconButton size="small" onClick={handleEditConfirm} data-testid="host-entry-edit-save">
                         <CheckIcon fontSize="small" />
@@ -230,7 +226,7 @@ export function HostEntriesTab({ value, onChange, disabled }: HostEntriesTabProp
                   <TableCell>
                     <Typography variant="body2">{entry.hostnames.join(', ')}</Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     <Tooltip title="Edit">
                       <IconButton
                         size="small"
@@ -281,7 +277,7 @@ export function HostEntriesTab({ value, onChange, disabled }: HostEntriesTabProp
                     error={Boolean(addError)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                   <Tooltip title="Add">
                     <IconButton size="small" onClick={handleAddConfirm} data-testid="host-entry-add-confirm">
                       <CheckIcon fontSize="small" />
