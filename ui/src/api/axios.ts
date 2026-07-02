@@ -84,10 +84,16 @@ export const del = async <T>({ endpoint, baseUrl, config = {} }: BaseRequestPara
   return response.data
 }
 
+export const getBlob = async ({ endpoint, baseUrl, config }: BaseRequestParams) => {
+  const url = pathJoin(baseUrl || getDefaultBaseUrl(config), endpoint)
+  return axiosInstance.get<Blob>(url, { ...config, responseType: 'blob' })
+}
+
 export default {
   get,
   post,
   put,
   patch,
-  del
+  del,
+  getBlob,
 }

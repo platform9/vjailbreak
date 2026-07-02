@@ -10,6 +10,7 @@ import {
   MenuItem,
   Select,
   SelectChangeEvent,
+  Snackbar,
   Switch,
   TextField,
   Tooltip,
@@ -23,6 +24,8 @@ import SyncIcon from '@mui/icons-material/Sync'
 import { Migration, Phase } from '../../api/migrations'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { downloadDebugBundle } from 'src/api/migrations/debugBundle'
+import { useToast } from 'src/features/migration/hooks/useToast'
 
 const TERMINAL_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed, Phase.ValidationFailed]
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'SUCCESS'] as const
@@ -157,6 +160,7 @@ interface MigrationDetailDebugLogsProps {
 }
 
 export default function MigrationDetailDebugLogs({ migration }: MigrationDetailDebugLogsProps) {
+  const { toastOpen, toastMessage, toastSeverity, showToast, handleCloseToast } = useToast()
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState<LogLevel>('ALL')
   const [sourceFilter, setSourceFilter] = useState('ALL')
@@ -164,6 +168,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
   const [isPaused, setIsPaused] = useState(false)
   const [sessionKey, setSessionKey] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const phase = migration.status?.phase as Phase | undefined
@@ -234,17 +239,17 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
     setTimeout(() => setCopied(false), 2000)
   }, [filtered])
 
-  const handleDownload = useCallback(() => {
-    const blob = new Blob([filtered.join('\n')], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${podName || 'pod'}-logs.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, [filtered, podName])
+  const handleDownload = useCallback(async () => {
+    setIsDownloading(true)
+    try {
+      await downloadDebugBundle(migration.metadata?.name ?? '', namespace)
+    } catch (err) {
+      console.error('Debug bundle download failed:', err)
+      showToast('Failed to download debug bundle. The bundle may be too large.', 'error')
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [migration.metadata?.name, namespace, showToast])
 
   const handleReconnect = useCallback(() => {
     setSessionKey((k) => k + 1)
@@ -430,10 +435,19 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
             <ContentCopyIcon sx={{ fontSize: 17 }} />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Download logs">
-          <IconButton size="small" onClick={handleDownload} sx={{ color: 'text.secondary' }}>
-            <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+        <Tooltip title={isDownloading ? 'Downloading…' : 'Download debug bundle'}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={handleDownload}
+              disabled={isDownloading}
+              sx={{ color: 'text.secondary' }}
+            >
+              {isDownloading
+                ? <CircularProgress size={18} sx={{ color: 'text.secondary' }} />
+                : <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </span>
         </Tooltip>
         <Tooltip title="Reconnect">
           <IconButton size="small" onClick={handleReconnect} sx={{ color: 'text.secondary' }}>
@@ -553,6 +567,12 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         )}
         <div ref={bottomRef} />
       </Box>
+
+      <Snackbar open={toastOpen} autoHideDuration={6000} onClose={handleCloseToast} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
+        <Alert onClose={handleCloseToast} severity={toastSeverity} sx={{ width: '100%' }}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }
