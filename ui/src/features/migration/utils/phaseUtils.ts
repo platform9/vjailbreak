@@ -191,7 +191,7 @@ export function derivePhaseStates(
         i === 1 ? 'Validated' :
         i === 2 ? 'DataCopy' :
         i === 3 ? 'Migrating' :
-        i === 4 ? 'Migrated' :
+        i === 4 ? 'Migrating' :
         i === 5 ? 'Migrated' : ''
       const elapsed = conditionElapsed(creationTs?.toString(), conditions, condType) ?? null
       return { status: 'done', elapsed, detail: doneDetail(i, conditions), eta: null }
@@ -222,10 +222,13 @@ export function derivePhaseStates(
 
     // Active migration
     if (i < currentIndex) {
+      const condType =
+        i === 1 ? 'Validated' :
+        i === 2 ? 'DataCopy' :
+        i === 3 ? 'Migrating' : ''
       return {
         status: 'done',
-        elapsed: conditionElapsed(creationTs?.toString(), conditions,
-          i === 1 ? 'Validated' : i === 2 ? 'DataCopy' : '') ?? null,
+        elapsed: conditionElapsed(creationTs?.toString(), conditions, condType) ?? null,
         detail: doneDetail(i, conditions),
         eta: null,
       }
