@@ -4,7 +4,7 @@
 **Entry file**: `src/features/migration/pages/MigrationDetailPage.tsx`  
 **Feature branch**: `1980-enhance-user-experience-with-new-ui`  
 **Created**: 2026-06-12  
-**Last updated**: 2026-06-29 (session 4)  
+**Last updated**: 2026-07-02 (session 5)  
 **Status**: Implemented, visual-QA complete
 
 ---
@@ -424,6 +424,14 @@ Confirmation dialog spacing: `DialogTitle` `px:3, pt:3, pb:1` / `DialogContent` 
 - Uses `useDirectPodLogs({ podName, namespace, enabled: !isPaused, follow: isLive, sessionKey })`
 - `isLive = !isTerminal && !isPaused`
 
+**Download**: calls `downloadDebugBundle(migrationName, namespace)` from `src/api/migrations/debugBundle.ts`.
+- API: `GET /dev-api/sdk/vpw/v1/debug-bundle?migration=<name>&namespace=<ns>` (vpwned proxy)
+- Response: `text/plain` file with pod logs + K8s resource YAMLs + debug file logs
+- Filename from `Content-Disposition` response header; fallback `{migrationName}-debug-bundle.txt`
+- Download button shows `CircularProgress` while in-flight (`isDownloading` state)
+- On failure: `useToast` error toast (`Snackbar` top-right, 6s) — "Failed to download debug bundle. The bundle may be too large."
+- Known error: gRPC code 8 (`RESOURCE_EXHAUSTED`) when bundle exceeds 4 MB gRPC message limit — backend fix required
+
 **Toolbar** (single row, `flexWrap: 'nowrap'`, `overflowX: 'auto'`):
 - Search: full-width text input with search/clear icon
 - `LEVEL` label + Select (ALL/ERROR/WARN/INFO/DEBUG/SUCCESS)
@@ -431,7 +439,7 @@ Confirmation dialog spacing: `DialogTitle` `px:3, pt:3, pb:1` / `DialogContent` 
 - **Live indicator**: clickable `<button>` — pulsing green dot + "Live" text. Click toggles `isPaused`. Disabled (cursor: default) when `isTerminal`.
 - **Follow** switch (`Switch` + label) — auto-scrolls to bottom when enabled
 - Copy icon (`ContentCopyIcon`) — copies filtered lines to clipboard
-- Download icon (`FileDownloadOutlinedIcon`) — saves filtered lines as `.txt`
+- Download icon (`FileDownloadOutlinedIcon`) — triggers debug bundle download via API (see above)
 - Reconnect icon (`SyncIcon`) — increments `sessionKey`, calls `reconnect()`
 
 **Note**: Toolbar vertical dividers must use `width: '1px'` not `width: 1` — MUI sx treats `1` as `100%` (fraction).
@@ -632,3 +640,8 @@ server.use(cors({ origin: true, credentials: true }))
 | 2026-06-29 (s4) | **Grid alignment**: configured policy rows use `gridTemplateColumns: '220px 1fr'` (was flex + minWidth 200) — fixes long labels pushing value column. |
 | 2026-06-29 (s4) | **"Folder Name" → "Move VM to folder"**: label updated in `MIGRATION_POLICY_FIELDS`; default label `'Off'` (was `'Root'`). |
 | 2026-06-29 (s4) | **Refactor** `MigrationDetailsTab`: removed IIFE from JSX, moved `configuredCount`/`defaultCount`/`defaultRowCount` to component body, extracted `CHIP_SX` constant, stable `key={left.key}` in defaults grid. |
+| 2026-07-02 (s5) | **Download button — debug bundle API**: replaced blob-from-filtered-logs download with `GET /dev-api/sdk/vpw/v1/debug-bundle` API call. Bundle includes pod logs + K8s YAMLs + debug file logs. Filename from `Content-Disposition` header. |
+| 2026-07-02 (s5) | **Download loading state**: `isDownloading` state — button shows `CircularProgress` and is disabled during download. |
+| 2026-07-02 (s5) | **Download error toast**: `useToast` + `Snackbar` (top-right, 6s) surfaces download failures; previously silently `console.error` only. |
+| 2026-07-02 (s5) | **`getBlob` added to `src/api/axios.ts`**: returns full `AxiosResponse<Blob>` (not just `.data`) so callers access `Content-Disposition` header. |
+| 2026-07-02 (s5) | **`src/api/migrations/debugBundle.ts`** (new): `downloadDebugBundle(migrationName, namespace)` — dedicated API function following existing axios wrapper pattern. |
