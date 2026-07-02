@@ -59,10 +59,20 @@ spec:
           readOnly: true
         - mountPath: /etc/pf9
           name: pf9-config
+        - mountPath: /var/log/pf9
+          name: pf9-logs
+          readOnly: true
         envFrom:
         - configMapRef:
             name: pf9-env
             optional: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
       dnsConfig:
         options:
         - name: ndots
@@ -98,6 +108,10 @@ spec:
         hostPath:
           path: /etc/pf9
           type: Directory
+      - name: pf9-logs
+        hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

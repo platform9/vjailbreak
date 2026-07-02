@@ -4,6 +4,7 @@ syntax = "proto3";
 package api;
 
 import "google/api/annotations.proto";
+import "google/api/httpbody.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
 option go_package = "v1/service";
@@ -571,6 +572,26 @@ service VailbreakProxy {
         body: "*"
       };
     }
+
+    // GetDebugBundle returns a downloadable plain-text debug bundle for a
+    // migration: pod stdout/stderr logs, related Kubernetes resource YAMLs
+    // and debug logs from /var/log/pf9.
+    rpc GetDebugBundle(GetDebugBundleRequest) returns (google.api.HttpBody) {
+      option (google.api.http) = {
+        get: "/vpw/v1/debug-bundle"
+      };
+    }
+}
+
+message GetDebugBundleRequest {
+    // Migration CR name. Either migration or pod is required.
+    string migration = 1;
+    // v2v-helper pod name. Used to locate the migration via spec.podRef when
+    // migration is not set, and for the pod logs section.
+    string pod = 2;
+    // Namespace of the migration. Defaults to migration-system, which is
+    // also the only allowed value.
+    string namespace = 3;
 }
 
 message CleanupRequest {
