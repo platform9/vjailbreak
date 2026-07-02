@@ -7,8 +7,13 @@ import (
 )
 
 // maxDebugFileBytes caps each debug log file included from /var/log/pf9
-// (32 MiB per file).
-const maxDebugFileBytes = 32 << 20
+// (32 MiB per file). Variable so tests can shrink it.
+var maxDebugFileBytes = 32 << 20
+
+// maxDebugFilesTotalBytes caps the combined size of all debug log files in
+// one bundle (128 MiB). Together with the pod log cap this keeps the bundle
+// under the gateway's gRPC receive limit. Variable so tests can shrink it.
+var maxDebugFilesTotalBytes = 128 << 20
 
 // CollectDebugFileLogs reads the debug log files written under /var/log/pf9
 // (passed in as fsys) that belong to the given migration, mirroring the
@@ -27,7 +32,16 @@ func CollectDebugFileLogs(fsys fs.FS, migrationName string) string {
 		return fmt.Sprintf("[Failed to list debug logs directory: %v]\n", err)
 	}
 
+	truncated := false
 	appendFile := func(path, displayName string) {
+		if truncated {
+			return
+		}
+		if out.Len() >= maxDebugFilesTotalBytes {
+			truncated = true
+			out.WriteString(fmt.Sprintf("\n%s[Debug log size limit reached (%d MiB) — remaining files omitted]\n", sectionSeparator, maxDebugFilesTotalBytes>>20))
+			return
+		}
 		data, err := fs.ReadFile(fsys, path)
 		if err != nil {
 			out.WriteString(fmt.Sprintf("\n%sFILE: %s\n%s[failed to read: %v]\n", sectionSeparator, displayName, sectionSeparator, err))

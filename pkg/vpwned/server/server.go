@@ -108,6 +108,10 @@ func gRPCErrHandler(ctx context.Context, mux *runtime.ServeMux, m runtime.Marsha
 // download RPCs (e.g. GetDebugBundle) set to control the browser filename.
 const contentDispositionMetadataKey = "content-disposition"
 
+// maxGatewayRecvBytes is the receive limit for the gateway's loopback gRPC
+// connection (256 MiB), sized above the debug bundle content caps.
+const maxGatewayRecvBytes = 256 << 20
+
 // forwardDownloadHeaders promotes content-disposition gRPC header metadata
 // to a real HTTP Content-Disposition header so gateway responses can be
 // served as file downloads. Without this, the gateway would only expose it
@@ -167,6 +171,10 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	)
 	option := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Debug bundles (pod logs + CR YAMLs + /var/log/pf9 logs) far exceed
+		// the 4 MiB gRPC default on this loopback hop; the bundle itself is
+		// bounded by the caps in server/debugbundle.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxGatewayRecvBytes)),
 	}
 
 	// ctx, muxer, "127.0.0.1:3000", option

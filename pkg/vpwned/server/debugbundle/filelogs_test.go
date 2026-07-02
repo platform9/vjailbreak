@@ -38,3 +38,23 @@ func TestCollectDebugFileLogsNoMatches(t *testing.T) {
 		t.Errorf("expected empty output for unmatched migration, got:\n%s", output)
 	}
 }
+
+func TestCollectDebugFileLogsTotalSizeCap(t *testing.T) {
+	originalTotal := maxDebugFilesTotalBytes
+	maxDebugFilesTotalBytes = 64
+	defer func() { maxDebugFilesTotalBytes = originalTotal }()
+
+	fsys := fstest.MapFS{
+		"migration-big/a.log": {Data: []byte(strings.Repeat("x", 200))},
+		"migration-big/b.log": {Data: []byte("second file content")},
+	}
+
+	output := CollectDebugFileLogs(fsys, "migration-big")
+
+	if !strings.Contains(output, "Debug log size limit reached") {
+		t.Errorf("expected truncation note, got:\n%s", output)
+	}
+	if strings.Contains(output, "second file content") {
+		t.Errorf("files after the cap must be omitted, got:\n%s", output)
+	}
+}
