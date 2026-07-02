@@ -25,6 +25,13 @@ spec:
       labels:
         app: vpwned-sdk
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
       containers:
       - env:
         - name: DBUS_SYSTEM_BUS_ADDRESS
@@ -65,6 +72,9 @@ spec:
           readOnly: true
         - mountPath: /etc/pf9
           name: pf9-config
+        - mountPath: /var/log/pf9
+          name: pf9-logs
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -100,4 +110,8 @@ spec:
           path: /etc/pf9
           type: Directory
         name: pf9-config
+      - hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
+        name: pf9-logs
 ---

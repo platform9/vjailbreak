@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/proto"
 )
 
 var grpcServer *grpc.Server
@@ -64,6 +65,12 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 		return errors.Wrap(err, "failed to create k8s client for grpc server")
 	}
 
+	// Debug bundle needs kubernetes clients and the /var/log/pf9 mount;
+	// outside a cluster the GetDebugBundle API reports Unavailable.
+	if err := InitDebugBundle(); err != nil {
+		logrus.Warnf("debug bundle init skipped (non-cluster env): %v", err)
+	}
+
 	//Register all services here
 	//TODO: Register proto servers here.
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
@@ -95,6 +102,30 @@ func gRPCErrHandler(ctx context.Context, mux *runtime.ServeMux, m runtime.Marsha
 		}
 	}
 	runtime.DefaultHTTPErrorHandler(ctx, mux, m, w, r, err)
+}
+
+// contentDispositionMetadataKey is the gRPC header metadata key that file
+// download RPCs (e.g. GetDebugBundle) set to control the browser filename.
+const contentDispositionMetadataKey = "content-disposition"
+
+// maxGatewayRecvBytes is the receive limit for the gateway's loopback gRPC
+// connection (256 MiB), sized above the debug bundle content caps.
+const maxGatewayRecvBytes = 256 << 20
+
+// forwardDownloadHeaders promotes content-disposition gRPC header metadata
+// to a real HTTP Content-Disposition header so gateway responses can be
+// served as file downloads. Without this, the gateway would only expose it
+// as a Grpc-Metadata-Content-Disposition header, which browsers ignore.
+func forwardDownloadHeaders(ctx context.Context, w http.ResponseWriter, _ proto.Message) error {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	if vals := md.HeaderMD.Get(contentDispositionMetadataKey); len(vals) > 0 {
+		w.Header().Set("Content-Disposition", vals[0])
+		w.Header().Del(runtime.MetadataHeaderPrefix + "Content-Disposition")
+	}
+	return nil
 }
 
 func APILogger(fwd http.Handler) http.Handler {
@@ -135,9 +166,15 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	mux.HandleFunc("/vpw/v1/vcenter-resources", HandleVCenterResources)
 
 	//gatewayMuxer
-	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
+	gatewayMuxer := runtime.NewServeMux( //runtime.WithErrorHandler(gRPCErrHandler))
+		runtime.WithForwardResponseOption(forwardDownloadHeaders),
+	)
 	option := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Debug bundles (pod logs + CR YAMLs + /var/log/pf9 logs) far exceed
+		// the 4 MiB gRPC default on this loopback hop; the bundle itself is
+		// bounded by the caps in server/debugbundle.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxGatewayRecvBytes)),
 	}
 
 	// ctx, muxer, "127.0.0.1:3000", option
