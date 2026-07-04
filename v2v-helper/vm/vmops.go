@@ -35,6 +35,7 @@ const MinCBTHardwareVersion = 7
 type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
+	GetVmPowerState() (types.VirtualMachinePowerState, error)
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
 	UpdateDisksInfo(*VMInfo, bool) error
 	IsCBTEnabled() (bool, error)
