@@ -11,6 +11,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/pkg/common/microversion"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -69,6 +70,19 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_AUTH_URL")
 	}
 
+	// Application Credentials (v3applicationcredential) carry their own scope;
+	// project name / domain are not required from env. Detect this path first.
+	appCredID := strings.TrimSpace(os.Getenv("OS_APPLICATION_CREDENTIAL_ID"))
+	appCredSecret := strings.TrimSpace(os.Getenv("OS_APPLICATION_CREDENTIAL_SECRET"))
+	if appCredID != "" && appCredSecret != "" {
+		return gophercloud.AuthOptions{
+			IdentityEndpoint:            authURL,
+			ApplicationCredentialID:     appCredID,
+			ApplicationCredentialSecret: appCredSecret,
+			AllowReauth:                 true,
+		}, nil
+	}
+
 	tenantName := strings.TrimSpace(os.Getenv("OS_TENANT_NAME"))
 	if tenantName == "" {
 		tenantName = strings.TrimSpace(os.Getenv("OS_PROJECT_NAME"))
@@ -108,7 +122,7 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	}
 
 	if username == "" && userID == "" {
-		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_USERID, OS_USERNAME]")
+		return gophercloud.AuthOptions{}, fmt.Errorf("Missing one of the following environment variables [OS_USERID, OS_USERNAME, OS_APPLICATION_CREDENTIAL_ID]")
 	}
 	if password == "" {
 		return gophercloud.AuthOptions{}, fmt.Errorf("Missing environment variable OS_PASSWORD")
@@ -160,16 +174,19 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block storage client: %s", err)
 	}
+	blockStorageClient.Microversion = microversion.Floor(os.Getenv("OS_VOLUME_API_VERSION"), "")
 
 	computeClient, err := openstack.NewComputeV2(providerClient, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create compute client: %s", err)
 	}
+	computeClient.Microversion = microversion.Floor(os.Getenv("OS_COMPUTE_API_VERSION"), "")
 
 	networkingClient, err := openstack.NewNetworkV2(providerClient, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create networking client: %s", err)
 	}
+	networkingClient.Microversion = microversion.Floor(os.Getenv("OS_NETWORK_API_VERSION"), "")
 
 	return &utils.OpenStackClients{
 		BlockStorageClient: blockStorageClient,
