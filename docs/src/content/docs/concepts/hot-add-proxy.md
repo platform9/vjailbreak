@@ -69,6 +69,10 @@ vJailbreak will import the pre-configured OVA into vCenter, power the VM on, gen
 The OVA image uses default credentials (`root` / `password`) for the initial SSH key injection step. Change the root password on the VM after deployment in production environments.
 :::
 
+:::caution[ESXi/vCenter version requirement]
+The bundled OVA uses virtual hardware version **vmx-21**, which requires **ESXi 8.0 U2 (vCenter 8.0 U2) or newer**. Deploying it to an older host fails with an "unsupported hardware family" error. On ESXi/vCenter 7.x, use **Option B** to register a manually created Linux VM instead.
+:::
+
 ### Option B: Register an Existing Linux VM
 
 Any Linux VM can serve as the Proxy VM provided it meets the requirements. Install the necessary utilities:
