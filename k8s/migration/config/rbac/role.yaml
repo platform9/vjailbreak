@@ -122,6 +122,7 @@ rules:
   resources:
   - arraycreds
   - bmconfigs
+  - clusterconversionbatches
   - clustermigrations
   - esximigrations
   - esxisshcreds
@@ -154,6 +155,7 @@ rules:
   resources:
   - arraycreds/finalizers
   - bmconfigs/finalizers
+  - clusterconversionbatches/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - esxisshcreds/finalizers
@@ -176,6 +178,7 @@ rules:
   resources:
   - arraycreds/status
   - bmconfigs/status
+  - clusterconversionbatches/status
   - clustermigrations/status
   - esximigrations/status
   - esxisshcreds/status
