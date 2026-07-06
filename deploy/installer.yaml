@@ -648,6 +648,38 @@ spec:
               ESXIMigrationSpec defines the desired state of ESXIMigration including
               the ESXi host to migrate and the references to credentials and migration plan
             properties:
+              bmConfigRef:
+                description: |-
+                  BMConfigRef directly references the BMConfig for bare-metal provisioning.
+                  Required when RollingMigrationPlanRef is not set (ClusterConversionBatch flow).
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              clusterConversionBatchRef:
+                description: |-
+                  ClusterConversionBatchRef references the owning ClusterConversionBatch.
+                  Set by the ClusterConversionBatch controller. Absent for old-flow resources.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               esxiName:
                 description: ESXiName is the name of the ESXi host to be migrated
                 type: string
@@ -666,7 +698,9 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               rollingMigrationPlanRef:
-                description: RollingMigrationPlanRef is the reference to the RollingMigrationPlan
+                description: |-
+                  RollingMigrationPlanRef is the reference to the RollingMigrationPlan.
+                  Deprecated: use ClusterConversionBatchRef for new workflows.
                 properties:
                   name:
                     default: ""
@@ -696,7 +730,6 @@ spec:
             required:
             - esxiName
             - openstackCredsRef
-            - rollingMigrationPlanRef
             - vmwareCredsRef
             type: object
           status:
@@ -3786,6 +3819,7 @@ rules:
   resources:
   - arraycreds
   - bmconfigs
+  - clusterconversionbatches
   - clustermigrations
   - esximigrations
   - esxisshcreds
@@ -3818,6 +3852,7 @@ rules:
   resources:
   - arraycreds/finalizers
   - bmconfigs/finalizers
+  - clusterconversionbatches/finalizers
   - clustermigrations/finalizers
   - esximigrations/finalizers
   - esxisshcreds/finalizers
@@ -3840,6 +3875,7 @@ rules:
   resources:
   - arraycreds/status
   - bmconfigs/status
+  - clusterconversionbatches/status
   - clustermigrations/status
   - esximigrations/status
   - esxisshcreds/status
@@ -4741,7 +4777,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.4.7
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4848,7 +4884,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.7
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4977,7 +5013,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.7
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

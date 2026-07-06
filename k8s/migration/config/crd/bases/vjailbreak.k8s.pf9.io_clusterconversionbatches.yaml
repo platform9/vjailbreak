@@ -1,0 +1,280 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: clusterconversionbatches.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: ClusterConversionBatch
+    listKind: ClusterConversionBatchList
+    plural: clusterconversionbatches
+    singular: clusterconversionbatch
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.vmwareClusterName
+      name: Cluster
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.totalHosts
+      name: Total
+      type: integer
+    - jsonPath: .status.succeededHosts
+      name: Succeeded
+      type: integer
+    - jsonPath: .status.runningHosts
+      name: Running
+      type: integer
+    - jsonPath: .status.needsAttentionHosts
+      name: NeedsAttention
+      type: integer
+    - jsonPath: .spec.autoStart
+      name: AutoStart
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ClusterConversionBatch is the Schema for converting a set of ESXi hosts to PCD hosts.
+          It acts as a passive grouper: it tracks per-host conversion state and aggregates status,
+          but never cascades failures or deletions to sibling ESXIMigration resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ClusterConversionBatchSpec defines the desired state of ClusterConversionBatch.
+            properties:
+              autoStart:
+                default: Auto
+                description: AutoStart controls whether eligible hosts start converting
+                  automatically.
+                type: string
+              bmConfigRef:
+                description: BMConfigRef references the BMConfig for bare-metal provisioning.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              cloudInitConfigRef:
+                description: CloudInitConfigRef is an optional reference to a Secret
+                  with cloud-init configuration.
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              hosts:
+                description: Hosts lists the ESXi hosts to convert.
+                items:
+                  description: HostEntry identifies a single ESXi host included in
+                    the batch.
+                  properties:
+                    esxiName:
+                      description: ESXiName is the display name of the ESXi host in
+                        vCenter.
+                      minLength: 1
+                      type: string
+                  required:
+                  - esxiName
+                  type: object
+                minItems: 1
+                type: array
+              maxRetries:
+                default: 3
+                description: MaxRetries is the maximum number of retry attempts per
+                  host before NeedsAttention.
+                minimum: 0
+                type: integer
+              openstackCredsRef:
+                description: OpenstackCredsRef references the OpenStack credentials
+                  (PCD type) for this batch.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              retryBackoffSeconds:
+                default: 60
+                description: RetryBackoffSeconds is the base backoff duration in seconds
+                  for the exponential retry formula.
+                minimum: 30
+                type: integer
+              vmwareClusterName:
+                description: VMwareClusterName is the vCenter cluster these hosts
+                  belong to.
+                minLength: 1
+                type: string
+              vmwareCredsRef:
+                description: VMwareCredsRef references the VMwareCreds for this batch.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - bmConfigRef
+            - hosts
+            - openstackCredsRef
+            - vmwareClusterName
+            - vmwareCredsRef
+            type: object
+          status:
+            description: ClusterConversionBatchStatus defines the observed state of
+              ClusterConversionBatch.
+            properties:
+              completedAt:
+                description: CompletedAt is when the batch reached a terminal phase.
+                format: date-time
+                type: string
+              hosts:
+                description: Hosts contains per-host conversion status, one entry
+                  per spec.hosts entry.
+                items:
+                  description: HostConversionStatus tracks per-host state within a
+                    ClusterConversionBatch.
+                  properties:
+                    completedAt:
+                      description: CompletedAt is when the host reached Succeeded.
+                      format: date-time
+                      type: string
+                    eligibilityReason:
+                      description: EligibilityReason explains why EligibilityStatus
+                        is NotReady or Unknown.
+                      type: string
+                    eligibilityStatus:
+                      description: EligibilityStatus is the result of the most recent
+                        eligibility check.
+                      type: string
+                    esxiMigrationRef:
+                      description: ESXIMigrationRef references the currently active
+                        ESXIMigration for this host.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    esxiName:
+                      description: ESXiName matches the corresponding HostEntry.esxiName.
+                      type: string
+                    message:
+                      description: Message contains a human-readable status message.
+                      type: string
+                    nextRetryAt:
+                      description: NextRetryAt is when the controller will create
+                        the next ESXIMigration after a failure.
+                      format: date-time
+                      type: string
+                    phase:
+                      description: Phase is the current lifecycle phase for this host.
+                      type: string
+                    retryCount:
+                      description: RetryCount is how many ESXIMigrations have been
+                        created for this host (excluding the first).
+                      type: integer
+                    skippedAt:
+                      description: SkippedAt is when the operator skipped this host.
+                      format: date-time
+                      type: string
+                    startedAt:
+                      description: StartedAt is when conversion began (ESXIMigration
+                        created).
+                      format: date-time
+                      type: string
+                  required:
+                  - esxiName
+                  - phase
+                  type: object
+                type: array
+              message:
+                description: Message is a human-readable summary.
+                type: string
+              needsAttentionHosts:
+                description: NeedsAttentionHosts is the number of hosts in NeedsAttention
+                  phase.
+                type: integer
+              pendingHosts:
+                description: PendingHosts is the number of hosts not yet started (CheckingEligibility/NotReady/Ready).
+                type: integer
+              phase:
+                description: Phase is the aggregate phase of the batch.
+                type: string
+              runningHosts:
+                description: RunningHosts is the number of hosts in Converting phase.
+                type: integer
+              skippedHosts:
+                description: SkippedHosts is the number of hosts in Skipped phase.
+                type: integer
+              startedAt:
+                description: StartedAt is when the first host began converting.
+                format: date-time
+                type: string
+              succeededHosts:
+                description: SucceededHosts is the number of hosts in Succeeded phase.
+                type: integer
+              totalHosts:
+                description: TotalHosts is the total number of hosts in the batch.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
