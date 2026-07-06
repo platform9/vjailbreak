@@ -72,20 +72,21 @@ func (r *ESXIMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, errors.Wrap(err, "failed to create ESXIMigrationScope")
 	}
 
-	rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
-	rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
-	if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
-		if apierrors.IsNotFound(err) {
-			if !esxiMigration.DeletionTimestamp.IsZero() {
-				ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
-				return r.reconcileDelete(ctx, scope)
+	if esxiMigration.Spec.RollingMigrationPlanRef.Name != "" {
+		rollingMigrationPlan := &vjailbreakv1alpha1.RollingMigrationPlan{}
+		rollingMigrationPlanKey := client.ObjectKey{Namespace: esxiMigration.Namespace, Name: esxiMigration.Spec.RollingMigrationPlanRef.Name}
+		if err := r.Get(ctx, rollingMigrationPlanKey, rollingMigrationPlan); err != nil {
+			if apierrors.IsNotFound(err) {
+				if !esxiMigration.DeletionTimestamp.IsZero() {
+					ctxlog.Info("Resource is being deleted, reconciling deletion", "esximigration", req.NamespacedName)
+					return r.reconcileDelete(ctx, scope)
+				}
+				return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 			}
 			return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
 		}
-		return ctrl.Result{}, errors.Wrap(err, "failed to get RollingMigrationPlan")
+		scope.RollingMigrationPlan = rollingMigrationPlan
 	}
-
-	scope.RollingMigrationPlan = rollingMigrationPlan
 
 	// Always close the scope when exiting this function such that we can persist any ESXIMigration changes.
 	defer func() {
@@ -132,8 +133,13 @@ func (r *ESXIMigrationReconciler) reconcileNormal(ctx context.Context, scope *sc
 		return ctrl.Result{}, nil
 	}
 
+	bmConfigName, err := resolveBMConfigName(scope.ESXIMigration, scope.RollingMigrationPlan)
+	if err != nil {
+		log.Error(err, "Failed to resolve BMConfig name")
+		return ctrl.Result{}, err
+	}
 	bmConfig := &vjailbreakv1alpha1.BMConfig{}
-	bmConfigKey := client.ObjectKey{Namespace: scope.ESXIMigration.Namespace, Name: scope.RollingMigrationPlan.Spec.BMConfigRef.Name}
+	bmConfigKey := client.ObjectKey{Namespace: scope.ESXIMigration.Namespace, Name: bmConfigName}
 	if err := r.Get(ctx, bmConfigKey, bmConfig); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, errors.Wrap(err, "failed to get BMConfig")
@@ -191,6 +197,54 @@ func (r *ESXIMigrationReconciler) reconcileDelete(_ context.Context, scope *scop
 	return ctrl.Result{}, nil
 }
 
+// resolveBMConfigName returns the BMConfig name for an ESXIMigration.
+// Prefers spec.bmConfigRef (new ClusterConversionBatch flow) over the RollingMigrationPlan's bmConfigRef.
+func resolveBMConfigName(esxiMig *vjailbreakv1alpha1.ESXIMigration, rmp *vjailbreakv1alpha1.RollingMigrationPlan) (string, error) {
+	if esxiMig.Spec.BMConfigRef != nil && esxiMig.Spec.BMConfigRef.Name != "" {
+		return esxiMig.Spec.BMConfigRef.Name, nil
+	}
+	if rmp != nil && rmp.Spec.BMConfigRef.Name != "" {
+		return rmp.Spec.BMConfigRef.Name, nil
+	}
+	return "", errors.New("no BMConfig reference: set spec.bmConfigRef on ESXIMigration or ensure RollingMigrationPlanRef is valid")
+}
+
+// resolveVMwareCreds returns VMwareCreds for an ESXIMigration.
+// Prefers spec.vmwareCredsRef (ClusterConversionBatch flow) over the RollingMigrationPlan path.
+//
+//nolint:dupl
+func resolveVMwareCreds(ctx context.Context, k8sClient client.Client, esxiMig *vjailbreakv1alpha1.ESXIMigration, rmp *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.VMwareCreds, error) {
+	if esxiMig.Spec.VMwareCredsRef.Name != "" {
+		creds := &vjailbreakv1alpha1.VMwareCreds{}
+		if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: esxiMig.Spec.VMwareCredsRef.Name}, creds); err != nil {
+			return nil, errors.Wrap(err, "failed to get VMwareCreds from spec.vmwareCredsRef")
+		}
+		return creds, nil
+	}
+	if rmp != nil {
+		return utils.GetVMwareCredsFromRollingMigrationPlan(ctx, k8sClient, rmp)
+	}
+	return nil, errors.New("no VMwareCreds: set spec.vmwareCredsRef or ensure RollingMigrationPlanRef is valid")
+}
+
+// resolveOpenstackCreds returns OpenstackCreds for an ESXIMigration.
+// Prefers spec.openstackCredsRef (ClusterConversionBatch flow) over the RollingMigrationPlan path.
+//
+//nolint:dupl
+func resolveOpenstackCreds(ctx context.Context, k8sClient client.Client, esxiMig *vjailbreakv1alpha1.ESXIMigration, rmp *vjailbreakv1alpha1.RollingMigrationPlan) (*vjailbreakv1alpha1.OpenstackCreds, error) {
+	if esxiMig.Spec.OpenstackCredsRef.Name != "" {
+		creds := &vjailbreakv1alpha1.OpenstackCreds{}
+		if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.NamespaceMigrationSystem, Name: esxiMig.Spec.OpenstackCredsRef.Name}, creds); err != nil {
+			return nil, errors.Wrap(err, "failed to get OpenstackCreds from spec.openstackCredsRef")
+		}
+		return creds, nil
+	}
+	if rmp != nil {
+		return utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, k8sClient, rmp)
+	}
+	return nil, errors.New("no OpenstackCreds: set spec.openstackCredsRef or ensure RollingMigrationPlanRef is valid")
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ESXIMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -222,14 +276,14 @@ func (r *ESXIMigrationReconciler) handleESXiCordoned(ctx context.Context, scope 
 func (r *ESXIMigrationReconciler) handleESXiWaitingForPCDHost(ctx context.Context, scope *scope.ESXIMigrationScope) (ctrl.Result, error) {
 	log := scope.Logger
 	log.Info("ESXi is waiting for PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	destOpenstackCreds, err := resolveOpenstackCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
-		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
+		log.Error(err, "Failed to get destination openstack credentials")
 		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
 	}
-	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	sourceVMwareCreds, err := resolveVMwareCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
-		log.Error(err, "Failed to get source vmware credentials", "vmwareCreds", sourceVMwareCreds)
+		log.Error(err, "Failed to get source vmware credentials")
 		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
 	}
 	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, sourceVMwareCreds.Name)
@@ -261,14 +315,14 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 	log.Info("ESXi is configuring PCD host", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 	var pcdClusterName string
 
-	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	destOpenstackCreds, err := resolveOpenstackCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
-		log.Error(err, "Failed to get destination openstack credentials", "openstackCreds", destOpenstackCreds)
+		log.Error(err, "Failed to get destination openstack credentials")
 		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
 	}
-	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	sourceVMwareCreds, err := resolveVMwareCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
-		log.Error(err, "Failed to get source vmware credentials", "vmwareCreds", sourceVMwareCreds)
+		log.Error(err, "Failed to get source vmware credentials")
 		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
 	}
 	vmwareHost, err := utils.GetVMwareHostFromESXiName(ctx, r.Client, scope.ESXIMigration.Spec.ESXiName, sourceVMwareCreds.Name)
@@ -277,15 +331,16 @@ func (r *ESXIMigrationReconciler) handleESXiConfiguringPCDHost(ctx context.Conte
 		return ctrl.Result{}, errors.Wrap(err, "failed to get VMware host")
 	}
 	if vmwareHost.Spec.HostConfigID == "" {
-		log.Info("Host config ID is empty, pausing ESXi migration. please assign host config to ESXi to continue", "esxiName", scope.ESXIMigration.Spec.ESXiName)
-		scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = constants.PauseMigrationValue
-		err = r.Update(ctx, scope.RollingMigrationPlan)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")
+		log.Info("Host config ID is empty, waiting for host config assignment", "esxiName", scope.ESXIMigration.Spec.ESXiName)
+		if scope.RollingMigrationPlan != nil {
+			scope.RollingMigrationPlan.Labels[constants.PauseMigrationLabel] = constants.PauseMigrationValue
+			if err = r.Update(ctx, scope.RollingMigrationPlan); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update RollingMigrationPlan")
+			}
 		}
 		return ctrl.Result{RequeueAfter: constants.CredsRequeueAfter}, nil
 	}
-	if len(scope.RollingMigrationPlan.Spec.ClusterMapping) > 0 {
+	if scope.RollingMigrationPlan != nil && len(scope.RollingMigrationPlan.Spec.ClusterMapping) > 0 {
 		for _, mapping := range scope.RollingMigrationPlan.Spec.ClusterMapping {
 			if mapping.VMwareClusterName == vmwareHost.Spec.ClusterName || mapping.VMwareClusterName == vmwareHost.Labels[constants.VMwareClusterLabel] {
 				pcdClusterName = mapping.PCDClusterName
@@ -327,11 +382,11 @@ func (r *ESXIMigrationReconciler) handleESXiAssigningRole(ctx context.Context, s
 	log := scope.Logger
 	log.Info("Waiting for hypervisor role assignment", "esxiName", scope.ESXIMigration.Spec.ESXiName)
 
-	destOpenstackCreds, err := utils.GetOpenstackCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	destOpenstackCreds, err := resolveOpenstackCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get destination openstack credentials")
 	}
-	sourceVMwareCreds, err := utils.GetVMwareCredsFromRollingMigrationPlan(ctx, r.Client, scope.RollingMigrationPlan)
+	sourceVMwareCreds, err := resolveVMwareCreds(ctx, r.Client, scope.ESXIMigration, scope.RollingMigrationPlan)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get source vmware credentials")
 	}
