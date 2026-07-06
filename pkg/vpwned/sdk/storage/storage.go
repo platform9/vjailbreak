@@ -76,6 +76,17 @@ type CinderManageRefBuilder interface {
 	BuildCinderManageRef(vol Volume) map[string]interface{}
 }
 
+// CinderBackendPoolAware is an optional interface for providers that can
+// derive their volume-placement target (e.g. Hitachi's DP pool) from the
+// Cinder backend mapping already configured on the ArrayCreds. Callers pass
+// the backend's pool component — the openstackMapping.cinderBackendPool
+// field or the "#pool" suffix of a "host@backend#pool" Cinder host string —
+// and the provider resolves it against the array. Providers must treat an
+// explicitly configured placement option as taking precedence over the hint.
+type CinderBackendPoolAware interface {
+	ApplyCinderPoolHint(ctx context.Context, poolHint string) error
+}
+
 // MappingContext holds context information for volume mapping
 // It's a flexible map to store provider-specific context
 type MappingContext map[string]interface{}

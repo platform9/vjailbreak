@@ -194,6 +194,33 @@ func TestVendorMapperAdapterForwards(t *testing.T) {
 	}
 }
 
+func TestCinderPoolHintFromArrayCreds(t *testing.T) {
+	mk := func(pool, host string) vjailbreakv1alpha1.ArrayCreds {
+		ac := vjailbreakv1alpha1.ArrayCreds{}
+		ac.Spec.OpenStackMapping.CinderBackendPool = pool
+		ac.Spec.OpenStackMapping.CinderHost = host
+		return ac
+	}
+	tests := []struct {
+		name string
+		ac   vjailbreakv1alpha1.ArrayCreds
+		want string
+	}{
+		{"dedicated pool field wins", mk("poolA", "pcd@hbsd-1#poolB"), "poolA"},
+		{"pool parsed from cinderHost suffix", mk("", "pcd@hbsd-1#dp-pool-1"), "dp-pool-1"},
+		{"service host without pool yields empty", mk("", "55f61998@hbsd-1"), ""},
+		{"trailing hash yields empty", mk("", "pcd@hbsd-1#"), ""},
+		{"nothing configured yields empty", mk("", ""), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cinderPoolHintFromArrayCreds(tt.ac); got != tt.want {
+				t.Fatalf("cinderPoolHintFromArrayCreds() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConnectorHostForESXi(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"10.4.2.17", "vjailbreak-10-4-2-17"},

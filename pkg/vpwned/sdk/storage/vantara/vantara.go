@@ -117,6 +117,7 @@ func init() {
 var (
 	_ storage.StorageProvider        = (*VantaraStorageProvider)(nil)
 	_ storage.CinderManageRefBuilder = (*VantaraStorageProvider)(nil)
+	_ storage.CinderBackendPoolAware = (*VantaraStorageProvider)(nil)
 )
 
 // Connect validates the REST API version and establishes a session.
@@ -200,11 +201,59 @@ func (p *VantaraStorageProvider) ValidateCredentials(ctx context.Context) error 
 		return nil
 	}
 	if err := p.autoPickPool(ctx); err != nil {
-		// Multiple pools is not a credential failure; CreateVolume will
-		// demand explicit configuration.
+		// Multiple pools is not a credential failure; the pool is usually
+		// derived from the Cinder backend mapping (ApplyCinderPoolHint) and
+		// CreateVolume demands explicit configuration otherwise.
 		klog.Warningf("vantara: %v", err)
 	}
 	return nil
+}
+
+// ApplyCinderPoolHint implements storage.CinderBackendPoolAware. The hint is
+// the Cinder backend's pool for this array (openstackMapping.cinderBackendPool
+// or the "#pool" suffix of an explicit cinderHost). HBSD's hitachi_pools
+// accepts DP pool IDs or names, so the hint is resolved both ways. An
+// explicitly configured pool (spec.vantaraConfig.poolId) always wins.
+func (p *VantaraStorageProvider) ApplyCinderPoolHint(ctx context.Context, poolHint string) error {
+	poolHint = strings.TrimSpace(poolHint)
+	if poolHint == "" {
+		return nil
+	}
+	if p.poolID != nil {
+		klog.Infof("vantara: explicit pool %d configured; ignoring Cinder pool hint %q", *p.poolID, poolHint)
+		return nil
+	}
+	if err := p.ensureSession(ctx); err != nil {
+		return err
+	}
+
+	// Numeric hint: treat as a DP pool ID and verify it exists.
+	if id, err := strconv.Atoi(poolHint); err == nil {
+		if _, _, err := p.doJSON(ctx, http.MethodGet, fmt.Sprintf("%s/pools/%d", p.baseURL, id), nil, p.sessionHeaders()); err != nil {
+			return fmt.Errorf("vantara: Cinder pool hint %q does not match a pool on the array: %w", poolHint, err)
+		}
+		p.poolID = &id
+		klog.Infof("vantara: pool %d derived from Cinder backend pool hint", id)
+		return nil
+	}
+
+	// Otherwise resolve the hint as a DP pool name.
+	pools, err := p.listDPPools(ctx)
+	if err != nil {
+		return fmt.Errorf("vantara: failed to resolve Cinder pool hint %q: %w", poolHint, err)
+	}
+	for i := range pools {
+		if strings.EqualFold(pools[i].PoolName, poolHint) {
+			p.poolID = &pools[i].PoolID
+			klog.Infof("vantara: pool %d (%s) derived from Cinder backend pool hint", pools[i].PoolID, pools[i].PoolName)
+			return nil
+		}
+	}
+	names := make([]string, 0, len(pools))
+	for _, pi := range pools {
+		names = append(names, fmt.Sprintf("%d(%s)", pi.PoolID, pi.PoolName))
+	}
+	return fmt.Errorf("vantara: Cinder pool hint %q matches no DP pool on the array (available: %s)", poolHint, strings.Join(names, ", "))
 }
 
 // CreateVolume creates a DP LDEV of at least size bytes in the configured
@@ -219,7 +268,7 @@ func (p *VantaraStorageProvider) CreateVolume(volumeName string, size int64) (st
 	}
 	if p.poolID == nil {
 		if err := p.autoPickPool(ctx); err != nil {
-			return storage.Volume{}, fmt.Errorf("vantara: no pool configured for LDEV creation: %w (set spec.vantaraConfig.poolId on the ArrayCreds)", err)
+			return storage.Volume{}, fmt.Errorf("vantara: no pool configured for LDEV creation: %w (set spec.vantaraConfig.poolId, or let it derive from openstackMapping.cinderBackendPool / the \"#pool\" suffix of cinderHost)", err)
 		}
 	}
 
@@ -584,10 +633,10 @@ func (p *VantaraStorageProvider) findLdevByLabel(ctx context.Context, label stri
 	return nil, nil
 }
 
-func (p *VantaraStorageProvider) autoPickPool(ctx context.Context) error {
+func (p *VantaraStorageProvider) listDPPools(ctx context.Context) ([]poolInfo, error) {
 	resp, _, err := p.doJSON(ctx, http.MethodGet, p.baseURL+"/pools?poolType=DP", nil, p.sessionHeaders())
 	if err != nil {
-		return fmt.Errorf("failed to list DP pools: %w", err)
+		return nil, fmt.Errorf("failed to list DP pools: %w", err)
 	}
 	rows, _ := resp["data"].([]any)
 	pools := make([]poolInfo, 0, len(rows))
@@ -603,6 +652,14 @@ func (p *VantaraStorageProvider) autoPickPool(ctx context.Context) error {
 		pi.PoolName, _ = m["poolName"].(string)
 		pi.PoolType, _ = m["poolType"].(string)
 		pools = append(pools, pi)
+	}
+	return pools, nil
+}
+
+func (p *VantaraStorageProvider) autoPickPool(ctx context.Context) error {
+	pools, err := p.listDPPools(ctx)
+	if err != nil {
+		return err
 	}
 	switch len(pools) {
 	case 0:

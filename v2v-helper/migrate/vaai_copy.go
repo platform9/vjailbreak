@@ -188,6 +188,17 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	}
 	migobj.logMessage(fmt.Sprintf("selectMapper: using %s", mapperDesc))
 
+	// Check to get poolId for vantara backed systems. vantara provider implements CinderBackendPoolAware
+	// hence this if will be true for vantara.
+	if hinter, ok := migobj.StorageProvider.(storage.CinderBackendPoolAware); ok {
+		if hint := cinderPoolHintFromArrayCreds(arrayCreds); hint != "" {
+			if err := hinter.ApplyCinderPoolHint(ctx, hint); err != nil {
+				return storage.Volume{}, errors.Wrapf(err, "failed to apply Cinder backend pool hint %q", hint)
+			}
+			migobj.logMessage(fmt.Sprintf("Applied Cinder backend pool hint %q to storage provider", hint))
+		}
+	}
+
 	initiatorGroup := "vjailbreak-xcopy"
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
 	mappingContext, err := mapper.CreateOrUpdateInitiatorGroup(ctx, initiatorGroup, hostAdapters)
@@ -544,4 +555,20 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 	}
 
 	return "", fmt.Errorf("no active Cinder volume service found for backend: %s", backendName)
+}
+
+// cinderPoolHintFromArrayCreds extracts the Cinder backend's pool for this
+// array from the ArrayCreds OpenStack mapping: the dedicated
+// CinderBackendPool field first, else the "#pool" suffix of an explicitly
+// configured CinderHost ("host@backend#pool"). Returns "" when the mapping
+// carries no pool information (e.g. autodiscovered service hosts).
+func cinderPoolHintFromArrayCreds(arrayCreds vjailbreakv1alpha1.ArrayCreds) string {
+	if pool := strings.TrimSpace(arrayCreds.Spec.OpenStackMapping.CinderBackendPool); pool != "" {
+		return pool
+	}
+	host := arrayCreds.Spec.OpenStackMapping.CinderHost
+	if idx := strings.LastIndex(host, "#"); idx >= 0 && idx+1 < len(host) {
+		return strings.TrimSpace(host[idx+1:])
+	}
+	return ""
 }

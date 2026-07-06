@@ -363,6 +363,62 @@ func TestGetAllVolumeNAAs(t *testing.T) {
 	}
 }
 
+func TestApplyCinderPoolHint(t *testing.T) {
+	t.Run("numeric hint is verified and applied", func(t *testing.T) {
+		f := newFakeGUM(t)
+		p, _ := newTestProvider(t, f, nil)
+		if err := p.ApplyCinderPoolHint(context.Background(), "5"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.poolID == nil || *p.poolID != 5 {
+			t.Fatalf("pool not applied from numeric hint: %v", p.poolID)
+		}
+	})
+
+	t.Run("name hint resolves case-insensitively", func(t *testing.T) {
+		f := newFakeGUM(t)
+		p, _ := newTestProvider(t, f, nil)
+		if err := p.ApplyCinderPoolHint(context.Background(), "DP-POOL-1"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.poolID == nil || *p.poolID != 5 {
+			t.Fatalf("pool not resolved from name hint: %v", p.poolID)
+		}
+	})
+
+	t.Run("unknown name errors and lists available pools", func(t *testing.T) {
+		f := newFakeGUM(t)
+		p, _ := newTestProvider(t, f, nil)
+		err := p.ApplyCinderPoolHint(context.Background(), "no-such-pool")
+		if err == nil || !strings.Contains(err.Error(), "dp-pool-1") {
+			t.Fatalf("expected error listing available pools, got %v", err)
+		}
+	})
+
+	t.Run("explicit pool option wins over hint", func(t *testing.T) {
+		f := newFakeGUM(t)
+		f.mu.pools = append(f.mu.pools, poolInfo{PoolID: 9, PoolName: "dp-pool-2", PoolType: "DP"})
+		p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
+		if err := p.ApplyCinderPoolHint(context.Background(), "9"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.poolID == nil || *p.poolID != 5 {
+			t.Fatalf("explicit pool overridden by hint: %v", p.poolID)
+		}
+	})
+
+	t.Run("empty hint is a no-op", func(t *testing.T) {
+		f := newFakeGUM(t)
+		p, _ := newTestProvider(t, f, nil)
+		if err := p.ApplyCinderPoolHint(context.Background(), "  "); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.poolID != nil {
+			t.Fatalf("empty hint must not set a pool: %v", p.poolID)
+		}
+	})
+}
+
 func TestVantaraDoesNotImplementVendorMapper(t *testing.T) {
 	var p storage.StorageProvider = &VantaraStorageProvider{}
 	if _, ok := p.(storage.VendorMapper); ok {
