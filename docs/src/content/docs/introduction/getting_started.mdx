@@ -56,6 +56,11 @@ These example instructions are for any version of [Private Cloud Director](https
 ```shell
 openstack image create --os-interface admin --insecure --container-format bare --disk-format qcow2 --file <vjailbreak-image-path> vjailbreak-image.qcow2
 ```
+- Set the disk bus to virtio-scsi on the uploaded image. During migrations, vJailbreak attaches the target volumes to itself for conversion; with the default virtio-blk bus each attached volume consumes a PCI slot, and migrating VMs with many disks can fail with a `No more available PCI slots` error. 
+With virtio-scsi, all volumes share a single controller. See [Known Limitations](../../reference/known-limitations/#pci-slot-exhaustion-when-attaching-disks-with-virtio-blk).
+```shell
+openstack image set --property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi vjailbreak-image.qcow2
+```
 
 ### Create vJailbreak VM
 - Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use larger flavor for larger VM migration).
