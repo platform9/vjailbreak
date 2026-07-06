@@ -71,6 +71,19 @@ spec:
                 description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
                   from OpenStack
                 type: boolean
+              mappingMode:
+                description: |-
+                  MappingMode selects how target LUNs are exposed to the ESXi host during
+                  Storage-Accelerated-Copy. "auto" (default) uses vendor-native mapping when
+                  the provider implements it, falling back to Cinder os-initialize_connection
+                  otherwise. "native" hard-requires vendor-native (validation fails for
+                  providers that don't implement it). "cinder" forces the Cinder fallback
+                  even on Pure/NetApp (useful for testing the fallback path).
+                enum:
+                - auto
+                - native
+                - cinder
+                type: string
               netAppConfig:
                 description: |-
                   NetAppConfig holds NetApp-specific configuration. Required when
@@ -156,6 +169,21 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vantaraConfig:
+                description: |-
+                  VantaraConfig holds Hitachi Vantara (VSP) specific configuration.
+                  Optional; used when VendorType is "vantara".
+                properties:
+                  poolId:
+                    description: |-
+                      PoolID is the decimal DP pool ID where target LDEVs are created.
+                      Optional when the array has exactly one DP pool (auto-selected).
+                    type: string
+                  restPort:
+                    description: RESTPort overrides the Configuration Manager REST
+                      API port (default 443).
+                    type: string
+                type: object
               vendorType:
                 description: VendorType is the storage array vendor type (e.g., pure,
                   ontap, hpalletra)
