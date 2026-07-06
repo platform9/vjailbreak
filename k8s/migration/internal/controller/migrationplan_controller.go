@@ -39,6 +39,7 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
+	vantarasdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/vantara"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -1644,6 +1645,10 @@ func (r *MigrationPlanReconciler) setMigrationEnv(
 		if arraycreds.Spec.VendorType == netappsdk.VendorName && arraycreds.Spec.NetAppConfig != nil {
 			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
 			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
+		}
+		if arraycreds.Spec.VendorType == vantarasdk.VendorName && arraycreds.Spec.VantaraConfig != nil {
+			configMapData["VANTARA_POOL_ID"] = arraycreds.Spec.VantaraConfig.PoolID
+			configMapData["VANTARA_REST_PORT"] = arraycreds.Spec.VantaraConfig.RESTPort
 		}
 	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod && proxyVM != nil {
 		configMapData["STORAGE_COPY_METHOD"] = constants.HotAddCopyMethod

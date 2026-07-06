@@ -20,6 +20,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
+	vantarasdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/vantara"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
@@ -86,8 +87,13 @@ type Migrate struct {
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.
-	NetAppSVM         string
-	NetAppFlexVol     string
+	NetAppSVM     string
+	NetAppFlexVol string
+	// Hitachi Vantara-only. Empty for other vendors; when PoolID is empty
+	// the provider auto-picks a sole DP pool or fails CreateVolume with
+	// guidance to set spec.vantaraConfig.poolId on the ArrayCreds.
+	VantaraPoolID     string
+	VantaraRESTPort   string
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key
@@ -2444,6 +2450,14 @@ func (migobj *Migrate) buildProviderOptions() map[string]string {
 		}
 		if migobj.NetAppFlexVol != "" {
 			opts[netappsdk.OptionFlexVol] = migobj.NetAppFlexVol
+		}
+	}
+	if migobj.VendorType == vantarasdk.VendorName {
+		if migobj.VantaraPoolID != "" {
+			opts[vantarasdk.OptionPoolID] = migobj.VantaraPoolID
+		}
+		if migobj.VantaraRESTPort != "" {
+			opts[vantarasdk.OptionRESTPort] = migobj.VantaraRESTPort
 		}
 	}
 	if len(opts) == 0 {

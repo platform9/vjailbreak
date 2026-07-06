@@ -62,7 +62,36 @@ type ArrayCredsSpec struct {
 	// on status.backendTargets for interactive selection.
 	// +optional
 	NetAppConfig *NetAppConfig `json:"netAppConfig,omitempty"`
+
+	// MappingMode selects how target LUNs are exposed to the ESXi host during
+	// Storage-Accelerated-Copy. "auto" (default) uses vendor-native mapping when
+	// the provider implements it, falling back to Cinder os-initialize_connection
+	// otherwise. "native" hard-requires vendor-native (validation fails for
+	// providers that don't implement it). "cinder" forces the Cinder fallback
+	// even on Pure/NetApp (useful for testing the fallback path).
+	// +kubebuilder:validation:Enum=auto;native;cinder
+	// +optional
+	MappingMode string `json:"mappingMode,omitempty"`
+
+	// VantaraConfig holds Hitachi Vantara (VSP) specific configuration.
+	// Optional; used when VendorType is "vantara".
+	// +optional
+	VantaraConfig *VantaraConfig `json:"vantaraConfig,omitempty"`
 }
+
+// MappingMode values for ArrayCredsSpec.MappingMode. An empty MappingMode is
+// equivalent to MappingModeAuto everywhere it is consumed.
+const (
+	// MappingModeAuto uses vendor-native mapping when the provider
+	// implements it, falling back to the Cinder mapper otherwise.
+	MappingModeAuto = "auto"
+	// MappingModeNative hard-requires vendor-native mapping; ArrayCreds
+	// validation fails for providers that don't implement it.
+	MappingModeNative = "native"
+	// MappingModeCinder forces the Cinder os-initialize_connection fallback
+	// even on vendors with native mapping (useful for testing the fallback).
+	MappingModeCinder = "cinder"
+)
 
 // NetAppConfig holds NetApp ONTAP-specific targeting information. Both fields
 // must be set for the NetApp provider to create LUNs.
@@ -73,6 +102,20 @@ type NetAppConfig struct {
 	// FlexVol is the FlexVol name (within the SVM) where LUNs will be created.
 	// +optional
 	FlexVol string `json:"flexVol,omitempty"`
+}
+
+// VantaraConfig holds Hitachi Vantara (VSP family) specific targeting
+// information consumed by the vantara storage provider. LUN-to-ESXi mapping
+// for this vendor is delegated to the Hitachi Cinder driver (MappingMode
+// auto/cinder), so only volume-placement settings live here.
+type VantaraConfig struct {
+	// PoolID is the decimal DP pool ID where target LDEVs are created.
+	// Optional when the array has exactly one DP pool (auto-selected).
+	// +optional
+	PoolID string `json:"poolId,omitempty"`
+	// RESTPort overrides the Configuration Manager REST API port (default 443).
+	// +optional
+	RESTPort string `json:"restPort,omitempty"`
 }
 
 // OpenstackMapping holds the OpenStack Cinder configuration mapping

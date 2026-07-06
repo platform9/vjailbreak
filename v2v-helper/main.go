@@ -177,6 +177,8 @@ func main() {
 		ProxyVMK8sName:         migrationparams.ProxyVMK8sName,
 		NetAppSVM:              migrationparams.NetAppSVM,
 		NetAppFlexVol:          migrationparams.NetAppFlexVol,
+		VantaraPoolID:          migrationparams.VantaraPoolID,
+		VantaraRESTPort:        migrationparams.VantaraRESTPort,
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
 	}

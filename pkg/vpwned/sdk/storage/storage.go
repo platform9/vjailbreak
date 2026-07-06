@@ -34,6 +34,22 @@ type StorageProvider interface {
 	// GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
 	GetAllVolumeNAAs() ([]string, error)
 
+	// ResolveCinderVolumeToLUN resolves a persistent volume name to a storage Volume/LUN.
+	ResolveCinderVolumeToLUN(volumeName string) (Volume, error)
+
+	// WhoAmI returns the provider name
+	WhoAmI() string
+}
+
+// VendorMapper is the optional vendor-native LUN-mapping surface. Providers
+// that expose target LUNs to the ESXi host through the array's own API
+// (host objects, initiator groups, LUN maps) implement it in addition to
+// StorageProvider; Pure and NetApp satisfy it as-is. Providers without it
+// rely on the Cinder os-initialize_connection fallback selected in
+// v2v-helper (see sdk/storage/cinder). Callers type-assert:
+//
+//	mapper, ok := provider.(VendorMapper)
+type VendorMapper interface {
 	// CreateOrUpdateInitiatorGroup creates or updates an initiator group with the provided HBA identifiers.
 	// Returns a MappingContext that contains provider-specific information needed for mapping.
 	CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (MappingContext, error)
@@ -47,12 +63,17 @@ type StorageProvider interface {
 
 	// GetMappedGroups retrieves the initiator groups a target volume is currently mapped to.
 	GetMappedGroups(targetVolume Volume, context MappingContext) ([]string, error)
+}
 
-	// ResolveCinderVolumeToLUN resolves a persistent volume name to a storage Volume/LUN.
-	ResolveCinderVolumeToLUN(volumeName string) (Volume, error)
-
-	// WhoAmI returns the provider name
-	WhoAmI() string
+// CinderManageRefBuilder is an optional interface for providers whose Cinder
+// driver needs a non-default reference for the manageable_volumes (manage
+// existing) API. Without it, callers default to {"source-name": <name>}.
+// Example: Hitachi's HBSD driver resolves {"source-id": <LDEV id>}
+// unambiguously, while its source-name lookup requires dash-free labels.
+type CinderManageRefBuilder interface {
+	// BuildCinderManageRef returns the existing-volume reference passed to
+	// Cinder's os-volume-manage API for the given vendor volume.
+	BuildCinderManageRef(vol Volume) map[string]interface{}
 }
 
 // MappingContext holds context information for volume mapping

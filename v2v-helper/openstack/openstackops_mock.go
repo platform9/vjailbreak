@@ -322,6 +322,35 @@ func (mr *MockOpenstackOperationsMockRecorder) GetSubnet(ctx, network, ip interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnet", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSubnet), ctx, network, ip)
 }
 
+// InitializeVolumeConnection mocks base method.
+func (m *MockOpenstackOperations) InitializeVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitializeVolumeConnection", ctx, volumeID, connector)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InitializeVolumeConnection indicates an expected call of InitializeVolumeConnection.
+func (mr *MockOpenstackOperationsMockRecorder) InitializeVolumeConnection(ctx, volumeID, connector interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeVolumeConnection", reflect.TypeOf((*MockOpenstackOperations)(nil).InitializeVolumeConnection), ctx, volumeID, connector)
+}
+
+// TerminateVolumeConnection mocks base method.
+func (m *MockOpenstackOperations) TerminateVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TerminateVolumeConnection", ctx, volumeID, connector)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TerminateVolumeConnection indicates an expected call of TerminateVolumeConnection.
+func (mr *MockOpenstackOperationsMockRecorder) TerminateVolumeConnection(ctx, volumeID, connector interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateVolumeConnection", reflect.TypeOf((*MockOpenstackOperations)(nil).TerminateVolumeConnection), ctx, volumeID, connector)
+}
+
 // ManageExistingVolume mocks base method.
 func (m *MockOpenstackOperations) ManageExistingVolume(name string, ref map[string]interface{}, host, volumeType string) (*volumes.Volume, error) {
 	m.ctrl.T.Helper()

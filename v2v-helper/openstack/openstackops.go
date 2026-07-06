@@ -53,6 +53,13 @@ type OpenstackOperations interface {
 	DeleteVolume(ctx context.Context, volumeID string) error
 	FindDevice(volumeID string) (string, error)
 	ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error)
+	// InitializeVolumeConnection exposes a volume to the host described by the
+	// os-brick style connector dict via Cinder os-initialize_connection. Used
+	// by the Storage-Accelerated-Copy Cinder mapping fallback.
+	InitializeVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) (map[string]any, error)
+	// TerminateVolumeConnection removes a volume export previously created by
+	// InitializeVolumeConnection. The same connector must be supplied.
+	TerminateVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) error
 	WaitUntilVMActive(ctx context.Context, vmID string) (bool, error)
 	GetIsSimpleNetwork(ctx context.Context, networkID string) (bool, error)
 	// GetCinderVolumeServices returns Cinder volume services (Host, Status, State)

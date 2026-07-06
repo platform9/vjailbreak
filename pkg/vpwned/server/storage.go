@@ -88,6 +88,16 @@ func (s *storageArrayGRPC) CreateOrUpdateInitiatorGroup(ctx context.Context, req
 		}, nil
 	}
 
+	// Native mapping is optional: vendors without it are served by the
+	// Cinder fallback in v2v-helper, not by this RPC.
+	mapper, ok := provider.(storagesdk.VendorMapper)
+	if !ok {
+		return &api.CreateInitiatorGroupResponse{
+			Success: false,
+			Message: fmt.Sprintf("vendor %s does not implement native mapping; use the Cinder fallback", req.AccessInfo.VendorType),
+		}, nil
+	}
+
 	accessInfo := storagesdk.StorageAccessInfo{
 		Hostname:            req.AccessInfo.Hostname,
 		Username:            req.AccessInfo.Username,
@@ -104,7 +114,7 @@ func (s *storageArrayGRPC) CreateOrUpdateInitiatorGroup(ctx context.Context, req
 	}
 	defer provider.Disconnect()
 
-	mappingContext, err := provider.CreateOrUpdateInitiatorGroup(req.InitiatorGroupName, req.HbaIdentifiers)
+	mappingContext, err := mapper.CreateOrUpdateInitiatorGroup(req.InitiatorGroupName, req.HbaIdentifiers)
 	if err != nil {
 		return &api.CreateInitiatorGroupResponse{
 			Success: false,
@@ -141,6 +151,14 @@ func (s *storageArrayGRPC) MapVolumeToGroup(ctx context.Context, req *api.MapVol
 		}, nil
 	}
 
+	mapper, ok := provider.(storagesdk.VendorMapper)
+	if !ok {
+		return &api.MapVolumeResponse{
+			Success: false,
+			Message: fmt.Sprintf("vendor %s does not implement native mapping; use the Cinder fallback", req.AccessInfo.VendorType),
+		}, nil
+	}
+
 	accessInfo := storagesdk.StorageAccessInfo{
 		Hostname:            req.AccessInfo.Hostname,
 		Username:            req.AccessInfo.Username,
@@ -169,7 +187,7 @@ func (s *storageArrayGRPC) MapVolumeToGroup(ctx context.Context, req *api.MapVol
 	// Convert proto mapping context to SDK mapping context
 	mappingContext := convertProtoToMappingContext(req.MappingContext)
 
-	mappedVolume, err := provider.MapVolumeToGroup(req.InitiatorGroupName, volume, mappingContext)
+	mappedVolume, err := mapper.MapVolumeToGroup(req.InitiatorGroupName, volume, mappingContext)
 	if err != nil {
 		return &api.MapVolumeResponse{
 			Success: false,
@@ -212,6 +230,14 @@ func (s *storageArrayGRPC) UnmapVolumeFromGroup(ctx context.Context, req *api.Un
 		}, nil
 	}
 
+	mapper, ok := provider.(storagesdk.VendorMapper)
+	if !ok {
+		return &api.UnmapVolumeResponse{
+			Success: false,
+			Message: fmt.Sprintf("vendor %s does not implement native mapping; use the Cinder fallback", req.AccessInfo.VendorType),
+		}, nil
+	}
+
 	accessInfo := storagesdk.StorageAccessInfo{
 		Hostname:            req.AccessInfo.Hostname,
 		Username:            req.AccessInfo.Username,
@@ -238,7 +264,7 @@ func (s *storageArrayGRPC) UnmapVolumeFromGroup(ctx context.Context, req *api.Un
 
 	mappingContext := convertProtoToMappingContext(req.MappingContext)
 
-	if err := provider.UnmapVolumeFromGroup(req.InitiatorGroupName, volume, mappingContext); err != nil {
+	if err := mapper.UnmapVolumeFromGroup(req.InitiatorGroupName, volume, mappingContext); err != nil {
 		return &api.UnmapVolumeResponse{
 			Success: false,
 			Message: fmt.Sprintf("Failed to unmap volume: %v", err),
@@ -260,6 +286,11 @@ func (s *storageArrayGRPC) GetMappedGroups(ctx context.Context, req *api.GetMapp
 	provider, err := storagesdk.NewStorageProvider(req.AccessInfo.VendorType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get storage provider: %w", err)
+	}
+
+	mapper, ok := provider.(storagesdk.VendorMapper)
+	if !ok {
+		return nil, fmt.Errorf("vendor %s does not implement native mapping; use the Cinder fallback", req.AccessInfo.VendorType)
 	}
 
 	accessInfo := storagesdk.StorageAccessInfo{
@@ -285,7 +316,7 @@ func (s *storageArrayGRPC) GetMappedGroups(ctx context.Context, req *api.GetMapp
 
 	mappingContext := convertProtoToMappingContext(req.MappingContext)
 
-	groups, err := provider.GetMappedGroups(volume, mappingContext)
+	groups, err := mapper.GetMappedGroups(volume, mappingContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mapped groups: %w", err)
 	}

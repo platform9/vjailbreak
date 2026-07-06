@@ -59,6 +59,9 @@ type MigrationParams struct {
 	// provider should fall back to auto-detection.
 	NetAppSVM     string
 	NetAppFlexVol string
+	// Hitachi Vantara-specific targeting. Empty for non-Vantara arrays.
+	VantaraPoolID   string
+	VantaraRESTPort string
 
 	ImageMetadata map[string]string
 }
@@ -121,6 +124,8 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		ProxyVMK8sName:                 string(configMap.Data["PROXY_VM_K8S_NAME"]),
 		NetAppSVM:                      string(configMap.Data["NETAPP_SVM"]),
 		NetAppFlexVol:                  string(configMap.Data["NETAPP_FLEXVOL"]),
+		VantaraPoolID:                  string(configMap.Data["VANTARA_POOL_ID"]),
+		VantaraRESTPort:                string(configMap.Data["VANTARA_REST_PORT"]),
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		ImageMetadata:                  imageMetadata,
