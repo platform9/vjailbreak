@@ -750,6 +750,24 @@ const (
 	// ProxyVMMaxAttachedDisks is the vSphere hardware limit for disks per VM
 	ProxyVMMaxAttachedDisks = 60
 
+	// ClusterConversionBatchControllerName is the name of the ClusterConversionBatch controller
+	ClusterConversionBatchControllerName = "clusterconversionbatch-controller"
+
+	// ClusterConversionBatchFinalizer is the finalizer for ClusterConversionBatch
+	ClusterConversionBatchFinalizer = "clusterconversionbatch.k8s.pf9.io/finalizer"
+
+	// ClusterConversionBatchLabel is the label set on ESXIMigration resources created by a ClusterConversionBatch
+	ClusterConversionBatchLabel = "vjailbreak.k8s.pf9.io/cluster-conversion-batch"
+
+	// AnnotationTriggerHost is the annotation key for manually triggering a host conversion
+	AnnotationTriggerHost = "vjailbreak.k8s.pf9.io/trigger-host"
+
+	// AnnotationRetryHost is the annotation key for retrying a NeedsAttention host
+	AnnotationRetryHost = "vjailbreak.k8s.pf9.io/retry-host"
+
+	// AnnotationSkipHost is the annotation key for skipping a host
+	AnnotationSkipHost = "vjailbreak.k8s.pf9.io/skip-host"
+
 	// ProxyVMControllerName is the name of the ProxyVM controller
 	ProxyVMControllerName = "proxyvm-controller"
 
