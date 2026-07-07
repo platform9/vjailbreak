@@ -322,6 +322,16 @@ func addEFIFstabEntry(osdisks []vm.VMDisk, espUUID string) error {
 		log.Printf("addEFIFstabEntry: /boot/efi already in fstab, skipping")
 		return nil
 	}
+
+	// Create the mount point directory.  SLES 11 SP4 was a BIOS VM and never
+	// had /boot/efi.  Without this directory guestfish -i and virt-v2v both
+	// fail to mount the ESP, causing virt-v2v to abort with
+	// "could not find bootloader mount point (/boot/efi/EFI)".
+	if _, err := RunCommandInGuestAllVolumes(osdisks, "mkdir-p", true, "/boot/efi"); err != nil {
+		return fmt.Errorf("addEFIFstabEntry: cannot create /boot/efi: %v", err)
+	}
+	log.Printf("addEFIFstabEntry: created /boot/efi mount point")
+
 	entry := fmt.Sprintf("UUID=%s\t/boot/efi\tvfat\tdefaults\t0\t0\n", espUUID)
 	if out, err := RunCommandInGuestAllVolumes(osdisks, "write-append", true,
 		"/etc/fstab", entry); err != nil {
