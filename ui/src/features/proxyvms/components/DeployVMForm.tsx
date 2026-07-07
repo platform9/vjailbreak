@@ -29,6 +29,7 @@ interface DeployVMFormProps {
   scopedLoading: boolean
   isSubmitting: boolean
   vmOptions?: VMOption[]
+  registeredVMNames?: Set<string>
 }
 
 function toOptions(items: string[] | undefined) {
@@ -49,7 +50,8 @@ export default function DeployVMForm({
   dcLoading,
   scopedLoading,
   isSubmitting,
-  vmOptions = []
+  vmOptions = [],
+  registeredVMNames = new Set()
 }: DeployVMFormProps) {
   return (
     <DesignSystemForm
@@ -94,6 +96,8 @@ export default function DeployVMForm({
                   if (val.length > 63) return 'Must be 63 characters or fewer'
                   if (vmOptions.some((v) => v.name === val))
                     return 'A VM with this name already exists in the selected vCenter.'
+                  if (registeredVMNames.has(val))
+                    return 'A vJailbreak Proxy VM with this name is already registered or deploying.'
                   return true
                 }
               }}
