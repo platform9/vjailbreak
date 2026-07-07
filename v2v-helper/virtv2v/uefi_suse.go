@@ -162,7 +162,7 @@ func FormatESPDisk(espDiskPath string) (partition, uuid string, err error) {
 part-init /dev/sda gpt
 part-add /dev/sda primary 2048 -2048
 mkfs vfat /dev/sda1
-set-gpt-type /dev/sda 1 C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+part-set-gpt-type /dev/sda 1 C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 `
 	if _, err = runESPGuestfish(espDiskPath, true, script); err != nil {
 		return "", "", fmt.Errorf("FormatESPDisk: partition/format failed: %v", err)
