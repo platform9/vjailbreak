@@ -29,6 +29,9 @@ import { useClusterData } from '../hooks/useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useHostConfigHandlers } from '../hooks/useHostConfigHandlers'
 import { useRollingFormData } from '../hooks/useRollingFormData'
+import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
+import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
+import { hasAnySubnetMismatch } from '../utils/subnetMismatch'
 import { useRollingFormValidation } from '../hooks/useRollingFormValidation'
 import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 import { useSectionTracking } from '../hooks/useSectionTracking'
@@ -49,6 +52,7 @@ import type {
   FieldErrors,
   RollingFormParams
 } from '../types'
+import type { VmData } from '../api/migration-templates/model'
 
 // RollingMigration includes osFamily which the shared SelectedMigrationOptionsType does not
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
@@ -390,6 +394,30 @@ export default function RollingMigrationFormDrawer({
     const volumeTypes = openstackCredData?.status?.openstack?.volumeTypes || []
     return volumeTypes.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
   }, [openstackCredData])
+
+  // Subnet compatibility between VM IPs and mapped target networks — shared by
+  // the mapping step (warnings) and migration options (persist IP block).
+  const subnetCheckVMs = useMemo<VmData[]>(
+    () =>
+      vmsWithAssignments.map((vm) => ({
+        id: vm.id,
+        name: vm.name,
+        datastores: vm.datastores || [],
+        networks: vm.networks,
+        ipAddress: vm.ip,
+        networkInterfaces: vm.networkInterfaces
+      })),
+    [vmsWithAssignments]
+  )
+  const networkIPsMap = useNetworkIPsMap(subnetCheckVMs)
+  const subnetWarnings = useNetworkSubnetCompatibility({
+    networkMappings: params.networkMappings,
+    openstackCredentials: openstackCredData || undefined,
+    selectedVMs: subnetCheckVMs,
+    networkIPsMap,
+    openstackNetworks
+  })
+  const hasSubnetMismatch = hasAnySubnetMismatch(subnetWarnings)
 
   // Update ESXi host config names when OpenStack host configs become available
   useEffect(() => {
@@ -888,8 +916,7 @@ export default function RollingMigrationFormDrawer({
                       storageMappingError={storageMappingError}
                       loading={loadingOpenstackDetails}
                       showHeader={false}
-                      selectedVMs={vmsWithAssignments as any}
-                      openstackCredentials={openstackCredData || undefined}
+                      subnetWarnings={subnetWarnings}
                     />
                   ) : (
                     <Typography variant="body2" color="text.secondary">
@@ -947,6 +974,7 @@ export default function RollingMigrationFormDrawer({
                     errors={fieldErrors}
                     getErrorsUpdater={getFieldErrorsUpdater}
                     showHeader={false}
+                    hasSubnetMismatch={hasSubnetMismatch}
                   />
                 </SurfaceCard>
               </Box>
