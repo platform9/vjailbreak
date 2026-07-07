@@ -1458,6 +1458,17 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 	utils.PrintLog("virt-v2v conversion completed successfully")
 
+	// SLES 11 SP4: virt-v2v has now rebuilt the initrd with virtio_blk.
+	// Copy the updated kernel and initrd from /boot onto the ESP so GRUB 2 EFI
+	// can load them.  grub.cfg on the ESP is also rewritten with exact filenames.
+	if virtv2v.IsSLES11SP4(osRelease) && espDiskIndex >= 0 {
+		utils.PrintLog("SLES 11 SP4: copying rebuilt kernel+initrd to ESP")
+		if err := virtv2v.CopyKernelInitrdToESP(vminfo.VMDisks, espDiskIndex); err != nil {
+			return errors.Wrap(err, "SLES 11 SP4: failed to copy kernel+initrd to ESP")
+		}
+		utils.PrintLog("SLES 11 SP4: kernel+initrd copied to ESP successfully")
+	}
+
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
 		if removeVMwareTools {
 			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
@@ -1486,6 +1497,89 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 
 	return nil
 }
+
+// createAndSetupSLES11SP4ESP creates, attaches, formats, and pre-populates a
+// UEFI ESP Cinder volume for a SLES 11 SP4 guest that has no existing ESP.
+// It returns the updated VMInfo (ESP disk appended to VMDisks) and the index
+// of the new ESP disk.
+//
+// All steps are pre-conversion:
+//  1. Create a 1 GB Cinder volume with hw_firmware_type=uefi.
+//  2. Attach it to the migration pod.
+//  3. Format as GPT + FAT32 EFI System Partition.
+//  4. Call SetupLegacySUSEPreConversion (reads menu.lst, populates ESP,
+//     updates fstab / grub2-mkconfig stub / INITRD_MODULES on OS disks).
+//  5. Tag the boot OS volume as UEFI (it was created without that flag).
+//  6. Append the ESP VMDisk to vminfo so DetachAllVolumes and the final
+//     Nova attach both handle it correctly.
+func (migobj *Migrate) createAndSetupSLES11SP4ESP(
+	ctx context.Context,
+	vminfo vm.VMInfo,
+	bootVolumeIndex int,
+) (vm.VMInfo, int, error) {
+	// Use the boot volume's type for the ESP; fall back to first configured type.
+	espVolumeType := ""
+	if bootVolumeIndex >= 0 && bootVolumeIndex < len(migobj.Volumetypes) {
+		espVolumeType = migobj.Volumetypes[bootVolumeIndex]
+	} else if len(migobj.Volumetypes) > 0 {
+		espVolumeType = migobj.Volumetypes[0]
+	}
+
+	espName := vminfo.Name + "-esp"
+	// size=0 bytes → CreateVolume rounds up to 1 GiB (ceil(0/1GiB)=0, +1=1).
+	espVol, err := migobj.Openstackclients.CreateVolume(
+		ctx, espName, 0, vminfo.OSType, true /* uefi */, espVolumeType, false,
+	)
+	if err != nil {
+		return vminfo, -1, fmt.Errorf("createAndSetupSLES11SP4ESP: failed to create ESP volume: %v", err)
+	}
+	migobj.logMessage(fmt.Sprintf("SLES 11 SP4: ESP volume %q created (id=%s)", espName, espVol.ID))
+
+	espDisk := vm.VMDisk{
+		Name:        espName,
+		Size:        0,
+		OpenstackVol: espVol,
+	}
+	espPath, err := migobj.AttachVolume(ctx, espDisk)
+	if err != nil {
+		return vminfo, -1, fmt.Errorf("createAndSetupSLES11SP4ESP: failed to attach ESP volume: %v", err)
+	}
+	espDisk.Path = espPath
+	migobj.logMessage(fmt.Sprintf("SLES 11 SP4: ESP volume attached at %s", espPath))
+
+	// Format: GPT + FAT32 EFI System Partition.
+	_, espUUID, err := virtv2v.FormatESPDisk(espPath)
+	if err != nil {
+		return vminfo, -1, fmt.Errorf("createAndSetupSLES11SP4ESP: format failed: %v", err)
+	}
+	migobj.logMessage(fmt.Sprintf("SLES 11 SP4: ESP formatted (UUID=%s)", espUUID))
+
+	// Populate ESP + OS disk fixups; menu.lst is read inside this call.
+	osdisks := vminfo.VMDisks
+	if err := virtv2v.SetupLegacySUSEPreConversion(espPath, osdisks, espUUID); err != nil {
+		return vminfo, -1, fmt.Errorf("createAndSetupSLES11SP4ESP: pre-conversion setup failed: %v", err)
+	}
+
+	// Tag the boot OS volume as UEFI — it was created before we knew this
+	// guest needed UEFI, so hw_firmware_type was not set at volume creation.
+	if vminfo.VMDisks[bootVolumeIndex].OpenstackVol != nil {
+		if err := migobj.Openstackclients.SetVolumeUEFI(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
+			return vminfo, -1, fmt.Errorf("createAndSetupSLES11SP4ESP: failed to set boot volume UEFI metadata: %v", err)
+		}
+		migobj.logMessage("SLES 11 SP4: boot OS volume tagged with hw_firmware_type=uefi")
+	}
+
+	// Mark VMInfo as UEFI so the rest of the pipeline treats this migration as
+	// a proper UEFI VM — in particular, the ESP bootable-marking block in
+	// performDiskConversion checks vminfo.UEFI before calling SetVolumeBootable.
+	vminfo.UEFI = true
+
+	// Append ESP disk so cleanup and final attach loops see it.
+	vminfo.VMDisks = append(vminfo.VMDisks, espDisk)
+	espDiskIndex := len(vminfo.VMDisks) - 1
+	return vminfo, espDiskIndex, nil
+}
+
 func (migobj *Migrate) configureWindowsNetwork(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	persistNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	if persistNetwork {
@@ -1698,6 +1792,26 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 			}
 			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume", len(migobj.ImageMetadata)))
 		}
+	}
+
+	// SLES 11 SP4: synthesize a UEFI ESP before conversion.
+	// The source VM uses GRUB 0.97 (legacy GRUB) with no ESP disk.  We create
+	// a 1 GB Cinder volume, format it as GPT/FAT32, populate it with GRUB 2 EFI
+	// files, and apply the three OS-disk changes required by virt-v2v and OVMF.
+	// No other OS family or distro version is affected by this block.
+	if virtv2v.IsSLES11SP4(osRelease) {
+		migobj.logMessage("SLES 11 SP4: creating UEFI ESP and running pre-conversion setup")
+		var setupErr error
+		vminfo, espDiskIndex, setupErr = migobj.createAndSetupSLES11SP4ESP(ctx, vminfo, bootVolumeIndex)
+		if setupErr != nil {
+			return -1, errors.Wrap(setupErr, "SLES 11 SP4: ESP setup failed")
+		}
+		// Regenerate libvirt XML so virt-v2v sees the new ESP disk and can
+		// mount /boot/efi (now in fstab) during its internal guestfish pass.
+		if xmlErr := vmutils.GenerateXMLConfig(vminfo); xmlErr != nil {
+			return -1, errors.Wrap(xmlErr, "SLES 11 SP4: failed to regenerate XML after ESP creation")
+		}
+		migobj.logMessage(fmt.Sprintf("SLES 11 SP4: ESP ready at disk index %d, XML regenerated", espDiskIndex))
 	}
 
 	// Step 9: Perform disk conversion

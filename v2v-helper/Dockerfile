@@ -106,5 +106,9 @@ COPY scripts/firstboot/store /home/fedora/store
 COPY scripts/offline-vmware-cleanup.sh /home/fedora/offline-vmware-cleanup.sh
 COPY scripts/firstboot/linux/vmware-tools-cleanup.sh /home/fedora/vmware-tools-cleanup.sh
 COPY scripts/mkinitrd-lvm-wrapper.sh /home/fedora/mkinitrd-lvm-wrapper.sh
+# GRUB 2 x86_64-efi module tree for SLES 11 SP4 UEFI boot setup.
+# Packed with x86_64-efi/ prefix; extracted under /EFI/BOOT/ on the ESP by
+# virtv2v.PopulateESP using guestfish tar-in.
+COPY v2v-helper/nbdkit/grub2-x86_64-efi-sles11sp4.tar.gz /home/fedora/grub2-x86_64-efi-sles11sp4.tar.gz
 COPY scripts/firstboot/windows/Firstboot-Init-Windows.bat /home/fedora/Firstboot-Init-Windows.sh
 COPY scripts/99-l2-Netplan.yaml /home/fedora/99-l2-Netplan.yaml
