@@ -137,6 +137,29 @@ To use hotplug after migration:
 Standard flavors without hotplug extra specs will not support live resize. The VM must be powered off for a cold resize in that case.
 :::
 
+## PCI Slot Exhaustion When Attaching Disks with virtio-blk
+
+During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, Maximum 26 devices can be attached after which PCI slots will exhaust and volume attach fails with:
+
+```text
+libvirt.libvirtError: internal error: No more available PCI slots
+```
+
+**Workaround**: Set the disk bus to **virtio-scsi** on the vJailbreak image before creating the vJailbreak VM. All attached volumes then share a single SCSI controller (one PCI slot, up to 256 devices):
+
+```bash
+openstack image set \
+  --property hw_disk_bus=scsi \
+  --property hw_scsi_model=virtio-scsi \
+  <vjailbreak-image-name-or-ID>
+```
+
+:::note
+The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale up use the same image, so set these properties before scaling up.
+:::
+
+See the full troubleshooting entry: [Disk attach fails during migration: No more available PCI slots](../../guides/troubleshooting/troubleshooting/#disk-attach-fails-during-migration-no-more-available-pci-slots).
+
 ## Low Disk Space in the Source VM
 
 Before starting conversion, `virt-v2v` checks that each filesystem inside the **source VM** has sufficient free space. If any filesystem is too full, the conversion fails before it begins.
