@@ -35,9 +35,6 @@ import type {
   MigrationFormDrawerProps
 } from '../types'
 import { useSectionTracking } from '../hooks/useSectionTracking'
-import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
-import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
-import { hasAnySubnetMismatch } from '../utils/subnetMismatch'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
@@ -242,19 +239,6 @@ export default function MigrationFormDrawer({
     openstackCredentials,
     touchedSections
   })
-
-  // Subnet compatibility between selected VM IPs and mapped target networks.
-  // Shared by the mapping step (per-network warnings) and the options step
-  // (persist IP is blocked while any mismatch exists).
-  const networkIPsMap = useNetworkIPsMap(params.vms || [])
-  const subnetWarnings = useNetworkSubnetCompatibility({
-    networkMappings: params.networkMappings,
-    openstackCredentials,
-    selectedVMs: params.vms || [],
-    networkIPsMap,
-    openstackNetworks: sortedOpenstackNetworks
-  })
-  const hasSubnetMismatch = hasAnySubnetMismatch(subnetWarnings)
 
   const { submitting, handleSubmit, handleClose } = useMigrationFormSubmit({
     params,
@@ -594,7 +578,8 @@ export default function MigrationFormDrawer({
                   networkMappingError={fieldErrors['networksMapping']}
                   storageMappingError={fieldErrors['storageMapping']}
                   showHeader={false}
-                  subnetWarnings={subnetWarnings}
+                  selectedVMs={params.vms}
+                  openstackCredentials={openstackCredentials}
                 />
               </SurfaceCard>
             </Box>
@@ -645,7 +630,6 @@ export default function MigrationFormDrawer({
                   getErrorsUpdater={getFieldErrorsUpdater}
                   stepNumber="5"
                   showHeader={false}
-                  hasSubnetMismatch={hasSubnetMismatch}
                 />
               </SurfaceCard>
             </Box>

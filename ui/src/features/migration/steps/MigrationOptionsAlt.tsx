@@ -85,8 +85,7 @@ export default function MigrationOptionsAlt({
   errors,
   getErrorsUpdater,
   stepNumber,
-  showHeader = true,
-  hasSubnetMismatch = false
+  showHeader = true
 }: MigrationOptionsPropsInterface) {
   const { setValue } = useFormContext()
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
@@ -240,14 +239,6 @@ export default function MigrationOptionsAlt({
     const now = dayjs()
     return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
-
-  // Persist IP is mutually exclusive with mapping to a network whose subnet
-  // does not contain the source VM IPs — auto-uncheck when a mismatch appears
-  useEffect(() => {
-    if (hasSubnetMismatch && params?.networkPersistence) {
-      onChange('networkPersistence')(false)
-    }
-  }, [hasSubnetMismatch, params?.networkPersistence, onChange])
 
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
   const hasL2Network = hasSelectedLayer2Network(
@@ -646,14 +637,6 @@ export default function MigrationOptionsAlt({
             </Alert>
           )}
 
-          {hasSubnetMismatch && (
-            <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
-              Persist source network interfaces is not available because some VM IP addresses do
-              not lie within the subnet of the selected destination network(s). Map to a network
-              with a matching subnet to enable this option.
-            </Alert>
-          )}
-
           <OptionRow>
             <OptionLeft>
               <FormControlLabel
@@ -701,7 +684,6 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
-                    disabled={hasSubnetMismatch}
                     onChange={(e) => {
                       onChange('networkPersistence')(e.target.checked)
                     }}

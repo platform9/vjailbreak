@@ -31,7 +31,6 @@ export const API = {
   rdmDisks: `**${V1A1}/rdmdisks`,
   volumeImageProfiles: `**${V1A1}/volumeimageprofiles**`,
   validateIPs: `**/validate_openstack_ip`,
-  checkSubnetCompatibility: `**/check_network_subnet_compatibility`,
   podLogs: (namespace: string, podName: string) =>
     `**/namespaces/${namespace}/pods/${podName}/log*`,
   rollingMigrationPlans: `**${V1A1}/rollingmigrationplans`,

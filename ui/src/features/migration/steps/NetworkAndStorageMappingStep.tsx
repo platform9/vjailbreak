@@ -13,7 +13,9 @@ import {
   Chip
 } from '@mui/material'
 import { useMemo } from 'react'
+import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useFilteredMappings } from '../hooks/useFilteredMappings'
+import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
 import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
@@ -46,7 +48,8 @@ export default function NetworkAndStorageMappingStep({
   stepNumber = '3',
   loading = false,
   showHeader = true,
-  subnetWarnings = {}
+  selectedVMs = [],
+  openstackCredentials
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
@@ -94,6 +97,16 @@ export default function NetworkAndStorageMappingStep({
     storageCopyMethod,
     validatedArrayCreds,
     onChange
+  })
+
+  const networkIPsMap = useNetworkIPsMap(selectedVMs)
+
+  const subnetWarnings = useNetworkSubnetCompatibility({
+    networkMappings: params.networkMappings,
+    openstackCredentials,
+    selectedVMs,
+    networkIPsMap,
+    openstackNetworks
   })
 
   // Calculate unmapped networks and storage
