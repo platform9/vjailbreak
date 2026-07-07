@@ -493,7 +493,9 @@ useQuery (vCenter scoped resources)
   staleTime: 60_000
 ```
 
-**Cache invalidation**: After `postProxyVM`, `createProxyVMFromOVA`, or `deleteProxyVM`, invalidate `['proxyvms']`.
+**Cache invalidation**: After `postProxyVM`, `createProxyVMFromOVA`, `deleteProxyVM`, or `retryProxyVMVerification`, invalidate `['proxyvms']`.
+
+**`registeredVMNames`**: `useMemo(() => new Set(existingProxyVMs.map(vm => vm.spec.vmName)), [existingProxyVMs])` in `AddProxyVMDrawer`, built from `useProxyVMsQuery()` (enabled only while drawer `open`). Includes ProxyVMs in every status — `Deploying`/`Pending` included, not just `Ready` — so it also blocks re-registering/re-deploying a proxy VM name that hasn't finished provisioning yet. Passed to both `RegisterVMForm` (→ `VMAutocomplete`, disables the option) and `DeployVMForm` (→ blocks the name field's `validate` rule).
 
 ### Data Flow — Register Existing VM
 
@@ -538,10 +540,14 @@ ProxyVM is consumed in Step 3 (Network and Storage Mapping) of both standard and
 
 ### Storage Copy Method: `HotAdd`
 
-Added to `STORAGE_COPY_METHOD_OPTIONS` in `src/features/migration/constants.ts`:
+The internal enum value is still `'HotAdd'`, but the user-facing label is now **"vJailbreak Accelerated Copy"** (renamed from "Hot-Add via Proxy VM"). `STORAGE_COPY_METHOD_OPTIONS` in `src/features/migration/constants.ts`:
 
 ```ts
-{ value: 'HotAdd', label: 'Hot-Add via Proxy VM' }
+export const STORAGE_COPY_METHOD_OPTIONS = [
+  { value: 'normal', label: 'Standard Copy' },
+  { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' },
+  { value: 'HotAdd', label: 'vJailbreak Accelerated Copy' }
+] as const
 ```
 
 **`StorageCopyMethod` type** (`src/features/migration/types.ts`):
@@ -552,26 +558,28 @@ type StorageCopyMethod = 'normal' | 'StorageAcceleratedCopy' | 'HotAdd'
 
 **Form params**: `proxyVMRef?: string` added to `FormValues` and `RollingFormParams`.
 
-**Beta chip**: `HotAdd` radio label shows `<Chip label="Beta" color="warning" variant="outlined" />`.
+**Beta chip**: both `StorageAcceleratedCopy` and `HotAdd` radio labels show `<Chip label="Beta" color="warning" variant="outlined" />` (not `HotAdd`-only).
+
+**Migration detail/list display**: `MigrationDetailsTab` labels `HotAdd` migrations as `"vJailbreak Accelerated Copy"` and shows an extra "vJailbreak Proxy VM" field with the proxy's name. `Phase.HotAddTransferInProgress` / `Phase.HotAddCleanup` are surfaced as distinct progress phases in `MigrationProgress`, `MigrationProgressWithPopover`, `MigrationsTable`, and `MigrationNextActionBanner`.
 
 ### NetworkAndStorageMappingStep Behavior (HotAdd)
 
 When `storageCopyMethod === 'HotAdd'`:
 
-- **Proxy VM selector** shown (with `FieldLabel` above):
-  - Source: `useProxyVMsQuery()` filtered to `status.validationStatus === 'Ready'`
+- **VMware Datastore → PCD Volume Type mapping table** shown first (same table as `normal` mode)
+- **Proxy VM selector** shown below it (with `FieldLabel` above):
+  - Source: `useProxyVMsQuery()` (enabled only while `storageCopyMethod === 'HotAdd'`) filtered to `status.validationStatus === 'Ready'`
   - Option label: `metadata.name (status.ipAddress)` or just `metadata.name`
-  - If no Ready VMs: warning Alert shown
-- **VMware Datastore → PCD Volume Type mapping table** also shown
+  - If no Ready VMs: warning Alert, select disabled
 - Switching away from HotAdd clears `proxyVMRef`
 
 ### MigrationOptionsAlt Behavior (HotAdd)
 
-When `storageCopyMethod === 'HotAdd'`:
+When `storageCopyMethod === 'HotAdd'` (`isHotAdd`):
 
-- `dataCopyMethod` forced to `'cold'` via useEffect
-- `hot` and `mock` options disabled
-- Helper text: "Hot-Add migration only supports Cold copy. Hot copy is disabled."
+- `dataCopyMethod` forced to `'cold'` **only if it isn't already `'cold'` or `'mock'`** — i.e. HotAdd allows **Cold or Mock** copy, not cold-only
+- Only the `hot` data-copy option is disabled in the dropdown (`disabled={isHotAdd && item.value !== 'cold' && item.value !== 'mock'}`)
+- Info alert: "vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available."
 
 ### Validation
 
