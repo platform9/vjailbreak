@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -1058,13 +1057,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vm string,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
-	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arrayCredsSecretRef string,
 ) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
@@ -1097,17 +1094,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},
-		{
-			Name:  "USE_FLAVORLESS",
-			Value: strconv.FormatBool(migrationtemplate.Spec.UseFlavorless),
-		},
-	}
-
-	if migrationtemplate.Spec.UseFlavorless {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  "FLAVORLESS_FLAVOR_ID",
-			Value: vmMachine.Spec.TargetFlavorID,
-		})
 	}
 
 	// Get vjailbreak settings for pod resource configuration
@@ -2003,32 +1989,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
-	var (
-		fbcm                 *corev1.ConfigMap
-		baseFlavor           *flavors.Flavor
-		hotplugFlavorMissing = false
-	)
-
-	// For flavorless migrations, check hotplug base flavor availability
-	if migrationtemplate.Spec.UseFlavorless {
-		ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
-
-		osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
-		}
-
-		baseFlavor, err = utils.FindHotplugBaseFlavor(osClients.ComputeClient)
-		if err != nil {
-			ctxlog.Error(err, "Failed to discover hotplug base flavor")
-			if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "Failed to discover base flavor for flavorless migration"); updateErr != nil {
-				ctxlog.Error(updateErr, "Failed to update migration plan status after flavor discovery failure")
-			}
-			hotplugFlavorMissing = true
-		} else {
-			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
-		}
-	}
+	var fbcm *corev1.ConfigMap
 
 	vmKeyForMachine := make(map[string]string)
 	for _, group := range migrationplan.Spec.VirtualMachines {
@@ -2055,17 +2016,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm = vmMachineObj.Spec.VMInfo.Name
 		}
 
-		if migrationtemplate.Spec.UseFlavorless && !hotplugFlavorMissing {
-			if vmMachineObj.Spec.TargetFlavorID != baseFlavor.ID {
-				patch := client.MergeFrom(vmMachineObj.DeepCopy())
-				vmMachineObj.Spec.TargetFlavorID = baseFlavor.ID
-				if err := r.Patch(ctx, vmMachineObj, patch); err != nil {
-					return errors.Wrap(err, "failed to automatically patch VMwareMachine with discovered base flavor ID")
-				}
-				ctxlog.Info("Patched VMwareMachine with base flavor ID", "vmwareMachine", vmMachineObj.Name, "flavorID", baseFlavor.ID)
-			}
-		}
-
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
@@ -2081,13 +2031,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 
-		if migrationtemplate.Spec.UseFlavorless && hotplugFlavorMissing {
-			ctxlog.Info("Marking migration as Failed due to missing hotplug base flavor", "vm", vm)
-			if err := r.markMigrationFailed(ctx, migrationobj, "Failed to discover base flavor for flavorless migration"); err != nil {
-				ctxlog.Error(err, "Failed to mark migration as Failed", "vm", vm)
-			}
-			continue
-		}
 		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
@@ -2108,13 +2051,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		err = r.CreateJob(ctx,
 			migrationplan,
-			migrationtemplate,
 			migrationobj,
 			vm,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
-			vmMachineObj,
 			arraycredsSecretRef)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
@@ -2128,9 +2069,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 	}
 
-	if hotplugFlavorMissing {
-		return nil
-	}
 	return nil
 }
 
@@ -2587,14 +2525,3 @@ func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Cont
 	}
 }
 
-// markMigrationFailed updates a Migration status to Failed
-func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, message string) error {
-	condition := corev1.PodCondition{
-		Type:               "Failed",
-		Status:             corev1.ConditionTrue,
-		Reason:             "MigrationFailed",
-		Message:            message,
-		LastTransitionTime: metav1.Now(),
-	}
-	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
-}

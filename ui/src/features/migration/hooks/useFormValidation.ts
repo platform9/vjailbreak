@@ -324,7 +324,6 @@ export function useFormValidation({
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(params.removeVMwareTools) ||
       Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
       postMigrationActionSelected
     )
@@ -374,8 +373,7 @@ export function useFormValidation({
       (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
 
     const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+      !selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean'
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -415,7 +413,6 @@ export function useFormValidation({
     params.periodicSyncInterval,
     params.postMigrationScript,
     params.useGPU,
-    params.useFlavorless,
     params.postMigrationAction,
     fieldErrors
   ])

@@ -134,7 +134,6 @@ export function useCredentialFetching({
               ...(targetPCDClusterName && {
                 targetPCDClusterName
               }),
-              useFlavorless: params.useFlavorless || false,
               useGPUFlavor: params.useGPU || false
             }
           }
@@ -149,7 +148,6 @@ export function useCredentialFetching({
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,
-          useFlavorless: params.useFlavorless || false,
           useGPUFlavor: params.useGPU || false
         })
         const created = await postMigrationTemplate(body)
@@ -175,7 +173,6 @@ export function useCredentialFetching({
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
     targetPCDClusterName,
-    params.useFlavorless,
     params.useGPU,
     migrationTemplate?.metadata?.name,
     getFieldErrorsUpdater,

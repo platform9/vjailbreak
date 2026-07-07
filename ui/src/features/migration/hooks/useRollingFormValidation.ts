@@ -154,7 +154,6 @@ export function useRollingFormValidation({
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
       Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
 
     const dataCopyMethodOk =
@@ -187,8 +186,7 @@ export function useRollingFormValidation({
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
 
     const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+      !selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean'
 
     const postMigrationActionOk = !postMigrationActionSelected
       ? true
@@ -281,7 +279,6 @@ export function useRollingFormValidation({
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(selectedMigrationOptions.osFamily) ||
       Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
       postMigrationActionSelected
     )
   }, [selectedMigrationOptions])
@@ -316,8 +313,7 @@ export function useRollingFormValidation({
     const osFamilyOk = !selectedMigrationOptions.osFamily || Boolean(params.osFamily)
 
     const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+      !selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean'
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -357,7 +353,6 @@ export function useRollingFormValidation({
     params.postMigrationScript,
     params.osFamily,
     params.useGPU,
-    params.useFlavorless,
     params,
     fieldErrors
   ])

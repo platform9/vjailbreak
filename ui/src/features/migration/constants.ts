@@ -64,7 +64,6 @@ export const DEFAULT_MIGRATION_OPTIONS = {
   cutoverEndTime: false,
   postMigrationScript: false,
   useGPU: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,

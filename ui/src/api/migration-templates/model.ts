@@ -38,7 +38,6 @@ export interface MigrationTemplateSpec {
   source: Source
   storageMapping: string
   targetPCDClusterName?: string
-  useFlavorless?: boolean
   storageCopyMethod?: string
   proxyVMRef?: { name: string }
 }

@@ -562,7 +562,7 @@ func TestCreateTargetInstance(t *testing.T) {
 	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
 		MACAddress: "mac-address",
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -598,6 +598,63 @@ func TestCreateTargetInstance(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestCreateTargetInstance_HotplugFlavor verifies that assigning a hotplug base
+// flavor (0 vCPU, 0 RAM) is enough to drive the hotplug/flavorless path — no
+// separate UseFlavorless toggle exists anymore. The instance must be created
+// with the assigned hotplug flavor as-is.
+func TestCreateTargetInstance_HotplugFlavor(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	hotplugFlavor := &flavors.Flavor{
+		ID:    "0-0-x",
+		Name:  "hotplug-base",
+		VCPUs: 0,
+		RAM:   0,
+	}
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "0-0-x").Return(hotplugFlavor, nil).Times(1)
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any(), gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+		MACAddress: "mac-address",
+	}, nil).AnyTimes()
+	// The hotplug flavor selected by the user must be passed through unchanged.
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), hotplugFlavor, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).Times(1)
+	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetSecurityGroupIDs(gomock.Any(), gomock.Any(), gomock.Any()).Return([]string{}, nil).AnyTimes()
+
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		CPU:    4,
+		Memory: 8192,
+		Mac: []string{
+			"mac-address-1",
+			"mac-address-2",
+		},
+	}
+
+	fakeCtrlClient := ctrlfake.NewClientBuilder().WithObjects(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.VjailbreakSettingsConfigMapName,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Data: map[string]string{},
+	}).Build()
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networknames:     []string{"network-name-1", "network-name-2"},
+		InPod:            false,
+		TargetFlavorId:   "0-0-x",
+		K8sClient:        fakeCtrlClient,
+	}
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
+	assert.NoError(t, err)
+}
+
 func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -616,7 +673,7 @@ func TestCreateTargetInstance_AdvancedMapping_Ports(t *testing.T) {
 		ID:        "port-2-id",
 		NetworkID: "network-2",
 	}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
 		VCPUs: 2,
@@ -664,7 +721,7 @@ func TestCreateTargetInstance_AdvancedMapping_InsufficientPorts(t *testing.T) {
 		RAM:   2048,
 	}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().GetSecurityGroupIDs(gomock.Any(), gomock.Any(), gomock.Any()).Return([]string{}, nil).AnyTimes()
-	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
 	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	inputvminfo := vm.VMInfo{
 		Name:   "test-vm",

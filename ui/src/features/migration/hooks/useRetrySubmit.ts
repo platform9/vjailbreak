@@ -244,7 +244,6 @@ export function useRetrySubmit({
       ...(newStorageMappingName !== undefined && { storageMapping: newStorageMappingName }),
       storageCopyMethod: params.storageCopyMethod || 'normal',
       useGPUFlavor: params.useGPU || false,
-      useFlavorless: Boolean(selectedMigrationOptions.useFlavorless),
       targetPCDClusterName: selectedPcdClusterName || originalTemplateSpec.targetPCDClusterName || '',
       ...(params.storageCopyMethod === 'HotAdd' && params.proxyVMRef
         ? { proxyVMRef: { name: params.proxyVMRef } }

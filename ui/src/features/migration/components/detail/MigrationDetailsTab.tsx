@@ -50,7 +50,6 @@ const POLICY_DEFAULT_LABELS: Record<string, string> = {
   networkPersistence: 'Off',
   removeVMwareTools: 'Off',
   useGPUFlavor: 'Off',
-  useFlavorless: 'Off',
 }
 
 const CHIP_SX = { fontWeight: 600, fontSize: '0.68rem', height: 20, borderRadius: '10px' } as const
@@ -189,7 +188,6 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const planPostAction = (planSpec?.postMigrationAction as any) || {}
 
   const templateSpec = (data?.migrationTemplate?.spec as any) || {}
-  const useFlavorless = templateSpec?.useFlavorless === true
   const useGPUFlavor = templateSpec?.useGPUFlavor === true
   const storageCopyMethod = (templateSpec?.storageCopyMethod as string) || 'normal'
   const isStorageAcceleratedCopy = storageCopyMethod === 'StorageAcceleratedCopy'
@@ -509,9 +507,8 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       networkPersistence,
       removeVMwareTools,
       useGPUFlavor: enabledOrNA(useGPUFlavor),
-      useFlavorless: enabledOrNA(useFlavorless),
     }),
-    [cutoverPolicy, disconnectSourceNetwork, fallbackToDhcp, folderName, networkPersistence, removeVMwareTools, renameSuffix, scheduleDataCopy, securityGroups, serverGroup, useFlavorless, useGPUFlavor]
+    [cutoverPolicy, disconnectSourceNetwork, fallbackToDhcp, folderName, networkPersistence, removeVMwareTools, renameSuffix, scheduleDataCopy, securityGroups, serverGroup, useGPUFlavor]
   )
   const migrationPolicyItems = useMemo(
     () =>
