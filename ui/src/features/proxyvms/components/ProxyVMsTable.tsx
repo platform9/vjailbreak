@@ -232,8 +232,9 @@ export default function ProxyVMsTable() {
           } catch (err: any) {
             if (err?.response?.status !== 404) throw err
           }
-          if (vm.spec.sshKeySecretRef?.name) {
-            deleteSecret(vm.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+          const secretName = vm.spec.sshKeySecretRef?.name || vm.spec.sshKeyPairRef?.name
+          if (secretName) {
+            deleteSecret(secretName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
           }
         })
       )
@@ -263,8 +264,9 @@ export default function ProxyVMsTable() {
       }
       // 404 = already gone, proceed with cleanup
     }
-    if (deleteTarget.spec.sshKeySecretRef?.name) {
-      deleteSecret(deleteTarget.spec.sshKeySecretRef.name, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
+    const secretName = deleteTarget.spec.sshKeySecretRef?.name || deleteTarget.spec.sshKeyPairRef?.name
+    if (secretName) {
+      deleteSecret(secretName, VJAILBREAK_DEFAULT_NAMESPACE).catch(() => {})
     }
     queryClient.invalidateQueries({ queryKey: PROXY_VMS_QUERY_KEY })
     refetch()

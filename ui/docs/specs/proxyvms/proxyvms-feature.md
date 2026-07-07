@@ -22,7 +22,7 @@ ProxyVM is a Kubernetes CRD that represents a vCenter VM pre-configured to act a
 
 1. **Deploy new Proxy VM** → select method "Deploy a new vJailbreak Proxy VM" → enter VM name + pick VMware creds → pick datacenter/datastore/network → submit → controller deploys OVA, injects SSH keys, registers ProxyVM automatically → drawer shows progress and auto-closes once the VM appears in the list
 2. **Register existing VM** → select method "Register an existing VM" → pick VMware creds → pick VM from searchable dropdown (shows IP + vCPU; Windows VMs and already-registered VMs are greyed out/disabled) → generate key pair (copy public key to VM's `authorized_keys`) OR upload existing private key → submit → controller verifies prerequisites → VM becomes `Ready`
-3. **Monitor Proxy VM status** → page polls every 5s while any VM is `Deploying`, `Pending`, or `Verifying`; status filter + search available in table toolbar
+3. **Monitor Proxy VM status** → table's `useProxyVMsQuery()` polls every 5s while any VM is `Pending` or `Verifying` (a `Deploying` VM is tracked separately by the Add drawer's own deploy-poll, see §6); status filter + search available in table toolbar
 4. **Retry failed verification** → row in `VerificationFailed` status shows a retry icon → patches a `force-reconcile` annotation → controller re-verifies
 5. **Delete Proxy VM(s)** → single-row delete or multi-select "Delete Selected (n)" bulk delete → confirmation dialog → delete CRD(s) + SSH key Secret(s)
 6. **Use in migration** → Step 3 of migration form: select `vJailbreak Accelerated Copy` (Beta) → choose a `Ready` proxy VM from dropdown
@@ -40,7 +40,7 @@ src/api/proxyvms/
 └── index.ts        — barrel export
 
 src/hooks/api/
-└── useProxyVMsQuery.ts  — React Query hook, auto-polls while Pending/Verifying
+└── useProxyVMsQuery.ts  — React Query hook, auto-polls while any item is Pending/Verifying
 
 src/features/proxyvms/
 ├── pages/
@@ -521,7 +521,7 @@ User clicks "Add Proxy VM"
 ### Data Flow — Deploy New VM from OVA
 
 ```
-User selects "Deploy a new Proxy VM" method
+User selects "Deploy a new vJailbreak Proxy VM" method
   → DeployVMForm shown
   → Selects creds → fetches datacenters
   → Selects datacenter → fetches datastores + networks + clusters
@@ -597,21 +597,24 @@ HotAdd → createStorageMapping(params.storageMappings)
 
 ## 8. Validation Rules
 
-| Rule                     | Condition                                                     | Error                                                                                    |
-| ------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| proxyVMRef required      | `storageCopyMethod === 'HotAdd'` and `!params.proxyVMRef`     | "Please select a Proxy VM to use for Hot-Add data copy"                                  |
-| storageMappings required | `storageCopyMethod === 'HotAdd'` and storage not fully mapped | Storage mapping required (same as `normal` mode)                                         |
-| VM required (register)   | Add drawer, select mode, submit                               | "VM is required"                                                                         |
-| vmwareCredsRef required  | Add drawer submit                                             | "VMware credentials are required"                                                        |
-| vmName required (deploy) | Add drawer, create mode, submit                               | "VM name is required"                                                                    |
-| vmName format (deploy)   | Must match `/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`              | "Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen."       |
-| vmName blank (deploy)    | Whitespace-only input                                         | "VM name cannot be blank"                                                                |
-| vmName length (deploy)   | > 63 characters                                               | "Must be 63 characters or fewer"                                                         |
-| sshPrivateKey required   | Add drawer, register mode, upload tab, submit                 | "SSH private key is required"                                                            |
-| sshPrivateKey format     | Must contain OpenSSH headers                                  | "Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)" |
-| SSH key file size        | Upload > 1 MB                                                 | "File too large. SSH private key must be under 1 MB."                                    |
-| Generated key required   | Register mode, generate tab, no key generated yet             | "Generate a key pair first."                                                             |
-| authorizedKeysConfirmed  | Register mode; generate tab after key generated, OR upload tab after key pasted | "Required" (bold red FormHelperText below checkbox) |
+| Rule                          | Condition                                                                       | Error                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| proxyVMRef required           | `storageCopyMethod === 'HotAdd'` and `!params.proxyVMRef`                       | "Please select a Proxy VM to use for Hot-Add data copy"                                      |
+| storageMappings required      | `storageCopyMethod === 'HotAdd'` and storage not fully mapped                   | Storage mapping required (same as `normal` mode)                                             |
+| VM required (register)        | Add drawer, select mode, submit                                                 | "VM is required"                                                                              |
+| vmwareCredsRef required       | Add drawer submit                                                               | "VMware credentials are required"                                                             |
+| vmName required (deploy)      | Add drawer, create mode, submit                                                 | "VM name is required"                                                                          |
+| vmName format (deploy)        | Must match `/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`                                  | "Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen."             |
+| vmName blank (deploy)         | Whitespace-only input                                                           | "VM name cannot be blank"                                                                      |
+| vmName length (deploy)        | > 63 characters                                                                 | "Must be 63 characters or fewer"                                                               |
+| vmName vCenter collision (deploy) | Name matches a VM already in the selected vCenter (`vmOptions`)             | "A VM with this name already exists in the selected vCenter."                                 |
+| vmName registered collision (deploy) | Name matches any existing ProxyVM CR, incl. `Deploying`/`Pending` ones (`registeredVMNames`) | "A vJailbreak Proxy VM with this name is already registered or deploying." |
+| VM option disabled (register) | vCenter VM already registered (`registeredVMNames`) or non-Linux (`osFamily !== 'linuxGuest'`) | Option unselectable in `VMAutocomplete`; caption shows why |
+| sshPrivateKey required        | Add drawer, register mode, upload tab, submit                                  | "SSH private key is required"                                                                  |
+| sshPrivateKey format          | Must pass `validateSshPrivateKey` (OpenSSH, RSA, EC, or PKCS#8 headers)         | Format-specific message from `validateSshPrivateKey`                                          |
+| SSH key file size             | Upload > 1 MB                                                                   | "File too large. SSH private key must be under 1 MB."                                          |
+| Generated key required        | Register mode, generate tab, no key generated yet                              | "Generate a key pair first."                                                                    |
+| authorizedKeysConfirmed       | Register mode; generate tab after key generated, OR upload tab after key pasted | "Required" (bold red FormHelperText below checkbox)                                            |
 
 ---
 
@@ -632,10 +635,12 @@ The VM must have these configured before registering it (documented externally �
 
 - ProxyVM must be in `migration-system` namespace — hardcoded via `VJAILBREAK_DEFAULT_NAMESPACE`
 - Only `Ready` proxy VMs appear in migration form dropdown
-- HotAdd forces cold copy; warm (hot) migration not supported with HotAdd
+- HotAdd (vJailbreak Accelerated Copy) allows Cold or Mock data copy only; warm (hot) migration not supported with HotAdd
 - SSH Secret name derived from `toK8sName(vmName)`. Collision possible if two VM names normalize to the same K8s-safe string.
-- `AddProxyVMDialog.tsx` — orphaned dead file; safe to delete
 - ProxyVM CRD is not session-scoped — persists across migrations and must be explicitly deleted
 - VM picker fetches from `/vmwaremachines?labelSelector=...` — requires VMware creds already validated and VMwareMachine CRs to exist
 - OVA deploy endpoint is at `/dev-api/sdk/vpw/v1/create-proxy-vm` — proxied through the API server
 - vCenter resources endpoint is at `/dev-api/sdk/vpw/v1/vcenter-resources` — scoped by `datacenter` param for second-level resources
+- Windows guest VMs (`osFamily === 'windowsGuest'`) and any non-`linuxGuest` VM cannot be selected as a proxy VM (GHI #2088) — enforced client-side only in `VMAutocomplete`, not by the controller
+- Duplicate-name guard (`registeredVMNames`, GHI #2067) is also client-side only — a race between two clients (or direct API/kubectl use) could still create two ProxyVM CRs whose `spec.vmName` collide; the controller itself does not reject this
+- Retry (`force-reconcile` annotation) only surfaces in the UI for `VerificationFailed` rows; `DeployFailed` rows have no retry action from the table
