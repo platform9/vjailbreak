@@ -1,0 +1,64 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ai
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ai
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+      serviceAccountName: vjailbreak-ai-sa
+      containers:
+        - name: vjailbreak-ai
+          image: quay.io/platform9/vjailbreak-ai:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: api-key
+                  optional: true
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: admin-key
+                  optional: true
+            - name: CHROMA_PATH
+              value: /data/chroma
+            - name: CONTEXT_PATH
+              value: /data/context.md
+            - name: ALLOWED_ORIGINS
+              value: "http://vjailbreak-ui-service.migration-system.svc.cluster.local"
+          volumeMounts:
+            - name: ai-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: ai-data
+          persistentVolumeClaim:
+            claimName: vjailbreak-ai-data
+---
