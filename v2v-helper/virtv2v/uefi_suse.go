@@ -22,17 +22,25 @@ const grub2EFITarPath = "/home/fedora/grub2-x86_64-efi-sles11sp4.tar.gz"
 
 // ── Phase 1: Detection + grub.cfg generation ─────────────────────────────────
 
-// IsSLES11SP4 returns true when osRelease content (from /etc/SuSE-release)
-// identifies the guest as SUSE Linux Enterprise Server 11 SP4.
-// /etc/SuSE-release on SLES 11 SP4 looks like (after lower-casing):
+// IsSLES11SP4 returns true when osRelease content identifies the guest as
+// SUSE Linux Enterprise Server 11 SP4.
 //
-//	suse linux enterprise server 11 (x86_64)
-//	version = 11
-//	patchlevel = 4
+// GetOsReleaseAllVolumes tries /etc/os-release before /etc/SuSE-release, so
+// we must handle both file formats (after lower-casing by guestfish stdout):
+//
+//	/etc/os-release  → pretty_name="suse linux enterprise server 11 sp4"
+//	                   version_id="11.4"
+//	/etc/SuSE-release → suse linux enterprise server 11 (x86_64)
+//	                    version = 11
+//	                    patchlevel = 4
 func IsSLES11SP4(osRelease string) bool {
 	lower := strings.ToLower(osRelease)
-	return strings.Contains(lower, "suse linux enterprise server 11") &&
-		strings.Contains(lower, "patchlevel = 4")
+	if !strings.Contains(lower, "suse linux enterprise server 11") {
+		return false
+	}
+	return strings.Contains(lower, "patchlevel = 4") ||
+		strings.Contains(lower, `version_id="11.4"`) ||
+		strings.Contains(lower, " sp4")
 }
 
 // parseSLESMenuLst parses /boot/grub/menu.lst and returns the kernel version,
