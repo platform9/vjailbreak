@@ -169,8 +169,7 @@ export interface NetworkAndStorageMappingStepProps {
   stepNumber?: string
   loading?: boolean
   showHeader?: boolean
-  selectedVMs?: VmData[]
-  openstackCredentials?: OpenstackCreds
+  subnetWarnings?: Record<string, string>
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +350,7 @@ export interface MigrationOptionsPropsInterface {
   getErrorsUpdater: (key: string | number) => (value: string) => void
   stepNumber: string
   showHeader?: boolean
+  hasSubnetMismatch?: boolean
 }
 
 // ---------------------------------------------------------------------------
