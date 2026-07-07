@@ -1794,11 +1794,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (vm
 		}
 	}
 
-	// SLES 11 SP4: synthesize a UEFI ESP before conversion.
-	// The source VM uses GRUB 0.97 (legacy GRUB) with no ESP disk.  We create
-	// a 1 GB Cinder volume, format it as GPT/FAT32, populate it with GRUB 2 EFI
-	// files, and apply the three OS-disk changes required by virt-v2v and OVMF.
-	// No other OS family or distro version is affected by this block.
 	if virtv2v.IsSLES11SP4(osRelease) {
 		migobj.logMessage("SLES 11 SP4: creating UEFI ESP and running pre-conversion setup")
 		var setupErr error
@@ -1806,8 +1801,6 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (vm
 		if setupErr != nil {
 			return vminfo, -1, errors.Wrap(setupErr, "SLES 11 SP4: ESP setup failed")
 		}
-		// Regenerate libvirt XML so virt-v2v sees the new ESP disk and can
-		// mount /boot/efi (now in fstab) during its internal guestfish pass.
 		if xmlErr := vmutils.GenerateXMLConfig(vminfo); xmlErr != nil {
 			return vminfo, -1, errors.Wrap(xmlErr, "SLES 11 SP4: failed to regenerate XML after ESP creation")
 		}
@@ -2291,10 +2284,6 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			return errors.Wrap(err, "failed to live replicate disks")
 		}
 	}
-	// Convert the Boot Disk to raw format.
-	// ConvertVolumes returns the updated vminfo so that any disks added during
-	// conversion (e.g. the SLES 11 SP4 ESP) and the UEFI flag are visible to
-	// CreateTargetInstance when it creates the Nova VM.
 	var espDiskIndex int
 	vminfo, espDiskIndex, err = migobj.ConvertVolumes(ctx, vminfo)
 	if err != nil {

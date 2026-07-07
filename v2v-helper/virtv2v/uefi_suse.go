@@ -313,16 +313,6 @@ func SetupOSDiskForUEFI(osdisks []vm.VMDisk, espUUID string) error {
 	return nil
 }
 
-// createBootEFIMountpoint scans osdisks one disk at a time (without guestfish
-// -i) to locate the ext-based /boot partition — identified as a disk whose
-// first partition is ext2/3/4 and not an LVM2_member — and creates the /efi
-// directory on it directly.
-//
-// In the OS context, this partition is mounted at /boot, so /efi on the
-// partition becomes /boot/efi for virt-v2v.  The directory must exist before
-// the fstab entry is added or virt-v2v will fail with:
-//
-//	"mount: /boot/efi: mount point is not a directory"
 func createBootEFIMountpoint(osdisks []vm.VMDisk) error {
 	for i, disk := range osdisks {
 		fsOut, err := runESPGuestfish(disk.Path, false, "run\nlist-filesystems\n")
@@ -356,12 +346,6 @@ func createBootEFIMountpoint(osdisks []vm.VMDisk) error {
 }
 
 func addEFIFstabEntry(osdisks []vm.VMDisk, espUUID string) error {
-	// Always create /efi on the /boot partition before touching fstab.
-	// This must happen even on re-runs: a previous attempt may have written the
-	// fstab entry but put the directory on the root LVM (wrong filesystem),
-	// causing virt-v2v to fail with "mount point is not a directory".
-	// createBootEFIMountpoint is idempotent — mkdir-p succeeds whether the
-	// directory already exists or not.
 	if err := createBootEFIMountpoint(osdisks); err != nil {
 		return fmt.Errorf("addEFIFstabEntry: %v", err)
 	}
