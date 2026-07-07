@@ -58,10 +58,8 @@ anth_client   = None
 async def lifespan(app: FastAPI):
     global chroma_client, collection, anth_client
 
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set")
     if not ADMIN_API_KEY:
-        raise RuntimeError("ADMIN_API_KEY is not set — generate one with: python -c \"import secrets; print(secrets.token_hex(32))\"")
+        raise RuntimeError("ADMIN_API_KEY is not set — generate one with: openssl rand -hex 32")
 
     Path(CHROMA_PATH).mkdir(parents=True, exist_ok=True)
     chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -69,7 +67,11 @@ async def lifespan(app: FastAPI):
         name="vjailbreak",
         metadata={"hnsw:space": "cosine"},
     )
-    anth_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    if ANTHROPIC_API_KEY:
+        anth_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    else:
+        logger.warning("ANTHROPIC_API_KEY not set — AI analysis unavailable until configured via Settings UI")
     yield
 
 
@@ -351,6 +353,11 @@ class AnalyzeMigrationRequest(BaseModel):
 
 @app.post("/analyze-migration")
 async def analyze_migration_endpoint(req: AnalyzeMigrationRequest):
+    if not anth_client:
+        raise HTTPException(
+            status_code=503,
+            detail="Anthropic API key not configured. Set it in Settings → AI Analysis.",
+        )
     import server as _server_module
     result = _server_module.analyze_migration(req.model_dump(), chroma_client)
     return result

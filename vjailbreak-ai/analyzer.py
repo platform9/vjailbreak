@@ -167,7 +167,7 @@ def query_rag(chroma_client, error_keywords: list[str]) -> str:
     if not error_keywords or chroma_client is None:
         return ""
     try:
-        collection = chroma_client.get_collection("vjailbreak_docs")
+        collection = chroma_client.get_collection("vjailbreak")
         query_text = " ".join(error_keywords)
         results = collection.query(query_texts=[query_text], n_results=5)
         chunks = results.get("documents", [[]])[0]

@@ -47,7 +47,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
       .catch(() => setKeyConfigured(false))
   }, [])
 
-  const runAnalysis = useCallback(async (question?: string) => {
+  const runAnalysis = useCallback(async (question?: string, historyOverride?: ConversationTurn[]) => {
     const isFollowUp = !!question
     if (isFollowUp) {
       setFollowUpLoading(true)
@@ -60,7 +60,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
         migration_name: migrationName,
         namespace,
         question: question || undefined,
-        conversation_history: history,
+        conversation_history: historyOverride ?? history,
       })
       if (isFollowUp) {
         setHistory((prev) => [
@@ -98,7 +98,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
   const handleAnalyse = useCallback(() => {
     setResult(null)
     setHistory([])
-    runAnalysis()
+    runAnalysis(undefined, [])
   }, [runAnalysis])
 
   const handleFollowUp = useCallback(
