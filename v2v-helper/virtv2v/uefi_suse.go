@@ -313,7 +313,59 @@ func SetupOSDiskForUEFI(osdisks []vm.VMDisk, espUUID string) error {
 	return nil
 }
 
+// createBootEFIMountpoint scans osdisks one disk at a time (without guestfish
+// -i) to locate the ext-based /boot partition — identified as a disk whose
+// first partition is ext2/3/4 and not an LVM2_member — and creates the /efi
+// directory on it directly.
+//
+// In the OS context, this partition is mounted at /boot, so /efi on the
+// partition becomes /boot/efi for virt-v2v.  The directory must exist before
+// the fstab entry is added or virt-v2v will fail with:
+//
+//	"mount: /boot/efi: mount point is not a directory"
+func createBootEFIMountpoint(osdisks []vm.VMDisk) error {
+	for i, disk := range osdisks {
+		fsOut, err := runESPGuestfish(disk.Path, false, "run\nlist-filesystems\n")
+		if err != nil {
+			log.Printf("createBootEFIMountpoint: disk %d list-filesystems: %v", i, err)
+			continue
+		}
+		lower := strings.ToLower(fsOut)
+		if strings.Contains(lower, "lvm2_member") {
+			continue
+		}
+		partition := ""
+		for _, line := range strings.Split(fsOut, "\n") {
+			parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+			if len(parts) == 2 && strings.Contains(strings.ToLower(strings.TrimSpace(parts[1])), "ext") {
+				partition = strings.TrimSpace(parts[0])
+				break
+			}
+		}
+		if partition == "" {
+			continue
+		}
+		mkdirScript := fmt.Sprintf("run\nmount %s /\nmkdir-p /efi\n", partition)
+		if _, err := runESPGuestfish(disk.Path, true, mkdirScript); err != nil {
+			return fmt.Errorf("createBootEFIMountpoint: mkdir /efi on disk %d partition %s: %v", i, partition, err)
+		}
+		log.Printf("createBootEFIMountpoint: created /efi on disk %d partition %s", i, partition)
+		return nil
+	}
+	return fmt.Errorf("createBootEFIMountpoint: no ext-based /boot partition found among %d disks", len(osdisks))
+}
+
 func addEFIFstabEntry(osdisks []vm.VMDisk, espUUID string) error {
+	// Always create /efi on the /boot partition before touching fstab.
+	// This must happen even on re-runs: a previous attempt may have written the
+	// fstab entry but put the directory on the root LVM (wrong filesystem),
+	// causing virt-v2v to fail with "mount point is not a directory".
+	// createBootEFIMountpoint is idempotent — mkdir-p succeeds whether the
+	// directory already exists or not.
+	if err := createBootEFIMountpoint(osdisks); err != nil {
+		return fmt.Errorf("addEFIFstabEntry: %v", err)
+	}
+
 	fstab, err := RunCommandInGuestAllVolumes(osdisks, "cat", false, "/etc/fstab")
 	if err != nil {
 		return fmt.Errorf("addEFIFstabEntry: cannot read /etc/fstab: %v", err)
@@ -322,15 +374,6 @@ func addEFIFstabEntry(osdisks []vm.VMDisk, espUUID string) error {
 		log.Printf("addEFIFstabEntry: /boot/efi already in fstab, skipping")
 		return nil
 	}
-
-	// Create the mount point directory.  SLES 11 SP4 was a BIOS VM and never
-	// had /boot/efi.  Without this directory guestfish -i and virt-v2v both
-	// fail to mount the ESP, causing virt-v2v to abort with
-	// "could not find bootloader mount point (/boot/efi/EFI)".
-	if _, err := RunCommandInGuestAllVolumes(osdisks, "mkdir-p", true, "/boot/efi"); err != nil {
-		return fmt.Errorf("addEFIFstabEntry: cannot create /boot/efi: %v", err)
-	}
-	log.Printf("addEFIFstabEntry: created /boot/efi mount point")
 
 	entry := fmt.Sprintf("UUID=%s\t/boot/efi\tvfat\tdefaults\t0\t0\n", espUUID)
 	if out, err := RunCommandInGuestAllVolumes(osdisks, "write-append", true,
