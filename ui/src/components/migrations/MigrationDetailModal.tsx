@@ -150,7 +150,6 @@ export default function MigrationDetailModal({
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
   const templateSpec = (data?.migrationTemplate?.spec as any) || {}
-  const useFlavorless = templateSpec?.useFlavorless === true
   const useGPUFlavor = templateSpec?.useGPUFlavor === true
   const storageCopyMethod = (templateSpec?.storageCopyMethod as string) || 'normal'
   const isStorageAcceleratedCopy = storageCopyMethod === 'StorageAcceleratedCopy'
@@ -551,8 +550,7 @@ export default function MigrationDetailModal({
       fallbackToDhcp,
       networkPersistence,
       removeVMwareTools,
-      useGPUFlavor: enabledOrNA(useGPUFlavor),
-      useFlavorless: enabledOrNA(useFlavorless)
+      useGPUFlavor: enabledOrNA(useGPUFlavor)
     }),
     [
       cutoverPolicy,
@@ -565,7 +563,6 @@ export default function MigrationDetailModal({
       scheduleDataCopy,
       securityGroups,
       serverGroup,
-      useFlavorless,
       useGPUFlavor
     ]
   )

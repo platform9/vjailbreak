@@ -67,7 +67,6 @@ type Migrate struct {
 	SecurityGroups          []string
 	ServerGroup             string
 	RDMDisks                []string
-	UseFlavorless           bool
 	TenantName              string
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
@@ -1775,20 +1774,13 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	var flavor *flavors.Flavor
 	var err error
 
-	if migobj.UseFlavorless {
-		if migobj.TargetFlavorId == "" {
-			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", vminfo.Name)
-			return errors.Wrap(err, "failed to create target instance")
-		}
-		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
-		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
-		if err != nil {
-			return errors.Wrap(err, "failed to get the specified base flavor for flavorless creation")
-		}
-	} else if migobj.TargetFlavorId != "" {
+	if migobj.TargetFlavorId != "" {
 		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
 		if err != nil {
 			return errors.Wrap(err, "failed to get OpenStack flavor")
+		}
+		if utils.IsHotplugFlavor(flavor) {
+			migobj.logMessage(fmt.Sprintf("Assigned flavor %s is a hotplug base flavor (0 vCPU, 0 RAM); VM will be created with hotplug metadata", flavor.Name))
 		}
 	} else {
 		flavor, err = openstackops.GetClosestFlavour(ctx, vminfo.CPU, vminfo.Memory)
@@ -1818,7 +1810,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex)
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, espDiskIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}

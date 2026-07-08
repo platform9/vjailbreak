@@ -1440,10 +1440,6 @@ spec:
                 description: TargetPCDClusterName is the name of the PCD cluster where
                   the virtual machine will be migrated
                 type: string
-              useFlavorless:
-                description: UseFlavorless indicates if the migration should use flavorless
-                  VM creation for PCD.
-                type: boolean
               useGPUFlavor:
                 description: UseGPUFlavor indicates if the migration should filter
                   and use GPU-enabled flavors.
@@ -4741,7 +4737,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.4.7
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4848,7 +4844,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.7
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4977,7 +4973,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.7
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

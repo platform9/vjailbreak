@@ -901,7 +901,15 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return nil, fmt.Errorf("failed to create port after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
+// IsHotplugFlavor reports whether the flavor is a hotplug base flavor
+// (0 vCPUs and 0 RAM). Assigning such a flavor expresses the user's intent
+// to use hotplug-based (flavorless) provisioning, so the VM is created with
+// hotplug metadata instead of fixed flavor resources.
+func IsHotplugFlavor(flavor *flavors.Flavor) bool {
+	return flavor != nil && flavor.VCPUs == 0 && flavor.RAM == 0
+}
+
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -944,8 +952,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			vminfo.Name,
 		))
 	}
-	if useFlavorless {
-		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
+	if IsHotplugFlavor(flavor) {
+		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
 			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
 			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),

@@ -10,8 +10,53 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 )
+
+// TestIsHotplugFlavor verifies that hotplug intent is inferred solely from the
+// assigned flavor's shape: a flavor with 0 vCPUs and 0 RAM is a hotplug base
+// flavor; anything else is a regular flavor.
+func TestIsHotplugFlavor(t *testing.T) {
+	tests := []struct {
+		name   string
+		flavor *flavors.Flavor
+		want   bool
+	}{
+		{
+			name:   "hotplug base flavor (0 vCPU, 0 RAM)",
+			flavor: &flavors.Flavor{ID: "0-0-x", Name: "hotplug-base", VCPUs: 0, RAM: 0},
+			want:   true,
+		},
+		{
+			name:   "regular flavor",
+			flavor: &flavors.Flavor{ID: "m1.small", Name: "m1.small", VCPUs: 2, RAM: 2048},
+			want:   false,
+		},
+		{
+			name:   "zero vCPUs but non-zero RAM",
+			flavor: &flavors.Flavor{ID: "weird-1", VCPUs: 0, RAM: 512},
+			want:   false,
+		},
+		{
+			name:   "non-zero vCPUs but zero RAM",
+			flavor: &flavors.Flavor{ID: "weird-2", VCPUs: 1, RAM: 0},
+			want:   false,
+		},
+		{
+			name:   "nil flavor",
+			flavor: nil,
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsHotplugFlavor(tt.flavor); got != tt.want {
+				t.Errorf("IsHotplugFlavor(%+v) = %v, want %v", tt.flavor, got, tt.want)
+			}
+		})
+	}
+}
 
 // TestBuildPortCreateOptions verifies that buildPortCreateOptions layers the
 // correct OpenStack port extensions onto the base create options:

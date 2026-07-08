@@ -87,18 +87,18 @@ func (mr *MockOpenstackOperationsMockRecorder) CreatePort(ctx, networkid, mac, i
 }
 
 // CreateVM mocks base method.
-func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
+func (m *MockOpenstackOperations) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex)
+	ret := m.ctrl.Call(m, "CreateVM", ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, espDiskIndex)
 	ret0, _ := ret[0].(*servers.Server)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateVM indicates an expected call of CreateVM.
-func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) CreateVM(ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, espDiskIndex interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, useFlavorless, espDiskIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVM", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVM), ctx, flavor, networkIDs, portIDs, vminfo, availabilityZone, securityGroups, serverGroupID, vjailbreakSettings, espDiskIndex)
 }
 
 // CreateVolume mocks base method.

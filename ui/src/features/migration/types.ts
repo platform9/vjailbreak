@@ -80,7 +80,6 @@ export interface SelectedMigrationOptionsType {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   useGPU?: boolean
-  useFlavorless?: boolean
   periodicSyncEnabled?: boolean
   postMigrationAction?: {
     suffix?: boolean
@@ -147,7 +146,6 @@ export interface RollingFormParams extends Record<string, unknown> {
     moveToFolder?: boolean
   }
   useGPU?: boolean
-  useFlavorless?: boolean
   disconnectSourceNetwork?: boolean
   fallbackToDHCP?: boolean
   networkPersistence?: boolean
@@ -339,7 +337,7 @@ export interface VmsSelectionStepProps {
 // ---------------------------------------------------------------------------
 
 export interface MigrationOptionsPropsInterface {
-  params: FormValues & { useFlavorless?: boolean; useGPU?: boolean }
+  params: FormValues & { useGPU?: boolean }
   onChange: (key: string) => (value: unknown) => void
   openstackCredentials?: OpenstackCreds
   selectedMigrationOptions: SelectedMigrationOptionsType

@@ -55,7 +55,6 @@ const defaultMigrationOptions = {
   cutoverEndTime: false,
   postMigrationScript: false,
   useGPU: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,

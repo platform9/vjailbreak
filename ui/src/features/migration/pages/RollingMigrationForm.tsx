@@ -60,7 +60,6 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   postMigrationScript: boolean
   osFamily: boolean
   useGPU?: boolean
-  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -79,7 +78,6 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   postMigrationScript: false,
   osFamily: false,
   useGPU: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,

@@ -274,7 +274,6 @@ export function useRetryPrefill({
       cutoverEndTime: isSetTime(strategy?.vmCutoverEnd),
       postMigrationScript: Boolean(firstBootScript),
       useGPU: template.spec?.useGPUFlavor || false,
-      useFlavorless: template.spec?.useFlavorless || false,
       periodicSyncEnabled: advanced?.periodicSyncEnabled || false,
       ...(plan.spec?.postMigrationAction && {
         postMigrationAction: {

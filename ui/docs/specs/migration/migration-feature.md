@@ -960,7 +960,7 @@ All step completion flags, error flags, and section nav items are computed via `
 
 ### Feature Flags and Conditional Behavior
 
-- `isPCD` flag (derived from OpenstackCreds) enables GPU and flavorless options in MigrationOptionsAlt
+- `isPCD` flag (derived from OpenstackCreds) enables the GPU flavour option in MigrationOptionsAlt. Hotplug (flavorless) provisioning has no toggle: assigning a hotplug base flavor (0 vCPU, 0 RAM) to a VM is the sole signal, and the v2v-helper infers it from the flavor itself.
 - `storageCopyMethod === 'StorageAcceleratedCopy'` hides data copy + cutover scheduling
 - `storageCopyMethod === 'HotAdd'` forces cold copy, disables hot/mock, shows ProxyVM selector + storage mapping table in Step 3; submit POSTs `/storagemappings` and sets both `proxyVMRef` and `storageMapping` on template
 - `hasL2Network` disables security groups and fallback to DHCP

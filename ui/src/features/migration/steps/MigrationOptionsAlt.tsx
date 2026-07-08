@@ -731,27 +731,6 @@ export default function MigrationOptionsAlt({
               <Box />
             </OptionRow>
 
-            <OptionRow>
-              <OptionLeft>
-                <FormControlLabel
-                  label="Use dynamic hotplug-enabled flavors"
-                  control={
-                    <Checkbox
-                      checked={params?.useFlavorless || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked
-                        updateSelectedMigrationOptions('useFlavorless')(isChecked)
-                        onChange('useFlavorless')(isChecked)
-                      }}
-                    />
-                  }
-                />
-                <OptionHelp variant="caption">
-                  Uses the base flavor ID configured in PCD.
-                </OptionHelp>
-              </OptionLeft>
-              <Box />
-            </OptionRow>
           </SectionBlock>
         ) : null}
 

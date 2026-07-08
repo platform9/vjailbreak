@@ -28,7 +28,6 @@ export type MigrationPolicyFieldKey =
   | 'networkPersistence'
   | 'removeVMwareTools'
   | 'useGPUFlavor'
-  | 'useFlavorless'
 
 export const MIGRATION_POLICY_FIELDS: Array<{ key: MigrationPolicyFieldKey; label: string }> = [
   { key: 'securityGroups', label: 'Security Groups' },
@@ -42,5 +41,4 @@ export const MIGRATION_POLICY_FIELDS: Array<{ key: MigrationPolicyFieldKey; labe
   { key: 'networkPersistence', label: 'Persist source network' },
   { key: 'removeVMwareTools', label: 'Remove VMware Tools' },
   { key: 'useGPUFlavor', label: 'Use GPU-enabled flavours' },
-  { key: 'useFlavorless', label: 'Use dynamic hotplug-enabled flavors' }
 ]
