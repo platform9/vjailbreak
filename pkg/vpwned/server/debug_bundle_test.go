@@ -1,7 +1,11 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -96,18 +100,49 @@ func TestGetDebugBundleReturnsBundle(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if body.GetContentType() != "text/plain; charset=utf-8" {
+	if body.GetContentType() != "application/gzip" {
 		t.Errorf("unexpected content type %q", body.GetContentType())
 	}
-	content := string(body.GetData())
-	for _, section := range []string{
-		"STDOUT/STDERR LOGS (pod)",
-		"RELATED KUBERNETES RESOURCES",
-		"DEBUG LOGS FROM /var/log/pf9",
-		"FILE: kubernetes/migrations/migration-testvm.yaml",
-	} {
-		if !strings.Contains(content, section) {
-			t.Errorf("expected %q in bundle:\n%s", section, content)
+
+	gzReader, err := gzip.NewReader(bytes.NewReader(body.GetData()))
+	if err != nil {
+		t.Fatalf("response is not valid gzip: %v", err)
+	}
+	defer gzReader.Close()
+
+	entries := map[string]string{}
+	tarReader := tar.NewReader(gzReader)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
 		}
+		if err != nil {
+			t.Fatalf("failed to read tar: %v", err)
+		}
+		content, err := io.ReadAll(tarReader)
+		if err != nil {
+			t.Fatalf("failed to read tar entry %s: %v", header.Name, err)
+		}
+		entries[header.Name] = string(content)
+	}
+
+	var migrationYAML, podLog string
+	for name, content := range entries {
+		if strings.HasSuffix(name, "/kubernetes/migrations/migration-testvm.yaml") {
+			migrationYAML = content
+		}
+		if strings.HasSuffix(name, "/pod-logs/v2v-helper-testvm.log") {
+			podLog = content
+		}
+		if !strings.Contains(name, "testvm-debug-bundle-") {
+			t.Errorf("entry %s not under the bundle base directory", name)
+		}
+	}
+	if !strings.Contains(migrationYAML, "name: migration-testvm") {
+		t.Errorf("expected migration YAML in archive, entries: %v", entries)
+	}
+	if !strings.Contains(podLog, "fake logs") {
+		t.Errorf("expected pod log file in archive, entries: %v", entries)
 	}
 }

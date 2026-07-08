@@ -7,7 +7,7 @@ import (
 )
 
 // maxDebugFileBytes caps each debug log file included from /var/log/pf9
-// (32 MiB per file). Variable so tests can shrink it.
+// (32 MiB per file, keeping the tail). Variable so tests can shrink it.
 var maxDebugFileBytes = 32 << 20
 
 // maxDebugFilesTotalBytes caps the combined size of all debug log files in
@@ -15,47 +15,46 @@ var maxDebugFileBytes = 32 << 20
 // under the gateway's gRPC receive limit. Variable so tests can shrink it.
 var maxDebugFilesTotalBytes = 128 << 20
 
-// CollectDebugFileLogs reads the debug log files written under /var/log/pf9
+// CollectDebugFiles reads the debug log files written under /var/log/pf9
 // (passed in as fsys) that belong to the given migration, mirroring the
-// UI's fetchPodDebugLogs traversal:
+// traversal the UI previously performed:
 //   - root-level *.log files whose name contains migrationName
 //   - migration-* directories whose name contains migrationName, including
 //     every *.log file inside them (one level deep)
 //
-// Each file is emitted with a FILE: header. An empty string means no
-// matching debug logs were found.
-func CollectDebugFileLogs(fsys fs.FS, migrationName string) string {
-	var out strings.Builder
+// Each file becomes a debug-logs/ archive entry. Read failures and the
+// total-size cap are reported as warnings.
+func CollectDebugFiles(fsys fs.FS, migrationName string) ([]ArchiveFile, []string) {
+	var files []ArchiveFile
+	var warnings []string
 
 	rootEntries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		return fmt.Sprintf("[Failed to list debug logs directory: %v]\n", err)
+		return nil, []string{fmt.Sprintf("Failed to list debug logs directory: %v", err)}
 	}
 
+	totalBytes := 0
 	truncated := false
-	appendFile := func(path, displayName string) {
+	appendFile := func(path string) {
 		if truncated {
 			return
 		}
-		if out.Len() >= maxDebugFilesTotalBytes {
+		if totalBytes >= maxDebugFilesTotalBytes {
 			truncated = true
-			out.WriteString(fmt.Sprintf("\n%s[Debug log size limit reached (%d MiB) — remaining files omitted]\n", sectionSeparator, maxDebugFilesTotalBytes>>20))
+			warnings = append(warnings, fmt.Sprintf("Debug log size limit reached (%d MiB) — remaining files omitted", maxDebugFilesTotalBytes>>20))
 			return
 		}
 		data, err := fs.ReadFile(fsys, path)
 		if err != nil {
-			out.WriteString(fmt.Sprintf("\n%sFILE: %s\n%s[failed to read: %v]\n", sectionSeparator, displayName, sectionSeparator, err))
+			warnings = append(warnings, fmt.Sprintf("Failed to read debug log %s: %v", path, err))
 			return
 		}
 		if len(data) > maxDebugFileBytes {
 			data = data[len(data)-maxDebugFileBytes:]
+			warnings = append(warnings, fmt.Sprintf("Debug log %s truncated to last %d MiB", path, maxDebugFileBytes>>20))
 		}
-		out.WriteString("\n")
-		out.WriteString(sectionSeparator)
-		out.WriteString("FILE: " + displayName + "\n")
-		out.WriteString(sectionSeparator)
-		out.Write(data)
-		out.WriteString("\n")
+		totalBytes += len(data)
+		files = append(files, ArchiveFile{Path: "debug-logs/" + path, Data: data})
 	}
 
 	for _, entry := range rootEntries {
@@ -65,21 +64,21 @@ func CollectDebugFileLogs(fsys fs.FS, migrationName string) string {
 		}
 		switch {
 		case !entry.IsDir() && strings.HasSuffix(name, ".log"):
-			appendFile(name, name)
+			appendFile(name)
 		case entry.IsDir() && strings.HasPrefix(name, "migration-"):
 			subEntries, err := fs.ReadDir(fsys, name)
 			if err != nil {
-				out.WriteString(fmt.Sprintf("\n%sFILE: %s/\n%s[failed to list directory: %v]\n", sectionSeparator, name, sectionSeparator, err))
+				warnings = append(warnings, fmt.Sprintf("Failed to list debug logs in %s: %v", name, err))
 				continue
 			}
 			for _, subEntry := range subEntries {
 				subName := subEntry.Name()
 				if !subEntry.IsDir() && strings.HasSuffix(subName, ".log") {
-					appendFile(name+"/"+subName, name+"/"+subName)
+					appendFile(name + "/" + subName)
 				}
 			}
 		}
 	}
 
-	return out.String()
+	return files, warnings
 }

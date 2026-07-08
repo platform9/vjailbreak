@@ -10,7 +10,15 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestBuildAssemblesAllSections(t *testing.T) {
+func filesByPath(files []ArchiveFile) map[string]string {
+	out := make(map[string]string, len(files))
+	for _, file := range files {
+		out[file.Path] = string(file.Data)
+	}
+	return out
+}
+
+func TestBuildProducesArchiveFiles(t *testing.T) {
 	ctrlClient := newFakeClient(t, testMigrationGraph()...)
 	clientset := k8sfake.NewSimpleClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "v2v-helper-testvm", Namespace: testNamespace},
@@ -27,26 +35,24 @@ func TestBuildAssemblesAllSections(t *testing.T) {
 		t.Errorf("expected PodName resolved from spec.podRef, got %q", result.PodName)
 	}
 
-	for _, section := range []string{
-		"STDOUT/STDERR LOGS (pod)",
-		"RELATED KUBERNETES RESOURCES",
-		"DEBUG LOGS FROM /var/log/pf9",
-	} {
-		if !strings.Contains(result.Content, section) {
-			t.Errorf("expected section %q in bundle:\n%s", section, result.Content)
-		}
-	}
+	files := filesByPath(result.Files)
 
 	// The fake clientset serves a fixed log body for any pod.
-	if !strings.Contains(result.Content, "fake logs") {
-		t.Errorf("expected pod logs section content, got:\n%s", result.Content)
+	if !strings.Contains(files["pod-logs/v2v-helper-testvm.log"], "fake logs") {
+		t.Errorf("expected pod log file, got files %v", files)
 	}
-	if !strings.Contains(result.Content, "FILE: kubernetes/migrations/migration-testvm.yaml") {
-		t.Errorf("expected migration YAML in bundle:\n%s", result.Content)
+	migrationYAML := files["kubernetes/migrations/migration-testvm.yaml"]
+	if !strings.Contains(migrationYAML, "name: migration-testvm") {
+		t.Errorf("expected migration YAML file, got %q", migrationYAML)
 	}
-	// migrationName filter matches the debug log fixture prefix.
-	if !strings.Contains(result.Content, "root log line") {
-		t.Errorf("expected debug file logs in bundle:\n%s", result.Content)
+	if !strings.Contains(files["debug-logs/migration-testvm.log"], "root log line") {
+		t.Errorf("expected root debug log file, got files %v", files)
+	}
+	if !strings.Contains(files["debug-logs/migration-testvm/migration.001.log"], "subdir log line") {
+		t.Errorf("expected subdir debug log file, got files %v", files)
+	}
+	if _, ok := files[warningsFileName]; ok {
+		t.Errorf("expected no warnings file for a clean build, got %q", files[warningsFileName])
 	}
 }
 
@@ -57,22 +63,30 @@ func TestBuildWithoutLogsFS(t *testing.T) {
 	deps := Deps{Client: ctrlClient, Clientset: clientset}
 	result := Build(context.Background(), deps, testNamespace, "migration-testvm", "v2v-helper-testvm")
 
-	if !strings.Contains(result.Content, "[Debug logs directory is not available]") {
-		t.Errorf("expected missing-logs note, got:\n%s", result.Content)
+	files := filesByPath(result.Files)
+	if !strings.Contains(files[warningsFileName], "Debug logs directory is not available") {
+		t.Errorf("expected missing-logs warning, got %q", files[warningsFileName])
+	}
+	for path := range files {
+		if strings.HasPrefix(path, "debug-logs/") {
+			t.Errorf("expected no debug-logs entries, got %s", path)
+		}
 	}
 }
 
-func TestBuildMigrationMissingStillReturnsBundle(t *testing.T) {
+func TestBuildMigrationMissingStillReturnsWarnings(t *testing.T) {
 	ctrlClient := newFakeClient(t)
 	clientset := k8sfake.NewSimpleClientset()
 
 	deps := Deps{Client: ctrlClient, Clientset: clientset, LogsFS: testLogsFS()}
 	result := Build(context.Background(), deps, testNamespace, "missing-migration", "")
 
-	if !strings.Contains(result.Content, "Migration resource not found") {
-		t.Errorf("expected not-found warning in bundle:\n%s", result.Content)
+	files := filesByPath(result.Files)
+	warnings := files[warningsFileName]
+	if !strings.Contains(warnings, "Migration resource not found") {
+		t.Errorf("expected not-found warning, got %q", warnings)
 	}
-	if !strings.Contains(result.Content, "[No pod found for this migration]") {
-		t.Errorf("expected no-pod note, got:\n%s", result.Content)
+	if !strings.Contains(warnings, "No pod found for this migration") {
+		t.Errorf("expected no-pod warning, got %q", warnings)
 	}
 }

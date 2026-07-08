@@ -21,10 +21,18 @@ type Deps struct {
 	LogsFS fs.FS
 }
 
+// ArchiveFile is one file inside the debug bundle archive. Path is relative
+// to the archive root, e.g. kubernetes/migrations/migration-foo.yaml.
+type ArchiveFile struct {
+	Path string
+	Data []byte
+}
+
 // Result is a fully assembled debug bundle.
 type Result struct {
-	// Content is the bundle text (pod logs + resources + debug file logs).
-	Content string
+	// Files are the archive entries: pod-logs/, kubernetes/, debug-logs/
+	// and collection-warnings.txt.
+	Files []ArchiveFile
 	// VMName is the migration's spec.vmName when found, used for the
 	// download file name.
 	VMName string
@@ -33,15 +41,18 @@ type Result struct {
 	PodName string
 }
 
-func sectionHeader(title string) string {
-	return sectionSeparator + title + "\n" + sectionSeparator + "\n"
-}
+const warningsFileName = "collection-warnings.txt"
 
-// Build assembles the complete debug bundle for a migration, in the same
-// three-section layout the UI download previously produced:
-// pod stdout/stderr logs, related Kubernetes resources, and debug logs
-// from /var/log/pf9. Failures in any section degrade to an inline note so
-// the caller always receives the sections that could be collected.
+// Build assembles the complete debug bundle for a migration as a list of
+// archive files:
+//
+//	pod-logs/<pod>.log             pod stdout/stderr
+//	kubernetes/<plural>/<name>.yaml one file per related resource
+//	debug-logs/...                  log files from /var/log/pf9
+//	collection-warnings.txt         anything that could not be collected
+//
+// Failures in any part degrade to a warning entry so the caller always
+// receives the files that could be collected.
 func Build(ctx context.Context, deps Deps, namespace, migrationName, podName string) Result {
 	entries, warnings := CollectResources(ctx, deps.Client, namespace, migrationName, podName)
 
@@ -59,45 +70,37 @@ func Build(ctx context.Context, deps Deps, namespace, migrationName, podName str
 		}
 	}
 
-	var out strings.Builder
+	files := make([]ArchiveFile, 0, len(entries)+2)
 
-	out.WriteString(sectionHeader("STDOUT/STDERR LOGS (pod)"))
-	switch {
-	case podName == "":
-		out.WriteString("[No pod found for this migration]\n")
-	default:
+	if podName == "" {
+		warnings = append(warnings, "No pod found for this migration — pod logs omitted")
+	} else {
 		logs, err := FetchPodLogs(ctx, deps.Clientset, namespace, podName)
 		if err != nil {
-			out.WriteString(fmt.Sprintf("[Failed to fetch pod logs: %v]\n", err))
+			warnings = append(warnings, fmt.Sprintf("Failed to fetch pod logs: %v", err))
 		} else {
-			out.WriteString(logs)
-			if !strings.HasSuffix(logs, "\n") {
-				out.WriteString("\n")
-			}
+			files = append(files, ArchiveFile{Path: "pod-logs/" + podName + ".log", Data: []byte(logs)})
 		}
 	}
 
-	out.WriteString("\n")
-	out.WriteString(sectionHeader("RELATED KUBERNETES RESOURCES"))
-	resourceBundle := FormatYAMLBundle(entries, warnings)
-	if strings.TrimSpace(resourceBundle) == "" {
-		out.WriteString("[No related Kubernetes resources found]\n")
-	} else {
-		out.WriteString(resourceBundle)
+	for _, entry := range entries {
+		files = append(files, ArchiveFile{Path: entry.Path, Data: []byte(renderObjectYAML(entry.Object))})
 	}
 
-	out.WriteString("\n")
-	out.WriteString(sectionHeader("DEBUG LOGS FROM /var/log/pf9"))
 	if deps.LogsFS == nil {
-		out.WriteString("[Debug logs directory is not available]\n")
+		warnings = append(warnings, "Debug logs directory is not available — /var/log/pf9 logs omitted")
 	} else {
-		debugLogs := CollectDebugFileLogs(deps.LogsFS, migrationName)
-		if strings.TrimSpace(debugLogs) == "" {
-			out.WriteString("[No debug log files found]\n")
-		} else {
-			out.WriteString(debugLogs)
-		}
+		debugFiles, debugWarnings := CollectDebugFiles(deps.LogsFS, migrationName)
+		files = append(files, debugFiles...)
+		warnings = append(warnings, debugWarnings...)
 	}
 
-	return Result{Content: out.String(), VMName: vmName, PodName: podName}
+	if len(warnings) > 0 {
+		files = append(files, ArchiveFile{
+			Path: warningsFileName,
+			Data: []byte(strings.Join(warnings, "\n") + "\n"),
+		})
+	}
+
+	return Result{Files: files, VMName: vmName, PodName: podName}
 }

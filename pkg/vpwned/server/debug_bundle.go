@@ -55,9 +55,10 @@ func InitDebugBundle() error {
 }
 
 // GetDebugBundle implements VailbreakProxy.GetDebugBundle. It assembles a
-// plain-text debug bundle — pod stdout/stderr logs, related Kubernetes
-// resource YAMLs and debug logs from /var/log/pf9 — and returns it as an
-// HttpBody so the REST gateway serves it as a file download.
+// debug bundle — pod stdout/stderr logs, related Kubernetes resource YAMLs
+// and debug logs from /var/log/pf9 — as a .tar.gz archive with one file per
+// artifact, returned as an HttpBody so the REST gateway serves it as a
+// file download.
 func (p *vjailbreakProxy) GetDebugBundle(ctx context.Context, req *api.GetDebugBundleRequest) (*httpbody.HttpBody, error) {
 	if debugBundleDeps == nil {
 		return nil, status.Error(codes.Unavailable, "debug bundle collection is unavailable outside the cluster")
@@ -89,18 +90,22 @@ func (p *vjailbreakProxy) GetDebugBundle(ctx context.Context, req *api.GetDebugB
 	if baseName == "" {
 		baseName = "logs"
 	}
-	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
-	fileName := fmt.Sprintf("%s-pod-%s.txt", baseName, timestamp)
+	now := time.Now().UTC()
+	baseDir := fmt.Sprintf("%s-debug-bundle-%s", baseName, now.Format("2006-01-02T15-04-05Z"))
+	archive, err := debugbundle.TarGz(baseDir, result.Files, now)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to build debug bundle archive: %v", err)
+	}
 
 	// The gateway promotes this metadata to a real Content-Disposition
 	// header (see forwardDownloadHeaders in server.go). SetHeader fails on
 	// plain (non-transport) contexts, e.g. in unit tests — safe to ignore.
-	if err := grpc.SetHeader(ctx, metadata.Pairs(contentDispositionMetadataKey, fmt.Sprintf("attachment; filename=%q", fileName))); err != nil {
+	if err := grpc.SetHeader(ctx, metadata.Pairs(contentDispositionMetadataKey, fmt.Sprintf("attachment; filename=%q", baseDir+".tar.gz"))); err != nil {
 		logrus.Debugf("debug bundle: could not set content-disposition header: %v", err)
 	}
 
 	return &httpbody.HttpBody{
-		ContentType: "text/plain; charset=utf-8",
-		Data:        []byte(result.Content),
+		ContentType: "application/gzip",
+		Data:        archive,
 	}, nil
 }

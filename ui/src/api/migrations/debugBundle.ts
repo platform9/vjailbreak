@@ -21,7 +21,7 @@ export const downloadDebugBundle = async (
   const cd = response.headers['content-disposition'] as string | undefined
   const filename =
     cd?.match(/filename="([^"]+)"/)?.[1] ??
-    `${migrationName || podName || 'migration'}-debug-bundle.txt`
+    `${migrationName || podName || 'migration'}-debug-bundle.tar.gz`
   const objectUrl = URL.createObjectURL(response.data)
   const a = document.createElement('a')
   a.href = objectUrl
