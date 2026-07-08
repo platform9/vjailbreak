@@ -1,6 +1,7 @@
 import {
   FormControl,
   FormHelperText,
+  Link,
   MenuItem,
   Select,
   styled,
@@ -12,6 +13,7 @@ import {
   Alert,
   Chip
 } from '@mui/material'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { useMemo } from 'react'
 import { useFilteredMappings } from '../hooks/useFilteredMappings'
 import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
@@ -23,6 +25,9 @@ import type { NetworkAndStorageMappingStepProps } from '../types'
 import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 
 export type { ResourceMap, StorageCopyMethod } from '../types'
+
+const NETWORK_MAPPING_DOCS_URL =
+  'https://platform9.github.io/vjailbreak/concepts/network-storage-mapping/#network-mapping'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -174,7 +179,17 @@ export default function NetworkAndStorageMappingStep({
                   />
                   {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
                     <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
-                      <strong>{sourceNetwork}:</strong> {warning}
+                      <strong>{sourceNetwork}:</strong> {warning}{' '}
+                      <Link
+                        href={NETWORK_MAPPING_DOCS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="always"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+                      >
+                        Show more
+                        <OpenInNewIcon fontSize="inherit" />
+                      </Link>
                     </Alert>
                   ))}
                 </>

@@ -569,6 +569,14 @@ test.describe('MIG-036 — subnet compatibility warning', () => {
     await expect(
       page.getByText(/do not lie within the subnet of destination network/i).first()
     ).toBeVisible({ timeout: 5000 })
+
+    // Warning includes a "Show more" docs link to the network mapping concepts page
+    const showMoreLink = page.getByRole('link', { name: /show more/i }).first()
+    await expect(showMoreLink).toBeVisible()
+    await expect(showMoreLink).toHaveAttribute(
+      'href',
+      'https://platform9.github.io/vjailbreak/concepts/network-storage-mapping/#network-mapping'
+    )
   })
 
   test('remapping to compatible subnet clears subnet warning', async ({ page }) => {
@@ -862,6 +870,11 @@ test.describe('MIG-042 — persist IP mutually exclusive with different-subnet m
     await expect(checkbox).not.toBeChecked()
 
     await expect(page.getByTestId('network-persistence-subnet-alert')).toBeVisible()
+
+    // Helper text switches from the default description to the disabled reason
+    await expect(
+      page.getByText(/disabled because some vm ip addresses do not lie within the subnet/i)
+    ).toBeVisible()
   })
 
   test('compatible subnet keeps persist source network interfaces available', async ({ page }) => {

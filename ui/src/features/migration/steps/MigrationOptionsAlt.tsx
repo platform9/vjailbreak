@@ -709,7 +709,9 @@ export default function MigrationOptionsAlt({
                 }
               />
               <OptionHelp variant="caption">
-                Retain the source VM's network interface names
+                {hasSubnetMismatch
+                  ? 'Disabled because some VM IP addresses do not lie within the subnet of the mapped destination network(s). Map to a network with a matching subnet to enable this option.'
+                  : "Retain the source VM's network interface names"}
               </OptionHelp>
             </OptionLeft>
             <Box />
