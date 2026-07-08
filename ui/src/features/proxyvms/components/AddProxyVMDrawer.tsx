@@ -480,6 +480,7 @@ export default function AddProxyVMDrawer({ open, onClose }: AddProxyVMDrawerProp
               scopedLoading={scopedLoading}
               isSubmitting={isSubmitting}
               vmOptions={vmOptions}
+              registeredVMNames={registeredVMNames}
             />
           )}
         </Box>
