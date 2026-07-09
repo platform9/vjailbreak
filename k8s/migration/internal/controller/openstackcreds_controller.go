@@ -330,6 +330,7 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 	if err := r.List(ctx, vjailbreakNodeList, client.InNamespace(openstackcreds.Namespace)); err != nil {
 		return errors.Wrap(err, "failed to list VjailbreakNodes for cleanup")
 	}
+	pendingNodes := 0
 	for i := range vjailbreakNodeList.Items {
 		node := vjailbreakNodeList.Items[i]
 		if node.Spec.NodeRole == constants.NodeRoleMaster {
@@ -338,10 +339,17 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 		if node.Spec.OpenstackCreds.Name != openstackcreds.Name {
 			continue
 		}
-		ctxlog.Info("Deleting dependent non-master VjailbreakNode", "name", node.Name)
-		if err := r.Delete(ctx, &node); err != nil && !apierrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to delete dependent VjailbreakNode")
+		if node.DeletionTimestamp.IsZero() {
+			ctxlog.Info("Deleting dependent non-master VjailbreakNode", "name", node.Name)
+			if err := r.Delete(ctx, &node); err != nil && !apierrors.IsNotFound(err) {
+				return errors.Wrap(err, "failed to delete dependent VjailbreakNode")
+			}
 		}
+		pendingNodes++
+	}
+	if pendingNodes > 0 {
+		ctxlog.Info("Waiting for non-master VjailbreakNodes to finish deletion", "pending", pendingNodes)
+		return fmt.Errorf("waiting for %d VjailbreakNode(s) to be deleted before removing OpenstackCreds finalizer", pendingNodes)
 	}
 
 	if secretName := openstackcreds.Spec.SecretRef.Name; secretName != "" {

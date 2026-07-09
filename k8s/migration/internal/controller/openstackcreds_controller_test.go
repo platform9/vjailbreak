@@ -94,7 +94,8 @@ func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 }
 
 // TestReconcileDelete_DeletesNonMasterVjailbreakNodes verifies that reconcileDelete
-// removes non-master VjailbreakNodes referencing the deleted OpenstackCreds.
+// issues delete on non-master nodes, requeues while they are pending, then
+// removes the OpenstackCreds finalizer only after all target nodes are gone.
 func TestReconcileDelete_DeletesNonMasterVjailbreakNodes(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = vjailbreakv1alpha1.AddToScheme(scheme)
@@ -164,22 +165,30 @@ func TestReconcileDelete_DeletesNonMasterVjailbreakNodes(t *testing.T) {
 	}
 
 	r := &OpenstackCredsReconciler{Client: fakeClient, Scheme: scheme}
-	if err := r.reconcileDelete(context.Background(), credScope); err != nil {
-		t.Fatalf("reconcileDelete returned error: %v", err)
+
+	// First call: issues Delete on the worker node, then returns an error to
+	// requeue because the node is still counted as pending.
+	if err := r.reconcileDelete(context.Background(), credScope); err == nil {
+		t.Fatal("expected requeue error while worker node still pending, got nil")
 	}
 
-	// Worker node referencing the creds should be gone.
+	// Fake client removes no-finalizer objects immediately on Delete, so the
+	// worker node is already gone from the store. Second call should succeed.
 	remaining := &vjailbreakv1alpha1.VjailbreakNode{}
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-agent-abc", Namespace: ns}, remaining); err == nil {
-		t.Error("expected worker node to be deleted, but it still exists")
+		t.Error("expected worker node to be deleted after first reconcileDelete call")
 	}
 
-	// Master node should survive.
+	if err := r.reconcileDelete(context.Background(), credScope); err != nil {
+		t.Fatalf("second reconcileDelete returned unexpected error: %v", err)
+	}
+
+	// Master node must survive.
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-master", Namespace: ns}, remaining); err != nil {
 		t.Errorf("master node should not be deleted: %v", err)
 	}
 
-	// Node referencing different creds should survive.
+	// Node referencing different creds must survive.
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-agent-other", Namespace: ns}, remaining); err != nil {
 		t.Errorf("node for other creds should not be deleted: %v", err)
 	}
