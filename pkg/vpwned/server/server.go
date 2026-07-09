@@ -170,6 +170,10 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// vCenter resource listing — returns datacenters, clusters, datastores, networks.
 	mux.HandleFunc("/vpw/v1/vcenter-resources", HandleVCenterResources)
 
+	// OpenstackCreds deletion check — returns whether creds can be safely deleted
+	// based on number of non-master agent nodes referencing them.
+	mux.HandleFunc("/vpw/v1/openstackcreds-deletable", HandleCheckOpenstackCredsDeletable)
+
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux( //runtime.WithErrorHandler(gRPCErrHandler))
 		runtime.WithForwardResponseOption(forwardDownloadHeaders),
@@ -245,6 +249,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		// vCenter resource listing
 		if r.URL.Path == "/vpw/v1/vcenter-resources" {
 			HandleVCenterResources(w, r)
+			return
+		}
+		// OpenstackCreds deletion check
+		if r.URL.Path == "/vpw/v1/openstackcreds-deletable" {
+			HandleCheckOpenstackCredsDeletable(w, r)
 			return
 		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)
