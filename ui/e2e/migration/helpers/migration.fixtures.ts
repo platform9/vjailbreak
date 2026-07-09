@@ -496,6 +496,22 @@ export const MOCK_IP_VALIDATION_CONFLICT = {
   conflicts: ['192.168.1.101'],
 }
 
+// ─── Subnet compatibility responses (vpwned check_network_subnet_compatibility) ─
+
+export const MOCK_SUBNET_COMPATIBILITY_INCOMPATIBLE = {
+  results: [
+    { ip: '192.168.1.101', is_compatible: false, reason: 'IP not within subnet CIDR' },
+  ],
+  subnet_cidrs: ['10.20.0.0/24'],
+  all_compatible: false,
+}
+
+export const MOCK_SUBNET_COMPATIBILITY_COMPATIBLE = {
+  results: [{ ip: '192.168.1.101', is_compatible: true, reason: '' }],
+  subnet_cidrs: ['192.168.1.0/24'],
+  all_compatible: true,
+}
+
 // ─── VMware clusters (for cluster selection dropdown) ─────────────────────────
 
 export const MOCK_VMWARE_CLUSTER_1 = {
