@@ -709,7 +709,7 @@ func local_request_VailbreakProxy_CheckNetworkSubnetCompatibility_0(ctx context.
 
 var filter_VailbreakProxy_GetDebugBundle_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 
-func request_VailbreakProxy_GetDebugBundle_0(ctx context.Context, marshaler runtime.Marshaler, client VailbreakProxyClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_VailbreakProxy_GetDebugBundle_0(ctx context.Context, marshaler runtime.Marshaler, client VailbreakProxyClient, req *http.Request, pathParams map[string]string) (VailbreakProxy_GetDebugBundleClient, runtime.ServerMetadata, error) {
 	var (
 		protoReq GetDebugBundleRequest
 		metadata runtime.ServerMetadata
@@ -723,23 +723,16 @@ func request_VailbreakProxy_GetDebugBundle_0(ctx context.Context, marshaler runt
 	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_VailbreakProxy_GetDebugBundle_0); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	msg, err := client.GetDebugBundle(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
-	return msg, metadata, err
-}
-
-func local_request_VailbreakProxy_GetDebugBundle_0(ctx context.Context, marshaler runtime.Marshaler, server VailbreakProxyServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var (
-		protoReq GetDebugBundleRequest
-		metadata runtime.ServerMetadata
-	)
-	if err := req.ParseForm(); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	stream, err := client.GetDebugBundle(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
 	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_VailbreakProxy_GetDebugBundle_0); err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
 	}
-	msg, err := server.GetDebugBundle(ctx, &protoReq)
-	return msg, metadata, err
+	metadata.HeaderMD = header
+	return stream, metadata, nil
 }
 
 func request_StorageArray_ValidateCredentials_0(ctx context.Context, marshaler runtime.Marshaler, client StorageArrayClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -1420,25 +1413,12 @@ func RegisterVailbreakProxyHandlerServer(ctx context.Context, mux *runtime.Serve
 		}
 		forward_VailbreakProxy_CheckNetworkSubnetCompatibility_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+
 	mux.Handle(http.MethodGet, pattern_VailbreakProxy_GetDebugBundle_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		var stream runtime.ServerTransportStream
-		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/api.VailbreakProxy/GetDebugBundle", runtime.WithHTTPPathPattern("/vpw/v1/debug-bundle"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := local_request_VailbreakProxy_GetDebugBundle_0(annotatedContext, inboundMarshaler, server, req, pathParams)
-		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
-		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
-		if err != nil {
-			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		forward_VailbreakProxy_GetDebugBundle_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 
 	return nil
@@ -2206,7 +2186,7 @@ func RegisterVailbreakProxyHandlerClient(ctx context.Context, mux *runtime.Serve
 			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		forward_VailbreakProxy_GetDebugBundle_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_VailbreakProxy_GetDebugBundle_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 	})
 	return nil
 }
@@ -2226,7 +2206,7 @@ var (
 	forward_VailbreakProxy_InjectEnvVariables_0              = runtime.ForwardResponseMessage
 	forward_VailbreakProxy_ApplyTimeSettings_0               = runtime.ForwardResponseMessage
 	forward_VailbreakProxy_CheckNetworkSubnetCompatibility_0 = runtime.ForwardResponseMessage
-	forward_VailbreakProxy_GetDebugBundle_0                  = runtime.ForwardResponseMessage
+	forward_VailbreakProxy_GetDebugBundle_0                  = runtime.ForwardResponseStream
 )
 
 // RegisterStorageArrayHandlerFromEndpoint is same as RegisterStorageArrayHandler but

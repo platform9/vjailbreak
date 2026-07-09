@@ -11,7 +11,9 @@ import (
 
 	api "github.com/platform9/vjailbreak/pkg/vpwned/api/proto/v1/service"
 	"github.com/platform9/vjailbreak/pkg/vpwned/server/debugbundle"
+	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +25,32 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 )
+
+// fakeDebugBundleStream implements api.VailbreakProxy_GetDebugBundleServer,
+// capturing streamed chunks and headers.
+type fakeDebugBundleStream struct {
+	ctx    context.Context
+	chunks []*httpbody.HttpBody
+	header metadata.MD
+}
+
+func (s *fakeDebugBundleStream) Send(body *httpbody.HttpBody) error {
+	s.chunks = append(s.chunks, body)
+	return nil
+}
+func (s *fakeDebugBundleStream) SetHeader(md metadata.MD) error {
+	s.header = metadata.Join(s.header, md)
+	return nil
+}
+func (s *fakeDebugBundleStream) SendHeader(metadata.MD) error { return nil }
+func (s *fakeDebugBundleStream) SetTrailer(metadata.MD)       {}
+func (s *fakeDebugBundleStream) Context() context.Context     { return s.ctx }
+func (s *fakeDebugBundleStream) SendMsg(interface{}) error    { return nil }
+func (s *fakeDebugBundleStream) RecvMsg(interface{}) error    { return nil }
+
+func newFakeStream() *fakeDebugBundleStream {
+	return &fakeDebugBundleStream{ctx: context.Background()}
+}
 
 func newDebugBundleTestDeps(t *testing.T) *debugbundle.Deps {
 	t.Helper()
@@ -59,7 +87,7 @@ func TestGetDebugBundleUnavailableOutsideCluster(t *testing.T) {
 	defer func() { debugBundleDeps = original }()
 
 	proxy := &vjailbreakProxy{}
-	_, err := proxy.GetDebugBundle(context.Background(), &api.GetDebugBundleRequest{Migration: "m1"})
+	err := proxy.GetDebugBundle(&api.GetDebugBundleRequest{Migration: "m1"}, newFakeStream())
 
 	if status.Code(err) != codes.Unavailable {
 		t.Fatalf("expected Unavailable, got %v", err)
@@ -81,7 +109,7 @@ func TestGetDebugBundleValidation(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := proxy.GetDebugBundle(context.Background(), tc.req)
+			err := proxy.GetDebugBundle(tc.req, newFakeStream())
 			if status.Code(err) != codes.InvalidArgument {
 				t.Fatalf("expected InvalidArgument, got %v", err)
 			}
@@ -89,24 +117,36 @@ func TestGetDebugBundleValidation(t *testing.T) {
 	}
 }
 
-func TestGetDebugBundleReturnsBundle(t *testing.T) {
+func TestGetDebugBundleStreamsArchive(t *testing.T) {
 	original := debugBundleDeps
 	debugBundleDeps = newDebugBundleTestDeps(t)
 	defer func() { debugBundleDeps = original }()
 
 	proxy := &vjailbreakProxy{}
-	body, err := proxy.GetDebugBundle(context.Background(), &api.GetDebugBundleRequest{Migration: "migration-testvm"})
-	if err != nil {
+	stream := newFakeStream()
+	if err := proxy.GetDebugBundle(&api.GetDebugBundleRequest{Migration: "migration-testvm"}, stream); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if body.GetContentType() != "application/gzip" {
-		t.Errorf("unexpected content type %q", body.GetContentType())
+	if len(stream.chunks) == 0 {
+		t.Fatal("expected streamed chunks")
+	}
+	var archive bytes.Buffer
+	for _, chunk := range stream.chunks {
+		if chunk.GetContentType() != "application/gzip" {
+			t.Errorf("unexpected chunk content type %q", chunk.GetContentType())
+		}
+		archive.Write(chunk.GetData())
 	}
 
-	gzReader, err := gzip.NewReader(bytes.NewReader(body.GetData()))
+	disposition := stream.header.Get(contentDispositionMetadataKey)
+	if len(disposition) == 0 || !strings.Contains(disposition[0], ".tar.gz") {
+		t.Errorf("expected .tar.gz content-disposition header, got %v", disposition)
+	}
+
+	gzReader, err := gzip.NewReader(&archive)
 	if err != nil {
-		t.Fatalf("response is not valid gzip: %v", err)
+		t.Fatalf("streamed data is not valid gzip: %v", err)
 	}
 	defer gzReader.Close()
 
