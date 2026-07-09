@@ -198,7 +198,7 @@ export const checkOpenstackCredsDeletable = async (
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ): Promise<OpenstackCredsDeletableResponse> => {
   return axios.get<OpenstackCredsDeletableResponse>({
-    endpoint: `/vpw/v1/openstackcreds-deletable?name=${encodeURIComponent(credName)}&namespace=${encodeURIComponent(namespace)}`
+    endpoint: `/dev-api/sdk/vpw/v1/openstackcreds-deletable?name=${encodeURIComponent(credName)}&namespace=${encodeURIComponent(namespace)}`
   })
 }
 
