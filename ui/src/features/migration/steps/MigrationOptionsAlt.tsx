@@ -646,14 +646,6 @@ export default function MigrationOptionsAlt({
             </Alert>
           )}
 
-          {hasSubnetMismatch && (
-            <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
-              Persist source network interfaces is not available because some VM IP addresses do
-              not lie within the subnet of the selected destination network(s). Map to a network
-              with a matching subnet to enable this option.
-            </Alert>
-          )}
-
           <OptionRow>
             <OptionLeft>
               <FormControlLabel
@@ -709,13 +701,19 @@ export default function MigrationOptionsAlt({
                 }
               />
               <OptionHelp variant="caption">
-                {hasSubnetMismatch
-                  ? 'Disabled because some VM IP addresses do not lie within the subnet of the mapped destination network(s). Map to a network with a matching subnet to enable this option.'
-                  : "Retain the source VM's network interface names"}
+                Retain the source VM's network interface names
               </OptionHelp>
             </OptionLeft>
             <Box />
           </OptionRow>
+
+          {hasSubnetMismatch && (
+            <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
+              Persist source network interfaces is not available because some VM IP addresses do
+              not lie within the subnet of the selected destination network(s). Map to a network
+              with a matching subnet to enable this option.
+            </Alert>
+          )}
         </SectionBlock>
 
         {isPCD ? (
