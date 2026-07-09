@@ -396,6 +396,12 @@ export default function MigrationPhaseDetail({
     case Phase.CopyingBlocks:
     case Phase.CopyingChangedBlocks:
     case Phase.AwaitingDataCopyStart:
+    // Hot-Add proxy copy phases all render as the "Copying Blocks" stage.
+    case Phase.SnapshottingSourceVM:
+    case Phase.AttachingDisksToProxy:
+    case Phase.IdentifyingBlockDevices:
+    case Phase.HotAddTransferInProgress:
+    case Phase.HotAddCleanup:
       return <CopyingPhaseDetail migration={migration} />
 
     case Phase.ConvertingDisk:

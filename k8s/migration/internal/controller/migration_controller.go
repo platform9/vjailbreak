@@ -488,7 +488,13 @@ loop:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseFailed
 			break loop
 		case slices.Contains(IgnoredPhases, scope.Migration.Status.Phase):
-			break loop
+			// Still in a pre-started phase (Pending/Validating/ValidationFailed) and this event
+			// isn't a recognized progress signal. Keep scanning older events instead of bailing:
+			// events are newest-first, and for Hot-Add the long-running nbdcopy is often preceded
+			// by non-matching detail messages ("Disk attached...", "Removing pre-existing snapshot...")
+			// that would otherwise stop us before reaching the actual progress event and leave the
+			// migration stuck showing "Validating".
+			continue
 		default:
 			continue
 		}
