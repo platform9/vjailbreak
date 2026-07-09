@@ -32,6 +32,7 @@ import (
 
 	scope "github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	constants "github.com/platform9/vjailbreak/pkg/common/constants"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -89,6 +90,98 @@ func TestApplyValidationResult_ValidationFailure(t *testing.T) {
 				t.Errorf("OpenStackValidationStatus = %q, want %q", updated.Status.OpenStackValidationStatus, tt.wantValidationStatus)
 			}
 		})
+	}
+}
+
+// TestReconcileDelete_DeletesNonMasterVjailbreakNodes verifies that reconcileDelete
+// removes non-master VjailbreakNodes referencing the deleted OpenstackCreds.
+func TestReconcileDelete_DeletesNonMasterVjailbreakNodes(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const credName = "test-creds"
+
+	oscreds := &vjailbreakv1alpha1.OpenstackCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       credName,
+			Namespace:  ns,
+			Finalizers: []string{constants.OpenstackCredsFinalizer},
+		},
+	}
+
+	workerNode := &vjailbreakv1alpha1.VjailbreakNode{
+		ObjectMeta: metav1.ObjectMeta{Name: "vjailbreak-agent-abc", Namespace: ns},
+		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+			NodeRole: "worker",
+			OpenstackCreds: corev1.ObjectReference{
+				Name:      credName,
+				Namespace: ns,
+			},
+			OpenstackFlavorID: "f1",
+			OpenstackImageID:  "i1",
+		},
+	}
+
+	masterNode := &vjailbreakv1alpha1.VjailbreakNode{
+		ObjectMeta: metav1.ObjectMeta{Name: "vjailbreak-master", Namespace: ns},
+		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+			NodeRole: constants.NodeRoleMaster,
+			OpenstackCreds: corev1.ObjectReference{
+				Name:      credName,
+				Namespace: ns,
+			},
+			OpenstackFlavorID: "f1",
+			OpenstackImageID:  "i1",
+		},
+	}
+
+	otherCredsNode := &vjailbreakv1alpha1.VjailbreakNode{
+		ObjectMeta: metav1.ObjectMeta{Name: "vjailbreak-agent-other", Namespace: ns},
+		Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+			NodeRole: "worker",
+			OpenstackCreds: corev1.ObjectReference{
+				Name:      "other-creds",
+				Namespace: ns,
+			},
+			OpenstackFlavorID: "f1",
+			OpenstackImageID:  "i1",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(oscreds, workerNode, masterNode, otherCredsNode).
+		WithStatusSubresource(&vjailbreakv1alpha1.OpenstackCreds{}).
+		Build()
+
+	credScope, err := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
+		Client:         fakeClient,
+		OpenstackCreds: oscreds,
+	})
+	if err != nil {
+		t.Fatalf("failed to create scope: %v", err)
+	}
+
+	r := &OpenstackCredsReconciler{Client: fakeClient, Scheme: scheme}
+	if err := r.reconcileDelete(context.Background(), credScope); err != nil {
+		t.Fatalf("reconcileDelete returned error: %v", err)
+	}
+
+	// Worker node referencing the creds should be gone.
+	remaining := &vjailbreakv1alpha1.VjailbreakNode{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-agent-abc", Namespace: ns}, remaining); err == nil {
+		t.Error("expected worker node to be deleted, but it still exists")
+	}
+
+	// Master node should survive.
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-master", Namespace: ns}, remaining); err != nil {
+		t.Errorf("master node should not be deleted: %v", err)
+	}
+
+	// Node referencing different creds should survive.
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-agent-other", Namespace: ns}, remaining); err != nil {
+		t.Errorf("node for other creds should not be deleted: %v", err)
 	}
 }
 

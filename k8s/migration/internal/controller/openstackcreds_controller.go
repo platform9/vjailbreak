@@ -61,6 +61,7 @@ type OpenstackCredsReconciler struct {
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=pcdclusters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=vjailbreaknodes,verbs=get;list;watch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -321,6 +322,25 @@ func (r *OpenstackCredsReconciler) reconcileDelete(ctx context.Context, scope *s
 		ctxlog.Info("Deleting dependent PCDCluster", "name", pcdCluster.Name)
 		if err := r.Delete(ctx, &pcdCluster); err != nil && !apierrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete dependent PCDCluster")
+		}
+	}
+
+	ctxlog.Info("Cleaning up associated non-master VjailbreakNodes")
+	vjailbreakNodeList := &vjailbreakv1alpha1.VjailbreakNodeList{}
+	if err := r.List(ctx, vjailbreakNodeList, client.InNamespace(openstackcreds.Namespace)); err != nil {
+		return errors.Wrap(err, "failed to list VjailbreakNodes for cleanup")
+	}
+	for i := range vjailbreakNodeList.Items {
+		node := vjailbreakNodeList.Items[i]
+		if node.Spec.NodeRole == constants.NodeRoleMaster {
+			continue
+		}
+		if node.Spec.OpenstackCreds.Name != openstackcreds.Name {
+			continue
+		}
+		ctxlog.Info("Deleting dependent non-master VjailbreakNode", "name", node.Name)
+		if err := r.Delete(ctx, &node); err != nil && !apierrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete dependent VjailbreakNode")
 		}
 	}
 
