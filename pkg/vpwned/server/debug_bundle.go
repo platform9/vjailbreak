@@ -1,8 +1,8 @@
 package server
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -12,7 +12,6 @@ import (
 	"github.com/platform9/vjailbreak/pkg/vpwned/server/debugbundle"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/genproto/googleapis/api/httpbody"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -24,6 +23,8 @@ import (
 // It stays nil outside a cluster, in which case GetDebugBundle returns
 // codes.Unavailable.
 var debugBundleDeps *debugbundle.Deps
+
+const debugBundleChunkBytes = 2 << 20
 
 // InitDebugBundle wires the kubernetes clients and debug logs directory used
 // by the GetDebugBundle API. Call once during server startup; returns an
@@ -55,12 +56,14 @@ func InitDebugBundle() error {
 }
 
 // GetDebugBundle implements VailbreakProxy.GetDebugBundle. It assembles a
-// plain-text debug bundle — pod stdout/stderr logs, related Kubernetes
-// resource YAMLs and debug logs from /var/log/pf9 — and returns it as an
-// HttpBody so the REST gateway serves it as a file download.
-func (p *vjailbreakProxy) GetDebugBundle(ctx context.Context, req *api.GetDebugBundleRequest) (*httpbody.HttpBody, error) {
+// .tar.gz debug bundle — pod stdout/stderr logs, related Kubernetes resource
+// YAMLs and debug logs from /var/log/pf9 — by streaming every source into a
+// temporary archive file on disk, then streams that archive back in chunks.
+func (p *vjailbreakProxy) GetDebugBundle(req *api.GetDebugBundleRequest, stream api.VailbreakProxy_GetDebugBundleServer) error {
+	ctx := stream.Context()
+
 	if debugBundleDeps == nil {
-		return nil, status.Error(codes.Unavailable, "debug bundle collection is unavailable outside the cluster")
+		return status.Error(codes.Unavailable, "debug bundle collection is unavailable outside the cluster")
 	}
 
 	migrationName := strings.TrimSpace(req.GetMigration())
@@ -70,37 +73,69 @@ func (p *vjailbreakProxy) GetDebugBundle(ctx context.Context, req *api.GetDebugB
 		namespace = migrationSystemNamespace
 	}
 	if namespace != migrationSystemNamespace {
-		return nil, status.Errorf(codes.InvalidArgument, "namespace must be %s", migrationSystemNamespace)
+		return status.Errorf(codes.InvalidArgument, "namespace must be %s", migrationSystemNamespace)
 	}
 	if migrationName == "" && podName == "" {
-		return nil, status.Error(codes.InvalidArgument, "either migration or pod is required")
+		return status.Error(codes.InvalidArgument, "either migration or pod is required")
 	}
 
 	logrus.Infof("debug bundle requested: migration=%q pod=%q namespace=%s", migrationName, podName, namespace)
-	result := debugbundle.Build(ctx, *debugBundleDeps, namespace, migrationName, podName)
+	plan := debugbundle.PlanBundle(ctx, *debugBundleDeps, namespace, migrationName, podName)
 
-	baseName := result.VMName
+	baseName := plan.VMName
 	if baseName == "" {
 		baseName = migrationName
 	}
 	if baseName == "" {
-		baseName = result.PodName
+		baseName = plan.PodName
 	}
 	if baseName == "" {
 		baseName = "logs"
 	}
-	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
-	fileName := fmt.Sprintf("%s-pod-%s.txt", baseName, timestamp)
+	now := time.Now().UTC()
+	baseDir := fmt.Sprintf("%s-debug-bundle-%s", baseName, now.Format("2006-01-02T15-04-05Z"))
+
+	archive, err := os.CreateTemp("", "debug-bundle-*.tar.gz")
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to create debug bundle archive file: %v", err)
+	}
+	defer func() {
+		archive.Close()
+		os.Remove(archive.Name())
+	}()
+
+	if err := plan.WriteTarGz(ctx, baseDir, archive); err != nil {
+		return status.Errorf(codes.Internal, "failed to build debug bundle archive: %v", err)
+	}
+	if _, err := archive.Seek(0, io.SeekStart); err != nil {
+		return status.Errorf(codes.Internal, "failed to rewind debug bundle archive: %v", err)
+	}
 
 	// The gateway promotes this metadata to a real Content-Disposition
-	// header (see forwardDownloadHeaders in server.go). SetHeader fails on
-	// plain (non-transport) contexts, e.g. in unit tests — safe to ignore.
-	if err := grpc.SetHeader(ctx, metadata.Pairs(contentDispositionMetadataKey, fmt.Sprintf("attachment; filename=%q", fileName))); err != nil {
+	// header (see forwardDownloadHeaders in server.go). Must be set before
+	// the first Send.
+	if err := stream.SetHeader(metadata.Pairs(contentDispositionMetadataKey, fmt.Sprintf("attachment; filename=%q", baseDir+".tar.gz"))); err != nil {
 		logrus.Debugf("debug bundle: could not set content-disposition header: %v", err)
 	}
 
-	return &httpbody.HttpBody{
-		ContentType: "text/plain; charset=utf-8",
-		Data:        []byte(result.Content),
-	}, nil
+	buf := make([]byte, debugBundleChunkBytes)
+	for {
+		n, readErr := archive.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			if err := stream.Send(&httpbody.HttpBody{
+				ContentType: "application/gzip",
+				Data:        chunk,
+			}); err != nil {
+				return status.Errorf(codes.Internal, "failed to stream debug bundle chunk: %v", err)
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return status.Errorf(codes.Internal, "failed to read debug bundle archive: %v", readErr)
+		}
+	}
 }

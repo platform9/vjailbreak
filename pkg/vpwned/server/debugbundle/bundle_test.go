@@ -1,16 +1,58 @@
 package debugbundle
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"io"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestBuildAssemblesAllSections(t *testing.T) {
+// untarGz extracts an archive into a path→content map for assertions.
+func untarGz(t *testing.T, data []byte) map[string]string {
+	t.Helper()
+	gzReader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to open gzip: %v", err)
+	}
+	defer gzReader.Close()
+
+	out := map[string]string{}
+	tarReader := tar.NewReader(gzReader)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("failed to read tar: %v", err)
+		}
+		content, err := io.ReadAll(tarReader)
+		if err != nil {
+			t.Fatalf("failed to read tar entry %s: %v", header.Name, err)
+		}
+		out[header.Name] = string(content)
+	}
+	return out
+}
+
+func buildTarGz(t *testing.T, plan *Plan) map[string]string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := plan.WriteTarGz(context.Background(), "bundle", &buf); err != nil {
+		t.Fatalf("WriteTarGz failed: %v", err)
+	}
+	return untarGz(t, buf.Bytes())
+}
+
+func TestPlanAndWriteTarGzProducesStructure(t *testing.T) {
 	ctrlClient := newFakeClient(t, testMigrationGraph()...)
 	clientset := k8sfake.NewSimpleClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "v2v-helper-testvm", Namespace: testNamespace},
@@ -18,61 +60,92 @@ func TestBuildAssemblesAllSections(t *testing.T) {
 
 	deps := Deps{Client: ctrlClient, Clientset: clientset, LogsFS: testLogsFS()}
 	// podName intentionally empty — must be resolved from spec.podRef.
-	result := Build(context.Background(), deps, testNamespace, "migration-testvm", "")
+	plan := PlanBundle(context.Background(), deps, testNamespace, "migration-testvm", "")
 
-	if result.VMName != "testvm" {
-		t.Errorf("expected VMName=testvm, got %q", result.VMName)
+	if plan.VMName != "testvm" {
+		t.Errorf("expected VMName=testvm, got %q", plan.VMName)
 	}
-	if result.PodName != "v2v-helper-testvm" {
-		t.Errorf("expected PodName resolved from spec.podRef, got %q", result.PodName)
+	if plan.PodName != "v2v-helper-testvm" {
+		t.Errorf("expected PodName resolved from spec.podRef, got %q", plan.PodName)
 	}
 
-	for _, section := range []string{
-		"STDOUT/STDERR LOGS (pod)",
-		"RELATED KUBERNETES RESOURCES",
-		"DEBUG LOGS FROM /var/log/pf9",
-	} {
-		if !strings.Contains(result.Content, section) {
-			t.Errorf("expected section %q in bundle:\n%s", section, result.Content)
-		}
-	}
+	entries := buildTarGz(t, plan)
 
 	// The fake clientset serves a fixed log body for any pod.
-	if !strings.Contains(result.Content, "fake logs") {
-		t.Errorf("expected pod logs section content, got:\n%s", result.Content)
+	if !strings.Contains(entries["bundle/pod-logs/v2v-helper-testvm.log"], "fake logs") {
+		t.Errorf("expected pod log entry, got %v", entries)
 	}
-	if !strings.Contains(result.Content, "FILE: kubernetes/migrations/migration-testvm.yaml") {
-		t.Errorf("expected migration YAML in bundle:\n%s", result.Content)
+	if !strings.Contains(entries["bundle/kubernetes/migrations/migration-testvm.yaml"], "name: migration-testvm") {
+		t.Errorf("expected migration YAML entry, got %v", entries)
 	}
-	// migrationName filter matches the debug log fixture prefix.
-	if !strings.Contains(result.Content, "root log line") {
-		t.Errorf("expected debug file logs in bundle:\n%s", result.Content)
+	if entries["bundle/debug-logs/migration-testvm.log"] != "root log line" {
+		t.Errorf("expected root debug log entry, got %v", entries)
+	}
+	if entries["bundle/debug-logs/migration-testvm/migration.001.log"] != "subdir log line" {
+		t.Errorf("expected subdir debug log entry, got %v", entries)
+	}
+	if content, ok := entries["bundle/"+warningsFileName]; ok {
+		t.Errorf("expected no warnings entry for a clean build, got %q", content)
 	}
 }
 
-func TestBuildWithoutLogsFS(t *testing.T) {
+func TestWriteTarGzNoTruncation(t *testing.T) {
+	// A debug log well past the old 32 MiB-style caps must arrive whole.
+	largeLog := strings.Repeat("x", 5<<20)
+	ctrlClient := newFakeClient(t, testMigrationGraph()...)
+	clientset := k8sfake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "v2v-helper-testvm", Namespace: testNamespace},
+	})
+	deps := Deps{
+		Client:    ctrlClient,
+		Clientset: clientset,
+		LogsFS: fstest.MapFS{
+			"migration-testvm.log": {Data: []byte(largeLog)},
+		},
+	}
+
+	plan := PlanBundle(context.Background(), deps, testNamespace, "migration-testvm", "")
+	entries := buildTarGz(t, plan)
+
+	if got := len(entries["bundle/debug-logs/migration-testvm.log"]); got != len(largeLog) {
+		t.Errorf("expected full %d-byte debug log, got %d bytes", len(largeLog), got)
+	}
+	if content, ok := entries["bundle/"+warningsFileName]; ok && strings.Contains(content, "truncated") {
+		t.Errorf("no truncation warnings expected, got %q", content)
+	}
+}
+
+func TestWriteTarGzWithoutLogsFS(t *testing.T) {
 	ctrlClient := newFakeClient(t, testMigrationGraph()...)
 	clientset := k8sfake.NewSimpleClientset()
 
 	deps := Deps{Client: ctrlClient, Clientset: clientset}
-	result := Build(context.Background(), deps, testNamespace, "migration-testvm", "v2v-helper-testvm")
+	plan := PlanBundle(context.Background(), deps, testNamespace, "migration-testvm", "v2v-helper-testvm")
+	entries := buildTarGz(t, plan)
 
-	if !strings.Contains(result.Content, "[Debug logs directory is not available]") {
-		t.Errorf("expected missing-logs note, got:\n%s", result.Content)
+	if !strings.Contains(entries["bundle/"+warningsFileName], "Debug logs directory is not available") {
+		t.Errorf("expected missing-logs warning, got %v", entries)
+	}
+	for path := range entries {
+		if strings.Contains(path, "debug-logs/") {
+			t.Errorf("expected no debug-logs entries, got %s", path)
+		}
 	}
 }
 
-func TestBuildMigrationMissingStillReturnsBundle(t *testing.T) {
+func TestPlanBundleMigrationMissing(t *testing.T) {
 	ctrlClient := newFakeClient(t)
 	clientset := k8sfake.NewSimpleClientset()
 
 	deps := Deps{Client: ctrlClient, Clientset: clientset, LogsFS: testLogsFS()}
-	result := Build(context.Background(), deps, testNamespace, "missing-migration", "")
+	plan := PlanBundle(context.Background(), deps, testNamespace, "missing-migration", "")
+	entries := buildTarGz(t, plan)
 
-	if !strings.Contains(result.Content, "Migration resource not found") {
-		t.Errorf("expected not-found warning in bundle:\n%s", result.Content)
+	warnings := entries["bundle/"+warningsFileName]
+	if !strings.Contains(warnings, "Migration resource not found") {
+		t.Errorf("expected not-found warning, got %q", warnings)
 	}
-	if !strings.Contains(result.Content, "[No pod found for this migration]") {
-		t.Errorf("expected no-pod note, got:\n%s", result.Content)
+	if !strings.Contains(warnings, "No pod found for this migration") {
+		t.Errorf("expected no-pod warning, got %q", warnings)
 	}
 }

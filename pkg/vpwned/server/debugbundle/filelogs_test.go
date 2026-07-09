@@ -1,7 +1,7 @@
 package debugbundle
 
 import (
-	"strings"
+	"sort"
 	"testing"
 	"testing/fstest"
 )
@@ -16,45 +16,28 @@ func testLogsFS() fstest.MapFS {
 	}
 }
 
-func TestCollectDebugFileLogsFiltersByMigration(t *testing.T) {
-	output := CollectDebugFileLogs(testLogsFS(), "migration-testvm")
+func TestListDebugLogPathsFiltersByMigration(t *testing.T) {
+	paths, warnings := ListDebugLogPaths(testLogsFS(), "migration-testvm")
 
-	if !strings.Contains(output, "FILE: migration-testvm.log") || !strings.Contains(output, "root log line") {
-		t.Errorf("expected root-level log file, got:\n%s", output)
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings, got %v", warnings)
 	}
-	if !strings.Contains(output, "FILE: migration-testvm/migration.001.log") || !strings.Contains(output, "subdir log line") {
-		t.Errorf("expected subdirectory log file, got:\n%s", output)
+	sort.Strings(paths)
+	expected := []string{"migration-testvm.log", "migration-testvm/migration.001.log"}
+	if len(paths) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, paths)
 	}
-	if strings.Contains(output, "other vm log") {
-		t.Errorf("must not include other migrations' logs, got:\n%s", output)
-	}
-	if strings.Contains(output, "not a log file") || strings.Contains(output, "ignore me") {
-		t.Errorf("must only include .log files, got:\n%s", output)
+	for i, path := range expected {
+		if paths[i] != path {
+			t.Errorf("expected %s at %d, got %s", path, i, paths[i])
+		}
 	}
 }
 
-func TestCollectDebugFileLogsNoMatches(t *testing.T) {
-	if output := CollectDebugFileLogs(testLogsFS(), "migration-does-not-exist"); strings.TrimSpace(output) != "" {
-		t.Errorf("expected empty output for unmatched migration, got:\n%s", output)
-	}
-}
+func TestListDebugLogPathsNoMatches(t *testing.T) {
+	paths, warnings := ListDebugLogPaths(testLogsFS(), "migration-does-not-exist")
 
-func TestCollectDebugFileLogsTotalSizeCap(t *testing.T) {
-	originalTotal := maxDebugFilesTotalBytes
-	maxDebugFilesTotalBytes = 64
-	defer func() { maxDebugFilesTotalBytes = originalTotal }()
-
-	fsys := fstest.MapFS{
-		"migration-big/a.log": {Data: []byte(strings.Repeat("x", 200))},
-		"migration-big/b.log": {Data: []byte("second file content")},
-	}
-
-	output := CollectDebugFileLogs(fsys, "migration-big")
-
-	if !strings.Contains(output, "Debug log size limit reached") {
-		t.Errorf("expected truncation note, got:\n%s", output)
-	}
-	if strings.Contains(output, "second file content") {
-		t.Errorf("files after the cap must be omitted, got:\n%s", output)
+	if len(paths) != 0 || len(warnings) != 0 {
+		t.Errorf("expected empty result, got paths=%v warnings=%v", paths, warnings)
 	}
 }
