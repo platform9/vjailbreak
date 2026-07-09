@@ -186,6 +186,22 @@ export const deleteOpenStackCredsWithSecretFlow = async (
   }
 }
 
+export interface OpenstackCredsDeletableResponse {
+  canDelete: boolean
+  agentNodeCount: number
+  agentNodeNames: string[]
+  hasActiveMigrations: boolean
+}
+
+export const checkOpenstackCredsDeletable = async (
+  credName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<OpenstackCredsDeletableResponse> => {
+  return axios.get<OpenstackCredsDeletableResponse>({
+    endpoint: `/vpw/v1/openstackcreds-deletable?name=${encodeURIComponent(credName)}&namespace=${encodeURIComponent(namespace)}`
+  })
+}
+
 export interface RevalidateCredentialsRequest {
   name: string
   namespace: string

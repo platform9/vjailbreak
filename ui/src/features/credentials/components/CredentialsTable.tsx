@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip, Alert, Typography } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -20,7 +20,9 @@ import { OPENSTACK_CREDS_QUERY_KEY } from 'src/hooks/api/useOpenstackCredentials
 import {
   deleteVMwareCredsWithSecretFlow,
   deleteOpenStackCredsWithSecretFlow,
-  revalidateCredentials
+  revalidateCredentials,
+  checkOpenstackCredsDeletable,
+  OpenstackCredsDeletableResponse
 } from 'src/api/helpers'
 import VMwareCredentialsDrawer from './VMwareCredentialsDrawer'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
@@ -310,6 +312,10 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [agentNodeInfo, setAgentNodeInfo] = useState<Pick<
+    OpenstackCredsDeletableResponse,
+    'agentNodeCount' | 'agentNodeNames' | 'hasActiveMigrations'
+  > | null>(null)
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
 
@@ -410,7 +416,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     }
   }, [isVmware, refetchOpenstack, refetchVmware])
 
-  const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
+  const handleDeleteCredential = async (id: string, type: 'VMware' | 'OpenStack') => {
     const credentialName = id.startsWith('vmware-')
       ? id.replace('vmware-', '')
       : id.replace('openstack-', '')
@@ -431,6 +437,26 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
             : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
         credObject: credential
       }
+
+      if (type === 'OpenStack') {
+        try {
+          const result = await checkOpenstackCredsDeletable(credentialName)
+          if (result.agentNodeCount > 0) {
+            setAgentNodeInfo({
+              agentNodeCount: result.agentNodeCount,
+              agentNodeNames: result.agentNodeNames,
+              hasActiveMigrations: result.hasActiveMigrations
+            })
+          } else {
+            setAgentNodeInfo(null)
+          }
+        } catch {
+          setAgentNodeInfo(null)
+        }
+      } else {
+        setAgentNodeInfo(null)
+      }
+
       setSelectedForDeletion([credItem])
       setDeleteDialogOpen(true)
     }
@@ -490,9 +516,35 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     setSelectedIds(rowSelectionModel as string[])
   }
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     const selectedCreds = allCredentials.filter((cred) => selectedIds.includes(cred.id))
     setSelectedForDeletion(selectedCreds)
+
+    const openstackCreds = selectedCreds.filter((cred) => cred.type === 'OpenStack')
+    if (openstackCreds.length > 0) {
+      try {
+        const results = await Promise.all(
+          openstackCreds.map((cred) =>
+            checkOpenstackCredsDeletable(cred.id.replace('openstack-', ''))
+          )
+        )
+        const totalCount = results.reduce((sum, r) => sum + r.agentNodeCount, 0)
+        if (totalCount > 0) {
+          setAgentNodeInfo({
+            agentNodeCount: totalCount,
+            agentNodeNames: results.flatMap((r) => r.agentNodeNames),
+            hasActiveMigrations: results.some((r) => r.hasActiveMigrations)
+          })
+        } else {
+          setAgentNodeInfo(null)
+        }
+      } catch {
+        setAgentNodeInfo(null)
+      }
+    } else {
+      setAgentNodeInfo(null)
+    }
+
     setDeleteDialogOpen(true)
   }
 
@@ -500,6 +552,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     setDeleteDialogOpen(false)
     setSelectedForDeletion([])
     setDeleteError(null)
+    setAgentNodeInfo(null)
   }
 
   const handleConfirmDelete = async () => {
@@ -670,8 +723,8 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       <ConfirmationDialog
         open={deleteDialogOpen}
         onClose={handleDeleteClose}
-        title="Confirm Delete"
-        icon={<WarningIcon color="warning" />}
+        title={agentNodeInfo ? 'Force Delete Credentials' : 'Confirm Delete'}
+        icon={<WarningIcon color={agentNodeInfo ? 'error' : 'warning'} />}
         message={
           selectedForDeletion.length > 1
             ? 'Are you sure you want to delete these credentials?'
@@ -681,7 +734,26 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           id: cred.id,
           name: `${cred.name} (${cred.type})`
         }))}
-        actionLabel="Delete"
+        additionalContent={
+          agentNodeInfo ? (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                {agentNodeInfo.agentNodeCount} agent node{agentNodeInfo.agentNodeCount > 1 ? 's' : ''} will also be deleted:
+              </Typography>
+              {agentNodeInfo.agentNodeNames.map((name) => (
+                <Typography key={name} variant="body2">
+                  • {name}
+                </Typography>
+              ))}
+              {agentNodeInfo.hasActiveMigrations && (
+                <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
+                  ⚠ Some nodes have active migrations in progress. Deleting may interrupt running migrations.
+                </Typography>
+              )}
+            </Alert>
+          ) : undefined
+        }
+        actionLabel={agentNodeInfo ? 'Force Delete' : 'Delete'}
         actionColor="error"
         actionVariant="outlined"
         onConfirm={handleConfirmDelete}
