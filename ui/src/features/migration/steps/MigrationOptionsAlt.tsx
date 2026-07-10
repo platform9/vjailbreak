@@ -709,9 +709,9 @@ export default function MigrationOptionsAlt({
 
           {hasSubnetMismatch && (
             <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
-              Persist source network interfaces is not available because some VM IP addresses do
-              not lie within the subnet of the selected destination network(s). Map to a network
-              with a matching subnet to enable this option.
+              Persist source network interfaces is not available because some IP addresses of the
+              selected VMs do not lie within the subnet of the selected destination network(s). Map
+              to a network with a matching subnet to enable this option.
             </Alert>
           )}
         </SectionBlock>

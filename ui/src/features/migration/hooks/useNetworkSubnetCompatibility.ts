@@ -86,7 +86,7 @@ export function useNetworkSubnetCompatibility({
               const cidrList =
                 result.subnet_cidrs?.length > 0 ? ` (${result.subnet_cidrs.join(', ')})` : ''
               nextWarnings[mapping.source] =
-                `${incompatibleIPs.length} VM IP address(es) [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
+                `${incompatibleIPs.length} IP address(es) of the selected VMs [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
                 `Ensure fallback to DHCP is enabled, otherwise it may lead to migration failures`
             }
           } catch {
