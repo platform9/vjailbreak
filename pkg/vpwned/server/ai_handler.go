@@ -36,8 +36,9 @@ const (
 	controllerLogTailLines    = 200
 	controllerLogMaxChars     = 50000
 
-	// debug logs: errors can appear anywhere in file — keep error lines + small context, no tail
+	// debug logs: errors anywhere + tail to catch failures at end of file
 	debugLogContextLines = 3
+	debugLogTailLines    = 100
 	debugLogMaxChars     = 50000
 )
 
@@ -141,18 +142,22 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 	}
 
 	var migrationPlan any
+	var migrationPlanStatus any
 	var migrationTemplate any
 	var networkMapping any
 	var storageMapping any
+	var openstackCredsStatus any
+	var vmwareCredsStatus any
 
 	if planName := migration.Spec.MigrationPlan; planName != "" {
 		var plan migrationv1alpha1.MigrationPlan
 		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: planName, Namespace: namespace}, &plan); err == nil {
 			migrationPlan = plan.Spec
+			migrationPlanStatus = plan.Status
 
 			var tmpl migrationv1alpha1.MigrationTemplate
 			if err2 := h.k8sClient.Get(ctx, types.NamespacedName{Name: plan.Spec.MigrationTemplate, Namespace: namespace}, &tmpl); err2 == nil {
-				// Strip credential references (Source.VMwareRef, Destination.OpenstackRef)
+				// Strip credential secret refs; expose only non-sensitive config.
 				tmplSpec := map[string]any{
 					"networkMapping":    tmpl.Spec.NetworkMapping,
 					"storageMapping":    tmpl.Spec.StorageMapping,
@@ -174,6 +179,30 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 						storageMapping = sm.Spec
 					}
 				}
+
+				// OpenstackCreds validation status (no secrets).
+				if osRef := tmpl.Spec.Destination.OpenstackRef; osRef != "" {
+					var osCreds migrationv1alpha1.OpenstackCreds
+					if err3 := h.k8sClient.Get(ctx, types.NamespacedName{Name: osRef, Namespace: namespace}, &osCreds); err3 == nil {
+						openstackCredsStatus = map[string]any{
+							"name":              osRef,
+							"validationStatus":  osCreds.Status.OpenStackValidationStatus,
+							"validationMessage": osCreds.Status.OpenStackValidationMessage,
+						}
+					}
+				}
+
+				// VMwareCreds validation status (no secrets).
+				if vmRef := tmpl.Spec.Source.VMwareRef; vmRef != "" {
+					var vmCreds migrationv1alpha1.VMwareCreds
+					if err3 := h.k8sClient.Get(ctx, types.NamespacedName{Name: vmRef, Namespace: namespace}, &vmCreds); err3 == nil {
+						vmwareCredsStatus = map[string]any{
+							"name":              vmRef,
+							"validationStatus":  vmCreds.Status.VMwareValidationStatus,
+							"validationMessage": vmCreds.Status.VMwareValidationMessage,
+						}
+					}
+				}
 			}
 		}
 	}
@@ -181,6 +210,7 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 	fetchWarnings := []string{}
 
 	v2vLogs := ""
+	v2vPodStatus := map[string]any{}
 	if podName := migration.Spec.PodRef; podName != "" && h.rawK8s != nil {
 		lines, err := h.fetchPodLogs(ctx, namespace, podName)
 		if err != nil {
@@ -189,6 +219,25 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 		} else {
 			// v2v failures always at end — raw tail is sufficient
 			v2vLogs = TruncateTailChars(strings.Join(lines, "\n"), v2vLogTailChars)
+		}
+
+		// Fetch pod exit code / termination reason — useful even when logs are empty.
+		if pod, err := h.rawK8s.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{}); err == nil {
+			v2vPodStatus["phase"] = string(pod.Status.Phase)
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name != "v2v-helper" && cs.Name != podName {
+					continue
+				}
+				if t := cs.State.Terminated; t != nil {
+					v2vPodStatus["exitCode"] = t.ExitCode
+					v2vPodStatus["reason"] = t.Reason
+					v2vPodStatus["message"] = t.Message
+				} else if t := cs.LastTerminationState.Terminated; t != nil {
+					v2vPodStatus["lastExitCode"] = t.ExitCode
+					v2vPodStatus["lastReason"] = t.Reason
+					v2vPodStatus["lastMessage"] = t.Message
+				}
+			}
 		}
 	}
 
@@ -222,16 +271,20 @@ func (h *aiAnalyzeHandler) assembleMigrationContext(migrationName, namespace str
 	}
 
 	return map[string]any{
-		"migration_cr":       migrationCR,
-		"migration_plan":     nilToEmptyMap(migrationPlan),
-		"migration_template": nilToEmptyMap(migrationTemplate),
-		"network_mapping":    nilToEmptyMap(networkMapping),
-		"storage_mapping":    nilToEmptyMap(storageMapping),
-		"v2v_logs":           v2vLogs,
-		"controller_logs":    controllerLogs,
-		"debug_logs":         debugLogs,
-		"additional_context": additionalContext,
-		"fetch_warnings":     fetchWarnings,
+		"migration_cr":          migrationCR,
+		"migration_plan":        nilToEmptyMap(migrationPlan),
+		"migration_plan_status": nilToEmptyMap(migrationPlanStatus),
+		"migration_template":    nilToEmptyMap(migrationTemplate),
+		"network_mapping":       nilToEmptyMap(networkMapping),
+		"storage_mapping":       nilToEmptyMap(storageMapping),
+		"openstack_creds_status": nilToEmptyMap(openstackCredsStatus),
+		"vmware_creds_status":    nilToEmptyMap(vmwareCredsStatus),
+		"v2v_pod_status":         v2vPodStatus,
+		"v2v_logs":              v2vLogs,
+		"controller_logs":       controllerLogs,
+		"debug_logs":            debugLogs,
+		"additional_context":    additionalContext,
+		"fetch_warnings":        fetchWarnings,
 	}, nil
 }
 
@@ -305,8 +358,7 @@ func (h *aiAnalyzeHandler) fetchDebugLogs(migrationName string) (map[string]stri
 				}
 				content, err := h.fetchFileContent(debugLogsBaseURL + "/" + entry.Name + "/" + sub.Name)
 				if err == nil {
-					// debug logs: errors anywhere — extract error lines with small context, no tail
-					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, 0)
+					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, debugLogTailLines)
 					result[entry.Name+"/"+sub.Name] = TruncateTailChars(strings.Join(extracted, "\n"), debugLogMaxChars)
 				}
 			}
@@ -314,7 +366,7 @@ func (h *aiAnalyzeHandler) fetchDebugLogs(migrationName string) (map[string]stri
 			if len(result) < maxDebugLogFiles {
 				content, err := h.fetchFileContent(debugLogsBaseURL + "/" + entry.Name)
 				if err == nil {
-					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, 0)
+					extracted := ExtractRelevantLines(SplitLines(content), debugLogContextLines, debugLogTailLines)
 					result[entry.Name] = TruncateTailChars(strings.Join(extracted, "\n"), debugLogMaxChars)
 				}
 			}
