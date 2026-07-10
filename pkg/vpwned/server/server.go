@@ -226,7 +226,7 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		}
 		aiHandler := NewAIAnalyzeHandler(aiK8sClient, rawK8s)
 		mux.Handle("/vpw/v1/ai/analyze", aiHandler)
-		mux.Handle("/vpw/v1/ai/key", &aiKeyHandler{k8sClient: aiK8sClient})
+		mux.Handle("/vpw/v1/ai/key", &aiKeyHandler{k8sClient: aiK8sClient, rawK8s: rawK8s})
 	}
 
 	// Wrap gatewayMuxer to handle all other routes
