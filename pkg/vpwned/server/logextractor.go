@@ -38,7 +38,10 @@ func ExtractRelevantLines(lines []string, contextWindow, tailLines int) []string
 
 	for i, line := range lines {
 		up := strings.ToUpper(line)
-		if strings.Contains(up, "ERROR") || strings.Contains(up, "FAILED") || strings.Contains(up, "WARN") {
+		if strings.Contains(up, "ERROR") || strings.Contains(up, "FAILED") || strings.Contains(up, "WARN") ||
+			strings.Contains(up, "PANIC") || strings.Contains(up, "FATAL") ||
+			strings.Contains(up, "EXCEPTION") || strings.Contains(up, "TRACEBACK") ||
+			strings.Contains(up, "KILLED") || strings.Contains(up, "OOM") || strings.Contains(up, "SIGNAL") {
 			start := i - contextWindow
 			if start < 0 {
 				start = 0

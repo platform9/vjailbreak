@@ -43,10 +43,14 @@ GITHUB_COLLECT_FIRST = [
 
 
 def extract_error_keywords(logs: str) -> list[str]:
-    """Extract up to 10 error/failed lines for RAG query."""
+    """Extract up to 10 signal lines for RAG query."""
     if not logs:
         return []
-    lines = [ln for ln in logs.splitlines() if re.search(r"ERROR|FAILED", ln, re.IGNORECASE)]
+    pattern = re.compile(
+        r"ERROR|FAILED|WARN|PANIC|FATAL|EXCEPTION|TRACEBACK|KILLED|OOM|SIGNAL",
+        re.IGNORECASE,
+    )
+    lines = [ln for ln in logs.splitlines() if pattern.search(ln)]
     return lines[:10]
 
 
@@ -55,15 +59,52 @@ def build_user_message(context: dict[str, Any], rag_context: str) -> str:
     status = migration_cr.get("status", {})
     conditions = status.get("conditions", [])
 
+    # Conditions first — primary signal for the AI
     sections = [
-        "## Migration CR Status",
+        "## Migration Status (start here)",
         f"Phase: {status.get('phase', 'unknown')}",
         f"Conditions:\n{json.dumps(conditions, indent=2, default=str)}",
         "",
+    ]
+
+    # v2v pod exit code — often the clearest signal for disk-copy failures
+    v2v_pod = context.get("v2v_pod_status", {})
+    if v2v_pod:
+        sections += [
+            "## v2v-helper Pod Exit Status",
+            json.dumps(v2v_pod, indent=2, default=str),
+            "",
+        ]
+
+    # MigrationPlan status
+    plan_status = context.get("migration_plan_status", {})
+    if plan_status:
+        sections += [
+            "## MigrationPlan Status",
+            json.dumps(plan_status, indent=2, default=str),
+            "",
+        ]
+
+    # Credential validation — surfaces auth failures even before pod starts
+    os_status = context.get("openstack_creds_status", {})
+    vm_status = context.get("vmware_creds_status", {})
+    if os_status or vm_status:
+        sections.append("## Credential Validation Status")
+        if vm_status:
+            sections.append(f"VMware ({vm_status.get('name', '')}): "
+                            f"{vm_status.get('validationStatus', '?')} — "
+                            f"{vm_status.get('validationMessage', '')}")
+        if os_status:
+            sections.append(f"OpenStack ({os_status.get('name', '')}): "
+                            f"{os_status.get('validationStatus', '?')} — "
+                            f"{os_status.get('validationMessage', '')}")
+        sections.append("")
+
+    sections += [
         "## Migration Template Config (credentials redacted)",
         json.dumps(context.get("migration_template", {}), indent=2, default=str),
         "",
-        "## MigrationPlan",
+        "## MigrationPlan Spec",
         json.dumps(context.get("migration_plan", {}), indent=2, default=str),
         "",
         "## v2v-helper Pod Logs (extracted)",

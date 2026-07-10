@@ -333,9 +333,13 @@ async def query(req: QueryRequest, request: Request):
 class MigrationContext(BaseModel):
     migration_cr: dict[str, Any] = {}
     migration_plan: dict[str, Any] = {}
+    migration_plan_status: dict[str, Any] = {}
     migration_template: dict[str, Any] = {}
     network_mapping: dict[str, Any] = {}
     storage_mapping: dict[str, Any] = {}
+    openstack_creds_status: dict[str, Any] = {}
+    vmware_creds_status: dict[str, Any] = {}
+    v2v_pod_status: dict[str, Any] = {}
     v2v_logs: str = ""
     controller_logs: str = ""
     debug_logs: dict[str, str] = {}
