@@ -901,7 +901,26 @@ func extractKeyValue(content, key string) string {
 	return ""
 }
 
+func prepareOsReleaseProbeCommand(disks []vm.VMDisk, releaseFiles []string) *exec.Cmd {
+	cmd := exec.Command("guestfish", "--ro")
+
+	for _, disk := range disks {
+		cmd.Args = append(cmd.Args, "-a", disk.Path)
+	}
+	cmd.Args = append(cmd.Args, "-i", "--")
+
+	for i, file := range releaseFiles {
+		if i > 0 {
+			cmd.Args = append(cmd.Args, ":", "echo", utils.OsReleaseProbeMarker, ":")
+		}
+		cmd.Args = append(cmd.Args, "-cat", file)
+	}
+	return cmd
+}
+
 func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
 	// Try multiple OS release files in order of preference
 	releaseFiles := []string{
 		"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
@@ -909,26 +928,29 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 		"/etc/SuSE-release",   // SUSE 11 and older
 	}
 
-	var errors []string
-	for _, file := range releaseFiles {
-		output, err := RunCommandInGuestAllVolumes(disks, "cat", false, file)
-		if err == nil {
-			log.Printf("Successfully read OS release from %s", file)
-			return output, nil
-		}
+	cmd := prepareOsReleaseProbeCommand(disks, releaseFiles)
+	log.Printf("Executing %s", cmd.String())
 
-		// Log the failure and continue to next file
-		log.Printf("Failed to get %s: %v", file, err)
-		errors = append(errors, fmt.Sprintf("%s: %v", file, err))
-
-		// If it's not a "file not found" error, stop trying
-		if !strings.Contains(err.Error(), "No such file or directory") {
-			break
-		}
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	runErr := cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("guestfish stderr (os-release probe): %s", strings.TrimSpace(stderrBuf.String()))
 	}
 
-	// All attempts failed
-	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(errors, "; "))
+	rawOutput := strings.ToLower(stdoutBuf.String())
+	content, matchedFile, found := utils.ParseOsReleaseProbe(rawOutput, releaseFiles)
+	if !found {
+		if runErr != nil {
+			return "", fmt.Errorf("failed to get OS release from any known location (%s): %v: %s",
+				strings.Join(releaseFiles, ", "), runErr, strings.TrimSpace(stderrBuf.String()))
+		}
+		return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(releaseFiles, ", "))
+	}
+
+	log.Printf("Successfully read OS release from %s (combined probe)", matchedFile)
+	return content, nil
 }
 
 // GetWindowsVersion detects the Windows version using guestfish inspect commands
