@@ -873,7 +873,7 @@ test.describe('MIG-042 — persist IP mutually exclusive with different-subnet m
 
     // Helper text switches from the default description to the disabled reason
     await expect(
-      page.getByText(/disabled because some vm ip addresses do not lie within the subnet/i)
+      page.getByText(/disabled because some ip addresses of the selected vms do not lie within the subnet/i)
     ).toBeVisible()
   })
 
