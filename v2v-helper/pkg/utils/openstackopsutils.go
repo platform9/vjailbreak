@@ -955,10 +955,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	if IsHotplugFlavor(flavor) {
 		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
 		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
-			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
+			constants.HotplugCPUKey:    fmt.Sprintf("%d", vminfo.CPU),
+			constants.HotplugMemoryKey: fmt.Sprintf("%d", vminfo.Memory),
 		}
 	}
 

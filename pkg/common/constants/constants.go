@@ -345,10 +345,8 @@ const (
 	AnnotationValueTrue = "true"
 
 	// v2v-helper specific constants
-	HotplugCPUKey       = "HOTPLUG_CPU"
-	HotplugMemoryKey    = "HOTPLUG_MEMORY"
-	HotplugCPUMaxKey    = "HOTPLUG_CPU_MAX"
-	HotplugMemoryMaxKey = "HOTPLUG_MEMORY_MAX"
+	HotplugCPUKey    = "HOTPLUG_CPU"
+	HotplugMemoryKey = "HOTPLUG_MEMORY"
 
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
