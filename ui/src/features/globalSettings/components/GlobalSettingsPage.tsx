@@ -972,6 +972,7 @@ export default function GlobalSettingsPage() {
   const [aiKeySaving, setAIKeySaving] = useState(false)
   const [aiKeyError, setAIKeyError] = useState<string | null>(null)
   const [aiKeySuccess, setAIKeySuccess] = useState(false)
+  const [adminKeyError, setAdminKeyError] = useState<string | null>(null)
 
   useEffect(() => {
     getAIKeyStatus().then((s) => setAIKeyConfigured(s.configured)).catch(() => {})
@@ -979,6 +980,12 @@ export default function GlobalSettingsPage() {
 
   const handleSaveAIKey = useCallback(async () => {
     if (!aiKeyValue.trim()) return
+    // Admin key required only when no existing key is configured
+    if (!aiKeyConfigured && !adminKeyValue.trim()) {
+      setAdminKeyError('Admin key is required for initial setup')
+      return
+    }
+    setAdminKeyError(null)
     setAIKeySaving(true)
     setAIKeyError(null)
     try {
@@ -993,7 +1000,7 @@ export default function GlobalSettingsPage() {
     } finally {
       setAIKeySaving(false)
     }
-  }, [aiKeyValue, adminKeyValue])
+  }, [aiKeyValue, adminKeyValue, aiKeyConfigured])
 
   const [vddkFile, setVddkFile] = useState<File | null>(null)
   const [vddkStatus, setVddkStatus] = useState<VddkUploadStatus>('idle')
@@ -1660,27 +1667,32 @@ export default function GlobalSettingsPage() {
             <Box sx={{ mt: 3, maxWidth: 480 }}>
               <Typography variant="h6" gutterBottom>AI Configuration</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Required for &quot;Analyse with AI&quot; on failed migrations. Key is stored securely
-                in the cluster and never sent to external services except the Anthropic API.
+                Required for &quot;Analyse with AI&quot; on failed migrations. Keys are stored
+                securely in the cluster secret and never exposed after saving.
               </Typography>
 
-              {aiKeyConfigured && (
+              {aiKeyConfigured && !aiKeySuccess && (
                 <Alert severity="success" sx={{ mb: 2 }}>
-                  Anthropic API key is configured.
+                  API keys configured. Enter new values below to update them.
                 </Alert>
               )}
-
+              {aiKeySuccess && <Alert severity="success" sx={{ mb: 2 }}>API keys saved. The AI service is restarting to pick up the new key.</Alert>}
               {aiKeyError && <Alert severity="error" sx={{ mb: 2 }}>{aiKeyError}</Alert>}
-              {aiKeySuccess && <Alert severity="success" sx={{ mb: 2 }}>API key saved.</Alert>}
 
               <TextField
                 label="Anthropic API Key"
                 type="password"
                 fullWidth
+                required
                 value={aiKeyValue}
                 onChange={(e) => setAIKeyValue(e.target.value)}
-                placeholder={aiKeyConfigured ? '••••••••••••••••••••' : 'sk-ant-...'}
-                helperText={aiKeyConfigured ? 'Leave blank to keep existing key' : 'Enter your Anthropic API key'}
+                placeholder="sk-ant-..."
+                helperText={
+                  aiKeyConfigured
+                    ? 'Key is configured — enter a new value to replace it'
+                    : 'Enter your Anthropic API key (required)'
+                }
+                error={!aiKeyValue.trim() && aiKeySaving}
                 sx={{ mb: 2 }}
               />
 
@@ -1688,19 +1700,26 @@ export default function GlobalSettingsPage() {
                 label="Admin API Key"
                 type="password"
                 fullWidth
+                required={!aiKeyConfigured}
                 value={adminKeyValue}
-                onChange={(e) => setAdminKeyValue(e.target.value)}
-                placeholder={aiKeyConfigured ? '••••••••••••••••••••' : 'Enter admin key for /crawl endpoint'}
-                helperText="Used to authenticate vjailbreak-ai admin endpoints (/crawl, /context)"
+                onChange={(e) => { setAdminKeyValue(e.target.value); setAdminKeyError(null) }}
+                placeholder={aiKeyConfigured ? '(leave blank to keep existing)' : 'Enter admin key'}
+                helperText={
+                  adminKeyError ||
+                  (aiKeyConfigured
+                    ? 'Leave blank to keep the existing admin key'
+                    : 'Auto-generated at boot — check install.sh output or your deployment notes')
+                }
+                error={!!adminKeyError}
                 sx={{ mb: 2 }}
               />
 
               <Button
                 variant="contained"
                 onClick={handleSaveAIKey}
-                disabled={aiKeySaving || !aiKeyValue.trim()}
+                disabled={aiKeySaving || !aiKeyValue.trim() || (!aiKeyConfigured && !adminKeyValue.trim())}
               >
-                {aiKeySaving ? 'Saving...' : 'Save API Key'}
+                {aiKeySaving ? 'Saving...' : 'Save API Keys'}
               </Button>
             </Box>
           </TabPanel>
