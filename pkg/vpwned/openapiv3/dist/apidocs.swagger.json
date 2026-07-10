@@ -193,13 +193,16 @@
     },
     "/vpw/v1/debug-bundle": {
       "get": {
-        "summary": "GetDebugBundle returns a downloadable plain-text debug bundle for a\nmigration: pod stdout/stderr logs, related Kubernetes resource YAMLs\nand debug logs from /var/log/pf9.",
+        "summary": "GetDebugBundle returns a downloadable .tar.gz debug bundle for a\nmigration: pod stdout/stderr logs, related Kubernetes resource YAMLs\nand debug logs from /var/log/pf9.",
         "operationId": "VailbreakProxy_GetDebugBundle",
         "responses": {
           "200": {
-            "description": "A successful response.",
+            "description": "A successful response.(streaming responses)",
             "schema": {
-              "$ref": "#/definitions/apiHttpBody"
+              "type": "string",
+              "format": "binary",
+              "properties": {},
+              "title": "Free form byte stream"
             }
           },
           "default": {

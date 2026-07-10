@@ -1,0 +1,167 @@
+name: Security Vulnerability Comment
+
+on:
+  workflow_run:
+    workflows: ["Go Security scan"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment:
+    name: Post Vulnerability Summary Comment
+    runs-on: ubuntu-latest
+    # Only run for PRs (not pushes to main or releases)
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download Gosec PR Summary
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: security-gosec-summary
+          path: artifacts/gosec
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Trivy PR Summary
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: security-trivy-summary
+          path: artifacts/trivy
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Vulnerability Summary Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const readFile = (path, defaultVal = '0') => {
+              try { return fs.readFileSync(path, 'utf8').trim() || defaultVal; }
+              catch { return defaultVal; }
+            };
+
+            const prNumber = parseInt(readFile('artifacts/gosec/pr-number.txt', '0')) ||
+                             parseInt(readFile('artifacts/trivy/pr-number.txt', '0'));
+            if (!prNumber) {
+              console.log('No PR number found in artifacts, skipping comment');
+              return;
+            }
+
+            const baseSha = readFile('artifacts/gosec/base-sha.txt', '') ||
+                            readFile('artifacts/trivy/base-sha.txt', '');
+
+            const gosecCurrent = readFile('artifacts/gosec/current.txt');
+            const gosecBaseline = readFile('artifacts/gosec/baseline.txt');
+            const gosecAdded = readFile('artifacts/gosec/added.txt');
+            const gosecFixed = readFile('artifacts/gosec/fixed.txt');
+            const gosecMethod = readFile('artifacts/gosec/method.txt', 'none');
+            const gosecAddedDetails = readFile('artifacts/gosec/added-details.txt', '');
+            const gosecFixedDetails = readFile('artifacts/gosec/fixed-details.txt', '');
+
+            const trivyCurrent = readFile('artifacts/trivy/current.txt');
+            const trivyBaseline = readFile('artifacts/trivy/baseline.txt');
+            const trivyAdded = readFile('artifacts/trivy/added.txt');
+            const trivyFixed = readFile('artifacts/trivy/fixed.txt');
+            const trivyMethod = readFile('artifacts/trivy/method.txt', 'none');
+            const trivyAddedDetails = readFile('artifacts/trivy/added-details.txt', '');
+            const trivyFixedDetails = readFile('artifacts/trivy/fixed-details.txt', '');
+
+            const totalAdded = parseInt(gosecAdded) + parseInt(trivyAdded);
+            const totalFixed = parseInt(gosecFixed) + parseInt(trivyFixed);
+
+            const getMethodIcon = (method) => {
+              switch(method) {
+                case 'artifact': return '📦';
+                case 'live_scan': return '🔄';
+                case 'no_baseline': return '⚠️';
+                default: return '❓';
+              }
+            };
+
+            let statusIcon = '✅';
+            let statusText = 'No change in security posture';
+
+            if (totalAdded > 0 && totalFixed === 0) {
+              statusIcon = '🚨';
+              statusText = 'Security posture degraded';
+            } else if (totalAdded === 0 && totalFixed > 0) {
+              statusIcon = '🎉';
+              statusText = 'Security posture improved';
+            } else if (totalAdded > 0 && totalFixed > 0) {
+              statusIcon = '⚠️';
+              statusText = 'Mixed security changes';
+            }
+
+            const comment = `## ${statusIcon} Security Vulnerability Summary
+
+**${statusText}**
+
+### 📊 Overall Changes
+| Metric | Count |
+|--------|-------|
+| **Total Added** | **${totalAdded}** |
+| **Total Fixed** | **${totalFixed}** |
+| **Net Change** | **${totalAdded - totalFixed > 0 ? '+' : ''}${totalAdded - totalFixed}** |
+
+### 🔍 Detailed Breakdown
+
+#### ${getMethodIcon(gosecMethod)} Gosec (Static Analysis)
+| Current | Baseline | Added | Fixed | Method |
+|---------|----------|-------|-------|--------|
+| ${gosecCurrent} | ${gosecBaseline} | ${gosecAdded} | ${gosecFixed} | ${gosecMethod} |
+
+#### ${getMethodIcon(trivyMethod)} Trivy (Dependency Scan)
+| Current | Baseline | Added | Fixed | Method |
+|---------|----------|-------|-------|--------|
+| ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
+
+### 📋 Baseline Methods
+- **📦 artifact**: Used stored report from main branch
+- **🔄 live_scan**: Scanned base branch in real-time
+- **⚠️ no_baseline**: No baseline available (all vulnerabilities treated as new)
+
+${totalAdded > 0 ? `
+### 🚨 Added Vulnerabilities
+
+${parseInt(gosecAdded) > 0 ? `
+#### Gosec (Static Analysis) - ${gosecAdded} Added
+${gosecAddedDetails || '*No detailed information available*'}
+` : ''}
+
+${parseInt(trivyAdded) > 0 ? `
+#### Trivy (Dependencies) - ${trivyAdded} Added
+${trivyAddedDetails || '*No detailed information available*'}
+` : ''}
+
+` : ''}
+
+${totalFixed > 0 ? `
+### 🎉 Fixed Vulnerabilities
+
+${parseInt(gosecFixed) > 0 ? `
+#### Gosec (Static Analysis) - ${gosecFixed} Fixed
+${gosecFixedDetails || '*No detailed information available*'}
+` : ''}
+
+${parseInt(trivyFixed) > 0 ? `
+#### Trivy (Dependencies) - ${trivyFixed} Fixed
+${trivyFixedDetails || '*No detailed information available*'}
+` : ''}
+
+` : ''}
+
+---
+*Only HIGH and CRITICAL severity vulnerabilities are tracked*
+*Baseline: \`${baseSha}\`*`;
+
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

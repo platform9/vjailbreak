@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -108,6 +109,10 @@ func gRPCErrHandler(ctx context.Context, mux *runtime.ServeMux, m runtime.Marsha
 // download RPCs (e.g. GetDebugBundle) set to control the browser filename.
 const contentDispositionMetadataKey = "content-disposition"
 
+type rawStreamMarshaler struct{ runtime.Marshaler }
+
+func (rawStreamMarshaler) Delimiter() []byte { return nil }
+
 // maxGatewayRecvBytes is the receive limit for the gateway's loopback gRPC
 // connection (256 MiB), sized above the debug bundle content caps.
 const maxGatewayRecvBytes = 256 << 20
@@ -168,6 +173,14 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	//gatewayMuxer
 	gatewayMuxer := runtime.NewServeMux( //runtime.WithErrorHandler(gRPCErrHandler))
 		runtime.WithForwardResponseOption(forwardDownloadHeaders),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, rawStreamMarshaler{
+			Marshaler: &runtime.HTTPBodyMarshaler{
+				Marshaler: &runtime.JSONPb{
+					MarshalOptions:   protojson.MarshalOptions{EmitUnpopulated: true},
+					UnmarshalOptions: protojson.UnmarshalOptions{DiscardUnknown: true},
+				},
+			},
+		}),
 	)
 	option := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

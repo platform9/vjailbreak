@@ -573,10 +573,10 @@ service VailbreakProxy {
       };
     }
 
-    // GetDebugBundle returns a downloadable plain-text debug bundle for a
+    // GetDebugBundle returns a downloadable .tar.gz debug bundle for a
     // migration: pod stdout/stderr logs, related Kubernetes resource YAMLs
     // and debug logs from /var/log/pf9.
-    rpc GetDebugBundle(GetDebugBundleRequest) returns (google.api.HttpBody) {
+    rpc GetDebugBundle(GetDebugBundleRequest) returns (stream google.api.HttpBody) {
       option (google.api.http) = {
         get: "/vpw/v1/debug-bundle"
       };
