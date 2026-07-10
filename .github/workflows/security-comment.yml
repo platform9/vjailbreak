@@ -99,65 +99,65 @@ jobs:
 
             const comment = `## ${statusIcon} Security Vulnerability Summary
 
-**${statusText}**
+            **${statusText}**
 
-### 📊 Overall Changes
-| Metric | Count |
-|--------|-------|
-| **Total Added** | **${totalAdded}** |
-| **Total Fixed** | **${totalFixed}** |
-| **Net Change** | **${totalAdded - totalFixed > 0 ? '+' : ''}${totalAdded - totalFixed}** |
+            ### 📊 Overall Changes
+            | Metric | Count |
+            |--------|-------|
+            | **Total Added** | **${totalAdded}** |
+            | **Total Fixed** | **${totalFixed}** |
+            | **Net Change** | **${totalAdded - totalFixed > 0 ? '+' : ''}${totalAdded - totalFixed}** |
 
-### 🔍 Detailed Breakdown
+            ### 🔍 Detailed Breakdown
 
-#### ${getMethodIcon(gosecMethod)} Gosec (Static Analysis)
-| Current | Baseline | Added | Fixed | Method |
-|---------|----------|-------|-------|--------|
-| ${gosecCurrent} | ${gosecBaseline} | ${gosecAdded} | ${gosecFixed} | ${gosecMethod} |
+            #### ${getMethodIcon(gosecMethod)} Gosec (Static Analysis)
+            | Current | Baseline | Added | Fixed | Method |
+            |---------|----------|-------|-------|--------|
+            | ${gosecCurrent} | ${gosecBaseline} | ${gosecAdded} | ${gosecFixed} | ${gosecMethod} |
 
-#### ${getMethodIcon(trivyMethod)} Trivy (Dependency Scan)
-| Current | Baseline | Added | Fixed | Method |
-|---------|----------|-------|-------|--------|
-| ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
+            #### ${getMethodIcon(trivyMethod)} Trivy (Dependency Scan)
+            | Current | Baseline | Added | Fixed | Method |
+            |---------|----------|-------|-------|--------|
+            | ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
 
-### 📋 Baseline Methods
-- **📦 artifact**: Used stored report from main branch
-- **🔄 live_scan**: Scanned base branch in real-time
-- **⚠️ no_baseline**: No baseline available (all vulnerabilities treated as new)
+            ### 📋 Baseline Methods
+            - **📦 artifact**: Used stored report from main branch
+            - **🔄 live_scan**: Scanned base branch in real-time
+            - **⚠️ no_baseline**: No baseline available (all vulnerabilities treated as new)
 
-${totalAdded > 0 ? `
-### 🚨 Added Vulnerabilities
+            ${totalAdded > 0 ? `
+            ### 🚨 Added Vulnerabilities
 
-${parseInt(gosecAdded) > 0 ? `
-#### Gosec (Static Analysis) - ${gosecAdded} Added
-${gosecAddedDetails || '*No detailed information available*'}
-` : ''}
+            ${parseInt(gosecAdded) > 0 ? `
+            #### Gosec (Static Analysis) - ${gosecAdded} Added
+            ${gosecAddedDetails || '*No detailed information available*'}
+            ` : ''}
 
-${parseInt(trivyAdded) > 0 ? `
-#### Trivy (Dependencies) - ${trivyAdded} Added
-${trivyAddedDetails || '*No detailed information available*'}
-` : ''}
+            ${parseInt(trivyAdded) > 0 ? `
+            #### Trivy (Dependencies) - ${trivyAdded} Added
+            ${trivyAddedDetails || '*No detailed information available*'}
+            ` : ''}
 
-` : ''}
+            ` : ''}
 
-${totalFixed > 0 ? `
-### 🎉 Fixed Vulnerabilities
+            ${totalFixed > 0 ? `
+            ### 🎉 Fixed Vulnerabilities
 
-${parseInt(gosecFixed) > 0 ? `
-#### Gosec (Static Analysis) - ${gosecFixed} Fixed
-${gosecFixedDetails || '*No detailed information available*'}
-` : ''}
+            ${parseInt(gosecFixed) > 0 ? `
+            #### Gosec (Static Analysis) - ${gosecFixed} Fixed
+            ${gosecFixedDetails || '*No detailed information available*'}
+            ` : ''}
 
-${parseInt(trivyFixed) > 0 ? `
-#### Trivy (Dependencies) - ${trivyFixed} Fixed
-${trivyFixedDetails || '*No detailed information available*'}
-` : ''}
+            ${parseInt(trivyFixed) > 0 ? `
+            #### Trivy (Dependencies) - ${trivyFixed} Fixed
+            ${trivyFixedDetails || '*No detailed information available*'}
+            ` : ''}
 
-` : ''}
+            ` : ''}
 
----
-*Only HIGH and CRITICAL severity vulnerabilities are tracked*
-*Baseline: \`${baseSha}\`*`;
+            ---
+            *Only HIGH and CRITICAL severity vulnerabilities are tracked*
+            *Baseline: \`${baseSha}\`*`;
 
             await github.rest.issues.createComment({
               issue_number: prNumber,
