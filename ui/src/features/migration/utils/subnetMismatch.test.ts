@@ -17,7 +17,7 @@ describe('hasAnySubnetMismatch', () => {
   it('returns true when a single network has a mismatch warning', () => {
     expect(
       hasAnySubnetMismatch({
-        'VM Network': '2 VM IP address(es) do not lie within the subnet of destination network'
+        'VM Network': '2 IP address(es) of the selected VMs do not lie within the subnet of destination network'
       })
     ).toBe(true)
   })
@@ -26,7 +26,7 @@ describe('hasAnySubnetMismatch', () => {
     expect(
       hasAnySubnetMismatch({
         'VM Network': '',
-        Mgmt: '1 VM IP address(es) do not lie within the subnet of destination network'
+        Mgmt: '1 IP address(es) of the selected VMs do not lie within the subnet of destination network'
       })
     ).toBe(true)
   })
