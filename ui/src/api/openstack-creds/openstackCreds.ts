@@ -3,12 +3,37 @@ import axios from '../axios'
 import { VJAILBREAK_API_BASE_PATH, VJAILBREAK_DEFAULT_NAMESPACE } from '../constants'
 import { GetOpenstackCredsList, OpenstackCreds } from './model'
 
-export const getOpenstackCredentialsList = async (namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
+// Page size for the paginated list below. Keeps each response small/fast and
+// avoids a single oversized list response at scale (100s of large creds).
+const OPENSTACK_CREDS_LIST_PAGE_SIZE = 50
+
+export const getOpenstackCredentialsList = async (
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<OpenstackCreds[]> => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/openstackcreds`
-  const response = await axios.get<GetOpenstackCredsList>({
-    endpoint
-  })
-  return response?.items
+
+  // Fetch all credentials by following the Kubernetes list `continue` token.
+  // The token is an opaque bookmark; we echo it back until the API returns an
+  // empty one, which signals the last page. For small datasets this is a single
+  // request (no token returned), identical to the previous unpaginated call.
+  const allCreds: OpenstackCreds[] = []
+  let continueToken: string | undefined
+
+  do {
+    const response = await axios.get<GetOpenstackCredsList>({
+      endpoint,
+      config: {
+        params: {
+          limit: OPENSTACK_CREDS_LIST_PAGE_SIZE,
+          ...(continueToken ? { continue: continueToken } : {})
+        }
+      }
+    })
+    allCreds.push(...(response?.items || []))
+    continueToken = response?.metadata?.continue || undefined
+  } while (continueToken)
+
+  return allCreds
 }
 
 export const getOpenstackCredentials = async (name, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
