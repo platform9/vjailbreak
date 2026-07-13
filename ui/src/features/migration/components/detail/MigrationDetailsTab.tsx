@@ -34,6 +34,7 @@ import {
 } from 'src/components/migrations/migrationDetailConstants'
 import { FieldLabel, KeyValueGrid, SurfaceCard } from 'src/components'
 import { formatDateTime, formatDiskSize } from 'src/utils'
+import { normalizeVmDisks, resolveFlavorDisplay } from '../../utils/migrationDetailFields'
 import { Migration } from '../../api/migrations'
 
 const enabledOrNA = (value: unknown) => (value === true ? 'Enabled' : 'N/A')
@@ -213,6 +214,20 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
     if (Array.isArray(disks)) return String(disks.length)
     return 'N/A'
   }, [vmSpec?.disks])
+
+  const selectedFlavorId = data?.vmwareMachine?.spec?.targetFlavorId || ''
+  const configFlavorId = data?.migrationConfigMap?.TARGET_FLAVOR_ID || ''
+  const flavorDisplay = useMemo(
+    () =>
+      resolveFlavorDisplay({
+        configFlavorId,
+        selectedFlavorId,
+        flavors: data?.openstackCreds?.spec?.flavors,
+      }),
+    [configFlavorId, data?.openstackCreds, selectedFlavorId]
+  )
+
+  const vmDisks = useMemo(() => normalizeVmDisks(vmSpec?.disks), [vmSpec?.disks])
 
   const networkAdapterCount = useMemo(() => {
     const ifaces = vmSpec?.networkInterfaces
@@ -473,12 +488,13 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       { label: 'Guest OS', value: guestOS },
       { label: 'CPU', value: cpu },
       { label: 'Memory', value: memory },
+      { label: 'Flavor', value: flavorDisplay },
       { label: 'Total Disks', value: diskCount },
       { label: 'Network Adapters', value: networkAdapterCount },
       { label: 'vJailbreak Agent', value: (migrationStatus?.agentName as string) || 'N/A' },
       { label: 'RDM Disks', value: rdmDisksSummary },
     ],
-    [cpu, createdAt, dataCopyMethodLabel, diskCount, displayVmName, guestOS, isHotAdd, memory, migrationStatus?.agentName, migrationType, networkAdapterCount, proxyVMName, rdmDisksSummary]
+    [cpu, createdAt, dataCopyMethodLabel, diskCount, displayVmName, flavorDisplay, guestOS, isHotAdd, memory, migrationStatus?.agentName, migrationType, networkAdapterCount, proxyVMName, rdmDisksSummary]
   )
 
   const migrationEnvironmentValues = useMemo(
@@ -703,33 +719,73 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
           </Box>
         ) : null}
 
+        {vmDisks.length ? (
+          <Box sx={{ mt: 2 }}>
+            <Divider sx={{ mb: 2 }} />
+            <Box sx={{ display: 'grid', gap: 1 }}>
+              <FieldLabel label="Disks" />
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Disk</TableCell>
+                      <TableCell>Size</TableCell>
+                      <TableCell>Datastore</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {vmDisks.map((d, idx) => (
+                      <TableRow key={`${d.name}-${idx}`}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                            {d.name}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{d.size}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                            {d.datastore}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          </Box>
+        ) : null}
+
         {data?.rdmDisks?.length ? (
           <Box sx={{ mt: 2 }}>
             <Divider sx={{ mb: 2 }} />
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Disk</TableCell>
-                    <TableCell>Size</TableCell>
-                    <TableCell>Phase</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.rdmDisks.map((d) => (
-                    <TableRow key={d.metadata.name}>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                          {d.spec.displayName || d.spec.diskName || d.metadata.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{formatDiskSize(d.spec.diskSize)}</TableCell>
-                      <TableCell>{d.status?.phase || 'N/A'}</TableCell>
+            <Box sx={{ display: 'grid', gap: 1 }}>
+              <FieldLabel label="RDM Disks" />
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Disk</TableCell>
+                      <TableCell>Size</TableCell>
+                      <TableCell>Phase</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {data.rdmDisks.map((d) => (
+                      <TableRow key={d.metadata.name}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                            {d.spec.displayName || d.spec.diskName || d.metadata.name}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{formatDiskSize(d.spec.diskSize)}</TableCell>
+                        <TableCell>{d.status?.phase || 'N/A'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
           </Box>
         ) : null}
       </SurfaceCard>

@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
 import type { RetryMigrationConfig } from './context/MigrationFormContext'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
+import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
 import type { GridRowSelectionModel, GridToolbarProps } from '@mui/x-data-grid'
@@ -285,7 +286,7 @@ export interface CanonicalVM {
   vmKey?: string
   vmid?: string
   labels?: Record<string, string>
-  disks?: string[]
+  disks?: VMwareDiskEntry[]
   vmWareMachineName?: string
 }
 
