@@ -87,13 +87,8 @@ export default function BaseLogsDrawer({
 
     if (logLevelFilter !== 'ALL') {
       filtered = filtered.filter((log) => {
-        const structuredMatch = new RegExp(`level=${logLevelFilter}\\b`, 'i')
-        if (structuredMatch.test(log)) return true
-        const cleanLog = log.replace(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/,
-          ''
-        )
-        return cleanLog.toUpperCase().startsWith(logLevelFilter)
+        const raw = extractLevel(log)
+        return !!raw && normalizeLevel(raw) === logLevelFilter
       })
     }
 

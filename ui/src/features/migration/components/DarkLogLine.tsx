@@ -16,11 +16,12 @@ export function extractLevel(line: string): string | null {
   return m ? m[1].toUpperCase() : null
 }
 
-export function normalizeLevel(raw: string): 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'SUCCESS' | 'OTHER' {
+export function normalizeLevel(raw: string): 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE' | 'SUCCESS' | 'OTHER' {
   if (/ERROR|FATAL|FAIL/.test(raw)) return 'ERROR'
   if (/WARN/.test(raw)) return 'WARN'
   if (raw === 'INFO') return 'INFO'
   if (raw === 'DEBUG') return 'DEBUG'
+  if (raw === 'TRACE') return 'TRACE'
   if (/SUCCESS|SUCCEED/.test(raw)) return 'SUCCESS'
   return 'OTHER'
 }
