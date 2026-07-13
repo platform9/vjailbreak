@@ -94,19 +94,8 @@ get_fstab_id() {
   fi
 }
 
-# detect_bootloader <root_prefix>
-#
-# Prints "legacy", "grub2", or "unknown" for the guest rooted at
-# <root_prefix> (pass "" when not running inside a guestfish appliance, or
-# "/sysroot" when the guest is mounted there).
-#
-# Signal order, most to least authoritative:
-#   1. SUSE's /etc/sysconfig/bootloader LOADER_TYPE= — YaST's own record of
-#      which bootloader is actually installed (grub == legacy, grub2* == grub2).
-#   2. Presence of /boot/grub2 or a grub.cfg file (Debian/Ubuntu keep GRUB2's
-#      config under /boot/grub/grub.cfg, so filename beats directory name).
-#   3. Presence of /boot/grub/menu.lst or /boot/grub/grub.conf with no
-#      grub.cfg alongside it — the classic GRUB Legacy layout.
+# detect_bootloader <root_prefix>: echo legacy|grub2|unknown, preferring SUSE's LOADER_TYPE=,
+# then a grub.cfg / /boot/grub2 dir (grub2), then menu.lst / grub.conf (GRUB Legacy).
 detect_bootloader() {
   _prefix="$1"
 
@@ -131,14 +120,8 @@ detect_bootloader() {
   echo "unknown"
 }
 
-# fix_grub_cmdline <root_prefix>
-#
-# Rewrites root=/resume= kernel cmdline device references to UUID= form in
-# GRUB Legacy's menu.lst/grub.conf, GRUB2's /etc/default/grub, and SUSE's
-# /etc/sysconfig/bootloader. Deliberately never touches device.map — this is
-# the safe half of the old fix_grub_config, callable on its own (see
-# --os-family=suse in print_help) without risking the GRUB stage1 "Error 21"
-# regression that rewriting device.map before virt-v2v runs can cause.
+# fix_grub_cmdline <root_prefix>: rewrite root=/resume= device refs to UUID= in menu.lst/grub.conf,
+# /etc/default/grub, and sysconfig/bootloader. Never touches device.map, so it's safe pre-virt-v2v.
 fix_grub_cmdline() {
   _prefix="$1"
   echo "Fixing GRUB kernel cmdline (root=/resume=) references..."
@@ -189,14 +172,8 @@ fix_grub_cmdline() {
   echo " -> GRUB cmdline fixed. Backups created with .bak.* extension. device.map untouched."
 }
 
-# fix_grub_device_map <root_prefix>
-#
-# Rewrites /boot/grub/device.map entries from /dev/sdX to /dev/vdX. This is
-# the unsafe half of the old fix_grub_config: on SUSE GRUB Legacy guests,
-# doing this BEFORE virt-v2v runs makes virt-v2v's own appliance (where
-# disks are still /dev/sdX) reinstall GRUB stage1 with incorrect embedded
-# drive references, causing GRUB Error 21 at boot. Only ever call this from
-# fix_grub_config (--force-uuid), never from the --os-family=suse safe path.
+# fix_grub_device_map <root_prefix>: rewrite device.map /dev/sdX -> /dev/vdX. Unsafe pre-virt-v2v on
+# SUSE GRUB Legacy (stage1 reinstalled with wrong drives -> Error 21); only call via --force-uuid.
 fix_grub_device_map() {
   _prefix="$1"
   if [ -f "${_prefix}/boot/grub/device.map" ]; then
@@ -404,9 +381,8 @@ if $APPLY; then
 
   echo " -> Done. Backups created in /etc/udev/rules.d and /etc/fstab.bak.*"
   
-  # Fix grub configuration if --force-uuid was specified. Otherwise, for
-  # SUSE guests only (--os-family=suse), safely fix a detected GRUB Legacy
-  # cmdline without ever touching device.map (see print_help for why).
+  # --force-uuid runs the full grub fix; --os-family=suse only fixes a detected
+  # GRUB Legacy cmdline, never device.map (see print_help for why).
   if $FORCE_UUID; then
     fix_grub_config
   elif [ "$OS_FAMILY" = "suse" ]; then
