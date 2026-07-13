@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip, Alert, Typography } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip, Alert } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -737,18 +737,10 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         additionalContent={
           agentNodeInfo ? (
             <Alert severity="error" sx={{ mt: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                {agentNodeInfo.agentNodeCount} agent node{agentNodeInfo.agentNodeCount > 1 ? 's' : ''} will also be deleted:
-              </Typography>
-              {agentNodeInfo.agentNodeNames.map((name) => (
-                <Typography key={name} variant="body2">
-                  • {name}
-                </Typography>
-              ))}
+              {agentNodeInfo.agentNodeCount} agent node{agentNodeInfo.agentNodeCount > 1 ? 's' : ''} will also be deleted:{' '}
+              {agentNodeInfo.agentNodeNames.join(', ')}
               {agentNodeInfo.hasActiveMigrations && (
-                <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
-                  ⚠ Some nodes have active migrations in progress. Deleting may interrupt running migrations.
-                </Typography>
+                <> Some nodes have active migrations in progress. Deleting may interrupt running migrations.</>
               )}
             </Alert>
           ) : undefined
