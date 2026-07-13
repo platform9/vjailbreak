@@ -6,18 +6,14 @@ import {
   CircularProgress,
   FormControl,
   IconButton,
-  InputAdornment,
   MenuItem,
   Select,
   SelectChangeEvent,
   Snackbar,
   Switch,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
-import SearchIcon from '@mui/icons-material/Search'
-import ClearIcon from '@mui/icons-material/Clear'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import SyncIcon from '@mui/icons-material/Sync'
@@ -33,6 +29,7 @@ import DarkLogLine, {
   normalizeLevel,
   extractSource
 } from '../DarkLogLine'
+import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from '../LogsToolbarControls'
 
 const TERMINAL_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed, Phase.ValidationFailed]
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'SUCCESS'] as const
@@ -173,31 +170,9 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           overflowX: 'auto',
         }}
       >
-        {/* Search */}
-        <TextField
-          size="small"
-          placeholder='Search logs… ("exact match" for literal)'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 0 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" sx={{ color: 'text.disabled' }} />
-              </InputAdornment>
-            ),
-            endAdornment: search ? (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearch('')}>
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : undefined,
-          }}
-        />
+        <LogsSearchField value={search} onChange={setSearch} />
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* LEVEL */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -224,8 +199,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </FormControl>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* SOURCE */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -252,51 +226,14 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </FormControl>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
-        {/* Live — clickable toggle */}
-        <Tooltip title={isTerminal ? 'Migration ended — no live stream' : isPaused ? 'Click to resume live stream' : 'Click to pause live stream'}>
-          <Box
-            component="button"
-            onClick={() => !isTerminal && setIsPaused((p) => !p)}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              cursor: isTerminal ? 'default' : 'pointer',
-              border: 'none',
-              bgcolor: 'transparent',
-              p: 0.5,
-              borderRadius: 1,
-              '&:hover': !isTerminal ? { bgcolor: 'action.hover' } : {},
-            }}
-          >
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                bgcolor: isLive ? '#3fb950' : 'text.disabled',
-                flexShrink: 0,
-                ...(isLive && {
-                  animation: 'livePulse 1.5s ease-in-out infinite',
-                  '@keyframes livePulse': {
-                    '0%,100%': { opacity: 1, transform: 'scale(1)' },
-                    '50%': { opacity: 0.5, transform: 'scale(0.85)' },
-                  },
-                }),
-              }}
-            />
-            <Typography
-              variant="caption"
-              fontWeight={600}
-              sx={{ color: isLive ? '#3fb950' : 'text.disabled', fontSize: '0.8rem' }}
-            >
-              Live
-            </Typography>
-          </Box>
-        </Tooltip>
+        <LiveToggle
+          live={isLive}
+          onToggle={() => setIsPaused((p) => !p)}
+          disabled={isTerminal}
+          disabledTooltip="Migration ended — no live stream"
+        />
 
         {/* Follow switch */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -311,8 +248,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </Typography>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* Actions */}
         <Tooltip title={copied ? 'Copied!' : 'Copy visible logs'}>
@@ -341,55 +277,13 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         </Tooltip>
       </Box>
 
-      {/* ── Meta bar ─────────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          px: 1.5,
-          py: '5px',
-          bgcolor: '#161b22',
-          borderLeft: '1px solid #30363d',
-          borderRight: '1px solid #30363d',
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{ color: '#8b949e', fontFamily: 'monospace', fontSize: '0.7rem' }}
-        >
-          {filtered.length} / {logs.length} lines
-        </Typography>
-        <Box sx={{ mx: 1, color: '#30363d' }}>·</Box>
-        {[
-          { label: 'errors', count: counts.ERROR, activeColor: '#f85149' },
-          { label: 'warnings', count: counts.WARN, activeColor: '#e3b341' },
-          { label: 'info', count: counts.INFO, activeColor: '#79c0ff' },
-          { label: 'debug', count: counts.DEBUG, activeColor: '#8b949e' },
-        ].map(({ label, count, activeColor }, i) => (
-          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-            {i > 0 && <Box sx={{ mx: 1, color: '#21262d' }}> </Box>}
-            <Typography
-              variant="caption"
-              sx={{
-                color: count > 0 ? activeColor : '#484f58',
-                fontFamily: 'monospace',
-                fontSize: '0.7rem',
-              }}
-            >
-              {count} {label}
-            </Typography>
-          </Box>
-        ))}
-        {isLoading && <CircularProgress size={10} sx={{ ml: 1.5, color: '#58a6ff' }} />}
-        <Box sx={{ flex: 1 }} />
-        <Typography
-          variant="caption"
-          sx={{ color: '#484f58', fontFamily: 'monospace', fontSize: '0.65rem', fontStyle: 'italic' }}
-        >
-          Logs are a debug aid. Use Overview tab for status.
-        </Typography>
-      </Box>
+      <LogsMetaBar
+        shownCount={filtered.length}
+        totalCount={logs.length}
+        counts={counts}
+        isLoading={isLoading}
+        note="Logs are a debug aid. Use Overview tab for status."
+      />
 
       {/* Error */}
       {error && (

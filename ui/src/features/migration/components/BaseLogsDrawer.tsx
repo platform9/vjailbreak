@@ -7,7 +7,6 @@ import {
   Switch,
   CircularProgress,
   Alert,
-  TextField,
   Tooltip,
   FormControl,
   MenuItem,
@@ -16,11 +15,10 @@ import {
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
-import SearchIcon from '@mui/icons-material/Search'
-import ClearIcon from '@mui/icons-material/Clear'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { DrawerShell, DrawerHeader } from 'src/components'
 import DarkLogLine, { LOG_BG, LOG_TS, extractLevel, normalizeLevel } from './DarkLogLine'
+import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from './LogsToolbarControls'
 
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'SUCCESS']
 
@@ -61,7 +59,6 @@ export default function BaseLogsDrawer({
   const [downloadSuccess, setDownloadSuccess] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
-  const logsContainerRef = useRef<HTMLDivElement>(null)
   const logsLengthRef = useRef(0)
 
   useEffect(() => {
@@ -217,27 +214,9 @@ export default function BaseLogsDrawer({
               overflowX: 'auto'
             }}
           >
-            {/* Search */}
-            <TextField
-              data-testid="logs-search-input"
-              size="small"
-              placeholder='Search logs… ("exact match" for literal)'
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              sx={{ flex: 1, minWidth: 0 }}
-              InputProps={{
-                startAdornment: (
-                  <SearchIcon fontSize="small" sx={{ color: 'text.disabled', mr: 1 }} />
-                ),
-                endAdornment: searchTerm ? (
-                  <IconButton size="small" onClick={() => setSearchTerm('')}>
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                ) : undefined
-              }}
-            />
+            <LogsSearchField data-testid="logs-search-input" value={searchTerm} onChange={setSearchTerm} />
 
-            <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+            <ToolbarDivider />
 
             {/* Level */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -268,50 +247,9 @@ export default function BaseLogsDrawer({
               </FormControl>
             </Box>
 
-            <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+            <ToolbarDivider />
 
-            {/* Live — clickable toggle */}
-            <Tooltip title={isPaused ? 'Click to resume live stream' : 'Click to pause live stream'}>
-              <Box
-                component="button"
-                onClick={() => onPausedChange(!isPaused)}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  cursor: 'pointer',
-                  border: 'none',
-                  bgcolor: 'transparent',
-                  p: 0.5,
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: 'action.hover' }
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    bgcolor: !isPaused ? '#3fb950' : 'text.disabled',
-                    flexShrink: 0,
-                    ...(!isPaused && {
-                      animation: 'baseLogsLivePulse 1.5s ease-in-out infinite',
-                      '@keyframes baseLogsLivePulse': {
-                        '0%,100%': { opacity: 1, transform: 'scale(1)' },
-                        '50%': { opacity: 0.5, transform: 'scale(0.85)' }
-                      }
-                    })
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  fontWeight={600}
-                  sx={{ color: !isPaused ? '#3fb950' : 'text.disabled', fontSize: '0.8rem' }}
-                >
-                  Live
-                </Typography>
-              </Box>
-            </Tooltip>
+            <LiveToggle live={!isPaused} onToggle={() => onPausedChange(!isPaused)} />
 
             {/* Follow switch */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -328,7 +266,7 @@ export default function BaseLogsDrawer({
               </Typography>
             </Box>
 
-            <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+            <ToolbarDivider />
 
             {/* Actions */}
             <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
@@ -361,41 +299,12 @@ export default function BaseLogsDrawer({
             </Tooltip>
           </Box>
 
-          {/* Meta bar */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0,
-              px: 1.5,
-              py: '5px',
-              bgcolor: '#161b22',
-              borderLeft: '1px solid #30363d',
-              borderRight: '1px solid #30363d'
-            }}
-          >
-            <Typography variant="caption" sx={{ color: '#8b949e', fontFamily: 'monospace', fontSize: '0.7rem' }}>
-              {filteredLogs.length} / {logs.length} lines
-            </Typography>
-            <Box sx={{ mx: 1, color: '#30363d' }}>·</Box>
-            {[
-              { label: 'errors', count: counts.ERROR, activeColor: '#f85149' },
-              { label: 'warnings', count: counts.WARN, activeColor: '#e3b341' },
-              { label: 'info', count: counts.INFO, activeColor: '#79c0ff' },
-              { label: 'debug', count: counts.DEBUG, activeColor: '#8b949e' }
-            ].map(({ label, count, activeColor }, i) => (
-              <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                {i > 0 && <Box sx={{ mx: 1, color: '#21262d' }}> </Box>}
-                <Typography
-                  variant="caption"
-                  sx={{ color: count > 0 ? activeColor : '#484f58', fontFamily: 'monospace', fontSize: '0.7rem' }}
-                >
-                  {count} {label}
-                </Typography>
-              </Box>
-            ))}
-            {isLoading && <CircularProgress size={10} sx={{ ml: 1.5, color: '#58a6ff' }} />}
-          </Box>
+          <LogsMetaBar
+            shownCount={filteredLogs.length}
+            totalCount={logs.length}
+            counts={counts}
+            isLoading={isLoading}
+          />
 
           {isPaused && logs.length > 0 && (
             <Alert severity="info" sx={{ mt: 1 }}>
@@ -423,7 +332,6 @@ export default function BaseLogsDrawer({
 
         {(logs.length > 0 || isLoading || !error) && (
           <Box
-            ref={logsContainerRef}
             sx={{
               flex: 1,
               overflow: 'auto',
