@@ -6,18 +6,14 @@ import {
   CircularProgress,
   FormControl,
   IconButton,
-  InputAdornment,
   MenuItem,
   Select,
   SelectChangeEvent,
   Snackbar,
   Switch,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
-import SearchIcon from '@mui/icons-material/Search'
-import ClearIcon from '@mui/icons-material/Clear'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import SyncIcon from '@mui/icons-material/Sync'
@@ -26,132 +22,18 @@ import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { downloadDebugBundle } from 'src/api/migrations/debugBundle'
 import { useToast } from 'src/features/migration/hooks/useToast'
+import DarkLogLine, {
+  LOG_BG,
+  LOG_TS,
+  extractLevel,
+  normalizeLevel,
+  extractSource
+} from '../DarkLogLine'
+import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from '../LogsToolbarControls'
 
 const TERMINAL_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed, Phase.ValidationFailed]
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'SUCCESS'] as const
 type LogLevel = (typeof LOG_LEVELS)[number]
-
-// ─── Dark log theme ───────────────────────────────────────────────────────────
-const LOG_BG = '#0d1117'
-const LOG_TEXT = '#c9d1d9'
-const LOG_NUM = '#484f58'
-const LOG_TS = '#8b949e'
-
-// ─── Log parsing ─────────────────────────────────────────────────────────────
-
-const LOG_RE =
-  /^(\d{2}:\d{2}:\d{2}[.\d]*)\s+\[?(\w[\w-]*)\]?\s+(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED)\s+(.*)$/i
-
-function extractLevel(line: string): string | null {
-  const m = line.match(
-    /\b(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED)\b/i
-  )
-  return m ? m[1].toUpperCase() : null
-}
-
-function normalizeLevel(raw: string): LogLevel | 'OTHER' {
-  if (/ERROR|FATAL|FAIL/.test(raw)) return 'ERROR'
-  if (/WARN/.test(raw)) return 'WARN'
-  if (raw === 'INFO') return 'INFO'
-  if (raw === 'DEBUG') return 'DEBUG'
-  if (/SUCCESS|SUCCEED/.test(raw)) return 'SUCCESS'
-  return 'OTHER'
-}
-
-function extractSource(line: string): string | null {
-  const m = line.match(/^\d{2}:\d{2}:\d{2}[.\d]*\s+\[?(\w[\w-]*)\]?/)
-  return m ? m[1] : null
-}
-
-// Level color for text (no badge, just colored text)
-function levelTextColor(lvl: string): string {
-  if (/ERROR|FATAL|FAIL/.test(lvl)) return '#f85149'
-  if (/WARN/.test(lvl)) return '#e3b341'
-  if (lvl === 'INFO') return '#79c0ff'
-  if (lvl === 'DEBUG') return '#8b949e'
-  if (/SUCCESS|SUCCEED/.test(lvl)) return '#3fb950'
-  return '#c9d1d9'
-}
-
-// ─── Single log line ─────────────────────────────────────────────────────────
-
-function DarkLogLine({ line, index }: { line: string; index: number }) {
-  const m = line.match(LOG_RE)
-
-  if (m) {
-    const [, ts, source, level, msg] = m
-    const lvl = level.toUpperCase()
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: '8px',
-          py: '1px',
-          px: 1.5,
-          fontFamily: '"Fira Code","SF Mono","Consolas",monospace',
-          fontSize: '0.72rem',
-          lineHeight: 1.75,
-          '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
-        }}
-      >
-        <span
-          style={{
-            color: LOG_NUM,
-            userSelect: 'none',
-            minWidth: 28,
-            textAlign: 'right',
-            flexShrink: 0,
-          }}
-        >
-          {String(index + 1).padStart(3, '0')}
-        </span>
-        <span style={{ color: LOG_TS, flexShrink: 0 }}>{ts}</span>
-        <span style={{ color: '#79c0ff', flexShrink: 0 }}>[{source}]</span>
-        <span
-          style={{
-            color: levelTextColor(lvl),
-            fontWeight: 700,
-            flexShrink: 0,
-            minWidth: 52,
-          }}
-        >
-          {lvl}
-        </span>
-        <span style={{ color: LOG_TEXT, wordBreak: 'break-all', flex: 1 }}>{msg}</span>
-      </Box>
-    )
-  }
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: '8px',
-        py: '1px',
-        px: 1.5,
-        fontFamily: '"Fira Code","SF Mono","Consolas",monospace',
-        fontSize: '0.72rem',
-        lineHeight: 1.75,
-        '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
-      }}
-    >
-      <span
-        style={{
-          color: LOG_NUM,
-          userSelect: 'none',
-          minWidth: 28,
-          textAlign: 'right',
-          flexShrink: 0,
-        }}
-      >
-        {String(index + 1).padStart(3, '0')}
-      </span>
-      <span style={{ color: LOG_TEXT, wordBreak: 'break-all', flex: 1 }}>{line}</span>
-    </Box>
-  )
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -288,31 +170,9 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           overflowX: 'auto',
         }}
       >
-        {/* Search */}
-        <TextField
-          size="small"
-          placeholder='Search logs… ("exact match" for literal)'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 0 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" sx={{ color: 'text.disabled' }} />
-              </InputAdornment>
-            ),
-            endAdornment: search ? (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearch('')}>
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : undefined,
-          }}
-        />
+        <LogsSearchField value={search} onChange={setSearch} />
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* LEVEL */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -339,8 +199,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </FormControl>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* SOURCE */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -367,51 +226,14 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </FormControl>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
-        {/* Live — clickable toggle */}
-        <Tooltip title={isTerminal ? 'Migration ended — no live stream' : isPaused ? 'Click to resume live stream' : 'Click to pause live stream'}>
-          <Box
-            component="button"
-            onClick={() => !isTerminal && setIsPaused((p) => !p)}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              cursor: isTerminal ? 'default' : 'pointer',
-              border: 'none',
-              bgcolor: 'transparent',
-              p: 0.5,
-              borderRadius: 1,
-              '&:hover': !isTerminal ? { bgcolor: 'action.hover' } : {},
-            }}
-          >
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                bgcolor: isLive ? '#3fb950' : 'text.disabled',
-                flexShrink: 0,
-                ...(isLive && {
-                  animation: 'livePulse 1.5s ease-in-out infinite',
-                  '@keyframes livePulse': {
-                    '0%,100%': { opacity: 1, transform: 'scale(1)' },
-                    '50%': { opacity: 0.5, transform: 'scale(0.85)' },
-                  },
-                }),
-              }}
-            />
-            <Typography
-              variant="caption"
-              fontWeight={600}
-              sx={{ color: isLive ? '#3fb950' : 'text.disabled', fontSize: '0.8rem' }}
-            >
-              Live
-            </Typography>
-          </Box>
-        </Tooltip>
+        <LiveToggle
+          live={isLive}
+          onToggle={() => setIsPaused((p) => !p)}
+          disabled={isTerminal}
+          disabledTooltip="Migration ended — no live stream"
+        />
 
         {/* Follow switch */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -426,8 +248,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </Typography>
         </Box>
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 24, bgcolor: 'divider', flexShrink: 0 }} />
+        <ToolbarDivider />
 
         {/* Actions */}
         <Tooltip title={copied ? 'Copied!' : 'Copy visible logs'}>
@@ -456,55 +277,13 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         </Tooltip>
       </Box>
 
-      {/* ── Meta bar ─────────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          px: 1.5,
-          py: '5px',
-          bgcolor: '#161b22',
-          borderLeft: '1px solid #30363d',
-          borderRight: '1px solid #30363d',
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{ color: '#8b949e', fontFamily: 'monospace', fontSize: '0.7rem' }}
-        >
-          {filtered.length} / {logs.length} lines
-        </Typography>
-        <Box sx={{ mx: 1, color: '#30363d' }}>·</Box>
-        {[
-          { label: 'errors', count: counts.ERROR, activeColor: '#f85149' },
-          { label: 'warnings', count: counts.WARN, activeColor: '#e3b341' },
-          { label: 'info', count: counts.INFO, activeColor: '#79c0ff' },
-          { label: 'debug', count: counts.DEBUG, activeColor: '#8b949e' },
-        ].map(({ label, count, activeColor }, i) => (
-          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-            {i > 0 && <Box sx={{ mx: 1, color: '#21262d' }}> </Box>}
-            <Typography
-              variant="caption"
-              sx={{
-                color: count > 0 ? activeColor : '#484f58',
-                fontFamily: 'monospace',
-                fontSize: '0.7rem',
-              }}
-            >
-              {count} {label}
-            </Typography>
-          </Box>
-        ))}
-        {isLoading && <CircularProgress size={10} sx={{ ml: 1.5, color: '#58a6ff' }} />}
-        <Box sx={{ flex: 1 }} />
-        <Typography
-          variant="caption"
-          sx={{ color: '#484f58', fontFamily: 'monospace', fontSize: '0.65rem', fontStyle: 'italic' }}
-        >
-          Logs are a debug aid. Use Overview tab for status.
-        </Typography>
-      </Box>
+      <LogsMetaBar
+        shownCount={filtered.length}
+        totalCount={logs.length}
+        counts={counts}
+        isLoading={isLoading}
+        note="Logs are a debug aid. Use Overview tab for status."
+      />
 
       {/* Error */}
       {error && (

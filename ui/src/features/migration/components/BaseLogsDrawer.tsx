@@ -5,36 +5,20 @@ import {
   Typography,
   IconButton,
   Switch,
-  FormControlLabel,
   CircularProgress,
   Alert,
-  Paper,
-  useTheme,
-  TextField,
   Tooltip,
-  Chip,
+  FormControl,
   MenuItem,
-  Menu,
-  Badge
+  Select,
+  SelectChangeEvent
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
-import SearchIcon from '@mui/icons-material/Search'
-import ClearIcon from '@mui/icons-material/Clear'
-import FilterListIcon from '@mui/icons-material/FilterList'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { DrawerShell, DrawerHeader } from 'src/components'
-import LogLine from './LogLine'
-import {
-  DARK_BG_PAPER,
-  DARK_TEXT_PRIMARY,
-  DARK_DIVIDER,
-  LIGHT_BG_PAPER,
-  LIGHT_TEXT_PRIMARY,
-  LIGHT_DIVIDER,
-  DARK_TEXT_SECONDARY,
-  LIGHT_TEXT_SECONDARY
-} from 'src/theme/colors'
+import DarkLogLine, { LOG_BG, LOG_TS, extractLevel, normalizeLevel } from './DarkLogLine'
+import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from './LogsToolbarControls'
 
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'SUCCESS']
 
@@ -68,18 +52,13 @@ export default function BaseLogsDrawer({
   onDownload,
   'data-testid': dataTestId
 }: BaseLogsDrawerProps) {
-  const theme = useTheme()
-  const isDarkMode = theme.palette.mode === 'dark'
-
   const [follow, setFollow] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [logLevelFilter, setLogLevelFilter] = useState<string>('ALL')
   const [copySuccess, setCopySuccess] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
-  const logsContainerRef = useRef<HTMLDivElement>(null)
   const logsLengthRef = useRef(0)
 
   useEffect(() => {
@@ -108,13 +87,8 @@ export default function BaseLogsDrawer({
 
     if (logLevelFilter !== 'ALL') {
       filtered = filtered.filter((log) => {
-        const structuredMatch = new RegExp(`level=${logLevelFilter}\\b`, 'i')
-        if (structuredMatch.test(log)) return true
-        const cleanLog = log.replace(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s*/,
-          ''
-        )
-        return cleanLog.toUpperCase().startsWith(logLevelFilter)
+        const raw = extractLevel(log)
+        return !!raw && normalizeLevel(raw) === logLevelFilter
       })
     }
 
@@ -131,6 +105,20 @@ export default function BaseLogsDrawer({
 
     return filtered
   }, [logs, searchTerm, logLevelFilter])
+
+  const counts = useMemo(() => {
+    const c = { ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0 }
+    logs.forEach((line) => {
+      const raw = extractLevel(line)
+      if (!raw) return
+      const norm = normalizeLevel(raw)
+      if (norm === 'ERROR') c.ERROR++
+      else if (norm === 'WARN') c.WARN++
+      else if (norm === 'INFO') c.INFO++
+      else if (norm === 'DEBUG') c.DEBUG++
+    })
+    return c
+  }, [logs])
 
   const handleCopyLogs = useCallback(() => {
     navigator.clipboard.writeText(filteredLogs.join('\n')).then(
@@ -204,149 +192,127 @@ export default function BaseLogsDrawer({
             px: 4
           }}
         >
-          {/* Controls */}
+          {/* Toolbar */}
           <Box
             sx={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: 1.5,
-              mb: 2,
-              pb: 2,
-              borderBottom: 1,
-              borderColor: 'divider'
+              gap: 1,
+              alignItems: 'center',
+              px: 1.5,
+              py: 1,
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '8px 8px 0 0',
+              borderBottom: 'none',
+              flexWrap: 'nowrap',
+              overflowX: 'auto'
             }}
           >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={!isPaused}
-                      onChange={(e) => onPausedChange(!e.target.checked)}
-                      name="streaming"
-                      size="small"
-                    />
-                  }
-                  label="Live"
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={follow}
-                      onChange={handleFollowToggle}
-                      name="follow"
-                      size="small"
-                      disabled={isPaused}
-                      data-testid="logs-follow-toggle"
-                    />
-                  }
-                  label="Follow"
-                />
-              </Box>
+            <LogsSearchField data-testid="logs-search-input" value={searchTerm} onChange={setSearchTerm} />
 
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Tooltip title={`Filter by level: ${logLevelFilter}`}>
-                  <IconButton
-                    onClick={(e) => setFilterMenuAnchor(e.currentTarget)}
-                    size="small"
-                    color={logLevelFilter !== 'ALL' ? 'primary' : 'default'}
-                  >
-                    <Badge variant="dot" color="primary" invisible={logLevelFilter === 'ALL'}>
-                      <FilterListIcon fontSize="small" />
-                    </Badge>
-                  </IconButton>
-                </Tooltip>
+            <ToolbarDivider />
 
-                <Menu
-                  anchorEl={filterMenuAnchor}
-                  open={Boolean(filterMenuAnchor)}
-                  onClose={() => setFilterMenuAnchor(null)}
-                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            {/* Level */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                sx={{ textTransform: 'uppercase', letterSpacing: 0.6, fontSize: '0.65rem', color: 'text.secondary' }}
+              >
+                Level
+              </Typography>
+              <FormControl size="small">
+                <Select
+                  value={logLevelFilter}
+                  onChange={(e: SelectChangeEvent) => setLogLevelFilter(e.target.value)}
+                  variant="outlined"
+                  sx={{
+                    fontSize: '0.8rem',
+                    '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                    '& .MuiSelect-select': { py: 0.5, px: 1 }
+                  }}
                 >
                   {LOG_LEVELS.map((level) => (
-                    <MenuItem
-                      key={level}
-                      selected={logLevelFilter === level}
-                      onClick={() => { setLogLevelFilter(level); setFilterMenuAnchor(null) }}
-                    >
-                      {level === 'ALL' ? 'All Levels' : level}
+                    <MenuItem key={level} value={level} sx={{ fontSize: '0.8rem' }}>
+                      {level === 'ALL' ? 'All' : level}
                     </MenuItem>
                   ))}
-                </Menu>
-
-                <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
-                  <IconButton
-                    onClick={handleCopyLogs}
-                    size="small"
-                    color={copySuccess ? 'success' : 'default'}
-                    disabled={filteredLogs.length === 0}
-                  >
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title={downloadSuccess ? 'Downloaded!' : isDownloading ? 'Downloading...' : 'Download logs'}>
-                  <IconButton
-                    data-testid="logs-download-button"
-                    onClick={handleDownloadLogs}
-                    size="small"
-                    color={downloadSuccess ? 'success' : 'default'}
-                    disabled={filteredLogs.length === 0 || isDownloading}
-                  >
-                    {isDownloading ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
-                  </IconButton>
-                </Tooltip>
-
-                <Chip
-                  label={`${filteredLogs.length} / ${logs.length} lines`}
-                  size="small"
-                  variant="outlined"
-                />
-              </Box>
+                </Select>
+              </FormControl>
             </Box>
 
-            <TextField
-              data-testid="logs-search-input"
-              fullWidth
-              size="small"
-              placeholder="Search logs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
-                ),
-                endAdornment: searchTerm && (
-                  <IconButton size="small" onClick={() => setSearchTerm('')}>
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                )
-              }}
-            />
+            <ToolbarDivider />
+
+            <LiveToggle live={!isPaused} onToggle={() => onPausedChange(!isPaused)} />
+
+            {/* Follow switch */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+              <Switch
+                size="small"
+                checked={follow}
+                onChange={handleFollowToggle}
+                disabled={isPaused}
+                data-testid="logs-follow-toggle"
+                sx={{ mr: -0.5 }}
+              />
+              <Typography variant="caption" fontWeight={600} sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                Follow
+              </Typography>
+            </Box>
+
+            <ToolbarDivider />
+
+            {/* Actions */}
+            <Tooltip title={copySuccess ? 'Copied!' : 'Copy visible logs'}>
+              <IconButton
+                size="small"
+                onClick={handleCopyLogs}
+                disabled={filteredLogs.length === 0}
+                sx={{ color: copySuccess ? 'success.main' : 'text.secondary' }}
+              >
+                <ContentCopyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={downloadSuccess ? 'Downloaded!' : isDownloading ? 'Downloading…' : 'Download logs'}>
+              <span>
+                <IconButton
+                  data-testid="logs-download-button"
+                  size="small"
+                  onClick={handleDownloadLogs}
+                  disabled={filteredLogs.length === 0 || isDownloading}
+                  sx={{ color: downloadSuccess ? 'success.main' : 'text.secondary' }}
+                >
+                  {isDownloading ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Reconnect">
+              <IconButton size="small" onClick={onReconnect} sx={{ color: 'text.secondary' }}>
+                <ReplayIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Box>
 
+          <LogsMetaBar
+            shownCount={filteredLogs.length}
+            totalCount={logs.length}
+            counts={counts}
+            isLoading={isLoading}
+          />
+
           {isPaused && logs.length > 0 && (
-            <Alert severity="info" sx={{ mb: 2 }}>
+            <Alert severity="info" sx={{ mt: 1 }}>
               Logs are paused. Showing {logs.length} lines captured before pause. Turn Live ON to
               resume streaming.
             </Alert>
           )}
         </Box>
 
-        {isLoading && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
-            <CircularProgress size={24} sx={{ mr: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              Connecting to log stream...
-            </Typography>
-          </Box>
-        )}
-
         {error && (
           <Alert
             severity="error"
-            sx={{ mb: 2 }}
+            sx={{ my: 1, border: '1px solid #30363d' }}
             action={
               <Tooltip title="Retry connection">
                 <IconButton color="inherit" size="small" onClick={onReconnect}>
@@ -360,75 +326,41 @@ export default function BaseLogsDrawer({
         )}
 
         {(logs.length > 0 || isLoading || !error) && (
-          <Paper
-            variant="outlined"
+          <Box
             sx={{
               flex: 1,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
-              borderColor: isDarkMode ? DARK_DIVIDER : LIGHT_DIVIDER
+              overflow: 'auto',
+              bgcolor: LOG_BG,
+              py: 0.5,
+              border: '1px solid #30363d',
+              borderTop: 'none',
+              borderRadius: '0 0 8px 8px'
             }}
           >
-            <Box
-              ref={logsContainerRef}
-              sx={{
-                flex: 1,
-                overflow: 'auto',
-                p: 2,
-                backgroundColor: isDarkMode ? DARK_BG_PAPER : LIGHT_BG_PAPER,
-                color: isDarkMode ? DARK_TEXT_PRIMARY : LIGHT_TEXT_PRIMARY,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.4,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}
-            >
-              {logs.length === 0 && !isLoading && !error && (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontFamily: 'monospace',
-                    color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY
-                  }}
-                >
-                  {isPaused
-                    ? 'No logs captured yet. Turn Live ON to start streaming.'
-                    : 'No logs available'}
+            {isLoading && logs.length === 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2 }}>
+                <CircularProgress size={14} sx={{ color: '#58a6ff' }} />
+                <Typography variant="caption" sx={{ color: LOG_TS, fontFamily: 'monospace' }}>
+                  Connecting to log stream…
                 </Typography>
-              )}
-              {filteredLogs.map((log, index) => (
-                <Box key={index} sx={{ display: 'flex' }}>
-                  <Box
-                    sx={{
-                      minWidth: '50px',
-                      pr: 2,
-                      py: 0.5,
-                      textAlign: 'right',
-                      color: isDarkMode ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY,
-                      userSelect: 'none',
-                      fontSize: '0.75rem',
-                      fontFamily: 'monospace',
-                      lineHeight: 1.6
-                    }}
-                  >
-                    {index + 1}
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <LogLine
-                      log={log}
-                      index={index}
-                      showBorder={index < filteredLogs.length - 1}
-                      isDarkMode={isDarkMode}
-                    />
-                  </Box>
-                </Box>
-              ))}
-              <div ref={logsEndRef} />
-            </Box>
-          </Paper>
+              </Box>
+            )}
+            {!isLoading && filteredLogs.length === 0 && (
+              <Box sx={{ p: 2 }}>
+                <Typography variant="caption" sx={{ color: LOG_TS, fontFamily: 'monospace' }}>
+                  {logs.length === 0
+                    ? isPaused
+                      ? 'No logs captured yet. Turn Live ON to start streaming.'
+                      : 'No logs available'
+                    : 'No lines match the current filters.'}
+                </Typography>
+              </Box>
+            )}
+            {filteredLogs.map((log, index) => (
+              <DarkLogLine key={index} line={log} index={index} />
+            ))}
+            <div ref={logsEndRef} />
+          </Box>
         )}
       </Box>
     </DrawerShell>
