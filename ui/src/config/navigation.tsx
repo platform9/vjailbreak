@@ -33,6 +33,16 @@ export const navigationItems: NavigationItem[] = [
         id: 'image-profiles',
         label: 'Profiles',
         path: '/dashboard/profiles'
+      },
+      {
+        id: 'proxy-vms',
+        label: 'vJailbreak Proxy VMs',
+        path: '/dashboard/proxy-vms',
+        badge: {
+          label: 'Beta',
+          color: 'warning',
+          variant: 'outlined'
+        }
       }
     ]
   },
@@ -67,16 +77,6 @@ export const navigationItems: NavigationItem[] = [
         label: 'ESXi SSH',
         path: '/dashboard/esxi-ssh-keys',
         icon: <VpnKeyIcon />
-      },
-      {
-        id: 'proxy-vms',
-        label: 'vJailbreak Proxy VMs',
-        path: '/dashboard/proxy-vms',
-        badge: {
-          label: 'Beta',
-          color: 'warning',
-          variant: 'outlined'
-        }
       }
     ]
   },
