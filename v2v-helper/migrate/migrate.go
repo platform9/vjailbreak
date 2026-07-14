@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
@@ -2273,151 +2275,199 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 	return nil
 }
 
+// ReservePortsForVM reserves ports for every VM NIC: reuseExistingPorts if the
+// user pre-created ports, otherwise createPortsForNetworks makes new ones.
 func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
-
-	networkids := []string{}
-	ipaddresses := []string{}
-	portids := []string{}
-	openstackops := migobj.Openstackclients
-	networknames := migobj.Networknames
 	migobj.isSimpleNetwork = false
-	// Get security group IDs
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
+
+	securityGroupIDs, err := migobj.Openstackclients.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
 	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
 
-	// Log server group
 	if migobj.ServerGroup != "" {
 		utils.PrintLog(fmt.Sprintf("Server group ID for VM placement: %s", migobj.ServerGroup))
 	}
 
-	// Create ports
 	if len(migobj.Networkports) != 0 {
-		if len(migobj.Networkports) != len(networknames) {
-			return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
+		return migobj.reuseExistingPorts(ctx)
+	}
+	return migobj.createPortsForNetworks(ctx, vminfo, securityGroupIDs)
+}
+
+// reuseExistingPorts handles the pre-created-ports flow: migobj.Networkports
+// holds one OpenStack port ID per NIC, created outside this migration.
+func (migobj *Migrate) reuseExistingPorts(ctx context.Context) ([]string, []string, []string, error) {
+	if len(migobj.Networkports) != len(migobj.Networknames) {
+		return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
+	}
+
+	networkids := []string{}
+	portids := []string{}
+	ipaddresses := []string{}
+	for _, portID := range migobj.Networkports {
+		retrPort, err := migobj.Openstackclients.GetPort(ctx, portID)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to get port")
 		}
-		for _, port := range migobj.Networkports {
-			retrPort, err := openstackops.GetPort(ctx, port)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to get port")
-			}
-			networkids = append(networkids, retrPort.NetworkID)
-			portids = append(portids, retrPort.ID)
-			for _, fixedIP := range retrPort.FixedIPs {
-				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
-			}
+		networkids = append(networkids, retrPort.NetworkID)
+		portids = append(portids, retrPort.ID)
+		for _, fixedIP := range retrPort.FixedIPs {
+			ipaddresses = append(ipaddresses, fixedIP.IPAddress)
 		}
-	} else {
-
-		for idx, networkname := range networknames {
-			// Create Port Group with the same mac address as the source VM
-			// Find the network with the given ID
-			network, err := openstackops.GetNetwork(ctx, networkname)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to get network")
-			}
-
-			if network == nil {
-				return nil, nil, nil, errors.Errorf("network not found")
-			}
-			// determine simple network
-			isSimpleNetwork, err := openstackops.GetIsSimpleNetwork(ctx, network.ID)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
-			}
-			migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
-			// Check for per-NIC overrides. Default to true (preserve everything).
-			// Only override when explicitly set — nil means "not specified, keep default".
-			preserveIP := true
-			preserveMAC := true
-			userAssignedIp := []string{}
-			for _, override := range migobj.NetworkOverrides {
-				if override.InterfaceIndex == idx {
-					if override.PreserveIP != nil {
-						preserveIP = *override.PreserveIP
-					}
-					if override.PreserveMAC != nil {
-						preserveMAC = *override.PreserveMAC
-					}
-					if override.UserAssignedIP != "" {
-						splitUserAssignedIP := strings.Split(override.UserAssignedIP, ",")
-						for _, ip := range splitUserAssignedIP {
-							trimmedIP := strings.TrimSpace(ip)
-							if trimmedIP != "" {
-								userAssignedIp = append(userAssignedIp, trimmedIP)
-							}
-						}
-					}
-					break
-				}
-			}
-			if len(userAssignedIp) > 0 && len(userAssignedIp) > 1 {
-				return nil, nil, nil, errors.Errorf("multiple user assigned IPs not supported for an interface")
-			}
-			var ippm []string
-
-			// VMware Tools detected IPs
-			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
-				for _, detectedIP := range detectedIPs {
-					ippm = append(ippm, detectedIP.IP)
-				}
-				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
-			}
-
-			// Apply per-NIC overrides
-			mac := vminfo.Mac[idx]
-			if !preserveIP {
-				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
-				hasUserAssignedIP := false
-				if len(userAssignedIp) > 0 {
-					ippm = []string{}
-					vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{}
-					for _, ip := range userAssignedIp {
-						vminfo.IPperMac[vminfo.Mac[idx]] = append(vminfo.IPperMac[vminfo.Mac[idx]], vm.IpEntry{
-							IP:     ip,
-							Prefix: 0,
-						})
-						ippm = append(ippm, ip)
-					}
-					hasUserAssignedIP = true
-				}
-				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
-				if !hasUserAssignedIP {
-					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
-					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
-				} else {
-					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
-				}
-			}
-			if !preserveMAC {
-				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
-				// Always copy IPs (preserved, custom, or empty-non-nil) to the "" key so
-				// GetCreateOpts uses them when no MAC is specified (OpenStack generates one).
-				vminfo.IPperMac[""] = vminfo.IPperMac[mac]
-				mac = ""
-			}
-
-			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
-			}
-			addressesOfPort := []string{}
-			for _, fixedIP := range port.FixedIPs {
-				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
-			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
-			networkids = append(networkids, network.ID)
-			portids = append(portids, port.ID)
-			for _, fixedIP := range port.FixedIPs {
-				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
-			}
-		}
-		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
+}
+
+// createPortsForNetworks handles the create-new-ports flow: one port per
+// entry in migobj.Networknames, in NIC order.
+func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VMInfo, securityGroupIDs []string) ([]string, []string, []string, error) {
+	networkids := []string{}
+	portids := []string{}
+	ipaddresses := []string{}
+
+	for idx, networkname := range migobj.Networknames {
+		network, err := migobj.Openstackclients.GetNetwork(ctx, networkname)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to get network")
+		}
+		if network == nil {
+			return nil, nil, nil, errors.Errorf("network not found")
+		}
+
+		isSimpleNetwork, err := migobj.Openstackclients.GetIsSimpleNetwork(ctx, network.ID)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
+		}
+		migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
+
+		override, err := resolveNICOverride(migobj.NetworkOverrides, idx)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		mac := vminfo.Mac[idx]
+		detectedIPs := logAndCollectDetectedIPs(vminfo, mac)
+		loggedIPs := applyPreserveIPOverride(vminfo, idx, mac, override, detectedIPs)
+		mac = applyPreserveMACOverride(vminfo, idx, mac, override.preserveMAC)
+		utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], loggedIPs))
+
+		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		networkids = append(networkids, network.ID)
+		portids = append(portids, port.ID)
+		for _, fixedIP := range port.FixedIPs {
+			ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+		}
+	}
+	utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
+	return networkids, portids, ipaddresses, nil
+}
+
+// createPort creates a single OpenStack port on network for the given
+// (possibly overridden) MAC, using vminfo.IPperMac to determine fixed IPs.
+func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string) (*ports.Port, error) {
+	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create port group")
+	}
+	addressesOfPort := []string{}
+	for _, fixedIP := range port.FixedIPs {
+		addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
+	}
+	utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
+	return port, nil
+}
+
+// nicOverride is the resolved per-NIC configuration for preserveIP/preserveMAC
+// and any user-assigned replacement IP, defaulting to "preserve everything".
+type nicOverride struct {
+	preserveIP     bool
+	preserveMAC    bool
+	userAssignedIP []string
+}
+
+// resolveNICOverride resolves the NICOverride (if any) for interface idx
+// against the "preserve everything" default; a nil field means "not set".
+func resolveNICOverride(overrides []NICOverride, idx int) (nicOverride, error) {
+	result := nicOverride{preserveIP: true, preserveMAC: true}
+
+	for _, override := range overrides {
+		if override.InterfaceIndex != idx {
+			continue
+		}
+		if override.PreserveIP != nil {
+			result.preserveIP = *override.PreserveIP
+		}
+		if override.PreserveMAC != nil {
+			result.preserveMAC = *override.PreserveMAC
+		}
+		if override.UserAssignedIP != "" {
+			for _, ip := range strings.Split(override.UserAssignedIP, ",") {
+				if trimmedIP := strings.TrimSpace(ip); trimmedIP != "" {
+					result.userAssignedIP = append(result.userAssignedIP, trimmedIP)
+				}
+			}
+		}
+		break
+	}
+
+	if len(result.userAssignedIP) > 1 {
+		return nicOverride{}, errors.Errorf("multiple user assigned IPs not supported for an interface")
+	}
+	return result, nil
+}
+
+// logAndCollectDetectedIPs logs and returns the IPs VMware Tools reported for
+// mac, or nil if none were detected.
+func logAndCollectDetectedIPs(vminfo *vm.VMInfo, mac string) []string {
+	detectedIPs := vminfo.IPperMac[mac]
+	if len(detectedIPs) == 0 {
+		return nil
+	}
+	ippm := make([]string, 0, len(detectedIPs))
+	for _, detectedIP := range detectedIPs {
+		ippm = append(ippm, detectedIP.IP)
+	}
+	utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", mac, detectedIPs))
+	return ippm
+}
+
+// applyPreserveIPOverride replaces vminfo.IPperMac[mac] with the user-assigned
+// IP, or clears it, when preserveIP is false; returns the IPs for logging.
+func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override nicOverride, detectedIPs []string) []string {
+	if override.preserveIP {
+		return detectedIPs
+	}
+
+	if len(override.userAssignedIP) > 0 {
+		entries := make([]vm.IpEntry, 0, len(override.userAssignedIP))
+		for _, ip := range override.userAssignedIP {
+			entries = append(entries, vm.IpEntry{IP: ip, Prefix: 0})
+		}
+		vminfo.IPperMac[mac] = entries
+		utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
+		return override.userAssignedIP
+	}
+
+	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
+	vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
+	return detectedIPs                    // matches pre-refactor log wording, even though these IPs are discarded
+}
+
+// applyPreserveMACOverride copies mac's IPs to the "" key and returns "" so
+// OpenStack generates a new MAC, when preserveMAC is false.
+func applyPreserveMACOverride(vminfo *vm.VMInfo, idx int, mac string, preserveMAC bool) string {
+	if preserveMAC {
+		return mac
+	}
+	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
+	vminfo.IPperMac[""] = vminfo.IPperMac[mac]
+	return ""
 }
 
 // LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.
