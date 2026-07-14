@@ -21,6 +21,7 @@ import { getVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import type { PCDCluster, PCDClusterList } from 'src/api/pcd-clusters/model'
 import { getPCDClusters } from 'src/api/pcd-clusters/pcdClusters'
 import type { Migration } from 'src/features/migration/api/migrations'
+import { getMigrationConfigMap } from 'src/api/migrations/migrations'
 
 export interface MigrationDetailResources {
   migrationPlan: MigrationPlan | null
@@ -40,6 +41,7 @@ export interface MigrationDetailResources {
   arrayCredsMapping: ArrayCredsMapping | null
   vmwareMachine: VMwareMachine | null
   rdmDisks: RdmDisk[]
+  migrationConfigMap: Record<string, string> | null
 }
 
 export const useMigrationDetailResourcesQuery = ({
@@ -73,7 +75,8 @@ export const useMigrationDetailResourcesQuery = ({
           storageMapping: null,
           arrayCredsMapping: null,
           vmwareMachine: null,
-          rdmDisks: []
+          rdmDisks: [],
+          migrationConfigMap: null
         }
       }
 
@@ -172,6 +175,10 @@ export const useMigrationDetailResourcesQuery = ({
         ? await safeGet(() => getVMwareMachine(vmwareMachineName, namespace))
         : null
 
+      const migrationConfigMap = vmwareMachineName
+        ? (await safeGet(() => getMigrationConfigMap(vmwareMachineName, namespace)))?.data || null
+        : null
+
       const rdmDiskNames = ((vmwareMachine?.spec as any)?.vms?.rdmDisks as string[]) || []
       const effectiveVmName = vmName || ((vmwareMachine?.spec as any)?.vms?.name as string) || ''
       const allRdmDisks = effectiveVmName ? await safeGet(() => getRdmDisksList(namespace)) : null
@@ -203,7 +210,8 @@ export const useMigrationDetailResourcesQuery = ({
         storageMapping,
         arrayCredsMapping,
         vmwareMachine,
-        rdmDisks
+        rdmDisks,
+        migrationConfigMap
       }
     }
   })

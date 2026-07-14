@@ -17,6 +17,18 @@ export const getMigrations = async (
   return data?.items
 }
 
+export interface MigrationConfigMap {
+  data?: Record<string, string>
+}
+
+export const getMigrationConfigMap = async (
+  vmwareMachineName: string,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+): Promise<MigrationConfigMap> => {
+  const endpoint = `${K8S_PROXY_BASE_PATH}/namespaces/${namespace}/configmaps/migration-config-${vmwareMachineName}`
+  return axios.get<MigrationConfigMap>({ endpoint })
+}
+
 export const getMigration = async (migrationName, namespace = VJAILBREAK_DEFAULT_NAMESPACE) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/migrations/${migrationName}`
   const response = await axios.get<Migration>({
