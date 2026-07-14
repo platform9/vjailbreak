@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Box,
   Button,
+  IconButton,
   Typography,
   CircularProgress,
   Alert,
@@ -15,8 +16,12 @@ import {
 } from '@mui/material'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
+import ThumbUpIcon from '@mui/icons-material/ThumbUp'
+import ThumbDownIcon from '@mui/icons-material/ThumbDown'
 import { analyzeMigration, getAIKeyStatus } from 'src/api/ai/aiAnalysis'
 import type { AIAnalyzeResponse } from 'src/api/ai/model'
+import { trackEvent } from 'src/services/amplitudeService'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 interface AIAnalysisTabProps {
   migrationName: string
@@ -40,6 +45,7 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
   const [history, setHistory] = useState<ConversationTurn[]>([])
   const [followUp, setFollowUp] = useState('')
   const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
+  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null)
 
   useEffect(() => {
     getAIKeyStatus()
@@ -85,6 +91,12 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           { role: 'assistant', content: analysisText },
         ])
         setResult(resp)
+        trackEvent(AMPLITUDE_EVENTS.AI_ANALYSIS_TRIGGERED, {
+          migration_name: migrationName,
+          namespace,
+          confidence: resp.confidence,
+          root_cause: resp.root_cause ?? undefined,
+        })
       }
       setFollowUp('')
     } catch {
@@ -98,8 +110,20 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
   const handleAnalyse = useCallback(() => {
     setResult(null)
     setHistory([])
+    setFeedback(null)
     runAnalysis(undefined, [])
   }, [runAnalysis])
+
+  const handleFeedback = useCallback((value: 'positive' | 'negative') => {
+    setFeedback(value)
+    trackEvent(AMPLITUDE_EVENTS.AI_ANALYSIS_FEEDBACK, {
+      migration_name: migrationName,
+      namespace,
+      feedback: value,
+      confidence: result?.confidence,
+      root_cause: result?.root_cause ?? undefined,
+    })
+  }, [migrationName, namespace, result])
 
   const handleFollowUp = useCallback(
     (e: React.FormEvent) => {
@@ -204,6 +228,11 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
                 href={result.github_issue.prefill_url}
                 target="_blank"
                 rel="noopener"
+                onClick={() => trackEvent(AMPLITUDE_EVENTS.AI_GITHUB_ISSUE_OPENED, {
+                  migration_name: migrationName,
+                  confidence: result.confidence,
+                  root_cause: result.root_cause ?? undefined,
+                })}
               >
                 Open GitHub Issue
               </Button>
@@ -253,7 +282,26 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
               </Box>
             )}
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">Was this helpful?</Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => handleFeedback('positive')}
+                  color={feedback === 'positive' ? 'success' : 'default'}
+                  aria-label="helpful"
+                >
+                  <ThumbUpIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => handleFeedback('negative')}
+                  color={feedback === 'negative' ? 'error' : 'default'}
+                  aria-label="not helpful"
+                >
+                  <ThumbDownIcon fontSize="small" />
+                </IconButton>
+              </Box>
               <Button
                 size="small"
                 variant="outlined"
@@ -261,10 +309,15 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
                 component="a"
                 href={
                   result.github_issue?.prefill_url ||
-                  `https://github.com/platform9/vjailbreak/issues/new?title=${encodeURIComponent(`Migration failure: ${migrationName}`)}`
+                  `https://github.com/platform9/vjailbreak/issues/new?title=${encodeURIComponent(result.root_cause || `Migration failure: ${migrationName}`)}`
                 }
                 target="_blank"
                 rel="noopener"
+                onClick={() => trackEvent(AMPLITUDE_EVENTS.AI_GITHUB_ISSUE_OPENED, {
+                  migration_name: migrationName,
+                  confidence: result.confidence,
+                  root_cause: result.root_cause ?? undefined,
+                })}
               >
                 Open GitHub Issue
               </Button>
