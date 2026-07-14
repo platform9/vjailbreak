@@ -95,6 +95,9 @@ type Migrate struct {
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
 	ImageMetadata     map[string]string
+	// TargetMetadata is the merged instance metadata (preserved source tags/attributes
+	// plus user-entered custom metadata) applied to the target VM at create time.
+	TargetMetadata map[string]string
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -1812,6 +1815,10 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
+	if len(migobj.TargetMetadata) > 0 {
+		vminfo.TargetMetadata = migobj.TargetMetadata
+		migobj.logMessage(fmt.Sprintf("Applying %d instance metadata entries (preserved source tags/custom metadata) to target VM", len(migobj.TargetMetadata)))
+	}
 	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, espDiskIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")

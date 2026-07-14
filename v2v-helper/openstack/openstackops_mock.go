@@ -116,6 +116,20 @@ func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(ctx, name, size, ost
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), ctx, name, size, ostype, uefi, volumetype, setRDMLabel)
 }
 
+// DeleteServer mocks base method.
+func (m *MockOpenstackOperations) DeleteServer(ctx context.Context, serverID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteServer", ctx, serverID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteServer indicates an expected call of DeleteServer.
+func (mr *MockOpenstackOperationsMockRecorder) DeleteServer(ctx, serverID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServer", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteServer), ctx, serverID)
+}
+
 // DeletePort mocks base method.
 func (m *MockOpenstackOperations) DeletePort(ctx context.Context, portID string) error {
 	m.ctrl.T.Helper()

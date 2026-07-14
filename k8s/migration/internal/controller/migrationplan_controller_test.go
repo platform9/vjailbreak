@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -140,6 +141,115 @@ func TestGetDatastoresForVolumeMapping_PreservesBlankDiskDatastore(t *testing.T)
 	want := []string{"", "nfs"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected datastore mapping for blank datastore disks: got %v, want %v", got, want)
+	}
+}
+
+func TestSetTagsAndCustomMetadata(t *testing.T) {
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Tags:             map[string]string{"env": "production"},
+				CustomAttributes: map[string]string{"Owner": "alice@corp.com"},
+			},
+		},
+	}
+
+	tests := []struct {
+		name               string
+		preserveSourceTags bool
+		customMetadata     map[string]string
+		vmMachine          *vjailbreakv1alpha1.VMwareMachine
+		wantPreserve       string
+		wantSourceTags     map[string]string
+		wantCustom         map[string]string
+	}{
+		{
+			name:               "toggle off writes false and no metadata keys",
+			preserveSourceTags: false,
+			vmMachine:          vmMachine,
+			wantPreserve:       "false",
+		},
+		{
+			name:               "toggle on writes resolved source tags",
+			preserveSourceTags: true,
+			vmMachine:          vmMachine,
+			wantPreserve:       "true",
+			wantSourceTags: map[string]string{
+				"tag:env":    "production",
+				"attr:Owner": "alice@corp.com",
+			},
+		},
+		{
+			name:               "custom metadata written independently of toggle",
+			preserveSourceTags: false,
+			customMetadata:     map[string]string{"wave": "2"},
+			vmMachine:          vmMachine,
+			wantPreserve:       "false",
+			wantCustom:         map[string]string{"wave": "2"},
+		},
+		{
+			name:               "toggle on with no tags on VM writes no source key",
+			preserveSourceTags: true,
+			vmMachine:          &vjailbreakv1alpha1.VMwareMachine{},
+			wantPreserve:       "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migrationplan := &vjailbreakv1alpha1.MigrationPlan{
+				Spec: vjailbreakv1alpha1.MigrationPlanSpec{
+					CustomMetadata: tt.customMetadata,
+				},
+			}
+			migrationobj := &vjailbreakv1alpha1.Migration{
+				Spec: vjailbreakv1alpha1.MigrationSpec{
+					PreserveSourceTags: tt.preserveSourceTags,
+				},
+			}
+			configMapData := map[string]string{
+				// Pre-populate to verify stale keys from a previous reconcile are removed.
+				"SOURCE_TAGS_METADATA": "stale",
+				"CUSTOM_METADATA":      "stale",
+			}
+
+			if err := setTagsAndCustomMetadata(configMapData, migrationplan, migrationobj, tt.vmMachine); err != nil {
+				t.Fatalf("setTagsAndCustomMetadata() error = %v", err)
+			}
+
+			if got := configMapData["PRESERVE_SOURCE_TAGS"]; got != tt.wantPreserve {
+				t.Errorf("PRESERVE_SOURCE_TAGS = %q, want %q", got, tt.wantPreserve)
+			}
+
+			assertJSONKey(t, configMapData, "SOURCE_TAGS_METADATA", tt.wantSourceTags)
+			assertJSONKey(t, configMapData, "CUSTOM_METADATA", tt.wantCustom)
+		})
+	}
+}
+
+func assertJSONKey(t *testing.T, configMapData map[string]string, key string, want map[string]string) {
+	t.Helper()
+	raw, present := configMapData[key]
+	if want == nil {
+		if present {
+			t.Errorf("%s should be absent, got %q", key, raw)
+		}
+		return
+	}
+	if !present {
+		t.Fatalf("%s missing from configmap data", key)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("%s is not valid JSON: %v", key, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%s = %v, want %v", key, got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s[%q] = %q, want %q", key, k, got[k], v)
+		}
 	}
 }
 

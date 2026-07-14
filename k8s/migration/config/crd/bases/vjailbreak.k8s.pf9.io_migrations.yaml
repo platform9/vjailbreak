@@ -91,6 +91,11 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
+              preserveSourceTags:
+                description: |-
+                  PreserveSourceTags indicates whether the source VM's vSphere tags and custom
+                  attributes are copied to the migrated VM as instance metadata.
+                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack

@@ -938,6 +938,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
+	if len(vminfo.TargetMetadata) > 0 {
+		// Preserved source tags/attributes and custom metadata. Set first so the
+		// hotplug/RDM system keys below win on any collision.
+		serverCreateOpts.Metadata = make(map[string]string, len(vminfo.TargetMetadata))
+		for key, value := range vminfo.TargetMetadata {
+			serverCreateOpts.Metadata[key] = value
+		}
+		PrintLog(fmt.Sprintf("Applying %d instance metadata entries to VM %s", len(vminfo.TargetMetadata), vminfo.Name))
+	}
 	if len(networkIDs) == 0 {
 		// Nova's "networks":"none" sentinel was added in compute API
 		// microversion 2.37. Without this header bump the request goes out at
@@ -954,12 +963,13 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 	}
 	if IsHotplugFlavor(flavor) {
 		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
-		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
-			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
+		if serverCreateOpts.Metadata == nil {
+			serverCreateOpts.Metadata = map[string]string{}
 		}
+		serverCreateOpts.Metadata[constants.HotplugCPUKey] = fmt.Sprintf("%d", vminfo.CPU)
+		serverCreateOpts.Metadata[constants.HotplugMemoryKey] = fmt.Sprintf("%d", vminfo.Memory)
+		serverCreateOpts.Metadata[constants.HotplugCPUMaxKey] = fmt.Sprintf("%d", vminfo.CPU)
+		serverCreateOpts.Metadata[constants.HotplugMemoryMaxKey] = fmt.Sprintf("%d", vminfo.Memory)
 	}
 
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {

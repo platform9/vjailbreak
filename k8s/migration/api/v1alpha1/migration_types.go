@@ -118,6 +118,11 @@ type MigrationSpec struct {
 	// from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering.
 	// +optional
 	ImageMetadata map[string]string `json:"imageMetadata,omitempty"`
+
+	// PreserveSourceTags indicates whether the source VM's vSphere tags and custom
+	// attributes are copied to the migrated VM as instance metadata.
+	// +optional
+	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
