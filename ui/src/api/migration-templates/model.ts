@@ -1,3 +1,4 @@
+import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 export interface GetMigrationTemplatesList {
   apiVersion: string
   items: MigrationTemplate[]
@@ -74,7 +75,7 @@ export interface VmData {
   esxHost?: string
   ipAddress?: string
   targetFlavorId?: string
-  disks?: string[]
+  disks?: VMwareDiskEntry[]
   labels?: { [key: string]: string }
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]

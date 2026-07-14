@@ -1,7 +1,16 @@
+export interface VMwareDisk {
+  name?: string
+  capacityGB?: number
+  datastore?: string
+  datastoreId?: string
+}
+
+export type VMwareDiskEntry = string | VMwareDisk
+
 export interface VMwareVM {
   cpu: number
   datastores: string[]
-  disks: string[]
+  disks: VMwareDiskEntry[]
   memory: number
   name: string
   vmid?: string
