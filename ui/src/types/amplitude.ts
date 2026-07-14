@@ -47,7 +47,12 @@ export const AMPLITUDE_EVENTS = {
   CLUSTER_CONVERSION_TRIGGERED: 'Cluster Conversion Triggered',
   CLUSTER_CONVERSION_FAILED: 'Cluster Conversion Failed',
   CLUSTER_CONVERSION_EXECUTION_FAILED: 'Cluster Conversion Execution Failed', // For runtime failures
-  CLUSTER_CONVERSION_SUCCEEDED: 'Cluster Conversion Succeeded' // For successful completions
+  CLUSTER_CONVERSION_SUCCEEDED: 'Cluster Conversion Succeeded', // For successful completions
+
+  // AI Analysis Events
+  AI_ANALYSIS_TRIGGERED: 'AI Analysis Triggered',
+  AI_ANALYSIS_FEEDBACK: 'AI Analysis Feedback',
+  AI_GITHUB_ISSUE_OPENED: 'AI GitHub Issue Opened',
 } as const
 
 export type AmplitudeEventName = (typeof AMPLITUDE_EVENTS)[keyof typeof AMPLITUDE_EVENTS] | string

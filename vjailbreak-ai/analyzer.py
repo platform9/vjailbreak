@@ -186,8 +186,11 @@ def build_user_message(context: dict[str, Any], rag_context: str) -> str:
     return "\n".join(sections)
 
 
-def build_github_issue(migration_name: str, conditions: list, error_snippet: str) -> dict:
-    title = f"Migration failure: {migration_name}"
+def build_github_issue(migration_name: str, conditions: list, error_snippet: str, root_cause: str | None = None) -> dict:
+    if root_cause:
+        title = root_cause[:80] if len(root_cause) <= 80 else root_cause[:77] + "..."
+    else:
+        title = f"vJailbreak migration failure ({migration_name})"
     body_lines = [
         f"## Migration: `{migration_name}`",
         "",
@@ -226,7 +229,7 @@ def parse_claude_response(
             result = json.loads(json_match.group())
             result["raw_response"] = raw
             confidence = result.get("confidence", "none")
-            github_issue = build_github_issue(migration_name, conditions, error_snippet)
+            github_issue = build_github_issue(migration_name, conditions, error_snippet, result.get("root_cause"))
             github_issue["should_open"] = confidence in ("none", "low")
             result["github_issue"] = github_issue
             return result

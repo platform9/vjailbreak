@@ -201,7 +201,15 @@ export default function BaseLogsDrawer({
             sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}
           >
             <Tab label="Logs" value="logs" />
-            <Tab label="🤖 AI Analysis" value="ai" />
+            <Tab
+              value="ai"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  🤖 AI Analysis
+                  <Chip label="Experimental" size="small" color="info" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                </Box>
+              }
+            />
           </Tabs>
         )}
 

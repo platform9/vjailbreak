@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Tab,
   Tabs,
@@ -124,7 +125,17 @@ export default function MigrationDetailPage() {
           <Tab label="Details" value="details" />
           <Tab label="Events" value="events" />
           <Tab label="Pod logs" value="logs" />
-          {failed && <Tab label="AI Analysis" value="ai" />}
+          {failed && (
+            <Tab
+              value="ai"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  AI Analysis
+                  <Chip label="Experimental" size="small" color="info" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                </Box>
+              }
+            />
+          )}
         </Tabs>
       </Box>
 
