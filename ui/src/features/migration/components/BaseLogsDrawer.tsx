@@ -7,13 +7,12 @@ import {
   Switch,
   CircularProgress,
   Alert,
+  Chip,
   Tooltip,
   FormControl,
   MenuItem,
   Select,
   SelectChangeEvent,
-  Menu,
-  Badge,
   Tabs,
   Tab
 } from '@mui/material'
@@ -65,7 +64,6 @@ export default function BaseLogsDrawer({
   const [copySuccess, setCopySuccess] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null)
   const [activeTab, setActiveTab] = useState<'logs' | 'ai'>('logs')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsLengthRef = useRef(0)
