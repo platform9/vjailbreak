@@ -1,5 +1,7 @@
 package utils
 
+import "unicode/utf8"
+
 // novaMetadataMaxLength is the Nova API limit for instance metadata keys and values.
 const novaMetadataMaxLength = 255
 
@@ -22,8 +24,12 @@ func BuildTargetMetadata(sourceTagsMetadata, customMetadata map[string]string) m
 }
 
 func truncateMetadata(s string) string {
-	if len(s) > novaMetadataMaxLength {
-		return s[:novaMetadataMaxLength]
+	if len(s) <= novaMetadataMaxLength {
+		return s
 	}
-	return s
+	truncated := s[:novaMetadataMaxLength]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
 }
