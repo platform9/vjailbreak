@@ -106,15 +106,6 @@ type MigrationPlanSpec struct {
 	// NetworkOverridesPerVM is a map of VM names to per-NIC network overrides
 	// Only NICs with non-default settings (i.e., preserve=false) need to be listed
 	NetworkOverridesPerVM map[string][]NICOverride `json:"networkOverridesPerVM,omitempty"`
-	// PreserveSourceTags copies each source VM's vSphere tags and custom attributes
-	// to the migrated VM as instance metadata. Applies to all VMs in the plan.
-	// +kubebuilder:default:=false
-	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
-	// CustomMetadata is a map of additional key-value pairs applied as instance
-	// metadata to every migrated VM in the plan. Keys here override colliding
-	// keys derived from preserved source tags.
-	// +optional
-	CustomMetadata map[string]string `json:"customMetadata,omitempty"`
 }
 
 // MigrationPlanSpecPerVM defines the configuration that applies to each VM in the migration plan
@@ -128,6 +119,15 @@ type MigrationPlanSpecPerVM struct {
 	// +kubebuilder:default:="echo \"Add your startup script here!\""
 	FirstBootScript     string               `json:"firstBootScript,omitempty"`
 	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
+	// PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+	// to the migrated VM as instance metadata. Applies to all VMs in the plan.
+	// +kubebuilder:default:=false
+	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
+	// CustomMetadata is a map of additional key-value pairs applied as instance
+	// metadata to every migrated VM in the plan. Keys here override colliding
+	// keys derived from preserved source tags.
+	// +optional
+	CustomMetadata map[string]string `json:"customMetadata,omitempty"`
 }
 
 // MigrationPlanStatus defines the observed state of MigrationPlan including

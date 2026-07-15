@@ -2524,6 +2524,14 @@ spec:
                   - vmSequence
                   type: object
                 type: array
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
+                type: object
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -2581,6 +2589,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan

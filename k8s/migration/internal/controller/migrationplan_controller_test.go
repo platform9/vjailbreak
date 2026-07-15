@@ -199,7 +199,9 @@ func TestSetTagsAndCustomMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			migrationplan := &vjailbreakv1alpha1.MigrationPlan{
 				Spec: vjailbreakv1alpha1.MigrationPlanSpec{
-					CustomMetadata: tt.customMetadata,
+					MigrationPlanSpecPerVM: vjailbreakv1alpha1.MigrationPlanSpecPerVM{
+						CustomMetadata: tt.customMetadata,
+					},
 				},
 			}
 			migrationobj := &vjailbreakv1alpha1.Migration{
