@@ -87,6 +87,10 @@ export interface VmData {
   preserveIp?: Record<number, boolean>
   preserveMac?: Record<number, boolean>
   hasSharedRdm?: boolean
+  // vSphere tag category name -> comma-separated tag names
+  tags?: Record<string, string>
+  // vSphere custom attribute name -> value
+  customAttributes?: Record<string, string>
 }
 
 export interface VmNetworkInterface {

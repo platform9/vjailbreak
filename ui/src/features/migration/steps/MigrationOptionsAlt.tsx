@@ -23,6 +23,7 @@ import { IntervalField } from 'src/shared/components/forms'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 import { hasSelectedLayer2Network } from 'src/shared/utils/network'
 import type { MigrationOptionsPropsInterface } from '../types'
+import TagsAndMetadataSection from './TagsAndMetadataSection'
 
 export type { MigrationOptionsPropsInterface } from '../types'
 
@@ -714,6 +715,15 @@ export default function MigrationOptionsAlt({
               to a network with a matching subnet to enable this option.
             </Alert>
           )}
+        </SectionBlock>
+
+        <SectionBlock>
+          <TagsAndMetadataSection
+            vms={params?.vms}
+            preserveSourceTags={Boolean(params?.preserveSourceTags)}
+            customMetadata={params?.customMetadata || []}
+            onChange={onChange}
+          />
         </SectionBlock>
 
         {isPCD ? (

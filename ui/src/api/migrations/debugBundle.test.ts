@@ -58,7 +58,7 @@ describe('downloadDebugBundle', () => {
 
     await downloadDebugBundle('migration-testvm')
 
-    expect(clickedDownloads).toEqual(['migration-testvm-debug-bundle.txt'])
+    expect(clickedDownloads).toEqual(['migration-testvm-debug-bundle.tar.gz'])
   })
 
   it('propagates request failures to the caller', async () => {
