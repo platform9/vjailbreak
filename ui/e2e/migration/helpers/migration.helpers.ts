@@ -5,6 +5,8 @@ import { Page, expect } from '@playwright/test'
 export const NS = 'migration-system'
 const V1A1 = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NS}`
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 export const API = {
   settingsConfigMap: `**/api/v1/namespaces/${NS}/configmaps/vjailbreak-settings`,
   migrations: `**${V1A1}/migrations`,
@@ -17,7 +19,7 @@ export const API = {
   vmwareCredByName: (name: string) => `**${V1A1}/vmwarecreds/${name}`,
   // The list endpoint is paginated (?limit=N), which glob patterns can't express
   // without also swallowing the by-name routes — use a regex instead.
-  openstackCreds: new RegExp(`${V1A1.replace(/\./g, '\\.')}/openstackcreds(\\?.*)?$`),
+  openstackCreds: new RegExp(`${escapeRegExp(V1A1)}/openstackcreds(\\?.*)?$`),
   openstackCredByName: (name: string) => `**${V1A1}/openstackcreds/${name}`,
   networkMappings: `**${V1A1}/networkmappings`,
   networkMappingByName: (name: string) => `**${V1A1}/networkmappings/${name}`,
