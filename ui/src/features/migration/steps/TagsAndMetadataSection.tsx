@@ -31,6 +31,7 @@ interface TagsAndMetadataSectionProps {
   preserveSourceTags: boolean
   customMetadata: KeyValuePair[]
   onChange: (key: string) => (value: unknown) => void
+  showHeader?: boolean
 }
 
 const renderEntryChips = (entries?: Record<string, string>) => {
@@ -61,7 +62,8 @@ export default function TagsAndMetadataSection({
   vms,
   preserveSourceTags,
   customMetadata,
-  onChange
+  onChange,
+  showHeader = true
 }: TagsAndMetadataSectionProps) {
   const { vmCount, entryCount } = summarizeSourceEntries(vms || [])
 
@@ -80,21 +82,25 @@ export default function TagsAndMetadataSection({
 
   return (
     <Box sx={{ display: 'grid', gap: 1.25 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          gap: 2,
-          mb: 1
-        }}
-      >
-        <Typography variant="subtitle2">Tags &amp; Metadata</Typography>
-        <Typography variant="caption" color="text.secondary">
-          Carry organizational context from VMware to the migrated VMs
-        </Typography>
-      </Box>
-      <Divider />
+      {showHeader ? (
+        <>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 2,
+              mb: 1
+            }}
+          >
+            <Typography variant="subtitle2">Tags &amp; Metadata</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Carry organizational context from VMware to the migrated VMs
+            </Typography>
+          </Box>
+          <Divider />
+        </>
+      ) : null}
 
       <Box sx={{ py: 1 }}>
         <FormControlLabel
