@@ -30,13 +30,15 @@ Unlike network mapping, storage mapping is different. For networking, interconne
 
 ### VMware Storage Types
 
-For VMware environment, the storage is typically of type `vSphere Datastore` with either `VMFS` or `NFS` as the storage type. vJailbreak supports both of these types of storage.
+For VMware environments, the storage is typically of type `vSphere Datastore` with either `VMFS` or `NFS` as the storage type. vJailbreak supports both of these storage types.
+
+vJailbreak also supports RDM disks for cold migrations to Platform9 Private Cloud Director (PCD) when the SAN-backed LUN can be represented as a target volume and the required storage prerequisites are met. See the [RDM migration guide](../../guides/cli-api/migrating_rdm_disk_windows_cluster_machine_using_cli/) for the step-by-step workflow. This support is not currently available for OpenStack-targeted migrations.
 
 There are a few exceptions and unsupported configurations.
 
-* vJailbreak does not support the `vCenter Storage Policies` or 'vVols' at the time of writing this document.
-* vJailbreak does not support the `RDM` (Raw Disk Mapping) feature of vCenter either. We plan to support this in the near future.
-* vJailbreak doesn't support snapshot preservation during the copy.
+* vJailbreak does not support `vCenter Storage Policies` or `vVols` at the time of writing this document.
+* vJailbreak does not preserve snapshots during the copy.
+* For Rolling Conversion or other vMotion-based workflows, RDM disks in physical mode remain unsupported.
 
 ### OpenStack/PCD Volume Types
 For OpenStack/PCD environment, the volumes are created using 'Cinder' and can be of type `NFS` `iSCSI`, `FiberChannel`. vJailbreak supports all of these types of storage with the help of the corresponding OpenStack/PCD Cinder drivers. The Cinder and corresponding volume types must be precreated before the migration starts.
