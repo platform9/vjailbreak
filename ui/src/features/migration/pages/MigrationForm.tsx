@@ -640,7 +640,7 @@ export default function MigrationFormDrawer({
                 data-testid="migration-form-tags-metadata-card"
               >
                 <TagsAndMetadataSection
-                  vms={params?.vms}
+                  vms={params?.vms ?? []}
                   preserveSourceTags={Boolean(params?.preserveSourceTags)}
                   customMetadata={params?.customMetadata || []}
                   onChange={getParamsUpdater}

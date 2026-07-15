@@ -15,7 +15,9 @@ export const API = {
   migrationTemplateByName: (name: string) => `**${V1A1}/migrationtemplates/${name}`,
   vmwareCreds: `**${V1A1}/vmwarecreds`,
   vmwareCredByName: (name: string) => `**${V1A1}/vmwarecreds/${name}`,
-  openstackCreds: `**${V1A1}/openstackcreds`,
+  // The list endpoint is paginated (?limit=N), which glob patterns can't express
+  // without also swallowing the by-name routes — use a regex instead.
+  openstackCreds: new RegExp(`${V1A1.replace(/\./g, '\\.')}/openstackcreds(\\?.*)?$`),
   openstackCredByName: (name: string) => `**${V1A1}/openstackcreds/${name}`,
   networkMappings: `**${V1A1}/networkmappings`,
   networkMappingByName: (name: string) => `**${V1A1}/networkmappings/${name}`,
@@ -92,7 +94,7 @@ type JsonBody = Record<string, unknown>
 
 export async function mockRoute(
   page: Page,
-  url: string,
+  url: string | RegExp,
   method: HttpMethod,
   body: JsonBody | JsonBody[],
   status = 200,
