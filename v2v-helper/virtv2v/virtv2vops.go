@@ -271,6 +271,15 @@ func IsSUSEFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "opensuse")
 }
 
+// MountPersistenceScriptArgs picks generate-mount-persistence.sh flags per OS: non-SUSE uses
+// --force-uuid; SUSE uses --replace-fstab --os-family=suse to skip the device.map rewrite that breaks GRUB (Error 21).
+func MountPersistenceScriptArgs(osRelease string) string {
+	if IsSUSEFamily(osRelease) {
+		return "--replace-fstab --os-family=suse"
+	}
+	return "--force-uuid"
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -989,17 +998,14 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
 	}
 
-	// Choose the script flag based on OS family.
-	// SUSE GRUB Legacy guests must not have device.map rewritten before virt-v2v
-	// runs, so we use --replace-fstab (which skips fix_grub_config) instead of
-	// --force-uuid.
-	scriptFlag := "--force-uuid"
+	// Pick script args by OS family: SUSE uses --replace-fstab --os-family=suse instead of
+	// --force-uuid, skipping the pre-virt-v2v device.map rewrite that breaks SUSE GRUB Legacy.
+	scriptArgs := MountPersistenceScriptArgs(osRelease)
 	if IsSUSEFamily(osRelease) {
-		scriptFlag = "--replace-fstab"
-		log.Printf("SUSE guest detected: using --replace-fstab (skipping fix_grub_config) to avoid corrupting device.map before virt-v2v")
+		log.Printf("SUSE guest detected: using --replace-fstab --os-family=suse (script will safely fix GRUB Legacy cmdline if detected, without touching device.map)")
 	}
 
-	log.Printf("Running generate-mount-persistence.sh with %s option", scriptFlag)
+	log.Printf("Running generate-mount-persistence.sh with %s option(s)", scriptArgs)
 
 	// Upload the script to the guest VM
 	var uploadErr error
@@ -1032,7 +1038,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 	var runOutput string
 
 	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptFlag)
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptArgs)
 
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
@@ -1040,7 +1046,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 		return nil
 	}
 
-	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptFlag)
+	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptArgs)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
 	return nil
