@@ -18,6 +18,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import ThumbUpIcon from '@mui/icons-material/ThumbUp'
 import ThumbDownIcon from '@mui/icons-material/ThumbDown'
+import { ActionButton, Banner, StatusChip } from 'src/components'
 import { analyzeMigration, getAIKeyStatus } from 'src/api/ai/aiAnalysis'
 import type { AIAnalyzeResponse } from 'src/api/ai/model'
 import { trackEvent } from 'src/services/amplitudeService'
@@ -30,12 +31,12 @@ interface AIAnalysisTabProps {
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string }
 
-const confidenceColor = {
+const confidenceTone = {
   high: 'success',
   medium: 'warning',
   low: 'warning',
   none: 'error',
-} as const
+} as const satisfies Record<string, 'success' | 'warning' | 'error'>
 
 export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTabProps) {
   const [loading, setLoading] = useState(false)
@@ -175,11 +176,13 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
   if (error) {
     return (
       <Box sx={{ p: 2 }}>
-        <Alert severity="error" action={
-          <Button size="small" onClick={handleAnalyse}>Retry</Button>
-        }>
-          {error}
-        </Alert>
+        <Banner
+          variant="error"
+          message={error}
+          actionLabel="Retry"
+          onAction={handleAnalyse}
+          actionProps={{ size: 'small', variant: 'outlined' }}
+        />
       </Box>
     )
   }
@@ -191,9 +194,9 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           Analyse with AI
         </Button>
         {result && (
-          <Chip
+          <StatusChip
             label={`${result.confidence} confidence`}
-            color={confidenceColor[result.confidence]}
+            tone={confidenceTone[result.confidence]}
             size="small"
           />
         )}
@@ -365,9 +368,9 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           onChange={(e) => setFollowUp(e.target.value)}
           disabled={followUpLoading}
         />
-        <Button type="submit" variant="contained" size="small" disabled={followUpLoading || !followUp.trim()}>
-          {followUpLoading ? <CircularProgress size={16} color="inherit" /> : 'Send'}
-        </Button>
+        <ActionButton type="submit" size="small" loading={followUpLoading} disabled={!followUp.trim()}>
+          Send
+        </ActionButton>
       </Box>
     </Box>
   )

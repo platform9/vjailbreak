@@ -204,7 +204,7 @@ export default function BaseLogsDrawer({
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                   🤖 AI Analysis
-                  <Chip label="Experimental" size="small" color="info" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                  <Chip label="Experimental" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
                 </Box>
               }
             />
