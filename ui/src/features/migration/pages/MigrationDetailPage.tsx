@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Tab,
   Tabs,
@@ -11,6 +12,7 @@ import {
 } from '@mui/material'
 import { useMigrationDetailQuery } from '../hooks/useMigrationDetailQuery'
 import { useMigrationDetailResourcesQuery } from 'src/hooks/api/useMigrationDetailResourcesQuery'
+import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { isMigrationFailed } from '../utils/phaseUtils'
 import { Phase } from '../api/migrations'
 import {
@@ -24,8 +26,9 @@ import {
   MigrationEventsTab,
   MigrationDetailsTab,
 } from '../components/detail'
+import AIAnalysisTab from '../components/AIAnalysisTab'
 
-type TabId = 'overview' | 'logs' | 'events' | 'details'
+type TabId = 'overview' | 'logs' | 'events' | 'details' | 'ai'
 
 export default function MigrationDetailPage() {
   const { migrationName } = useParams<{ migrationName: string }>()
@@ -122,8 +125,17 @@ export default function MigrationDetailPage() {
           <Tab label="Details" value="details" />
           <Tab label="Events" value="events" />
           <Tab label="Pod logs" value="logs" />
-          {/* TODO: re-enable when Resources tab is implemented */}
-          {/* <Tab label="Resources" disabled sx={{ opacity: 0.4 }} /> */}
+          {failed && (
+            <Tab
+              value="ai"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  AI Analysis
+                  <Chip label="Experimental" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                </Box>
+              }
+            />
+          )}
         </Tabs>
       </Box>
 
@@ -151,6 +163,14 @@ export default function MigrationDetailPage() {
       {/* Details tab */}
       {tab === 'details' && (
         <MigrationDetailsTab migration={migration} />
+      )}
+
+      {/* AI Analysis tab — only shown for failed migrations */}
+      {tab === 'ai' && failed && (
+        <AIAnalysisTab
+          migrationName={migration.metadata?.name ?? ''}
+          namespace={(migration.metadata?.namespace as string | undefined) ?? VJAILBREAK_DEFAULT_NAMESPACE}
+        />
       )}
     </Box>
   )

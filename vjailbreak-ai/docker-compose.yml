@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  vjailbreak-ai:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-changeme}
+    volumes:
+      - chroma-data:/data
+    restart: unless-stopped
+
+volumes:
+  chroma-data:
