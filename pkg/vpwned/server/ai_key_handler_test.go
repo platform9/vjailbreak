@@ -55,7 +55,7 @@ func TestAIKeyHandler_GetPresent(t *testing.T) {
 
 func TestAIKeyHandler_PostCreates(t *testing.T) {
 	h := &aiKeyHandler{k8sClient: fakeK8sClientForKeyTest()}
-	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-abc", AdminKey: "my-admin"})
+	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-abc"})
 	req := httptest.NewRequest(http.MethodPost, "/vpw/v1/ai/key", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -73,10 +73,10 @@ func TestAIKeyHandler_PostCreates(t *testing.T) {
 func TestAIKeyHandler_PostUpdates(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: aiSecretName, Namespace: aiSecretNS},
-		Data:       map[string][]byte{"api-key": []byte("old"), "admin-key": []byte("old-admin")},
+		Data:       map[string][]byte{"api-key": []byte("old")},
 	}
 	h := &aiKeyHandler{k8sClient: fakeK8sClientForKeyTest(secret)}
-	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-new", AdminKey: "new-admin"})
+	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-new"})
 	req := httptest.NewRequest(http.MethodPost, "/vpw/v1/ai/key", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -94,42 +94,5 @@ func TestAIKeyHandler_PostMissingKey(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
-	}
-}
-
-// TestAIKeyHandler_PostPreservesAdminKey verifies that when admin_key is omitted
-// but the secret already has one, the existing admin key is kept.
-func TestAIKeyHandler_PostPreservesAdminKey(t *testing.T) {
-	existingAdminKey := "boot-generated-admin-key"
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: aiSecretName, Namespace: aiSecretNS},
-		Data: map[string][]byte{
-			"api-key":   []byte("old-anthropic"),
-			"admin-key": []byte(existingAdminKey),
-		},
-	}
-	h := &aiKeyHandler{k8sClient: fakeK8sClientForKeyTest(secret)}
-	// Only supply new Anthropic key; omit admin_key.
-	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-new"})
-	req := httptest.NewRequest(http.MethodPost, "/vpw/v1/ai/key", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-// TestAIKeyHandler_PostAdminKeyRequiredNoExisting verifies that admin_key is
-// required when no secret exists yet (first-time setup).
-func TestAIKeyHandler_PostAdminKeyRequiredNoExisting(t *testing.T) {
-	h := &aiKeyHandler{k8sClient: fakeK8sClientForKeyTest()}
-	body, _ := json.Marshal(aiKeyRequest{APIKey: "sk-ant-abc"}) // no admin_key
-	req := httptest.NewRequest(http.MethodPost, "/vpw/v1/ai/key", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 when admin_key absent on first setup, got %d", w.Code)
 	}
 }
