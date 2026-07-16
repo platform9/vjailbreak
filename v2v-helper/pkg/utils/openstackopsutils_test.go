@@ -13,6 +13,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -474,5 +475,73 @@ func TestSetVolumeBootable_ErrorButNotBootableReturnsError(t *testing.T) {
 	err := client.SetVolumeBootable(t.Context(), vol)
 	if err == nil {
 		t.Fatal("expected error when GetVolume confirms not bootable, got nil")
+	}
+}
+
+func TestBuildPortName(t *testing.T) {
+	tests := []struct {
+		name        string
+		networkName string
+		subnetName  string
+		vmname      string
+		want        string
+		wantLen     int
+	}{
+		{
+			name:        "normal case with subnet",
+			networkName: "prod-net",
+			subnetName:  "prod-subnet",
+			vmname:      "my-vm",
+			want:        "port-prod-net-prod-subnet-my-vm",
+		},
+		{
+			name:        "L2 network no subnet",
+			networkName: "l2-net",
+			subnetName:  "",
+			vmname:      "my-vm",
+			want:        "port-l2-net-my-vm",
+		},
+		{
+			name:        "vmname truncated to fit 255 limit",
+			networkName: "net",
+			subnetName:  "sub",
+			vmname:      strings.Repeat("a", 300),
+			wantLen:     constants.NeutronMaxPortNameLen,
+		},
+		{
+			name:        "long network+subnet forces vmname truncation",
+			networkName: strings.Repeat("n", 100),
+			subnetName:  strings.Repeat("s", 100),
+			vmname:      strings.Repeat("v", 100),
+			wantLen:     constants.NeutronMaxPortNameLen,
+		},
+		{
+			name:        "extremely long network+subnet exceeds prefix budget",
+			networkName: strings.Repeat("n", 200),
+			subnetName:  strings.Repeat("s", 100),
+			vmname:      "vm",
+			wantLen:     constants.NeutronMaxPortNameLen,
+		},
+		{
+			name:        "all short names fit without truncation",
+			networkName: "net",
+			subnetName:  "sub",
+			vmname:      "vm",
+			want:        "port-net-sub-vm",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildPortName(tt.networkName, tt.subnetName, tt.vmname)
+			if tt.want != "" && got != tt.want {
+				t.Errorf("buildPortName(%q, %q, %q) = %q, want %q", tt.networkName, tt.subnetName, tt.vmname, got, tt.want)
+			}
+			if tt.wantLen > 0 && len(got) != tt.wantLen {
+				t.Errorf("buildPortName(%q, %q, %q) len=%d, want %d", tt.networkName, tt.subnetName, tt.vmname, len(got), tt.wantLen)
+			}
+			if len(got) > constants.NeutronMaxPortNameLen {
+				t.Errorf("buildPortName result len=%d exceeds %d: %q", len(got), constants.NeutronMaxPortNameLen, got)
+			}
+		})
 	}
 }

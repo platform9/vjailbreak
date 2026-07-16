@@ -694,10 +694,31 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 
 }
 
+// buildPortName constructs a unique, human-readable port name for OpenStack.
+// Format: port-<networkName>-<subnetName>-<vmname> (or port-<networkName>-<vmname> for L2).
+// The vmname segment is truncated to fit within the Neutron 255-character limit.
+func buildPortName(networkName, subnetName, vmname string) string {
+	var prefix string
+	if subnetName != "" {
+		prefix = fmt.Sprintf("port-%s-%s-", networkName, subnetName)
+	} else {
+		prefix = fmt.Sprintf("port-%s-", networkName)
+	}
+	remaining := constants.NeutronMaxPortNameLen - len(prefix)
+	if remaining <= 0 {
+		return (prefix + vmname)[:constants.NeutronMaxPortNameLen]
+	}
+	if len(vmname) > remaining {
+		return prefix + vmname[:remaining]
+	}
+	return prefix + vmname
+}
+
 func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
 
+	// Default: network-only name (L2 networks have no subnets). Overridden below when subnet is available.
 	createOpts := ports.CreateOpts{
-		Name:           "port-" + vmname,
+		Name:           buildPortName(network.Name, "", vmname),
 		NetworkID:      network.ID,
 		SecurityGroups: &securityGroups,
 	}
@@ -721,11 +742,16 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 
 	if len(localDeepCopyIpEntries) > 0 {
 		fixedIPs := make([]ports.IP, 0)
+		nameSet := false
 		for _, ipEntry := range localDeepCopyIpEntries {
 			subnetId, err := osclient.GetSubnet(ctx, network.Subnets, ipEntry.IP)
 			if err != nil {
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
 			} else {
+				if !nameSet {
+					createOpts.Name = buildPortName(network.Name, subnetId.Name, vmname)
+					nameSet = true
+				}
 				gatewayIP[mac] = subnetId.GatewayIP
 				PrintLog(fmt.Sprintf("IP %s is in subnet %s", ipEntry.IP, subnetId.ID))
 				fixedIPs = append(fixedIPs, ports.IP{
@@ -739,6 +765,13 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
+		// Non-L2 networks have subnets; look up the first one for a meaningful port name.
+		if !isL2Network && len(network.Subnets) > 0 {
+			subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
+			if err == nil {
+				createOpts.Name = buildPortName(network.Name, subnetID.Name, vmname)
+			}
+		}
 	} else if len(network.Subnets) > 0 {
 		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
@@ -747,6 +780,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
 		gatewayIP[mac] = subnetID.GatewayIP
+		createOpts.Name = buildPortName(network.Name, subnetID.Name, vmname)
 	} else {
 		// nil ipEntries but the network has no subnets at all (e.g. an L2-only
 		// network that legitimately has zero subnets). There's no subnet to
