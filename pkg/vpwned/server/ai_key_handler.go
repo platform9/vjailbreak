@@ -28,8 +28,7 @@ type aiKeyHandler struct {
 }
 
 type aiKeyRequest struct {
-	APIKey   string `json:"api_key"`
-	AdminKey string `json:"admin_key"`
+	APIKey string `json:"api_key"`
 }
 
 type aiKeyResponse struct {
@@ -65,24 +64,12 @@ func (h *aiKeyHandler) saveKey(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	// Fetch existing secret to preserve admin-key if not provided.
-	var existing corev1.Secret
-	existingErr := h.k8sClient.Get(ctx, types.NamespacedName{Name: aiSecretName, Namespace: aiSecretNS}, &existing)
-
 	secretData := map[string][]byte{
 		"api-key": []byte(req.APIKey),
 	}
 
-	switch {
-	case req.AdminKey != "":
-		secretData["admin-key"] = []byte(req.AdminKey)
-	case existingErr == nil && len(existing.Data["admin-key"]) > 0:
-		// Preserve existing admin key when caller omits it.
-		secretData["admin-key"] = existing.Data["admin-key"]
-	default:
-		http.Error(w, "admin_key is required", http.StatusBadRequest)
-		return
-	}
+	var existing corev1.Secret
+	existingErr := h.k8sClient.Get(ctx, types.NamespacedName{Name: aiSecretName, Namespace: aiSecretNS}, &existing)
 
 	if k8serrors.IsNotFound(existingErr) {
 		newSecret := &corev1.Secret{
