@@ -968,12 +968,10 @@ export default function GlobalSettingsPage() {
 
   // AI key state
   const [aiKeyValue, setAIKeyValue] = useState('')
-  const [adminKeyValue, setAdminKeyValue] = useState('')
   const [aiKeyConfigured, setAIKeyConfigured] = useState(false)
   const [aiKeySaving, setAIKeySaving] = useState(false)
   const [aiKeyError, setAIKeyError] = useState<string | null>(null)
   const [aiKeySuccess, setAIKeySuccess] = useState(false)
-  const [adminKeyError, setAdminKeyError] = useState<string | null>(null)
 
   useEffect(() => {
     getAIKeyStatus().then((s) => setAIKeyConfigured(s.configured)).catch(() => {})
@@ -981,27 +979,20 @@ export default function GlobalSettingsPage() {
 
   const handleSaveAIKey = useCallback(async () => {
     if (!aiKeyValue.trim()) return
-    // Admin key required only when no existing key is configured
-    if (!aiKeyConfigured && !adminKeyValue.trim()) {
-      setAdminKeyError('Admin key is required for initial setup')
-      return
-    }
-    setAdminKeyError(null)
     setAIKeySaving(true)
     setAIKeyError(null)
     try {
-      await saveAIKey(aiKeyValue.trim(), adminKeyValue.trim())
+      await saveAIKey(aiKeyValue.trim())
       setAIKeyConfigured(true)
       setAIKeyValue('')
-      setAdminKeyValue('')
       setAIKeySuccess(true)
       setTimeout(() => setAIKeySuccess(false), 3000)
     } catch {
-      setAIKeyError('Failed to save API keys. Check vpwned logs.')
+      setAIKeyError('Failed to save API key. Check vpwned logs.')
     } finally {
       setAIKeySaving(false)
     }
-  }, [aiKeyValue, adminKeyValue, aiKeyConfigured])
+  }, [aiKeyValue])
 
   const [vddkFile, setVddkFile] = useState<File | null>(null)
   const [vddkStatus, setVddkStatus] = useState<VddkUploadStatus>('idle')
@@ -1686,10 +1677,10 @@ export default function GlobalSettingsPage() {
 
               {aiKeyConfigured && !aiKeySuccess && (
                 <Alert severity="success" sx={{ mb: 2 }}>
-                  API keys configured. Enter new values below to update them.
+                  API key configured. Enter a new value below to update it.
                 </Alert>
               )}
-              {aiKeySuccess && <Alert severity="success" sx={{ mb: 2 }}>API keys saved. The AI service is restarting to pick up the new key.</Alert>}
+              {aiKeySuccess && <Alert severity="success" sx={{ mb: 2 }}>API key saved. The AI service is restarting to pick up the new key.</Alert>}
               {aiKeyError && <Alert severity="error" sx={{ mb: 2 }}>{aiKeyError}</Alert>}
 
               <TextField
@@ -1709,30 +1700,12 @@ export default function GlobalSettingsPage() {
                 sx={{ mb: 2 }}
               />
 
-              <TextField
-                label="Admin API Key"
-                type="password"
-                fullWidth
-                required={!aiKeyConfigured}
-                value={adminKeyValue}
-                onChange={(e) => { setAdminKeyValue(e.target.value); setAdminKeyError(null) }}
-                placeholder={aiKeyConfigured ? '(leave blank to keep existing)' : 'Enter admin key'}
-                helperText={
-                  adminKeyError ||
-                  (aiKeyConfigured
-                    ? 'Leave blank to keep the existing admin key'
-                    : 'Auto-generated at boot — check install.sh output or your deployment notes')
-                }
-                error={!!adminKeyError}
-                sx={{ mb: 2 }}
-              />
-
               <Button
                 variant="contained"
                 onClick={handleSaveAIKey}
-                disabled={aiKeySaving || !aiKeyValue.trim() || (!aiKeyConfigured && !adminKeyValue.trim())}
+                disabled={aiKeySaving || !aiKeyValue.trim()}
               >
-                {aiKeySaving ? 'Saving...' : 'Save API Keys'}
+                {aiKeySaving ? 'Saving...' : 'Save API Key'}
               </Button>
             </Box>
           </TabPanel>
