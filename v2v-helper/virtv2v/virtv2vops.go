@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -762,6 +761,27 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(stdoutBuf.String()), nil
 }
 
+// GuestDiskIndex returns the position of device within the guest disks reported
+// by libguestfs list-devices. Unlike device-index, list-devices excludes the
+// appliance's own disk and lists the attached disks in -a order (== vm.VMDisk
+// order), so the returned position is a valid VMDisks index regardless of where
+// the appliance disk lands in the kernel enumeration. Returns an error if device
+// is not one of the guest disks (e.g. the caller resolved the appliance disk).
+func GuestDiskIndex(disks []vm.VMDisk, device string) (int, error) {
+	out, err := RunCommandInGuestAllVolumes(disks, "list-devices", false)
+	if err != nil {
+		return -1, fmt.Errorf("failed to list guest devices: %w", err)
+	}
+	device = strings.TrimSpace(device)
+	guestDisks := strings.Fields(strings.TrimSpace(out))
+	for i, d := range guestDisks {
+		if d == device {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("resolved boot device %q is not among guest disks %v (likely the libguestfs appliance disk)", device, guestDisks)
+}
+
 // GetDeviceNumberFromPartition returns the device index for a given partition name
 func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
 	command := "part-to-dev"
@@ -786,13 +806,9 @@ func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, err
 	}
 
 	if strings.TrimSpace(bootable) == "true" {
-		command = "device-index"
-		index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-			return -1, err
-		}
-		return strconv.Atoi(strings.TrimSpace(index))
+		// Map to a VMDisks index via list-devices position (excludes the appliance
+		// disk), not device-index which counts it and depends on enumeration order.
+		return GuestDiskIndex(disks, strings.TrimSpace(device))
 	}
 
 	return -1, errors.New("partition is not bootable")
