@@ -6,6 +6,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   FormControl,
   FormHelperText,
@@ -1241,11 +1242,23 @@ export default function GlobalSettingsPage() {
                 data-testid={`global-settings-tab-${tab}`}
                 data-tour={tab === 'vddk' ? 'settings-tab-vddk' : undefined}
                 label={
-                  <TabLabel
-                    label={TAB_META[tab].label}
-                    showError={tabHasError(tab)}
-                    icon={TAB_META[tab].icon}
-                  />
+                  tab === 'ai' ? (
+                    <Box display="flex" alignItems="center" gap={0.75}>
+                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary' }}>
+                        {TAB_META[tab].icon}
+                      </Box>
+                      <Typography variant="body2" fontWeight={600}>
+                        {TAB_META[tab].label}
+                      </Typography>
+                      <Chip label="Experimental" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                    </Box>
+                  ) : (
+                    <TabLabel
+                      label={TAB_META[tab].label}
+                      showError={tabHasError(tab)}
+                      icon={TAB_META[tab].icon}
+                    />
+                  )
                 }
                 {...tabProps(tab)}
               />
