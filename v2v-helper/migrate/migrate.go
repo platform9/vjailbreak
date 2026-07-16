@@ -1221,6 +1221,11 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	finalBootIndex = bootVolumeIndex
 	finalOsPath = osPath
 
+	// Nothing downstream is safe to index if there are no disks.
+	if len(vminfo.VMDisks) == 0 {
+		return -1, "", "", -1, errors.New("no disks present for VM; cannot detect boot disk")
+	}
+
 	// Run get-bootable-partition.sh script
 	var ans string
 	var cmdErr error
@@ -1247,13 +1252,22 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
+	// device-index can resolve to the libguestfs appliance's own disk (a slot past
+	// the guest's disks). Fail the migration rather than indexing vminfo.VMDisks out
+	// of range (which would panic) or silently converting the wrong disk.
+	if finalBootIndex < 0 || finalBootIndex >= len(vminfo.VMDisks) {
+		return -1, "", "", -1, errors.Errorf(
+			"detected boot disk index %d is out of range for %d disk(s); aborting migration",
+			finalBootIndex, len(vminfo.VMDisks))
+	}
+
 	// Detect ESP for UEFI VMs
 	espDiskIndex = -1
 	if vminfo.UEFI {
 		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
 		if espErr != nil {
 			migobj.logMessage(fmt.Sprintf("Error detecting ESP disk: %v", espErr))
-		} else if detectedESPIndex >= 0 {
+		} else if detectedESPIndex >= 0 && detectedESPIndex < len(vminfo.VMDisks) {
 			espDiskIndex = detectedESPIndex
 			migobj.logMessage(fmt.Sprintf("ESP detected on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
 		} else {
@@ -1328,10 +1342,23 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 	var finalBootIndex int
 	var err error
 
+	if len(vminfo.VMDisks) == 0 {
+		return -1, "", errors.New("no disks present for VM; cannot detect boot disk")
+	}
+
 	utils.PrintLog("checking for bootable volume in case of LDM")
 	finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
 	if err != nil {
 		return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
+	}
+
+	// Same guard as the Linux path: GetBootableVolumeIndex resolves via device-index,
+	// which can point at the libguestfs appliance disk (past the guest's disks).
+	// Fail the migration rather than indexing vminfo.VMDisks out of range.
+	if finalBootIndex < 0 || finalBootIndex >= len(vminfo.VMDisks) {
+		return -1, "", errors.Errorf(
+			"detected boot disk index %d is out of range for %d disk(s); aborting migration",
+			finalBootIndex, len(vminfo.VMDisks))
 	}
 
 	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path)

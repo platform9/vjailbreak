@@ -3,6 +3,7 @@
 # Prints the correct BIOS boot disk (the one containing GRUB MBR)
 # Works with LVM and /boot on a separate disk.
 # Assumes we are running inside a guestfish-mounted environment
+exec 3>&1 1>&2
 
 # Step 1: Identify all disks in guest
 # List block devices (assuming /dev/vda, /dev/sda, etc. are available)
@@ -99,4 +100,50 @@ if [ -z "$bootdisk" ]; then
 fi
 
 echo "[DEBUG] Result: bootdisk=$bootdisk" >&2
-echo "$bootdisk"
+
+fail() { echo "[ERROR] $1" >&2; exit 1; }
+
+# (a) Non-empty
+[ -n "$bootdisk" ] || fail "no bootable disk could be determined"
+
+# (b) Whole-disk device path (/dev/sda, /dev/vdb, ...), not a partition or junk
+echo "$bootdisk" | grep -qE '^/dev/[sv]d[a-z]$' || \
+  fail "resolved bootdisk '$bootdisk' is not a whole-disk device path"
+
+# (c) Real block device in this environment
+[ -b "$bootdisk" ] || fail "resolved bootdisk '$bootdisk' is not a block device"
+
+# (d) Appliance-disk guard
+if [ "$#" -gt 0 ]; then
+  # Caller passed the authoritative guest-disk list (libguestfs list-devices,
+  # which excludes the appliance's own disk); bootdisk must be one of them.
+  _match=false
+  for _gd in "$@"; do
+    [ "$bootdisk" = "$_gd" ] && { _match=true; break; }
+  done
+  $_match || fail "resolved bootdisk '$bootdisk' is not among guest disks ($*) - refusing to return the appliance disk"
+else
+  # No allowlist: a genuine guest boot disk backs part of the mounted guest OS,
+  # while the appliance's own disk backs nothing in this mount namespace.
+  _backed=$(
+    # direct partition/whole-disk mounts on this disk
+    mount 2>/dev/null | awk '{print $1}' | grep -E "^${bootdisk}[0-9]*$"
+    # LVM: PVs on this disk whose VG is actually mounted
+    if command -v pvs >/dev/null 2>&1 && mount 2>/dev/null | grep -q '/dev/mapper/'; then
+      _vgs=$(mount 2>/dev/null | awk '{print $1}' | grep '^/dev/mapper/' \
+             | while read -r _dm; do lvs --noheadings -o vg_name "$_dm" 2>/dev/null; done \
+             | tr -d ' ' | sort -u)
+      for _vg in $_vgs; do
+        pvs --noheadings -o pv_name,vg_name 2>/dev/null \
+          | awk -v vg="$_vg" '$2 == vg {print $1}' | grep -E "^${bootdisk}[0-9]*$"
+      done
+    fi
+  )
+  [ -n "$_backed" ] || \
+    fail "resolved bootdisk '$bootdisk' backs no mounted guest filesystem - likely the libguestfs appliance disk"
+fi
+
+echo "[DEBUG] Validation passed: bootdisk=$bootdisk" >&2
+
+# The one and only write to the caller's stdout channel.
+echo "$bootdisk" >&3
