@@ -119,7 +119,11 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 Older SUSE-family VMs — **SLES**, **SLED**, and other **SUSE** distributions — that still boot with **legacy GRUB (0.97)** require special handling. These are typically BIOS VMs on a multi-disk layout, where the first boot stage sits in one disk's MBR while its second stage and `/boot` live on a separate disk. After migration to KVM, the virtual disks are re-numbered and no longer match the original VMware ordering, so GRUB cannot find its second stage and the VM fails to boot with `GRUB Error 21`.
 
-**Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2. But on these older SUSE releases, GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI — which is exactly why a self-contained **EFI System Partition (ESP)** is required.
+In such scenarios, we reccommend upgrading to GRUB2.
+
+**Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2.
+
+NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
 
 ## Hotplug Flavor Requirements
 
