@@ -65,7 +65,9 @@ vJailbreak supports migrating VMs to OpenStack flavors that have **hotplug** CPU
 
 To use hotplug after migration:
 
-1. Ask your OpenStack administrator to create or identify a flavor with hotplug-enabled extra specs. Example:
+1. **On Platform9 Private Cloud Director (PCD)**: a hotplug base flavor named `hotplug` is available by default. While triggering the migration, simply select the `hotplug` flavor for the VMs that should support live resize.
+
+2. **On other OpenStack environments**: ask your administrator to create or identify a flavor with hotplug-enabled extra specs, and select it in the migration form. Example:
 
    ```bash
    openstack flavor set <flavor-name> \
@@ -73,11 +75,12 @@ To use hotplug after migration:
      --property hw:cpu_max_vcpus=<max-vcpus>
    ```
 
-2. Select this hotplug-capable flavor in the vJailbreak migration form when configuring the destination VM.
-3. After migration completes, resize the VM in OpenStack using a hotplug-capable flavor to add or remove vCPUs and RAM without a reboot.
+3. After migration completes, resize the VM to add or remove vCPUs and RAM without a reboot.
+
+When a hotplug base flavor (0 vCPU, 0 RAM — such as PCD's default `hotplug` flavor) is assigned, vJailbreak sets the VM's hotplug metadata at creation time: the current values (`HOTPLUG_CPU`, `HOTPLUG_MEMORY`) match the source VM, and the maximum values (`HOTPLUG_CPU_MAX`, `HOTPLUG_MEMORY_MAX`) are set to **twice** the source VM's vCPU and memory. This gives every migrated VM room to live-resize up to 2x its original size. Hotplug metadata cannot be changed after the VM is created.
 
 :::note
-Standard flavors without hotplug extra specs require a VM power-off for resize. See [Known Limitations: Hotplug Flavor Requirements](../../reference/known-limitations/#hotplug-flavor-requirements) for details on flavor prerequisites.
+Standard flavors without hotplug extra specs require a VM power-off for resize. See [Known Limitations: Hotplug Flavor Requirements](../../reference/known-limitations/#hotplug-flavor-requirements) for details on flavor prerequisites and the metadata reference.
 :::
 
 ### Can vJailbreak migrate VMs running Docker Engine?

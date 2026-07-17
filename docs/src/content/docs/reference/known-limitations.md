@@ -127,11 +127,13 @@ NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-B
 
 ## Hotplug Flavor Requirements
 
-OpenStack **hotplug** (live CPU/RAM resize without VM reboot) is supported post-migration, but only if the assigned flavor is explicitly configured for hotplug by the OpenStack administrator.
+OpenStack **hotplug** (live CPU/RAM resize without VM reboot) is supported post-migration, but only if the VM is migrated with a hotplug-capable flavor.
 
 To use hotplug after migration:
 
-1. Ask your OpenStack admin to create a flavor with hotplug-enabled extra specs, for example:
+1. **Platform9 Private Cloud Director (PCD)**: PCD provides a hotplug base flavor named `hotplug` by default. While triggering the migration in vJailbreak, select the `hotplug` flavor for the VMs that need live resize.
+
+2. **Other OpenStack environments**: ask your OpenStack admin to create a flavor with hotplug-enabled extra specs, for example:
 
    ```bash
    openstack flavor set <flavor-name> \
@@ -140,8 +142,25 @@ To use hotplug after migration:
      --property hw:mem_page_size=any
    ```
 
-2. Assign this flavor in the vJailbreak migration form before starting the migration.
-3. After migration, resize the VM in OpenStack using the hotplug-capable flavor.
+   Then assign this flavor in the vJailbreak migration form before starting the migration.
+3. After migration, resize the VM in OpenStack using the hotplug capability.
+
+### Hotplug Metadata and Resize Headroom
+
+When a hotplug base flavor (0 vCPU, 0 RAM — such as PCD's default `hotplug` flavor) is assigned, vJailbreak creates the target VM with the following server metadata:
+
+| Metadata key | Value |
+|---|---|
+| `HOTPLUG_CPU` | Source VM's current vCPU count |
+| `HOTPLUG_MEMORY` | Source VM's current memory (MB) |
+| `HOTPLUG_CPU_MAX` | **2x** the source VM's vCPU count |
+| `HOTPLUG_MEMORY_MAX` | **2x** the source VM's memory (MB) |
+
+The max keys define the ceiling for post-migration live resize. They are set to twice the source VM's size so the migrated VM has hotplug headroom out of the box — for example, a VM migrated with 2 vCPUs and 4096 MB RAM can be live-resized up to 4 vCPUs and 8192 MB RAM.
+
+:::caution
+Hotplug metadata can only be set at VM creation time and cannot be modified afterward. To resize beyond the 2x ceiling, the VM must be recreated.
+:::
 
 :::note
 Standard flavors without hotplug extra specs will not support live resize. The VM must be powered off for a cold resize in that case.
