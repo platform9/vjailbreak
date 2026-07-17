@@ -36,6 +36,8 @@ resources:
 - vjailbreaknode_viewer_role.yaml
 - migrationtemplate_editor_role.yaml
 - migrationtemplate_viewer_role.yaml
+- migrationblueprint_editor_role.yaml
+- migrationblueprint_viewer_role.yaml
 - migrationplan_editor_role.yaml
 - migrationplan_viewer_role.yaml
 - storagemapping_editor_role.yaml
