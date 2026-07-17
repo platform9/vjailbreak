@@ -909,6 +909,17 @@ func IsHotplugFlavor(flavor *flavors.Flavor) bool {
 	return flavor != nil && flavor.VCPUs == 0 && flavor.RAM == 0
 }
 
+// HotplugMetadata builds the server metadata for hotplug (flavorless)
+// provisioning.
+func HotplugMetadata(cpu, memoryMB int32) map[string]string {
+	return map[string]string{
+		constants.HotplugCPUKey:       fmt.Sprintf("%d", cpu),
+		constants.HotplugMemoryKey:    fmt.Sprintf("%d", memoryMB),
+		constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", 2*cpu),
+		constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", 2*memoryMB),
+	}
+}
+
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
@@ -953,13 +964,8 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		))
 	}
 	if IsHotplugFlavor(flavor) {
-		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
-		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
-			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
-		}
+		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
+		serverCreateOpts.Metadata = HotplugMetadata(vminfo.CPU, vminfo.Memory)
 	}
 
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {

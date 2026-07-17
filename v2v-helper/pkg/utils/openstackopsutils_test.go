@@ -58,6 +58,53 @@ func TestIsHotplugFlavor(t *testing.T) {
 	}
 }
 
+// TestHotplugMetadata verifies the server metadata built for hotplug
+// (flavorless) provisioning.
+func TestHotplugMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		cpu      int32
+		memoryMB int32
+		want     map[string]string
+	}{
+		{
+			name:     "typical small VM",
+			cpu:      1,
+			memoryMB: 2048,
+			want: map[string]string{
+				"HOTPLUG_CPU":        "1",
+				"HOTPLUG_MEMORY":     "2048",
+				"HOTPLUG_CPU_MAX":    "2",
+				"HOTPLUG_MEMORY_MAX": "4096",
+			},
+		},
+		{
+			name:     "larger VM",
+			cpu:      8,
+			memoryMB: 16384,
+			want: map[string]string{
+				"HOTPLUG_CPU":        "8",
+				"HOTPLUG_MEMORY":     "16384",
+				"HOTPLUG_CPU_MAX":    "16",
+				"HOTPLUG_MEMORY_MAX": "32768",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HotplugMetadata(tt.cpu, tt.memoryMB)
+			if len(got) != len(tt.want) {
+				t.Fatalf("HotplugMetadata(%d, %d) has %d keys, want %d: %v", tt.cpu, tt.memoryMB, len(got), len(tt.want), got)
+			}
+			for k, want := range tt.want {
+				if got[k] != want {
+					t.Errorf("HotplugMetadata(%d, %d)[%q] = %q, want %q", tt.cpu, tt.memoryMB, k, got[k], want)
+				}
+			}
+		})
+	}
+}
+
 // TestBuildPortCreateOptions verifies that buildPortCreateOptions layers the
 // correct OpenStack port extensions onto the base create options:
 //   - L2-only networks must carry the {"l2-port": true} binding profile that PCD
