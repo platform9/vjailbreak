@@ -46,6 +46,10 @@ import { useRetryPrefill } from '../hooks/useRetryPrefill'
 import { useRetrySubmit } from '../hooks/useRetrySubmit'
 import { Banner } from 'src/components'
 import { RetrySourceDestinationSummary } from '../components/RetryMigration'
+import { useApplyTemplatePrefill } from '../hooks/useApplyTemplatePrefill'
+import SaveAsTemplateDialog from '../components/templates/SaveAsTemplateDialog'
+import type { SaveAsTemplateInput } from '../mock-templates/types'
+import { CUTOVER_TYPES } from '../constants'
 
 const drawerWidth = 1400
 
@@ -72,7 +76,8 @@ export default function MigrationFormDrawer({
   open,
   onClose,
   onSuccess,
-  retryConfig
+  retryConfig,
+  templatePrefill
 }: MigrationFormDrawerProps) {
   const isRetryMode = Boolean(retryConfig)
   const navigate = useNavigate()
@@ -145,16 +150,71 @@ export default function MigrationFormDrawer({
     disableTemplateSync: isRetryMode
   })
 
-  const { prefillLoading, blockingError, retryPlan, retryTemplate, retryVm, vmK8sName, sourceCluster } =
-    useRetryPrefill({
-      open,
-      retryConfig,
-      pcdData,
-      updateParams,
-      updateSelectedOptions: updateSelectedMigrationOptionsBulk,
-      form,
-      setMigrationTemplate
-    })
+  const {
+    prefillLoading,
+    blockingError,
+    retryPlan,
+    retryTemplate,
+    retryVm,
+    vmK8sName,
+    sourceCluster
+  } = useRetryPrefill({
+    open,
+    retryConfig,
+    pcdData,
+    updateParams,
+    updateSelectedOptions: updateSelectedMigrationOptionsBulk,
+    form,
+    setMigrationTemplate
+  })
+
+  // "Use template" prefill — mirrors useRetryPrefill's template → FormValues mapping,
+  // but never touches migrationTemplate/ephemeral-template state: Use Template only
+  // seeds FormValues, so the normal New Migration flow (a fresh ephemeral
+  // MigrationTemplate auto-created on cred validation) proceeds untouched.
+  useApplyTemplatePrefill({
+    open: open && !isRetryMode,
+    templatePrefill,
+    updateParams,
+    updateSelectedOptions: updateSelectedMigrationOptionsBulk
+  })
+
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
+  const canSaveAsTemplate = !isRetryMode && vmwareCredsValidated && openstackCredsValidated
+  const buildSaveTemplateInput = useCallback(
+    (fields: { displayName: string; description?: string }): SaveAsTemplateInput => ({
+      ...fields,
+      sourceVCenter:
+        vmwareCredentials?.metadata?.name || params.vmwareCreds?.existingCredName || '',
+      destination:
+        openstackCredentials?.metadata?.name || params.openstackCreds?.existingCredName || '',
+      tenantProject: openstackCredentials?.metadata?.name || '',
+      targetCluster: targetPCDClusterName || '',
+      networkMappings: params.networkMappings || [],
+      storageMappings: params.storageMappings || [],
+      dataCopyMethod: (params.dataCopyMethod || 'cold') as SaveAsTemplateInput['dataCopyMethod'],
+      cutoverOption: params.cutoverOption || CUTOVER_TYPES.IMMEDIATE,
+      vmwareCluster: params.vmwareCluster,
+      pcdCluster: params.pcdCluster,
+      osFamily: params.osFamily,
+      useGPU: params.useGPU || false
+    }),
+    [
+      vmwareCredentials,
+      openstackCredentials,
+      params.vmwareCreds,
+      params.openstackCreds,
+      params.networkMappings,
+      params.storageMappings,
+      params.dataCopyMethod,
+      params.cutoverOption,
+      params.vmwareCluster,
+      params.pcdCluster,
+      params.osFamily,
+      params.useGPU,
+      targetPCDClusterName
+    ]
+  )
 
   const [selectedFlavorId, setSelectedFlavorId] = useState('')
   useEffect(() => {
@@ -273,27 +333,27 @@ export default function MigrationFormDrawer({
     onClose,
     onSuccess,
     sessionId,
-    networkMappingRequired
+    networkMappingRequired,
+    appliedTemplateName: templatePrefill?.name
   })
 
-  const { retrySubmitting, retryError, handleEditAndRetry } =
-    useRetrySubmit({
-      retryConfig,
-      params,
-      selectedMigrationOptions,
-      retryPlan,
-      retryTemplate,
-      retryVm,
-      vmK8sName,
-      selectedFlavorId,
-      selectedPcdClusterName,
-      networkMappingRequired,
-      queryClient,
-      navigate,
-      onClose,
-      onSuccess,
-      reportError
-    })
+  const { retrySubmitting, retryError, handleEditAndRetry } = useRetrySubmit({
+    retryConfig,
+    params,
+    selectedMigrationOptions,
+    retryPlan,
+    retryTemplate,
+    retryVm,
+    vmK8sName,
+    selectedFlavorId,
+    selectedPcdClusterName,
+    networkMappingRequired,
+    queryClient,
+    navigate,
+    onClose,
+    onSuccess,
+    reportError
+  })
 
   // In retry mode the template belongs to the live MigrationPlan — the standard close
   // handler would delete it. Cancelling a retry must not modify anything.
@@ -333,221 +393,211 @@ export default function MigrationFormDrawer({
   const isSmallNav = useMediaQuery(theme.breakpoints.down('md'))
 
   return (
-    <DrawerShell
-      data-testid="migration-form-drawer"
-      open={open}
-      onClose={handleDrawerClose}
-      width={drawerWidth}
-      ModalProps={{
-        keepMounted: false,
-        style: { zIndex: 1300 }
-      }}
-      header={
-        <DrawerHeader
-          data-testid="migration-form-header"
-          closeButtonTestId="migration-form-close"
-          title={isRetryMode ? 'Retry Migration' : 'Start Migration'}
-          subtitle={
-            isRetryMode
-              ? `Review and adjust the configuration of "${retryConfig?.vmName}" before retrying`
-              : 'Configure source/destination, select VMs, and map resources before starting'
-          }
-          icon={<MigrationIcon />}
-          onClose={handleDrawerClose}
-        />
-      }
-      footer={
-        isRetryMode ? (
-          <DrawerFooter data-testid="migration-form-footer">
-            <ActionButton
-              tone="secondary"
-              onClick={handleDrawerClose}
-              data-testid="migration-form-cancel"
-            >
-              Cancel
-            </ActionButton>
-            <ActionButton
-              tone="primary"
-              onClick={handleEditAndRetry}
-              disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
-              loading={retrySubmitting}
-              data-testid="migration-form-retry"
-            >
-              Retry
-            </ActionButton>
-          </DrawerFooter>
-        ) : (
-          <DrawerFooter data-testid="migration-form-footer">
-            <ActionButton
-              tone="secondary"
-              onClick={handleClose}
-              data-testid="migration-form-cancel"
-            >
-              Cancel
-            </ActionButton>
-            <ActionButton
-              tone="primary"
-              onClick={handleSubmit}
-              disabled={submitDisabled}
-              loading={submitting}
-              data-testid="migration-form-submit"
-            >
-              Start Migration
-            </ActionButton>
-          </DrawerFooter>
-        )
-      }
-    >
-      <DesignSystemForm
-        form={form}
-        onSubmit={async () => {
-          if (isRetryMode) {
-            await handleEditAndRetry()
-            return
-          }
-          await handleSubmit()
+    <>
+      <DrawerShell
+        data-testid="migration-form-drawer"
+        open={open}
+        onClose={handleDrawerClose}
+        width={drawerWidth}
+        ModalProps={{
+          keepMounted: false,
+          style: { zIndex: 1300 }
         }}
-        keyboardSubmitProps={{
-          open,
-          onClose: handleDrawerClose,
-          isSubmitDisabled: isRetryMode
-            ? Boolean(blockingError) || prefillLoading || retrySubmitting
-            : disableSubmit || submitting
-        }}
+        header={
+          <DrawerHeader
+            data-testid="migration-form-header"
+            closeButtonTestId="migration-form-close"
+            title={isRetryMode ? 'Retry Migration' : 'Start Migration'}
+            subtitle={
+              isRetryMode
+                ? `Review and adjust the configuration of "${retryConfig?.vmName}" before retrying`
+                : 'Configure source/destination, select VMs, and map resources before starting'
+            }
+            icon={<MigrationIcon />}
+            onClose={handleDrawerClose}
+          />
+        }
+        footer={
+          isRetryMode ? (
+            <DrawerFooter data-testid="migration-form-footer">
+              <ActionButton
+                tone="secondary"
+                onClick={handleDrawerClose}
+                data-testid="migration-form-cancel"
+              >
+                Cancel
+              </ActionButton>
+              <ActionButton
+                tone="primary"
+                onClick={handleEditAndRetry}
+                disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
+                loading={retrySubmitting}
+                data-testid="migration-form-retry"
+              >
+                Retry
+              </ActionButton>
+            </DrawerFooter>
+          ) : (
+            <DrawerFooter data-testid="migration-form-footer">
+              <ActionButton
+                tone="secondary"
+                onClick={() => setSaveTemplateOpen(true)}
+                disabled={!canSaveAsTemplate}
+                sx={{ mr: 'auto' }}
+                data-testid="migration-form-save-template"
+              >
+                Save as template
+              </ActionButton>
+              <ActionButton
+                tone="secondary"
+                onClick={handleClose}
+                data-testid="migration-form-cancel"
+              >
+                Cancel
+              </ActionButton>
+              <ActionButton
+                tone="primary"
+                onClick={handleSubmit}
+                disabled={submitDisabled}
+                loading={submitting}
+                data-testid="migration-form-submit"
+              >
+                Start Migration
+              </ActionButton>
+            </DrawerFooter>
+          )
+        }
       >
-        {isRetryMode && blockingError ? (
-          <Box data-testid="retry-blocking-banner" sx={{ mb: 2 }}>
-            <Banner
-              variant="error"
-              title="This migration cannot be retried"
-              message={blockingError}
-            />
-          </Box>
-        ) : null}
-        {isRetryMode && retryError ? (
-          <Box data-testid="retry-error-banner" sx={{ mb: 2 }}>
-            <Banner variant="error" title="Retry failed" message={retryError} />
-          </Box>
-        ) : null}
-        {isRetryMode && prefillLoading ? (
-          <Box data-testid="retry-prefill-loading-banner" sx={{ mb: 2 }}>
-            <Banner variant="info" message="Loading the failed migration's configuration…" />
-          </Box>
-        ) : null}
-        <Box
-          ref={contentRootRef}
-          data-testid="migration-form-content"
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
-            gap: 3
+        <DesignSystemForm
+          form={form}
+          onSubmit={async () => {
+            if (isRetryMode) {
+              await handleEditAndRetry()
+              return
+            }
+            await handleSubmit()
+          }}
+          keyboardSubmitProps={{
+            open,
+            onClose: handleDrawerClose,
+            isSubmitDisabled: isRetryMode
+              ? Boolean(blockingError) || prefillLoading || retrySubmitting
+              : disableSubmit || submitting
           }}
         >
-          {!isSmallNav ? (
-            <SectionNav
-              data-testid="migration-form-section-nav"
-              items={sectionNavItems}
-              activeId={activeSectionId}
-              onSelect={scrollToSection}
-              dense
-              showDescriptions={false}
-            />
+          {isRetryMode && blockingError ? (
+            <Box data-testid="retry-blocking-banner" sx={{ mb: 2 }}>
+              <Banner
+                variant="error"
+                title="This migration cannot be retried"
+                message={blockingError}
+              />
+            </Box>
           ) : null}
-
-          <Box sx={{ display: 'grid', gap: 3 }}>
-            {isSmallNav ? (
-              <SurfaceCard
-                title="Steps"
-                subtitle="Jump to any section"
-                data-testid="migration-form-steps-card"
-              >
-                <NavTabs
-                  value={activeSectionId}
-                  onChange={(_e, value) => scrollToSection(value as string)}
-                  data-testid="migration-form-steps-tabs"
-                >
-                  {sectionNavItems.map((item) => (
-                    <NavTab
-                      key={item.id}
-                      value={item.id}
-                      label={item.title}
-                      description={item.description}
-                      data-testid={`migration-form-steps-tab-${item.id}`}
-                    />
-                  ))}
-                </NavTabs>
-              </SurfaceCard>
+          {isRetryMode && retryError ? (
+            <Box data-testid="retry-error-banner" sx={{ mb: 2 }}>
+              <Banner variant="error" title="Retry failed" message={retryError} />
+            </Box>
+          ) : null}
+          {isRetryMode && prefillLoading ? (
+            <Box data-testid="retry-prefill-loading-banner" sx={{ mb: 2 }}>
+              <Banner variant="info" message="Loading the failed migration's configuration…" />
+            </Box>
+          ) : null}
+          <Box
+            ref={contentRootRef}
+            data-testid="migration-form-content"
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: isSmallNav ? '1fr' : '56px 1fr',
+              gap: 3
+            }}
+          >
+            {!isSmallNav ? (
+              <SectionNav
+                data-testid="migration-form-section-nav"
+                items={sectionNavItems}
+                activeId={activeSectionId}
+                onSelect={scrollToSection}
+                dense
+                showDescriptions={false}
+              />
             ) : null}
 
-            {/* Step 1 */}
-            <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
-              <SurfaceCard
-                variant="section"
-                title="Source And Destination"
-                subtitle={
-                  isRetryMode
-                    ? 'Locked to the failed migration’s environments'
-                    : 'Choose where you migrate from and where you migrate to'
-                }
-                data-testid="migration-form-step1-card"
-              >
-                {isRetryMode ? (
-                  <RetrySourceDestinationSummary
-                    vmwareCredName={params.vmwareCreds?.existingCredName}
-                    sourceCluster={sourceCluster}
-                    openstackCredName={params.openstackCreds?.existingCredName}
-                    pcdClusters={pcdData}
-                    selectedPcdClusterId={params.pcdCluster || ''}
-                    onPcdClusterChange={handleRetryClusterChange}
-                    disabled={prefillLoading || retrySubmitting}
-                  />
-                ) : (
-                  <SourceDestinationClusterSelection
-                    onChange={getParamsUpdater}
-                    errors={fieldErrors}
-                    vmwareCluster={params.vmwareCluster}
-                    pcdCluster={params.pcdCluster}
-                    showHeader={false}
-                  />
-                )}
-              </SurfaceCard>
-            </Box>
+            <Box sx={{ display: 'grid', gap: 3 }}>
+              {isSmallNav ? (
+                <SurfaceCard
+                  title="Steps"
+                  subtitle="Jump to any section"
+                  data-testid="migration-form-steps-card"
+                >
+                  <NavTabs
+                    value={activeSectionId}
+                    onChange={(_e, value) => scrollToSection(value as string)}
+                    data-testid="migration-form-steps-tabs"
+                  >
+                    {sectionNavItems.map((item) => (
+                      <NavTab
+                        key={item.id}
+                        value={item.id}
+                        label={item.title}
+                        description={item.description}
+                        data-testid={`migration-form-steps-tab-${item.id}`}
+                      />
+                    ))}
+                  </NavTabs>
+                </SurfaceCard>
+              ) : null}
 
-            <Divider />
+              {/* Step 1 */}
+              <Box ref={section1Ref} data-testid="migration-form-step-source-destination">
+                <SurfaceCard
+                  variant="section"
+                  title="Source And Destination"
+                  subtitle={
+                    isRetryMode
+                      ? 'Locked to the failed migration’s environments'
+                      : 'Choose where you migrate from and where you migrate to'
+                  }
+                  data-testid="migration-form-step1-card"
+                >
+                  {isRetryMode ? (
+                    <RetrySourceDestinationSummary
+                      vmwareCredName={params.vmwareCreds?.existingCredName}
+                      sourceCluster={sourceCluster}
+                      openstackCredName={params.openstackCreds?.existingCredName}
+                      pcdClusters={pcdData}
+                      selectedPcdClusterId={params.pcdCluster || ''}
+                      onPcdClusterChange={handleRetryClusterChange}
+                      disabled={prefillLoading || retrySubmitting}
+                    />
+                  ) : (
+                    <SourceDestinationClusterSelection
+                      onChange={getParamsUpdater}
+                      errors={fieldErrors}
+                      vmwareCluster={params.vmwareCluster}
+                      pcdCluster={params.pcdCluster}
+                      showHeader={false}
+                    />
+                  )}
+                </SurfaceCard>
+              </Box>
 
-            {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
-            <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
-              <SurfaceCard
-                variant="section"
-                title={isRetryMode ? 'Virtual Machine' : 'Select VMs'}
-                subtitle={
-                  isRetryMode
-                    ? 'The failed VM is locked for this retry'
-                    : 'Pick the virtual machines you want to migrate'
-                }
-                data-testid="migration-form-step2-card"
-              >
-                {isRetryMode ? (
-                  <VmsSelectionStep
-                    mode="standard"
-                    onChange={getParamsUpdater}
-                    error={fieldErrors['vms']}
-                    open={open}
-                    vmwareCredsValidated={vmwareCredsValidated}
-                    openstackCredsValidated={openstackCredsValidated}
-                    sessionId={sessionId}
-                    openstackFlavors={openstackCredentials?.spec?.flavors}
-                    vmwareCredName={params.vmwareCreds?.existingCredName}
-                    openstackCredName={params.openstackCreds?.existingCredName}
-                    openstackCredentials={openstackCredentials}
-                    vmwareCluster={params.vmwareCluster}
-                    useGPU={params.useGPU}
-                    showHeader={false}
-                    retryVmName={retryConfig?.vmName}
-                    retryPrefillVm={params.vms?.[0]}
-                  />
-                ) : (
-                  <>
+              <Divider />
+
+              {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
+              <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
+                <SurfaceCard
+                  variant="section"
+                  title={isRetryMode ? 'Virtual Machine' : 'Select VMs'}
+                  subtitle={
+                    isRetryMode
+                      ? 'The failed VM is locked for this retry'
+                      : 'Pick the virtual machines you want to migrate'
+                  }
+                  data-testid="migration-form-step2-card"
+                >
+                  {isRetryMode ? (
                     <VmsSelectionStep
                       mode="standard"
                       onChange={getParamsUpdater}
@@ -563,179 +613,208 @@ export default function MigrationFormDrawer({
                       vmwareCluster={params.vmwareCluster}
                       useGPU={params.useGPU}
                       showHeader={false}
+                      retryVmName={retryConfig?.vmName}
+                      retryPrefillVm={params.vms?.[0]}
                     />
-                    {vmValidation.hasError && (
-                      <Alert severity="warning">{vmValidation.errorMessage}</Alert>
-                    )}
-                    {rdmValidation.hasConfigError && (
-                      <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
-                    )}
-                  </>
-                )}
-              </SurfaceCard>
-            </Box>
-            <Divider />
+                  ) : (
+                    <>
+                      <VmsSelectionStep
+                        mode="standard"
+                        onChange={getParamsUpdater}
+                        error={fieldErrors['vms']}
+                        open={open}
+                        vmwareCredsValidated={vmwareCredsValidated}
+                        openstackCredsValidated={openstackCredsValidated}
+                        sessionId={sessionId}
+                        openstackFlavors={openstackCredentials?.spec?.flavors}
+                        vmwareCredName={params.vmwareCreds?.existingCredName}
+                        openstackCredName={params.openstackCreds?.existingCredName}
+                        openstackCredentials={openstackCredentials}
+                        vmwareCluster={params.vmwareCluster}
+                        useGPU={params.useGPU}
+                        showHeader={false}
+                      />
+                      {vmValidation.hasError && (
+                        <Alert severity="warning">{vmValidation.errorMessage}</Alert>
+                      )}
+                      {rdmValidation.hasConfigError && (
+                        <Alert severity="error">{rdmValidation.configErrorMessage}</Alert>
+                      )}
+                    </>
+                  )}
+                </SurfaceCard>
+              </Box>
+              <Divider />
 
-            {/* Step 3 */}
-            <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
-              <SurfaceCard
-                variant="section"
-                title="Map Networks And Storage"
-                subtitle="Ensure all VMware networks and datastores have PCD targets"
-                data-testid="migration-form-step3-card"
+              {/* Step 3 */}
+              <Box ref={section3Ref} data-testid="migration-form-step-map-resources">
+                <SurfaceCard
+                  variant="section"
+                  title="Map Networks And Storage"
+                  subtitle="Ensure all VMware networks and datastores have PCD targets"
+                  data-testid="migration-form-step3-card"
+                >
+                  <NetworkAndStorageMappingStep
+                    vmwareNetworks={availableVmwareNetworks}
+                    vmWareStorage={availableVmwareDatastores}
+                    openstackNetworks={sortedOpenstackNetworks}
+                    openstackStorage={sortedOpenstackVolumeTypes}
+                    params={params}
+                    onChange={getParamsUpdater}
+                    networkMappingError={fieldErrors['networksMapping']}
+                    storageMappingError={fieldErrors['storageMapping']}
+                    showHeader={false}
+                    subnetWarnings={subnetWarnings}
+                  />
+                </SurfaceCard>
+              </Box>
+              <Divider />
+
+              {/* Step 4 */}
+              <Box ref={section4Ref} data-testid="migration-form-step-security">
+                <SurfaceCard
+                  variant="section"
+                  title="Security groups, server group & image profiles"
+                  subtitle="Optional placement, security settings, and boot volume metadata"
+                  data-testid="migration-form-step4-card"
+                >
+                  <SecurityGroupAndServerGroupStep
+                    params={params}
+                    onChange={getParamsUpdater}
+                    openstackCredentials={openstackCredentials}
+                    openstackNetworks={sortedOpenstackNetworks}
+                    stepNumber="4"
+                    showHeader={false}
+                  />
+                </SurfaceCard>
+              </Box>
+              <Divider />
+
+              {/* Step 5 */}
+              <Box
+                ref={section5Ref}
+                data-testid="migration-form-step-options"
+                onChangeCapture={() => markTouched('options')}
+                onInputCapture={() => markTouched('options')}
+                onClickCapture={() => markTouched('options')}
+                onKeyDownCapture={() => markTouched('options')}
               >
-                <NetworkAndStorageMappingStep
-                  vmwareNetworks={availableVmwareNetworks}
-                  vmWareStorage={availableVmwareDatastores}
-                  openstackNetworks={sortedOpenstackNetworks}
-                  openstackStorage={sortedOpenstackVolumeTypes}
-                  params={params}
-                  onChange={getParamsUpdater}
-                  networkMappingError={fieldErrors['networksMapping']}
-                  storageMappingError={fieldErrors['storageMapping']}
-                  showHeader={false}
-                  subnetWarnings={subnetWarnings}
-                />
-              </SurfaceCard>
-            </Box>
-            <Divider />
+                <SurfaceCard
+                  variant="section"
+                  title="Migration Options"
+                  subtitle="Optional scheduling, cutover behavior, and advanced settings"
+                  data-testid="migration-form-step5-card"
+                >
+                  <MigrationOptions
+                    params={params}
+                    onChange={getParamsUpdater}
+                    openstackCredentials={openstackCredentials}
+                    selectedMigrationOptions={selectedMigrationOptions}
+                    updateSelectedMigrationOptions={updateSelectedMigrationOptions}
+                    errors={fieldErrors}
+                    getErrorsUpdater={getFieldErrorsUpdater}
+                    stepNumber="5"
+                    showHeader={false}
+                    hasSubnetMismatch={hasSubnetMismatch}
+                  />
+                </SurfaceCard>
+              </Box>
+              {!isRetryMode && <Divider />}
 
-            {/* Step 4 */}
-            <Box ref={section4Ref} data-testid="migration-form-step-security">
-              <SurfaceCard
-                variant="section"
-                title="Security groups, server group & image profiles"
-                subtitle="Optional placement, security settings, and boot volume metadata"
-                data-testid="migration-form-step4-card"
-              >
-                <SecurityGroupAndServerGroupStep
-                  params={params}
-                  onChange={getParamsUpdater}
-                  openstackCredentials={openstackCredentials}
-                  openstackNetworks={sortedOpenstackNetworks}
-                  stepNumber="4"
-                  showHeader={false}
-                />
-              </SurfaceCard>
-            </Box>
-            <Divider />
+              {!isRetryMode && (
+                <Box ref={reviewRef} data-testid="migration-form-step-review">
+                  <SurfaceCard
+                    variant="section"
+                    title="Preview"
+                    subtitle="Verify your selections before starting the migration"
+                    data-testid="migration-form-step6-card"
+                  >
+                    <Box sx={{ display: 'grid', gap: 1.5 }}>
+                      <Typography variant="subtitle2">Summary</Typography>
+                      <Divider />
 
-            {/* Step 5 */}
-            <Box
-              ref={section5Ref}
-              data-testid="migration-form-step-options"
-              onChangeCapture={() => markTouched('options')}
-              onInputCapture={() => markTouched('options')}
-              onClickCapture={() => markTouched('options')}
-              onKeyDownCapture={() => markTouched('options')}
-            >
-              <SurfaceCard
-                variant="section"
-                title="Migration Options"
-                subtitle="Optional scheduling, cutover behavior, and advanced settings"
-                data-testid="migration-form-step5-card"
-              >
-                <MigrationOptions
-                  params={params}
-                  onChange={getParamsUpdater}
-                  openstackCredentials={openstackCredentials}
-                  selectedMigrationOptions={selectedMigrationOptions}
-                  updateSelectedMigrationOptions={updateSelectedMigrationOptions}
-                  errors={fieldErrors}
-                  getErrorsUpdater={getFieldErrorsUpdater}
-                  stepNumber="5"
-                  showHeader={false}
-                  hasSubnetMismatch={hasSubnetMismatch}
-                />
-              </SurfaceCard>
-            </Box>
-            {!isRetryMode && <Divider />}
+                      <Box sx={{ display: 'grid', gap: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Source
+                          </Typography>
+                          <Typography variant="body2">{params.vmwareCluster || '—'}</Typography>
+                        </Box>
 
-            {!isRetryMode && <Box ref={reviewRef} data-testid="migration-form-step-review">
-              <SurfaceCard
-                variant="section"
-                title="Preview"
-                subtitle="Verify your selections before starting the migration"
-                data-testid="migration-form-step6-card"
-              >
-                <Box sx={{ display: 'grid', gap: 1.5 }}>
-                  <Typography variant="subtitle2">Summary</Typography>
-                  <Divider />
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Destination
+                          </Typography>
+                          <Typography variant="body2">
+                            {targetPCDClusterName || params.pcdCluster || '—'}
+                          </Typography>
+                        </Box>
 
-                  <Box sx={{ display: 'grid', gap: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Source
-                      </Typography>
-                      <Typography variant="body2">{params.vmwareCluster || '—'}</Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            VMs selected
+                          </Typography>
+                          <Typography variant="body2">{params.vms?.length || 0}</Typography>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Network mappings
+                          </Typography>
+                          <Typography variant="body2">
+                            {availableVmwareNetworks.length === 0
+                              ? '—'
+                              : unmappedNetworksCount === 0
+                                ? 'All mapped'
+                                : `${unmappedNetworksCount} unmapped`}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Storage mappings
+                          </Typography>
+                          <Typography variant="body2">
+                            {availableVmwareDatastores.length === 0
+                              ? '—'
+                              : unmappedStorageCount === 0
+                                ? 'All mapped'
+                                : `${unmappedStorageCount} unmapped`}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Security groups
+                          </Typography>
+                          <Typography variant="body2">
+                            {(params.securityGroups ?? []).length === 0
+                              ? '—'
+                              : `${(params.securityGroups ?? []).length} selected`}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Server group
+                          </Typography>
+                          <Typography variant="body2">{params.serverGroup || '—'}</Typography>
+                        </Box>
+                      </Box>
                     </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Destination
-                      </Typography>
-                      <Typography variant="body2">
-                        {targetPCDClusterName || params.pcdCluster || '—'}
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        VMs selected
-                      </Typography>
-                      <Typography variant="body2">{params.vms?.length || 0}</Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Network mappings
-                      </Typography>
-                      <Typography variant="body2">
-                        {availableVmwareNetworks.length === 0
-                          ? '—'
-                          : unmappedNetworksCount === 0
-                            ? 'All mapped'
-                            : `${unmappedNetworksCount} unmapped`}
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Storage mappings
-                      </Typography>
-                      <Typography variant="body2">
-                        {availableVmwareDatastores.length === 0
-                          ? '—'
-                          : unmappedStorageCount === 0
-                            ? 'All mapped'
-                            : `${unmappedStorageCount} unmapped`}
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Security groups
-                      </Typography>
-                      <Typography variant="body2">
-                        {(params.securityGroups ?? []).length === 0
-                          ? '—'
-                          : `${(params.securityGroups ?? []).length} selected`}
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Server group
-                      </Typography>
-                      <Typography variant="body2">{params.serverGroup || '—'}</Typography>
-                    </Box>
-                  </Box>
+                  </SurfaceCard>
                 </Box>
-              </SurfaceCard>
-            </Box>}
+              )}
+            </Box>
           </Box>
-        </Box>
-      </DesignSystemForm>
-    </DrawerShell>
+        </DesignSystemForm>
+      </DrawerShell>
+
+      <SaveAsTemplateDialog
+        open={saveTemplateOpen}
+        onClose={() => setSaveTemplateOpen(false)}
+        buildTemplateInput={buildSaveTemplateInput}
+      />
+    </>
   )
 }

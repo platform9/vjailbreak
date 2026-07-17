@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Box, Tab, Tabs } from '@mui/material'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
@@ -7,11 +8,24 @@ import { Migration } from '../api/migrations'
 import MigrationsTable from '../components/MigrationsTable'
 import DeleteMigrationDialog from '../components/DeleteMigrationDialog'
 import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
+import { useMigrationTemplatesQuery } from '../hooks/useMigrationTemplatesQuery'
+import { useMigrationFormActions } from '../context/MigrationFormContext'
+import TemplatesTabPanel from '../components/templates/TemplatesTabPanel'
+import type { SavedTemplate } from '../mock-templates/types'
+
+type MigrationsPageTab = 'migrations' | 'templates'
 
 export default function MigrationsPage() {
+  const [activeTab, setActiveTab] = useState<MigrationsPageTab>('migrations')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [openSnackbar, setOpenSnackbar] = useState(false)
+  const { data: templates = [] } = useMigrationTemplatesQuery()
+  const { openMigrationForm } = useMigrationFormActions()
+
+  const handleUseTemplate = (template: SavedTemplate) => {
+    openMigrationForm('standard', undefined, template)
+  }
 
   const {
     data: migrations,
@@ -62,13 +76,32 @@ export default function MigrationsPage() {
 
   return (
     <>
-      <MigrationsTable
-        refetchMigrations={refetchMigrations}
-        migrations={migrations || []}
-        onDeleteMigration={handleDeleteClick}
-        onDeleteSelected={handleDeleteSelected}
-        loading={isMigrationsLoading}
-      />
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_event, value: MigrationsPageTab) => setActiveTab(value)}
+          data-testid="migrations-page-tabs"
+        >
+          <Tab label="Migrations" value="migrations" data-testid="migrations-page-tab-migrations" />
+          <Tab
+            label={`Templates ${templates.length}`}
+            value="templates"
+            data-testid="migrations-page-tab-templates"
+          />
+        </Tabs>
+      </Box>
+
+      {activeTab === 'migrations' ? (
+        <MigrationsTable
+          refetchMigrations={refetchMigrations}
+          migrations={migrations || []}
+          onDeleteMigration={handleDeleteClick}
+          onDeleteSelected={handleDeleteSelected}
+          loading={isMigrationsLoading}
+        />
+      ) : (
+        <TemplatesTabPanel onUseTemplate={handleUseTemplate} />
+      )}
 
       <DeleteMigrationDialog
         open={deleteDialogOpen}

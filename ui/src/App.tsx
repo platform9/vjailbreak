@@ -23,6 +23,7 @@ import {
   MigrationFormContext,
   RetryMigrationConfig
 } from './features/migration/context/MigrationFormContext'
+import type { SavedTemplate } from './features/migration/mock-templates/types'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'
@@ -125,6 +126,7 @@ function App() {
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
   const [retryConfig, setRetryConfig] = useState<RetryMigrationConfig | undefined>(undefined)
+  const [templatePrefill, setTemplatePrefill] = useState<SavedTemplate | undefined>(undefined)
   const [joyrideRun, setJoyrideRun] = useState(false)
   const [joyrideSnoozed, setJoyrideSnoozed] = useState(false)
   const [joyrideReady, setJoyrideReady] = useState(false)
@@ -366,10 +368,16 @@ function App() {
     }
   }
 
-  const handleOpenMigrationForm = (open, type = 'standard', retry?: RetryMigrationConfig) => {
+  const handleOpenMigrationForm = (
+    open,
+    type = 'standard',
+    retry?: RetryMigrationConfig,
+    template?: SavedTemplate
+  ) => {
     setOpenMigrationForm(open)
     setMigrationType(type)
     setRetryConfig(retry)
+    setTemplatePrefill(template)
   }
 
   const handleSuccess = (message: string) => {
@@ -415,7 +423,8 @@ function App() {
       <AppBar hide={hideAppbar} />
       <MigrationFormContext.Provider
         value={{
-          openMigrationForm: (type, retry) => handleOpenMigrationForm(true, type, retry)
+          openMigrationForm: (type, retry, template) =>
+            handleOpenMigrationForm(true, type, retry, template)
         }}
       >
         <AppContent ref={appContentRef}>
@@ -425,9 +434,11 @@ function App() {
               onClose={() => {
                 setOpenMigrationForm(false)
                 setRetryConfig(undefined)
+                setTemplatePrefill(undefined)
               }}
               onSuccess={handleSuccess}
               retryConfig={retryConfig}
+              templatePrefill={templatePrefill}
             />
           )}
           {openMigrationForm && migrationType === 'rolling' && (

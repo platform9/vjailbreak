@@ -25,6 +25,8 @@ import { VMWARE_MACHINES_BASE_KEY } from 'src/hooks/api/useVMwareMachinesQuery'
 import { getRegionNameForOpenstackRef } from 'src/utils/regionNameResolver'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { CUTOVER_TYPES } from '../constants'
+import { markSavedTemplateUsed } from '../mock-templates/mockStore'
+import { MIGRATION_TEMPLATES_QUERY_KEY } from './useMigrationTemplatesQuery'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
 
 interface UseMigrationFormSubmitParams {
@@ -37,7 +39,10 @@ interface UseMigrationFormSubmitParams {
   setVmwareCredentials: React.Dispatch<React.SetStateAction<VMwareCreds | undefined>>
   setOpenstackCredentials: React.Dispatch<React.SetStateAction<OpenstackCreds | undefined>>
   getFieldErrorsUpdater: (key: string) => (value: string) => void
-  reportError: (error: Error, options?: { context?: string; metadata?: Record<string, unknown> }) => void
+  reportError: (
+    error: Error,
+    options?: { context?: string; metadata?: Record<string, unknown> }
+  ) => void
   track: (event: string, properties?: Record<string, unknown>) => void
   queryClient: QueryClient
   navigate: NavigateFunction
@@ -45,6 +50,9 @@ interface UseMigrationFormSubmitParams {
   onSuccess?: (message: string) => void
   sessionId: string
   networkMappingRequired: boolean
+  // Name of the saved template this migration was prefilled from (via "Use template"),
+  // if any. Used only to bump that template's usage counters on a successful submit.
+  appliedTemplateName?: string
 }
 
 interface UseMigrationFormSubmitResult {
@@ -70,7 +78,8 @@ export function useMigrationFormSubmit({
   onClose,
   onSuccess,
   sessionId,
-  networkMappingRequired
+  networkMappingRequired,
+  appliedTemplateName
 }: UseMigrationFormSubmitParams): UseMigrationFormSubmitResult {
   const [submitting, setSubmitting] = useState(false)
   const [, setError] = useState<{ title: string; message: string } | null>(null)
@@ -469,6 +478,16 @@ export function useMigrationFormSubmit({
 
     await createMigrationPlan(updatedMigrationTemplate)
 
+    if (appliedTemplateName) {
+      // Best-effort — a failure here must never fail the migration submission itself.
+      try {
+        await markSavedTemplateUsed(appliedTemplateName)
+        queryClient.invalidateQueries({ queryKey: MIGRATION_TEMPLATES_QUERY_KEY })
+      } catch (err) {
+        console.error('Error updating template usage stats', err)
+      }
+    }
+
     setSubmitting(false)
     queryClient.invalidateQueries({ queryKey: MIGRATIONS_QUERY_KEY })
 
@@ -490,7 +509,8 @@ export function useMigrationFormSubmit({
     queryClient,
     onClose,
     onSuccess,
-    navigate
+    navigate,
+    appliedTemplateName
   ])
 
   const handleClose = useCallback(async () => {

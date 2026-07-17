@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { SavedTemplate } from '../mock-templates/types'
 
 type MigrationFormType = 'standard' | 'rolling'
 
@@ -10,7 +11,11 @@ export interface RetryMigrationConfig {
 }
 
 export interface MigrationFormContextValue {
-  openMigrationForm: (type: MigrationFormType, retryConfig?: RetryMigrationConfig) => void
+  openMigrationForm: (
+    type: MigrationFormType,
+    retryConfig?: RetryMigrationConfig,
+    templatePrefill?: SavedTemplate
+  ) => void
 }
 
 export const MigrationFormContext = createContext<MigrationFormContextValue | undefined>(undefined)

@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
 import type { RetryMigrationConfig } from './context/MigrationFormContext'
+import type { SavedTemplate } from './mock-templates/types'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'
@@ -110,6 +111,7 @@ export interface MigrationFormDrawerProps {
   reloadMigrations?: () => void
   onSuccess?: (message: string) => void
   retryConfig?: RetryMigrationConfig
+  templatePrefill?: SavedTemplate
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +369,9 @@ declare module '@mui/x-data-grid' {
     onBulkRetry: () => void
     numEligibleForRetry: number
     isBulkRetryLoading: boolean
-    refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
+    refetchMigrations: (
+      options?: RefetchOptions
+    ) => Promise<QueryObserverResult<Migration[], Error>>
     onStatusFilterChange: (filter: string) => void
     currentStatusFilter: string
     onDateFilterChange: (filter: string) => void
