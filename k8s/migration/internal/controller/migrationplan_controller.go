@@ -1529,6 +1529,10 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	virtiodrivers string,
 	openstacknws, openstackports, openstackvolumetypes []string,
 ) map[string]string {
+	removeVMwareTools := true
+	if migrationplan.Spec.AdvancedOptions.RemoveVMwareTools != nil {
+		removeVMwareTools = *migrationplan.Spec.AdvancedOptions.RemoveVMwareTools
+	}
 	return map[string]string{
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
@@ -1552,7 +1556,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 		"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
 		"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
-		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
+		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(removeVMwareTools),
 		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
 	}

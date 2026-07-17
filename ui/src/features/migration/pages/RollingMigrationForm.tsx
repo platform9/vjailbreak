@@ -143,7 +143,7 @@ export default function RollingMigrationFormDrawer({
   const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
 
   // Migration Options state
-  const { params, getParamsUpdater, updateParams } = useParams<RollingFormParams>({})
+  const { params, getParamsUpdater, updateParams } = useParams<RollingFormParams>({ removeVMwareTools: true })
 
   const { data: settingsConfigMap } = useSettingsConfigMapQuery()
   const networkPersistenceSeedRef = useRef(false)

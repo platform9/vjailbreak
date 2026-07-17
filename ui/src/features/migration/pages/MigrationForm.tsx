@@ -67,7 +67,7 @@ const defaultMigrationOptions = {
   }
 }
 
-const defaultValues: Partial<FormValues> = {}
+const defaultValues: Partial<FormValues> = { removeVMwareTools: true }
 
 export default function MigrationFormDrawer({
   open,
