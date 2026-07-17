@@ -121,7 +121,7 @@ type MigrationSpec struct {
 
 	// PreserveSourceTags indicates whether the source VM's vSphere tags and custom
 	// attributes are copied to the migrated VM as instance metadata.
-	// +optional
+	// +kubebuilder:default:=false
 	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
 }
 
