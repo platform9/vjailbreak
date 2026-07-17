@@ -354,10 +354,10 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 	return nil
 }
 
-func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) error {
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
 	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
 	if err != nil {
-		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
+		return "", errors.Wrap(err, "failed to get vJailbreak instance UUID")
 	}
 
 	var bootDisk *vm.VMDisk
@@ -368,34 +368,34 @@ func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo
 		}
 	}
 	if bootDisk == nil || bootDisk.OpenstackVol == nil {
-		return fmt.Errorf("no boot volume found")
+		return "", fmt.Errorf("no boot volume found")
 	}
 
 	volume, err := migobj.Openstackclients.GetVolume(ctx, bootDisk.OpenstackVol.ID)
 	if err != nil {
-		return errors.Wrap(err, "failed to get boot volume")
+		return "", errors.Wrap(err, "failed to get boot volume")
 	}
 
 	if len(volume.Attachments) == 0 {
-		return fmt.Errorf("boot volume is not attached to any server")
+		return "", fmt.Errorf("boot volume is not attached to any server")
 	}
 
 	attachedServerID := volume.Attachments[0].ServerID
 	if attachedServerID == vjailbreakUUID {
-		return fmt.Errorf("boot volume is still attached to vJailbreak VM")
+		return "", fmt.Errorf("boot volume is still attached to vJailbreak VM")
 	}
 
 	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
 	if err != nil {
-		return errors.Wrap(err, "failed to get target VM status")
+		return "", errors.Wrap(err, "failed to get target VM status")
 	}
 
 	if strings.ToUpper(status) != "ACTIVE" {
-		return fmt.Errorf("target VM %s is in %s state", attachedServerID, status)
+		return "", fmt.Errorf("target VM %s is in %s state", attachedServerID, status)
 	}
 
 	migobj.logMessage(fmt.Sprintf("Boot volume attached to active target VM %s", attachedServerID))
-	return nil
+	return attachedServerID, nil
 }
 
 func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
@@ -2231,8 +2231,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
 	if err != nil {
-		if recoveryErr := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo); recoveryErr == nil {
-			migobj.logMessage(fmt.Sprintf("VM created despite CreateTargetInstance error (%v), skipping cleanup", err))
+		if serverID, recoveryErr := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo); recoveryErr == nil {
+			utils.PrintLog(fmt.Sprintf("VM created despite CreateTargetInstance error (%v), skipping cleanup", err))
+			migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", serverID))
 		} else {
 			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
@@ -2243,7 +2244,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 	}
 
 	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
 	}
 
 	return nil
