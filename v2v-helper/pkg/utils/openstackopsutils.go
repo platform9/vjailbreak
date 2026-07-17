@@ -909,6 +909,17 @@ func IsHotplugFlavor(flavor *flavors.Flavor) bool {
 	return flavor != nil && flavor.VCPUs == 0 && flavor.RAM == 0
 }
 
+// HotplugMetadata builds the server metadata for hotplug (flavorless)
+// provisioning.
+func HotplugMetadata(cpu, memoryMB int32) map[string]string {
+	return map[string]string{
+		constants.HotplugCPUKey:       fmt.Sprintf("%d", cpu),
+		constants.HotplugMemoryKey:    fmt.Sprintf("%d", memoryMB),
+		constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", 2*cpu),
+		constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", 2*memoryMB),
+	}
+}
+
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
@@ -961,16 +972,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			vminfo.Name,
 		))
 	}
-	if IsHotplugFlavor(flavor) {
-		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
-		if serverCreateOpts.Metadata == nil {
-			serverCreateOpts.Metadata = map[string]string{}
-		}
-		serverCreateOpts.Metadata[constants.HotplugCPUKey] = fmt.Sprintf("%d", vminfo.CPU)
-		serverCreateOpts.Metadata[constants.HotplugMemoryKey] = fmt.Sprintf("%d", vminfo.Memory)
-		serverCreateOpts.Metadata[constants.HotplugCPUMaxKey] = fmt.Sprintf("%d", vminfo.CPU)
-		serverCreateOpts.Metadata[constants.HotplugMemoryMaxKey] = fmt.Sprintf("%d", vminfo.Memory)
-	}
+  if IsHotplugFlavor(flavor) {
+      PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
+      if serverCreateOpts.Metadata == nil {
+        serverCreateOpts.Metadata = map[string]string{}
+      }
+      for key, value := range HotplugMetadata(vminfo.CPU, vminfo.Memory) {
+        serverCreateOpts.Metadata[key] = value
+      }
+    }
 
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name

@@ -4995,4 +4995,37 @@ subjects:
 - kind: ServiceAccount
   name: ui-manager-sa
   namespace: migration-system
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vjailbreak-ai-sa
+  namespace: migration-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vjailbreak-ai-data
+  namespace: migration-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ai
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
 ---

@@ -7,11 +7,14 @@ import {
   Switch,
   CircularProgress,
   Alert,
+  Chip,
   Tooltip,
   FormControl,
   MenuItem,
   Select,
-  SelectChangeEvent
+  SelectChangeEvent,
+  Tabs,
+  Tab
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
@@ -36,6 +39,8 @@ export interface BaseLogsDrawerProps {
   /** Custom download handler. Receives filteredLogs. If omitted, downloads filteredLogs as plain text. */
   onDownload?: (filteredLogs: string[]) => Promise<void>
   'data-testid'?: string
+  /** When provided, adds an "AI Analysis" tab alongside the Logs tab. */
+  aiTabContent?: React.ReactNode
 }
 
 export default function BaseLogsDrawer({
@@ -50,7 +55,8 @@ export default function BaseLogsDrawer({
   onPausedChange,
   onReconnect,
   onDownload,
-  'data-testid': dataTestId
+  'data-testid': dataTestId,
+  aiTabContent
 }: BaseLogsDrawerProps) {
   const [follow, setFollow] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -58,6 +64,7 @@ export default function BaseLogsDrawer({
   const [copySuccess, setCopySuccess] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'logs' | 'ai'>('logs')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsLengthRef = useRef(0)
 
@@ -71,6 +78,10 @@ export default function BaseLogsDrawer({
       }
     }
   }, [logs.length, follow])
+
+  useEffect(() => {
+    if (!open) setActiveTab('logs')
+  }, [open])
 
   const handleFollowToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked
@@ -181,6 +192,29 @@ export default function BaseLogsDrawer({
         data-testid="logs-drawer-body"
         sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
       >
+        {aiTabContent !== undefined && (
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}
+          >
+            <Tab label="Logs" value="logs" />
+            <Tab
+              value="ai"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  🤖 AI Analysis
+                  <Chip label="Experimental" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />
+                </Box>
+              }
+            />
+          </Tabs>
+        )}
+
+        {activeTab === 'ai' && aiTabContent}
+
+        {(activeTab === 'logs' || aiTabContent === undefined) && (
+          <>
         <Box
           sx={{
             position: 'sticky',
@@ -361,6 +395,8 @@ export default function BaseLogsDrawer({
             ))}
             <div ref={logsEndRef} />
           </Box>
+        )}
+          </>
         )}
       </Box>
     </DrawerShell>

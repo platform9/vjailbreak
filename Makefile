@@ -25,6 +25,7 @@ export UI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ui:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/v2v-helper:${TAG}
 export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
+export AI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ai:${TAG}
 export RELEASE_VERSION ?= $(VERSION)
 export KUBECONFIG ?= ~/.kube/config
 export CONTAINER_TOOL ?= docker
@@ -67,10 +68,15 @@ generate-manifests: setup-hooks vjail-controller ui
 	cp image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 	cp deploy/volumeimageprofile-defaults.yaml image_builder/configs/volumeimageprofile-defaults.yaml
+	envsubst < vjailbreak-ai/deploy/vjailbreak-ai.yaml > image_builder/deploy/08vjailbreak-ai.yaml
 	
 .PHONY: build-vpwned
 build-vpwned: setup-hooks
 	make -C pkg/vpwned docker-build
+
+.PHONY: vjailbreak-ai
+vjailbreak-ai: setup-hooks
+	docker build --platform linux/amd64 -t $(AI_IMG) vjailbreak-ai/
 
 build-installer: setup-hooks
 	make -C k8s/migration/ build-installer 
