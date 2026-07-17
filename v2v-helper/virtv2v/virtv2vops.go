@@ -610,7 +610,8 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 				continue
 			}
 			if len(gn.DNS) > 0 {
-				macToDNS[gn.MAC] = gn.DNS
+				// ipPerMac keys are canonical lowercase; match that case
+				macToDNS[strings.ToLower(gn.MAC)] = gn.DNS
 			}
 		}
 	}
@@ -825,7 +826,8 @@ func AddUdevRules(disks []vm.VMDisk, diskPath string, interfaces []string, macs 
 	// Create the udev rules content
 	var udevRules strings.Builder
 	for i, iface := range interfaces {
-		udevRules.WriteString(fmt.Sprintf("SUBSYSTEM==\"net\", ACTION==\"add\", ATTR{address}==\"%s\", NAME=\"%s\"\n", macs[i], iface))
+		// udev ATTR{address} matches sysfs, which is always lowercase
+		udevRules.WriteString(fmt.Sprintf("SUBSYSTEM==\"net\", ACTION==\"add\", ATTR{address}==\"%s\", NAME=\"%s\"\n", vm.CanonicalMAC(macs[i]), iface))
 		log.Printf("Adding udev rule: %s", udevRules.String())
 	}
 

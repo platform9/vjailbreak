@@ -636,7 +636,8 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 		return nil, err
 	}
 	for _, port := range portList {
-		if port.MACAddress == mac {
+		// Neutron stores MACs lowercase; compare case-insensitively
+		if strings.EqualFold(port.MACAddress, mac) {
 			if port.DeviceID != "" {
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
 			}
