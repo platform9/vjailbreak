@@ -972,15 +972,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			vminfo.Name,
 		))
 	}
-  if IsHotplugFlavor(flavor) {
-      PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
-      if serverCreateOpts.Metadata == nil {
-        serverCreateOpts.Metadata = map[string]string{}
-      }
-      for key, value := range HotplugMetadata(vminfo.CPU, vminfo.Memory) {
-        serverCreateOpts.Metadata[key] = value
-      }
-    }
+	if IsHotplugFlavor(flavor) {
+		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
+		if serverCreateOpts.Metadata == nil {
+			serverCreateOpts.Metadata = map[string]string{}
+		}
+		for key, value := range HotplugMetadata(vminfo.CPU, vminfo.Memory) {
+			serverCreateOpts.Metadata[key] = value
+		}
+	}
 
 	if availabilityZone != "" && !strings.Contains(availabilityZone, constants.PCDClusterNameNoCluster) {
 		// for PCD, this will be set to cluster name
