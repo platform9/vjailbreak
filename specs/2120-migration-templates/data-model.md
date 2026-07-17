@@ -16,8 +16,6 @@ No new CRD is introduced. The existing `MigrationTemplate` type gains new `Spec`
 | `displayName` | string | required when `saved=true` | User-facing name shown on cards/detail drawer. Empty for ephemeral templates. |
 | `description` | string | optional | Free-text, shown on cards/detail drawer. |
 | `saved` | bool | — | `true` for user-saved templates; unset/`false` for ephemeral per-session objects. Authoritative flag for lifecycle-gating logic. |
-| `visibility` | enum `shared` \| `private` | optional, default `private` | UI-level label only (see Assumptions in spec.md) — not access-control enforced. |
-| `owner` | string | optional | Free-text display label, not a verified identity. |
 
 ### Spec fields (existing, unchanged, reused by saved templates)
 
@@ -39,7 +37,6 @@ No new CRD is introduced. The existing `MigrationTemplate` type gains new `Spec`
 ### Validation rules
 
 - `displayName` MUST be non-empty and unique among templates where `saved=true` (enforced client-side pre-submit against the already-fetched saved-templates list, and authoritatively by the Kubernetes API's object-name uniqueness — the sanitized `displayName` is used as `metadata.name`, so a duplicate submission fails with an `AlreadyExists` 409, surfaced to the operator per spec FR-002).
-- `visibility` MUST be one of `shared` / `private` (CRD enum validation).
 - A template with `saved=false`/unset MUST NOT appear in the Templates tab list (label-selector-filtered) and MUST continue to be eligible for the existing ephemeral auto-patch/auto-delete lifecycle.
 - A template with `saved=true` MUST be skipped by the ephemeral auto-patch (`useCredentialFetching.ts`) and auto-delete-on-cancel (`useMigrationFormSubmit.ts`) logic.
 
@@ -51,7 +48,7 @@ No new CRD is introduced. The existing `MigrationTemplate` type gains new `Spec`
         │ (ephemeral MigrationTemplate auto-created/patched, saved=false — unchanged existing behavior)
         │
         ▼
-  "Save as template" ──► POST new MigrationTemplate, saved=true, displayName/description/visibility/owner set,
+  "Save as template" ──► POST new MigrationTemplate, saved=true, displayName/description set,
                           same source/destination/mapping/options values copied from the current form state
         │
         ▼
@@ -66,7 +63,7 @@ No new CRD is introduced. The existing `MigrationTemplate` type gains new `Spec`
         │            on submit success: PATCH this template's /status → timesUsed+1, lastUsedAt=now
         │
         ├── "Clone" ──► POST new MigrationTemplate, saved=true, same Spec values, new unique displayName
-        │                (default "<name> (copy)"), owner=current session, status reset to zero
+        │                (default "<name> (copy)"), status reset to zero
         │
         └── "Delete" ──► DELETE this MigrationTemplate object
                           (does not affect any MigrationPlan/Migration already created from it —

@@ -19,7 +19,7 @@ This is a UI- and CRD-level feature; it does not change the underlying migration
 
 - Q: The CRD design direction — reuse the existing `MigrationTemplate` CRD (today an ephemeral, uuid-named, auto-created/auto-deleted per-migration-session config blob) vs. introduce a new CRD? → A: Extend the existing `MigrationTemplate` CRD rather than add a new CRD. This is the user's stated leaning, **not yet fully confirmed** — flagged as a risk in Assumptions and Edge Cases below, since it requires carefully gating the existing auto-patch (`useCredentialFetching.ts`) and auto-delete-on-cancel (`useMigrationFormSubmit.ts`) behavior so saved templates are never silently mutated or deleted by an unrelated New Migration session.
 
-- Q: vJailbreak today has no per-user login/identity system (single shared admin session per appliance, API-token auth). The mockup shows "Owner" avatars, "N shared / M private" counts, and per-template ownership. Is a real multi-user identity/ownership model in scope? → A: No — v1 uses a UI-only stand-in. "Owner" is a free-text display label (no verified identity), "private" only hides a template from the default view (not RBAC-protected), and "shared" means visible to anyone using this appliance. Real multi-tenant RBAC is out of scope.
+- Q: vJailbreak today has no per-user login/identity system (single shared admin session per appliance, API-token auth). The mockup showed "Owner" avatars and "N shared / M private" counts. Is a real multi-user identity/ownership model in scope? → A: No — and since there is no real identity to attach, owner and shared/private visibility are dropped entirely from v1. Every template is visible to every operator of this appliance; there is no per-template ownership label or visibility filter. Real multi-tenant RBAC (and any ownership/visibility concept built on top of it) is out of scope.
 - Q: What counts as a template "use" for the times-used/last-used counters? → A: Clicking "Use template" only prefills the New Migration form — it is NOT itself a countable use event. The counters increment only when a migration created from that prefilled form is actually submitted successfully.
 
 ---
@@ -53,11 +53,10 @@ An operator navigates to the "Templates" tab (sibling to "Migrations") to see al
 
 **Acceptance Scenarios**:
 
-1. **Given** one or more templates exist, **When** the operator opens the "Templates" tab, **Then** they see a card per template showing: name, shared/private badge, description, source→destination summary (with tenant/project and target cluster), copy-method/cutover/mapping-count tags, owner, last-used recency, usage count, and a "Use" action.
-2. **Given** the operator types into the search box, **When** the query matches a template's name, description, or owner, **Then** only matching templates remain visible; the visible count updates.
-3. **Given** the operator selects the "Shared" or "Private" filter chip, **When** applied, **Then** only templates matching that visibility are shown, and the counts in the chips (e.g. "Shared 4", "Private 2") match the underlying data.
-4. **Given** the operator changes the sort control, **When** "Last used" (default) or another supported sort is selected, **Then** the card order updates accordingly.
-5. **Given** no templates exist yet, **When** the operator opens the Templates tab, **Then** an empty state is shown with guidance on how to create the first template (pointing back to the New Migration flow's "Save as template" action).
+1. **Given** one or more templates exist, **When** the operator opens the "Templates" tab, **Then** they see a card per template showing: name, description, source→destination summary (with tenant/project and target cluster), copy-method/cutover/mapping-count tags, last-used recency, usage count, and a "Use" action.
+2. **Given** the operator types into the search box, **When** the query matches a template's name or description, **Then** only matching templates remain visible; the visible count updates.
+3. **Given** the operator changes the sort control, **When** "Last used" (default) or another supported sort is selected, **Then** the card order updates accordingly.
+4. **Given** no templates exist yet, **When** the operator opens the Templates tab, **Then** an empty state is shown with guidance on how to create the first template (pointing back to the New Migration flow's "Save as template" action).
 
 ---
 
@@ -84,11 +83,11 @@ An operator clicks a template card to see its full configuration in a detail pan
 
 **Why this priority**: Useful for confidence and auditability before reuse, but the feature is still usable without it if List (US2) already surfaces enough summary data to act on.
 
-**Independent Test**: Click a template card and confirm a detail drawer opens showing full owner/usage/created metadata, source & destination fields, and the full list of network/storage mappings, independent of taking any action from the drawer.
+**Independent Test**: Click a template card and confirm a detail drawer opens showing full usage/created metadata, source & destination fields, and the full list of network/storage mappings, independent of taking any action from the drawer.
 
 **Acceptance Scenarios**:
 
-1. **Given** a template card, **When** the operator clicks it, **Then** a right-side detail drawer opens (list dims behind it) showing: name, description, shared/private badge; an info block with Owner, Times Used, Last Used, Created; a "Source & Destination" section (source vCenter, destination, tenant/project, target cluster); and a "Network & Storage Mappings" section listing every mapping pair.
+1. **Given** a template card, **When** the operator clicks it, **Then** a right-side detail drawer opens (list dims behind it) showing: name, description; an info block with Times Used, Last Used, Created; a "Source & Destination" section (source vCenter, destination, tenant/project, target cluster); and a "Network & Storage Mappings" section listing every mapping pair.
 2. **Given** the detail drawer is open, **When** the operator clicks the close (X) control or clicks outside the drawer, **Then** the drawer closes and the underlying Templates list is restored to its prior (undimmed) state.
 
 ---
@@ -104,8 +103,7 @@ An operator removes a template that is no longer relevant, or clones an existing
 **Acceptance Scenarios**:
 
 1. **Given** a template's detail drawer is open, **When** the operator clicks "Delete" and confirms, **Then** the template is permanently removed and no longer appears in the Templates list. Deleting a template MUST NOT affect any `MigrationPlan` or `Migration` previously created from it (those retain their own resolved configuration and continue to run/display normally).
-2. **Given** a template's detail drawer is open, **When** the operator clicks "Clone", **Then** a new template is created with the same configuration, a default name indicating it is a copy (e.g. "Production RHEL · East (copy)"), and ownership set to the current operator/session; the original template is unmodified.
-3. **Given** a template that only the current operator can see (private), **When** another operator's session views the Templates list, **Then** that private template is not shown to them (see Clarifications — ownership/visibility scope).
+2. **Given** a template's detail drawer is open, **When** the operator clicks "Clone", **Then** a new template is created with the same configuration and a default name indicating it is a copy (e.g. "Production RHEL · East (copy)"); the original template is unmodified.
 
 ---
 
@@ -127,21 +125,20 @@ An operator removes a template that is no longer relevant, or clones an existing
 - **FR-001**: The system MUST allow an operator to save the current New Migration form configuration as a named template, with an optional free-text description, from within the New Migration drawer.
 - **FR-002**: Template names MUST be unique; the system MUST reject a save/clone/rename that would produce a duplicate name with a clear error message.
 - **FR-003**: The system MUST provide a "Templates" tab, presented as a sibling to the existing "Migrations" tab, showing a count badge of available templates.
-- **FR-004**: The Templates view MUST support: free-text search (by name, description, and owner), filtering by shared/private visibility, sorting (at minimum by "last used"), and switching between grid and list layouts.
-- **FR-005**: Each template card MUST display: name, visibility badge (shared/private), description, source→destination summary (source vCenter, destination, tenant/project, target cluster), relevant configuration tags (copy method — hot/cold/mock; cutover policy; mapping count), owner, last-used recency, usage count, and a primary "Use" action.
-- **FR-006**: Clicking a template MUST open a detail drawer (reusing the existing `DrawerShell` slide-in panel pattern) showing full metadata (owner, times used, last used, created date), full source & destination fields, and the complete list of network/storage mappings, with Delete, Clone, and "Use template" actions.
+- **FR-004**: The Templates view MUST support: free-text search (by name and description), sorting (at minimum by "last used"), and switching between grid and list layouts.
+- **FR-005**: Each template card MUST display: name, description, source→destination summary (source vCenter, destination, tenant/project, target cluster), relevant configuration tags (copy method — hot/cold/mock; cutover policy; mapping count), last-used recency, usage count, and a primary "Use" action.
+- **FR-006**: Clicking a template MUST open a detail drawer (reusing the existing `DrawerShell` slide-in panel pattern) showing full metadata (times used, last used, created date), full source & destination fields, and the complete list of network/storage mappings, with Delete, Clone, and "Use template" actions.
 - **FR-007**: Selecting "Use" (from the list card or the detail drawer) MUST open the New Migration drawer with the template's saved source/destination, network/storage mappings, and migration options (copy method, cutover policy, GPU/flavor options, etc.) pre-populated; VM selection MUST remain the operator's own choice from the live inventory of the pre-filled source/destination.
 - **FR-008**: All fields pre-populated from a template MUST remain fully editable before submission — applying a template MUST NOT lock or disable any form field.
 - **FR-009**: If a template references a credential, network mapping, storage mapping, or cluster that no longer exists at apply time, the system MUST leave the corresponding field(s) unset and display an inline warning identifying the missing reference, rather than failing to open the form or silently guessing a substitute value.
 - **FR-010**: The system MUST support deleting a template (with confirmation) and cloning a template (producing an independent copy with a distinguishing default name); deleting a template MUST NOT alter any Migration/MigrationPlan previously created from it.
-- **FR-011**: The system MUST record and display an owner label for each template (a free-text display label, not a verified identity — no multi-user auth system exists today) and MUST distinguish "shared" templates (visible to all operators of this appliance) from "private" templates (hidden from other sessions' default view but not RBAC-enforced).
-- **FR-012**: The system MUST track and display each template's usage count and last-used timestamp. Clicking "Use template" (prefilling the form) MUST NOT itself increment these counters; they MUST increment only when a migration created from that prefilled form is submitted successfully.
-- **FR-013**: The existing disposable, per-session `MigrationTemplate` object created and auto-managed by the New Migration drawer (`useCredentialFetching.ts` auto-patch, `useMigrationFormSubmit.ts` auto-delete-on-cancel) MUST continue to function exactly as today for migrations not created from a saved template, and MUST NOT be able to overwrite or delete a saved template.
-- **FR-014**: Saving, applying, deleting, and cloning templates MUST NOT alter the existing `MigrationPlan`/`MigrationPlanReconciler` consumption path that reads `MigrationTemplate` by name to drive an actual migration (network/storage mapping resolution, virtio driver selection, GPU flavor, HotAdd proxy VM reference, etc.).
+- **FR-011**: The system MUST track and display each template's usage count and last-used timestamp. Clicking "Use template" (prefilling the form) MUST NOT itself increment these counters; they MUST increment only when a migration created from that prefilled form is submitted successfully.
+- **FR-012**: The existing disposable, per-session `MigrationTemplate` object created and auto-managed by the New Migration drawer (`useCredentialFetching.ts` auto-patch, `useMigrationFormSubmit.ts` auto-delete-on-cancel) MUST continue to function exactly as today for migrations not created from a saved template, and MUST NOT be able to overwrite or delete a saved template.
+- **FR-013**: Saving, applying, deleting, and cloning templates MUST NOT alter the existing `MigrationPlan`/`MigrationPlanReconciler` consumption path that reads `MigrationTemplate` by name to drive an actual migration (network/storage mapping resolution, virtio driver selection, GPU flavor, HotAdd proxy VM reference, etc.).
 
 ### Key Entities
 
-- **Migration Template**: A saved, named, reusable migration configuration. Attributes: name (unique, user-provided), optional description, visibility (shared/private), owner, created timestamp, times-used count, last-used timestamp, source vCenter/VMware reference, destination OpenStack/PCD reference (tenant/project, target cluster), network mappings, storage mappings, migration options (copy method, cutover policy, GPU/flavor settings, post-migration actions). Extends the existing ephemeral `MigrationTemplate` CRD rather than introducing a new CRD (per Clarifications), distinguished from disposable per-session config objects by a "saved" marker.
+- **Migration Template**: A saved, named, reusable migration configuration. Attributes: name (unique, user-provided), optional description, created timestamp, times-used count, last-used timestamp, source vCenter/VMware reference, destination OpenStack/PCD reference (tenant/project, target cluster), network mappings, storage mappings, migration options (copy method, cutover policy, GPU/flavor settings, post-migration actions). Extends the existing ephemeral `MigrationTemplate` CRD rather than introducing a new CRD (per Clarifications), distinguished from disposable per-session config objects by a "saved" marker.
 - **Migration Configuration**: The full set of form values (source/destination, mappings, options) captured at "save as template" time or applied at "use template" time — corresponds to the existing `FormValues` shape already used by the New Migration drawer.
 
 ---
@@ -162,7 +159,7 @@ An operator removes a template that is no longer relevant, or clones an existing
 ## Assumptions
 
 - The existing `MigrationTemplate` CRD is extended (not replaced by a new CRD) to represent saved templates, per the user's stated direction — flagged as **not yet fully confirmed** in Clarifications; this spec proceeds on that basis but the implementation plan should re-confirm before any breaking schema change ships.
-- No genuine multi-user identity/authorization system exists in vJailbreak today (single shared appliance session, API-token auth). Per Clarifications, v1 "owner" and "shared/private" are **UI-level labels without access-control enforcement** — a "private" template is hidden from other sessions' default view but is not cryptographically or RBAC-protected, and "owner" is a display label rather than a verified identity. Real multi-tenant RBAC is out of scope for this feature.
+- No genuine multi-user identity/authorization system exists in vJailbreak today (single shared appliance session, API-token auth). Per Clarifications, v1 drops owner and shared/private visibility entirely rather than faking them with unverified UI labels — every template is visible to every operator of this appliance, with no ownership or visibility concept. Real multi-tenant RBAC (and any ownership/visibility feature built on it) is out of scope.
 - VM selection is never templated — only source/destination, mappings, and options are saved/applied, since the specific VMs to migrate are expected to differ per migration even when the surrounding configuration is identical.
 - Template "times used" / "last used" tracking increments only on successful migration submission from an applied template, not on the "Use template" click that merely prefills the form.
 - The Templates tab is additive UI (new tab alongside "Migrations"); it does not change the existing Migrations list, its route, or its table behavior.

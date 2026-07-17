@@ -4,7 +4,7 @@
 
 `apiVersion: vjailbreak.k8s.pf9.io/v1alpha1`, `kind: MigrationTemplate` — existing kind, extended schema.
 
-### Example: saved, shared template (post-feature)
+### Example: saved template (post-feature)
 
 ```yaml
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
@@ -18,8 +18,6 @@ spec:
   saved: true
   displayName: "Production RHEL · East"
   description: "Standard hot migration for east-region RHEL web & app tiers. Admin-gated cutover, Ceph NVMe storage."
-  visibility: shared
-  owner: "Jordan Diaz"
   osFamily: linuxGuest
   networkMapping: netmap-east-prod
   storageMapping: stormap-east-prod
@@ -65,12 +63,6 @@ properties:
         type: string
       saved:
         type: boolean
-      visibility:
-        type: string
-        enum: ["shared", "private"]
-        default: "private"
-      owner:
-        type: string
   status:
     properties:
       timesUsed:
@@ -90,7 +82,7 @@ Base path (per `ui/src/api/constants.ts`): `/apis/vjailbreak.k8s.pf9.io/v1alpha1
 |---|---|---|
 | List saved templates | `GET .../migrationtemplates?labelSelector=vjailbreak.k8s.pf9.io%2Fsaved%3Dtrue` | New — filters out ephemeral per-session objects |
 | Get one template | `GET .../migrationtemplates/{name}` | Existing, unchanged |
-| Create saved template | `POST .../migrationtemplates` | Body includes `spec.saved: true`, `spec.displayName`, `spec.description`, `spec.visibility`, `spec.owner`, plus existing mapping/source/destination fields; `metadata.name` = sanitized `displayName`; `metadata.labels["vjailbreak.k8s.pf9.io/saved"] = "true"` set alongside |
+| Create saved template | `POST .../migrationtemplates` | Body includes `spec.saved: true`, `spec.displayName`, `spec.description`, plus existing mapping/source/destination fields; `metadata.name` = sanitized `displayName`; `metadata.labels["vjailbreak.k8s.pf9.io/saved"] = "true"` set alongside |
 | Clone template | `POST .../migrationtemplates` | Same as Create, with `spec` copied from the source template and a new unique `metadata.name`/`spec.displayName` |
 | Delete template | `DELETE .../migrationtemplates/{name}` | Existing, unchanged |
 | Update usage stats | `PATCH .../migrationtemplates/{name}/status` (`Content-Type: application/merge-patch+json`, body `{"status":{"timesUsed": N, "lastUsedAt": "<ISO-8601>"}}`) | New — status-subresource PATCH; `ui-manager-role` already grants `migrationtemplates/status` get/patch/update, no RBAC change needed |

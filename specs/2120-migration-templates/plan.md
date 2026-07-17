@@ -7,7 +7,7 @@
 
 Let operators save a migration's configuration (source/destination, network/storage mappings, copy method, cutover policy, etc.) as a named, reusable **Migration Template**, browse templates from a new "Templates" tab next to "Migrations", and apply ("Use") a template to pre-fill the New Migration drawer. Adds delete/clone lifecycle management.
 
-Technical approach: extend the existing `MigrationTemplate` CRD (no new CRD, no new controller) to carry saved-template metadata in `Spec` (DisplayName, Description, Saved, Visibility, Owner) and usage stats in a newly-added `Status` (TimesUsed, LastUsedAt) — the CRD already declares `+kubebuilder:subresource:status` and `ui-manager-role` already has `migrationtemplates/status` get/patch/update RBAC, so no new RBAC is required. Reuse the existing generic k8s-API CRUD frontend module, the `DrawerShell` panel primitive, and the existing retry-prefill pattern for "apply template". Gate the existing ephemeral-template auto-patch/auto-delete lifecycle on `Spec.Saved != true` so saved templates are never touched by an unrelated migration session.
+Technical approach: extend the existing `MigrationTemplate` CRD (no new CRD, no new controller) to carry saved-template metadata in `Spec` (DisplayName, Description, Saved) and usage stats in a newly-added `Status` (TimesUsed, LastUsedAt) — the CRD already declares `+kubebuilder:subresource:status` and `ui-manager-role` already has `migrationtemplates/status` get/patch/update RBAC, so no new RBAC is required. Reuse the existing generic k8s-API CRUD frontend module, the `DrawerShell` panel primitive, and the existing retry-prefill pattern for "apply template". Gate the existing ephemeral-template auto-patch/auto-delete lifecycle on `Spec.Saved != true` so saved templates are never touched by an unrelated migration session.
 
 ---
 
@@ -21,7 +21,7 @@ Technical approach: extend the existing `MigrationTemplate` CRD (no new CRD, no 
 **Project Type**: Kubernetes CRD extension + React UI (no new controller, no new backend REST service)
 **Performance Goals**: Templates list/search/filter must feel instant for the expected scale (tens of templates per appliance, not thousands) — no server-side pagination required for v1
 **Constraints**: Must not regress `MigrationPlanReconciler`'s existing consumption of `MigrationTemplate` by name; must not regress the existing ephemeral per-session template lifecycle used by every New Migration drawer open; no new backend REST surface in `pkg/vpwned`
-**Scale/Scope**: Single-appliance, UI-only ownership/visibility labels (no real multi-tenant auth) per Clarifications
+**Scale/Scope**: Single-appliance, every template visible to every operator — no ownership/visibility concept, no real multi-tenant auth, per Clarifications
 
 ---
 
@@ -61,7 +61,7 @@ specs/2120-migration-templates/
 ```text
 # CONTROLLER (k8s/migration/ module)
 k8s/migration/api/v1alpha1/
-└── migrationtemplate_types.go     [MODIFY — add Saved/DisplayName/Description/Visibility/Owner to Spec;
+└── migrationtemplate_types.go     [MODIFY — add Saved/DisplayName/Description to Spec;
                                      add new MigrationTemplateStatus{TimesUsed, LastUsedAt} + Status field]
 
 k8s/migration/api/v1alpha1/
@@ -89,7 +89,7 @@ ui/src/features/migration/api/migration-templates/
                                      filtered by spec.saved=true), patchMigrationTemplateStatus
                                      (status subresource PATCH for usage tracking)]
 └── helpers.ts                     [MODIFY — add buildSavedTemplateJson(name, description,
-                                     visibility, formValues), cloneTemplateJson(template)]
+                                     formValues), cloneTemplateJson(template)]
 
 ui/src/features/migration/pages/
 └── MigrationsPage.tsx             [MODIFY — add MUI Tabs (Migrations | Templates); existing
@@ -100,7 +100,7 @@ ui/src/features/migration/components/templates/
 ├── TemplateCard.tsx               [NEW — one card per template, per FR-005]
 ├── TemplateDetailDrawer.tsx       [NEW — built on DrawerShell, modeled on
                                      ui/src/features/proxyvms/components/ProxyVMDetailDrawer.tsx]
-├── SaveAsTemplateDialog.tsx       [NEW — name + optional description + visibility prompt]
+├── SaveAsTemplateDialog.tsx       [NEW — name + optional description]
 └── DeleteTemplateDialog.tsx       [NEW — confirmation, mirrors DeleteMigrationDialog.tsx pattern]
 
 ui/src/features/migration/hooks/
@@ -146,7 +146,7 @@ See [research.md](research.md). Key decisions:
 
 See [data-model.md](data-model.md).
 
-**Modified CRD**: `MigrationTemplate` — `Spec` gains `DisplayName`, `Description`, `Saved`, `Visibility`, `Owner`; new `Status` gains `TimesUsed`, `LastUsedAt`.
+**Modified CRD**: `MigrationTemplate` — `Spec` gains `DisplayName`, `Description`, `Saved`; new `Status` gains `TimesUsed`, `LastUsedAt`.
 **No new CRDs, no new controllers, no new v2v-helper types** (this feature is UI/CRD-schema only; it never reaches the migration worker).
 
 ### Contracts
@@ -173,18 +173,6 @@ type MigrationTemplateSpec struct {
     // drawer's auto-patch/auto-delete lifecycle MUST skip any template with Saved=true.
     // +optional
     Saved bool `json:"saved,omitempty"`
-    // Visibility controls whether this template is shown to all operators of this
-    // appliance ("shared") or hidden from other sessions' default view ("private").
-    // This is a UI-level label only; it is not access-control enforced (see spec
-    // Clarifications — no multi-user auth system exists today).
-    // +kubebuilder:validation:Enum=shared;private
-    // +kubebuilder:default:=private
-    // +optional
-    Visibility string `json:"visibility,omitempty"`
-    // Owner is a free-text display label identifying who created this template.
-    // Not a verified identity.
-    // +optional
-    Owner string `json:"owner,omitempty"`
 }
 
 // MigrationTemplateStatus defines observed usage statistics for a saved template.
@@ -237,7 +225,7 @@ Wrap existing content in an MUI `Tabs` bar with two panels: "Migrations" (existi
 
 #### Save-as-template action (`MigrationForm.tsx`)
 
-A "Save as template" button/menu-item alongside the existing Cancel/Submit actions, enabled once source, destination are set (FR-001/FR-003 in spec's Acceptance Scenarios). Opens `SaveAsTemplateDialog` (name + optional description + shared/private toggle) → calls `useSaveAsTemplate` → `postMigrationTemplate` with `spec.saved=true`, `spec.displayName`, `spec.description`, `spec.visibility`, `spec.owner`, plus the same source/destination/mapping/options fields the ephemeral auto-patch already writes today. Name-uniqueness (FR-002) is checked client-side against the already-fetched saved-templates list before POST, with a server-side duplicate-name response (409/AlreadyExists on a name collision, since k8s object names are unique) as the authoritative fallback.
+A "Save as template" button/menu-item alongside the existing Cancel/Submit actions, enabled once source, destination are set (FR-001/FR-003 in spec's Acceptance Scenarios). Opens `SaveAsTemplateDialog` (name + optional description) → calls `useSaveAsTemplate` → `postMigrationTemplate` with `spec.saved=true`, `spec.displayName`, `spec.description`, plus the same source/destination/mapping/options fields the ephemeral auto-patch already writes today. Name-uniqueness (FR-002) is checked client-side against the already-fetched saved-templates list before POST, with a server-side duplicate-name response (409/AlreadyExists on a name collision, since k8s object names are unique) as the authoritative fallback.
 
 ---
 

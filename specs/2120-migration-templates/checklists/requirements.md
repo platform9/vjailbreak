@@ -31,6 +31,6 @@
 
 ## Notes
 
-- All `[NEEDS CLARIFICATION]` markers resolved 2026-07-15 (ownership/visibility model → UI-only label, no RBAC; usage-tracking trigger → increments only on successful migration submit, not on "Use template" click).
+- All `[NEEDS CLARIFICATION]` markers resolved 2026-07-15 (ownership/visibility model → dropped entirely, no real identity to attach it to; usage-tracking trigger → increments only on successful migration submit, not on "Use template" click).
 - CRD-reuse-vs-new-CRD decision is resolved (per user direction) but flagged as "not yet fully confirmed" — carries residual risk into planning; plan.md should re-validate before schema changes.
 - Two mockup source images (list page, detail drawer) were reviewed directly and their layout/content is reflected in User Stories 2 and 4 plus FR-003 through FR-006.
