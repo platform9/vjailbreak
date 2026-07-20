@@ -24,6 +24,7 @@ import SecurityGroupAndServerGroupStep from '../steps/SecurityGroupAndServerGrou
 import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from '../steps/MigrationOptionsAlt'
+import TagsAndMetadataSection from '../steps/TagsAndMetadataSection'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useClusterData } from '../hooks/useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
@@ -470,6 +471,7 @@ export default function RollingMigrationFormDrawer({
     vms: false,
     mapResources: false,
     security: false,
+    tagsMetadata: false,
     options: false
   })
 
@@ -571,6 +573,7 @@ export default function RollingMigrationFormDrawer({
       vms: false,
       mapResources: false,
       security: false,
+      tagsMetadata: false,
       options: false
     })
   }, [open])
@@ -582,6 +585,7 @@ export default function RollingMigrationFormDrawer({
   const vmsRef = React.useRef<HTMLDivElement | null>(null)
   const mapResourcesRef = React.useRef<HTMLDivElement | null>(null)
   const securityRef = React.useRef<HTMLDivElement | null>(null)
+  const tagsMetadataRef = React.useRef<HTMLDivElement | null>(null)
   const optionsRef = React.useRef<HTMLDivElement | null>(null)
   const previewRef = React.useRef<HTMLDivElement | null>(null)
 
@@ -595,6 +599,7 @@ export default function RollingMigrationFormDrawer({
       { ref: vmsRef, id: 'vms' },
       { ref: mapResourcesRef, id: 'map-resources' },
       { ref: securityRef, id: 'security' },
+      { ref: tagsMetadataRef, id: 'tags-metadata' },
       { ref: optionsRef, id: 'options' }
     ],
     setActiveSectionId
@@ -608,6 +613,7 @@ export default function RollingMigrationFormDrawer({
       vms: vmsRef,
       'map-resources': mapResourcesRef,
       security: securityRef,
+      'tags-metadata': tagsMetadataRef,
       options: optionsRef
     }
 
@@ -945,6 +951,29 @@ export default function RollingMigrationFormDrawer({
                     openstackCredentials={openstackCredData || undefined}
                     openstackNetworks={openstackNetworks}
                     stepNumber="7"
+                    showHeader={false}
+                  />
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box
+                ref={tagsMetadataRef}
+                data-testid="rolling-migration-form-step-tags-metadata"
+                onChangeCapture={() => markTouched('tagsMetadata')}
+                onClickCapture={() => markTouched('tagsMetadata')}
+              >
+                <SurfaceCard
+                  variant="section"
+                  title="Tags & Metadata"
+                  subtitle="Carry organizational context from VMware to the migrated VMs"
+                  data-testid="rolling-migration-form-tags-metadata-card"
+                >
+                  <TagsAndMetadataSection
+                    preserveSourceTags={Boolean(params?.preserveSourceTags)}
+                    customMetadata={params?.customMetadata || []}
+                    onChange={getParamsUpdater}
                     showHeader={false}
                   />
                 </SurfaceCard>

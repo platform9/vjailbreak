@@ -23,7 +23,9 @@ export const createMigrationPlanJson = (params) => {
     networkPersistence,
     removeVMwareTools,
     acknowledgeNetworkConflictRisk,
-    imageProfiles
+    imageProfiles,
+    preserveSourceTags,
+    customMetadata
   } = params || {}
 
   const spec: Record<string, unknown> = {
@@ -87,6 +89,14 @@ export const createMigrationPlanJson = (params) => {
 
   if (networkOverridesPerVM && Object.keys(networkOverridesPerVM).length > 0) {
     spec.networkOverridesPerVM = networkOverridesPerVM
+  }
+
+  if (typeof preserveSourceTags === 'boolean') {
+    spec.preserveSourceTags = preserveSourceTags
+  }
+
+  if (customMetadata && Object.keys(customMetadata).length > 0) {
+    spec.customMetadata = customMetadata
   }
 
   return {

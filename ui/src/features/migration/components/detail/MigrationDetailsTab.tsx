@@ -36,6 +36,7 @@ import { FieldLabel, KeyValueGrid, SurfaceCard } from 'src/components'
 import { formatDateTime, formatDiskSize } from 'src/utils'
 import { normalizeVmDisks, resolveFlavorDisplay } from '../../utils/migrationDetailFields'
 import { Migration } from '../../api/migrations'
+import MigrationTagsMetadataCard from './MigrationTagsMetadataCard'
 
 const enabledOrNA = (value: unknown) => (value === true ? 'Enabled' : 'N/A')
 
@@ -828,6 +829,12 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
           </Box>
         </Box>
       </SurfaceCard>
+
+      {/* Tags & Metadata — hidden unless the plan preserves source tags or defines custom metadata */}
+      <MigrationTagsMetadataCard
+        migrationPlan={data?.migrationPlan}
+        vmwareMachine={data?.vmwareMachine}
+      />
 
       {/* Migration Policies */}
       <SurfaceCard

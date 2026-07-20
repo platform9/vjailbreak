@@ -109,7 +109,9 @@ export const mapToVmDataWithRdm = (
       rdmDisks,
       hasSharedRdm,
       rdmDependencies,
-      useGPU: machine.spec.vms.useGPU
+      useGPU: machine.spec.vms.useGPU,
+      tags: machine.spec.vms.tags,
+      customAttributes: machine.spec.vms.customAttributes
     }
   })
 }
