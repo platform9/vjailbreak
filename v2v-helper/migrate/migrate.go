@@ -1240,13 +1240,15 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 		return -1, "", "", -1, errors.New("empty bootable partition from the script")
 	}
 
-	// Map the resolved boot device to its position among the guest disks via
-	// list-devices (which excludes the appliance's own disk and lists attached
-	// disks in VMDisks order). This is immune to where the appliance disk lands in
-	// the kernel enumeration, unlike device-index which counts it.
-	finalBootIndex, err = virtv2v.GuestDiskIndex(vminfo.VMDisks, ans)
+	index, err := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, "device-index", false, strings.TrimSpace(ans))
 	if err != nil {
+		fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
 		return -1, "", "", -1, err
+	}
+
+	finalBootIndex, err = strconv.Atoi(strings.TrimSpace(index))
+	if err != nil {
+		return -1, "", "", -1, errors.Wrap(err, "failed to convert bootable partition index to int")
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
