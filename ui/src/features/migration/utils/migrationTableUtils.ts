@@ -19,8 +19,12 @@ export const PHASE_STEPS: Record<string, number> = {
   [Phase.ValidationFailed]: 11
 }
 
+export const AWAITING_ACTION_PHASES: Phase[] = [
+  Phase.AwaitingAdminCutOver,
+  Phase.AwaitingCutOverStartTime
+]
+
 export const IN_PROGRESS_PHASES: Phase[] = [
-  Phase.Pending,
   Phase.Validating,
   Phase.AwaitingDataCopyStart,
   Phase.CopyingBlocks,
@@ -30,10 +34,42 @@ export const IN_PROGRESS_PHASES: Phase[] = [
   Phase.IdentifyingBlockDevices,
   Phase.HotAddTransferInProgress,
   Phase.HotAddCleanup,
-  Phase.ConvertingDisk,
-  Phase.AwaitingCutOverStartTime,
-  Phase.AwaitingAdminCutOver
+  Phase.ConvertingDisk
 ]
+
+export type MigrationStatusCategory =
+  | 'inProgress'
+  | 'awaitingAction'
+  | 'pending'
+  | 'succeeded'
+  | 'failed'
+
+// Buckets a migration's phase into the 5 summary categories shown on the Migrations
+// page stat cards; also drives the "click to filter" status filter on the table.
+export function getMigrationStatusCategory(phase: Phase | undefined): MigrationStatusCategory {
+  if (!phase || phase === Phase.Pending) return 'pending'
+  if (phase === Phase.Succeeded) return 'succeeded'
+  if (phase === Phase.Failed || phase === Phase.ValidationFailed) return 'failed'
+  if (AWAITING_ACTION_PHASES.includes(phase)) return 'awaitingAction'
+  return 'inProgress'
+}
+
+export const STATUS_FILTER_OPTIONS = [
+  'All',
+  'In Progress',
+  'Awaiting Action',
+  'Pending',
+  'Succeeded',
+  'Failed'
+] as const
+
+export const STATUS_FILTER_TO_CATEGORY: Record<string, MigrationStatusCategory> = {
+  'In Progress': 'inProgress',
+  'Awaiting Action': 'awaitingAction',
+  Pending: 'pending',
+  Succeeded: 'succeeded',
+  Failed: 'failed'
+}
 
 export const getProgressText = (
   phase: Phase | undefined,

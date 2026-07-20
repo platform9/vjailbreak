@@ -369,16 +369,8 @@ declare module '@mui/x-data-grid' {
     onBulkRetry: () => void
     numEligibleForRetry: number
     isBulkRetryLoading: boolean
-    refetchMigrations: (
-      options?: RefetchOptions
-    ) => Promise<QueryObserverResult<Migration[], Error>>
-    onStatusFilterChange: (filter: string) => void
-    currentStatusFilter: string
-    onDateFilterChange: (filter: string) => void
-    currentDateFilter: string
-    onStartMigration: () => void
-    startMigrationDisabled: boolean
-    startMigrationDisabledReason: string
+    filteredCount: number
+    totalCount: number
   }
 }
 
@@ -390,14 +382,8 @@ export interface CustomToolbarProps extends GridToolbarProps {
   onBulkRetry: () => void
   numEligibleForRetry: number
   isBulkRetryLoading: boolean
-  refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
-  onStatusFilterChange: (filter: string) => void
-  currentStatusFilter: string
-  onDateFilterChange: (filter: string) => void
-  currentDateFilter: string
-  onStartMigration: () => void
-  startMigrationDisabled: boolean
-  startMigrationDisabledReason: string
+  filteredCount: number
+  totalCount: number
 }
 
 export interface MigrationsTableProps {
@@ -406,4 +392,5 @@ export interface MigrationsTableProps {
   onDeleteSelected?: (migrations: Migration[]) => void
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
   loading?: boolean
+  statusFilter?: string
 }

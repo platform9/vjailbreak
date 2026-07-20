@@ -19,6 +19,7 @@ import { useMigrationTemplatesQuery } from '../../hooks/useMigrationTemplatesQue
 import { filterTemplates, sortTemplates, type TemplateSortKey } from '../../utils/templateFilters'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import TemplateCard from './TemplateCard'
+import TemplatesTable from './TemplatesTable'
 import TemplateDetailDrawer from './TemplateDetailDrawer'
 
 export interface TemplatesTabPanelProps {
@@ -62,13 +63,13 @@ export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelPr
         }}
       >
         <TextField
-          size="small"
-          placeholder="Search templates…"
+          placeholder="Search templates..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           data-testid="templates-search"
-          sx={{ minWidth: 280 }}
+          sx={{ width: '100%', maxWidth: 360 }}
           InputProps={{
+            sx: { '& .MuiInputBase-input': { textOverflow: 'ellipsis' } },
             startAdornment: (
               <InputAdornment position="start">
                 <SearchIcon fontSize="small" color="action" />
@@ -132,10 +133,16 @@ export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelPr
             Try a different search term or filter.
           </Typography>
         </Box>
+      ) : view === 'list' ? (
+        <TemplatesTable
+          templates={visibleTemplates}
+          onOpenDetail={setSelectedTemplate}
+          onUse={onUseTemplate}
+        />
       ) : (
-        <Grid container spacing={2} direction={view === 'list' ? 'column' : 'row'}>
+        <Grid container spacing={2}>
           {visibleTemplates.map((template) => (
-            <Grid item xs={12} md={view === 'list' ? 12 : 6} key={template.name}>
+            <Grid item xs={12} sm={6} md={4} key={template.name}>
               <TemplateCard
                 template={template}
                 onOpenDetail={setSelectedTemplate}

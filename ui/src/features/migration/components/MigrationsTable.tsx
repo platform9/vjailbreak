@@ -1,7 +1,7 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert, LinearProgress } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import MigrationIcon from '@mui/icons-material/SwapHoriz'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
@@ -10,21 +10,23 @@ import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { Phase } from '../api/migrations'
 import MigrationProgress from '../components/MigrationProgress'
+import MigrationStatusChip from '../components/MigrationStatusChip'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import AddIcon from '@mui/icons-material/Add'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
-import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
-import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import type { CustomToolbarProps, MigrationsTableProps } from '../types'
 import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 import { STATUS_ORDER } from '../constants'
-import { getProgressText, IN_PROGRESS_PHASES } from '../utils/migrationTableUtils'
+import {
+  getProgressText,
+  getMigrationStatusCategory,
+  STATUS_FILTER_TO_CATEGORY
+} from '../utils/migrationTableUtils'
 
 const pulse = keyframes`
   0% {
@@ -46,14 +48,8 @@ const CustomToolbar = ({
   onBulkRetry,
   numEligibleForRetry,
   isBulkRetryLoading,
-  refetchMigrations,
-  onStatusFilterChange,
-  currentStatusFilter,
-  onDateFilterChange,
-  currentDateFilter,
-  onStartMigration,
-  startMigrationDisabled,
-  startMigrationDisabledReason
+  filteredCount,
+  totalCount
 }: CustomToolbarProps) => {
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -97,38 +93,17 @@ const CustomToolbar = ({
           )}
         </>
       ) : null}
-      <CustomSearchToolbar
-        placeholder="Search by Name, Status, or Progress"
-        onRefresh={refetchMigrations}
-        onStatusFilterChange={numSelected === 0 ? onStatusFilterChange : undefined}
-        currentStatusFilter={currentStatusFilter}
-        onDateFilterChange={numSelected === 0 ? onDateFilterChange : undefined}
-        currentDateFilter={currentDateFilter}
-      />
+      <CustomSearchToolbar placeholder="Search VM, tenant, OS..." />
     </Box>
   )
 
   const actions = (
-    <Tooltip title={startMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
-      <span>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onStartMigration}
-          disabled={startMigrationDisabled}
-          sx={{ height: 40 }}
-          data-testid="start-migration-button"
-        >
-          Start Migration
-        </Button>
-      </span>
-    </Tooltip>
+    <Typography variant="body2" color="text.secondary" data-testid="migrations-showing-count">
+      Showing {filteredCount} of {totalCount}
+    </Typography>
   )
 
-  return (
-    <ListingToolbar title="Migrations" icon={<MigrationIcon />} search={search} actions={actions} />
-  )
+  return <ListingToolbar search={search} actions={actions} />
 }
 
 export default function MigrationsTable({
@@ -136,32 +111,12 @@ export default function MigrationsTable({
   onDeleteMigration,
   onDeleteSelected,
   refetchMigrations,
-  loading = false
+  loading = false,
+  statusFilter: statusFilterProp
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
   const navigate = useNavigate()
 
-  const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
-    staleTime: 0,
-    refetchOnMount: true
-  })
-  const { data: openstackCreds } = useOpenstackCredentialsQuery(undefined, {
-    staleTime: 0,
-    refetchOnMount: true
-  })
-
-  const hasVmwareCredentials = useMemo(() => (vmwareCreds || []).length > 0, [vmwareCreds])
-  const hasPcdCredentials = useMemo(() => {
-    const openstack = Array.isArray(openstackCreds) ? openstackCreds : []
-    return (
-      openstack.filter(
-        (cred) => cred?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
-      ).length > 0
-    )
-  }, [openstackCreds])
-
-  const startMigrationDisabled = !hasVmwareCredentials || !hasPcdCredentials
-  const startMigrationDisabledReason = 'Add VMware and PCD credentials before starting a migration.'
   const [selectedRows, setSelectedRows] = useState<GridRowSelectionModel>([])
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
@@ -169,8 +124,7 @@ export default function MigrationsTable({
   const [isBulkRetryLoading, setIsBulkRetryLoading] = useState(false)
   const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false)
   const [bulkRetryError, setBulkRetryError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [dateFilter, setDateFilter] = useState('All Time')
+  const statusFilter = statusFilterProp ?? 'All'
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
@@ -179,42 +133,11 @@ export default function MigrationsTable({
   const filteredMigrations = useMemo(() => {
     if (!migrations) return []
 
-    const now = new Date()
-    let timeCutoff = 0
+    const category = STATUS_FILTER_TO_CATEGORY[statusFilter]
+    if (!category) return migrations
 
-    switch (dateFilter) {
-      case 'Last 24 hours':
-        timeCutoff = now.getTime() - 24 * 60 * 60 * 1000
-        break
-      case 'Last 7 days':
-        timeCutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000
-        break
-      case 'Last 30 days':
-        timeCutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000
-        break
-      default:
-        timeCutoff = 0
-    }
-
-    const dateFiltered = migrations.filter((m) => {
-      if (!m.metadata?.creationTimestamp) return false
-      return new Date(m.metadata.creationTimestamp).getTime() >= timeCutoff
-    })
-
-    switch (statusFilter) {
-      case 'Succeeded':
-        return dateFiltered.filter((m) => m.status?.phase === Phase.Succeeded)
-      case 'Failed':
-        return dateFiltered.filter((m) => m.status?.phase === Phase.Failed)
-      case 'In Progress':
-        return dateFiltered.filter(
-          (m) => m.status?.phase && IN_PROGRESS_PHASES.includes(m.status.phase)
-        )
-      case 'All':
-      default:
-        return dateFiltered
-    }
-  }, [migrations, statusFilter, dateFilter])
+    return migrations.filter((m) => getMigrationStatusCategory(m.status?.phase) === category)
+  }, [migrations, statusFilter])
 
   const destinationByPlanQuery = useMigrationPlanDestinationsQuery(filteredMigrations)
 
@@ -256,6 +179,7 @@ export default function MigrationsTable({
 
           const destinationTenant = destination?.destinationTenant || 'N/A'
           const destinationCluster = destination?.destinationCluster || 'N/A'
+          const osFamily = destination?.vmOsByName?.[vmName]
 
           const tooltipTitle = (
             <TooltipContent
@@ -292,15 +216,24 @@ export default function MigrationsTable({
             (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
             ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
+          const migrationTypeLabel = isHotMigration
+            ? 'Hot'
+            : isColdMigration
+              ? 'Cold'
+              : isMockMigration
+                ? 'Mock'
+                : ''
+          const subtitle = [migrationTypeLabel, osFamily].filter(Boolean).join(' · ')
 
           return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, py: 0.5 }}>
               {isHotMigration && (
                 <Tooltip title="Hot Migration">
                   <FiberManualRecordIcon
                     sx={{
                       fontSize: 12,
                       color: '#FFAE42',
+                      mt: '4px',
                       ...(isInProgress && { animation: syncedPulse })
                     }}
                   />
@@ -312,6 +245,7 @@ export default function MigrationsTable({
                     sx={{
                       fontSize: 12,
                       color: '#4293FF',
+                      mt: '4px',
                       ...(isInProgress && { animation: syncedPulse })
                     }}
                   />
@@ -323,26 +257,82 @@ export default function MigrationsTable({
                     sx={{
                       fontSize: 12,
                       color: '#9e1111ff',
+                      mt: '4px',
                       ...(isInProgress && { animation: syncedPulse })
                     }}
                   />
                 </Tooltip>
               )}
-              <Tooltip title={tooltipTitle} arrow>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: 'primary.main',
-                    cursor: 'pointer',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    '&:hover': { textDecoration: 'underline' },
-                  }}
-                >
-                  {displayVmName}
-                </Typography>
-              </Tooltip>
+              <Box sx={{ overflow: 'hidden' }}>
+                <Tooltip title={tooltipTitle} arrow>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'primary.main',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      '&:hover': { textDecoration: 'underline' }
+                    }}
+                  >
+                    {displayVmName}
+                  </Typography>
+                </Tooltip>
+                {subtitle && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {subtitle}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          )
+        }
+      },
+      {
+        field: 'sourceDestination',
+        headerName: 'Source → Destination',
+        flex: 1.4,
+        sortable: false,
+        valueGetter: (_, row) => row.spec?.vmName,
+        renderCell: (params) => {
+          const namespace = params.row.metadata?.namespace
+          const planName =
+            params.row.spec?.migrationPlan || params.row.metadata?.labels?.migrationplan
+          const key = namespace && planName ? `${namespace}::${planName}` : ''
+          const destination = key ? destinationByPlan[key] : null
+
+          const sourceVmwareRef = destination?.sourceVmwareRef || 'N/A'
+          const destinationOpenstackRef = destination?.destinationOpenstackRef || 'N/A'
+          const sourceDatacenter = destination?.sourceDatacenter || 'N/A'
+          const destinationTenant = destination?.destinationTenant || 'N/A'
+
+          return (
+            <Box sx={{ py: 0.5, overflow: 'hidden' }}>
+              <Typography
+                variant="body2"
+                noWrap
+                title={`${sourceVmwareRef} → ${destinationOpenstackRef}`}
+              >
+                {sourceVmwareRef} <Box component="span" sx={{ color: 'text.secondary' }}>{'→'}</Box> {destinationOpenstackRef}
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                noWrap
+                title={`${sourceDatacenter} → ${destinationTenant}`}
+              >
+                {sourceDatacenter} {'→'} {destinationTenant}
+              </Typography>
             </Box>
           )
         }
@@ -356,7 +346,8 @@ export default function MigrationsTable({
           const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER
           const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER
           return order1 - order2
-        }
+        },
+        renderCell: (params) => <MigrationStatusChip phase={params.row?.status?.phase} />
       },
       {
         field: 'agent',
@@ -409,7 +400,7 @@ export default function MigrationsTable({
           const syncWarningMessage = params.row?.status?.syncWarningMessage
           const migrationName = params.row?.metadata?.name
 
-          {/* const isCopyPhase = [
+          const isCopyPhase = [
             Phase.CopyingBlocks,
             Phase.CopyingChangedBlocks,
             Phase.ConvertingDisk,
@@ -429,8 +420,12 @@ export default function MigrationsTable({
                 : undefined
 
           const progressValue = diskProgress ?? 0
-          const barColor = syncWarningMessage ? 'warning' : 'primary'
-          */}
+          const barColor =
+            phase === Phase.Failed || phase === Phase.ValidationFailed
+              ? 'error'
+              : syncWarningMessage
+                ? 'warning'
+                : 'primary'
 
           return conditions ? (
             <Box
@@ -444,14 +439,14 @@ export default function MigrationsTable({
                 progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
                 syncWarningMessage={syncWarningMessage}
               />
-              {/* {progressVariant && (
+              {(progressVariant || phase === Phase.Failed || phase === Phase.ValidationFailed) && (
                 <LinearProgress
-                  variant={progressVariant}
-                  value={progressValue}
-                  color={barColor as 'primary' | 'success' | 'warning'}
+                  variant={progressVariant ?? 'determinate'}
+                  value={phase === Phase.Failed || phase === Phase.ValidationFailed ? 100 : progressValue}
+                  color={barColor}
                   sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
                 />
-              )} */}
+              )}
             </Box>
           ) : null
         }
@@ -459,8 +454,8 @@ export default function MigrationsTable({
       {
         field: 'actions',
         headerName: 'Actions',
-        flex: 0.4,
-        minWidth: 90,
+        flex: 0.5,
+        minWidth: 130,
         renderCell: (params) => {
           const phase = params.row?.status?.phase
           const initiateCutover = params.row?.spec?.initiateCutover
@@ -486,9 +481,30 @@ export default function MigrationsTable({
 
           return (
             <Box
-              sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}
+              className="migration-row-actions"
+              sx={{
+                display: 'flex',
+                gap: 0.5,
+                alignItems: 'center',
+                height: '100%',
+                opacity: 0,
+                transition: 'opacity 0.1s ease',
+                '.MuiDataGrid-row:hover &': { opacity: 1 },
+                '.MuiDataGrid-row:focus-within &': { opacity: 1 }
+              }}
               onClick={(e) => e.stopPropagation()}
             >
+              <Tooltip title="View details">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
+                  }}
+                  size="small"
+                >
+                  <VisibilityIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
               <Tooltip title={'Delete migration'}>
                 <IconButton
                   onClick={(e) => {
@@ -680,7 +696,6 @@ export default function MigrationsTable({
           // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
           toolbar: hasSelectionActions ? CustomToolbar : undefined
         }}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         slotProps={{
           toolbar: hasSelectionActions
             ? ({
@@ -691,14 +706,9 @@ export default function MigrationsTable({
                 onBulkRetry: () => setBulkRetryDialogOpen(true),
                 numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
                 isBulkRetryLoading,
-                refetchMigrations,
-                onStatusFilterChange: setStatusFilter,
-                currentStatusFilter: statusFilter,
-                onDateFilterChange: setDateFilter,
-                currentDateFilter: dateFilter,
-                onStartMigration: () => openMigrationForm('standard'),
-                startMigrationDisabled,
-                startMigrationDisabledReason
+                filteredCount: filteredMigrations.length,
+                totalCount: migrations?.length || 0
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
               } as any)
             : {}
         }}

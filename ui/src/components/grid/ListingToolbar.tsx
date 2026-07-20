@@ -3,7 +3,7 @@ import { GridToolbarContainer } from '@mui/x-data-grid'
 import type { ReactNode } from 'react'
 
 interface ListingToolbarProps {
-  title: string
+  title?: string
   icon?: ReactNode
   subtitle?: ReactNode
   search?: ReactNode
@@ -28,19 +28,23 @@ export default function ListingToolbar({
         justifyContent: 'space-between'
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-        {icon}
-        <Box>
-          <Typography variant="h6" component="h2">
-            {title}
-          </Typography>
-          {subtitle ? (
-            <Typography variant="body2" color="text.secondary">
-              {subtitle}
+      {title ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          {icon}
+          <Box>
+            <Typography variant="h6" component="h2">
+              {title}
             </Typography>
-          ) : null}
+            {subtitle ? (
+              <Typography variant="body2" color="text.secondary">
+                {subtitle}
+              </Typography>
+            ) : null}
+          </Box>
         </Box>
-      </Box>
+      ) : (
+        <Box />
+      )}
       <Box
         sx={{
           display: 'flex',

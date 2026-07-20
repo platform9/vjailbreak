@@ -1,9 +1,19 @@
-import { Avatar, Box, Chip, Stack, Typography } from '@mui/material'
-import CloudSyncIcon from '@mui/icons-material/CloudSync'
+import { useState } from 'react'
+import { Box, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { ActionButton, SurfaceCard } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
-import { cutoverOptionLabel, DATA_COPY_METHOD_LABEL } from '../../utils/templateLabels'
+import {
+  cutoverOptionLabel,
+  dataCopyMethodChipSx,
+  DATA_COPY_METHOD_LABEL
+} from '../../utils/templateLabels'
+import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
+import { useTemplateTenantLookup } from '../../hooks/useTemplateTenantLookup'
+import DeleteTemplateDialog from './DeleteTemplateDialog'
+import TemplateTypeAvatar from './TemplateTypeAvatar'
 
 export interface TemplateCardProps {
   template: SavedTemplate
@@ -13,26 +23,31 @@ export interface TemplateCardProps {
 
 export default function TemplateCard({ template, onOpenDetail, onUse }: TemplateCardProps) {
   const mappingCount = template.networkMappings.length + template.storageMappings.length
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const cloneMutation = useCloneTemplate()
+  const deleteMutation = useDeleteTemplate()
+  const tenantByDestination = useTemplateTenantLookup()
+  const tenantProject = tenantByDestination[template.destination]
+  const subtitleLine = [tenantProject, template.targetCluster].filter(Boolean).join(' · ')
+
+  const handleDeleteConfirmed = async () => {
+    await deleteMutation.mutateAsync(template.name)
+    setConfirmDeleteOpen(false)
+  }
 
   return (
     <SurfaceCard
       variant="card"
       data-testid={`template-card-${template.name}`}
-      sx={{ cursor: 'pointer', height: '100%' }}
+      sx={{
+        cursor: 'pointer',
+        height: '100%',
+        '&:hover .template-card-hover-actions': { opacity: 1 }
+      }}
       onClick={() => onOpenDetail(template)}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-        <Avatar
-          variant="rounded"
-          sx={{
-            bgcolor: 'primary.light',
-            color: 'primary.dark',
-            width: 36,
-            height: 36
-          }}
-        >
-          <CloudSyncIcon fontSize="small" />
-        </Avatar>
+        <TemplateTypeAvatar dataCopyMethod={template.dataCopyMethod} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
@@ -54,6 +69,42 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
             </Typography>
           )}
         </Box>
+        <Box
+          className="template-card-hover-actions"
+          sx={{
+            display: 'flex',
+            gap: 0.5,
+            opacity: 0,
+            transition: 'opacity 0.1s ease',
+            flexShrink: 0
+          }}
+        >
+          <Tooltip title="Clone template">
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation()
+                cloneMutation.mutate(template)
+              }}
+              disabled={cloneMutation.isPending}
+              data-testid={`template-card-clone-${template.name}`}
+            >
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete template">
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation()
+                setConfirmDeleteOpen(true)
+              }}
+              data-testid={`template-card-delete-${template.name}`}
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       <Box
@@ -73,21 +124,35 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
             {template.destination}
           </Typography>
         </Box>
-        <Typography variant="caption" color="text.secondary" noWrap component="div">
-          {template.targetCluster}
-        </Typography>
+        {subtitleLine && (
+          <Typography variant="caption" color="text.secondary" noWrap component="div">
+            {subtitleLine}
+          </Typography>
+        )}
       </Box>
 
-      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-        <Chip size="small" label={DATA_COPY_METHOD_LABEL[template.dataCopyMethod]} />
-        <Chip size="small" label={cutoverOptionLabel(template.cutoverOption)} />
-        <Chip size="small" label={`${mappingCount} mapping${mappingCount === 1 ? '' : 's'}`} />
-      </Stack>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          mt: 'auto'
+        }}
+      >
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ minWidth: 0 }}>
+          <Chip
+            size="small"
+            label={DATA_COPY_METHOD_LABEL[template.dataCopyMethod]}
+            sx={dataCopyMethodChipSx(template.dataCopyMethod)}
+          />
+          <Chip size="small" label={cutoverOptionLabel(template.cutoverOption)} />
+          <Chip size="small" label={`${mappingCount} mapping${mappingCount === 1 ? '' : 's'}`} />
+        </Stack>
         <ActionButton
           tone="primary"
           size="small"
+          sx={{ flexShrink: 0 }}
           data-testid={`template-use-${template.name}`}
           onClick={(event) => {
             event.stopPropagation()
@@ -97,6 +162,14 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
           Use
         </ActionButton>
       </Box>
+
+      <DeleteTemplateDialog
+        open={confirmDeleteOpen}
+        template={template}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={handleDeleteConfirmed}
+        isDeleting={deleteMutation.isPending}
+      />
     </SurfaceCard>
   )
 }
