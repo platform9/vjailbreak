@@ -203,12 +203,11 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	var mac []string
 	for _, device := range o.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
-			mac = append(mac, nic.GetVirtualEthernetCard().MacAddress)
+			// Canonical lowercase so IPperMac lookups by vminfo.Mac always hit,
+			// regardless of the case vCenter reports for manually-assigned MACs
+			mac = append(mac, CanonicalMAC(nic.GetVirtualEthernetCard().MacAddress))
 		}
 	}
-	// Get IP addresses of the VM from vmwaremachines
-	ips := []string{}
-	ipPerMac := make(map[string][]IpEntry)
 
 	// Get the vmware machine from k8s
 	vmk8sName, err := k8sutils.GetVMwareMachineName()
@@ -221,46 +220,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		return VMInfo{}, fmt.Errorf("failed to get vmware machine: %s", err)
 	}
 
-	for _, macAddresss := range mac {
-		// Get the IPs from the vmware machine.
-		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
-			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
-				// Every mac should have a corresponding IP, Ignore link layer ip
-				if strings.EqualFold(guestNetwork.MAC, macAddresss) {
-					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
-						ipPerMac[guestNetwork.MAC] = []IpEntry{}
-					}
-					if !strings.Contains(guestNetwork.IP, ":") {
-						ips = append(ips, guestNetwork.IP)
-						ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], IpEntry{
-							IP:     guestNetwork.IP,
-							Prefix: guestNetwork.PrefixLength,
-						})
-					}
-				}
-			}
-		} else {
-			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
-				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss {
-						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
-							ipPerMac[networkInterface.MAC] = []IpEntry{}
-						}
-						for _, ipAddress := range networkInterface.IPAddress {
-							if strings.Contains(ipAddress, ":") {
-								continue
-							}
-							ips = append(ips, ipAddress)
-							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
-								IP:     ipAddress,
-								Prefix: 0,
-							})
-						}
-					}
-				}
-			}
-		}
-	}
+	ipPerMac := CollectIPsPerMac(mac, vmwareMachine.Spec.VMInfo.GuestNetworks, vmwareMachine.Spec.VMInfo.NetworkInterfaces)
 
 	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
