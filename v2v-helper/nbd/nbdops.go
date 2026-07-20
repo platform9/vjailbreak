@@ -254,8 +254,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		}
 	}
 
-	// Use the redacted command string for logging, into the dedicated nbd log file
-	utils.AddDebugOutputToFileWithCommandCategory(cmd, cmdstring, utils.LogCategoryNBD)
+	utils.AddDebugOutputToFileWithCommandCategory(cmd, cmdstring, utils.LogCategoryNBD, password)
 
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdstring))
 	err = cmd.Start()

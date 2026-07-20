@@ -3,6 +3,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,9 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withTestLogging points logsBaseDir at a fresh temp dir and sets
-// VMWARE_MACHINE_OBJECT_NAME so GetMigrationObjectName() resolves, then
-// restores previous state on cleanup.
 func withTestLogging(t *testing.T) (tmpDir string, migrationName string) {
 	t.Helper()
 
@@ -40,7 +38,6 @@ func withTestLogging(t *testing.T) (tmpDir string, migrationName string) {
 	return tmpDir, migrationName
 }
 
-// listLogFiles returns the base file names present in the migration's log directory.
 func listLogFiles(t *testing.T, tmpDir, migrationName string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Join(tmpDir, migrationName))
@@ -64,8 +61,6 @@ func TestAddDebugOutputToFileWithCommandCategory_SeparatesFilesByCategory(t *tes
 	virtCmd := exec.Command("true")
 	AddDebugOutputToFileWithCommandCategory(virtCmd, "virt-v2v-in-place -v", LogCategoryVirtV2V)
 
-	// Both commands should have their own log file objects (Stdout/Stderr)
-	// which must not be the same *os.File.
 	assert.NotNil(t, nbdCmd.Stdout)
 	assert.NotNil(t, virtCmd.Stdout)
 	assert.NotSame(t, nbdCmd.Stdout, virtCmd.Stdout)
@@ -134,22 +129,25 @@ func TestCloseLogFile_RefCountsAcrossCommandsInSameCategory(t *testing.T) {
 	cmd2 := exec.Command("true")
 	AddDebugOutputToFileWithCommandCategory(cmd2, "cmd2", LogCategoryNBD)
 
-	// Same category => same underlying file, shared refcount.
-	assert.Same(t, cmd1.Stdout, cmd2.Stdout)
+	w1, ok := cmd1.Stdout.(*redactingWriter)
+	require.True(t, ok)
+	w2, ok := cmd2.Stdout.(*redactingWriter)
+	require.True(t, ok)
+	assert.NotSame(t, w1, w2)
+	assert.Same(t, w1.w, w2.w)
 
 	CloseLogFile(cmd1)
-	// File should still be open/tracked (cmd2 still references it).
 	key := migrationLogKey{migrationName: migrationName, category: LogCategoryNBD}
 	logMutex.Lock()
 	_, stillOpen := migrationLogs[key]
 	logMutex.Unlock()
-	assert.True(t, stillOpen, "log file should remain open while cmd2 still references it")
+	assert.True(t, stillOpen)
 
 	CloseLogFile(cmd2)
 	logMutex.Lock()
 	_, stillOpenAfter := migrationLogs[key]
 	logMutex.Unlock()
-	assert.False(t, stillOpenAfter, "log file should be closed once all referencing commands are closed")
+	assert.False(t, stillOpenAfter)
 
 	files := listLogFiles(t, tmpDir, migrationName)
 	require.Len(t, files, 1)
@@ -168,9 +166,60 @@ func TestCleanupMigrationLogs_ClosesAllCategories(t *testing.T) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 	for key := range migrationLogs {
-		assert.NotEqual(t, migrationName, key.migrationName, "no log files for migration should remain open after cleanup")
+		assert.NotEqual(t, migrationName, key.migrationName)
 	}
-	for _, key := range commandLogs {
-		assert.NotEqual(t, migrationName, key.migrationName, "no commands for migration should remain tracked after cleanup")
+	for _, entry := range commandLogs {
+		assert.NotEqual(t, migrationName, entry.key.migrationName)
 	}
+}
+
+func TestAddDebugOutputToFileWithCommandCategory_RedactsSecretsFromChildOutput(t *testing.T) {
+	tmpDir, migrationName := withTestLogging(t)
+
+	secret := "s3cr3t-value"
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("echo 'key=%s'", secret))
+
+	require.NoError(t, RunCommandWithLogFileRedactedCategory(cmd, "cmd [REDACTED]", LogCategoryNBD, secret))
+
+	files := listLogFiles(t, tmpDir, migrationName)
+	require.Len(t, files, 1)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, migrationName, files[0]))
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), secret)
+	assert.Contains(t, string(content), redactedPlaceholder)
+}
+
+func TestRedactingWriter_FlushesRedactedPartialLineOnClose(t *testing.T) {
+	tmpDir, migrationName := withTestLogging(t)
+
+	secret := "s3cr3t-value"
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("printf 'key=%s'", secret))
+
+	AddDebugOutputToFileWithCommandCategory(cmd, "cmd [REDACTED]", LogCategoryNBD, secret)
+	require.NoError(t, cmd.Run())
+	CloseLogFile(cmd)
+
+	files := listLogFiles(t, tmpDir, migrationName)
+	require.Len(t, files, 1)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, migrationName, files[0]))
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), secret)
+	assert.Contains(t, string(content), redactedPlaceholder)
+}
+
+func TestRedactingWriter_NoSecretsPassesThroughUnmodified(t *testing.T) {
+	tmpDir, migrationName := withTestLogging(t)
+
+	cmd := exec.Command("sh", "-c", "echo 'plain output'")
+	require.NoError(t, RunCommandWithLogFileRedactedCategory(cmd, "echo ...", LogCategoryGeneral))
+
+	files := listLogFiles(t, tmpDir, migrationName)
+	require.Len(t, files, 1)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, migrationName, files[0]))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "plain output")
+	assert.NotContains(t, string(content), redactedPlaceholder)
 }

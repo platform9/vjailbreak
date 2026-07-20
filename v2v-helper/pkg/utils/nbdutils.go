@@ -1,19 +1,19 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
-// logsBaseDir is the root directory under which per-migration/per-category log
-// files are created. It defaults to constants.LogsDir but is a variable
-// (rather than using the constant directly) so unit tests can point it at a
-// temp directory instead of the real, often-unwritable, /var/log/pf9 path.
+// logsBaseDir is overridable so tests can point it at a temp directory.
 var logsBaseDir = constants.LogsDir
 
 func ParseFraction(text string) (int, int, error) {
@@ -25,39 +25,104 @@ func ParseFraction(text string) (int, int, error) {
 	return numerator, denominator, nil
 }
 
-// Log categories: each category gets its own log file per migration so that
-// noisy subprocess output (e.g. nbdkit/nbdcopy) doesn't drown out virt-v2v
-// output (or vice versa) in a single interleaved file.
+// Log categories: each category gets its own log file per migration.
 const (
-	// LogCategoryNBD groups nbdkit/nbdcopy disk-copy related command output.
-	LogCategoryNBD = "nbd"
-	// LogCategoryVirtV2V groups virt-v2v-in-place and related guest
-	// conversion/customization command output (e.g. ntfsfix).
-	LogCategoryVirtV2V = "virtv2v"
-	// LogCategoryGeneral is the default bucket for commands that don't
-	// belong to a more specific category.
-	LogCategoryGeneral = "general"
+	LogCategoryNBD      = "nbd"
+	LogCategoryVirtV2V  = "virtv2v"
+	LogCategoryGeneral  = "general"
+	redactedPlaceholder = "[REDACTED]"
 )
 
-// migrationLogKey identifies a single log file: one per (migration, category) pair.
+// redactingWriter strips configured substrings out of everything written
+// through it before forwarding to the underlying writer. Input is buffered
+// line-by-line so a match split across two Write() calls is still caught.
+type redactingWriter struct {
+	mu      sync.Mutex
+	w       io.Writer
+	secrets []string
+	buf     bytes.Buffer
+}
+
+func newRedactingWriter(w io.Writer, secrets []string) *redactingWriter {
+	filtered := make([]string, 0, len(secrets))
+	for _, s := range secrets {
+		if s != "" {
+			filtered = append(filtered, s)
+		}
+	}
+	return &redactingWriter{w: w, secrets: filtered}
+}
+
+func (r *redactingWriter) redact(s string) string {
+	for _, secret := range r.secrets {
+		s = strings.ReplaceAll(s, secret, redactedPlaceholder)
+	}
+	return s
+}
+
+func (r *redactingWriter) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	n := len(p)
+
+	if len(r.secrets) == 0 {
+		if _, err := r.w.Write(p); err != nil {
+			return 0, err
+		}
+		return n, nil
+	}
+
+	r.buf.Write(p)
+	for {
+		data := r.buf.Bytes()
+		idx := bytes.IndexByte(data, '\n')
+		if idx < 0 {
+			break
+		}
+		line := r.redact(string(data[:idx+1]))
+		if _, err := r.w.Write([]byte(line)); err != nil {
+			return n, err
+		}
+		r.buf.Next(idx + 1)
+	}
+	return n, nil
+}
+
+// Flush writes out any buffered partial line. Call once no more writes are
+// expected, e.g. when the log file entry is being closed.
+func (r *redactingWriter) Flush() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.buf.Len() == 0 {
+		return nil
+	}
+	remaining := r.redact(r.buf.String())
+	r.buf.Reset()
+	_, err := r.w.Write([]byte(remaining))
+	return err
+}
+
+// migrationLogKey identifies a single log file: one per (migration, category).
 type migrationLogKey struct {
 	migrationName string
 	category      string
 }
 
-// migrationLogInfo tracks log files by migration+category to ensure one file
-// per migration attempt per category.
 type migrationLogInfo struct {
 	filePath string
 	file     *os.File
 	refCount int
 }
 
-// We use a map to track migration log files, keyed by migration name + category.
-var migrationLogs = make(map[migrationLogKey]*migrationLogInfo)
+type commandLogEntry struct {
+	key    migrationLogKey
+	writer *redactingWriter
+}
 
-// commandLogs maps commands to their migration log key for cleanup
-var commandLogs = make(map[*exec.Cmd]migrationLogKey)
+var migrationLogs = make(map[migrationLogKey]*migrationLogInfo)
+var commandLogs = make(map[*exec.Cmd]*commandLogEntry)
 var logMutex sync.Mutex
 
 // closeLogInfoLocked decrements the refcount for a log key and closes/removes
@@ -69,7 +134,6 @@ func closeLogInfoLocked(key migrationLogKey) {
 	}
 	logInfo.refCount--
 	if logInfo.refCount <= 0 {
-		// Last command using this log file, close it
 		PrintLog(fmt.Sprintf("Closing migration log file: %s", logInfo.filePath))
 		logInfo.file.Sync()
 		logInfo.file.Close()
@@ -82,26 +146,35 @@ func CloseLogFile(cmd *exec.Cmd) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
-	// Get the log key associated with this command
-	key, exists := commandLogs[cmd]
+	entry, exists := commandLogs[cmd]
 	if !exists {
-		return // No log file associated with this command
+		return
 	}
-
-	// Remove command tracking
 	delete(commandLogs, cmd)
 
-	closeLogInfoLocked(key)
+	if entry.writer != nil {
+		entry.writer.Flush()
+	}
+
+	closeLogInfoLocked(entry.key)
 }
 
-// CleanupMigrationLogs forcibly closes all of a migration's log files (across
-// all categories) regardless of reference count.
-// Call this when a migration is complete to clean up resources
+// CleanupMigrationLogs forcibly closes all of a migration's log files
+// regardless of reference count. Call when a migration is complete.
 func CleanupMigrationLogs(migrationName string) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
-	// Close and remove any open log files for this migration, across all categories
+	for cmd, entry := range commandLogs {
+		if entry.key.migrationName != migrationName {
+			continue
+		}
+		if entry.writer != nil {
+			entry.writer.Flush()
+		}
+		delete(commandLogs, cmd)
+	}
+
 	for key, logInfo := range migrationLogs {
 		if key.migrationName != migrationName {
 			continue
@@ -111,85 +184,53 @@ func CleanupMigrationLogs(migrationName string) {
 		logInfo.file.Close()
 		delete(migrationLogs, key)
 	}
-
-	// Clean up any commands associated with this migration
-	for cmd, key := range commandLogs {
-		if key.migrationName == migrationName {
-			delete(commandLogs, cmd)
-		}
-	}
 }
 
 // RunCommandWithLogFile runs a command with output redirected to a log file
-// and ensures the log file is properly closed after execution
-// WARNING: This logs the full command including all arguments. Do NOT use this
-// for commands containing sensitive data (passwords, tokens, etc.). Use
+// and ensures the log file is properly closed after execution.
+// WARNING: This logs the full command including all arguments. Use
 // RunCommandWithLogFileRedacted instead and pass a redacted command string.
 func RunCommandWithLogFile(cmd *exec.Cmd) error {
 	return RunCommandWithLogFileRedactedCategory(cmd, cmd.String(), LogCategoryGeneral)
 }
 
-// RunCommandWithLogFileRedacted runs a command with output redirected to the
-// default ("general") log file using a redacted command string for logging,
-// and ensures the log file is properly closed.
 func RunCommandWithLogFileRedacted(cmd *exec.Cmd, cmdString string) error {
 	return RunCommandWithLogFileRedactedCategory(cmd, cmdString, LogCategoryGeneral)
 }
 
-// RunCommandWithLogFileCategory runs a command with output redirected to the
-// log file for the given category, and ensures the log file is properly closed.
-// WARNING: This logs the full command including all arguments. Do NOT use this
-// for commands containing sensitive data. Use RunCommandWithLogFileRedactedCategory
-// instead and pass a redacted command string.
+// WARNING: This logs the full command including all arguments. Use
+// RunCommandWithLogFileRedactedCategory instead and pass a redacted command string.
 func RunCommandWithLogFileCategory(cmd *exec.Cmd, category string) error {
 	return RunCommandWithLogFileRedactedCategory(cmd, cmd.String(), category)
 }
 
-// RunCommandWithLogFileRedactedCategory runs a command with output redirected
-// to the log file for the given category, using a redacted command string for
-// logging, and ensures the log file is properly closed after execution.
-func RunCommandWithLogFileRedactedCategory(cmd *exec.Cmd, cmdString string, category string) error {
-	// First ensure output is directed to a log file with redacted command
-	AddDebugOutputToFileWithCommandCategory(cmd, cmdString, category)
-
-	// Run the command
+func RunCommandWithLogFileRedactedCategory(cmd *exec.Cmd, cmdString string, category string, secrets ...string) error {
+	AddDebugOutputToFileWithCommandCategory(cmd, cmdString, category, secrets...)
 	err := cmd.Run()
-
-	// Close the log file
 	CloseLogFile(cmd)
-
 	return err
 }
 
-// AddDebugOutputToFile redirects command output to the default ("general")
-// debug log file.
-// WARNING: This logs the full command including all arguments. Do NOT use this
-// for commands containing sensitive data (passwords, tokens, etc.). Use
+// WARNING: This logs the full command including all arguments. Use
 // AddDebugOutputToFileWithCommand instead and pass a redacted command string.
 func AddDebugOutputToFile(cmd *exec.Cmd) {
 	AddDebugOutputToFileWithCommandCategory(cmd, cmd.String(), LogCategoryGeneral)
 }
 
-// AddDebugOutputToFileWithCommand redirects command output to the default
-// ("general") debug log file, using the provided (already-redacted) command string.
 func AddDebugOutputToFileWithCommand(cmd *exec.Cmd, cmdString string) {
 	AddDebugOutputToFileWithCommandCategory(cmd, cmdString, LogCategoryGeneral)
 }
 
-// AddDebugOutputToFileCategory redirects command output to the debug log file
-// for the given category.
-// WARNING: This logs the full command including all arguments. Do NOT use this
-// for commands containing sensitive data. Use
+// WARNING: This logs the full command including all arguments. Use
 // AddDebugOutputToFileWithCommandCategory instead and pass a redacted command string.
 func AddDebugOutputToFileCategory(cmd *exec.Cmd, category string) {
 	AddDebugOutputToFileWithCommandCategory(cmd, cmd.String(), category)
 }
 
 // AddDebugOutputToFileWithCommandCategory redirects command output to a
-// per-migration, per-category debug log file (e.g. "nbd.<timestamp>.log" or
-// "virtv2v.<timestamp>.log"), keeping different tools' noisy debug output in
-// separate files so they're easy to find independently.
-func AddDebugOutputToFileWithCommandCategory(cmd *exec.Cmd, cmdString string, category string) {
+// per-migration, per-category debug log file. Any secrets passed in are
+// scrubbed from the command's stdout/stderr before it's written.
+func AddDebugOutputToFileWithCommandCategory(cmd *exec.Cmd, cmdString string, category string, secrets ...string) {
 	if category == "" {
 		category = LogCategoryGeneral
 	}
@@ -199,12 +240,10 @@ func AddDebugOutputToFileWithCommandCategory(cmd *exec.Cmd, cmdString string, ca
 		return
 	}
 
-	// Ensure logs directory exists
 	if err := os.MkdirAll(logsBaseDir, 0755); err != nil {
 		return
 	}
 
-	// Create a directory for this specific migration
 	attemptDir := fmt.Sprintf("%s/%s", logsBaseDir, migrationName)
 	if err := os.MkdirAll(attemptDir, 0755); err != nil {
 		return
@@ -215,58 +254,49 @@ func AddDebugOutputToFileWithCommandCategory(cmd *exec.Cmd, cmdString string, ca
 
 	key := migrationLogKey{migrationName: migrationName, category: category}
 
-	// First close any existing log file for this command
-	// (do this within lock to avoid race conditions)
-	if oldKey, exists := commandLogs[cmd]; exists {
-		// Remove command tracking
+	if oldEntry, exists := commandLogs[cmd]; exists {
 		delete(commandLogs, cmd)
-		closeLogInfoLocked(oldKey)
+		if oldEntry.writer != nil {
+			oldEntry.writer.Flush()
+		}
+		closeLogInfoLocked(oldEntry.key)
 	}
 
-	// Check if we already have an open log file for this migration+category
 	var logFile *os.File
 	logInfo, exists := migrationLogs[key]
 	if exists {
-		// Reuse existing log file
 		logFile = logInfo.file
-		logInfo.refCount++ // Increment reference count
+		logInfo.refCount++
 	} else {
-		// Create a new log file with timestamp in name (only done once per migration+category)
 		timestamp := time.Now().Format("2006-01-02-15:04:05")
 		logFilePath := fmt.Sprintf("%s/%s.%s.log", attemptDir, category, timestamp)
 
-		// Create/open the log file
 		var err error
 		logFile, err = os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			return
 		}
 
-		// Store new log info
 		migrationLogs[key] = &migrationLogInfo{
 			filePath: logFilePath,
 			file:     logFile,
 			refCount: 1,
 		}
 
-		// Write header to log file
 		headerTime := time.Now().Format("2006-01-02 15:04:05")
 		logFile.WriteString(fmt.Sprintf("==== MIGRATION LOG [%s]: %s - Started at %s ====\n\n",
 			category, migrationName, headerTime))
 	}
 
-	// Associate this command with the migration+category for later tracking
-	commandLogs[cmd] = key
+	writer := newRedactingWriter(logFile, secrets)
+	commandLogs[cmd] = &commandLogEntry{key: key, writer: writer}
 
-	// Write a separator for this command to make logs more readable
 	timePrefix := time.Now().Format("2006-01-02 15:04:05")
 	logFile.WriteString(fmt.Sprintf("\n\n==== %s: COMMAND: %s ====\n\n", timePrefix, cmdString))
 
-	// Redirect command output to this file
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	// NOTE: The log file will NOT be automatically closed when the command completes.
-	// Either call CloseLogFile(cmd) manually after the command completes,
-	// or use RunCommandWithLogFile() (or its *Category variant) which handles
-	// the cleanup automatically.
+	cmd.Stdout = writer
+	cmd.Stderr = writer
+	// NOTE: The log file is not automatically closed or flushed when the
+	// command completes. Call CloseLogFile(cmd), or use RunCommandWithLogFile
+	// (or its *Category variant) which handles cleanup automatically.
 }
