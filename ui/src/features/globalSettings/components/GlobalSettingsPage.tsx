@@ -1209,6 +1209,11 @@ export default function GlobalSettingsPage() {
       <FormProvider {...rhfForm}>
         <Box
           component="form"
+          // noValidate is required: inactive tab panels stay mounted (hidden via
+          // display:none), so a `required` input on another tab would otherwise make
+          // the browser silently abort form submission because it cannot focus the
+          // invalid hidden control. All validation for this form is handled inside onSave.
+          noValidate
           onSubmit={handleSave}
           data-testid="global-settings-form"
           sx={{
