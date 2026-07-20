@@ -735,7 +735,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
-	} else {
+	} else if len(network.Subnets) > 0 {
 		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
 		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
@@ -743,6 +743,11 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
 		gatewayIP[mac] = subnetID.GatewayIP
+	} else {
+		// nil ipEntries but the network has no subnets at all (e.g. an L2-only
+		// network that legitimately has zero subnets). There's no subnet to
+		// query or gateway to record, so just leave FixedIPs/gatewayIP unset.
+		PrintLog("Empty port with no subnets on network " + network.ID + " for mac " + mac)
 	}
 	return createOpts, nil
 }
