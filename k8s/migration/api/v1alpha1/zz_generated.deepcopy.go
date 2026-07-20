@@ -44,6 +44,11 @@ func (in *AdvancedOptions) DeepCopyInto(out *AdvancedOptions) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.RemoveVMwareTools != nil {
+		in, out := &in.RemoveVMwareTools, &out.RemoveVMwareTools
+		*out = new(bool)
+		**out = **in
+	}
 	if in.ImageProfiles != nil {
 		in, out := &in.ImageProfiles, &out.ImageProfiles
 		*out = make([]string, len(*in))

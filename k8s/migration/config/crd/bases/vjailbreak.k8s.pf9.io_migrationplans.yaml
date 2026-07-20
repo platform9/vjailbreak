@@ -99,8 +99,10 @@ spec:
                       migration plan should be synced
                     type: string
                   removeVMwareTools:
-                    description: RemoveVMwareTools instructs the migration helper
-                      to remove VMware Tools post migration
+                    default: true
+                    description: |-
+                      RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration.
+                      Defaults to true since most migrations require VMware Tools removal.
                     type: boolean
                 type: object
               customMetadata:
