@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
 import type { RetryMigrationConfig } from './context/MigrationFormContext'
-import type { SavedTemplate } from './mock-templates/types'
+import type { SavedTemplate } from './api/migration-blueprints/types'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'

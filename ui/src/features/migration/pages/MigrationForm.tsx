@@ -48,7 +48,7 @@ import { Banner } from 'src/components'
 import { RetrySourceDestinationSummary } from '../components/RetryMigration'
 import { useApplyTemplatePrefill } from '../hooks/useApplyTemplatePrefill'
 import SaveAsTemplateDialog from '../components/templates/SaveAsTemplateDialog'
-import type { SaveAsTemplateInput } from '../mock-templates/types'
+import type { SaveAsTemplateInput } from '../api/migration-blueprints/types'
 import { CUTOVER_TYPES } from '../constants'
 
 const drawerWidth = 1400
@@ -175,6 +175,7 @@ export default function MigrationFormDrawer({
   useApplyTemplatePrefill({
     open: open && !isRetryMode,
     templatePrefill,
+    pcdData,
     updateParams,
     updateSelectedOptions: updateSelectedMigrationOptionsBulk
   })
@@ -188,14 +189,11 @@ export default function MigrationFormDrawer({
         vmwareCredentials?.metadata?.name || params.vmwareCreds?.existingCredName || '',
       destination:
         openstackCredentials?.metadata?.name || params.openstackCreds?.existingCredName || '',
-      tenantProject: openstackCredentials?.metadata?.name || '',
       targetCluster: targetPCDClusterName || '',
       networkMappings: params.networkMappings || [],
       storageMappings: params.storageMappings || [],
       dataCopyMethod: (params.dataCopyMethod || 'cold') as SaveAsTemplateInput['dataCopyMethod'],
       cutoverOption: params.cutoverOption || CUTOVER_TYPES.IMMEDIATE,
-      vmwareCluster: params.vmwareCluster,
-      pcdCluster: params.pcdCluster,
       osFamily: params.osFamily,
       useGPU: params.useGPU || false
     }),
@@ -208,8 +206,6 @@ export default function MigrationFormDrawer({
       params.storageMappings,
       params.dataCopyMethod,
       params.cutoverOption,
-      params.vmwareCluster,
-      params.pcdCluster,
       params.osFamily,
       params.useGPU,
       targetPCDClusterName
@@ -333,8 +329,7 @@ export default function MigrationFormDrawer({
     onClose,
     onSuccess,
     sessionId,
-    networkMappingRequired,
-    appliedTemplateName: templatePrefill?.name
+    networkMappingRequired
   })
 
   const { retrySubmitting, retryError, handleEditAndRetry } = useRetrySubmit({

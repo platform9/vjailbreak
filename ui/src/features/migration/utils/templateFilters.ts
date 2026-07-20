@@ -1,6 +1,6 @@
-import type { SavedTemplate } from '../mock-templates/types'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 
-export type TemplateSortKey = 'lastUsed' | 'name' | 'timesUsed' | 'created'
+export type TemplateSortKey = 'name' | 'created'
 
 export function filterTemplates(templates: SavedTemplate[], query: string): SavedTemplate[] {
   const trimmedQuery = query.trim().toLowerCase()
@@ -23,18 +23,10 @@ export function sortTemplates(
   switch (sortKey) {
     case 'name':
       return sorted.sort((a, b) => a.displayName.localeCompare(b.displayName))
-    case 'timesUsed':
-      return sorted.sort((a, b) => b.timesUsed - a.timesUsed)
     case 'created':
+    default:
       return sorted.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       )
-    case 'lastUsed':
-    default:
-      return sorted.sort((a, b) => {
-        const aTime = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0
-        const bTime = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0
-        return bTime - aTime
-      })
   }
 }

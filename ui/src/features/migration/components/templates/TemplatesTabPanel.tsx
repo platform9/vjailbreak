@@ -17,7 +17,7 @@ import ViewListIcon from '@mui/icons-material/ViewList'
 import CloudSyncIcon from '@mui/icons-material/CloudSync'
 import { useMigrationTemplatesQuery } from '../../hooks/useMigrationTemplatesQuery'
 import { filterTemplates, sortTemplates, type TemplateSortKey } from '../../utils/templateFilters'
-import type { SavedTemplate } from '../../mock-templates/types'
+import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import TemplateCard from './TemplateCard'
 import TemplateDetailDrawer from './TemplateDetailDrawer'
 
@@ -26,16 +26,14 @@ export interface TemplatesTabPanelProps {
 }
 
 const SORT_OPTIONS: Array<{ value: TemplateSortKey; label: string }> = [
-  { value: 'lastUsed', label: 'Last used' },
   { value: 'created', label: 'Newest' },
-  { value: 'name', label: 'Name' },
-  { value: 'timesUsed', label: 'Most used' }
+  { value: 'name', label: 'Name' }
 ]
 
 export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelProps) {
   const { data: templates = [], isLoading } = useMigrationTemplatesQuery()
   const [query, setQuery] = useState('')
-  const [sortKey, setSortKey] = useState<TemplateSortKey>('lastUsed')
+  const [sortKey, setSortKey] = useState<TemplateSortKey>('created')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [selectedTemplate, setSelectedTemplate] = useState<SavedTemplate | null>(null)
 

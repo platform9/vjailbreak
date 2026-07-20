@@ -1,21 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { filterTemplates, sortTemplates } from './templateFilters'
 import { CUTOVER_TYPES } from '../constants'
-import type { SavedTemplate } from '../mock-templates/types'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 
 const makeTemplate = (overrides: Partial<SavedTemplate>): SavedTemplate => ({
   name: 'template',
   displayName: 'Template',
   createdAt: '2026-01-01T00:00:00Z',
-  timesUsed: 0,
   sourceVCenter: 'vcenter.example.com',
   destination: 'pcd-1',
-  tenantProject: 'proj',
   targetCluster: 'cluster-a',
   networkMappings: [],
   storageMappings: [],
   dataCopyMethod: 'hot',
   cutoverOption: CUTOVER_TYPES.ADMIN_INITIATED,
+  spec: { displayName: 'Template' },
   ...overrides
 })
 
@@ -58,21 +57,16 @@ describe('sortTemplates', () => {
     makeTemplate({
       name: 'a',
       displayName: 'Charlie',
-      timesUsed: 5,
-      createdAt: '2026-01-01T00:00:00Z',
-      lastUsedAt: '2026-01-10T00:00:00Z'
+      createdAt: '2026-01-01T00:00:00Z'
     }),
     makeTemplate({
       name: 'b',
       displayName: 'Alpha',
-      timesUsed: 20,
-      createdAt: '2026-03-01T00:00:00Z',
-      lastUsedAt: '2026-02-01T00:00:00Z'
+      createdAt: '2026-03-01T00:00:00Z'
     }),
     makeTemplate({
       name: 'c',
       displayName: 'Bravo',
-      timesUsed: 1,
       createdAt: '2026-02-01T00:00:00Z'
     })
   ]
@@ -87,15 +81,7 @@ describe('sortTemplates', () => {
     expect(sortTemplates(templates, 'name').map((t) => t.name)).toEqual(['b', 'c', 'a'])
   })
 
-  it('sorts by timesUsed descending', () => {
-    expect(sortTemplates(templates, 'timesUsed').map((t) => t.name)).toEqual(['b', 'a', 'c'])
-  })
-
   it('sorts by created descending', () => {
     expect(sortTemplates(templates, 'created').map((t) => t.name)).toEqual(['b', 'c', 'a'])
-  })
-
-  it('sorts by lastUsed descending, treating missing lastUsedAt as oldest', () => {
-    expect(sortTemplates(templates, 'lastUsed').map((t) => t.name)).toEqual(['b', 'a', 'c'])
   })
 })

@@ -23,7 +23,7 @@ import {
   MigrationFormContext,
   RetryMigrationConfig
 } from './features/migration/context/MigrationFormContext'
-import type { SavedTemplate } from './features/migration/mock-templates/types'
+import type { SavedTemplate } from './features/migration/api/migration-blueprints/types'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'

@@ -7,7 +7,7 @@ import {
   DialogTitle
 } from '@mui/material'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import type { SavedTemplate } from '../../mock-templates/types'
+import type { SavedTemplate } from '../../api/migration-blueprints/types'
 
 export interface DeleteTemplateDialogProps {
   open: boolean

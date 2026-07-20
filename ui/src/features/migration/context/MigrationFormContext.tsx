@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { SavedTemplate } from '../mock-templates/types'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 
 type MigrationFormType = 'standard' | 'rolling'
 

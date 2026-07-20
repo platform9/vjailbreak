@@ -1,9 +1,8 @@
 import { Avatar, Box, Chip, Stack, Typography } from '@mui/material'
 import CloudSyncIcon from '@mui/icons-material/CloudSync'
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
-import { formatDistanceToNowStrict } from 'date-fns'
 import { ActionButton, SurfaceCard } from 'src/components'
-import type { SavedTemplate } from '../../mock-templates/types'
+import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import { cutoverOptionLabel, DATA_COPY_METHOD_LABEL } from '../../utils/templateLabels'
 
 export interface TemplateCardProps {
@@ -75,7 +74,7 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
           </Typography>
         </Box>
         <Typography variant="caption" color="text.secondary" noWrap component="div">
-          {template.tenantProject} · {template.targetCluster}
+          {template.targetCluster}
         </Typography>
       </Box>
 
@@ -85,13 +84,7 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
         <Chip size="small" label={`${mappingCount} mapping${mappingCount === 1 ? '' : 's'}`} />
       </Stack>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-        <Typography variant="caption" color="text.secondary" noWrap component="div">
-          {template.lastUsedAt
-            ? `${formatDistanceToNowStrict(new Date(template.lastUsedAt), { addSuffix: true })}`
-            : 'Never used'}{' '}
-          · {template.timesUsed} run{template.timesUsed === 1 ? '' : 's'}
-        </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
         <ActionButton
           tone="primary"
           size="small"

@@ -1,21 +1,23 @@
 import { useEffect, useRef } from 'react'
-import type { SavedTemplate } from '../mock-templates/types'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
 
 interface UseApplyTemplatePrefillParams {
   open: boolean
   templatePrefill: SavedTemplate | undefined
+  pcdData: Array<{ id: string; name?: string }>
   updateParams: (values: Partial<FormValues>) => void
   updateSelectedOptions: (values: Partial<SelectedMigrationOptionsType>) => void
 }
 
 // Maps a saved template's fields onto the New Migration form's FormValues, mirroring
-// the shape of useRetryPrefill.ts's template → FormValues mapping. Runs synchronously
-// (no credential/mapping existence lookups) while templates are mock-data-backed;
-// swap in stale-reference resolution once the real API lands (plan.md FR-009).
+// useRetryPrefill.ts's plan/template → FormValues mapping. A blueprint only stores the
+// target PCD cluster's name, so pcdData resolves it to the id the form expects — the
+// same name→id lookup useRetryPrefill does for retries.
 export function useApplyTemplatePrefill({
   open,
   templatePrefill,
+  pcdData,
   updateParams,
   updateSelectedOptions
 }: UseApplyTemplatePrefillParams) {
@@ -29,13 +31,14 @@ export function useApplyTemplatePrefill({
     if (appliedRef.current === templatePrefill.name) return
     appliedRef.current = templatePrefill.name
 
+    const pcd = pcdData.find((p) => p.name === templatePrefill.targetCluster)
+
     updateParams({
       vmwareCreds: { existingCredName: templatePrefill.sourceVCenter } as FormValues['vmwareCreds'],
       openstackCreds: {
         existingCredName: templatePrefill.destination
       } as FormValues['openstackCreds'],
-      vmwareCluster: templatePrefill.vmwareCluster || '',
-      pcdCluster: templatePrefill.pcdCluster || '',
+      pcdCluster: pcd?.id || templatePrefill.targetCluster || '',
       networkMappings: templatePrefill.networkMappings,
       storageMappings: templatePrefill.storageMappings,
       dataCopyMethod: templatePrefill.dataCopyMethod,
@@ -49,7 +52,7 @@ export function useApplyTemplatePrefill({
       cutoverOption: true,
       useGPU: templatePrefill.useGPU || false
     })
-  }, [open, templatePrefill, updateParams, updateSelectedOptions])
+  }, [open, templatePrefill, pcdData, updateParams, updateSelectedOptions])
 
   return { appliedTemplateName: templatePrefill?.name }
 }

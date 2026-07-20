@@ -11,7 +11,7 @@ import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
 import { useMigrationTemplatesQuery } from '../hooks/useMigrationTemplatesQuery'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import TemplatesTabPanel from '../components/templates/TemplatesTabPanel'
-import type { SavedTemplate } from '../mock-templates/types'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 
 type MigrationsPageTab = 'migrations' | 'templates'
 

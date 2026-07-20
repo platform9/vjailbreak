@@ -1,5 +1,7 @@
+import type { MigrationBlueprintSpec } from 'src/api/migration-blueprints/model'
+
 // Mirrors FormValues.dataCopyMethod ('hot' | 'cold' | 'mock') — the "Hot copy" / "Cold
-// copy" / "Mock copy" tag shown on each template card, per the mockup.
+// copy" / "Mock copy" tag shown on each template card.
 export type DataCopyMethod = 'hot' | 'cold' | 'mock'
 
 export interface SavedTemplateMapping {
@@ -7,31 +9,24 @@ export interface SavedTemplateMapping {
   target: string
 }
 
-/**
- * UI-side shape for a saved Migration Template card/drawer. Field names mirror what
- * plan.md's MigrationTemplateSpec/Status extension will eventually carry, so swapping
- * the mock store in useMigrationTemplatesQuery.ts for real API calls later requires no
- * changes to any component in components/templates/.
- */
+// UI-facing, flattened view of a MigrationBlueprint for the Templates tab
+// card/drawer. `spec` carries the full backend spec so clone/delete can
+// round-trip fields this flattened shape doesn't surface.
 export interface SavedTemplate {
-  name: string // k8s-style unique id (sanitized display name)
+  name: string // k8s object name (sanitized display name)
   displayName: string
   description?: string
   createdAt: string
-  timesUsed: number
-  lastUsedAt?: string
   sourceVCenter: string
   destination: string
-  tenantProject: string
   targetCluster: string
   networkMappings: SavedTemplateMapping[]
   storageMappings: SavedTemplateMapping[]
   dataCopyMethod: DataCopyMethod
   cutoverOption: string // CUTOVER_TYPES value ('0' | '1' | '2')
-  vmwareCluster?: string
-  pcdCluster?: string
   osFamily?: string
   useGPU?: boolean
+  spec: MigrationBlueprintSpec
 }
 
 export interface SaveAsTemplateInput {
@@ -39,14 +34,11 @@ export interface SaveAsTemplateInput {
   description?: string
   sourceVCenter: string
   destination: string
-  tenantProject: string
   targetCluster: string
   networkMappings: SavedTemplateMapping[]
   storageMappings: SavedTemplateMapping[]
   dataCopyMethod: DataCopyMethod
   cutoverOption: string // CUTOVER_TYPES value ('0' | '1' | '2')
-  vmwareCluster?: string
-  pcdCluster?: string
   osFamily?: string
   useGPU?: boolean
 }

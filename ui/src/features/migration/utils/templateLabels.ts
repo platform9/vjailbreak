@@ -1,5 +1,5 @@
 import { CUTOVER_TYPES } from '../constants'
-import type { DataCopyMethod } from '../mock-templates/types'
+import type { DataCopyMethod } from '../api/migration-blueprints/types'
 
 export const DATA_COPY_METHOD_LABEL: Record<DataCopyMethod, string> = {
   hot: 'Hot copy',

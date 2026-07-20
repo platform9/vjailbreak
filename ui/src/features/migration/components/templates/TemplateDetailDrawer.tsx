@@ -3,7 +3,6 @@ import { Box, Typography } from '@mui/material'
 import CloudSyncIcon from '@mui/icons-material/CloudSync'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import { formatDistanceToNowStrict } from 'date-fns'
 import {
   ActionButton,
   DrawerFooter,
@@ -12,7 +11,7 @@ import {
   KeyValueGrid,
   SurfaceCard
 } from 'src/components'
-import type { SavedTemplate } from '../../mock-templates/types'
+import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
 import DeleteTemplateDialog from './DeleteTemplateDialog'
 
@@ -35,24 +34,11 @@ export default function TemplateDetailDrawer({
 
   if (!template) return null
 
-  const infoItems = [
-    {
-      label: 'Times used',
-      value: `${template.timesUsed} migration${template.timesUsed === 1 ? '' : 's'}`
-    },
-    {
-      label: 'Last used',
-      value: template.lastUsedAt
-        ? formatDistanceToNowStrict(new Date(template.lastUsedAt), { addSuffix: true })
-        : 'Never'
-    },
-    { label: 'Created', value: new Date(template.createdAt).toLocaleDateString() }
-  ]
+  const infoItems = [{ label: 'Created', value: new Date(template.createdAt).toLocaleDateString() }]
 
   const sourceDestinationItems = [
     { label: 'Source vCenter', value: template.sourceVCenter },
     { label: 'Destination', value: template.destination },
-    { label: 'Tenant / project', value: template.tenantProject },
     { label: 'Target cluster', value: template.targetCluster }
   ]
 
@@ -62,7 +48,7 @@ export default function TemplateDetailDrawer({
   ]
 
   const handleClone = async () => {
-    await cloneMutation.mutateAsync(template.name)
+    await cloneMutation.mutateAsync(template)
     onClose()
   }
 

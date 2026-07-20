@@ -10,7 +10,7 @@ import {
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import { useSaveAsTemplate } from '../../hooks/useSaveAsTemplate'
-import type { SaveAsTemplateInput } from '../../mock-templates/types'
+import type { SaveAsTemplateInput } from '../../api/migration-blueprints/types'
 
 export interface SaveAsTemplateDialogProps {
   open: boolean
