@@ -4161,6 +4161,7 @@ rules:
   - clustermigrations
   - esximigrations
   - esxisshcreds
+  - migrationblueprints
   - migrationplans
   - migrations
   - migrationtemplates

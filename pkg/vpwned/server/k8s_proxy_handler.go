@@ -41,6 +41,12 @@ var allowedRoutes = []allowedRoute{
 	{http.MethodPost, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets$`)},
 	{http.MethodPut, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets/[^/?]+$`)},
 	{http.MethodDelete, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets/[^/?]+$`)},
+	// MigrationBlueprints — full CRUD via proxy
+	{http.MethodGet, regexp.MustCompile(`^/apis/vjailbreak\.k8s\.pf9\.io/v1alpha1/namespaces/migration-system/migrationblueprints(/[^/?]+)?$`)},
+	{http.MethodPost, regexp.MustCompile(`^/apis/vjailbreak\.k8s\.pf9\.io/v1alpha1/namespaces/migration-system/migrationblueprints$`)},
+	{http.MethodPut, regexp.MustCompile(`^/apis/vjailbreak\.k8s\.pf9\.io/v1alpha1/namespaces/migration-system/migrationblueprints/[^/?]+$`)},
+	{http.MethodPatch, regexp.MustCompile(`^/apis/vjailbreak\.k8s\.pf9\.io/v1alpha1/namespaces/migration-system/migrationblueprints/[^/?]+$`)},
+	{http.MethodDelete, regexp.MustCompile(`^/apis/vjailbreak\.k8s\.pf9\.io/v1alpha1/namespaces/migration-system/migrationblueprints/[^/?]+$`)},
 }
 
 func isAllowedRoute(method, k8sPath string) bool {

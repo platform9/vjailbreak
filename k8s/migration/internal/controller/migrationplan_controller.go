@@ -99,6 +99,7 @@ var v2vimage = "platform9/v2v-helper:v0.1"
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationtemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=migrationblueprints,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vjailbreak.k8s.pf9.io,resources=proxyvms,verbs=get;list;watch;update;patch
 
 // Reconcile reads that state of the cluster for a MigrationPlan object and makes necessary changes
