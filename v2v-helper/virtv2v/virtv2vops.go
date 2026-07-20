@@ -761,12 +761,14 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(stdoutBuf.String()), nil
 }
 
-// GuestDiskIndex returns the position of device within the guest disks reported
-// by libguestfs list-devices. Unlike device-index, list-devices excludes the
-// appliance's own disk and lists the attached disks in -a order (== vm.VMDisk
-// order), so the returned position is a valid VMDisks index regardless of where
-// the appliance disk lands in the kernel enumeration. Returns an error if device
-// is not one of the guest disks (e.g. the caller resolved the appliance disk).
+/*
+GuestDiskIndex returns the position of device within the guest disks reported
+by libguestfs list-devices. Unlike device-index, list-devices excludes the
+appliance's own disk and lists the attached disks in -a order (== vm.VMDisk
+order), so the returned position is a valid VMDisks index regardless of where
+the appliance disk lands in the kernel enumeration. Returns an error if device
+is not one of the guest disks (e.g. the caller resolved the appliance disk).
+*/
 func GuestDiskIndex(disks []vm.VMDisk, device string) (int, error) {
 	out, err := RunCommandInGuestAllVolumes(disks, "list-devices", false)
 	if err != nil {
