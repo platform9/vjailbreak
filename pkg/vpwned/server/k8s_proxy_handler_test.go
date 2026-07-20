@@ -219,18 +219,10 @@ func TestHandleK8sProxy_AllowedPaths(t *testing.T) {
 		{"create secret", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets", http.StatusOK},
 		{"replace secret", http.MethodPut, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
 		{"delete secret", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
-		// migrationblueprints — allowed CRUD
-		{"list migrationblueprints", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints", http.StatusOK},
-		{"get migrationblueprint", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints/my-bp", http.StatusOK},
-		{"create migrationblueprint", http.MethodPost, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints", http.StatusOK},
-		{"replace migrationblueprint", http.MethodPut, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints/my-bp", http.StatusOK},
-		{"patch migrationblueprint", http.MethodPatch, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints/my-bp", http.StatusOK},
-		{"delete migrationblueprint", http.MethodDelete, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints/my-bp", http.StatusOK},
 		// blocked — wrong namespace
 		{"secrets kube-system forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/secrets", http.StatusForbidden},
-		{"migrationblueprints default ns forbidden", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/default/migrationblueprints", http.StatusForbidden},
-		// blocked — other CRDs not routed through proxy
-		{"migrationplans via proxy forbidden", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationplans", http.StatusForbidden},
+		// blocked — CRDs are not routed through the proxy (UI calls them directly)
+		{"migrationblueprints via proxy forbidden", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints", http.StatusForbidden},
 		{"pods default ns forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/default/pods", http.StatusForbidden},
 		// blocked — disallowed methods on pods
 		{"post pods forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusForbidden},
