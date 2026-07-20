@@ -178,6 +178,7 @@ func main() {
 		NetAppFlexVol:          migrationparams.NetAppFlexVol,
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
+		TargetMetadata:         utils.BuildTargetMetadata(migrationparams.SourceTagsMetadata, migrationparams.CustomMetadata),
 	}
 
 	if migrationobj.ServerGroup != "" {

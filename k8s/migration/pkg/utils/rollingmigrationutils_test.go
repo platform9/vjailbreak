@@ -270,6 +270,96 @@ func TestConvertVMSequenceToMigrationPlans_UsesVMIDKeyedNames(t *testing.T) {
 	}
 }
 
+func TestConvertVMSequenceToMigrationPlans_PropagatesTagsAndCustomMetadata(t *testing.T) {
+	ns := constants.NamespaceMigrationSystem
+	credsName := "vmware-creds"
+	templateName := "test-template"
+
+	plan := &vjailbreakv1alpha1.RollingMigrationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-rmp-tags", Namespace: ns},
+		Spec: vjailbreakv1alpha1.RollingMigrationPlanSpec{
+			MigrationPlanSpecPerVM: vjailbreakv1alpha1.MigrationPlanSpecPerVM{
+				MigrationTemplate:  templateName,
+				PreserveSourceTags: true,
+				CustomMetadata:     map[string]string{"wave": "2", "migrated_by": "vjailbreak"},
+			},
+			ClusterSequence: []vjailbreakv1alpha1.ClusterMigrationInfo{
+				{
+					ClusterName:          "cluster-01",
+					VMMigrationBatchSize: 10,
+					VMSequence: []vjailbreakv1alpha1.VMSequenceInfo{
+						{VMName: "ubuntu-1"},
+					},
+				},
+			},
+		},
+	}
+	template := &vjailbreakv1alpha1.MigrationTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: templateName, Namespace: ns},
+		Spec: vjailbreakv1alpha1.MigrationTemplateSpec{
+			Source: vjailbreakv1alpha1.MigrationTemplateSource{VMwareRef: credsName},
+		},
+	}
+	creds := &vjailbreakv1alpha1.VMwareCreds{
+		ObjectMeta: metav1.ObjectMeta{Name: credsName, Namespace: ns},
+	}
+	vm1 := &vjailbreakv1alpha1.VMwareMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ubuntu-1-180-hash",
+			Namespace: ns,
+			Labels:    map[string]string{constants.VMwareCredsLabel: credsName},
+		},
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Name:     "ubuntu-1",
+				VMID:     "vm-180",
+				ESXiName: "10.9.26.32",
+			},
+		},
+	}
+
+	scheme := testScheme(t)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(plan, template, creds, vm1).
+		Build()
+
+	s, err := scope.NewClusterMigrationScope(scope.ClusterMigrationScopeParams{
+		Client:               fakeClient,
+		ClusterMigration:     &vjailbreakv1alpha1.ClusterMigration{ObjectMeta: metav1.ObjectMeta{Namespace: ns}},
+		RollingMigrationPlan: plan,
+	})
+	if err != nil {
+		t.Fatalf("failed to create scope: %v", err)
+	}
+
+	if err := ConvertVMSequenceToMigrationPlans(context.Background(), s, 10); err != nil {
+		t.Fatalf("ConvertVMSequenceToMigrationPlans() error: %v", err)
+	}
+
+	mpList := &vjailbreakv1alpha1.MigrationPlanList{}
+	if err := fakeClient.List(context.Background(), mpList); err != nil {
+		t.Fatalf("failed to list MigrationPlans: %v", err)
+	}
+	if len(mpList.Items) == 0 {
+		t.Fatal("expected at least one MigrationPlan to be created")
+	}
+
+	mp := mpList.Items[0]
+	if !mp.Spec.PreserveSourceTags {
+		t.Error("PreserveSourceTags not propagated from RollingMigrationPlan to batch MigrationPlan")
+	}
+	wantMetadata := map[string]string{"wave": "2", "migrated_by": "vjailbreak"}
+	if len(mp.Spec.CustomMetadata) != len(wantMetadata) {
+		t.Fatalf("CustomMetadata = %v, want %v", mp.Spec.CustomMetadata, wantMetadata)
+	}
+	for k, v := range wantMetadata {
+		if mp.Spec.CustomMetadata[k] != v {
+			t.Errorf("CustomMetadata[%q] = %q, want %q", k, mp.Spec.CustomMetadata[k], v)
+		}
+	}
+}
+
 func TestFilterHostsForMigrationPlan(t *testing.T) {
 	makeHost := func(name string) vjailbreakv1alpha1.VMwareHost {
 		return vjailbreakv1alpha1.VMwareHost{

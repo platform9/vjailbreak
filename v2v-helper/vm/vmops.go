@@ -76,6 +76,7 @@ type VMInfo struct {
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
 	GatewayIP         map[string]string
+	TargetMetadata    map[string]string
 }
 
 type NIC struct {

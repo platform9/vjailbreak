@@ -103,6 +103,14 @@ spec:
                       to remove VMware Tools post migration
                     type: boolean
                 type: object
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
+                type: object
               fallbackToDHCP:
                 type: boolean
               firstBootScript:
@@ -192,6 +200,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               securityGroups:
                 items:
                   type: string
