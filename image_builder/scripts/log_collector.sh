@@ -246,7 +246,17 @@ collect_version_info() {
         echo ""
         echo "=== Tool Versions (from migration logs) ==="
         if [ -d "$LOG_DIR" ]; then
-            local recent_log=$(find "$LOG_DIR" -mindepth 2 -type f -name "migration.*.log" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+            # nbdkit/VDDK/nbdcopy details live in the dedicated "nbd.*.log" file
+            # (per-migration debug logs are now split by tool: nbd.*.log,
+            # virtv2v.*.log, general.*.log -- see pkg/utils/nbdutils.go).
+            local recent_log=$(find "$LOG_DIR" -mindepth 2 -type f -name "nbd.*.log" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+
+            if [ -z "$recent_log" ]; then
+                # Fall back to the pre-split combined log name, or any other
+                # per-migration debug log, for backwards compatibility with
+                # older v2v-helper versions.
+                recent_log=$(find "$LOG_DIR" -mindepth 2 -type f -name "migration.*.log" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+            fi
 
             if [ -z "$recent_log" ]; then
                 recent_log=$(find "$LOG_DIR" -type f -name "migration*.log" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
@@ -309,8 +319,8 @@ collect_version_info() {
                     fi
                     echo ""
                 else
-                    echo "Note: Selected log file is a high-level migration log without detailed tool version information."
-                    echo "Detailed version info is typically in subdirectory logs (migration-<vm>/migration.*.log)."
+                    echo "Note: Selected log file does not contain nbdkit debug output."
+                    echo "Detailed nbdkit/VDDK/nbdcopy version info is in subdirectory logs (migration-<vm>/nbd.*.log)."
                     echo ""
                 fi
             else
