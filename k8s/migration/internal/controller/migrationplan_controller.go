@@ -1663,6 +1663,10 @@ func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Conte
 	if len(profileNames) == 0 {
 		return nil
 	}
+	r.ctxlog.Info("Resolving VolumeImageProfiles for migration",
+		"migration", migrationobj.Name,
+		"vm", vmMachine.Name,
+		"requestedProfiles", profileNames)
 
 	// Prefer the migration template's override when set, otherwise fall back to detected OS family.
 	effectiveOSFamily := strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily)
@@ -1735,6 +1739,11 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 				"vmOSFamily", osFamily)
 			continue
 		}
+		r.ctxlog.Info("Applying VolumeImageProfile",
+			"profile", profile.Name,
+			"profileOSFamily", profileOS,
+			"vmOSFamily", osFamily,
+			"properties", profile.Spec.Properties)
 		for k, v := range profile.Spec.Properties {
 			if prev, exists := merged[k]; exists && prev != v {
 				r.ctxlog.Info("VolumeImageProfile key conflict; later profile wins",
@@ -1747,6 +1756,13 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 			merged[k] = v
 			contributedBy[k] = profile.Name
 		}
+	}
+	if len(merged) > 0 {
+		r.ctxlog.Info("Resolved VolumeImageProfile metadata",
+			"requestedProfiles", profileNames,
+			"vmOSFamily", osFamily,
+			"mergedMetadata", merged,
+			"contributedBy", contributedBy)
 	}
 	return merged, nil
 }
