@@ -2356,7 +2356,7 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 
 		mac := vminfo.Mac[idx]
 		detectedIPs := logAndCollectDetectedIPs(vminfo, mac)
-		loggedIPs := applyPreserveIPOverride(vminfo, idx, mac, override, detectedIPs)
+		loggedIPs := applyPreserveIPOverride(vminfo, idx, mac, override, detectedIPs, migobj.FallbackToDHCP)
 		mac = applyPreserveMACOverride(vminfo, idx, mac, override.preserveMAC)
 		utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], loggedIPs))
 
@@ -2446,7 +2446,9 @@ func logAndCollectDetectedIPs(vminfo *vm.VMInfo, mac string) []string {
 
 // applyPreserveIPOverride replaces vminfo.IPperMac[mac] with the user-assigned
 // IP, or clears it, when preserveIP is false; returns the IPs for logging.
-func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override nicOverride, detectedIPs []string) []string {
+// If no custom IP is given, fallbackToDHCP picks nil (auto-allocate) vs an
+// empty slice (no fixed IPs) for GetCreateOpts.
+func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override nicOverride, detectedIPs []string, fallbackToDHCP bool) []string {
 	if override.preserveIP {
 		return detectedIPs
 	}
@@ -2461,9 +2463,15 @@ func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override ni
 		return override.userAssignedIP
 	}
 
-	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
-	vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
-	return detectedIPs                    // matches pre-refactor log wording, even though these IPs are discarded
+	if fallbackToDHCP {
+		utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s, fallbackToDHCP=true — port will auto-allocate an IP", idx, mac))
+		vminfo.IPperMac[mac] = nil
+		return detectedIPs
+	}
+
+	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s, fallbackToDHCP=false — port will have no fixed IPs", idx, mac))
+	vminfo.IPperMac[mac] = []vm.IpEntry{}
+	return detectedIPs
 }
 
 // applyPreserveMACOverride copies mac's IPs to the "" key and returns "" so
