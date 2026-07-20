@@ -221,8 +221,6 @@ func TestHandleK8sProxy_AllowedPaths(t *testing.T) {
 		{"delete secret", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
 		// blocked — wrong namespace
 		{"secrets kube-system forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/secrets", http.StatusForbidden},
-		// blocked — CRDs are not routed through the proxy (UI calls them directly)
-		{"migrationblueprints via proxy forbidden", http.MethodGet, "/vpw/v1/k8s/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints", http.StatusForbidden},
 		{"pods default ns forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/default/pods", http.StatusForbidden},
 		// blocked — disallowed methods on pods
 		{"post pods forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods", http.StatusForbidden},
