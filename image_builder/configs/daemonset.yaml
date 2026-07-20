@@ -59,21 +59,56 @@ spec:
             - |
               IS_MASTER=$(grep -E '^export IS_MASTER=' /etc/pf9/k3s.env | cut -d'=' -f2)
               MASTER_IP=$(grep -E '^export MASTER_IP=' /etc/pf9/k3s.env | cut -d'=' -f2)
+
+              # Migration considered idle if quiet for this long; only then is it eligible for cleanup.
+              ACTIVITY_WINDOW_MIN=60
+              # Delete threshold: older than 24h.
+              RETENTION_MTIME=+1
+
+              # Deletes migration-<vm>-<id>.log + migration-<vm>-<id>/ as one unit,
+              # skipping the pair if either was written to within ACTIVITY_WINDOW_MIN.
+              cleanup_dir() {
+                local base_dir="$1"
+                [ -d "$base_dir" ] || return 0
+
+                local names
+                names=$( { find "$base_dir" -maxdepth 1 -type f -name 'migration-*.log' -printf '%f\n' 2>/dev/null | sed 's/\.log$//'
+                           find "$base_dir" -mindepth 1 -maxdepth 1 -type d -name 'migration-*' -printf '%f\n' 2>/dev/null
+                         } | sort -u )
+
+                echo "$names" | while IFS= read -r name; do
+                  [ -n "$name" ] || continue
+                  local log_file="$base_dir/$name.log"
+                  local dir="$base_dir/$name"
+
+                  if find "$log_file" "$dir" -type f -mmin -"$ACTIVITY_WINDOW_MIN" 2>/dev/null | grep -q .; then
+                    echo "[cleanup] Skipping $name (active within last ${ACTIVITY_WINDOW_MIN}m)"
+                    continue
+                  fi
+
+                  [ -f "$log_file" ] && find "$log_file" -mtime "$RETENTION_MTIME" -delete 2>/dev/null
+                  if [ -d "$dir" ]; then
+                    find "$dir" -type f -mtime "$RETENTION_MTIME" -delete 2>/dev/null
+                    rmdir "$dir" 2>/dev/null || true
+                  fi
+                done
+
+                # Stray non-migration files: clean by age alone.
+                find "$base_dir" -maxdepth 1 -type f ! -name 'migration-*.log' -mtime "$RETENTION_MTIME" -delete 2>/dev/null || true
+              }
+
               if [ "$IS_MASTER" = "true" ]; then
                 echo "Master node detected. IP: $MASTER_IP"
-                
-                # Clean up logs older than 24 hours on master node
-                echo "Cleaning up logs older than 24 hours on master node"
-                # Note: Not restarting services to avoid disruption
-                # Instead, properly closing files in the v2v-helper code
-                # Clean master's own logs and force delete any stuck files
-                find /var/log/pf9 -type f -mtime +1 -delete 2>/dev/null || true
-                # Clean worker logs stored on master and force delete any stuck files
-                find /var/lib/rsync/worker-logs -type f -mtime +1 -delete 2>/dev/null || true
-                # Clear deleted but open files (useful when processes still hold file handles)
-                echo "Clearing deleted but open files..."
-                lsof +L1 | grep "/var/log/pf9\|/var/lib/rsync/worker-logs" | awk '{print $2}' | xargs -r kill -HUP 2>/dev/null || true
-                
+
+                master_cleanup_loop() {
+                  while true; do
+                    echo "Cleaning up logs older than 24 hours on master node ($(date))"
+                    cleanup_dir /var/log/pf9
+                    sleep 300
+                  done
+                }
+                master_cleanup_loop &
+
                 echo "Starting rsync daemon..."
                 rsync --daemon --config=/etc/pf9/rsyncd.conf --no-detach
                 if ps aux | grep rsync | grep -v grep; then
@@ -84,29 +119,24 @@ spec:
                 fi
               else
                 echo "Worker node detected. Syncing from Master..."
+
+                agent_cleanup_loop() {
+                  while true; do
+                    echo "Cleaning up logs older than 24 hours on worker node ($(date))"
+                    cleanup_dir /var/log/pf9
+                    sync
+                    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+                    sleep 300
+                  done
+                }
+                agent_cleanup_loop &
+
                 while true; do
                   mkdir -p /home/ubuntu/vmware-vix-disklib-distrib/
-                  
-                  # Clean up logs older than 24 hours on worker node
-                  echo "Cleaning up logs older than 24 hours on worker node"
-                  # Note: Not restarting services to avoid disruption
-                  # Instead, properly closing files in the v2v-helper code
-                  # Force delete old log files
-                  find /var/log/pf9 -type f -mtime +1 -delete 2>/dev/null || true
-                  # Clear deleted but open files
-                  echo "Clearing deleted but open files..."
-                  lsof +L1 | grep "/var/log/pf9" | awk '{print $2}' | xargs -r kill -HUP 2>/dev/null || true
-                  # Free up disk space by clearing caches
-                  sync
-                  echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-                  
+
                   echo "Syncing from rsync://${MASTER_IP}"
                   rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
-
-                  # Sync logs from worker to master
                   rsync -avz  /var/log/pf9 rsync://${MASTER_IP}/worker-logs
-
-                  # Sync virtio-win drivers from master to worker
                   rsync -avz rsync://${MASTER_IP}/virtio-win /home/ubuntu/virtio-win
 
                   if [ $? -eq 0 ]; then
