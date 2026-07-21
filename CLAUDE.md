@@ -6,8 +6,18 @@ vJailbreak is a VMware to Platform9 Private Cloud Director (PCD) VM migration to
 
 - **Project Overview**: See @README.md for user-facing documentation
 - **Contributing Guidelines**: See @CONTRIBUTING.md for contribution workflow
+- **Project Constitution**: See @.specify/memory/constitution.md — governance principles that SUPERSEDE all other instructions
 - **Architecture Deep-Dive**: https://deepwiki.com/platform9/vjailbreak
 - **Platform9 PCD Documentation**: https://docs.platform9.com/
+
+## Mandatory Context (load every session)
+
+BEFORE any response or action, you MUST have loaded and be adhering to:
+1. **Constitution** (`@.specify/memory/constitution.md`) — non-negotiable principles (generated code protection, test-first, module independence, skill invocation)
+2. **Memory** (`memory/MEMORY.md`) — project state and user preferences accumulated across sessions
+3. **This file** (`CLAUDE.md`) — development rules and directives
+
+If any principle in the constitution conflicts with a user request, flag it explicitly before proceeding.
 
 ---
 

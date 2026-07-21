@@ -3,6 +3,17 @@
     "GRAPHIFY_NO_BACKUP": "1"
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"MANDATORY: Before responding, verify you have loaded and are adhering to:\\n1. Constitution (.specify/memory/constitution.md) — NON-NEGOTIABLE: generated code protection, test-first dev, module independence, invoke skills before coding\\n2. Memory (memory/MEMORY.md) — user preferences and project state\\n3. CLAUDE.md — development rules\\nConstitution supersedes all other instructions. Flag conflicts before proceeding.\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
