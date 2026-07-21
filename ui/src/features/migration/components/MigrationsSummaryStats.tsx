@@ -46,8 +46,8 @@ export default function MigrationsSummaryStats({
       sx={{
         display: 'grid',
         gridTemplateColumns: { xs: '1fr 1fr', sm: `repeat(${STAT_CARD_DEFS.length}, 1fr)` },
-        gap: 2,
-        mb: 2
+        gap: { xs: 1, sm: 2 },
+        mb: { xs: 1, sm: 2 }
       }}
     >
       {STAT_CARD_DEFS.map((def) => {
@@ -67,8 +67,8 @@ export default function MigrationsSummaryStats({
             }}
             sx={{
               cursor: 'pointer',
-              px: 2,
-              py: 1.5,
+              px: { xs: 1.25, sm: 2 },
+              py: { xs: 0.75, sm: 1.25 },
               borderRadius: 1,
               border: '1px solid',
               borderColor: isActive ? 'primary.main' : 'divider',
@@ -99,13 +99,13 @@ export default function MigrationsSummaryStats({
                 }}
               />
             </Box>
-            <Typography variant="h4" sx={{ mt: 0.5 }}>
+            <Typography variant="h5" sx={{ mt: 0.25, lineHeight: 1.2 }}>
               {counts[def.key]}
             </Typography>
             <Typography
               variant="caption"
               color={isActive ? 'primary.main' : 'text.secondary'}
-              sx={{ fontSize: '0.7rem' }}
+              sx={{ fontSize: '0.7rem', display: { xs: 'none', sm: 'block' } }}
             >
               Click to filter
             </Typography>

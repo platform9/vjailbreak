@@ -1,11 +1,17 @@
-import type { SavedTemplate } from '../api/migration-blueprints/types'
+import type { DataCopyMethod, SavedTemplate } from '../api/migration-blueprints/types'
 
 export type TemplateSortKey = 'name' | 'created'
+export type TemplateCopyMethodFilter = DataCopyMethod | 'all'
 
-export function filterTemplates(templates: SavedTemplate[], query: string): SavedTemplate[] {
+export function filterTemplates(
+  templates: SavedTemplate[],
+  query: string,
+  copyMethod: TemplateCopyMethodFilter = 'all'
+): SavedTemplate[] {
   const trimmedQuery = query.trim().toLowerCase()
 
   return templates.filter((template) => {
+    if (copyMethod !== 'all' && template.dataCopyMethod !== copyMethod) return false
     if (!trimmedQuery) return true
 
     return [template.displayName, template.description].some((field) =>

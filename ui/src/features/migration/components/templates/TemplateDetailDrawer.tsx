@@ -7,15 +7,17 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
-import { ActionButton, DrawerShell, KeyValueGrid, SurfaceCard } from 'src/components'
+import SettingsSuggestOutlinedIcon from '@mui/icons-material/SettingsSuggestOutlined'
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined'
+import { ActionButton, DrawerShell } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
 import { useTemplateTenantLookup } from '../../hooks/useTemplateTenantLookup'
 import {
+  buildAdvancedOptionRows,
   cutoverOptionLabel,
   dataCopyMethodChipSx,
   DATA_COPY_METHOD_LABEL,
-  deriveAdvancedOptionsSummary,
   guestOsLabel,
   storageCopyMethodLabel
 } from '../../utils/templateLabels'
@@ -51,12 +53,44 @@ function SectionBlock({ icon, title, children }: { icon: ReactNode; title: strin
 function DetailRow({
   label,
   value,
-  isLast = false
+  isLast = false,
+  stacked = false
 }: {
   label: string
   value: ReactNode
   isLast?: boolean
+  // Long values (scripts, comma-joined lists) read poorly squeezed into a
+  // right-aligned half-width column — stack label above a full-width, left-aligned
+  // value instead.
+  stacked?: boolean
 }) {
+  if (stacked) {
+    return (
+      <Box
+        sx={{
+          px: 2,
+          py: 1.25,
+          borderBottom: isLast ? 'none' : '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          {label}
+        </Typography>
+        {typeof value === 'string' ? (
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+          >
+            {value}
+          </Typography>
+        ) : (
+          value
+        )}
+      </Box>
+    )
+  }
+
   return (
     <Box
       sx={{
@@ -103,7 +137,11 @@ export default function TemplateDetailDrawer({
 
   const tenantProject = tenantByDestination[template.destination] || ''
 
-  const infoItems = [{ label: 'Created', value: new Date(template.createdAt).toLocaleDateString() }]
+  const createdLabel = new Date(template.createdAt).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 
   const mappings = [
     ...template.networkMappings.map((m) => ({ ...m, kind: 'Network' })),
@@ -111,6 +149,7 @@ export default function TemplateDetailDrawer({
   ]
 
   const copyMethodLabel = storageCopyMethodLabel(template.spec.storageCopyMethod)
+  const advancedOptionRows = buildAdvancedOptionRows(template)
 
   const handleClone = async () => {
     await cloneMutation.mutateAsync(template)
@@ -128,7 +167,7 @@ export default function TemplateDetailDrawer({
       <DrawerShell
         open={open}
         onClose={onClose}
-        width={460}
+        width={560}
         requireCloseConfirmation={false}
         data-testid="template-detail-drawer"
         header={
@@ -147,11 +186,32 @@ export default function TemplateDetailDrawer({
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, minWidth: 0 }}>
               <TemplateTypeAvatar dataCopyMethod={template.dataCopyMethod} />
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 700 }}>
-                  {template.displayName}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 700 }}>
+                    {template.displayName}
+                  </Typography>
+                  {/* Created date folded in next to the title as a small pill instead of
+                      its own full-width card — a single date doesn't need a whole section. */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      px: 1,
+                      py: 0.25,
+                      borderRadius: 5,
+                      bgcolor: 'action.hover',
+                      flexShrink: 0
+                    }}
+                  >
+                    <CalendarTodayOutlinedIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {createdLabel}
+                    </Typography>
+                  </Box>
+                </Box>
                 {template.description && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     {template.description}
                   </Typography>
                 )}
@@ -219,10 +279,6 @@ export default function TemplateDetailDrawer({
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <SurfaceCard variant="card">
-            <KeyValueGrid items={infoItems} mdGrids={1} />
-          </SurfaceCard>
-
           <SectionBlock icon={<DnsOutlinedIcon fontSize="small" color="action" />} title="Source & destination">
             <DetailRow label="Source vCenter" value={template.sourceVCenter} />
             <DetailRow label="Destination" value={template.destination} />
@@ -272,8 +328,30 @@ export default function TemplateDetailDrawer({
               }
             />
             <DetailRow label="Cutover" value={cutoverOptionLabel(template.cutoverOption)} />
-            <DetailRow label="Guest OS" value={guestOsLabel(template.osFamily)} />
-            <DetailRow label="Advanced" value={deriveAdvancedOptionsSummary(template.spec)} isLast />
+            <DetailRow label="Guest OS" value={guestOsLabel(template.osFamily)} isLast />
+          </SectionBlock>
+
+          <SectionBlock
+            icon={<SettingsSuggestOutlinedIcon fontSize="small" color="action" />}
+            title="Advanced options"
+          >
+            {advancedOptionRows.length === 0 ? (
+              <Box sx={{ px: 2, py: 1.25 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No advanced options configured.
+                </Typography>
+              </Box>
+            ) : (
+              advancedOptionRows.map((row, index) => (
+                <DetailRow
+                  key={row.label}
+                  label={row.label}
+                  value={row.value}
+                  isLast={index === advancedOptionRows.length - 1}
+                  stacked={row.value.length > 40}
+                />
+              ))
+            )}
           </SectionBlock>
         </Box>
       </DrawerShell>

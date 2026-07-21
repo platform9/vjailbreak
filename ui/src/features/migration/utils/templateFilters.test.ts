@@ -68,6 +68,29 @@ describe('filterTemplates', () => {
     expect(filterTemplates(templates, 'nonexistent')).toEqual([])
   })
 })
+describe('filterTemplates copy method filter', () => {
+  const templates = [
+    makeTemplate({ name: 'a', displayName: 'Hot one', dataCopyMethod: 'hot' }),
+    makeTemplate({ name: 'b', displayName: 'Cold one', dataCopyMethod: 'cold' }),
+    makeTemplate({ name: 'c', displayName: 'Mock one', dataCopyMethod: 'mock' })
+  ]
+
+  it('returns all templates when filter is "all"', () => {
+    expect(filterTemplates(templates, '', 'all')).toHaveLength(3)
+  })
+
+  it('returns only templates matching the copy method', () => {
+    expect(filterTemplates(templates, '', 'cold')).toEqual([templates[1]])
+  })
+
+  it('combines copy method filter with search query', () => {
+    expect(filterTemplates(templates, 'one', 'hot')).toEqual([templates[0]])
+  })
+
+  it('defaults to "all" when copy method is omitted', () => {
+    expect(filterTemplates(templates, '')).toHaveLength(3)
+  })
+})
 
 describe('sortTemplates', () => {
   const templates = [

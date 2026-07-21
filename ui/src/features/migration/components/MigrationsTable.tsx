@@ -216,17 +216,21 @@ export default function MigrationsTable({
             (params.row?.metadata?.labels?.['vjailbreak.k8s.pf9.io/vm-key'] as string) ||
             ''
           const displayVmName = isDuplicate && vmKey ? vmKey : vmName
-          const migrationTypeLabel = isHotMigration
-            ? 'Hot'
-            : isColdMigration
-              ? 'Cold'
-              : isMockMigration
-                ? 'Mock'
-                : ''
-          const subtitle = [migrationTypeLabel, osFamily].filter(Boolean).join(' · ')
+          // Migration type is already conveyed by the colored dot before the name —
+          // no need to repeat it as text here.
+          const subtitle = osFamily || ''
 
           return (
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, py: 0.5 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 0.5,
+                py: 0.5,
+                width: '100%',
+                minWidth: 0
+              }}
+            >
               {isHotMigration && (
                 <Tooltip title="Hot Migration">
                   <FiberManualRecordIcon
@@ -263,7 +267,7 @@ export default function MigrationsTable({
                   />
                 </Tooltip>
               )}
-              <Box sx={{ overflow: 'hidden' }}>
+              <Box sx={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
                 <Tooltip title={tooltipTitle} arrow>
                   <Typography
                     variant="body2"
@@ -313,11 +317,12 @@ export default function MigrationsTable({
 
           const sourceVmwareRef = destination?.sourceVmwareRef || 'N/A'
           const destinationOpenstackRef = destination?.destinationOpenstackRef || 'N/A'
-          const sourceDatacenter = destination?.sourceDatacenter || 'N/A'
+          const rawSourceDatacenter = destination?.sourceDatacenter || 'N/A'
+          const sourceDatacenter = rawSourceDatacenter === 'N/A' ? 'No cluster' : rawSourceDatacenter
           const destinationTenant = destination?.destinationTenant || 'N/A'
 
           return (
-            <Box sx={{ py: 0.5, overflow: 'hidden' }}>
+            <Box sx={{ py: 0.5, overflow: 'hidden', width: '100%', minWidth: 0 }}>
               <Typography
                 variant="body2"
                 noWrap
@@ -486,11 +491,7 @@ export default function MigrationsTable({
                 display: 'flex',
                 gap: 0.5,
                 alignItems: 'center',
-                height: '100%',
-                opacity: 0,
-                transition: 'opacity 0.1s ease',
-                '.MuiDataGrid-row:hover &': { opacity: 1 },
-                '.MuiDataGrid-row:focus-within &': { opacity: 1 }
+                height: '100%'
               }}
               onClick={(e) => e.stopPropagation()}
             >

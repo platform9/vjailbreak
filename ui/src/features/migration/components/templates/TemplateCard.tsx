@@ -45,27 +45,51 @@ export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: 
         sx={{
           cursor: 'pointer',
           height: '100%',
-          '&:hover .template-card-hover-actions': { opacity: 1 }
+          transition: 'border-color 0.15s ease',
+          '&:hover': { borderColor: 'primary.main' }
         }}
         onClick={() => onOpenDetail(template)}
       >
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
           <TemplateTypeAvatar dataCopyMethod={template.dataCopyMethod} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+            {/* Title and description each own their parent Box so they can be sized
+                independently — the description box's height isn't coupled to the
+                title's line height. */}
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                variant="body1"
+                component="h3"
+                title={template.displayName}
+                sx={{
+                  fontWeight: 500,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+              >
                 {template.displayName}
               </Typography>
             </Box>
+            {/* No fixed/min height here — a forced height either clips long text
+                (or worse, lets it bleed past the box) or leaves a dead gap when the
+                description is short or missing. Clamping to 2 lines caps runaway-long
+                text; cards with no or short description just take less vertical space,
+                and the grid row's natural stretch + the footer's mt:'auto' below keep
+                every card's bottom-aligned regardless. */}
             {template.description && (
               <Typography
                 variant="body2"
                 color="text.secondary"
+                title={template.description}
                 sx={{
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  wordBreak: 'break-word',
+                  mt: 0.25
                 }}
               >
                 {template.description}
@@ -73,12 +97,9 @@ export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: 
             )}
           </Box>
           <Box
-            className="template-card-hover-actions"
             sx={{
               display: 'flex',
               gap: 0.5,
-              opacity: 0,
-              transition: 'opacity 0.1s ease',
               flexShrink: 0
             }}
           >
