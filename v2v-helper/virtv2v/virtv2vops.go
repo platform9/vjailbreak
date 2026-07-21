@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -600,6 +601,103 @@ func AddWildcardNetplanForL2(disks []vm.VMDisk, diskPath string) error {
 
 }
 
+// netplanDHCPWildcard is a netplan that brings every ethernet interface up via
+// DHCP by matching on interface name rather than MAC address. It is used when no
+// NIC has a fixed IP — e.g. migrating to a different network with "Fallback to
+// DHCP" and/or preserveMAC=false. Matching by the source MAC would fail in that
+// case because OpenStack assigns the port a fresh MAC and the guest renames the
+// NIC (ensX/enpXsY), so the old per-MAC "vjN" stanzas never bound to the real
+// interface and the VM came up with no network.
+const netplanDHCPWildcard = `network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    all-interfaces:
+      match:
+        name: "*"
+      dhcp4: true
+      optional: true
+`
+
+// buildWildcardNetplanYAML renders the guest netplan from the per-MAC fixed-IP
+// map. It is a pure function (no I/O) so it is unit-testable without libguestfs.
+// Output is deterministic: MAC keys are sorted.
+//
+// Behaviour per NIC:
+//   - MAC with fixed IP entries    -> static config (dhcp4:false + addresses),
+//     matched by MAC address.
+//   - MAC with an empty IP slice   -> DHCP (dhcp4:true, optional:true), matched
+//     by MAC address. An empty (non-nil) slice is the signal set upstream by the
+//     preserveIP / UserAssignedIP logic meaning "this NIC has no fixed IP", so it
+//     must obtain one over DHCP rather than be left unconfigured.
+//   - No NIC has a fixed IP at all -> a single name-wildcard DHCP catch-all (see
+//     netplanDHCPWildcard) that is robust to renamed interfaces and a reassigned
+//     MAC (the "move to a new network with DHCP" case).
+func buildWildcardNetplanYAML(macToIPs map[string][]vm.IpEntry, gatewayIP map[string]string, macToDNS map[string][]string) string {
+	anyStatic := false
+	for _, entries := range macToIPs {
+		if len(entries) > 0 {
+			anyStatic = true
+			break
+		}
+	}
+	if !anyStatic {
+		// Every NIC wants DHCP (or there are none): use the name-wildcard catch-all
+		// so the config applies regardless of the guest's NIC names or a new MAC.
+		return netplanDHCPWildcard
+	}
+
+	macs := make([]string, 0, len(macToIPs))
+	for mac := range macToIPs {
+		macs = append(macs, mac)
+	}
+	sort.Strings(macs)
+
+	var b strings.Builder
+	b.WriteString("network:\n")
+	b.WriteString("  version: 2\n")
+	b.WriteString("  renderer: networkd\n")
+	b.WriteString("  ethernets:\n")
+	routesAdded := false
+	for idx, mac := range macs {
+		id := fmt.Sprintf("vj%d", idx)
+		entries := macToIPs[mac]
+		b.WriteString(fmt.Sprintf("    %s:\n", id))
+		b.WriteString("      match:\n")
+		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
+		if len(entries) == 0 {
+			// No fixed IP for this NIC -> DHCP. optional:true so a missing lease
+			// does not block boot.
+			b.WriteString("      dhcp4: true\n")
+			b.WriteString("      optional: true\n")
+			continue
+		}
+		b.WriteString("      dhcp4: false\n")
+		b.WriteString("      addresses:\n")
+		for _, e := range entries {
+			prefix := e.Prefix
+			if prefix == 0 {
+				prefix = 24 // default prefix to 24 if zero
+			}
+			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
+		}
+		if gateway, ok := gatewayIP[mac]; ok && gateway != "" && !routesAdded {
+			b.WriteString("      routes:\n")
+			b.WriteString("        - to: default\n")
+			b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+			routesAdded = true
+		}
+		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
+			b.WriteString("      nameservers:\n")
+			b.WriteString("        addresses:\n")
+			for _, d := range dns {
+				b.WriteString(fmt.Sprintf("          - %s\n", d))
+			}
+		}
+	}
+	return b.String()
+}
+
 func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	// Add wildcard to netplan
 	macToIPs := ipPerMac
@@ -616,55 +714,9 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 		}
 	}
 
-	// Construct YAML
-	var b strings.Builder
-	b.WriteString("network:\n")
-	b.WriteString("  version: 2\n")
-	b.WriteString("  renderer: networkd\n")
-	b.WriteString("  ethernets:\n")
-	idx := 0
-	routesAdded := false
+	// Construct YAML (pure, testable builder)
 	log.Printf("MAC GATEWAY : %v", gatewayIP)
-	for mac, entries := range macToIPs {
-		if len(entries) == 0 {
-			continue
-		}
-		id := fmt.Sprintf("vj%d", idx)
-		b.WriteString(fmt.Sprintf("    %s:\n", id))
-		b.WriteString("      match:\n")
-		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-		b.WriteString("      dhcp4: false\n")
-		b.WriteString("      addresses:\n")
-		for _, e := range entries {
-			// default prefix to 24 if zero
-			prefix := e.Prefix
-			if prefix == 0 {
-				prefix = 24
-			}
-			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
-		}
-		if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
-			if !routesAdded {
-				log.Printf("Writing default routes")
-				b.WriteString("      routes:\n")
-				b.WriteString("        - to: default\n")
-				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
-				routesAdded = true
-			}
-		}
-		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
-			b.WriteString("      nameservers:\n")
-			b.WriteString("        addresses:\n")
-			for _, d := range dns {
-				b.WriteString(fmt.Sprintf("          - %s\n", d))
-			}
-		}
-		idx++
-	}
-	if !routesAdded {
-		log.Println("WARNING: No gateway found")
-	}
-	netplanYAML := b.String()
+	netplanYAML := buildWildcardNetplanYAML(macToIPs, gatewayIP, macToDNS)
 	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
