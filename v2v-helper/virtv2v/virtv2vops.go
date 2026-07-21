@@ -322,8 +322,8 @@ func NTFSFix(path string) error {
 		cmd := exec.Command("ntfsfix", append(args, partition)...)
 		log.Printf("Executing %s", cmd.String())
 
-		// Use the debug logging with proper file cleanup
-		err := utils.RunCommandWithLogFile(cmd)
+		// Use the debug logging with proper file cleanup, into the dedicated virtv2v log file
+		err := utils.RunCommandWithLogFileCategory(cmd, utils.LogCategoryVirtV2V)
 		if err != nil {
 			log.Printf("Skipping NTFS fix on %s", partition)
 		}
@@ -486,8 +486,8 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 
-	// Use the debug logging with proper file cleanup
-	err := utils.RunCommandWithLogFile(cmd)
+	// Use the debug logging with proper file cleanup, into the dedicated virtv2v log file
+	err := utils.RunCommandWithLogFileCategory(cmd, utils.LogCategoryVirtV2V)
 	duration := time.Since(start)
 
 	if err != nil {

@@ -469,9 +469,12 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	if len(metadata) == 0 {
 		return nil
 	}
-	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		metadataJSON = []byte(fmt.Sprintf("%v", metadata))
+	}
+	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s: %s", len(metadata), volume.ID, string(metadataJSON)))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
-	var err error
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
 		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 		if err == nil {

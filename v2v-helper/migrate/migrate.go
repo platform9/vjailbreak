@@ -1727,7 +1727,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, migobj.ImageMetadata); err != nil {
 				return -1, errors.Wrap(err, "failed to apply VolumeImageProfile metadata to boot volume")
 			}
-			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume", len(migobj.ImageMetadata)))
+			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume %s: %v",
+				len(migobj.ImageMetadata), bootVol.ID, migobj.ImageMetadata))
 		}
 	}
 
