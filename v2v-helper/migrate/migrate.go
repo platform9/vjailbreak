@@ -19,6 +19,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
@@ -32,6 +33,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
@@ -98,6 +100,11 @@ type Migrate struct {
 	// TargetMetadata is the merged instance metadata (preserved source tags/attributes
 	// plus user-entered custom metadata) applied to the target VM at create time.
 	TargetMetadata map[string]string
+
+	// DataOnly indicates no OpenStack VM should be created after disk conversion.
+	// When true, port reservation and VM creation are skipped and a DataCopied
+	// phase is reported instead of Succeeded.
+	DataOnly bool
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -2096,16 +2103,19 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		migobj.StorageCopyMethod != constants.HotAddCopyMethod {
 		return errors.Errorf("number of volume types does not match number of disks vm(%d) volume(%d)", len(vminfo.VMDisks), len(migobj.Volumetypes))
 	}
-	if len(vminfo.Mac) != len(migobj.Networknames) {
+	if !migobj.DataOnly && len(vminfo.Mac) != len(migobj.Networknames) {
 		return errors.Errorf("number of mac addresses does not match number of network names mac(%d) network(%d)", len(vminfo.Mac), len(migobj.Networknames))
 	}
 	// Graceful Termination clean-up volumes and snapshots
 	go migobj.gracefulTerminate(ctx, vminfo, cancel)
 
 	// Reserve ports for VM
-	networkids, portids, ipaddresses, err := migobj.ReservePortsForVM(ctx, &vminfo)
-	if err != nil {
-		return errors.Wrap(err, "failed to reserve ports for VM")
+	var networkids, portids, ipaddresses []string
+	if !migobj.DataOnly {
+		networkids, portids, ipaddresses, err = migobj.ReservePortsForVM(ctx, &vminfo)
+		if err != nil {
+			return errors.Wrap(err, "failed to reserve ports for VM")
+		}
 	}
 	vcenterSettings, err := k8sutils.GetVjailbreakSettings(ctx, migobj.K8sClient)
 	if err != nil {
@@ -2227,6 +2237,14 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
 		return errors.Wrap(err, "failed to convert disks")
+	}
+
+	if migobj.DataOnly {
+		migobj.logMessage("DataOnly mode: disk copy and conversion complete, skipping VM creation")
+		if err := migobj.reportStagedVolumeIDs(ctx, vminfo); err != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: failed to report staged volume IDs: %v", err))
+		}
+		return nil
 	}
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
@@ -2659,6 +2677,47 @@ func (migobj *Migrate) LoadESXiSSHKey(ctx context.Context) error {
 
 	migobj.ESXiSSHPrivateKey = privateKey
 	migobj.logMessage("ESXi SSH private key loaded successfully")
+
+	return nil
+}
+
+// reportStagedVolumeIDs collects the Cinder volume IDs from vminfo and patches
+// them onto Migration.Status.StagedVolumeIDs. It then sends the DataCopied
+// event message via the EventReporter channel so the controller can update the
+// migration phase. Failures are non-fatal — the caller logs a warning and
+// continues.
+func (migobj *Migrate) reportStagedVolumeIDs(ctx context.Context, vminfo vm.VMInfo) error {
+	// Collect volume IDs
+	var volumeIDs []string
+	for _, disk := range vminfo.VMDisks {
+		if disk.OpenstackVol != nil && disk.OpenstackVol.ID != "" {
+			volumeIDs = append(volumeIDs, disk.OpenstackVol.ID)
+		}
+	}
+
+	// Patch Migration.Status.StagedVolumeIDs if we have a K8s client
+	if migobj.K8sClient != nil {
+		migrationName, err := utils.GetMigrationObjectName()
+		if err != nil {
+			return errors.Wrap(err, "failed to get migration object name for staged volume IDs patch")
+		}
+		migration := &vjailbreakv1alpha1.Migration{}
+		if err := migobj.K8sClient.Get(ctx, k8stypes.NamespacedName{
+			Name:      migrationName,
+			Namespace: constants.NamespaceMigrationSystem,
+		}, migration); err != nil {
+			return errors.Wrapf(err, "failed to get migration %s to patch staged volume IDs", migrationName)
+		}
+		patch := client.MergeFrom(migration.DeepCopy())
+		migration.Status.StagedVolumeIDs = volumeIDs
+		if err := migobj.K8sClient.Status().Patch(ctx, migration, patch); err != nil {
+			return errors.Wrapf(err, "failed to patch staged volume IDs on migration %s", migrationName)
+		}
+		migobj.logMessage(fmt.Sprintf("Patched StagedVolumeIDs %v on migration %s", volumeIDs, migrationName))
+	}
+
+	// Send DataCopied event so the controller can advance the migration phase
+	migobj.logMessage(constants.EventMessageDataCopied)
 
 	return nil
 }

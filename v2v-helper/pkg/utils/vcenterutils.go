@@ -70,6 +70,9 @@ type MigrationParams struct {
 	// CustomMetadata is the user-entered plan-wide instance metadata; its keys win
 	// over colliding SourceTagsMetadata keys.
 	CustomMetadata map[string]string
+
+	// DataOnly indicates no OpenStack VM should be created after disk conversion.
+	DataOnly bool
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -148,5 +151,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		PreserveSourceTags:             string(configMap.Data["PRESERVE_SOURCE_TAGS"]) == constants.TrueString,
 		SourceTagsMetadata:             sourceTagsMetadata,
 		CustomMetadata:                 customMetadata,
+		DataOnly:                       string(configMap.Data["DATA_ONLY"]) == "true",
 	}, nil
 }
