@@ -31,85 +31,73 @@ type MigrationBlueprintSpec struct {
 	// DisplayName is the human-readable name of the blueprint shown in the UI
 	// +kubebuilder:validation:MinLength=1
 	DisplayName string `json:"displayName"`
-	// Description is an optional free-text description of the blueprint
-	// +optional
+	// Description is a free-text description of the blueprint
 	Description string `json:"description,omitempty"`
 
 	// VMwareRef is the name of the VMwareCreds to use as the source environment.
 	// Optional so partially filled forms can be saved as templates.
-	// +optional
 	VMwareRef string `json:"vmwareRef,omitempty"`
 	// PCDRef is the name of the OpenstackCreds to use as the destination PCD environment.
 	// Optional so partially filled forms can be saved as templates.
-	// +optional
 	PCDRef string `json:"pcdRef,omitempty"`
+	// VMwareClusterName is the name of the source vCenter cluster VMs are
+	// migrated from.
+	VMwareClusterName string `json:"vmwareClusterName,omitempty"`
+	// NoVMwareClusterFilter records that the user explicitly chose the
+	// "No Cluster" source filter: VMs on standalone ESXi hosts that are not
+	// part of any vCenter cluster in the datacenter referenced by VMwareRef.
+	// This is distinct from VMwareClusterName simply not being set yet, so it
+	// is tracked as its own field rather than inferred from an empty string.
+	NoVMwareClusterFilter bool `json:"noVMwareClusterFilter,omitempty"`
 	// TargetPCDClusterName is the name of the PCD cluster to migrate VMs into
-	// +optional
 	TargetPCDClusterName string `json:"targetPCDClusterName,omitempty"`
 
 	// NetworkMappings is an inline snapshot of source-to-target network pairs.
 	// Copied by value rather than referencing a NetworkMapping resource, since
 	// those are per-migration objects that may be mutated or deleted.
-	// +optional
 	NetworkMappings []Network `json:"networkMappings,omitempty"`
 	// StorageMappings is an inline snapshot of source-to-target storage pairs.
 	// Copied by value for the same reason as NetworkMappings.
-	// +optional
 	StorageMappings []Storage `json:"storageMappings,omitempty"`
 	// ArrayCredsMappings is an inline snapshot of datastore-to-ArrayCreds pairs.
 	// Used when StorageCopyMethod is "StorageAcceleratedCopy".
-	// +optional
 	ArrayCredsMappings []DatastoreArrayCredsMapping `json:"arrayCredsMappings,omitempty"`
 	// ProxyVMRef references the ProxyVM to use for data copy.
 	// Used when StorageCopyMethod is "HotAdd".
-	// +optional
 	ProxyVMRef *corev1.LocalObjectReference `json:"proxyVMRef,omitempty"`
 
 	// MigrationStrategy captures the migration type, cutover windows, and
 	// health-check settings to pre-fill into the migration form.
 	// Optional so partially filled forms can be saved as templates.
-	// +optional
 	MigrationStrategy *MigrationPlanStrategy `json:"migrationStrategy,omitempty"`
 	// AdvancedOptions captures the advanced migration options to pre-fill
-	// +optional
 	AdvancedOptions AdvancedOptions `json:"advancedOptions,omitempty"`
 	// PostMigrationAction captures the post-migration actions to pre-fill
-	// +optional
 	PostMigrationAction *PostMigrationAction `json:"postMigrationAction,omitempty"`
 	// FirstBootScript is the script to run on first boot of migrated VMs
-	// +optional
 	FirstBootScript string `json:"firstBootScript,omitempty"`
 	// SecurityGroups is the list of OpenStack security group names to apply
-	// +optional
 	SecurityGroups []string `json:"securityGroups,omitempty"`
 	// ServerGroup is the OpenStack server group to place migrated VMs into
-	// +optional
 	ServerGroup string `json:"serverGroup,omitempty"`
 	// FallbackToDHCP falls back to DHCP when static IP assignment is not possible
-	// +optional
 	FallbackToDHCP bool `json:"fallbackToDHCP,omitempty"`
 	// PreserveSourceTags copies each source VM's vSphere tags and custom
 	// attributes to the migrated VM as instance metadata
-	// +optional
 	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
 	// CustomMetadata is a map of additional key-value pairs applied as instance
 	// metadata to every migrated VM
-	// +optional
 	CustomMetadata map[string]string `json:"customMetadata,omitempty"`
 	// UseGPUFlavor indicates if the migration should filter and use GPU-enabled flavors
-	// +optional
 	UseGPUFlavor bool `json:"useGPUFlavor,omitempty"`
 	// StorageCopyMethod indicates the method to use for storage migration
 	// +kubebuilder:validation:Enum=normal;StorageAcceleratedCopy;HotAdd
 	// +kubebuilder:default:=normal
-	// +optional
 	StorageCopyMethod string `json:"storageCopyMethod,omitempty"`
 	// OSFamily is the OS type of the virtual machines this blueprint targets
 	// +kubebuilder:validation:Enum=windowsGuest;linuxGuest
-	// +optional
 	OSFamily string `json:"osFamily,omitempty"`
 	// VirtioWinDriver is the virtio-win driver version to use for Windows guests
-	// +optional
 	VirtioWinDriver string `json:"virtioWinDriver,omitempty"`
 }
 

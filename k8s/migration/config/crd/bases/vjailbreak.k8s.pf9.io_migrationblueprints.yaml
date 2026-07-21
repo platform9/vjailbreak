@@ -140,8 +140,7 @@ spec:
                   metadata to every migrated VM
                 type: object
               description:
-                description: Description is an optional free-text description of the
-                  blueprint
+                description: Description is a free-text description of the blueprint
                 type: string
               displayName:
                 description: DisplayName is the human-readable name of the blueprint
@@ -215,6 +214,14 @@ spec:
                   - target
                   type: object
                 type: array
+              noVMwareClusterFilter:
+                description: |-
+                  NoVMwareClusterFilter records that the user explicitly chose the
+                  "No Cluster" source filter: VMs on standalone ESXi hosts that are not
+                  part of any vCenter cluster in the datacenter referenced by VMwareRef.
+                  This is distinct from VMwareClusterName simply not being set yet, so it
+                  is tracked as its own field rather than inferred from an empty string.
+                type: boolean
               osFamily:
                 description: OSFamily is the OS type of the virtual machines this
                   blueprint targets
@@ -312,6 +319,11 @@ spec:
               virtioWinDriver:
                 description: VirtioWinDriver is the virtio-win driver version to use
                   for Windows guests
+                type: string
+              vmwareClusterName:
+                description: |-
+                  VMwareClusterName is the name of the source vCenter cluster VMs are
+                  migrated from.
                 type: string
               vmwareRef:
                 description: |-

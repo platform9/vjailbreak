@@ -33,6 +33,7 @@ func sampleBlueprint() *MigrationBlueprint {
 			Description:          "Standard hot migration for east-region RHEL tiers",
 			VMwareRef:            "vcenter-east",
 			PCDRef:               "pcd-east-1",
+			VMwareClusterName:    "vcenter-cluster-a",
 			TargetPCDClusterName: "cluster-prod-a",
 			NetworkMappings: []Network{
 				{Source: "vmnet-prod", Target: "net-prod-east-a"},
@@ -149,6 +150,33 @@ func TestMigrationBlueprintDeepCopyObject(t *testing.T) {
 	}
 	if len(copiedList.Items) != 1 || !reflect.DeepEqual(&copiedList.Items[0], bp) {
 		t.Fatal("MigrationBlueprintList DeepCopyObject mismatch")
+	}
+}
+
+func TestMigrationBlueprintVMwareClusterFilterStates(t *testing.T) {
+	// Unset: template was never saved with either a cluster choice.
+	unset := MigrationBlueprintSpec{DisplayName: "unset"}
+	if unset.VMwareClusterName != "" || unset.NoVMwareClusterFilter {
+		t.Error("expected both cluster fields zero-valued when never set")
+	}
+
+	// Explicit "No Cluster": must be distinguishable from unset even though
+	// VMwareClusterName is empty in both cases.
+	noCluster := MigrationBlueprintSpec{DisplayName: "no-cluster", NoVMwareClusterFilter: true}
+	if noCluster.VMwareClusterName != "" {
+		t.Error("expected VMwareClusterName empty when NoVMwareClusterFilter is true")
+	}
+	if !noCluster.NoVMwareClusterFilter {
+		t.Error("expected NoVMwareClusterFilter true to survive independent of VMwareClusterName")
+	}
+	if noCluster.NoVMwareClusterFilter == unset.NoVMwareClusterFilter {
+		t.Error("explicit no-cluster selection must not equal the unset state")
+	}
+
+	// Named cluster: mutually exclusive with the no-cluster flag.
+	named := MigrationBlueprintSpec{DisplayName: "named", VMwareClusterName: "cluster-a"}
+	if named.NoVMwareClusterFilter {
+		t.Error("expected NoVMwareClusterFilter false when a cluster name is set")
 	}
 }
 
