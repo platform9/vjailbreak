@@ -192,6 +192,39 @@ EOF
 
 Use `--request-changes` only for Critical violations or blocking logic bugs.
 
+## Step 6: Save Outputs and Launch Eval Viewer
+
+Save the review outputs to the workspace and open the eval viewer in the browser.
+
+```bash
+# Create timestamped run directory
+WORKSPACE="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/vjailbreak/skills/vjailbreak-pr-review-workspace"
+RUN_DIR="$WORKSPACE/pr-<number>/$(date +%Y%m%d_%H%M%S)/outputs"
+mkdir -p "$RUN_DIR"
+
+# Write review.md and send_comments.sh (content from Steps 4 and 5)
+cat > "$RUN_DIR/review.md" << 'MDEOF'
+<review.md content>
+MDEOF
+
+cat > "$RUN_DIR/send_comments.sh" << 'SHEOF'
+<send_comments.sh content>
+SHEOF
+chmod +x "$RUN_DIR/send_comments.sh"
+
+# Write eval metadata so viewer shows PR URL as prompt
+cat > "$(dirname $RUN_DIR)/eval_metadata.json" << 'JSONEOF'
+{"prompt": "Review PR #<number>: https://github.com/platform9/vjailbreak/pull/<number>"}
+JSONEOF
+
+# Launch eval viewer (opens browser automatically)
+EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
+cd "$EVAL_VIEWER"
+python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
+```
+
+The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The review.md will render as formatted Markdown with syntax-highlighted code blocks. Use the **Post to GitHub** section to post findings directly from the UI.
+
 ## Reference: Module Paths
 
 | Module | Directory | Test command |
