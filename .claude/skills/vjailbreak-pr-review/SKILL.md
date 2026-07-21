@@ -235,10 +235,12 @@ if [ ! -f "$PR_DIR/eval_metadata.json" ]; then
 JSONEOF
 fi
 
-# Launch eval viewer — opens http://localhost:3117 automatically
+# Launch eval viewer scoped to this PR only
 EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
+VIEWER_WORKSPACE=$(mktemp -d)
+ln -s "$PR_DIR" "$VIEWER_WORKSPACE/pr-<number>"
 cd "$EVAL_VIEWER"
-python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
+python3 eval-viewer/generate_review.py "$VIEWER_WORKSPACE" --skill-name vjailbreak-pr-review &
 ```
 
 The viewer opens `http://localhost:3117` in the browser. The **Post to GitHub** button in the viewer posts comments directly from the UI. Alternatively run `bash send_comments.sh` from the terminal.
