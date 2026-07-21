@@ -15,6 +15,7 @@ import {
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import { dataCopyMethodChipSx, DATA_COPY_METHOD_LABEL } from '../../utils/templateLabels'
@@ -27,9 +28,15 @@ export interface TemplatesTableProps {
   templates: SavedTemplate[]
   onOpenDetail: (template: SavedTemplate) => void
   onUse: (template: SavedTemplate) => void
+  onEdit: (template: SavedTemplate) => void
 }
 
-export default function TemplatesTable({ templates, onOpenDetail, onUse }: TemplatesTableProps) {
+export default function TemplatesTable({
+  templates,
+  onOpenDetail,
+  onUse,
+  onEdit
+}: TemplatesTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<SavedTemplate | null>(null)
   const cloneMutation = useCloneTemplate()
   const deleteMutation = useDeleteTemplate()
@@ -118,6 +125,15 @@ export default function TemplatesTable({ templates, onOpenDetail, onUse }: Templ
                         data-testid={`templates-table-use-${template.name}`}
                       >
                         <CloudUploadOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit template">
+                      <IconButton
+                        size="small"
+                        onClick={() => onEdit(template)}
+                        data-testid={`templates-table-edit-${template.name}`}
+                      >
+                        <EditOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Clone template">

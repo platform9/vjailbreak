@@ -3,6 +3,7 @@ import { Box, Chip, IconButton, Typography } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
@@ -26,6 +27,7 @@ export interface TemplateDetailDrawerProps {
   template: SavedTemplate | null
   onClose: () => void
   onUse: (template: SavedTemplate) => void
+  onEdit: (template: SavedTemplate) => void
 }
 
 function SectionBlock({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
@@ -89,7 +91,8 @@ export default function TemplateDetailDrawer({
   open,
   template,
   onClose,
-  onUse
+  onUse,
+  onEdit
 }: TemplateDetailDrawerProps) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const deleteMutation = useDeleteTemplate()
@@ -187,6 +190,14 @@ export default function TemplateDetailDrawer({
               Delete
             </ActionButton>
             <Box sx={{ display: 'flex', gap: 1.5 }}>
+              <ActionButton
+                tone="secondary"
+                startIcon={<EditOutlinedIcon />}
+                onClick={() => onEdit(template)}
+                data-testid="template-edit-button"
+              >
+                Edit
+              </ActionButton>
               <ActionButton
                 tone="secondary"
                 startIcon={<ContentCopyIcon />}

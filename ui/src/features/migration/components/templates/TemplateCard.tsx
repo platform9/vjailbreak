@@ -3,6 +3,7 @@ import { Box, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { ActionButton, SurfaceCard } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import {
@@ -19,9 +20,10 @@ export interface TemplateCardProps {
   template: SavedTemplate
   onOpenDetail: (template: SavedTemplate) => void
   onUse: (template: SavedTemplate) => void
+  onEdit: (template: SavedTemplate) => void
 }
 
-export default function TemplateCard({ template, onOpenDetail, onUse }: TemplateCardProps) {
+export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: TemplateCardProps) {
   const mappingCount = template.networkMappings.length + template.storageMappings.length
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const cloneMutation = useCloneTemplate()
@@ -80,6 +82,18 @@ export default function TemplateCard({ template, onOpenDetail, onUse }: Template
               flexShrink: 0
             }}
           >
+            <Tooltip title="Edit template">
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEdit(template)
+                }}
+                data-testid={`template-card-edit-${template.name}`}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Clone template">
               <IconButton
                 size="small"

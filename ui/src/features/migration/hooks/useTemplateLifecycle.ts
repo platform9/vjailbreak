@@ -1,12 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   postMigrationBlueprint,
+  putMigrationBlueprint,
   deleteMigrationBlueprint
 } from 'src/api/migration-blueprints/migrationBlueprints'
 import { createMigrationBlueprintJson } from 'src/api/migration-blueprints/helpers'
-import { sanitizeTemplateName, uniqueTemplateName } from '../api/migration-blueprints/adapters'
+import {
+  sanitizeTemplateName,
+  savedTemplateInputToBlueprintSpec,
+  uniqueTemplateName
+} from '../api/migration-blueprints/adapters'
 import { MIGRATION_TEMPLATES_QUERY_KEY } from './useMigrationTemplatesQuery'
-import type { SavedTemplate } from '../api/migration-blueprints/types'
+import type { SavedTemplate, SaveAsTemplateInput } from '../api/migration-blueprints/types'
 
 // Delete/clone mutations for the Templates tab detail drawer (US5).
 export function useDeleteTemplate() {
@@ -14,6 +19,35 @@ export function useDeleteTemplate() {
 
   return useMutation({
     mutationFn: (name: string) => deleteMigrationBlueprint(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MIGRATION_TEMPLATES_QUERY_KEY })
+    }
+  })
+}
+
+// Updates an existing blueprint in place (Edit Template flow) — keeps the k8s object
+// name so the same template row is updated rather than a new one created.
+export function useUpdateTemplate() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ name, input }: { name: string; input: SaveAsTemplateInput }) => {
+      const existing =
+        queryClient.getQueryData<SavedTemplate[]>(MIGRATION_TEMPLATES_QUERY_KEY) || []
+
+      const displayNameTaken = existing.some(
+        (t) =>
+          t.name !== name &&
+          t.displayName.trim().toLowerCase() === input.displayName.trim().toLowerCase()
+      )
+      if (displayNameTaken) {
+        throw new Error(`A template named "${input.displayName}" already exists.`)
+      }
+
+      const spec = savedTemplateInputToBlueprintSpec(input)
+      const body = createMigrationBlueprintJson(name, spec)
+      return putMigrationBlueprint(name, body)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MIGRATION_TEMPLATES_QUERY_KEY })
     }

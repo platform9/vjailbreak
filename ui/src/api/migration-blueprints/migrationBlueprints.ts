@@ -26,6 +26,15 @@ export const postMigrationBlueprint = async (
   return axios.post<MigrationBlueprint>({ endpoint, data: body })
 }
 
+export const putMigrationBlueprint = async (
+  name: string,
+  body: Partial<MigrationBlueprint>,
+  namespace = VJAILBREAK_DEFAULT_NAMESPACE
+) => {
+  const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/${MIGRATION_BLUEPRINTS_RESOURCE}/${name}`
+  return axios.put<MigrationBlueprint>({ endpoint, data: body })
+}
+
 export const deleteMigrationBlueprint = async (
   name: string,
   namespace = VJAILBREAK_DEFAULT_NAMESPACE

@@ -21,6 +21,7 @@ import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredential
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 import {
   MigrationFormContext,
+  MigrationFormTemplateMode,
   RetryMigrationConfig
 } from './features/migration/context/MigrationFormContext'
 import type { SavedTemplate } from './features/migration/api/migration-blueprints/types'
@@ -127,6 +128,9 @@ function App() {
   const [migrationType, setMigrationType] = useState('standard')
   const [retryConfig, setRetryConfig] = useState<RetryMigrationConfig | undefined>(undefined)
   const [templatePrefill, setTemplatePrefill] = useState<SavedTemplate | undefined>(undefined)
+  const [templateMode, setTemplateMode] = useState<MigrationFormTemplateMode | undefined>(
+    undefined
+  )
   const [joyrideRun, setJoyrideRun] = useState(false)
   const [joyrideSnoozed, setJoyrideSnoozed] = useState(false)
   const [joyrideReady, setJoyrideReady] = useState(false)
@@ -372,12 +376,14 @@ function App() {
     open,
     type = 'standard',
     retry?: RetryMigrationConfig,
-    template?: SavedTemplate
+    template?: SavedTemplate,
+    mode?: MigrationFormTemplateMode
   ) => {
     setOpenMigrationForm(open)
     setMigrationType(type)
     setRetryConfig(retry)
     setTemplatePrefill(template)
+    setTemplateMode(mode)
   }
 
   const handleSuccess = (message: string) => {
@@ -423,8 +429,8 @@ function App() {
       <AppBar hide={hideAppbar} />
       <MigrationFormContext.Provider
         value={{
-          openMigrationForm: (type, retry, template) =>
-            handleOpenMigrationForm(true, type, retry, template)
+          openMigrationForm: (type, retry, template, mode) =>
+            handleOpenMigrationForm(true, type, retry, template, mode)
         }}
       >
         <AppContent ref={appContentRef}>
@@ -435,10 +441,12 @@ function App() {
                 setOpenMigrationForm(false)
                 setRetryConfig(undefined)
                 setTemplatePrefill(undefined)
+                setTemplateMode(undefined)
               }}
               onSuccess={handleSuccess}
               retryConfig={retryConfig}
               templatePrefill={templatePrefill}
+              templateMode={templateMode}
             />
           )}
           {openMigrationForm && migrationType === 'rolling' && (

@@ -77,9 +77,13 @@ export default function MigrationFormDrawer({
   onClose,
   onSuccess,
   retryConfig,
-  templatePrefill
+  templatePrefill,
+  templateMode
 }: MigrationFormDrawerProps) {
   const isRetryMode = Boolean(retryConfig)
+  const isCreateTemplateMode = templateMode === 'create'
+  const isEditTemplateMode = templateMode === 'edit'
+  const isTemplateMode = isCreateTemplateMode || isEditTemplateMode
   const navigate = useNavigate()
   const { params, getParamsUpdater, updateParams } = useParams<FormValues>(defaultValues)
   const { pcdData, sourceData } = useClusterData()
@@ -460,11 +464,23 @@ export default function MigrationFormDrawer({
           <DrawerHeader
             data-testid="migration-form-header"
             closeButtonTestId="migration-form-close"
-            title={isRetryMode ? 'Retry Migration' : 'Start Migration'}
+            title={
+              isRetryMode
+                ? 'Retry Migration'
+                : isEditTemplateMode
+                  ? 'Edit Template'
+                  : isCreateTemplateMode
+                    ? 'Create Template'
+                    : 'Start Migration'
+            }
             subtitle={
               isRetryMode
                 ? `Review and adjust the configuration of "${retryConfig?.vmName}" before retrying`
-                : 'Configure source/destination, select VMs, and map resources before starting'
+                : isEditTemplateMode
+                  ? `Update the configuration saved in "${templatePrefill?.displayName}"`
+                  : isCreateTemplateMode
+                    ? 'Configure source/destination and mappings, then save it as a reusable template'
+                    : 'Configure source/destination, select VMs, and map resources before starting'
             }
             icon={<MigrationIcon />}
             onClose={handleDrawerClose}
@@ -488,6 +504,24 @@ export default function MigrationFormDrawer({
                 data-testid="migration-form-retry"
               >
                 Retry
+              </ActionButton>
+            </DrawerFooter>
+          ) : isTemplateMode ? (
+            <DrawerFooter data-testid="migration-form-footer">
+              <ActionButton
+                tone="secondary"
+                onClick={handleDrawerClose}
+                data-testid="migration-form-cancel"
+              >
+                Cancel
+              </ActionButton>
+              <ActionButton
+                tone="primary"
+                onClick={() => setSaveTemplateOpen(true)}
+                disabled={!canSaveAsTemplate}
+                data-testid="migration-form-save-template-mode"
+              >
+                {isEditTemplateMode ? 'Save Changes' : 'Create Template'}
               </ActionButton>
             </DrawerFooter>
           ) : (
@@ -528,6 +562,10 @@ export default function MigrationFormDrawer({
               await handleEditAndRetry()
               return
             }
+            if (isTemplateMode) {
+              setSaveTemplateOpen(true)
+              return
+            }
             await handleSubmit()
           }}
           keyboardSubmitProps={{
@@ -535,7 +573,9 @@ export default function MigrationFormDrawer({
             onClose: handleDrawerClose,
             isSubmitDisabled: isRetryMode
               ? Boolean(blockingError) || prefillLoading || retrySubmitting
-              : disableSubmit || submitting
+              : isTemplateMode
+                ? !canSaveAsTemplate
+                : disableSubmit || submitting
           }}
         >
           {isRetryMode && blockingError ? (
@@ -867,7 +907,9 @@ export default function MigrationFormDrawer({
       <SaveAsTemplateDialog
         open={saveTemplateOpen}
         onClose={() => setSaveTemplateOpen(false)}
+        onSaved={isTemplateMode ? handleClose : undefined}
         buildTemplateInput={buildSaveTemplateInput}
+        editingTemplate={isEditTemplateMode ? templatePrefill : undefined}
       />
     </>
   )

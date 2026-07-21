@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Dialog,
@@ -10,7 +10,8 @@ import {
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import { useSaveAsTemplate } from '../../hooks/useSaveAsTemplate'
-import type { SaveAsTemplateInput } from '../../api/migration-blueprints/types'
+import { useUpdateTemplate } from '../../hooks/useTemplateLifecycle'
+import type { SavedTemplate, SaveAsTemplateInput } from '../../api/migration-blueprints/types'
 
 export interface SaveAsTemplateDialogProps {
   open: boolean
@@ -22,25 +23,38 @@ export interface SaveAsTemplateDialogProps {
     displayName: string
     description?: string
   }) => SaveAsTemplateInput
+  // When set, the dialog updates this existing blueprint in place (Edit Template)
+  // instead of creating a new one — name/description prefill from it.
+  editingTemplate?: SavedTemplate
 }
 
 export default function SaveAsTemplateDialog({
   open,
   onClose,
   onSaved,
-  buildTemplateInput
+  buildTemplateInput,
+  editingTemplate
 }: SaveAsTemplateDialogProps) {
   const [displayName, setDisplayName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
   const saveMutation = useSaveAsTemplate()
+  const updateMutation = useUpdateTemplate()
+  const isEditing = Boolean(editingTemplate)
+  const isPending = saveMutation.isPending || updateMutation.isPending
+
+  useEffect(() => {
+    if (!open) return
+    setDisplayName(editingTemplate?.displayName || '')
+    setDescription(editingTemplate?.description || '')
+    setError(null)
+  }, [open, editingTemplate])
 
   const handleClose = () => {
-    if (saveMutation.isPending) return
-    setDisplayName('')
-    setDescription('')
+    if (isPending) return
     setError(null)
     saveMutation.reset()
+    updateMutation.reset()
     onClose()
   }
 
@@ -56,7 +70,11 @@ export default function SaveAsTemplateDialog({
         displayName: displayName.trim(),
         description: description.trim() || undefined
       })
-      await saveMutation.mutateAsync(input)
+      if (editingTemplate) {
+        await updateMutation.mutateAsync({ name: editingTemplate.name, input })
+      } else {
+        await saveMutation.mutateAsync(input)
+      }
       onSaved?.()
       handleClose()
     } catch (err) {
@@ -66,12 +84,12 @@ export default function SaveAsTemplateDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Save as template</DialogTitle>
+      <DialogTitle>{isEditing ? 'Save changes' : 'Save as template'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <DialogContentText>
-          Save the current source, destination, mappings, and migration options as a reusable
-          template. VM selection is not saved — you&apos;ll choose VMs fresh each time you use this
-          template.
+          {isEditing
+            ? 'Update this template’s name, description, and configuration.'
+            : 'Save the current source, destination, mappings, and migration options as a reusable template. VM selection is not saved — you’ll choose VMs fresh each time you use this template.'}
         </DialogContentText>
         <TextField
           label="Template name"
@@ -95,16 +113,16 @@ export default function SaveAsTemplateDialog({
         {error && <Alert severity="error">{error}</Alert>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <ActionButton tone="secondary" onClick={handleClose} disabled={saveMutation.isPending}>
+        <ActionButton tone="secondary" onClick={handleClose} disabled={isPending}>
           Cancel
         </ActionButton>
         <ActionButton
           tone="primary"
           onClick={handleSave}
-          loading={saveMutation.isPending}
+          loading={isPending}
           data-testid="save-template-confirm"
         >
-          Save template
+          {isEditing ? 'Save changes' : 'Save template'}
         </ActionButton>
       </DialogActions>
     </Dialog>

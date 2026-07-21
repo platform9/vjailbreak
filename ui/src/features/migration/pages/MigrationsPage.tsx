@@ -55,6 +55,14 @@ export default function MigrationsPage() {
     openMigrationForm('standard', undefined, template)
   }
 
+  const handleCreateTemplate = () => {
+    openMigrationForm('standard', undefined, undefined, 'create')
+  }
+
+  const handleEditTemplate = (template: SavedTemplate) => {
+    openMigrationForm('standard', undefined, template, 'edit')
+  }
+
   const {
     data: migrations,
     refetch: refetchMigrations,
@@ -196,11 +204,11 @@ export default function MigrationsPage() {
                   variant="contained"
                   color="primary"
                   startIcon={<AddIcon />}
-                  onClick={() => openMigrationForm('standard')}
+                  onClick={handleCreateTemplate}
                   disabled={startMigrationDisabled}
-                  data-testid="new-migration-button"
+                  data-testid="create-template-button"
                 >
-                  New Migration
+                  Create New Template
                 </Button>
               </span>
             </Tooltip>
@@ -240,7 +248,7 @@ export default function MigrationsPage() {
           />
         </>
       ) : (
-        <TemplatesTabPanel onUseTemplate={handleUseTemplate} />
+        <TemplatesTabPanel onUseTemplate={handleUseTemplate} onEditTemplate={handleEditTemplate} />
       )}
 
       <DeleteMigrationDialog

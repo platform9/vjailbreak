@@ -24,6 +24,7 @@ import TemplateDetailDrawer from './TemplateDetailDrawer'
 
 export interface TemplatesTabPanelProps {
   onUseTemplate: (template: SavedTemplate) => void
+  onEditTemplate: (template: SavedTemplate) => void
 }
 
 const SORT_OPTIONS: Array<{ value: TemplateSortKey; label: string }> = [
@@ -31,7 +32,7 @@ const SORT_OPTIONS: Array<{ value: TemplateSortKey; label: string }> = [
   { value: 'name', label: 'Name' }
 ]
 
-export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelProps) {
+export default function TemplatesTabPanel({ onUseTemplate, onEditTemplate }: TemplatesTabPanelProps) {
   const { data: templates = [], isLoading } = useMigrationTemplatesQuery()
   const [query, setQuery] = useState('')
   const [sortKey, setSortKey] = useState<TemplateSortKey>('created')
@@ -138,6 +139,7 @@ export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelPr
           templates={visibleTemplates}
           onOpenDetail={setSelectedTemplate}
           onUse={onUseTemplate}
+          onEdit={onEditTemplate}
         />
       ) : (
         <Grid container spacing={2}>
@@ -147,6 +149,7 @@ export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelPr
                 template={template}
                 onOpenDetail={setSelectedTemplate}
                 onUse={onUseTemplate}
+                onEdit={onEditTemplate}
               />
             </Grid>
           ))}
@@ -158,6 +161,7 @@ export default function TemplatesTabPanel({ onUseTemplate }: TemplatesTabPanelPr
         template={selectedTemplate}
         onClose={() => setSelectedTemplate(null)}
         onUse={onUseTemplate}
+        onEdit={onEditTemplate}
       />
     </Box>
   )
