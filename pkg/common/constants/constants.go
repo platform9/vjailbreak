@@ -386,6 +386,8 @@ const (
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
+	// EventMessageDataCopied is sent by v2v-helper when data-only mode completes disk copy/conversion.
+	EventMessageDataCopied = "DataOnly mode: disk copy and conversion complete, skipping VM creation"
 
 	// StorageAcceleratedCopy specific event messages
 	EventMessageEsxiSSHConnect                       = "Connecting to ESXi"

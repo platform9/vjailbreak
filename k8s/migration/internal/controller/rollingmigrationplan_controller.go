@@ -446,7 +446,7 @@ func (r *RollingMigrationPlanReconciler) UpdateRollingMigrationPlanStatus(ctx co
 				switch migration.Status.Phase {
 				case vjailbreakv1alpha1.VMMigrationPhaseFailed:
 					scope.RollingMigrationPlan.Status.FailedVMs = append(scope.RollingMigrationPlan.Status.FailedVMs, vm)
-				case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+				case vjailbreakv1alpha1.VMMigrationPhaseSucceeded, vjailbreakv1alpha1.VMMigrationPhaseDataCopied:
 					scope.RollingMigrationPlan.Status.MigratedVMs = append(scope.RollingMigrationPlan.Status.MigratedVMs, vm)
 				}
 			}
