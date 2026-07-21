@@ -3,6 +3,7 @@ import {
   getMigrationBlueprintsList,
   getMigrationBlueprint,
   postMigrationBlueprint,
+  putMigrationBlueprint,
   deleteMigrationBlueprint
 } from './migrationBlueprints'
 import axios from '../axios'
@@ -12,6 +13,7 @@ vi.mock('../axios', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
     del: vi.fn()
   }
 }))
@@ -74,6 +76,24 @@ describe('postMigrationBlueprint', () => {
 
     expect(mockedAxios.post).toHaveBeenCalledWith({
       endpoint: '/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints',
+      data: body
+    })
+  })
+})
+
+describe('putMigrationBlueprint', () => {
+  it('puts the body to the named resource endpoint', async () => {
+    const body = {
+      metadata: { name: 'my-template', resourceVersion: '42' },
+      spec: { displayName: 'renamed' }
+    }
+    mockedAxios.put.mockResolvedValue(makeBlueprint('my-template'))
+
+    await putMigrationBlueprint('my-template', body)
+
+    expect(mockedAxios.put).toHaveBeenCalledWith({
+      endpoint:
+        '/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/migration-system/migrationblueprints/my-template',
       data: body
     })
   })

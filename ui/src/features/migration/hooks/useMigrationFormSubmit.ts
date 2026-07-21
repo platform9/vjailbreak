@@ -50,10 +50,14 @@ interface UseMigrationFormSubmitParams {
   networkMappingRequired: boolean
 }
 
+interface HandleCloseOptions {
+  preserveCredentials?: boolean
+}
+
 interface UseMigrationFormSubmitResult {
   submitting: boolean
   handleSubmit: () => Promise<void>
-  handleClose: () => Promise<void>
+  handleClose: (options?: HandleCloseOptions) => Promise<void>
 }
 
 export function useMigrationFormSubmit({
@@ -496,7 +500,7 @@ export function useMigrationFormSubmit({
     navigate
   ])
 
-  const handleClose = useCallback(async () => {
+  const handleClose = useCallback(async (options?: HandleCloseOptions) => {
     try {
       setMigrationTemplate(undefined)
       setVmwareCredentials(undefined)
@@ -511,6 +515,8 @@ export function useMigrationFormSubmit({
       if (migrationTemplate?.metadata?.name) {
         await deleteMigrationTemplate(migrationTemplate.metadata.name)
       }
+
+      if (options?.preserveCredentials) return
 
       if (vmwareCredentials?.metadata?.name && !params.vmwareCreds?.existingCredName) {
         await deleteVmwareCredentials(vmwareCredentials.metadata.name)

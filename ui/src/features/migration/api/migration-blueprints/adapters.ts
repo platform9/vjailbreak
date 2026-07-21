@@ -24,6 +24,7 @@ export function blueprintToSavedTemplate(blueprint: MigrationBlueprint): SavedTe
   const { spec, metadata } = blueprint
   return {
     name: metadata.name,
+    resourceVersion: metadata.resourceVersion || '',
     displayName: spec.displayName,
     description: spec.description,
     createdAt: metadata.creationTimestamp || new Date(0).toISOString(),

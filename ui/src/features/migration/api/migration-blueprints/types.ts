@@ -23,6 +23,7 @@ export type SavedTemplateStorageCopyMethod = 'normal' | 'StorageAcceleratedCopy'
 // round-trip fields this flattened shape doesn't surface.
 export interface SavedTemplate {
   name: string // k8s object name (sanitized display name)
+  resourceVersion: string
   displayName: string
   description?: string
   createdAt: string

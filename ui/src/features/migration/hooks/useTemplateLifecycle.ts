@@ -31,7 +31,15 @@ export function useUpdateTemplate() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ name, input }: { name: string; input: SaveAsTemplateInput }) => {
+    mutationFn: async ({
+      name,
+      resourceVersion,
+      input
+    }: {
+      name: string
+      resourceVersion: string
+      input: SaveAsTemplateInput
+    }) => {
       const existing =
         queryClient.getQueryData<SavedTemplate[]>(MIGRATION_TEMPLATES_QUERY_KEY) || []
 
@@ -45,7 +53,7 @@ export function useUpdateTemplate() {
       }
 
       const spec = savedTemplateInputToBlueprintSpec(input)
-      const body = createMigrationBlueprintJson(name, spec)
+      const body = createMigrationBlueprintJson(name, spec, resourceVersion)
       return putMigrationBlueprint(name, body)
     },
     onSuccess: () => {

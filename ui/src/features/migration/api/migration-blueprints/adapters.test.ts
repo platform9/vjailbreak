@@ -12,7 +12,12 @@ import type { SaveAsTemplateInput } from './types'
 const makeBlueprint = (overrides: Partial<MigrationBlueprint['spec']> = {}): MigrationBlueprint => ({
   apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
   kind: 'MigrationBlueprint',
-  metadata: { name: 'production-rhel-east', namespace: 'migration-system', creationTimestamp: '2026-06-01T00:00:00Z' },
+  metadata: {
+    name: 'production-rhel-east',
+    namespace: 'migration-system',
+    creationTimestamp: '2026-06-01T00:00:00Z',
+    resourceVersion: '42'
+  },
   spec: {
     displayName: 'Production RHEL · East',
     description: 'Standard hot migration',
@@ -52,6 +57,7 @@ describe('blueprintToSavedTemplate', () => {
 
     expect(result).toMatchObject({
       name: 'production-rhel-east',
+      resourceVersion: '42',
       displayName: 'Production RHEL · East',
       sourceVCenter: 'vcenter-east-creds',
       sourceCluster: 'cluster-east-a',
@@ -97,6 +103,14 @@ describe('blueprintToSavedTemplate', () => {
       periodicSyncEnabled: false,
       acknowledgeNetworkConflictRisk: false
     })
+  })
+
+  it('defaults resourceVersion to empty string when metadata omits it', () => {
+    const blueprint = makeBlueprint()
+    delete blueprint.metadata.resourceVersion
+
+    const result = blueprintToSavedTemplate(blueprint)
+    expect(result.resourceVersion).toBe('')
   })
 
   it('reads a scheduled data copy start time from the strategy', () => {

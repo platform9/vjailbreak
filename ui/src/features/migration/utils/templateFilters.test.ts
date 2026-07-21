@@ -5,6 +5,7 @@ import type { SavedTemplate } from '../api/migration-blueprints/types'
 
 const makeTemplate = (overrides: Partial<SavedTemplate>): SavedTemplate => ({
   name: 'template',
+  resourceVersion: '1',
   displayName: 'Template',
   createdAt: '2026-01-01T00:00:00Z',
   sourceVCenter: 'vcenter.example.com',

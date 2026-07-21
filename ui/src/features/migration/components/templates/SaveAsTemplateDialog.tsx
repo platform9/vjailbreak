@@ -71,7 +71,11 @@ export default function SaveAsTemplateDialog({
         description: description.trim() || undefined
       })
       if (editingTemplate) {
-        await updateMutation.mutateAsync({ name: editingTemplate.name, input })
+        await updateMutation.mutateAsync({
+          name: editingTemplate.name,
+          resourceVersion: editingTemplate.resourceVersion,
+          input
+        })
       } else {
         await saveMutation.mutateAsync(input)
       }

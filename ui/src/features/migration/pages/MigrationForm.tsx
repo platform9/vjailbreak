@@ -414,7 +414,7 @@ export default function MigrationFormDrawer({
 
   // In retry mode the template belongs to the live MigrationPlan — the standard close
   // handler would delete it. Cancelling a retry must not modify anything.
-  const handleDrawerClose = isRetryMode ? onClose : handleClose
+  const handleDrawerClose = isRetryMode ? onClose : () => handleClose()
 
   const scrollToSection = useCallback((id: string) => {
     const map: Record<string, React.RefObject<HTMLDivElement | null>> = {
@@ -537,7 +537,7 @@ export default function MigrationFormDrawer({
               </ActionButton>
               <ActionButton
                 tone="secondary"
-                onClick={handleClose}
+                onClick={() => handleClose()}
                 data-testid="migration-form-cancel"
               >
                 Cancel
@@ -907,7 +907,7 @@ export default function MigrationFormDrawer({
       <SaveAsTemplateDialog
         open={saveTemplateOpen}
         onClose={() => setSaveTemplateOpen(false)}
-        onSaved={isTemplateMode ? handleClose : undefined}
+        onSaved={isTemplateMode ? () => handleClose({ preserveCredentials: true }) : undefined}
         buildTemplateInput={buildSaveTemplateInput}
         editingTemplate={isEditTemplateMode ? templatePrefill : undefined}
       />
