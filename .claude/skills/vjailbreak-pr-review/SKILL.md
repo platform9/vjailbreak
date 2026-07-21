@@ -7,9 +7,18 @@ description: Reviews vJailbreak GitHub PRs for logic correctness, coding princip
 
 Reviews vJailbreak PRs for correctness, test coverage, and adherence to the project constitution and coding principles.
 
-## Step 1: Brainstorm Before Reviewing
+**HARD STOP: This skill ONLY reviews. It does NOT:**
+- Fix code or suggest implementations in the repo
+- Edit any source files
+- Create branches, commits, or PRs
+- Invoke any implementation skill (brainstorming, writing-plans, speckit-implement, etc.)
+- Run `make`, `go build`, or any build/test commands
 
-Before reading a single line of diff, invoke `superpowers:brainstorming` to think through:
+Output is `review.md` + `send_comments.sh` only. If asked to fix issues found during review, decline and tell the user to open a separate task.
+
+## Step 1: Orient Before Reading Diff
+
+Think through these questions inline (no sub-skill invocation needed):
 
 - What kind of change is this? (feature, fix, refactor, CRD change, UI-only?)
 - Which modules does it touch? (k8s/migration, v2v-helper, pkg/vpwned, pkg/common, ui/)
@@ -194,36 +203,45 @@ Use `--request-changes` only for Critical violations or blocking logic bugs.
 
 ## Step 6: Save Outputs and Launch Eval Viewer
 
-Save the review outputs to the workspace and open the eval viewer in the browser.
+Save outputs to the workspace and open the review in the browser.
 
 ```bash
-# Create timestamped run directory
 WORKSPACE="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/vjailbreak/skills/vjailbreak-pr-review-workspace"
-RUN_DIR="$WORKSPACE/pr-<number>/$(date +%Y%m%d_%H%M%S)/outputs"
+PR_DIR="$WORKSPACE/pr-<number>"
+RUN_DIR="$PR_DIR/$(date +%Y%m%d_%H%M%S)/outputs"
 mkdir -p "$RUN_DIR"
 
-# Write review.md and send_comments.sh (content from Steps 4 and 5)
+# Write review.md
 cat > "$RUN_DIR/review.md" << 'MDEOF'
 <review.md content>
 MDEOF
 
+# Write send_comments.sh
 cat > "$RUN_DIR/send_comments.sh" << 'SHEOF'
 <send_comments.sh content>
 SHEOF
 chmod +x "$RUN_DIR/send_comments.sh"
 
-# Write eval metadata so viewer shows PR URL as prompt
-cat > "$(dirname $RUN_DIR)/eval_metadata.json" << 'JSONEOF'
-{"prompt": "Review PR #<number>: https://github.com/platform9/vjailbreak/pull/<number>"}
+# Write eval metadata at PR level (NOT run level) — eval_id required for viewer sort
+# Use PR number as eval_id. Only write if file doesn't exist yet (preserve across runs).
+if [ ! -f "$PR_DIR/eval_metadata.json" ]; then
+  cat > "$PR_DIR/eval_metadata.json" << 'JSONEOF'
+{
+  "eval_id": <number>,
+  "eval_name": "pr-<number>",
+  "prompt": "Review PR #<number>: https://github.com/platform9/vjailbreak/pull/<number>",
+  "assertions": []
+}
 JSONEOF
+fi
 
-# Launch eval viewer (opens browser automatically)
+# Launch eval viewer — opens http://localhost:3117 automatically
 EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
 cd "$EVAL_VIEWER"
 python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
 ```
 
-The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The review.md will render as formatted Markdown with syntax-highlighted code blocks. Use the **Post to GitHub** section to post findings directly from the UI.
+The viewer opens `http://localhost:3117` in the browser. The **Post to GitHub** button in the viewer posts comments directly from the UI. Alternatively run `bash send_comments.sh` from the terminal.
 
 ## Reference: Module Paths
 
