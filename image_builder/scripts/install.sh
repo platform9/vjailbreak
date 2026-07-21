@@ -453,6 +453,19 @@ if [ "$IS_MASTER" == "true" ]; then
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/kube-prometheus/manifests/
   check_command "Applying kube-prometheus manifests"
 
+  # Pre-create migration-system namespace and vjailbreak-ai-secret before applying
+  # manifests so the AI pod starts cleanly without a CrashLoopBackOff cycle.
+  kubectl create namespace migration-system --dry-run=client -o yaml | kubectl apply -f -
+  check_command "Creating migration-system namespace"
+
+  VJAILBREAK_AI_ADMIN_KEY=$(openssl rand -hex 32)
+  kubectl create secret generic vjailbreak-ai-secret \
+    -n migration-system \
+    --from-literal=admin-key="${VJAILBREAK_AI_ADMIN_KEY}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  check_command "Creating vjailbreak-ai-secret"
+  log "vjailbreak-ai admin key generated and stored in secret"
+
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 

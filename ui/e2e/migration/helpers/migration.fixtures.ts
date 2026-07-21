@@ -660,6 +660,8 @@ export const MOCK_VMWARE_MACHINE_1 = {
       vmState: 'poweredOn', ipAddress: '192.168.1.101', osFamily: 'Linux',
       networks: ['VM Network'], datastores: ['datastore1'], disks: [],
       networkInterfaces: [{ mac: '00:50:56:aa:01:01', network: 'VM Network', ipAddress: ['192.168.1.101'] }],
+      tags: { env: 'production' },
+      customAttributes: { Owner: 'alice@corp.com' },
     },
   },
   status: { migrated: false, powerState: 'running' },

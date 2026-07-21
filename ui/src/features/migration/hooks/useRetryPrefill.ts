@@ -263,7 +263,15 @@ export function useRetryPrefill({
       ...(advanced?.imageProfiles?.length && { imageProfiles: advanced.imageProfiles }),
       ...(advanced?.periodicSyncInterval && {
         periodicSyncInterval: advanced.periodicSyncInterval
-      })
+      }),
+      preserveSourceTags: plan.spec?.preserveSourceTags || false,
+      ...(plan.spec?.customMetadata &&
+        Object.keys(plan.spec.customMetadata).length > 0 && {
+          customMetadata: Object.entries(plan.spec.customMetadata).map(([key, value]) => ({
+            key,
+            value
+          }))
+        })
     })
 
     updateSelectedOptions({

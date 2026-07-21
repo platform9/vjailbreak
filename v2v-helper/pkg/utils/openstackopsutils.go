@@ -469,9 +469,12 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	if len(metadata) == 0 {
 		return nil
 	}
-	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		metadataJSON = []byte(fmt.Sprintf("%v", metadata))
+	}
+	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s: %s", len(metadata), volume.ID, string(metadataJSON)))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
-	var err error
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
 		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 		if err == nil {
@@ -636,7 +639,8 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 		return nil, err
 	}
 	for _, port := range portList {
-		if port.MACAddress == mac {
+		// Neutron stores MACs lowercase; compare case-insensitively
+		if strings.EqualFold(port.MACAddress, mac) {
 			if port.DeviceID != "" {
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
 			}
@@ -735,7 +739,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
-	} else {
+	} else if len(network.Subnets) > 0 {
 		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
 		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
@@ -743,6 +747,11 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
 		gatewayIP[mac] = subnetID.GatewayIP
+	} else {
+		// nil ipEntries but the network has no subnets at all (e.g. an L2-only
+		// network that legitimately has zero subnets). There's no subnet to
+		// query or gateway to record, so just leave FixedIPs/gatewayIP unset.
+		PrintLog("Empty port with no subnets on network " + network.ID + " for mac " + mac)
 	}
 	return createOpts, nil
 }
@@ -909,6 +918,17 @@ func IsHotplugFlavor(flavor *flavors.Flavor) bool {
 	return flavor != nil && flavor.VCPUs == 0 && flavor.RAM == 0
 }
 
+// HotplugMetadata builds the server metadata for hotplug (flavorless)
+// provisioning.
+func HotplugMetadata(cpu, memoryMB int32) map[string]string {
+	return map[string]string{
+		constants.HotplugCPUKey:       fmt.Sprintf("%d", cpu),
+		constants.HotplugMemoryKey:    fmt.Sprintf("%d", memoryMB),
+		constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", 2*cpu),
+		constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", 2*memoryMB),
+	}
+}
+
 func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
@@ -938,6 +958,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
+	if len(vminfo.TargetMetadata) > 0 {
+		// Preserved source tags/attributes and custom metadata. Set first so the
+		// hotplug/RDM system keys below win on any collision.
+		serverCreateOpts.Metadata = make(map[string]string, len(vminfo.TargetMetadata))
+		for key, value := range vminfo.TargetMetadata {
+			serverCreateOpts.Metadata[key] = value
+		}
+		PrintLog(fmt.Sprintf("Applying %d instance metadata entries to VM %s", len(vminfo.TargetMetadata), vminfo.Name))
+	}
 	if len(networkIDs) == 0 {
 		// Nova's "networks":"none" sentinel was added in compute API
 		// microversion 2.37. Without this header bump the request goes out at
@@ -953,12 +982,12 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		))
 	}
 	if IsHotplugFlavor(flavor) {
-		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
-		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
-			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
+		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
+		if serverCreateOpts.Metadata == nil {
+			serverCreateOpts.Metadata = map[string]string{}
+		}
+		for key, value := range HotplugMetadata(vminfo.CPU, vminfo.Memory) {
+			serverCreateOpts.Metadata[key] = value
 		}
 	}
 

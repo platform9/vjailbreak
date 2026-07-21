@@ -3,6 +3,7 @@ import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { downloadDebugBundle } from 'src/api/migrations/debugBundle'
 import { Phase } from '../api/migrations'
 import BaseLogsDrawer from './BaseLogsDrawer'
+import AIAnalysisTab from './AIAnalysisTab'
 
 const STREAM_END_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed]
 
@@ -79,6 +80,11 @@ export default function PodLogsDrawer({
     await downloadDebugBundle(migrationName, namespace, podName)
   }, [migrationName, namespace, podName])
 
+  const aiTabContent =
+    migrationPhase === Phase.Failed && migrationName && namespace ? (
+      <AIAnalysisTab migrationName={migrationName} namespace={namespace} />
+    ) : undefined
+
   return (
     <BaseLogsDrawer
       data-testid="pod-logs-drawer"
@@ -93,6 +99,7 @@ export default function PodLogsDrawer({
       onPausedChange={setIsPaused}
       onReconnect={handleReconnect}
       onDownload={handleDownload}
+      aiTabContent={aiTabContent}
     />
   )
 }

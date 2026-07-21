@@ -976,9 +976,19 @@ spec:
                       migration plan should be synced
                     type: string
                   removeVMwareTools:
-                    description: RemoveVMwareTools instructs the migration helper
-                      to remove VMware Tools post migration
+                    default: true
+                    description: |-
+                      RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration.
+                      Defaults to true since most migrations require VMware Tools removal.
                     type: boolean
+                type: object
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -1069,6 +1079,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               securityGroups:
                 items:
                   type: string
@@ -1202,6 +1218,12 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags indicates whether the source VM's vSphere tags and custom
+                  attributes are copied to the migrated VM as instance metadata.
+                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack
@@ -2406,8 +2428,10 @@ spec:
                       migration plan should be synced
                     type: string
                   removeVMwareTools:
-                    description: RemoveVMwareTools instructs the migration helper
-                      to remove VMware Tools post migration
+                    default: true
+                    description: |-
+                      RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration.
+                      Defaults to true since most migrations require VMware Tools removal.
                     type: boolean
                 type: object
               bmConfigRef:
@@ -2505,6 +2529,14 @@ spec:
                   - vmSequence
                   type: object
                 type: array
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
+                type: object
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -2562,6 +2594,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -3247,6 +3285,12 @@ spec:
                   cpu:
                     description: CPU is the number of CPUs in the virtual machine
                     type: integer
+                  customAttributes:
+                    additionalProperties:
+                      type: string
+                    description: CustomAttributes maps vSphere custom attribute names
+                      to their values for the VM
+                    type: object
                   datastores:
                     description: Datastores is the list of datastores for the virtual
                       machine
@@ -3354,6 +3398,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  tags:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Tags maps vSphere tag category names to a comma-separated list of the
+                      tag names attached to the VM in that category (e.g. "env" -> "production")
+                    type: object
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
@@ -5216,3 +5267,99 @@ subjects:
 - kind: ServiceAccount
   name: ui-manager-sa
   namespace: migration-system
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vjailbreak-ai-sa
+  namespace: migration-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vjailbreak-ai-data
+  namespace: migration-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ai
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ai
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+      serviceAccountName: vjailbreak-ai-sa
+      containers:
+        - name: vjailbreak-ai
+          image: quay.io/platform9/vjailbreak-ai:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: api-key
+                  optional: true
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: admin-key
+                  optional: true
+            - name: CHROMA_PATH
+              value: /data/chroma
+            - name: CONTEXT_PATH
+              value: /data/context.md
+            - name: ALLOWED_ORIGINS
+              value: "http://vjailbreak-ui-service.migration-system.svc.cluster.local"
+          volumeMounts:
+            - name: ai-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: ai-data
+          persistentVolumeClaim:
+            claimName: vjailbreak-ai-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ai
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

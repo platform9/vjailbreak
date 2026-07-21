@@ -23,6 +23,10 @@ export interface VMwareVM {
   rdmDisks?: string[]
   clusterName?: string
   useGPU?: boolean
+  // vSphere tag category name -> comma-separated tag names (e.g. "env" -> "production")
+  tags?: Record<string, string>
+  // vSphere custom attribute name -> value (e.g. "Owner" -> "alice@corp.com")
+  customAttributes?: Record<string, string>
 }
 
 export interface VmNetworkInterface {

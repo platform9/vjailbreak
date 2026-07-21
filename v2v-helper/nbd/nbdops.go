@@ -254,8 +254,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 		}
 	}
 
-	// Use the redacted command string for logging
-	utils.AddDebugOutputToFileWithCommand(cmd, cmdstring)
+	utils.AddDebugOutputToFileWithCommandCategory(cmd, cmdstring, utils.LogCategoryNBD, password)
 
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdstring))
 	err = cmd.Start()
@@ -319,8 +318,9 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			}
 		}
 	}()
-	// Use the helper function with command string to ensure log file is closed after command execution
-	err = utils.RunCommandWithLogFileRedacted(cmd, cmdString)
+	// Use the helper function with command string to ensure log file is closed after command execution.
+	// nbdcopy output goes into the same dedicated nbd log file as nbdkit's.
+	err = utils.RunCommandWithLogFileRedactedCategory(cmd, cmdString, utils.LogCategoryNBD)
 	if err != nil {
 		// retry once with debug enabled, to get more details
 		cmd.Stdout = os.Stdout

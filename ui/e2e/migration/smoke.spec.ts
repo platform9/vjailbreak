@@ -18,12 +18,13 @@ import {
   MOCK_OPENSTACK_CREDS_LIST,
 } from './helpers/migration.fixtures'
 
-// Section IDs from useFormValidation.ts sectionNavItems (5 total)
+// Section IDs from useFormValidation.ts sectionNavItems (6 total)
 const SECTION_IDS = [
   'source-destination',
   'select-vms',
   'map-resources',
   'security',
+  'tags-metadata',
   'options',
 ] as const
 
@@ -47,7 +48,7 @@ test.describe('MIG-001 — open / close standard migration form', () => {
     await openMigrationDrawer(page)
     await expectDrawerOpen(page)
 
-    // All 5 section nav items rendered
+    // All 6 section nav items rendered
     for (const sectionId of SECTION_IDS) {
       await expect(page.getByTestId(`section-nav-item-${sectionId}`)).toBeVisible()
     }
