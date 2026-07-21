@@ -58,6 +58,10 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              dataOnly:
+                description: DataOnly indicates no OpenStack VM should be created
+                  after disk conversion.
+                type: boolean
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -192,6 +196,7 @@ spec:
                 - IdentifyingBlockDevices
                 - HotAddTransferInProgress
                 - HotAddCleanup
+                - DataCopied
                 type: string
               retryable:
                 description: |-
@@ -199,6 +204,12 @@ spec:
                   Set to false for VMs with RDM (Raw Device Mapping) disks that share storage,
                   as RDM disk migration state prevents automatic retry.
                 type: boolean
+              stagedVolumeIDs:
+                description: StagedVolumeIDs lists the Cinder volume IDs created during
+                  a data-only migration.
+                items:
+                  type: string
+                type: array
               syncWarningMessage:
                 description: |-
                   SyncWarningMessage contains the warning message when periodic sync is in a warning state.

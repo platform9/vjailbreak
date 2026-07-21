@@ -571,7 +571,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationName, Namespace: migrationplan.Namespace}, existingMigration); err == nil {
 			if existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
 				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed ||
+				existingMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseDataCopied {
 				terminalMigrations[vmName] = true
 				r.ctxlog.Info("Skipping terminal migration from validation", "vm", vmName, "phase", existingMigration.Status.Phase)
 			}
@@ -813,6 +814,10 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 				fmt.Sprintf("Migration for VM '%s' failed: %s", migration.Spec.VMName, migration.Status.Conditions[0].Message))
 			return false, err
 
+		case vjailbreakv1alpha1.VMMigrationPhaseDataCopied:
+			r.ctxlog.Info("Data-only migration completed for VM, skipping post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
+			continue
+
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
 				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
@@ -892,7 +897,8 @@ func (r *MigrationPlanReconciler) handleRDMDiskMigrationError(ctx context.Contex
 			m := migrationList.Items[i]
 			if m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
 				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed ||
+				m.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseDataCopied {
 				continue
 			}
 			r.markMigrationValidationFailed(ctx, &m, m.Spec.VMName, message)
@@ -999,6 +1005,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				NetworkOverrides:        networkOverrides,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 				PreserveSourceTags:      migrationplan.Spec.PreserveSourceTags,
+				DataOnly:                migrationplan.Spec.MigrationStrategy.DataOnly,
 			},
 			Status: vjailbreakv1alpha1.MigrationStatus{
 				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -1042,6 +1049,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 			}
 			latest.Spec.NetworkOverrides = networkOverrides
 			latest.Spec.PreserveSourceTags = migrationplan.Spec.PreserveSourceTags
+			latest.Spec.DataOnly = migrationplan.Spec.MigrationStrategy.DataOnly
 			if updateErr := r.Update(ctx, latest); updateErr != nil {
 				return updateErr
 			}
@@ -1566,6 +1574,7 @@ func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[s
 	if migrationobj.Spec.NetworkOverrides != "" {
 		configMapData["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	}
+	configMapData["DATA_ONLY"] = strconv.FormatBool(migrationobj.Spec.DataOnly)
 }
 
 func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Context,
@@ -2088,7 +2097,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		if migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
 			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed ||
+			migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseDataCopied {
 			ctxlog.Info("Skipping VM with terminal migration status", "vm", vm, "phase", migrationobj.Status.Phase)
 			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 			continue
@@ -2155,7 +2165,8 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					// Reconcile if phase changed to a terminal state
 					isTerminal := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
 						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
-						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed ||
+						newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseDataCopied
 
 					// Reconcile if phase changed to AwaitingAdminCutOver (so UI can show cutover status)
 					isAwaitingCutover := newMigration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver
