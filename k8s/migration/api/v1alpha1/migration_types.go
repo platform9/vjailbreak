@@ -154,6 +154,13 @@ type MigrationStatus struct {
 	// If non-empty, indicates the sync failed but will auto-retry on next interval.
 	// +optional
 	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
+
+	// FailureReason contains a concise, human-readable root cause for a Failed
+	// migration, extracted from the migration pod's failure events (e.g. the
+	// specific virt-v2v/libguestfs error that caused disk conversion to fail).
+	// Empty unless Phase is Failed.
+	// +optional
+	FailureReason string `json:"failureReason,omitempty"`
 }
 
 // +kubebuilder:object:root=true

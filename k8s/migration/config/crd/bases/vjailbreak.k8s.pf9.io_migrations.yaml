@@ -165,6 +165,13 @@ spec:
                   CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
                   Extracted from migration pod events
                 type: string
+              failureReason:
+                description: |-
+                  FailureReason contains a concise, human-readable root cause for a Failed
+                  migration, extracted from the migration pod's failure events (e.g. the
+                  specific virt-v2v/libguestfs error that caused disk conversion to fail).
+                  Empty unless Phase is Failed.
+                type: string
               phase:
                 description: Phase is the current phase of the migration
                 enum:

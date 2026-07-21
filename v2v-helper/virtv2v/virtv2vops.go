@@ -491,11 +491,38 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	duration := time.Since(start)
 
 	if err != nil {
+		// virt-v2v-in-place's own error string is rarely more than "exit
+		// status 1". The actionable root cause (e.g. insufficient free
+		// disk space, filesystem corruption caught by e2fsck) is only
+		// written to the dedicated virtv2v debug log, so pull the most
+		// relevant line out of it and fold it into the returned error.
+		if reason := virtV2VFailureReasonFromLatestLog(); reason != "" {
+			return fmt.Errorf("failed to run virt-v2v-in-place: %s: %s", err, reason)
+		}
 		return fmt.Errorf("failed to run virt-v2v-in-place: %s", err)
 	}
 	log.Printf("virt-v2v-in-place conversion took: %s", duration)
 
 	return nil
+}
+
+// virtV2VFailureReasonFromLatestLog looks up the debug log file that was just
+// written for the current migration's virt-v2v invocation and extracts a
+// concise, human-readable root-cause line from it. Returns "" if the
+// migration name or log file can't be resolved, or no error line is found -
+// in which case callers should fall back to the raw process error.
+func virtV2VFailureReasonFromLatestLog() string {
+	migrationName, err := utils.GetMigrationObjectName()
+	if err != nil {
+		return ""
+	}
+
+	logPath, err := utils.GetLatestLogFilePath(migrationName, utils.LogCategoryVirtV2V)
+	if err != nil {
+		return ""
+	}
+
+	return utils.ExtractVirtV2VFailureReason(logPath)
 }
 
 func GetOsRelease(path string) (string, error) {

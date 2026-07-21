@@ -353,6 +353,7 @@ export default function MigrationsTable({
           const currentDisk = params.row?.status?.currentDisk
           const totalDisks = params.row?.status?.totalDisks
           const syncWarningMessage = params.row?.status?.syncWarningMessage
+          const failureReason = params.row?.status?.failureReason
           const migrationName = params.row?.metadata?.name
 
           const isCopyPhase = [
@@ -393,6 +394,7 @@ export default function MigrationsTable({
                 phase={phase}
                 progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
                 syncWarningMessage={syncWarningMessage}
+                failureReason={failureReason}
               />
               {(progressVariant || phase === Phase.Failed || phase === Phase.ValidationFailed) && (
                 <LinearProgress

@@ -91,6 +91,7 @@ export interface StatusClass {
   totalDisks?: number
   retryable?: boolean
   syncWarningMessage?: string
+  failureReason?: string
 }
 
 export interface Condition {
