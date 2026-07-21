@@ -161,16 +161,32 @@ Pending → Validating → AwaitingDataCopyStart → CopyingBlocks
 
 ### 6. Testing
 
-All new Go code requires unit tests (per CLAUDE.md).
+**TDD sequence (constitution IV — NON-NEGOTIABLE):** Write tests first → confirm they fail → implement → confirm they pass (Red-Green-Refactor).
 
-| Test file | Coverage |
-|-----------|----------|
-| `v2v-helper/migrate/migrate_test.go` | `DataOnly=true`: `CreateTargetInstance` not called, `DataCopied` phase returned |
-| `v2v-helper/migrate/migrate_test.go` | `DataOnly=false`: existing behavior unchanged (regression) |
-| `v2v-helper/pkg/utils/params_test.go` | `DataOnly` read correctly from `Migration` CR |
-| `k8s/migration/internal/controller/*_test.go` | `DataOnly` propagated from `MigrationPlanStrategy` → `MigrationSpec` |
+Unit tests required for every Go file modified (not just new files — per project memory).
 
-Tests use table-driven style and mock external dependencies (vCenter, OpenStack, Kubernetes API).
+| Test file | Go file covered | Coverage |
+|-----------|----------------|----------|
+| `v2v-helper/migrate/migrate_test.go` | `migrate.go` | `DataOnly=true`: `CreateTargetInstance` not called, `DataCopied` phase returned |
+| `v2v-helper/migrate/migrate_test.go` | `migrate.go` | `DataOnly=false`: existing behavior unchanged (regression) |
+| `v2v-helper/pkg/utils/params_test.go` | `params.go` | `DataOnly` read correctly from `Migration` CR |
+| `k8s/migration/internal/controller/migrationplan_controller_test.go` | `migrationplan_controller.go` | `DataOnly` propagated from `MigrationPlanStrategy` → `MigrationSpec` |
+
+Tests use table-driven style and mock external dependencies (vCenter, OpenStack, Kubernetes API — no live system contact).
+
+---
+
+### 7. External Documentation (Constitution II)
+
+Before implementing, consult:
+- **controller-runtime** — https://pkg.go.dev/sigs.k8s.io/controller-runtime (reconciler patterns, status patch)
+- **virt-v2v** — https://libguestfs.org/virt-v2v.1.html (conversion behavior unchanged but verify no side effects of skipping VM boot step)
+
+---
+
+### 8. Implementation Branch
+
+All implementation commits must land on a feature branch (e.g., `feature/492-data-only-migration`), never directly on `main` (per project memory and CONTRIBUTING.md).
 
 ---
 
