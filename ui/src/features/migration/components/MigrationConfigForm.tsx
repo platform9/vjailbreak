@@ -190,14 +190,14 @@ export default function MigrationConfigForm({
   const reviewRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
-  const [touchedSections, setTouchedSections] = useState({ options: false })
+  const [touchedSections, setTouchedSections] = useState({ options: false, tagsMetadata: false })
   const markTouched = useCallback((key: keyof typeof touchedSections) => {
     setTouchedSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
   }, [])
 
   useEffect(() => {
     if (!open) return
-    setTouchedSections({ options: false })
+    setTouchedSections({ options: false, tagsMetadata: false })
   }, [open])
 
   const {
@@ -500,8 +500,6 @@ export default function MigrationConfigForm({
                 networkMappingError={fieldErrors['networksMapping']}
                 storageMappingError={fieldErrors['storageMapping']}
                 showHeader={false}
-                selectedVMs={params.vms}
-                openstackCredentials={openstackCredentials}
               />
             </SurfaceCard>
           </Box>
